@@ -74,20 +74,37 @@ src/builtin/passes/sched/linear/fastvm/jit/
 - **已 JIT**：`extra.raw` 低 48 位存 `JitEntryFn`，`fastop[1]=0` 标识已替换。
 - **接口**：`getFuncExtraPtr`、`getFuncExtraCount`、`setFuncExtraPacked`、`incFuncExtraCount`。
 
+### 2.4 编译流水线（字节码 → 机器码）
+
+1. **字节码 → MIR**：`X64Backend::compileBytecode` 按 opcode 调用 `MirBuilder`，生成线性 MIR buffer（控制流 + V* 指令，vreg 由 `nextVReg` 递增分配）。
+2. **MIR 优化**：`optimizeMirBuffer`（如 Win64 下删除 prologue 后冗余 mov）。
+3. **pcToOffset**：按 MIR 编码长度计算每条指令偏移，得到 pc → 机器码 offset。
+4. **寄存器分配**：`linearScanVReg(mirBuf, …)` → `VRegAllocation`（vreg → preg）。
+5. **编码**：`encodeMirBuffer(mirBuf, pcToOffset, code, asmOut, baseOffset, vregAlloc)` 输出 x64 字节流。
+
 ---
 
 ## 3. 支持的 Opcode 与约束
 
-| 指令     | 说明                 | 约束 / 实现 |
-|----------|----------------------|-------------|
-| LADD/LSUB| 64 位加减            | 操作数/结果可为寄存器或 slot |
-| LLE      | 64 位 ≤ 比较，结果 0/1 | 仅支持 rhs=常量 1 |
-| BRCH     | 条件分支             | 仅支持简单 if-else（withCnt()==0） |
-| FUNC     | 普通调用             | trampolineFunc(slots, ctx, pc) |
-| TAIL     | 尾调用               | trampolineTail(slots, ctx, pc) |
-| JUMP     | 相对跳转             | 目标 pc 由 pcToOffset 得到 |
-| RETN     | 返回                 | 从 slot/寄存器取返回值到 rax 后 ret |
-| OPER     | 算子调用             | trampolineOper(slots, ctx, pc, graph) |
+所有算术/比较/加载存储均通过 **MIR V* 虚拟寄存器** 生成，再经 **linearScanVReg** 分配物理寄存器（rax..r11），最后 **encodeMirBuffer** 生成机器码。
+
+| 指令 | 说明 | 实现 |
+|------|------|------|
+| LADD/LSUB/LMUL/LDIV | 64 位加减乘除 | VLoadFromFrame/MemAt → VAdd/VSub/VMul/VIdiv → VStoreToFrame |
+| LLE/LLT/LGT/LEQ/LNE/LGE | 64 位比较，结果 0/1 | → VCmpSetLE/VCmpSetL/…/VCmpSetNE/VCmpSetGE → VStoreToFrame |
+| DADD/DSUB/DMUL/DDIV | 双精度加减乘除 | → VXmmAdd/VXmmSub/VXmmMul/VXmmDiv → VStoreToFrame |
+| DLT/DGT/DEQ/DNE/DLE/DGE | 双精度比较 | → VXmmCmpSetB/A/E/NZ/BE/AE → VStoreToFrame |
+| IADD/ISUB/IMUL/IDIV | 32 位整数加减乘除 | → VAdd32/VSub32/VMul32/VIdiv32 → VStoreToFrame |
+| ILT/IGT/IEQ/INE/ILE/IGE | 32 位整数比较 | → VCmpSetL32/…/NE32 → VStoreToFrame |
+| FADD/FSUB/FMUL/FDIV | 32 位浮点加减乘除 | VXmm32Load* → VXmm32Add/Sub/Mul/Div → VXmm32StoreToFrame |
+| FLT/FGT/FEQ/FNE/FLE/FGE | 32 位浮点比较 | → VXmm32CmpSet* → VStoreToFrame |
+| BRCH | 条件分支 | 仅支持简单 if-else（withCnt()==0）；VTest + VCmovnz + JzRel32/JmpRel32 |
+| FUNC | 普通调用 | trampolineFunc(slots, ctx, pc) |
+| TAIL | 尾调用 | trampolineTail(slots, ctx, pc) |
+| JUMP | 相对跳转 | 目标 pc 由 pcToOffset 得到 |
+| RETN | 返回 | VLoadFromFrame/MemAt → VRet（返回值 vreg→rax 后 ret） |
+| OPER | 算子调用 | trampolineOper(slots, ctx, pc, graph)；返回值 VMovFromRax + VStoreToFrame |
+| JOIN | 两路合并 | VCopy + VTest + VCmovnz，选分支值写 result 槽 |
 
 遇到不支持 opcode 或约束不满足时，`compileBytecode` 返回 `false`，该图不进入 JIT 缓存。
 
@@ -128,9 +145,11 @@ src/builtin/passes/sched/linear/fastvm/jit/
 
 ## 5. 寄存器分配（regalloc）
 
-- **可分配寄存器**：8 个（rax, rcx, rdx, rbx, r8-r11）；rax 兼作临时与返回值。
-- **AllocationResult**：`slotToReg[i]` 为寄存器编号，或 `kSpilled`（-1）表示溢出到 slot。
-- **linearScanAllocate**：对 LADD/LSUB/LLE/BRCH/FUNC/TAIL/OPER/RETN 等收集 def/use，构造 LiveInterval；跨越 call 的 interval 或 def 在 call 处的 slot 强制溢出（caller-saved 会被破坏）。
+- **可分配寄存器**：8 个（rax, rcx, rdx, rbx, r8–r11）；rax 兼作临时与返回值。
+- **V* 虚拟寄存器**：字节码先转为 MIR，其中算术/比较/加载存储使用 **V* 指令**（VLoadFromFrame、VAdd、VCmpSetLE、VXmmSub、VAdd32、VXmm32Add 等），操作数为 vreg（v0, v1, …）。
+- **linearScanVReg**：对 MIR 中所有 V* 指令做 **collectVRegDefUse**（def/use 收集），线性扫描得到 **vreg → preg**（0–7）；溢出时写回 frame slot。
+- **编码**：**encodeMirBuffer** 根据 VRegAllocation 将每条 MIR 编码为 x64（如 VAdd → mov rax, left_preg; add rax, right_preg; mov dst_preg, rax）。
+- **AllocationResult**：除 V* 的 vreg→preg 外，原有 slot 级 **linearScanAllocate** 仍用于与解释器一致的 slot 边界；JIT 路径以 V* + linearScanVReg 为主。
 
 ---
 
@@ -205,6 +224,7 @@ JIT OPER → trampolineOper(slots, ctx, pc, graph)
 | OnDemand：incFuncExtraCount + shouldJit | ✅ |
 | Always：全图预编译 + jitCache_ | ✅ |
 | OPER JIT 支持 | ✅ |
+| MIR V* + linearScanVReg + encodeMirBuffer | ✅（LADD/LSUB/LMUL/LDIV/LLE～LGE，DADD～DGE，IADD～IGE，FADD～FGE 等均已迁移） |
 | ACCS/FILL/CALL/SCHD JIT | ❌ 未实现 |
 
 ---

@@ -44,33 +44,32 @@ namespace camel::jit {
 
 namespace {
 
-// 二元 slot 运算：左操作数 loadL，右操作数 opR，结果 storeR（统一用 fastop[0]/[1]/result）
-template <typename SlotDispFn, typename StaticAddrFn, typename LoadL, typename OpR, typename StoreR>
-void emitBinarySlot(
-    const Bytecode &bc, const AllocationResult &alloc, x64::MirBuilder &build,
-    SlotDispFn slotDispFn, StaticAddrFn staticAddrFn, LoadL loadL, OpR opR, StoreR storeR) {
-    int d0 = slotDispFn(bc.fastop[0]), d1 = slotDispFn(bc.fastop[1]), dr = slotDispFn(bc.result);
-    int r0 = alloc.regForSlot(bc.fastop[0]), r1 = alloc.regForSlot(bc.fastop[1]),
-        rr = alloc.regForSlot(bc.result);
-    loadL(build, r0, d0, bc.fastop[0]);
-    opR(build, r1, d1, bc.fastop[1]);
-    storeR(build, rr, dr);
+// 用 VReg 加载一个操作数到 v（frame 或 static mem）
+inline void loadOperandToVReg(
+    const Bytecode &bc, int opIdx, int disp, uint64_t staticAddr, x64::VRegId v,
+    x64::MirBuilder &build) {
+    if (bc.fastop[opIdx] > 0)
+        build.emitVLoadFromFrame(v, disp);
+    else
+        build.emitVLoadFromMemAt(v, staticAddr);
 }
 
-// 比较：左操作数 loadL，右操作数 cmpR（结果 0/1 在 rax），再写回 result
-template <typename SlotDispFn, typename StaticAddrFn, typename LoadL, typename CmpR>
-void emitCompareSlot(
-    const Bytecode &bc, const AllocationResult &alloc, x64::MirBuilder &build,
-    SlotDispFn slotDispFn, StaticAddrFn staticAddrFn, LoadL loadL, CmpR cmpR) {
-    int d0 = slotDispFn(bc.fastop[0]), d1 = slotDispFn(bc.fastop[1]), dr = slotDispFn(bc.result);
-    int r0 = alloc.regForSlot(bc.fastop[0]), r1 = alloc.regForSlot(bc.fastop[1]),
-        rr = alloc.regForSlot(bc.result);
-    loadL(build, r0, d0, bc.fastop[0]);
-    cmpR(build, r1, d1, bc.fastop[1]);
-    if (rr >= 0)
-        build.emitMovRegFromRax(static_cast<uint8_t>(rr));
+// 用 VReg 写回结果（始终写 frame disp）
+inline void storeResultFromVReg(int disp, x64::VRegId v, x64::MirBuilder &build) {
+    build.emitVStoreToFrame(disp, v);
+}
+
+// Float：槽低 4 字节为 float，用 VXmm32* 加载/写回
+inline void loadFloatOperandToVReg(
+    const Bytecode &bc, int opIdx, int disp, uint64_t staticAddr, x64::VRegId v,
+    x64::MirBuilder &build) {
+    if (bc.fastop[opIdx] > 0)
+        build.emitVXmm32LoadFromFrame(v, disp);
     else
-        build.emitMovFrameFromReg(dr, x64::kRegRax);
+        build.emitVXmm32LoadFromMemAt(v, staticAddr);
+}
+inline void storeFloatResultFromVReg(int disp, x64::VRegId v, x64::MirBuilder &build) {
+    build.emitVXmm32StoreToFrame(disp, v);
 }
 
 // Camel 标准槽模型：每个 slot 一字（8 字节），布尔/32位/64位/指针均占一槽；JIT
@@ -167,9 +166,10 @@ bool X64Backend::compileBytecode(
         return a;
     };
 
-    // 构建 MIR → 优化 → 根据 MIR 计算 pcToOffset → 编码（L2 架构）
+    // 构建 MIR → 优化 → vreg 分配 → 根据 MIR 计算 pcToOffset → 编码（L2 架构）
     x64::MirBuffer mirBuf;
     x64::MirBuilder build(mirBuf);
+    x64::VRegId nextVReg = 0; // 虚拟寄存器计数器，供 JOIN 等使用
 #if defined(_WIN32) || defined(_WIN64)
     build.emitPrologueWin64();
 #endif
@@ -180,683 +180,383 @@ bool X64Backend::compileBytecode(
 
         switch (bc.opcode) {
         case OpCode::LADD: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovRegFromFrame(x64::kRegRax, d0);
-            else
-                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitAddRaxFromReg(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitAddRaxFromFrame(d1);
-            else
-                build.emitAddRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++;
+            x64::VRegId v1 = nextVReg++;
+            x64::VRegId vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVAdd(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::LSUB: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovRegFromFrame(x64::kRegRax, d0);
-            else
-                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitSubRaxFromReg(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitSubRaxFromFrame(d1);
-            else
-                build.emitSubRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++;
+            x64::VRegId v1 = nextVReg++;
+            x64::VRegId vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVSub(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::DADD: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovXmm0FromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovXmm0FromFrame(d0);
-            else
-                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitAddXmm0FromReg(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitAddXmm0FromFrame(d1);
-            else
-                build.emitAddXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromXmm0(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromXmm0(dr);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmmAdd(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::DSUB: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovXmm0FromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovXmm0FromFrame(d0);
-            else
-                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitSubXmm0FromReg(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitSubXmm0FromFrame(d1);
-            else
-                build.emitSubXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromXmm0(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromXmm0(dr);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmmSub(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::DMUL: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovXmm0FromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovXmm0FromFrame(d0);
-            else
-                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitMulXmm0FromReg(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitMulXmm0FromFrame(d1);
-            else
-                build.emitMulXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromXmm0(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromXmm0(dr);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmmMul(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::DDIV: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovXmm0FromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovXmm0FromFrame(d0);
-            else
-                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitDivXmm0FromReg(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitDivXmm0FromFrame(d1);
-            else
-                build.emitDivXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromXmm0(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromXmm0(dr);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmmDiv(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::DLT: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovXmm0FromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovXmm0FromFrame(d0);
-            else
-                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitComisdXmm0RegSetb(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitComisdXmm0FrameSetb(d1);
-            else
-                build.emitComisdXmm0MemAtSetb(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmmCmpSetB(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::DGT: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovXmm0FromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovXmm0FromFrame(d0);
-            else
-                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitComisdXmm0RegSeta(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitComisdXmm0FrameSeta(d1);
-            else
-                build.emitComisdXmm0MemAtSeta(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmmCmpSetA(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::DEQ: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovXmm0FromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovXmm0FromFrame(d0);
-            else
-                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitComisdXmm0RegSete(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitComisdXmm0FrameSete(d1);
-            else
-                build.emitComisdXmm0MemAtSete(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmmCmpSetE(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::DNE: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovXmm0FromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovXmm0FromFrame(d0);
-            else
-                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitComisdXmm0RegSetnz(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitComisdXmm0FrameSetnz(d1);
-            else
-                build.emitComisdXmm0MemAtSetnz(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmmCmpSetNZ(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::DLE: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovXmm0FromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovXmm0FromFrame(d0);
-            else
-                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitComisdXmm0RegSetbe(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitComisdXmm0FrameSetbe(d1);
-            else
-                build.emitComisdXmm0MemAtSetbe(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmmCmpSetBE(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::DGE: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovXmm0FromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovXmm0FromFrame(d0);
-            else
-                build.emitMovXmm0FromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitComisdXmm0RegSetae(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitComisdXmm0FrameSetae(d1);
-            else
-                build.emitComisdXmm0MemAtSetae(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmmCmpSetAE(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
-#define EMIT_BINARY_EAX(loadRight)                                                                 \
-    emitBinarySlot(                                                                                \
-        bc,                                                                                        \
-        alloc,                                                                                     \
-        build,                                                                                     \
-        [this](int i) { return slotDisp(i); },                                                     \
-        staticSlotAddr,                                                                            \
-        [&](x64::MirBuilder &b, int r, int d, int op) {                                            \
-            if (r >= 0)                                                                            \
-                b.emitMovEaxFromReg(static_cast<uint8_t>(r));                                      \
-            else if (op > 0)                                                                       \
-                b.emitMovEaxFromFrame(d);                                                          \
-            else                                                                                   \
-                b.emitMovEaxFromMemAt(staticSlotAddrWithComment(op));                              \
-        },                                                                                         \
-        loadRight,                                                                                 \
-        [&](x64::MirBuilder &b, int rr, int dr) {                                                  \
-            if (rr >= 0)                                                                           \
-                b.emitMovRegFromRax(static_cast<uint8_t>(rr));                                     \
-            else                                                                                   \
-                b.emitMovFrameFromReg(dr, x64::kRegRax);                                           \
-        })
-        case OpCode::IADD:
-            EMIT_BINARY_EAX([&](x64::MirBuilder &b, int r, int d, int op) {
-                if (r >= 0)
-                    b.emitAddEaxFromReg(static_cast<uint8_t>(r));
-                else if (op > 0)
-                    b.emitAddEaxFromFrame(d);
-                else
-                    b.emitAddEaxFromMemAt(staticSlotAddrWithComment(op));
-            });
-            break;
-        case OpCode::ISUB:
-            EMIT_BINARY_EAX([&](x64::MirBuilder &b, int r, int d, int op) {
-                if (r >= 0)
-                    b.emitSubEaxFromReg(static_cast<uint8_t>(r));
-                else if (op > 0)
-                    b.emitSubEaxFromFrame(d);
-                else
-                    b.emitSubEaxFromMemAt(staticSlotAddrWithComment(op));
-            });
-            break;
-        case OpCode::IMUL:
-            EMIT_BINARY_EAX([&](x64::MirBuilder &b, int r, int d, int op) {
-                if (r >= 0)
-                    b.emitMulEaxFromReg(static_cast<uint8_t>(r));
-                else if (op > 0)
-                    b.emitMulEaxFromFrame(d);
-                else
-                    b.emitMulEaxFromMemAt(staticSlotAddrWithComment(op));
-            });
-            break;
-        case OpCode::IDIV:
-            EMIT_BINARY_EAX([&](x64::MirBuilder &b, int r, int d, int op) {
-                if (r >= 0)
-                    b.emitIdivEaxByReg(static_cast<uint8_t>(r));
-                else if (op > 0)
-                    b.emitIdivEaxByFrame(d);
-                else
-                    b.emitIdivEaxByMemAt(staticSlotAddrWithComment(op));
-            });
-            break;
-#undef EMIT_BINARY_EAX
-#define EMIT_CMP_EAX(emitCmpFrame, emitCmpMemAt, emitCmpReg)                                       \
-    emitCompareSlot(                                                                               \
-        bc,                                                                                        \
-        alloc,                                                                                     \
-        build,                                                                                     \
-        [this](int i) { return slotDisp(i); },                                                     \
-        staticSlotAddr,                                                                            \
-        [&](x64::MirBuilder &b, int r, int d, int op) {                                            \
-            if (r >= 0)                                                                            \
-                b.emitMovEaxFromReg(static_cast<uint8_t>(r));                                      \
-            else if (op > 0)                                                                       \
-                b.emitMovEaxFromFrame(d);                                                          \
-            else                                                                                   \
-                b.emitMovEaxFromMemAt(staticSlotAddrWithComment(op));                              \
-        },                                                                                         \
-        [&](x64::MirBuilder &b, int r, int d, int op) {                                            \
-            if (r >= 0)                                                                            \
-                b.emitCmpReg(static_cast<uint8_t>(r));                                             \
-            else if (op > 0)                                                                       \
-                b.emitCmpFrame(d);                                                                 \
-            else                                                                                   \
-                b.emitCmpMemAt(staticSlotAddrWithComment(op));                                     \
-        })
-        case OpCode::ILT:
-            EMIT_CMP_EAX(emitCmpEaxFrameSetl, emitCmpEaxMemAtSetl, emitCmpEaxRegSetl);
-            break;
-        case OpCode::IGT:
-            EMIT_CMP_EAX(emitCmpEaxFrameSetg, emitCmpEaxMemAtSetg, emitCmpEaxRegSetg);
-            break;
-        case OpCode::IEQ:
-            EMIT_CMP_EAX(emitCmpEaxFrameSete, emitCmpEaxMemAtSete, emitCmpEaxRegSete);
-            break;
-        case OpCode::INE:
-            EMIT_CMP_EAX(emitCmpEaxFrameSetne, emitCmpEaxMemAtSetne, emitCmpEaxRegSetne);
-            break;
-        case OpCode::ILE:
-            EMIT_CMP_EAX(emitCmpEaxFrameSetle, emitCmpEaxMemAtSetle, emitCmpEaxRegSetle);
-            break;
-        case OpCode::IGE:
-            EMIT_CMP_EAX(emitCmpEaxFrameSetge, emitCmpEaxMemAtSetge, emitCmpEaxRegSetge);
-            break;
-#undef EMIT_CMP_EAX
-#define EMIT_BINARY_SS(loadRight)                                                                  \
-    emitBinarySlot(                                                                                \
-        bc,                                                                                        \
-        alloc,                                                                                     \
-        build,                                                                                     \
-        [this](int i) { return slotDisp(i); },                                                     \
-        staticSlotAddr,                                                                            \
-        [&](x64::MirBuilder &b, int r, int d, int op) {                                            \
-            if (r >= 0)                                                                            \
-                b.emitMovSsXmm0FromReg(static_cast<uint8_t>(r));                                   \
-            else if (op > 0)                                                                       \
-                b.emitMovSsXmm0FromFrame(d);                                                       \
-            else                                                                                   \
-                b.emitMovSsXmm0FromMemAt(staticSlotAddrWithComment(op));                           \
-        },                                                                                         \
-        loadRight,                                                                                 \
-        [&](x64::MirBuilder &b, int rr, int dr) {                                                  \
-            if (rr >= 0)                                                                           \
-                b.emitMovSsRegFromXmm0(static_cast<uint8_t>(rr));                                  \
-            else                                                                                   \
-                b.emitMovSsFrameFromXmm0(dr);                                                      \
-        })
-        case OpCode::FADD:
-            EMIT_BINARY_SS([&](x64::MirBuilder &b, int r, int d, int op) {
-                if (r >= 0)
-                    b.emitAddSsXmm0FromReg(static_cast<uint8_t>(r));
-                else if (op > 0)
-                    b.emitAddSsXmm0FromFrame(d);
-                else
-                    b.emitAddSsXmm0FromMemAt(staticSlotAddrWithComment(op));
-            });
-            break;
-        case OpCode::FSUB:
-            EMIT_BINARY_SS([&](x64::MirBuilder &b, int r, int d, int op) {
-                if (r >= 0)
-                    b.emitSubSsXmm0FromReg(static_cast<uint8_t>(r));
-                else if (op > 0)
-                    b.emitSubSsXmm0FromFrame(d);
-                else
-                    b.emitSubSsXmm0FromMemAt(staticSlotAddrWithComment(op));
-            });
-            break;
-        case OpCode::FMUL:
-            EMIT_BINARY_SS([&](x64::MirBuilder &b, int r, int d, int op) {
-                if (r >= 0)
-                    b.emitMulSsXmm0FromReg(static_cast<uint8_t>(r));
-                else if (op > 0)
-                    b.emitMulSsXmm0FromFrame(d);
-                else
-                    b.emitMulSsXmm0FromMemAt(staticSlotAddrWithComment(op));
-            });
-            break;
-        case OpCode::FDIV:
-            EMIT_BINARY_SS([&](x64::MirBuilder &b, int r, int d, int op) {
-                if (r >= 0)
-                    b.emitDivSsXmm0FromReg(static_cast<uint8_t>(r));
-                else if (op > 0)
-                    b.emitDivSsXmm0FromFrame(d);
-                else
-                    b.emitDivSsXmm0FromMemAt(staticSlotAddrWithComment(op));
-            });
-            break;
-#undef EMIT_BINARY_SS
-#define EMIT_CMP_SS(emitCmpFrame, emitCmpMemAt, emitCmpReg)                                        \
-    emitCompareSlot(                                                                               \
-        bc,                                                                                        \
-        alloc,                                                                                     \
-        build,                                                                                     \
-        [this](int i) { return slotDisp(i); },                                                     \
-        staticSlotAddr,                                                                            \
-        [&](x64::MirBuilder &b, int r, int d, int op) {                                            \
-            if (r >= 0)                                                                            \
-                b.emitMovSsXmm0FromReg(static_cast<uint8_t>(r));                                   \
-            else if (op > 0)                                                                       \
-                b.emitMovSsXmm0FromFrame(d);                                                       \
-            else                                                                                   \
-                b.emitMovSsXmm0FromMemAt(staticSlotAddrWithComment(op));                           \
-        },                                                                                         \
-        [&](x64::MirBuilder &b, int r, int d, int op) {                                            \
-            if (r >= 0)                                                                            \
-                b.emitCmpReg(static_cast<uint8_t>(r));                                             \
-            else if (op > 0)                                                                       \
-                b.emitCmpFrame(d);                                                                 \
-            else                                                                                   \
-                b.emitCmpMemAt(staticSlotAddrWithComment(op));                                     \
-        })
-        case OpCode::FLT:
-            EMIT_CMP_SS(emitComissXmm0FrameSetb, emitComissXmm0MemAtSetb, emitComissXmm0RegSetb);
-            break;
-        case OpCode::FGT:
-            EMIT_CMP_SS(emitComissXmm0FrameSeta, emitComissXmm0MemAtSeta, emitComissXmm0RegSeta);
-            break;
-        case OpCode::FEQ:
-            EMIT_CMP_SS(emitComissXmm0FrameSete, emitComissXmm0MemAtSete, emitComissXmm0RegSete);
-            break;
-        case OpCode::FNE:
-            EMIT_CMP_SS(emitComissXmm0FrameSetnz, emitComissXmm0MemAtSetnz, emitComissXmm0RegSetnz);
-            break;
-        case OpCode::FLE:
-            EMIT_CMP_SS(emitComissXmm0FrameSetbe, emitComissXmm0MemAtSetbe, emitComissXmm0RegSetbe);
-            break;
-        case OpCode::FGE:
-            EMIT_CMP_SS(emitComissXmm0FrameSetae, emitComissXmm0MemAtSetae, emitComissXmm0RegSetae);
-            break;
-#undef EMIT_CMP_SS
-        case OpCode::LLE: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(r0));
-            else
-                build.emitMovRegFromFrame(x64::kRegRax, d0);
-            if (bc.fastop[1] > 0)
-                build.emitCmpRaxFrameSetle(d1);
-            else
-                build.emitCmpRaxMemAtSetle(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+        case OpCode::IADD: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVAdd32(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
-        case OpCode::LLT: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(r0));
-            else
-                build.emitMovRegFromFrame(x64::kRegRax, d0);
-            if (bc.fastop[1] > 0)
-                build.emitCmpRaxFrameSetl(d1);
-            else
-                build.emitCmpRaxMemAtSetl(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+        case OpCode::ISUB: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVSub32(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
-        case OpCode::LGT: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(r0));
-            else
-                build.emitMovRegFromFrame(x64::kRegRax, d0);
-            if (bc.fastop[1] > 0)
-                build.emitCmpRaxFrameSetg(d1);
-            else
-                build.emitCmpRaxMemAtSetg(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+        case OpCode::IMUL: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVMul32(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
-        case OpCode::LEQ: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(r0));
-            else
-                build.emitMovRegFromFrame(x64::kRegRax, d0);
-            if (bc.fastop[1] > 0)
-                build.emitCmpRaxFrameSete(d1);
-            else
-                build.emitCmpRaxMemAtSete(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+        case OpCode::IDIV: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVIdiv32(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
-        case OpCode::LNE: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(r0));
-            else
-                build.emitMovRegFromFrame(x64::kRegRax, d0);
-            if (bc.fastop[1] > 0)
-                build.emitCmpRaxFrameSetne(d1);
-            else
-                build.emitCmpRaxMemAtSetne(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+        case OpCode::ILT: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVCmpSetL32(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
-        case OpCode::LGE: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(r0));
-            else
-                build.emitMovRegFromFrame(x64::kRegRax, d0);
-            if (bc.fastop[1] > 0)
-                build.emitCmpRaxFrameSetge(d1);
-            else
-                build.emitCmpRaxMemAtSetge(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+        case OpCode::IGT: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVCmpSetG32(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::IEQ: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVCmpSetE32(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::INE: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVCmpSetNE32(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::ILE: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVCmpSetLE32(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::IGE: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVCmpSetGE32(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::FADD: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmm32Add(vr, v0, v1);
+            storeFloatResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::FSUB: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmm32Sub(vr, v0, v1);
+            storeFloatResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::FMUL: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmm32Mul(vr, v0, v1);
+            storeFloatResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::FDIV: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmm32Div(vr, v0, v1);
+            storeFloatResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::FLT: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmm32CmpSetB(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::FGT: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmm32CmpSetA(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::FEQ: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmm32CmpSetE(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::FNE: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmm32CmpSetNZ(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::FLE: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmm32CmpSetBE(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::FGE: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVXmm32CmpSetAE(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::LMUL: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovRegFromFrame(x64::kRegRax, d0);
-            else
-                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitMulRaxFromReg(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitMulRaxFromFrame(d1);
-            else
-                build.emitMulRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++;
+            x64::VRegId v1 = nextVReg++;
+            x64::VRegId vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVMul(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::LDIV: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int d1 = slotDisp(bc.fastop[1]);
-            int dr = slotDisp(bc.result);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            int r1 = alloc.regForSlot(bc.fastop[1]);
-            int rr = alloc.regForSlot(bc.result);
-            if (r0 >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(r0));
-            else if (bc.fastop[0] > 0)
-                build.emitMovRegFromFrame(x64::kRegRax, d0);
-            else
-                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(bc.fastop[0]));
-            if (r1 >= 0)
-                build.emitIdivRaxByReg(static_cast<uint8_t>(r1));
-            else if (bc.fastop[1] > 0)
-                build.emitIdivRaxByFrame(d1);
-            else
-                build.emitIdivRaxByMemAt(staticSlotAddrWithComment(bc.fastop[1]));
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++;
+            x64::VRegId v1 = nextVReg++;
+            x64::VRegId vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVIdiv(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::LLE: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++;
+            x64::VRegId v1 = nextVReg++;
+            x64::VRegId vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVCmpSetLE(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::LLT: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++;
+            x64::VRegId v1 = nextVReg++;
+            x64::VRegId vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVCmpSetL(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::LGT: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++;
+            x64::VRegId v1 = nextVReg++;
+            x64::VRegId vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVCmpSetG(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::LEQ: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++;
+            x64::VRegId v1 = nextVReg++;
+            x64::VRegId vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVCmpSetE(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::LNE: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++;
+            x64::VRegId v1 = nextVReg++;
+            x64::VRegId vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVCmpSetNE(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
+            break;
+        }
+        case OpCode::LGE: {
+            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++;
+            x64::VRegId v1 = nextVReg++;
+            x64::VRegId vr = nextVReg++;
+            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
+            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            build.emitVCmpSetGE(vr, v0, v1);
+            storeResultFromVReg(dr, vr, build);
             break;
         }
         case OpCode::BRCH: {
@@ -871,21 +571,24 @@ bool X64Backend::compileBytecode(
                 return fail(
                     "pc=" + std::to_string(pc) + " BRCH cond slot index must be positive, got " +
                     std::to_string(condIdx));
-            int dc    = slotDisp(condIdx);
-            int dr    = slotDisp(bc.result);
-            int rc    = alloc.regForSlot(condIdx);
-            size_t t0 = pc + bc.opsize;     // true branch (jumpIdx=0)
-            size_t t1 = pc + bc.opsize + 1; // false branch (jumpIdx=1)
-            // 用 cmov 只写一次 result：r8=0, r9=1，test 后 cmove r8,r9（ZF 则 r8=1），再 store
-            build.emitMovRegImm32(x64::kRegR8, 0);
-            build.emitMovRegImm32(x64::kRegR9, 1);
-            if (rc > 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(rc));
-            else if (rc < 0)
-                build.emitMovRegFromFrame(x64::kRegRax, dc);
-            build.emitTestRaxRax();
-            build.emitCmoveR8FromR9();
-            build.emitMovFrameFromReg(dr, x64::kRegR8);
+            int dc            = slotDisp(condIdx);
+            int dr            = slotDisp(bc.result);
+            size_t t0         = pc + bc.opsize;
+            size_t t1         = pc + bc.opsize + 1;
+            x64::VRegId vCond = nextVReg++;
+            x64::VRegId vZero = nextVReg++;
+            x64::VRegId vOne  = nextVReg++;
+            x64::VRegId vRes  = nextVReg++;
+            if (condIdx > 0)
+                build.emitVLoadFromFrame(vCond, dc);
+            else
+                build.emitVLoadFromMemAt(vCond, staticSlotAddrWithComment(condIdx));
+            build.emitVLoadImm32(vZero, 0);
+            build.emitVLoadImm32(vOne, 1);
+            build.emitVCopy(vRes, vZero);
+            build.emitVTest(vCond);
+            build.emitVCmovnz(vRes, vOne);
+            build.emitVStoreToFrame(dr, vRes);
             build.emitJzRel32(static_cast<uint32_t>(t1));
             build.emitJmpRel32(static_cast<uint32_t>(t0));
             break;
@@ -901,38 +604,28 @@ bool X64Backend::compileBytecode(
             data_idx_t w0      = bc.wargs()[0];
             data_idx_t w1      = bc.wargs()[1];
             int dIdx = slotDisp(idxSlot), d0 = slotDisp(w0), d1 = slotDisp(w1),
-                dr   = slotDisp(bc.result);
-            int rIdx = alloc.regForSlot(idxSlot);
-            int r0   = alloc.regForSlot(w0);
-            int r1   = alloc.regForSlot(w1);
-            int rr   = alloc.regForSlot(bc.result);
-            if (r0 != 0 && r0 >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(r0));
-            else if (w0 > 0)
-                build.emitMovRegFromFrame(x64::kRegRax, d0);
+                dr         = slotDisp(bc.result);
+            x64::VRegId v0 = nextVReg++;
+            x64::VRegId v1 = nextVReg++;
+            x64::VRegId v2 = nextVReg++;
+            x64::VRegId v3 = nextVReg++;
+            // result = idx ? w1 : w0 → v3 = (v2 ? v1 : v0)：先 v3=v0，test v2，cmovnz v3,v1
+            if (w0 > 0)
+                build.emitVLoadFromFrame(v0, d0);
             else
-                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(w0));
-            build.emitMovRegFromRax(3);
-            if (r1 != 0 && r1 >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(r1));
-            else if (w1 > 0)
-                build.emitMovRegFromFrame(x64::kRegRax, d1);
+                build.emitVLoadFromMemAt(v0, staticSlotAddrWithComment(w0));
+            if (w1 > 0)
+                build.emitVLoadFromFrame(v1, d1);
             else
-                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(w1));
-            build.emitMovRegFromRax(1);
-            if (rIdx >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(rIdx));
-            else if (idxSlot > 0)
-                build.emitMovRegFromFrame(x64::kRegRax, dIdx);
+                build.emitVLoadFromMemAt(v1, staticSlotAddrWithComment(w1));
+            if (idxSlot > 0)
+                build.emitVLoadFromFrame(v2, dIdx);
             else
-                build.emitMovRaxFromMemAt(staticSlotAddrWithComment(idxSlot));
-            build.emitTestRaxRax();
-            build.emitCmoveRcxFromRbx();
-            build.emitMovRaxFromReg(1);
-            if (rr >= 0)
-                build.emitMovRegFromRax(static_cast<uint8_t>(rr));
-            else
-                build.emitMovFrameFromReg(dr, x64::kRegRax);
+                build.emitVLoadFromMemAt(v2, staticSlotAddrWithComment(idxSlot));
+            build.emitVCopy(v3, v0); // v3 = w0 (default)
+            build.emitVTest(v2);
+            build.emitVCmovnz(v3, v1); // if v2!=0 then v3 = v1
+            build.emitVStoreToFrame(dr, v3);
             break;
         }
         case OpCode::FUNC: {
@@ -944,8 +637,10 @@ bool X64Backend::compileBytecode(
 #else
             build.emitCallTrampolineSysV(static_cast<uint32_t>(pc), addr);
 #endif
-            int dr = slotDisp(bc.result);
-            build.emitMovFrameFromReg(dr, x64::kRegRax);
+            int dr           = slotDisp(bc.result);
+            x64::VRegId vRet = nextVReg++;
+            build.emitVMovFromRax(vRet);
+            build.emitVStoreToFrame(dr, vRet);
             break;
         }
         case OpCode::TAIL: {
@@ -966,13 +661,13 @@ bool X64Backend::compileBytecode(
             break;
         }
         case OpCode::RETN: {
-            int d0 = slotDisp(bc.fastop[0]);
-            int r0 = alloc.regForSlot(bc.fastop[0]);
-            if (r0 >= 0)
-                build.emitMovRaxFromReg(static_cast<uint8_t>(r0));
+            int d0         = slotDisp(bc.fastop[0]);
+            x64::VRegId v0 = nextVReg++;
+            if (bc.fastop[0] > 0)
+                build.emitVLoadFromFrame(v0, d0);
             else
-                build.emitMovRegFromFrame(x64::kRegRax, d0);
-            build.emitRet();
+                build.emitVLoadFromMemAt(v0, staticSlotAddrWithComment(bc.fastop[0]));
+            build.emitVRet(v0);
             break;
         }
         case OpCode::OPER: {
@@ -985,8 +680,9 @@ bool X64Backend::compileBytecode(
 #else
             build.emitCallTrampolineOperSysV(static_cast<uint32_t>(pc), graphPtr, addr);
 #endif
-            int dr = slotDisp(bc.result);
-            build.emitMovFrameFromReg(dr, x64::kRegRax);
+            x64::VRegId vRet = nextVReg++;
+            build.emitVMovFromRax(vRet);
+            build.emitVStoreToFrame(slotDisp(bc.result), vRet);
             break;
         }
         default:
@@ -997,6 +693,10 @@ bool X64Backend::compileBytecode(
     }
 
     x64::optimizeMirBuffer(mirBuf);
+
+    // 虚拟寄存器统一分配（对 MIR 中的 V* 指令）
+    VRegAllocation vregAlloc;
+    linearScanVReg(mirBuf, &vregAlloc);
 
     std::unordered_map<size_t, size_t> pcToOffset;
     size_t offset = 0;
@@ -1011,11 +711,12 @@ bool X64Backend::compileBytecode(
         opts.pcToOffset  = &pcToOffset;
         opts.symbolNames = unit.mirSymbolNames;
         opts.slotNames   = unit.mirSlotNames;
+        opts.vregAlloc   = static_cast<const void *>(&vregAlloc);
         x64::mirPrint(mirBuf, *unit.mirOut, opts);
         return true; // 仅打印 MIR，不编码
     }
     // asm 遍只输出编码后的汇编，不输出 MIR
-    x64::encodeMirBuffer(mirBuf, pcToOffset, code, unit.asmOut, 0);
+    x64::encodeMirBuffer(mirBuf, pcToOffset, code, unit.asmOut, 0, &vregAlloc);
     return true;
 }
 

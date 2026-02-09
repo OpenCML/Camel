@@ -26,6 +26,193 @@ namespace camel::jit {
 
 namespace {
 
+using namespace x64;
+
+static bool isVRegOp(MirOp op) {
+    switch (op) {
+    case MirOp::VLoadFromFrame:
+    case MirOp::VStoreToFrame:
+    case MirOp::VLoadFromMemAt:
+    case MirOp::VLoadImm32:
+    case MirOp::VLoadImm64:
+    case MirOp::VCopy:
+    case MirOp::VTest:
+    case MirOp::VCmove:
+    case MirOp::VCmovnz:
+    case MirOp::VMovFromRax:
+    case MirOp::VMovToRax:
+    case MirOp::VRet:
+    case MirOp::VAdd:
+    case MirOp::VSub:
+    case MirOp::VMul:
+    case MirOp::VIdiv:
+    case MirOp::VCmpSetL:
+    case MirOp::VCmpSetLE:
+    case MirOp::VCmpSetG:
+    case MirOp::VCmpSetGE:
+    case MirOp::VCmpSetE:
+    case MirOp::VCmpSetNE:
+    case MirOp::VXmmLoadFromFrame:
+    case MirOp::VXmmStoreToFrame:
+    case MirOp::VXmmLoadFromMemAt:
+    case MirOp::VXmmAdd:
+    case MirOp::VXmmSub:
+    case MirOp::VXmmMul:
+    case MirOp::VXmmDiv:
+    case MirOp::VXmmCmpSetB:
+    case MirOp::VXmmCmpSetBE:
+    case MirOp::VXmmCmpSetE:
+    case MirOp::VXmmCmpSetA:
+    case MirOp::VXmmCmpSetAE:
+    case MirOp::VXmmCmpSetNZ:
+    case MirOp::VAdd32:
+    case MirOp::VSub32:
+    case MirOp::VMul32:
+    case MirOp::VIdiv32:
+    case MirOp::VCmpSetL32:
+    case MirOp::VCmpSetLE32:
+    case MirOp::VCmpSetG32:
+    case MirOp::VCmpSetGE32:
+    case MirOp::VCmpSetE32:
+    case MirOp::VCmpSetNE32:
+    case MirOp::VXmm32LoadFromFrame:
+    case MirOp::VXmm32StoreToFrame:
+    case MirOp::VXmm32LoadFromMemAt:
+    case MirOp::VXmm32Add:
+    case MirOp::VXmm32Sub:
+    case MirOp::VXmm32Mul:
+    case MirOp::VXmm32Div:
+    case MirOp::VXmm32CmpSetB:
+    case MirOp::VXmm32CmpSetBE:
+    case MirOp::VXmm32CmpSetE:
+    case MirOp::VXmm32CmpSetA:
+    case MirOp::VXmm32CmpSetAE:
+    case MirOp::VXmm32CmpSetNZ:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// 收集 MIR 中 V* 指令的 vreg def/use，得到 firstDef[vreg]、lastUse[vreg]
+void collectVRegDefUse(
+    const MirBuffer &buf, std::vector<size_t> &firstDef, std::vector<size_t> &lastUse) {
+    auto ensureSize = [&](VRegId v) {
+        if (v != kInvalidVReg && v < kMaxVRegs) {
+            size_t s = static_cast<size_t>(v) + 1;
+            if (firstDef.size() < s) {
+                firstDef.resize(s, static_cast<size_t>(-1));
+                lastUse.resize(s, 0);
+            }
+        }
+    };
+    auto useVReg = [&](size_t idx, VRegId v) {
+        if (v != kInvalidVReg) {
+            ensureSize(v);
+            lastUse[static_cast<size_t>(v)] = idx;
+        }
+    };
+    auto defVReg = [&](size_t idx, VRegId v) {
+        if (v != kInvalidVReg) {
+            ensureSize(v);
+            if (firstDef[static_cast<size_t>(v)] == static_cast<size_t>(-1))
+                firstDef[static_cast<size_t>(v)] = idx;
+        }
+    };
+
+    for (size_t i = 0; i < buf.size(); ++i) {
+        const Mir &m = buf[i];
+        if (!isVRegOp(m.op))
+            continue;
+        VRegId r0   = static_cast<VRegId>(m.r0);
+        VRegId r1   = static_cast<VRegId>(m.r1);
+        VRegId immV = static_cast<VRegId>(m.imm32);
+        switch (m.op) {
+        case MirOp::VLoadFromFrame:
+        case MirOp::VLoadFromMemAt:
+        case MirOp::VMovFromRax:
+        case MirOp::VLoadImm32:
+        case MirOp::VLoadImm64:
+        case MirOp::VXmmLoadFromFrame:
+        case MirOp::VXmmLoadFromMemAt:
+        case MirOp::VXmm32LoadFromFrame:
+        case MirOp::VXmm32LoadFromMemAt:
+            defVReg(i, r0);
+            break;
+        case MirOp::VStoreToFrame:
+        case MirOp::VMovToRax:
+        case MirOp::VXmmStoreToFrame:
+        case MirOp::VXmm32StoreToFrame:
+            useVReg(i, r0);
+            break;
+        case MirOp::VCopy:
+            defVReg(i, r0);
+            useVReg(i, r1);
+            break;
+        case MirOp::VTest:
+        case MirOp::VRet:
+            useVReg(i, r0);
+            break;
+        case MirOp::VCmove:
+        case MirOp::VCmovnz:
+            defVReg(i, r0);
+            useVReg(i, r0);
+            useVReg(i, r1);
+            break;
+        case MirOp::VAdd:
+        case MirOp::VSub:
+        case MirOp::VMul:
+        case MirOp::VIdiv:
+        case MirOp::VCmpSetL:
+        case MirOp::VCmpSetLE:
+        case MirOp::VCmpSetG:
+        case MirOp::VCmpSetGE:
+        case MirOp::VCmpSetE:
+        case MirOp::VCmpSetNE:
+        case MirOp::VXmmAdd:
+        case MirOp::VXmmSub:
+        case MirOp::VXmmMul:
+        case MirOp::VXmmDiv:
+        case MirOp::VXmmCmpSetB:
+        case MirOp::VXmmCmpSetBE:
+        case MirOp::VXmmCmpSetE:
+        case MirOp::VXmmCmpSetA:
+        case MirOp::VXmmCmpSetAE:
+        case MirOp::VXmmCmpSetNZ:
+        case MirOp::VAdd32:
+        case MirOp::VSub32:
+        case MirOp::VMul32:
+        case MirOp::VIdiv32:
+        case MirOp::VCmpSetL32:
+        case MirOp::VCmpSetLE32:
+        case MirOp::VCmpSetG32:
+        case MirOp::VCmpSetGE32:
+        case MirOp::VCmpSetE32:
+        case MirOp::VCmpSetNE32:
+        case MirOp::VXmm32Add:
+        case MirOp::VXmm32Sub:
+        case MirOp::VXmm32Mul:
+        case MirOp::VXmm32Div:
+        case MirOp::VXmm32CmpSetB:
+        case MirOp::VXmm32CmpSetBE:
+        case MirOp::VXmm32CmpSetE:
+        case MirOp::VXmm32CmpSetA:
+        case MirOp::VXmm32CmpSetAE:
+        case MirOp::VXmm32CmpSetNZ:
+            defVReg(i, r0);
+            useVReg(i, r1);
+            useVReg(i, immV);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+} // namespace
+
+namespace {
+
 struct LiveInterval {
     int slot;
     size_t start;
@@ -284,6 +471,78 @@ makeAllSpilledAlloc(std::span<const Bytecode> bytecodes, size_t entryPc, size_t 
     AllocationResult result;
     result.slotToReg.resize(firstDef.size(), kSpilled);
     return result;
+}
+
+// -----------------------------------------------------------------------------
+// 虚拟寄存器线性扫描分配
+// -----------------------------------------------------------------------------
+
+struct VLiveInterval {
+    x64::VRegId vreg;
+    size_t start;
+    size_t end;
+};
+
+bool linearScanVReg(
+    const x64::MirBuffer &buf, VRegAllocation *out, const VRegAllocOptions * /*opts*/) {
+    std::vector<size_t> firstDef, lastUse;
+    collectVRegDefUse(buf, firstDef, lastUse);
+    if (firstDef.empty()) {
+        out->vregToPreg.clear();
+        return true;
+    }
+
+    std::vector<VLiveInterval> intervals;
+    for (size_t v = 0; v < firstDef.size(); ++v) {
+        if (firstDef[v] != static_cast<size_t>(-1) && lastUse[v] >= firstDef[v]) {
+            intervals.push_back({static_cast<x64::VRegId>(v), firstDef[v], lastUse[v]});
+        }
+    }
+    std::sort(
+        intervals.begin(),
+        intervals.end(),
+        [](const VLiveInterval &a, const VLiveInterval &b) { return a.start < b.start; });
+
+    out->vregToPreg.resize(firstDef.size(), kSpilled);
+    std::vector<std::pair<VLiveInterval, int>> active;
+    int freeRegs[kNumAllocatableRegs];
+    for (int i = 0; i < kNumAllocatableRegs; ++i)
+        freeRegs[i] = 1;
+
+    for (const VLiveInterval &cur : intervals) {
+        for (auto it = active.begin(); it != active.end();) {
+            if (it->first.end <= cur.start) {
+                freeRegs[it->second] = 1;
+                it                   = active.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        int reg = -1;
+        for (int r = 0; r < kNumAllocatableRegs; ++r) {
+            if (freeRegs[r]) {
+                reg         = r;
+                freeRegs[r] = 0;
+                break;
+            }
+        }
+        if (reg < 0) {
+            auto spill =
+                std::max_element(active.begin(), active.end(), [](const auto &a, const auto &b) {
+                    return a.first.end < b.first.end;
+                });
+            if (spill != active.end() && spill->first.end > cur.end) {
+                out->vregToPreg[static_cast<size_t>(spill->first.vreg)] = kSpilled;
+                reg                                                     = spill->second;
+                active.erase(spill);
+            }
+        }
+        if (reg >= 0) {
+            out->vregToPreg[static_cast<size_t>(cur.vreg)] = reg;
+            active.emplace_back(cur, reg);
+        }
+    }
+    return true;
 }
 
 } // namespace camel::jit

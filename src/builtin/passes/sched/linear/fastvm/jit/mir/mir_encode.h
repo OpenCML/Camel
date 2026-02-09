@@ -21,6 +21,7 @@
 
 #include "builtin/passes/sched/linear/fastvm/jit/backend/x64/x64_encoder.h"
 #include "builtin/passes/sched/linear/fastvm/jit/mir/mir.h"
+#include "builtin/passes/sched/linear/fastvm/jit/regalloc/regalloc.h"
 
 #include <unordered_map>
 #include <vector>
@@ -28,8 +29,10 @@
 namespace camel::jit::x64 {
 
 // 将 buf 编码到 code，并可选输出汇编到 asmOut。pcToOffset 用于解析跳转目标（pc -> 字节偏移）。
+// vregAlloc 非空时，V* 指令按分配结果编码为物理寄存器指令。
 void encodeMirBuffer(
     const MirBuffer &buf, const std::unordered_map<size_t, size_t> &pcToOffset,
-    std::vector<uint8_t> &code, std::ostream *asmOut, size_t baseOffset = 0);
+    std::vector<uint8_t> &code, std::ostream *asmOut, size_t baseOffset = 0,
+    const ::camel::jit::VRegAllocation *vregAlloc = nullptr);
 
 } // namespace camel::jit::x64

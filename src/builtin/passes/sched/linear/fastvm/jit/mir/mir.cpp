@@ -40,373 +40,227 @@ std::string mirToString(const Mir &m) {
         os << "mov " << mirRegName(m.r0) << ", 0x" << std::hex << m.imm64 << std::dec;
         break;
     }
-    case MirOp::MovRegFromFrame:
-        os << "mov " << mirRegName(m.r0) << ", [rdi+" << m.disp << "]";
+    case MirOp::VLoadFromFrame:
+        os << "vload v" << static_cast<int>(m.r0) << ", [rdi+" << m.disp << "]";
         break;
-    case MirOp::MovFrameFromReg:
-        os << "mov [rdi+" << m.disp << "], " << mirRegName(m.r0);
+    case MirOp::VStoreToFrame:
+        os << "vstore [rdi+" << m.disp << "], v" << static_cast<int>(m.r0);
         break;
-    case MirOp::MovRaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nmov rax, [rbx]";
+    case MirOp::VLoadFromMemAt: {
+        std::ostringstream hex;
+        hex << "0x" << std::hex << m.imm64;
+        os << "vload v" << static_cast<int>(m.r0) << ", [" << hex.str() << "]";
         break;
-    case MirOp::AddRaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nadd rax, [rbx]";
+    }
+    case MirOp::VLoadImm32:
+        os << "vloadimm32 v" << static_cast<int>(m.r0) << ", " << m.imm32;
         break;
-    case MirOp::SubRaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nsub rax, [rbx]";
+    case MirOp::VLoadImm64:
+        os << "vloadimm64 v" << static_cast<int>(m.r0) << ", 0x" << std::hex << m.imm64 << std::dec;
         break;
-    case MirOp::MovRaxFromReg:
-        os << "mov rax, " << mirRegName(m.r0);
+    case MirOp::VCopy:
+        os << "vcopy v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1);
         break;
-    case MirOp::MovRegFromRax:
-        os << "mov " << mirRegName(m.r0) << ", rax";
+    case MirOp::VTest:
+        os << "vtest v" << static_cast<int>(m.r0);
         break;
-    case MirOp::AddRaxFromReg:
-        os << "add rax, " << mirRegName(m.r0);
+    case MirOp::VCmove:
+        os << "vcmove v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1);
         break;
-    case MirOp::SubRaxFromReg:
-        os << "sub rax, " << mirRegName(m.r0);
+    case MirOp::VCmovnz:
+        os << "vcmovnz v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1);
         break;
-    case MirOp::AddRaxFromFrame:
-        os << "add rax, [rdi+" << m.disp << "]";
+    case MirOp::VMovFromRax:
+        os << "vmov v" << static_cast<int>(m.r0) << ", rax";
         break;
-    case MirOp::SubRaxFromFrame:
-        os << "sub rax, [rdi+" << m.disp << "]";
+    case MirOp::VMovToRax:
+        os << "vmov rax, v" << static_cast<int>(m.r0);
         break;
-    case MirOp::MovXmm0FromFrame:
-        os << "movsd xmm0, [rdi+" << m.disp << "]";
+    case MirOp::VRet:
+        os << "vret v" << static_cast<int>(m.r0);
         break;
-    case MirOp::AddXmm0FromFrame:
-        os << "addsd xmm0, [rdi+" << m.disp << "]";
+    case MirOp::VAdd:
+        os << "vadd v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::SubXmm0FromFrame:
-        os << "subsd xmm0, [rdi+" << m.disp << "]";
+    case MirOp::VSub:
+        os << "vsub v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::MovFrameFromXmm0:
-        os << "movsd [rdi+" << m.disp << "], xmm0";
+    case MirOp::VMul:
+        os << "vmul v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::MovXmm0FromReg:
-        os << "movq xmm0, " << mirRegName(m.r0);
+    case MirOp::VIdiv:
+        os << "vidiv v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::AddXmm0FromReg:
-        os << "movq xmm1, " << mirRegName(m.r0) << "\naddsd xmm0, xmm1";
+    case MirOp::VCmpSetL:
+        os << "vcmp.lt v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::SubXmm0FromReg:
-        os << "movq xmm1, " << mirRegName(m.r0) << "\nsubsd xmm0, xmm1";
+    case MirOp::VCmpSetLE:
+        os << "vcmp.le v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::MovRegFromXmm0:
-        os << "movq " << mirRegName(m.r0) << ", xmm0";
+    case MirOp::VCmpSetG:
+        os << "vcmp.gt v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::MovXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nmovsd xmm0, [rbx]";
+    case MirOp::VCmpSetGE:
+        os << "vcmp.ge v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::AddXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\naddsd xmm0, [rbx]";
+    case MirOp::VCmpSetE:
+        os << "vcmp.eq v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::SubXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nsubsd xmm0, [rbx]";
+    case MirOp::VCmpSetNE:
+        os << "vcmp.ne v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::CmpRaxImm8Setle:
-        os << "cmp rax, 1\nsetle al\nmovzx rax, al";
+    case MirOp::VXmmLoadFromFrame:
+        os << "vxmm.load v" << static_cast<int>(m.r0) << ", [rdi+" << m.disp << "]";
         break;
-    case MirOp::CmpRaxFrameSetle:
-        os << "cmp rax, [rdi+" << m.disp << "]\nsetle al\nmovzx rax, al";
+    case MirOp::VXmmStoreToFrame:
+        os << "vxmm.store [rdi+" << m.disp << "], v" << static_cast<int>(m.r0);
         break;
-    case MirOp::CmpRaxMemAtSetle:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncmp rax, [rbx]\nsetle al\nmovzx rax, al";
+    case MirOp::VXmmLoadFromMemAt:
+        os << "vxmm.load v" << static_cast<int>(m.r0) << ", [0x" << std::hex << m.imm64 << std::dec
+           << "]";
         break;
-    case MirOp::CmpRaxFrameSetl:
-        os << "cmp rax, [rdi+" << m.disp << "]\nsetl al\nmovzx rax, al";
+    case MirOp::VXmmAdd:
+        os << "vxmm.add v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::CmpRaxMemAtSetl:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncmp rax, [rbx]\nsetl al\nmovzx rax, al";
+    case MirOp::VXmmSub:
+        os << "vxmm.sub v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::CmpRaxFrameSetg:
-        os << "cmp rax, [rdi+" << m.disp << "]\nsetg al\nmovzx rax, al";
+    case MirOp::VXmmMul:
+        os << "vxmm.mul v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::CmpRaxMemAtSetg:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncmp rax, [rbx]\nsetg al\nmovzx rax, al";
+    case MirOp::VXmmDiv:
+        os << "vxmm.div v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::CmpRaxFrameSete:
-        os << "cmp rax, [rdi+" << m.disp << "]\nsete al\nmovzx rax, al";
+    case MirOp::VXmmCmpSetB:
+        os << "vxmm.cmp.b v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::CmpRaxMemAtSete:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncmp rax, [rbx]\nsete al\nmovzx rax, al";
+    case MirOp::VXmmCmpSetBE:
+        os << "vxmm.cmp.be v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::CmpRaxFrameSetne:
-        os << "cmp rax, [rdi+" << m.disp << "]\nsetne al\nmovzx rax, al";
+    case MirOp::VXmmCmpSetE:
+        os << "vxmm.cmp.eq v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::CmpRaxMemAtSetne:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncmp rax, [rbx]\nsetne al\nmovzx rax, al";
+    case MirOp::VXmmCmpSetA:
+        os << "vxmm.cmp.a v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::CmpRaxFrameSetge:
-        os << "cmp rax, [rdi+" << m.disp << "]\nsetge al\nmovzx rax, al";
+    case MirOp::VXmmCmpSetAE:
+        os << "vxmm.cmp.ae v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::CmpRaxMemAtSetge:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncmp rax, [rbx]\nsetge al\nmovzx rax, al";
+    case MirOp::VXmmCmpSetNZ:
+        os << "vxmm.cmp.nz v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::MulRaxFromReg:
-        os << "imul rax, " << mirRegName(m.r0);
+    case MirOp::VAdd32:
+        os << "vadd32 v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::MulRaxFromFrame:
-        os << "imul rax, [rdi+" << m.disp << "]";
+    case MirOp::VSub32:
+        os << "vsub32 v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::MulRaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nimul rax, [rbx]";
+    case MirOp::VMul32:
+        os << "vmul32 v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::IdivRaxByReg:
-        os << "cqo\nidiv " << mirRegName(m.r0);
+    case MirOp::VIdiv32:
+        os << "vidiv32 v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::IdivRaxByFrame:
-        os << "cqo\nidiv qword [rdi+" << m.disp << "]";
+    case MirOp::VCmpSetL32:
+        os << "vcmp32.lt v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::IdivRaxByMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\ncqo\nidiv [rbx]";
+    case MirOp::VCmpSetLE32:
+        os << "vcmp32.le v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::MulXmm0FromReg:
-        os << "movq xmm1, " << mirRegName(m.r0) << "\nmulsd xmm0, xmm1";
+    case MirOp::VCmpSetG32:
+        os << "vcmp32.gt v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::MulXmm0FromFrame:
-        os << "mulsd xmm0, [rdi+" << m.disp << "]";
+    case MirOp::VCmpSetGE32:
+        os << "vcmp32.ge v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::MulXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nmulsd xmm0, [rbx]";
+    case MirOp::VCmpSetE32:
+        os << "vcmp32.eq v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::DivXmm0FromReg:
-        os << "movq xmm1, " << mirRegName(m.r0) << "\ndivsd xmm0, xmm1";
+    case MirOp::VCmpSetNE32:
+        os << "vcmp32.ne v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::DivXmm0FromFrame:
-        os << "divsd xmm0, [rdi+" << m.disp << "]";
+    case MirOp::VXmm32LoadFromFrame:
+        os << "vxmm32.load v" << static_cast<int>(m.r0) << ", [rdi+" << m.disp << "]";
         break;
-    case MirOp::DivXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\ndivsd xmm0, [rbx]";
+    case MirOp::VXmm32StoreToFrame:
+        os << "vxmm32.store [rdi+" << m.disp << "], v" << static_cast<int>(m.r0);
         break;
-    case MirOp::ComisdXmm0FrameSetb:
-        os << "comisd xmm0, [rdi+" << m.disp << "]\nsetb al\nmovzx rax, al";
+    case MirOp::VXmm32LoadFromMemAt:
+        os << "vxmm32.load v" << static_cast<int>(m.r0) << ", [0x" << std::hex << m.imm64
+           << std::dec << "]";
         break;
-    case MirOp::ComisdXmm0MemAtSetb:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncomisd xmm0, [rbx]\nsetb al\nmovzx rax, al";
+    case MirOp::VXmm32Add:
+        os << "vxmm32.add v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::ComisdXmm0RegSetb:
-        os << "movq xmm1, " << mirRegName(m.r0) << "\ncomisd xmm0, xmm1\nsetb al\nmovzx rax, al";
+    case MirOp::VXmm32Sub:
+        os << "vxmm32.sub v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::ComisdXmm0FrameSetbe:
-        os << "comisd xmm0, [rdi+" << m.disp << "]\nsetbe al\nmovzx rax, al";
+    case MirOp::VXmm32Mul:
+        os << "vxmm32.mul v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::ComisdXmm0MemAtSetbe:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncomisd xmm0, [rbx]\nsetbe al\nmovzx rax, al";
+    case MirOp::VXmm32Div:
+        os << "vxmm32.div v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::ComisdXmm0RegSetbe:
-        os << "movq xmm1, " << mirRegName(m.r0) << "\ncomisd xmm0, xmm1\nsetbe al\nmovzx rax, al";
+    case MirOp::VXmm32CmpSetB:
+        os << "vxmm32.cmp.b v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::ComisdXmm0FrameSete:
-        os << "comisd xmm0, [rdi+" << m.disp << "]\nsete al\nmovzx rax, al";
+    case MirOp::VXmm32CmpSetBE:
+        os << "vxmm32.cmp.be v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1)
+           << ", v" << m.imm32;
         break;
-    case MirOp::ComisdXmm0MemAtSete:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncomisd xmm0, [rbx]\nsete al\nmovzx rax, al";
+    case MirOp::VXmm32CmpSetE:
+        os << "vxmm32.cmp.eq v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1)
+           << ", v" << m.imm32;
         break;
-    case MirOp::ComisdXmm0RegSete:
-        os << "movq xmm1, " << mirRegName(m.r0) << "\ncomisd xmm0, xmm1\nsete al\nmovzx rax, al";
+    case MirOp::VXmm32CmpSetA:
+        os << "vxmm32.cmp.a v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
+           << m.imm32;
         break;
-    case MirOp::ComisdXmm0FrameSeta:
-        os << "comisd xmm0, [rdi+" << m.disp << "]\nseta al\nmovzx rax, al";
+    case MirOp::VXmm32CmpSetAE:
+        os << "vxmm32.cmp.ae v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1)
+           << ", v" << m.imm32;
         break;
-    case MirOp::ComisdXmm0MemAtSeta:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncomisd xmm0, [rbx]\nseta al\nmovzx rax, al";
-        break;
-    case MirOp::ComisdXmm0RegSeta:
-        os << "movq xmm1, " << mirRegName(m.r0) << "\ncomisd xmm0, xmm1\nseta al\nmovzx rax, al";
-        break;
-    case MirOp::ComisdXmm0FrameSetae:
-        os << "comisd xmm0, [rdi+" << m.disp << "]\nsetae al\nmovzx rax, al";
-        break;
-    case MirOp::ComisdXmm0MemAtSetae:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncomisd xmm0, [rbx]\nsetae al\nmovzx rax, al";
-        break;
-    case MirOp::ComisdXmm0RegSetae:
-        os << "movq xmm1, " << mirRegName(m.r0) << "\ncomisd xmm0, xmm1\nsetae al\nmovzx rax, al";
-        break;
-    case MirOp::ComisdXmm0FrameSetnz:
-        os << "comisd xmm0, [rdi+" << m.disp << "]\nsetnz al\nmovzx rax, al";
-        break;
-    case MirOp::ComisdXmm0MemAtSetnz:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncomisd xmm0, [rbx]\nsetnz al\nmovzx rax, al";
-        break;
-    case MirOp::ComisdXmm0RegSetnz:
-        os << "movq xmm1, " << mirRegName(m.r0) << "\ncomisd xmm0, xmm1\nsetnz al\nmovzx rax, al";
-        break;
-    case MirOp::MovEaxFromFrame:
-        os << "mov eax, [rdi+" << m.disp << "]";
-        break;
-    case MirOp::MovEaxFromReg:
-        os << "mov eax, " << mirRegName(m.r0);
-        break;
-    case MirOp::MovEaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nmov eax, [rbx]";
-        break;
-    case MirOp::AddEaxFromFrame:
-        os << "add eax, [rdi+" << m.disp << "]";
-        break;
-    case MirOp::AddEaxFromReg:
-        os << "add eax, " << mirRegName(m.r0);
-        break;
-    case MirOp::AddEaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nadd eax, [rbx]";
-        break;
-    case MirOp::SubEaxFromFrame:
-        os << "sub eax, [rdi+" << m.disp << "]";
-        break;
-    case MirOp::SubEaxFromReg:
-        os << "sub eax, " << mirRegName(m.r0);
-        break;
-    case MirOp::SubEaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nsub eax, [rbx]";
-        break;
-    case MirOp::MulEaxFromFrame:
-        os << "imul eax, [rdi+" << m.disp << "]";
-        break;
-    case MirOp::MulEaxFromReg:
-        os << "imul eax, " << mirRegName(m.r0);
-        break;
-    case MirOp::MulEaxFromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nimul eax, [rbx]";
-        break;
-    case MirOp::IdivEaxByFrame:
-        os << "cdq\nidiv dword [rdi+" << m.disp << "]";
-        break;
-    case MirOp::IdivEaxByReg:
-        os << "cdq\nidiv " << mirRegName(m.r0);
-        break;
-    case MirOp::IdivEaxByMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\ncdq\nidiv [rbx]";
-        break;
-    case MirOp::CmpEaxFrameSetl:
-    case MirOp::CmpEaxFrameSetg:
-    case MirOp::CmpEaxFrameSete:
-    case MirOp::CmpEaxFrameSetne:
-    case MirOp::CmpEaxFrameSetle:
-    case MirOp::CmpEaxFrameSetge:
-        os << "cmp eax, [rdi+" << m.disp << "]\nsetcc al\nmovzx rax, al";
-        break;
-    case MirOp::CmpEaxMemAtSetl:
-    case MirOp::CmpEaxMemAtSetg:
-    case MirOp::CmpEaxMemAtSete:
-    case MirOp::CmpEaxMemAtSetne:
-    case MirOp::CmpEaxMemAtSetle:
-    case MirOp::CmpEaxMemAtSetge:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncmp eax, [rbx]\nsetcc al\nmovzx rax, al";
-        break;
-    case MirOp::CmpEaxRegSetl:
-    case MirOp::CmpEaxRegSetg:
-    case MirOp::CmpEaxRegSete:
-    case MirOp::CmpEaxRegSetne:
-    case MirOp::CmpEaxRegSetle:
-    case MirOp::CmpEaxRegSetge:
-        os << "cmp eax, " << mirRegName(m.r0) << "\nsetcc al\nmovzx rax, al";
-        break;
-    case MirOp::MovSsXmm0FromFrame:
-        os << "movss xmm0, [rdi+" << m.disp << "]";
-        break;
-    case MirOp::MovSsXmm0FromReg:
-        os << "movd xmm0, " << mirRegName(m.r0);
-        break;
-    case MirOp::MovSsXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nmovss xmm0, [rbx]";
-        break;
-    case MirOp::AddSsXmm0FromFrame:
-        os << "addss xmm0, [rdi+" << m.disp << "]";
-        break;
-    case MirOp::AddSsXmm0FromReg:
-        os << "movd xmm1, " << mirRegName(m.r0) << "\naddss xmm0, xmm1";
-        break;
-    case MirOp::AddSsXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\naddss xmm0, [rbx]";
-        break;
-    case MirOp::SubSsXmm0FromFrame:
-        os << "subss xmm0, [rdi+" << m.disp << "]";
-        break;
-    case MirOp::SubSsXmm0FromReg:
-        os << "movd xmm1, " << mirRegName(m.r0) << "\nsubss xmm0, xmm1";
-        break;
-    case MirOp::SubSsXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nsubss xmm0, [rbx]";
-        break;
-    case MirOp::MulSsXmm0FromFrame:
-        os << "mulss xmm0, [rdi+" << m.disp << "]";
-        break;
-    case MirOp::MulSsXmm0FromReg:
-        os << "movd xmm1, " << mirRegName(m.r0) << "\nmulss xmm0, xmm1";
-        break;
-    case MirOp::MulSsXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\nmulss xmm0, [rbx]";
-        break;
-    case MirOp::DivSsXmm0FromFrame:
-        os << "divss xmm0, [rdi+" << m.disp << "]";
-        break;
-    case MirOp::DivSsXmm0FromReg:
-        os << "movd xmm1, " << mirRegName(m.r0) << "\ndivss xmm0, xmm1";
-        break;
-    case MirOp::DivSsXmm0FromMemAt:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec << "\ndivss xmm0, [rbx]";
-        break;
-    case MirOp::MovSsFrameFromXmm0:
-        os << "movss [rdi+" << m.disp << "], xmm0";
-        break;
-    case MirOp::MovSsRegFromXmm0:
-        os << "movd " << mirRegName(m.r0) << ", xmm0";
-        break;
-    case MirOp::ComissXmm0FrameSetb:
-    case MirOp::ComissXmm0FrameSetbe:
-    case MirOp::ComissXmm0FrameSete:
-    case MirOp::ComissXmm0FrameSeta:
-    case MirOp::ComissXmm0FrameSetae:
-    case MirOp::ComissXmm0FrameSetnz:
-        os << "comiss xmm0, [rdi+" << m.disp << "]\nsetcc al\nmovzx rax, al";
-        break;
-    case MirOp::ComissXmm0MemAtSetb:
-    case MirOp::ComissXmm0MemAtSetbe:
-    case MirOp::ComissXmm0MemAtSete:
-    case MirOp::ComissXmm0MemAtSeta:
-    case MirOp::ComissXmm0MemAtSetae:
-    case MirOp::ComissXmm0MemAtSetnz:
-        os << "mov rbx, 0x" << std::hex << m.imm64 << std::dec
-           << "\ncomiss xmm0, [rbx]\nsetcc al\nmovzx rax, al";
-        break;
-    case MirOp::ComissXmm0RegSetb:
-    case MirOp::ComissXmm0RegSetbe:
-    case MirOp::ComissXmm0RegSete:
-    case MirOp::ComissXmm0RegSeta:
-    case MirOp::ComissXmm0RegSetae:
-    case MirOp::ComissXmm0RegSetnz:
-        os << "comiss xmm0, " << mirRegName(m.r0) << "\nsetcc al\nmovzx rax, al";
-        break;
-    case MirOp::TestRaxRax:
-        os << "test rax, rax";
-        break;
-    case MirOp::TestRaxJzRel32:
-        os << "test rax, rax\njz pc=" << m.imm32;
+    case MirOp::VXmm32CmpSetNZ:
+        os << "vxmm32.cmp.nz v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1)
+           << ", v" << m.imm32;
         break;
     case MirOp::JzRel32:
         os << "jz pc=" << m.imm32;
-        break;
-    case MirOp::CmoveRcxFromRbx:
-        os << "cmove rcx, rbx";
-        break;
-    case MirOp::CmoveR8FromR9:
-        os << "cmove r8, r9";
         break;
     case MirOp::JmpRel32:
         os << "jmp pc=" << m.imm32;
@@ -420,11 +274,11 @@ std::string mirToString(const Mir &m) {
     case MirOp::JleRel8:
         os << "jle rel8 " << m.disp;
         break;
-    case MirOp::Ret:
-        os << "ret";
-        break;
     case MirOp::CallRax:
         os << "call rax";
+        break;
+    case MirOp::Ret:
+        os << "ret";
         break;
     case MirOp::Nop:
         os << "nop";
@@ -433,54 +287,13 @@ std::string mirToString(const Mir &m) {
     return os.str();
 }
 
-// 使用 imm64 作为静态地址的 op（*MemAt*、MovRegImm64），可带符号/static slot 注释
+// 使用 imm64 作为静态地址的 op，可带符号/static slot 注释
 static bool mirOpUsesImm64AsAddr(MirOp op) {
     switch (op) {
     case MirOp::MovRegImm64:
-    case MirOp::MovRaxFromMemAt:
-    case MirOp::AddRaxFromMemAt:
-    case MirOp::SubRaxFromMemAt:
-    case MirOp::MovXmm0FromMemAt:
-    case MirOp::AddXmm0FromMemAt:
-    case MirOp::SubXmm0FromMemAt:
-    case MirOp::CmpRaxMemAtSetle:
-    case MirOp::CmpRaxMemAtSetl:
-    case MirOp::CmpRaxMemAtSetg:
-    case MirOp::CmpRaxMemAtSete:
-    case MirOp::CmpRaxMemAtSetne:
-    case MirOp::CmpRaxMemAtSetge:
-    case MirOp::MulRaxFromMemAt:
-    case MirOp::IdivRaxByMemAt:
-    case MirOp::MulXmm0FromMemAt:
-    case MirOp::DivXmm0FromMemAt:
-    case MirOp::ComisdXmm0MemAtSetb:
-    case MirOp::ComisdXmm0MemAtSetbe:
-    case MirOp::ComisdXmm0MemAtSete:
-    case MirOp::ComisdXmm0MemAtSeta:
-    case MirOp::ComisdXmm0MemAtSetae:
-    case MirOp::ComisdXmm0MemAtSetnz:
-    case MirOp::MovEaxFromMemAt:
-    case MirOp::AddEaxFromMemAt:
-    case MirOp::SubEaxFromMemAt:
-    case MirOp::MulEaxFromMemAt:
-    case MirOp::IdivEaxByMemAt:
-    case MirOp::CmpEaxMemAtSetl:
-    case MirOp::CmpEaxMemAtSetg:
-    case MirOp::CmpEaxMemAtSete:
-    case MirOp::CmpEaxMemAtSetne:
-    case MirOp::CmpEaxMemAtSetle:
-    case MirOp::CmpEaxMemAtSetge:
-    case MirOp::MovSsXmm0FromMemAt:
-    case MirOp::AddSsXmm0FromMemAt:
-    case MirOp::SubSsXmm0FromMemAt:
-    case MirOp::MulSsXmm0FromMemAt:
-    case MirOp::DivSsXmm0FromMemAt:
-    case MirOp::ComissXmm0MemAtSetb:
-    case MirOp::ComissXmm0MemAtSetbe:
-    case MirOp::ComissXmm0MemAtSete:
-    case MirOp::ComissXmm0MemAtSeta:
-    case MirOp::ComissXmm0MemAtSetae:
-    case MirOp::ComissXmm0MemAtSetnz:
+    case MirOp::VLoadFromMemAt:
+    case MirOp::VXmmLoadFromMemAt:
+    case MirOp::VXmm32LoadFromMemAt:
         return true;
     default:
         return false;
@@ -490,53 +303,12 @@ static bool mirOpUsesImm64AsAddr(MirOp op) {
 // 仅用于帧访问的 op 才带 [rdi+disp]，需槽位注释
 static bool mirOpUsesFrameDisp(MirOp op) {
     switch (op) {
-    case MirOp::CmpRaxFrameSetle:
-    case MirOp::CmpRaxFrameSetl:
-    case MirOp::CmpRaxFrameSetg:
-    case MirOp::CmpRaxFrameSete:
-    case MirOp::CmpRaxFrameSetne:
-    case MirOp::CmpRaxFrameSetge:
-    case MirOp::MulRaxFromFrame:
-    case MirOp::IdivRaxByFrame:
-    case MirOp::MovRegFromFrame:
-    case MirOp::MovFrameFromReg:
-    case MirOp::AddRaxFromFrame:
-    case MirOp::SubRaxFromFrame:
-    case MirOp::MovXmm0FromFrame:
-    case MirOp::AddXmm0FromFrame:
-    case MirOp::SubXmm0FromFrame:
-    case MirOp::MovFrameFromXmm0:
-    case MirOp::MulXmm0FromFrame:
-    case MirOp::DivXmm0FromFrame:
-    case MirOp::ComisdXmm0FrameSetb:
-    case MirOp::ComisdXmm0FrameSetbe:
-    case MirOp::ComisdXmm0FrameSete:
-    case MirOp::ComisdXmm0FrameSeta:
-    case MirOp::ComisdXmm0FrameSetae:
-    case MirOp::ComisdXmm0FrameSetnz:
-    case MirOp::MovEaxFromFrame:
-    case MirOp::AddEaxFromFrame:
-    case MirOp::SubEaxFromFrame:
-    case MirOp::MulEaxFromFrame:
-    case MirOp::IdivEaxByFrame:
-    case MirOp::CmpEaxFrameSetl:
-    case MirOp::CmpEaxFrameSetg:
-    case MirOp::CmpEaxFrameSete:
-    case MirOp::CmpEaxFrameSetne:
-    case MirOp::CmpEaxFrameSetle:
-    case MirOp::CmpEaxFrameSetge:
-    case MirOp::MovSsXmm0FromFrame:
-    case MirOp::AddSsXmm0FromFrame:
-    case MirOp::SubSsXmm0FromFrame:
-    case MirOp::MulSsXmm0FromFrame:
-    case MirOp::DivSsXmm0FromFrame:
-    case MirOp::MovSsFrameFromXmm0:
-    case MirOp::ComissXmm0FrameSetb:
-    case MirOp::ComissXmm0FrameSetbe:
-    case MirOp::ComissXmm0FrameSete:
-    case MirOp::ComissXmm0FrameSeta:
-    case MirOp::ComissXmm0FrameSetae:
-    case MirOp::ComissXmm0FrameSetnz:
+    case MirOp::VLoadFromFrame:
+    case MirOp::VStoreToFrame:
+    case MirOp::VXmmLoadFromFrame:
+    case MirOp::VXmmStoreToFrame:
+    case MirOp::VXmm32LoadFromFrame:
+    case MirOp::VXmm32StoreToFrame:
         return true;
     default:
         return false;
@@ -664,199 +436,15 @@ size_t mirSizeBytes(const Mir &m) {
     case MirOp::MovRegReg:
         return 3;
     case MirOp::MovRegImm32:
-        return (m.r0 == 4) ? 6 : 7; // r8d: 41 b8+4; rdx/rcx: 48 c7 c2/c1+4
+        return (m.r0 == 4) ? 6 : 7;
     case MirOp::MovRegImm64:
-        return 10; // rex + b8/b9 + 8
-    case MirOp::MovRegFromFrame:
-    case MirOp::MovFrameFromReg:
-        return fitsDisp8(m.disp) ? 3 : 6;
-    case MirOp::MovRaxFromMemAt:
-    case MirOp::AddRaxFromMemAt:
-    case MirOp::SubRaxFromMemAt:
-        return 10 + 3; // mov rbx, imm64 + op [rbx]
-    case MirOp::MovXmm0FromMemAt:
-    case MirOp::AddXmm0FromMemAt:
-    case MirOp::SubXmm0FromMemAt:
-        return 10 + 4; // mov rbx, imm64 + xmm op
-    case MirOp::MovRaxFromReg:
-    case MirOp::MovRegFromRax:
-        return (m.r0 == 0) ? 0 : 3;
-    case MirOp::AddRaxFromReg:
-    case MirOp::SubRaxFromReg:
-        return 3;
-    case MirOp::AddRaxFromFrame:
-    case MirOp::SubRaxFromFrame:
-        return fitsDisp8(m.disp) ? 3 : 6;
-    case MirOp::MovXmm0FromFrame:
-    case MirOp::AddXmm0FromFrame:
-    case MirOp::SubXmm0FromFrame:
-    case MirOp::MovFrameFromXmm0:
-        return fitsDisp8(m.disp) ? 4 : 7;
-    case MirOp::MovXmm0FromReg:
-        return 5;
-    case MirOp::AddXmm0FromReg:
-    case MirOp::SubXmm0FromReg:
-        return 5 + 4; // movq xmm1, reg + addsd/subsd
-    case MirOp::MovRegFromXmm0:
-        return 5;
-    case MirOp::CmpRaxImm8Setle:
-        return 4 + 3 + 4; // cmp + setle + movzx
-    case MirOp::CmpRaxFrameSetle:
-        return (fitsDisp8(m.disp) ? 3 : 6) + 3 + 4; // cmp + setle + movzx
-    case MirOp::CmpRaxMemAtSetle:
-        return 10 + 3 + 3 + 4;
-    case MirOp::CmpRaxFrameSetl:
-    case MirOp::CmpRaxFrameSetg:
-    case MirOp::CmpRaxFrameSete:
-    case MirOp::CmpRaxFrameSetne:
-    case MirOp::CmpRaxFrameSetge:
-        return (fitsDisp8(m.disp) ? 3 : 6) + 3 + 4;
-    case MirOp::CmpRaxMemAtSetl:
-    case MirOp::CmpRaxMemAtSetg:
-    case MirOp::CmpRaxMemAtSete:
-    case MirOp::CmpRaxMemAtSetne:
-    case MirOp::CmpRaxMemAtSetge:
-        return 10 + 3 + 3 + 4;
-    case MirOp::MulRaxFromReg:
-        return 4; // rex.w + 0f af /r
-    case MirOp::MulRaxFromFrame:
-        return (fitsDisp8(m.disp) ? 4 : 7);
-    case MirOp::MulRaxFromMemAt:
-        return 10 + 3;
-    case MirOp::IdivRaxByReg:
-        return 2 + 2; // cqo + idiv
-    case MirOp::IdivRaxByFrame:
-        return 2 + (fitsDisp8(m.disp) ? 3 : 6);
-    case MirOp::IdivRaxByMemAt:
-        return 10 + 2 + 3;
-    case MirOp::MulXmm0FromReg:
-    case MirOp::DivXmm0FromReg:
-        return 5 + 4; // movq xmm1, reg + mulsd/divsd
-    case MirOp::MulXmm0FromFrame:
-    case MirOp::DivXmm0FromFrame:
-        return fitsDisp8(m.disp) ? 4 : 7;
-    case MirOp::MulXmm0FromMemAt:
-    case MirOp::DivXmm0FromMemAt:
-        return 10 + 4;
-    case MirOp::ComisdXmm0FrameSetb:
-    case MirOp::ComisdXmm0FrameSetbe:
-    case MirOp::ComisdXmm0FrameSete:
-    case MirOp::ComisdXmm0FrameSeta:
-    case MirOp::ComisdXmm0FrameSetae:
-    case MirOp::ComisdXmm0FrameSetnz:
-        return (fitsDisp8(m.disp) ? 4 : 7) + 3 + 4; // comisd + setcc + movzx
-    case MirOp::ComisdXmm0MemAtSetb:
-    case MirOp::ComisdXmm0MemAtSetbe:
-    case MirOp::ComisdXmm0MemAtSete:
-    case MirOp::ComisdXmm0MemAtSeta:
-    case MirOp::ComisdXmm0MemAtSetae:
-    case MirOp::ComisdXmm0MemAtSetnz:
-        return 10 + 4 + 3 + 4;
-    case MirOp::ComisdXmm0RegSetb:
-    case MirOp::ComisdXmm0RegSetbe:
-    case MirOp::ComisdXmm0RegSete:
-    case MirOp::ComisdXmm0RegSeta:
-    case MirOp::ComisdXmm0RegSetae:
-    case MirOp::ComisdXmm0RegSetnz:
-        return 5 + 4 + 3 + 4;
-    case MirOp::MovEaxFromFrame:
-    case MirOp::AddEaxFromFrame:
-    case MirOp::SubEaxFromFrame:
-        return fitsDisp8(m.disp) ? 3 : 6;
-    case MirOp::MovEaxFromReg:
-    case MirOp::AddEaxFromReg:
-    case MirOp::SubEaxFromReg:
-        return (m.r0 == 0) ? 0 : 3;
-    case MirOp::MovEaxFromMemAt:
-    case MirOp::AddEaxFromMemAt:
-    case MirOp::SubEaxFromMemAt:
-        return 10 + 3;
-    case MirOp::MulEaxFromFrame:
-        return fitsDisp8(m.disp) ? 4 : 7;
-    case MirOp::MulEaxFromReg:
-        return 4;
-    case MirOp::MulEaxFromMemAt:
-        return 10 + 3;
-    case MirOp::IdivEaxByFrame:
-        return 2 + (fitsDisp8(m.disp) ? 3 : 6);
-    case MirOp::IdivEaxByReg:
-        return 2 + 2;
-    case MirOp::IdivEaxByMemAt:
-        return 10 + 2 + 3;
-    case MirOp::CmpEaxFrameSetl:
-    case MirOp::CmpEaxFrameSetg:
-    case MirOp::CmpEaxFrameSete:
-    case MirOp::CmpEaxFrameSetne:
-    case MirOp::CmpEaxFrameSetle:
-    case MirOp::CmpEaxFrameSetge:
-        return (fitsDisp8(m.disp) ? 3 : 6) + 3 + 4;
-    case MirOp::CmpEaxMemAtSetl:
-    case MirOp::CmpEaxMemAtSetg:
-    case MirOp::CmpEaxMemAtSete:
-    case MirOp::CmpEaxMemAtSetne:
-    case MirOp::CmpEaxMemAtSetle:
-    case MirOp::CmpEaxMemAtSetge:
-        return 10 + 3 + 3 + 4;
-    case MirOp::CmpEaxRegSetl:
-    case MirOp::CmpEaxRegSetg:
-    case MirOp::CmpEaxRegSete:
-    case MirOp::CmpEaxRegSetne:
-    case MirOp::CmpEaxRegSetle:
-    case MirOp::CmpEaxRegSetge:
-        return 3 + 3 + 4;
-    case MirOp::MovSsXmm0FromFrame:
-    case MirOp::AddSsXmm0FromFrame:
-    case MirOp::SubSsXmm0FromFrame:
-    case MirOp::MulSsXmm0FromFrame:
-    case MirOp::DivSsXmm0FromFrame:
-    case MirOp::MovSsFrameFromXmm0:
-        return fitsDisp8(m.disp) ? 4 : 7;
-    case MirOp::MovSsXmm0FromReg:
-        return 5;
-    case MirOp::AddSsXmm0FromReg:
-    case MirOp::SubSsXmm0FromReg:
-    case MirOp::MulSsXmm0FromReg:
-    case MirOp::DivSsXmm0FromReg:
-        return 5 + 4; // movd xmm1, reg + op xmm0, xmm1
-    case MirOp::MovSsXmm0FromMemAt:
-    case MirOp::AddSsXmm0FromMemAt:
-    case MirOp::SubSsXmm0FromMemAt:
-    case MirOp::MulSsXmm0FromMemAt:
-    case MirOp::DivSsXmm0FromMemAt:
-        return 10 + 4;
-    case MirOp::MovSsRegFromXmm0:
-        return 5;
-    case MirOp::ComissXmm0FrameSetb:
-    case MirOp::ComissXmm0FrameSetbe:
-    case MirOp::ComissXmm0FrameSete:
-    case MirOp::ComissXmm0FrameSeta:
-    case MirOp::ComissXmm0FrameSetae:
-    case MirOp::ComissXmm0FrameSetnz:
-        return (fitsDisp8(m.disp) ? 4 : 7) + 3 + 4;
-    case MirOp::ComissXmm0MemAtSetb:
-    case MirOp::ComissXmm0MemAtSetbe:
-    case MirOp::ComissXmm0MemAtSete:
-    case MirOp::ComissXmm0MemAtSeta:
-    case MirOp::ComissXmm0MemAtSetae:
-    case MirOp::ComissXmm0MemAtSetnz:
-        return 10 + 4 + 3 + 4;
-    case MirOp::ComissXmm0RegSetb:
-    case MirOp::ComissXmm0RegSetbe:
-    case MirOp::ComissXmm0RegSete:
-    case MirOp::ComissXmm0RegSeta:
-    case MirOp::ComissXmm0RegSetae:
-    case MirOp::ComissXmm0RegSetnz:
-        return 5 + 4 + 3 + 4; // movd + comiss + setcc + movzx
-    case MirOp::TestRaxRax:
-        return 3;
-    case MirOp::TestRaxJzRel32:
-        return 3 + 6; // test + jz rel32
+        return 10;
+    case MirOp::CallRax:
+        return 2;
+    case MirOp::Ret:
+        return 1;
     case MirOp::JzRel32:
-        return 6; // jz rel32
-    case MirOp::CmoveRcxFromRbx:
-        return 4;
-    case MirOp::CmoveR8FromR9:
-        return 4;
+        return 6;
     case MirOp::JmpRel32:
         return 5;
     case MirOp::JleRel32:
@@ -865,10 +453,87 @@ size_t mirSizeBytes(const Mir &m) {
         return 2;
     case MirOp::JleRel8:
         return 2;
-    case MirOp::Ret:
+    case MirOp::VLoadFromFrame:
+    case MirOp::VStoreToFrame:
+        return fitsDisp8(m.disp) ? 3 : 6;
+    case MirOp::VLoadFromMemAt:
+        return 10 + 3;
+    case MirOp::VLoadImm32:
+        return (m.r0 == 4) ? 6 : 7;
+    case MirOp::VLoadImm64:
+        return 10;
+    case MirOp::VCopy:
+        return 3;
+    case MirOp::VTest:
+        return 3;
+    case MirOp::VCmove:
+    case MirOp::VCmovnz:
+        return 4;
+    case MirOp::VMovFromRax:
+    case MirOp::VMovToRax:
+        return (m.r0 == 0) ? 0 : 3;
+    case MirOp::VRet:
         return 1;
-    case MirOp::CallRax:
-        return 2;
+    case MirOp::VAdd:
+    case MirOp::VSub:
+    case MirOp::VMul:
+        return 3;
+    case MirOp::VIdiv:
+        return 2 + 2;
+    case MirOp::VCmpSetL:
+    case MirOp::VCmpSetLE:
+    case MirOp::VCmpSetG:
+    case MirOp::VCmpSetGE:
+    case MirOp::VCmpSetE:
+    case MirOp::VCmpSetNE:
+        return (fitsDisp8(m.disp) ? 3 : 6) + 3 + 4;
+    case MirOp::VXmmLoadFromFrame:
+    case MirOp::VXmmStoreToFrame:
+        return fitsDisp8(m.disp) ? 4 : 7;
+    case MirOp::VXmmLoadFromMemAt:
+        return 10 + 4;
+    case MirOp::VXmmAdd:
+    case MirOp::VXmmSub:
+    case MirOp::VXmmMul:
+    case MirOp::VXmmDiv:
+        return 5 + 4;
+    case MirOp::VXmmCmpSetB:
+    case MirOp::VXmmCmpSetBE:
+    case MirOp::VXmmCmpSetE:
+    case MirOp::VXmmCmpSetA:
+    case MirOp::VXmmCmpSetAE:
+    case MirOp::VXmmCmpSetNZ:
+        return 5 + 4 + 3 + 4;
+    case MirOp::VAdd32:
+    case MirOp::VSub32:
+    case MirOp::VMul32:
+        return 3;
+    case MirOp::VIdiv32:
+        return 2 + 2;
+    case MirOp::VCmpSetL32:
+    case MirOp::VCmpSetLE32:
+    case MirOp::VCmpSetG32:
+    case MirOp::VCmpSetGE32:
+    case MirOp::VCmpSetE32:
+    case MirOp::VCmpSetNE32:
+        return (fitsDisp8(m.disp) ? 3 : 6) + 3 + 4;
+    case MirOp::VXmm32LoadFromFrame:
+    case MirOp::VXmm32StoreToFrame:
+        return fitsDisp8(m.disp) ? 4 : 7;
+    case MirOp::VXmm32LoadFromMemAt:
+        return 10 + 4;
+    case MirOp::VXmm32Add:
+    case MirOp::VXmm32Sub:
+    case MirOp::VXmm32Mul:
+    case MirOp::VXmm32Div:
+        return 5 + 4;
+    case MirOp::VXmm32CmpSetB:
+    case MirOp::VXmm32CmpSetBE:
+    case MirOp::VXmm32CmpSetE:
+    case MirOp::VXmm32CmpSetA:
+    case MirOp::VXmm32CmpSetAE:
+    case MirOp::VXmm32CmpSetNZ:
+        return 5 + 4 + 3 + 4;
     case MirOp::Nop:
         return 1;
     }

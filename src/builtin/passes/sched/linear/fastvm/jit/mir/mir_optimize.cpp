@@ -44,15 +44,8 @@ void optimizeWin64RedundantArgSetup(MirBuffer &buf) {
     }
 }
 
-void optimizeRemoveNoopMovRaxRax(MirBuffer &buf) {
-    for (size_t i = 0; i < buf.size();) {
-        const Mir &m = buf[i];
-        if (m.op == MirOp::MovRegFromRax && m.r0 == kRegRax) {
-            buf.erase(buf.begin() + static_cast<std::ptrdiff_t>(i));
-            continue;
-        }
-        ++i;
-    }
-}
+// 原逻辑为删除 mov rax,rax；迁移到 VReg 后无此物理 op，VMovFromRax(r0) 需分配结果才知是否为
+// noop，暂不优化
+void optimizeRemoveNoopMovRaxRax(MirBuffer &buf) { (void)buf; }
 
 } // namespace camel::jit::x64

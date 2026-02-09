@@ -41,6 +41,11 @@ constexpr uint8_t kRegRax = 0, kRegRcx = 1, kRegRdx = 2, kRegRbx = 3;
 constexpr uint8_t kRegR8 = 4, kRegR9 = 5, kRegR10 = 6, kRegR11 = 7;
 constexpr uint8_t kRegRdi = 8, kRegRsi = 9;
 
+// 虚拟寄存器：在 MIR 中表示“未分配”的值，由统一寄存器分配阶段赋给物理寄存器
+using VRegId                  = uint16_t;
+constexpr VRegId kInvalidVReg = 0xFFFFu;
+constexpr VRegId kMaxVRegs    = 512;
+
 inline const char *mirRegName(uint8_t r) {
     static const char *n[] = {"rax", "rcx", "rdx", "rbx", "r8", "r9", "r10", "r11", "rdi", "rsi"};
     return (r <= 9u) ? n[r] : "?";
@@ -51,168 +56,77 @@ struct MirBlockInfo {
     uint32_t blockId{0}; // 0 = 未分配，L3 用于 CFG
 };
 
+// 仅保留 ABI/控制流；其余全部为 V*（虚拟寄存器），由 linearScanVReg 统一分配
 enum class MirOp : uint8_t {
-    // 寄存器-寄存器
     MovRegReg,
-    // 立即数
     MovRegImm32,
     MovRegImm64,
-    // Frame [rdi+disp]
-    MovRegFromFrame,
-    MovFrameFromReg,
-    // 内存（静态区等，用 rbx 作基址）
-    MovRaxFromMemAt,
-    AddRaxFromMemAt,
-    SubRaxFromMemAt,
-    // 算术 (rax 与 reg/frame/mem)
-    MovRaxFromReg,
-    MovRegFromRax,
-    AddRaxFromReg,
-    SubRaxFromReg,
-    AddRaxFromFrame,
-    SubRaxFromFrame,
-    // XMM0 与 frame/reg/mem
-    MovXmm0FromFrame,
-    AddXmm0FromFrame,
-    SubXmm0FromFrame,
-    MovFrameFromXmm0,
-    MovXmm0FromReg,
-    AddXmm0FromReg,
-    SubXmm0FromReg,
-    MovRegFromXmm0,
-    MovXmm0FromMemAt,
-    AddXmm0FromMemAt,
-    SubXmm0FromMemAt,
-    // 比较与条件（Long 两 slot 比较，结果 0/1 入 rax）
-    CmpRaxImm8Setle,
-    CmpRaxFrameSetle,
-    CmpRaxMemAtSetle,
-    CmpRaxFrameSetl,
-    CmpRaxMemAtSetl,
-    CmpRaxFrameSetg,
-    CmpRaxMemAtSetg,
-    CmpRaxFrameSete,
-    CmpRaxMemAtSete,
-    CmpRaxFrameSetne,
-    CmpRaxMemAtSetne,
-    CmpRaxFrameSetge,
-    CmpRaxMemAtSetge,
-    // Long 算术
-    MulRaxFromReg,
-    MulRaxFromFrame,
-    MulRaxFromMemAt,
-    IdivRaxByReg,
-    IdivRaxByFrame,
-    IdivRaxByMemAt,
-    // Double 算术
-    MulXmm0FromReg,
-    MulXmm0FromFrame,
-    MulXmm0FromMemAt,
-    DivXmm0FromReg,
-    DivXmm0FromFrame,
-    DivXmm0FromMemAt,
-    // Double 比较：comisd xmm0, op; setcc al; movzx rax, al
-    ComisdXmm0FrameSetb,
-    ComisdXmm0MemAtSetb,
-    ComisdXmm0RegSetb,
-    ComisdXmm0FrameSetbe,
-    ComisdXmm0MemAtSetbe,
-    ComisdXmm0RegSetbe,
-    ComisdXmm0FrameSete,
-    ComisdXmm0MemAtSete,
-    ComisdXmm0RegSete,
-    ComisdXmm0FrameSeta,
-    ComisdXmm0MemAtSeta,
-    ComisdXmm0RegSeta,
-    ComisdXmm0FrameSetae,
-    ComisdXmm0MemAtSetae,
-    ComisdXmm0RegSetae,
-    ComisdXmm0FrameSetnz,
-    ComisdXmm0MemAtSetnz,
-    ComisdXmm0RegSetnz,
-    // 32 位整型 (I*)
-    MovEaxFromFrame,
-    MovEaxFromReg,
-    MovEaxFromMemAt,
-    AddEaxFromFrame,
-    AddEaxFromReg,
-    AddEaxFromMemAt,
-    SubEaxFromFrame,
-    SubEaxFromReg,
-    SubEaxFromMemAt,
-    MulEaxFromFrame,
-    MulEaxFromReg,
-    MulEaxFromMemAt,
-    IdivEaxByFrame,
-    IdivEaxByReg,
-    IdivEaxByMemAt,
-    CmpEaxFrameSetl,
-    CmpEaxMemAtSetl,
-    CmpEaxRegSetl,
-    CmpEaxFrameSetg,
-    CmpEaxMemAtSetg,
-    CmpEaxRegSetg,
-    CmpEaxFrameSete,
-    CmpEaxMemAtSete,
-    CmpEaxRegSete,
-    CmpEaxFrameSetne,
-    CmpEaxMemAtSetne,
-    CmpEaxRegSetne,
-    CmpEaxFrameSetle,
-    CmpEaxMemAtSetle,
-    CmpEaxRegSetle,
-    CmpEaxFrameSetge,
-    CmpEaxMemAtSetge,
-    CmpEaxRegSetge,
-    // 32 位浮点 (F*)
-    MovSsXmm0FromFrame,
-    MovSsXmm0FromReg,
-    MovSsXmm0FromMemAt,
-    AddSsXmm0FromFrame,
-    AddSsXmm0FromReg,
-    AddSsXmm0FromMemAt,
-    SubSsXmm0FromFrame,
-    SubSsXmm0FromReg,
-    SubSsXmm0FromMemAt,
-    MulSsXmm0FromFrame,
-    MulSsXmm0FromReg,
-    MulSsXmm0FromMemAt,
-    DivSsXmm0FromFrame,
-    DivSsXmm0FromReg,
-    DivSsXmm0FromMemAt,
-    MovSsFrameFromXmm0,
-    MovSsRegFromXmm0,
-    ComissXmm0FrameSetb,
-    ComissXmm0MemAtSetb,
-    ComissXmm0RegSetb,
-    ComissXmm0FrameSetbe,
-    ComissXmm0MemAtSetbe,
-    ComissXmm0RegSetbe,
-    ComissXmm0FrameSete,
-    ComissXmm0MemAtSete,
-    ComissXmm0RegSete,
-    ComissXmm0FrameSeta,
-    ComissXmm0MemAtSeta,
-    ComissXmm0RegSeta,
-    ComissXmm0FrameSetae,
-    ComissXmm0MemAtSetae,
-    ComissXmm0RegSetae,
-    ComissXmm0FrameSetnz,
-    ComissXmm0MemAtSetnz,
-    ComissXmm0RegSetnz,
-    TestRaxRax,
-    TestRaxJzRel32, // targetPc 有效（含 test rax,rax）
-    JzRel32,        // targetPc 有效，仅 jz（ZF 已由前一条指令设置）
-    CmoveRcxFromRbx,
-    CmoveR8FromR9, // ZF=1 时 r8=r9，用于 BRCH 单次写 result
-    // 控制流（targetPc 或 rel 在 imm32/disp 中）
-    JmpRel32, // targetPc 有效
-    JleRel32, // targetPc 有效
+    CallRax,
+    JzRel32,
+    JmpRel32,
+    JleRel32,
     JmpRel8,
     JleRel8,
-    Ret,
-    CallRax,
-    // 占位/调试
+    Ret, // 无操作数，用于 TAIL 等
+    // --- V*：r0/r1=VRegId，三操作数时右操作数在 imm32（vreg id）---
+    VLoadFromFrame,
+    VStoreToFrame,
+    VLoadFromMemAt,
+    VLoadImm32,
+    VLoadImm64,
+    VCopy,
+    VTest,
+    VCmove,
+    VCmovnz,
+    VMovFromRax,
+    VMovToRax,
+    VRet,
+    VAdd,
+    VSub,
+    VMul,
+    VIdiv,
+    VCmpSetL,
+    VCmpSetLE,
+    VCmpSetG,
+    VCmpSetGE,
+    VCmpSetE,
+    VCmpSetNE,
+    VXmmLoadFromFrame,
+    VXmmStoreToFrame,
+    VXmmLoadFromMemAt,
+    VXmmAdd,
+    VXmmSub,
+    VXmmMul,
+    VXmmDiv,
+    VXmmCmpSetB,
+    VXmmCmpSetBE,
+    VXmmCmpSetE,
+    VXmmCmpSetA,
+    VXmmCmpSetAE,
+    VXmmCmpSetNZ,
+    VAdd32,
+    VSub32,
+    VMul32,
+    VIdiv32,
+    VCmpSetL32,
+    VCmpSetLE32,
+    VCmpSetG32,
+    VCmpSetGE32,
+    VCmpSetE32,
+    VCmpSetNE32,
+    VXmm32LoadFromFrame,
+    VXmm32StoreToFrame,
+    VXmm32LoadFromMemAt,
+    VXmm32Add,
+    VXmm32Sub,
+    VXmm32Mul,
+    VXmm32Div,
+    VXmm32CmpSetB,
+    VXmm32CmpSetBE,
+    VXmm32CmpSetE,
+    VXmm32CmpSetA,
+    VXmm32CmpSetAE,
+    VXmm32CmpSetNZ,
     Nop,
 };
 
@@ -236,10 +150,13 @@ using MirBuffer = std::vector<Mir>;
 std::string mirToString(const Mir &m);
 
 // MIR 打印选项：仅首条对应某 pc 的指令显示 pc，其余 pc 列留空；可选符号名与槽位名注释
+// vregAlloc 传 camel::jit::VRegAllocation*（调用方 include regalloc.h），此处用 void* 避免 mir.h
+// 依赖 regalloc
 struct MirPrintOptions {
     const std::unordered_map<size_t, size_t> *pcToOffset         = nullptr;
     const std::unordered_map<uint64_t, std::string> *symbolNames = nullptr; // 地址 -> 函数/符号名
     const std::unordered_map<int, std::string> *slotNames = nullptr; // disp(rdi+) -> 槽位名如 "n"
+    const void *vregAlloc                                 = nullptr;
 };
 
 // 整段 buffer 打印到 stream，格式 "[pc][idx]  insn  ; 注释"。pc 列仅该 pc 的首条 MIR

@@ -551,6 +551,19 @@ class Encoder {
         emitBytes({0x8b, modrm});
         asmLine(std::string("mov eax, ") + regName(reg));
     }
+    // mov reg, eax（32 位，零扩展到 64），用于 VAdd32 等结果写回
+    void movRegFromEax(uint8_t reg) {
+        if (reg == 0)
+            return;
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC0 | (regEnc & 7));
+        if (regEnc >= 4) {
+            rexWB();
+            modrm = static_cast<uint8_t>(0xC0 | (regEnc - 4));
+        }
+        emitBytes({0x89, modrm});
+        asmLine(std::string("mov ") + regName(reg) + ", eax");
+    }
     void movEaxFromMemAt(uint64_t addr) {
         emitByte(0x48);
         emitByte(0xbb);
@@ -1133,6 +1146,46 @@ class Encoder {
         asmLine("cmp [rdi+" + std::to_string(disp) + "], " + std::to_string(imm));
     }
 
+    // cmp rax, reg（64 位，用于 VCmpSet* 两操作数均在 reg）
+    void cmpRaxWithReg(uint8_t reg) {
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm;
+        if (regEnc < 4) {
+            rexW();
+            modrm = static_cast<uint8_t>(0xC0 | regEnc);
+        } else {
+            rexWB();
+            modrm = static_cast<uint8_t>(0xC0 | (regEnc - 4));
+        }
+        emitBytes({0x3b, modrm});
+        asmLine(std::string("cmp rax, ") + regName(reg));
+    }
+
+    void setlAlMovzxRax() {
+        emitBytes({0x0f, 0x9c, 0xc0});
+        asmLine("setl al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void setleAlMovzxRax() {
+        emitBytes({0x0f, 0x9e, 0xc0});
+        asmLine("setle al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void setgAlMovzxRax() {
+        emitBytes({0x0f, 0x9f, 0xc0});
+        asmLine("setg al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+    void setgeAlMovzxRax() {
+        emitBytes({0x0f, 0x9d, 0xc0});
+        asmLine("setge al");
+        emitBytes({0x48, 0x0f, 0xb6, 0xc0});
+        asmLine("movzx rax, al");
+    }
+
     // cmp rax, [rdi + disp] 64 位比较一槽（disp8 或 disp32）
     void cmpRaxWithFrame(int disp) {
         rexW();
@@ -1437,6 +1490,28 @@ class Encoder {
     void cmoveR8FromR9() {
         emitBytes({0x4d, 0x0f, 0x44, 0xc1}); // REX.WRB 0F 44 /r: reg=r8, r/m=r9
         asmLine("cmove r8, r9");
+    }
+
+    // cmove/cmovnz 通用两寄存器（用于 VReg 分配后的 JOIN 等）
+    void cmoveRegFromReg(uint8_t dst, uint8_t src) {
+        uint8_t rex = 0x48;
+        if (dst >= 4 && dst <= 7)
+            rex |= 1;
+        if (src >= 4 && src <= 7)
+            rex |= 4;
+        emitByte(rex);
+        emitBytes({0x0f, 0x44, static_cast<uint8_t>(0xC0 | ((src & 7) << 3) | (dst & 7))});
+        asmLine(std::string("cmove ") + regName(dst) + ", " + regName(src));
+    }
+    void cmovnzRegFromReg(uint8_t dst, uint8_t src) {
+        uint8_t rex = 0x48;
+        if (dst >= 4 && dst <= 7)
+            rex |= 1;
+        if (src >= 4 && src <= 7)
+            rex |= 4;
+        emitByte(rex);
+        emitBytes({0x0f, 0x45, static_cast<uint8_t>(0xC0 | ((src & 7) << 3) | (dst & 7))});
+        asmLine(std::string("cmovnz ") + regName(dst) + ", " + regName(src));
     }
 
     // test rax, rax; jz rel32 (jump if cond is false)

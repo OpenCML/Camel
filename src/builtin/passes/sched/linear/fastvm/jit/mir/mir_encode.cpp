@@ -18,15 +18,85 @@
  */
 
 #include "builtin/passes/sched/linear/fastvm/jit/mir/mir_encode.h"
+#include "builtin/passes/sched/linear/fastvm/jit/regalloc/regalloc.h"
 
 namespace camel::jit::x64 {
 
 void encodeMirBuffer(
     const MirBuffer &buf, const std::unordered_map<size_t, size_t> &pcToOffset,
-    std::vector<uint8_t> &code, std::ostream *asmOut, size_t baseOffset) {
+    std::vector<uint8_t> &code, std::ostream *asmOut, size_t baseOffset,
+    const ::camel::jit::VRegAllocation *vregAlloc) {
     Encoder enc(code, asmOut, baseOffset);
+    auto pregFor = [vregAlloc](VRegId v) -> int {
+        if (!vregAlloc)
+            return ::camel::jit::kSpilled;
+        return vregAlloc->pregForVReg(v);
+    };
     for (const Mir &m : buf) {
         switch (m.op) {
+        case MirOp::VLoadFromFrame: {
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0)
+                enc.movRegFromFrame(static_cast<uint8_t>(r), m.disp);
+            break;
+        }
+        case MirOp::VStoreToFrame: {
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0)
+                enc.movToFrame(m.disp, static_cast<uint8_t>(r));
+            break;
+        }
+        case MirOp::VLoadFromMemAt: {
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0) {
+                enc.movRaxFromMemAt(m.imm64);
+                enc.emitMovRegReg(static_cast<uint8_t>(r), kRegRax);
+            }
+            break;
+        }
+        case MirOp::VCopy: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int sr = pregFor(static_cast<VRegId>(m.r1));
+            if (dr >= 0 && sr >= 0)
+                enc.emitMovRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(sr));
+            break;
+        }
+        case MirOp::VTest: {
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0) {
+                if (r != 0)
+                    enc.movRaxFromReg(static_cast<uint8_t>(r));
+                enc.testRaxRax();
+            }
+            break;
+        }
+        case MirOp::VCmove: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int sr = pregFor(static_cast<VRegId>(m.r1));
+            if (dr >= 0 && sr >= 0)
+                enc.cmoveRegFromReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(sr));
+            break;
+        }
+        case MirOp::VCmovnz: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int sr = pregFor(static_cast<VRegId>(m.r1));
+            if (dr >= 0 && sr >= 0)
+                enc.cmovnzRegFromReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(sr));
+            break;
+        }
+        case MirOp::VMovFromRax:
+        case MirOp::VMovToRax:
+            // 暂未在 JOIN 等路径使用，编码为 mov reg, rax / mov rax, reg
+            if (vregAlloc) {
+                int r = pregFor(static_cast<VRegId>(m.r0));
+                if (r >= 0) {
+                    if (m.op == MirOp::VMovFromRax)
+                        enc.emitMovRegReg(static_cast<uint8_t>(r), kRegRax);
+                    else
+                        enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(r));
+                }
+            }
+            break;
         case MirOp::MovRegReg:
             enc.emitMovRegReg(m.r0, m.r1);
             break;
@@ -36,451 +106,127 @@ void encodeMirBuffer(
         case MirOp::MovRegImm64:
             enc.emitMovRegImm64(m.r0, m.imm64);
             break;
-        case MirOp::MovRegFromFrame:
-            enc.movRegFromFrame(m.r0, m.disp);
-            break;
-        case MirOp::MovFrameFromReg:
-            enc.movToFrame(m.disp, m.r0);
-            break;
-        case MirOp::MovRaxFromMemAt:
-            enc.movRaxFromMemAt(m.imm64);
-            break;
-        case MirOp::AddRaxFromMemAt:
-            enc.addRaxFromMemAt(m.imm64);
-            break;
-        case MirOp::SubRaxFromMemAt:
-            enc.subRaxFromMemAt(m.imm64);
-            break;
-        case MirOp::MovRaxFromReg:
-            enc.movRaxFromReg(m.r0);
-            break;
-        case MirOp::MovRegFromRax:
-            enc.movRegFromRax(m.r0);
-            break;
-        case MirOp::AddRaxFromReg:
-            enc.addRaxFromReg(m.r0);
-            break;
-        case MirOp::SubRaxFromReg:
-            enc.subRaxFromReg(m.r0);
-            break;
-        case MirOp::AddRaxFromFrame:
-            enc.addRaxFromFrame(m.disp);
-            break;
-        case MirOp::SubRaxFromFrame:
-            enc.subRaxFromFrame(m.disp);
-            break;
-        case MirOp::MovXmm0FromFrame:
-            enc.movXmm0FromFrame(m.disp);
-            break;
-        case MirOp::AddXmm0FromFrame:
-            enc.addXmm0FromFrame(m.disp);
-            break;
-        case MirOp::SubXmm0FromFrame:
-            enc.subXmm0FromFrame(m.disp);
-            break;
-        case MirOp::MovFrameFromXmm0:
-            enc.movFrameFromXmm0(m.disp);
-            break;
-        case MirOp::MovXmm0FromReg:
-            enc.movXmm0FromReg(m.r0);
-            break;
-        case MirOp::AddXmm0FromReg:
-            enc.addXmm0FromReg(m.r0);
-            break;
-        case MirOp::SubXmm0FromReg:
-            enc.subXmm0FromReg(m.r0);
-            break;
-        case MirOp::MovRegFromXmm0:
-            enc.movRegFromXmm0(m.r0);
-            break;
-        case MirOp::MovXmm0FromMemAt:
-            enc.movXmm0FromMemAt(m.imm64);
-            break;
-        case MirOp::AddXmm0FromMemAt:
-            enc.addXmm0FromMemAt(m.imm64);
-            break;
-        case MirOp::SubXmm0FromMemAt:
-            enc.subXmm0FromMemAt(m.imm64);
-            break;
-        case MirOp::CmpRaxImm8Setle:
-            enc.cmpRaxImm8Setle();
-            break;
-        case MirOp::CmpRaxFrameSetle:
-            enc.cmpRaxFrameSetle(m.disp);
-            break;
-        case MirOp::CmpRaxMemAtSetle:
-            enc.cmpRaxMemAtSetle(m.imm64);
-            break;
-        case MirOp::CmpRaxFrameSetl:
-            enc.cmpRaxFrameSetl(m.disp);
-            break;
-        case MirOp::CmpRaxMemAtSetl:
-            enc.cmpRaxMemAtSetl(m.imm64);
-            break;
-        case MirOp::CmpRaxFrameSetg:
-            enc.cmpRaxFrameSetg(m.disp);
-            break;
-        case MirOp::CmpRaxMemAtSetg:
-            enc.cmpRaxMemAtSetg(m.imm64);
-            break;
-        case MirOp::CmpRaxFrameSete:
-            enc.cmpRaxFrameSete(m.disp);
-            break;
-        case MirOp::CmpRaxMemAtSete:
-            enc.cmpRaxMemAtSete(m.imm64);
-            break;
-        case MirOp::CmpRaxFrameSetne:
-            enc.cmpRaxFrameSetne(m.disp);
-            break;
-        case MirOp::CmpRaxMemAtSetne:
-            enc.cmpRaxMemAtSetne(m.imm64);
-            break;
-        case MirOp::CmpRaxFrameSetge:
-            enc.cmpRaxFrameSetge(m.disp);
-            break;
-        case MirOp::CmpRaxMemAtSetge:
-            enc.cmpRaxMemAtSetge(m.imm64);
-            break;
-        case MirOp::MulRaxFromReg:
-            enc.mulRaxFromReg(m.r0);
-            break;
-        case MirOp::MulRaxFromFrame:
-            enc.mulRaxFromFrame(m.disp);
-            break;
-        case MirOp::MulRaxFromMemAt:
-            enc.mulRaxFromMemAt(m.imm64);
-            break;
-        case MirOp::IdivRaxByReg:
-            enc.idivRaxByReg(m.r0);
-            break;
-        case MirOp::IdivRaxByFrame:
-            enc.idivRaxByFrame(m.disp);
-            break;
-        case MirOp::IdivRaxByMemAt:
-            enc.idivRaxByMemAt(m.imm64);
-            break;
-        case MirOp::MulXmm0FromReg:
-            enc.mulXmm0FromReg(m.r0);
-            break;
-        case MirOp::MulXmm0FromFrame:
-            enc.mulXmm0FromFrame(m.disp);
-            break;
-        case MirOp::MulXmm0FromMemAt:
-            enc.mulXmm0FromMemAt(m.imm64);
-            break;
-        case MirOp::DivXmm0FromReg:
-            enc.divXmm0FromReg(m.r0);
-            break;
-        case MirOp::DivXmm0FromFrame:
-            enc.divXmm0FromFrame(m.disp);
-            break;
-        case MirOp::DivXmm0FromMemAt:
-            enc.divXmm0FromMemAt(m.imm64);
-            break;
-        case MirOp::ComisdXmm0FrameSetb:
-            enc.comisdXmm0WithFrame(m.disp);
-            enc.setbAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0MemAtSetb:
-            enc.comisdXmm0WithMemAt(m.imm64);
-            enc.setbAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0RegSetb:
-            enc.comisdXmm0WithReg(m.r0);
-            enc.setbAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0FrameSetbe:
-            enc.comisdXmm0WithFrame(m.disp);
-            enc.setbeAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0MemAtSetbe:
-            enc.comisdXmm0WithMemAt(m.imm64);
-            enc.setbeAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0RegSetbe:
-            enc.comisdXmm0WithReg(m.r0);
-            enc.setbeAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0FrameSete:
-            enc.comisdXmm0WithFrame(m.disp);
-            enc.setzAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0MemAtSete:
-            enc.comisdXmm0WithMemAt(m.imm64);
-            enc.setzAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0RegSete:
-            enc.comisdXmm0WithReg(m.r0);
-            enc.setzAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0FrameSeta:
-            enc.comisdXmm0WithFrame(m.disp);
-            enc.setaAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0MemAtSeta:
-            enc.comisdXmm0WithMemAt(m.imm64);
-            enc.setaAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0RegSeta:
-            enc.comisdXmm0WithReg(m.r0);
-            enc.setaAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0FrameSetae:
-            enc.comisdXmm0WithFrame(m.disp);
-            enc.setaeAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0MemAtSetae:
-            enc.comisdXmm0WithMemAt(m.imm64);
-            enc.setaeAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0RegSetae:
-            enc.comisdXmm0WithReg(m.r0);
-            enc.setaeAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0FrameSetnz:
-            enc.comisdXmm0WithFrame(m.disp);
-            enc.setnzAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0MemAtSetnz:
-            enc.comisdXmm0WithMemAt(m.imm64);
-            enc.setnzAlMovzxRax();
-            break;
-        case MirOp::ComisdXmm0RegSetnz:
-            enc.comisdXmm0WithReg(m.r0);
-            enc.setnzAlMovzxRax();
-            break;
-        case MirOp::MovEaxFromFrame:
-            enc.movEaxFromFrame(m.disp);
-            break;
-        case MirOp::MovEaxFromReg:
-            enc.movEaxFromReg(m.r0);
-            break;
-        case MirOp::MovEaxFromMemAt:
-            enc.movEaxFromMemAt(m.imm64);
-            break;
-        case MirOp::AddEaxFromFrame:
-            enc.addEaxFromFrame(m.disp);
-            break;
-        case MirOp::AddEaxFromReg:
-            enc.addEaxFromReg(m.r0);
-            break;
-        case MirOp::AddEaxFromMemAt:
-            enc.addEaxFromMemAt(m.imm64);
-            break;
-        case MirOp::SubEaxFromFrame:
-            enc.subEaxFromFrame(m.disp);
-            break;
-        case MirOp::SubEaxFromReg:
-            enc.subEaxFromReg(m.r0);
-            break;
-        case MirOp::SubEaxFromMemAt:
-            enc.subEaxFromMemAt(m.imm64);
-            break;
-        case MirOp::MulEaxFromFrame:
-            enc.mulEaxFromFrame(m.disp);
-            break;
-        case MirOp::MulEaxFromReg:
-            enc.mulEaxFromReg(m.r0);
-            break;
-        case MirOp::MulEaxFromMemAt:
-            enc.mulEaxFromMemAt(m.imm64);
-            break;
-        case MirOp::IdivEaxByFrame:
-            enc.idivEaxByFrame(m.disp);
-            break;
-        case MirOp::IdivEaxByReg:
-            enc.idivEaxByReg(m.r0);
-            break;
-        case MirOp::IdivEaxByMemAt:
-            enc.idivEaxByMemAt(m.imm64);
-            break;
-        case MirOp::CmpEaxFrameSetl:
-            enc.cmpEaxFrameSetl(m.disp);
-            break;
-        case MirOp::CmpEaxMemAtSetl:
-            enc.cmpEaxMemAtSetl(m.imm64);
-            break;
-        case MirOp::CmpEaxRegSetl:
-            enc.cmpEaxRegSetl(m.r0);
-            break;
-        case MirOp::CmpEaxFrameSetg:
-            enc.cmpEaxFrameSetg(m.disp);
-            break;
-        case MirOp::CmpEaxMemAtSetg:
-            enc.cmpEaxMemAtSetg(m.imm64);
-            break;
-        case MirOp::CmpEaxRegSetg:
-            enc.cmpEaxRegSetg(m.r0);
-            break;
-        case MirOp::CmpEaxFrameSete:
-            enc.cmpEaxFrameSete(m.disp);
-            break;
-        case MirOp::CmpEaxMemAtSete:
-            enc.cmpEaxMemAtSete(m.imm64);
-            break;
-        case MirOp::CmpEaxRegSete:
-            enc.cmpEaxRegSete(m.r0);
-            break;
-        case MirOp::CmpEaxFrameSetne:
-            enc.cmpEaxFrameSetne(m.disp);
-            break;
-        case MirOp::CmpEaxMemAtSetne:
-            enc.cmpEaxMemAtSetne(m.imm64);
-            break;
-        case MirOp::CmpEaxRegSetne:
-            enc.cmpEaxRegSetne(m.r0);
-            break;
-        case MirOp::CmpEaxFrameSetle:
-            enc.cmpEaxFrameSetle(m.disp);
-            break;
-        case MirOp::CmpEaxMemAtSetle:
-            enc.cmpEaxMemAtSetle(m.imm64);
-            break;
-        case MirOp::CmpEaxRegSetle:
-            enc.cmpEaxRegSetle(m.r0);
-            break;
-        case MirOp::CmpEaxFrameSetge:
-            enc.cmpEaxFrameSetge(m.disp);
-            break;
-        case MirOp::CmpEaxMemAtSetge:
-            enc.cmpEaxMemAtSetge(m.imm64);
-            break;
-        case MirOp::CmpEaxRegSetge:
-            enc.cmpEaxRegSetge(m.r0);
-            break;
-        case MirOp::MovSsXmm0FromFrame:
-            enc.movSsXmm0FromFrame(m.disp);
-            break;
-        case MirOp::MovSsXmm0FromReg:
-            enc.movSsXmm0FromReg(m.r0);
-            break;
-        case MirOp::MovSsXmm0FromMemAt:
-            enc.movSsXmm0FromMemAt(m.imm64);
-            break;
-        case MirOp::AddSsXmm0FromFrame:
-            enc.addSsXmm0FromFrame(m.disp);
-            break;
-        case MirOp::AddSsXmm0FromReg:
-            enc.addSsXmm0FromReg(m.r0);
-            break;
-        case MirOp::AddSsXmm0FromMemAt:
-            enc.addSsXmm0FromMemAt(m.imm64);
-            break;
-        case MirOp::SubSsXmm0FromFrame:
-            enc.subSsXmm0FromFrame(m.disp);
-            break;
-        case MirOp::SubSsXmm0FromReg:
-            enc.subSsXmm0FromReg(m.r0);
-            break;
-        case MirOp::SubSsXmm0FromMemAt:
-            enc.subSsXmm0FromMemAt(m.imm64);
-            break;
-        case MirOp::MulSsXmm0FromFrame:
-            enc.mulSsXmm0FromFrame(m.disp);
-            break;
-        case MirOp::MulSsXmm0FromReg:
-            enc.mulSsXmm0FromReg(m.r0);
-            break;
-        case MirOp::MulSsXmm0FromMemAt:
-            enc.mulSsXmm0FromMemAt(m.imm64);
-            break;
-        case MirOp::DivSsXmm0FromFrame:
-            enc.divSsXmm0FromFrame(m.disp);
-            break;
-        case MirOp::DivSsXmm0FromReg:
-            enc.divSsXmm0FromReg(m.r0);
-            break;
-        case MirOp::DivSsXmm0FromMemAt:
-            enc.divSsXmm0FromMemAt(m.imm64);
-            break;
-        case MirOp::MovSsFrameFromXmm0:
-            enc.movSsFrameFromXmm0(m.disp);
-            break;
-        case MirOp::MovSsRegFromXmm0:
-            enc.movSsRegFromXmm0(m.r0);
-            break;
-        case MirOp::ComissXmm0FrameSetb:
-            enc.comissXmm0WithFrame(m.disp);
-            enc.setbAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0MemAtSetb:
-            enc.comissXmm0WithMemAt(m.imm64);
-            enc.setbAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0RegSetb:
-            enc.comissXmm0WithReg(m.r0);
-            enc.setbAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0FrameSetbe:
-            enc.comissXmm0WithFrame(m.disp);
-            enc.setbeAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0MemAtSetbe:
-            enc.comissXmm0WithMemAt(m.imm64);
-            enc.setbeAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0RegSetbe:
-            enc.comissXmm0WithReg(m.r0);
-            enc.setbeAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0FrameSete:
-            enc.comissXmm0WithFrame(m.disp);
-            enc.setzAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0MemAtSete:
-            enc.comissXmm0WithMemAt(m.imm64);
-            enc.setzAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0RegSete:
-            enc.comissXmm0WithReg(m.r0);
-            enc.setzAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0FrameSeta:
-            enc.comissXmm0WithFrame(m.disp);
-            enc.setaAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0MemAtSeta:
-            enc.comissXmm0WithMemAt(m.imm64);
-            enc.setaAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0RegSeta:
-            enc.comissXmm0WithReg(m.r0);
-            enc.setaAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0FrameSetae:
-            enc.comissXmm0WithFrame(m.disp);
-            enc.setaeAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0MemAtSetae:
-            enc.comissXmm0WithMemAt(m.imm64);
-            enc.setaeAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0RegSetae:
-            enc.comissXmm0WithReg(m.r0);
-            enc.setaeAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0FrameSetnz:
-            enc.comissXmm0WithFrame(m.disp);
-            enc.setnzAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0MemAtSetnz:
-            enc.comissXmm0WithMemAt(m.imm64);
-            enc.setnzAlMovzxRax();
-            break;
-        case MirOp::ComissXmm0RegSetnz:
-            enc.comissXmm0WithReg(m.r0);
-            enc.setnzAlMovzxRax();
-            break;
-        case MirOp::TestRaxRax:
-            enc.testRaxRax();
-            break;
-        case MirOp::TestRaxJzRel32: {
-            auto it = pcToOffset.find(static_cast<size_t>(m.imm32));
-            if (it == pcToOffset.end())
-                break;
-            int32_t rel =
-                static_cast<int32_t>(it->second) - static_cast<int32_t>(enc.here() + 3 + 6);
-            enc.testRaxJzRel32(rel);
+        case MirOp::VLoadImm32: {
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0)
+                enc.emitMovRegImm32(static_cast<uint8_t>(r), m.imm32);
+            break;
+        }
+        case MirOp::VLoadImm64: {
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0)
+                enc.emitMovRegImm64(static_cast<uint8_t>(r), m.imm64);
+            break;
+        }
+        case MirOp::VRet: {
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0) {
+                if (r != static_cast<int>(kRegRax))
+                    enc.movRaxFromReg(static_cast<uint8_t>(r));
+                enc.ret();
+            }
+            break;
+        }
+        case MirOp::VAdd: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                if (dr != static_cast<int>(kRegRax))
+                    enc.movRaxFromReg(static_cast<uint8_t>(lr));
+                else
+                    enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(lr));
+                enc.addRaxFromReg(static_cast<uint8_t>(rr));
+                if (dr != static_cast<int>(kRegRax))
+                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VSub: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                if (lr != static_cast<int>(kRegRax))
+                    enc.movRaxFromReg(static_cast<uint8_t>(lr));
+                else
+                    enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(lr));
+                enc.subRaxFromReg(static_cast<uint8_t>(rr));
+                if (dr != static_cast<int>(kRegRax))
+                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VMul: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                if (lr != static_cast<int>(kRegRax))
+                    enc.movRaxFromReg(static_cast<uint8_t>(lr));
+                else
+                    enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(lr));
+                enc.mulRaxFromReg(static_cast<uint8_t>(rr));
+                if (dr != static_cast<int>(kRegRax))
+                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VIdiv: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                if (lr != static_cast<int>(kRegRax))
+                    enc.movRaxFromReg(static_cast<uint8_t>(lr));
+                else
+                    enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(lr));
+                enc.idivRaxByReg(static_cast<uint8_t>(rr));
+                if (dr != static_cast<int>(kRegRax))
+                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VCmpSetL:
+        case MirOp::VCmpSetLE:
+        case MirOp::VCmpSetG:
+        case MirOp::VCmpSetGE:
+        case MirOp::VCmpSetE:
+        case MirOp::VCmpSetNE: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                if (lr != static_cast<int>(kRegRax))
+                    enc.movRaxFromReg(static_cast<uint8_t>(lr));
+                else
+                    enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(lr));
+                enc.cmpRaxWithReg(static_cast<uint8_t>(rr));
+                switch (m.op) {
+                case MirOp::VCmpSetL:
+                    enc.setlAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetLE:
+                    enc.setleAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetG:
+                    enc.setgAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetGE:
+                    enc.setgeAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetE:
+                    enc.setzAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetNE:
+                    enc.setnzAlMovzxRax();
+                    break;
+                default:
+                    break;
+                }
+                if (dr != static_cast<int>(kRegRax))
+                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+            }
             break;
         }
         case MirOp::JzRel32: {
@@ -491,12 +237,6 @@ void encodeMirBuffer(
             enc.jzRel32(rel);
             break;
         }
-        case MirOp::CmoveRcxFromRbx:
-            enc.cmoveRcxFromRbx();
-            break;
-        case MirOp::CmoveR8FromR9:
-            enc.cmoveR8FromR9();
-            break;
         case MirOp::JmpRel32: {
             auto it = pcToOffset.find(static_cast<size_t>(m.imm32));
             if (it == pcToOffset.end())
@@ -528,6 +268,308 @@ void encodeMirBuffer(
         case MirOp::Nop:
             enc.nop();
             break;
+        case MirOp::VXmmLoadFromFrame: {
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0) {
+                enc.movXmm0FromFrame(m.disp);
+                enc.movRegFromXmm0(static_cast<uint8_t>(r));
+            }
+            break;
+        }
+        case MirOp::VXmmStoreToFrame: {
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0) {
+                enc.movXmm0FromReg(static_cast<uint8_t>(r));
+                enc.movFrameFromXmm0(m.disp);
+            }
+            break;
+        }
+        case MirOp::VXmmLoadFromMemAt: {
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0) {
+                enc.movXmm0FromMemAt(m.imm64);
+                enc.movRegFromXmm0(static_cast<uint8_t>(r));
+            }
+            break;
+        }
+        case MirOp::VXmmAdd: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                enc.movXmm0FromReg(static_cast<uint8_t>(lr));
+                enc.addXmm0FromReg(static_cast<uint8_t>(rr));
+                enc.movRegFromXmm0(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VXmmSub: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                enc.movXmm0FromReg(static_cast<uint8_t>(lr));
+                enc.subXmm0FromReg(static_cast<uint8_t>(rr));
+                enc.movRegFromXmm0(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VXmmMul: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                enc.movXmm0FromReg(static_cast<uint8_t>(lr));
+                enc.mulXmm0FromReg(static_cast<uint8_t>(rr));
+                enc.movRegFromXmm0(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VXmmDiv: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                enc.movXmm0FromReg(static_cast<uint8_t>(lr));
+                enc.divXmm0FromReg(static_cast<uint8_t>(rr));
+                enc.movRegFromXmm0(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VXmmCmpSetB:
+        case MirOp::VXmmCmpSetBE:
+        case MirOp::VXmmCmpSetE:
+        case MirOp::VXmmCmpSetA:
+        case MirOp::VXmmCmpSetAE:
+        case MirOp::VXmmCmpSetNZ: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                enc.movXmm0FromReg(static_cast<uint8_t>(lr));
+                enc.comisdXmm0WithReg(static_cast<uint8_t>(rr));
+                switch (m.op) {
+                case MirOp::VXmmCmpSetB:
+                    enc.setbAlMovzxRax();
+                    break;
+                case MirOp::VXmmCmpSetBE:
+                    enc.setbeAlMovzxRax();
+                    break;
+                case MirOp::VXmmCmpSetE:
+                    enc.setzAlMovzxRax();
+                    break;
+                case MirOp::VXmmCmpSetA:
+                    enc.setaAlMovzxRax();
+                    break;
+                case MirOp::VXmmCmpSetAE:
+                    enc.setaeAlMovzxRax();
+                    break;
+                case MirOp::VXmmCmpSetNZ:
+                    enc.setnzAlMovzxRax();
+                    break;
+                default:
+                    break;
+                }
+                if (dr != static_cast<int>(kRegRax))
+                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VAdd32: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                if (lr != static_cast<int>(kRegRax))
+                    enc.movEaxFromReg(static_cast<uint8_t>(lr));
+                enc.addEaxFromReg(static_cast<uint8_t>(rr));
+                enc.movRegFromEax(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VSub32: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                if (lr != static_cast<int>(kRegRax))
+                    enc.movEaxFromReg(static_cast<uint8_t>(lr));
+                enc.subEaxFromReg(static_cast<uint8_t>(rr));
+                enc.movRegFromEax(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VMul32: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                if (lr != static_cast<int>(kRegRax))
+                    enc.movEaxFromReg(static_cast<uint8_t>(lr));
+                enc.mulEaxFromReg(static_cast<uint8_t>(rr));
+                enc.movRegFromEax(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VIdiv32: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                if (lr != static_cast<int>(kRegRax))
+                    enc.movEaxFromReg(static_cast<uint8_t>(lr));
+                enc.idivEaxByReg(static_cast<uint8_t>(rr));
+                enc.movRegFromEax(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VCmpSetL32:
+        case MirOp::VCmpSetLE32:
+        case MirOp::VCmpSetG32:
+        case MirOp::VCmpSetGE32:
+        case MirOp::VCmpSetE32:
+        case MirOp::VCmpSetNE32: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                if (lr != static_cast<int>(kRegRax))
+                    enc.movEaxFromReg(static_cast<uint8_t>(lr));
+                enc.cmpEaxWithReg(static_cast<uint8_t>(rr));
+                switch (m.op) {
+                case MirOp::VCmpSetL32:
+                    enc.setlAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetLE32:
+                    enc.setleAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetG32:
+                    enc.setgAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetGE32:
+                    enc.setgeAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetE32:
+                    enc.setzAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetNE32:
+                    enc.setnzAlMovzxRax();
+                    break;
+                default:
+                    break;
+                }
+                if (dr != static_cast<int>(kRegRax))
+                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VXmm32LoadFromFrame: {
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0) {
+                enc.movSsXmm0FromFrame(m.disp);
+                enc.movSsRegFromXmm0(static_cast<uint8_t>(r));
+            }
+            break;
+        }
+        case MirOp::VXmm32StoreToFrame: {
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0) {
+                enc.movSsXmm0FromReg(static_cast<uint8_t>(r));
+                enc.movSsFrameFromXmm0(m.disp);
+            }
+            break;
+        }
+        case MirOp::VXmm32LoadFromMemAt: {
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0) {
+                enc.movSsXmm0FromMemAt(m.imm64);
+                enc.movSsRegFromXmm0(static_cast<uint8_t>(r));
+            }
+            break;
+        }
+        case MirOp::VXmm32Add: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                enc.movSsXmm0FromReg(static_cast<uint8_t>(lr));
+                enc.addSsXmm0FromReg(static_cast<uint8_t>(rr));
+                enc.movSsRegFromXmm0(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VXmm32Sub: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                enc.movSsXmm0FromReg(static_cast<uint8_t>(lr));
+                enc.subSsXmm0FromReg(static_cast<uint8_t>(rr));
+                enc.movSsRegFromXmm0(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VXmm32Mul: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                enc.movSsXmm0FromReg(static_cast<uint8_t>(lr));
+                enc.mulSsXmm0FromReg(static_cast<uint8_t>(rr));
+                enc.movSsRegFromXmm0(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VXmm32Div: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                enc.movSsXmm0FromReg(static_cast<uint8_t>(lr));
+                enc.divSsXmm0FromReg(static_cast<uint8_t>(rr));
+                enc.movSsRegFromXmm0(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VXmm32CmpSetB:
+        case MirOp::VXmm32CmpSetBE:
+        case MirOp::VXmm32CmpSetE:
+        case MirOp::VXmm32CmpSetA:
+        case MirOp::VXmm32CmpSetAE:
+        case MirOp::VXmm32CmpSetNZ: {
+            int dr = pregFor(static_cast<VRegId>(m.r0));
+            int lr = pregFor(static_cast<VRegId>(m.r1));
+            int rr = pregFor(static_cast<VRegId>(m.imm32));
+            if (dr >= 0 && lr >= 0 && rr >= 0) {
+                enc.movSsXmm0FromReg(static_cast<uint8_t>(lr));
+                enc.comissXmm0WithReg(static_cast<uint8_t>(rr));
+                switch (m.op) {
+                case MirOp::VXmm32CmpSetB:
+                    enc.setbAlMovzxRax();
+                    break;
+                case MirOp::VXmm32CmpSetBE:
+                    enc.setbeAlMovzxRax();
+                    break;
+                case MirOp::VXmm32CmpSetE:
+                    enc.setzAlMovzxRax();
+                    break;
+                case MirOp::VXmm32CmpSetA:
+                    enc.setaAlMovzxRax();
+                    break;
+                case MirOp::VXmm32CmpSetAE:
+                    enc.setaeAlMovzxRax();
+                    break;
+                case MirOp::VXmm32CmpSetNZ:
+                    enc.setnzAlMovzxRax();
+                    break;
+                default:
+                    break;
+                }
+                if (dr != static_cast<int>(kRegRax))
+                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
         }
     }
 }

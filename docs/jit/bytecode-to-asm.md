@@ -1,6 +1,6 @@
 # JIT 字节码到机器码翻译注解
 
-本文档以 `fib.cml` 在 `std::inline std::asm` / `std::inline std::lbc` 下的输出为参照，逐条说明**每条字节码如何被 x64 JIT 翻译成机器码**。适用于理解 backend 行为与调试汇编。
+本文档以 `fib.cml` 在 `std::inline std::asm` / `std::inline std::lbc` / `std::inline std::rmir` 下的输出为参照，说明**字节码经 MIR（V* 虚拟寄存器）→ 寄存器分配 → 编码**生成 x64 机器码的流程。适用于理解 backend、MIR 层与调试汇编。
 
 ---
 
@@ -33,6 +33,18 @@
 - **rdi**：frame 基址（slots）。
 - **rsi**：ctx。
 - **r8–r11**：regalloc 可用；FUNC/OPER 调用时用于传参（如 r8d=pc，r9=graph）。
+
+### 1.5 编译流水线（MIR + V* + 寄存器分配）
+
+当前 x64 JIT 的流程为：
+
+1. **字节码 → MIR**：`X64Backend::compileBytecode` 中按 opcode 生成 **MIR 指令**（见 `jit/mir/mir.h`）。除控制流与 ABI 外，算术/比较/加载存储均使用 **V* 虚拟寄存器**（如 `VLoadFromFrame`、`VAdd`、`VSub`、`VCmpSetLE`、`VXmmSub`、`VXmm32Add` 等），操作数由 `nextVReg` 分配 v0, v1, …。
+2. **MIR 优化**：对 MIR buffer 做 `optimizeMirBuffer`（如 Win64 下删除 prologue 后冗余的 mov rcx,rdi / mov rdx,rsi）。
+3. **pcToOffset**：按 MIR 序列计算每条指令编码长度，得到 pc → 机器码偏移。
+4. **寄存器分配**：`linearScanVReg` 对 MIR 中的 V* 指令做 def/use 收集（`collectVRegDefUse`），线性扫描得到 **vreg → preg**（0–7 对应 rax..r11）；溢出时写回 slot。
+5. **编码**：`encodeMirBuffer` 根据 vregAlloc 将每条 MIR 编码为 x64 字节（如 `VAdd` → mov rax, left; add rax, right; mov dst, rax，其中 left/right/dst 为 preg）。
+
+因此，下文「按字节码逐条翻译」中的**汇编片段**是**编码阶段**在给定 preg 分配下产生的等价输出；同一字节码在不同分配下可能对应不同寄存器，但语义一致。
 
 ---
 
@@ -71,23 +83,16 @@
 **字节码**：`RETN (1) [ 0] | [ 1,  0]` 或 `RETN (1) [ 0] | [ 4,  0]`
 
 - **语义**：从 `fastop[0]` 槽读取返回值，放入 rax 并 **ret**。
-- **槽**：正数则 `[rdi + idx*8]`；负数则从静态区读（`mov rbx, imm64; mov rax, [rbx]`）。
+- **MIR**：`VLoadFromFrame`(v, disp) 或 `VLoadFromMemAt`(v, addr)；`VRet`(v)。编码时 v 对应 preg，若为 rax 则无需 mov，否则 `mov rax, preg` 后 ret。
 
-**示例 1（从动态区返回）**：
+**示例（从动态区返回）**：
 
 ```asm
-[23]  mov rax, [rdi+8]   ; result 在 slot 1 → disp=8
+[23]  mov rax, [rdi+8]   ; result 在 slot 1 → disp=8（或 mov rax, rX 若 v 分配在 rX）
 [24]  ret
 ```
 
-**示例 2（从静态区返回，main 末尾）**：
-
-```asm
-[137] mov rax, [rdi+-32] ; 实际编码为静态区基址 + 偏移，此处表示 result 在静态区
-[138] ret
-```
-
-（注：`[rdi+-32]` 在汇编注释中表示“负 slot”访问；实际编码为 `mov rbx, <staticAddr>; mov rax, [rbx]`。）
+（静态区时 MIR 为 VLoadFromMemAt，编码为 `mov rbx, imm64; mov rax, [rbx]; ret`。）
 
 ---
 
@@ -136,15 +141,16 @@
 
 **字节码**：`DSUB (1) [ 6] | [ 5,  3]`
 
-- **语义**：`result = fastop[0] - fastop[1]`（双精度），每槽 8 字节；使用 SSE2 **movsd / subsd**，操作数/结果可在 slot 或寄存器。
-- **机器码**：将左操作数装入 **xmm0**，再 **subsd xmm0, 右操作数**（来自 frame/静态区/寄存器），最后将 xmm0 写回 result（或 **movq** 到 GPR 若 result 在寄存器）。
+- **语义**：`result = fastop[0] - fastop[1]`（双精度），每槽 8 字节。
+- **MIR**：`VLoadFromFrame`/`VLoadFromMemAt` 将左右操作数装入 v0, v1；`VXmmSub`(vr, v0, v1)；`VStoreToFrame`(dr, vr)。编码时 vreg 已分配 preg，左/右/结果在 GPR 中存 double 位模式：`movq xmm0, left_preg`；`subsd xmm0, right_preg`；`movq result_preg, xmm0`。
 
-**对应汇编**：
+**对应汇编（等价）**：
 
 ```asm
-[dd]  movsd xmm0, [rdi+40]   ; slot 5 → 左操作数
-[e2]  subsd xmm0, [rdi+24]   ; slot 3 → 右操作数
-[e7]  movsd [rdi+48], xmm0   ; slot 6 → result
+[dd]  movq xmm0, rX          ; 左操作数 v0 → preg rX
+[e2]  movq xmm1, rY          ; 右操作数 v1 → preg rY
+     subsd xmm0, xmm1
+[e7]  movq rZ, xmm0          ; 结果 vr → preg rZ，再 vstore 写回 [rdi+48]
 ```
 
 ---
@@ -153,17 +159,17 @@
 
 **字节码**：`LLE (1) [ 2] | [ 1, -1]`
 
-- **语义**：`result = (slot[fastop[0]] <= 1) ? 1 : 0`（当前 JIT 仅支持 rhs 常量为 1）；用于 fib 中 `n <= 1` 判断。
-- **机器码**：从 slot 取左操作数到 **rax**；**cmp rax, 1**；**setle al**；**movzx rax, al**；将结果写回 result 槽。
+- **语义**：`result = (left <= right) ? 1 : 0`，left/right 来自 slot 或静态区；用于 fib 中 `n <= 1` 判断。
+- **MIR**：左右加载到 v0, v1（`VLoadFromFrame` / `VLoadFromMemAt`）；`VCmpSetLE`(vr, v0, v1)；`VStoreToFrame`(dr, vr)。编码：左→rax，`cmp rax, right_preg`，`setle al`，`movzx rax, al`，结果写回 dst preg 再 store。
 
-**对应汇编**：
+**对应汇编（等价）**：
 
 ```asm
-[13c] mov rax, [rdi+8]   ; slot 1 (n)
-[140] cmp rax, 1
-[143] setle al           ; al = (rax<=1 ? 1 : 0)
-[147] movzx rax, al      ; 零扩展为 64 位
-[14b] mov [rdi+16], rax  ; result 写入 slot 2
+[13c] mov rax, [rdi+8]   ; 或 mov rax, rX（左 v0 的 preg）
+[140] cmp rax, rY        ; 右 v1 的 preg（或 frame/静态区）
+[143] setle al
+[147] movzx rax, al
+[14b] mov [rdi+16], rax  ; 或 mov rZ, rax 再 mov [rdi+16], rZ
 ```
 
 ---
@@ -172,20 +178,18 @@
 
 **字节码**：`BRCH (2) [ 3] | [ 1,  0] | (2) <>`
 
-- **语义**：`withCnt()==0` 表示 bool 分支；读 `nargs()[0]`（条件槽），若为 true 跳 `pc+opsize+0`，否则跳 `pc+opsize+1`；并将“分支索引”0 或 1 写入 `result` 槽（供后续 JOIN 使用）。
-- **机器码**：条件槽装入 **rax**；**test rax, rax**；**jz** 到 else 块；否则顺序进入 then 块；两路末尾都会**跳转到 JOIN**（见 JUMP）。
+- **语义**：`withCnt()==0` 表示 bool 分支；读 `nargs()[0]`（条件槽），若为 true 跳 then，否则跳 else；并将分支索引 0/1 写入 `result` 槽（供 JOIN 使用）。
+- **MIR**：`VLoadFromFrame`(vCond, dc)；`VLoadImm32`(vZero, 0)、`VLoadImm32`(vOne, 1)；`VCopy`(vRes, vZero)；`VTest`(vCond)；`VCmovnz`(vRes, vOne)；`VStoreToFrame`(dr, vRes)；`JzRel32`(elsePc)；`JmpRel32`(thenPc)。
 
 **对应汇编**：
 
 ```asm
-[14f] mov rax, [rdi+16]   ; 条件槽 slot 2（LLE 的结果）
+[14f] mov rax, [rdi+16]   ; 条件槽（或 vCond 的 preg）
 [152] test rax, rax
-[158] jz .+7              ; 条件为 0 → 跳到 else（下一句 jmp 之后）
-[15d] jmp .+91            ; 条件非 0 → then 块（fib(n-1)+fib(n-2) 路径）
-[161] ...                 ; else 块起始（n<=1 时返回 n 的路径）
+[158] jz .+7
+[15d] jmp .+91
+[161] ...
 ```
-
-（实际 then/else 块内会再通过 **JUMP** 跳到 JOIN。）
 
 ---
 
@@ -206,16 +210,15 @@
 
 **字节码**：`LSUB (1) [ 5] | [ 1, -2]`
 
-- **语义**：`result = fastop[0] - fastop[1]`；此处 fastop[1]=-2 为静态区常量（如常量 1）。
-- **机器码**：左操作数装入 **rax**（来自 slot 或寄存器）；右操作数从 slot 或**静态区**减到 rax（静态区用 `mov rbx, imm64; sub rax, [rbx]`）；结果写回 result。
+- **语义**：`result = fastop[0] - fastop[1]`；右操作数可为静态区（如 -2）。
+- **MIR**：`VLoadFromFrame`/`VLoadFromMemAt`(v0, v1)；`VSub`(vr, v0, v1)；`VStoreToFrame`(dr, vr)。编码：mov rax, left；sub rax, right；mov dst, rax（left/right/dst 为 preg）。
 
-**对应汇编**：
+**对应汇编（等价）**：
 
 ```asm
-[161] mov rax, [rdi+8]       ; slot 1 (n)
-[16b] mov rbx, 0x234f7176868 ; 静态区常量地址
-[16e] sub rax, [rbx]
-[172] mov [rdi+40], rax      ; result 写入 slot 5 (n-1)
+[161] mov rax, [rdi+8]       ; 或 mov rax, rX（左 v0）
+[16b] sub rax, rY            ; 或 mov rbx, addr; sub rax, [rbx]（右 v1 在静态区）
+[172] mov [rdi+40], rax      ; 或 mov rZ, rax 再 store
 ```
 
 ---
@@ -225,17 +228,17 @@
 **字节码**：`LADD (1) [ 9] | [ 6,  8]`
 
 - **语义**：`result = fastop[0] + fastop[1]`（如 fib(n-1) + fib(n-2)）。
-- **机器码**：左操作数装入 **rax**，**add rax, 右操作数**（frame/寄存器），写回 result。
+- **MIR**：左右加载到 v0, v1；`VAdd`(vr, v0, v1)；`VStoreToFrame`(dr, vr)。编码：mov rax, left；add rax, right；mov dst, rax。
 
-**对应汇编**：
+**对应汇编（等价）**：
 
 ```asm
-[1c3] mov rax, [rdi+48]   ; slot 6
-[1c7] add rax, [rdi+64]   ; slot 8
-; result 在 slot 9，若下一句为 JOIN 则可能不再单独写回 slot 9，由 JOIN 从 slot 读
+[1c3] mov rax, rX         ; 左 v0 的 preg
+[1c7] add rax, rY         ; 右 v1 的 preg
+       mov rZ, rax        ; 结果 vr，再 vstore [rdi+72], rZ
 ```
 
-（此处 LADD 结果在 slot 9，紧接着被 JOIN 的 wargs[1] 使用。）
+（LADD 结果在 slot 9，供后续 JOIN 的 wargs[1] 使用。）
 
 ---
 
@@ -285,14 +288,38 @@
 
 ---
 
-## 4. 参考命令与文件
+## 4. MIR V* 指令一览（与字节码对应）
+
+| 字节码类型 | MIR V* 指令 |
+|------------|-------------|
+| LADD/LSUB/LMUL/LDIV | VLoadFromFrame / VLoadFromMemAt → VAdd / VSub / VMul / VIdiv → VStoreToFrame |
+| LLE/LLT/LGT/LEQ/LNE/LGE | 同上 → VCmpSetLE / VCmpSetL / VCmpSetG / VCmpSetE / VCmpSetNE / VCmpSetGE → VStoreToFrame |
+| DADD/DSUB/DMUL/DDIV | 同上（8 字节 double）→ VXmmAdd / VXmmSub / VXmmMul / VXmmDiv → VStoreToFrame |
+| DLT/DGT/DEQ/DNE/DLE/DGE | 同上 → VXmmCmpSetB/A/E/NZ/BE/AE → VStoreToFrame |
+| IADD/ISUB/IMUL/IDIV | 同上（低 32 位）→ VAdd32 / VSub32 / VMul32 / VIdiv32 → VStoreToFrame |
+| ILT/IGT/IEQ/INE/ILE/IGE | 同上 → VCmpSetL32/…/NE32 → VStoreToFrame |
+| FADD/FSUB/FMUL/FDIV | VXmm32LoadFromFrame / VXmm32LoadFromMemAt → VXmm32Add/Sub/Mul/Div → VXmm32StoreToFrame |
+| FLT/FGT/FEQ/FNE/FLE/FGE | 同上 → VXmm32CmpSetB/A/E/NZ/BE/AE → VStoreToFrame（结果 0/1） |
+| RETN | VLoadFromFrame / VLoadFromMemAt → VRet |
+| BRCH | VLoadFromFrame, VLoadImm32(0/1), VCopy, VTest, VCmovnz, VStoreToFrame, JzRel32, JmpRel32 |
+| JOIN | VLoadFromFrame（两路值 + 分支索引）→ VCopy, VTest, VCmovnz → VStoreToFrame |
+
+寄存器分配（`linearScanVReg`）对所有 V* 指令的 vreg 做 def/use 分析，得到 vreg→preg（0–7）；编码时用 preg 生成 mov/add/cmp/setcc 等。
+
+---
+
+## 5. 参考命令与文件
 
 - 查看链接后字节码：  
   `camel <path>/fib.cml std::inline std::lbc`
+- 查看 JIT MIR（带 pc/槽注释）：  
+  `camel <path>/fib.cml std::inline std::rmir`
 - 查看 JIT 汇编：  
   `camel <path>/fib.cml std::inline std::asm`
 - 实现位置：  
-  - 第一遍（算偏移）：`x64_backend.cpp` 中 `compileBytecode` 的 `switch (bc.opcode)`。  
-  - 第二遍（发码）：同文件内第二处 `switch`；编码细节在 `x64_encoder.h`。
+  - 字节码→MIR：`x64_backend.cpp` 中 `compileBytecode` 的 `switch (bc.opcode)`，`mir_builder.h`。  
+  - MIR 优化：`mir_optimize.cpp`。  
+  - 寄存器分配：`regalloc.cpp`（`collectVRegDefUse`、`linearScanVReg`）。  
+  - MIR→机器码：`mir_encode.cpp`，编码细节在 `x64_encoder.h`。
 
-本文档与上述命令输出一致；若后端或字节码格式有变更，以源码与最新 asm/lbc 输出为准。
+本文档与上述命令输出一致；若后端或字节码格式有变更，以源码与最新 asm/rmir/lbc 输出为准。

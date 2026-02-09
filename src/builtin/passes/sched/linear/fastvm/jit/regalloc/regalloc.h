@@ -20,6 +20,7 @@
 #pragma once
 
 #include "builtin/passes/sched/linear/fastvm/bytecode.h"
+#include "builtin/passes/sched/linear/fastvm/jit/mir/mir.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -61,5 +62,46 @@ linearScanAllocate(std::span<const Bytecode> bytecodes, size_t entryPc, size_t p
  */
 AllocationResult
 makeAllSpilledAlloc(std::span<const Bytecode> bytecodes, size_t entryPc, size_t pcEnd);
+
+// -----------------------------------------------------------------------------
+// 虚拟寄存器分配：对 MIR 中的 V* 指令做统一寄存器分配，便于消除“经 rax 中转”等冗余
+// -----------------------------------------------------------------------------
+
+/**
+ * 约束（预留）：在指定指令处某 vreg 必须位于某物理寄存器，用于 idiv(rax)、cmov 等
+ * 后续可在 linearScanVReg 中解析并插入 move 或优先分配。
+ */
+struct VRegConstraint {
+    size_t instrIndex;
+    x64::VRegId vreg;
+    uint8_t requiredPreg;
+};
+
+struct VRegAllocOptions {
+    std::vector<VRegConstraint> fixedAssignments; // 预留，当前未使用
+};
+
+/**
+ * 虚拟寄存器分配结果：vregToPreg[v] = 物理寄存器 0..7 或 kSpilled
+ */
+struct VRegAllocation {
+    std::vector<int> vregToPreg;
+
+    int pregForVReg(x64::VRegId v) const {
+        if (v >= vregToPreg.size())
+            return kSpilled;
+        return vregToPreg[v];
+    }
+};
+
+/**
+ * 对 MIR buffer 中的 V* 指令做线性扫描寄存器分配
+ * @param buf 含 VLoadFromFrame、VCopy、VTest、VCmove 等指令的 MIR
+ * @param out 输出分配结果
+ * @param opts 可选约束（预留）
+ * @return 是否成功（当前恒为 true）
+ */
+bool linearScanVReg(
+    const x64::MirBuffer &buf, VRegAllocation *out, const VRegAllocOptions *opts = nullptr);
 
 } // namespace camel::jit
