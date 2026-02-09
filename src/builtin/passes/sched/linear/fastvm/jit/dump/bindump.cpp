@@ -13,18 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "bindump.h"
-#include "../compile.h"
-#include "jit_config.h"
+#include "../../compile.h"
+#include "../jit_config.h"
 
 #if ENABLE_FASTVM_JIT
-#include "../bytecode.h"
-#include "backend/backend.h"
-#include "runtime/trampoline.h"
+#include "../../bytecode.h"
+#include "../backend/backend.h"
+#include "../runtime/trampoline.h"
 #endif
 
 #include <iomanip>

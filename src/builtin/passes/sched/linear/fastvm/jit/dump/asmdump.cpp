@@ -12,26 +12,25 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Feb. 08, 2026
+ * Created: Feb. 07, 2026
  * Updated: Feb. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "mirdump.h"
-#include "../compile.h"
-#include "jit_config.h"
+#include "asmdump.h"
+#include "../../compile.h"
+#include "../jit_config.h"
 
 #if ENABLE_FASTVM_JIT
-#include "../bytecode.h"
-#include "backend/backend.h"
+#include "../../bytecode.h"
+#include "../backend/backend.h"
+#include "../runtime/trampoline.h"
 #include "core/context/frame.h"
-#include "runtime/trampoline.h"
-#include <unordered_map>
 #endif
 
 using namespace GraphIR;
 
-graph_ptr_t JitMirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
     const auto &[bytecodes, _, offsetMap] = compileAndLink(
         context_,
@@ -44,18 +43,14 @@ graph_ptr_t JitMirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
 
     auto backend = camel::jit::createBackend();
     if (!backend) {
-        os << "[JIT] Backend not available, cannot dump MIR.\n";
+        os << "[JIT] Backend not available, cannot dump assembly.\n";
         return Graph::null();
     }
 
-    os << "[JIT MIR]  [pc][idx]  instruction  ; symbol/slot\n";
+    os << "[JIT Assembly] [offset]  instruction\n";
     os << "---\n";
 
     std::span<const Bytecode> bcSpan(bytecodes.data(), bytecodes.size());
-    std::unordered_map<uint64_t, std::string> mirSymbolNames;
-    mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineFunc)] = "trampolineFunc";
-    mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineTail)] = "trampolineTail";
-    mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineOper)] = "trampolineOper";
 
     for (const auto &[g, entryPc] : offsetMap) {
         FrameMeta *meta = g->getExtra<FrameMeta, 0>();
@@ -70,13 +65,10 @@ graph_ptr_t JitMirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
             .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
             .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
-            .asmOut         = nullptr,
-            .mirOut         = &os,
-            .mirSymbolNames = &mirSymbolNames,
-            .mirSlotNames   = nullptr, // 可选：disp -> 槽位名，需从 graph/FrameMeta 解析
+            .asmOut         = &os,
         };
 
-        os << "\n" << g->mangledName() << ":\n";
+        os << g->mangledName() << ":\n";
         std::string failureReason;
         auto compiled = backend->compile(unit, &failureReason);
         if (!compiled) {
@@ -90,7 +82,7 @@ graph_ptr_t JitMirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     return Graph::null();
 #else
     (void)graph;
-    os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump MIR.\n";
+    os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump assembly.\n";
     return Graph::null();
 #endif
 }
