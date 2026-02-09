@@ -1534,6 +1534,62 @@ class Encoder {
         asmLineAt(at, "ret");
     }
 
+    // Debug：展开为真实机器指令，每条一 asmLine，asm 列表与 std::bin 按指令分解一致。
+    void emitDebugTraceCall(uint32_t pc, void *fnAddr) {
+        constexpr uint8_t off_rax = 112, off_rcx = 104;
+        size_t at;
+        at = here();
+        emitBytes({0x48, 0x81, 0xec, 0x88, 0x00, 0x00, 0x00});
+        asmLineAt(at, "sub rsp, 136");
+        at = here();
+        emitBytes({0x48, 0x89, 0x44, 0x24, off_rax});
+        asmLineAt(at, "mov [rsp+112], rax");
+        at = here();
+        emitBytes({0x48, 0x89, 0x4c, 0x24, off_rcx});
+        asmLineAt(at, "mov [rsp+104], rcx");
+        at = here();
+        emitBytes({0xc7, 0x84, 0x24, 0x78, 0x00, 0x00, 0x00});
+        emitBytes({
+            static_cast<uint8_t>(pc & 0xff),
+            static_cast<uint8_t>((pc >> 8) & 0xff),
+            static_cast<uint8_t>((pc >> 16) & 0xff),
+            static_cast<uint8_t>((pc >> 24) & 0xff),
+        });
+        asmLineAt(at, "mov dword [rsp+120], " + std::to_string(pc));
+        at = here();
+        emitBytes({0x48, 0x8d, 0x0c, 0x24});
+        asmLineAt(at, "lea rcx, [rsp]");
+        uint64_t addr = reinterpret_cast<uint64_t>(fnAddr);
+        at            = here();
+        emitByte(0x48);
+        emitByte(0xb8);
+        emitBytes({
+            static_cast<uint8_t>(addr & 0xff),
+            static_cast<uint8_t>((addr >> 8) & 0xff),
+            static_cast<uint8_t>((addr >> 16) & 0xff),
+            static_cast<uint8_t>((addr >> 24) & 0xff),
+            static_cast<uint8_t>((addr >> 32) & 0xff),
+            static_cast<uint8_t>((addr >> 40) & 0xff),
+            static_cast<uint8_t>((addr >> 48) & 0xff),
+            static_cast<uint8_t>((addr >> 56) & 0xff),
+        });
+        std::ostringstream hex;
+        hex << "0x" << std::hex << addr;
+        asmLineAt(at, "mov rax, " + hex.str());
+        at = here();
+        emitBytes({0xff, 0xd0});
+        asmLineAt(at, "call rax");
+        at = here();
+        emitBytes({0x48, 0x8b, 0x44, 0x24, off_rax});
+        asmLineAt(at, "mov rax, [rsp+112]");
+        at = here();
+        emitBytes({0x48, 0x8b, 0x4c, 0x24, off_rcx});
+        asmLineAt(at, "mov rcx, [rsp+104]");
+        at = here();
+        emitBytes({0x48, 0x81, 0xc4, 0x88, 0x00, 0x00, 0x00});
+        asmLineAt(at, "add rsp, 136");
+    }
+
     // call rel32
     void callRel32(int32_t rel) {
         emitByte(0xe8);

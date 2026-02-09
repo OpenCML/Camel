@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Feb. 09, 2026
+ * Updated: Feb. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -280,6 +280,9 @@ std::string mirToString(const Mir &m) {
     case MirOp::Ret:
         os << "ret";
         break;
+    case MirOp::DebugTrace:
+        os << "debug_trace pc=" << m.pc;
+        break;
     case MirOp::Nop:
         os << "nop";
         break;
@@ -534,6 +537,8 @@ size_t mirSizeBytes(const Mir &m) {
     case MirOp::VXmm32CmpSetAE:
     case MirOp::VXmm32CmpSetNZ:
         return 5 + 4 + 3 + 4;
+    case MirOp::DebugTrace:
+        return 80; // 估算：push×15 + sub + mov(pc) + lea + mov(rax,fn) + call + add + pop×15
     case MirOp::Nop:
         return 1;
     }

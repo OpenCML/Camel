@@ -24,6 +24,7 @@
 #include "builtin/passes/sched/linear/fastvm/jit/mir/mir_encode.h"
 #include "builtin/passes/sched/linear/fastvm/jit/mir/mir_optimize.h"
 #include "builtin/passes/sched/linear/fastvm/jit/regalloc/regalloc.h"
+#include "builtin/passes/sched/linear/fastvm/jit/runtime/jit_debug_trace.h"
 #include "core/context/frame.h"
 #include "core/rtdata/data.h"
 #include "core/rtdata/tuple.h"
@@ -177,7 +178,10 @@ bool X64Backend::compileBytecode(
     for (size_t pc = entryPc; pc < pcEnd;) {
         const Bytecode &bc = base[pc];
         build.setNextPc(static_cast<uint32_t>(pc));
-
+#ifndef NDEBUG
+        build.emitDebugTrace(static_cast<uint32_t>(
+            pc)); // 插入到该 pc 对应 MIR 之前，jmp/ret 后仍会执行到目标 pc 的 trace
+#endif
         switch (bc.opcode) {
         case OpCode::LADD: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
@@ -763,7 +767,18 @@ bool X64Backend::compileBytecode(
     // 下标解析）
     VRegAllocation vregAlloc;
     linearScanVReg(mirBuf, &vregAlloc);
-    x64::encodeMirBuffer(mirBuf, code, unit.asmOut, 0, &vregAlloc, unit.instructionBoundaries);
+    void *debugTraceFn = nullptr;
+#ifndef NDEBUG
+    debugTraceFn = reinterpret_cast<void *>(&jitDebugTrace);
+#endif
+    x64::encodeMirBuffer(
+        mirBuf,
+        code,
+        unit.asmOut,
+        0,
+        &vregAlloc,
+        unit.instructionBoundaries,
+        debugTraceFn);
     return true;
 }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,7 @@ enum class JitPolicy {
 
 struct JitConfig {
     JitPolicy policy        = JitPolicy::OnDemand;
-    size_t hotThreshold     = 1000;
+    size_t hotThreshold     = 100;
     size_t maxCodeCacheSize = 4 * 1024 * 1024; // 4MB
 };
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Feb. 09, 2026
+ * Updated: Feb. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -127,6 +127,7 @@ enum class MirOp : uint8_t {
     VXmm32CmpSetA,
     VXmm32CmpSetAE,
     VXmm32CmpSetNZ,
+    DebugTrace, // 调试用：调用 jitDebugTrace(ctx)，打印 GPR + pc；仅 Debug 构建插入
     Nop,
 };
 

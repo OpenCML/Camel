@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Feb. 09, 2026
+ * Updated: Feb. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -82,6 +82,14 @@ class MirBuilder {
     }
     void emitCallRax() { push(MirOp::CallRax, 0, 0); }
     void emitRet() { push(MirOp::Ret, 0, 0); }
+    /** Debug 构建下在每两条指令间插入；pc 为当前字节码 pc，供 jitDebugTrace 打印 */
+    void emitDebugTrace(uint32_t pc) {
+        Mir m;
+        m.op    = MirOp::DebugTrace;
+        m.pc    = pc;
+        m.imm32 = pc;
+        buf_.push_back(m);
+    }
 
     // 虚拟寄存器指令（VRegId 存于 r0/r1，三操作数时右操作数在 imm32）
     void emitVLoadFromFrame(VRegId vreg, int disp) {

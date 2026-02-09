@@ -35,7 +35,8 @@ struct JumpPatch {
 void encodeMirBuffer(
     const MirBuffer &buf, std::vector<uint8_t> &code, std::ostream *asmOut, size_t baseOffset,
     const ::camel::jit::VRegAllocation *vregAlloc,
-    std::vector<std::tuple<size_t, size_t, std::string>> *instructionBoundaries) {
+    std::vector<std::tuple<size_t, size_t, std::string>> *instructionBoundaries,
+    void *debugTraceFn) {
     Encoder enc(code, asmOut, baseOffset);
     auto pregFor = [vregAlloc](VRegId v) -> int {
         if (!vregAlloc)
@@ -289,6 +290,10 @@ void encodeMirBuffer(
             break;
         case MirOp::CallRax:
             enc.callRax();
+            break;
+        case MirOp::DebugTrace:
+            if (debugTraceFn)
+                enc.emitDebugTraceCall(m.pc, debugTraceFn);
             break;
         case MirOp::Nop:
             enc.nop();
