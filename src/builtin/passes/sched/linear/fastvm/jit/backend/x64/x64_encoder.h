@@ -1534,20 +1534,20 @@ class Encoder {
         asmLineAt(at, "ret");
     }
 
-    // Debug：展开为真实机器指令，每条一 asmLine，asm 列表与 std::bin 按指令分解一致。
+    // Debug：栈 136 字节，保存区与 JitDebugContext 布局一致；JIT 调用 jitDebugTraceWrapper，
+    // wrapper 将 ctx 拷入 thread_local 再调 stub，stub 只写 thread_local，不覆盖本栈，恢复正确。
     void emitDebugTraceCall(uint32_t pc, void *fnAddr) {
-        constexpr uint8_t off_rax = 112, off_rcx = 104;
-        size_t at;
-        at = here();
-        emitBytes({0x48, 0x81, 0xec, 0x88, 0x00, 0x00, 0x00});
-        asmLineAt(at, "sub rsp, 136");
-        at = here();
+        constexpr uint8_t off_rax = 112, off_rcx = 104, off_rdx = 96;
+        constexpr uint8_t off_r8 = 56, off_r9 = 48, off_r10 = 40, off_r11 = 32;
+        size_t blockStart = here();
+        emitBytes({0x48, 0x81, 0xec, 0x88, 0x00, 0x00, 0x00}); // sub rsp, 136
         emitBytes({0x48, 0x89, 0x44, 0x24, off_rax});
-        asmLineAt(at, "mov [rsp+112], rax");
-        at = here();
         emitBytes({0x48, 0x89, 0x4c, 0x24, off_rcx});
-        asmLineAt(at, "mov [rsp+104], rcx");
-        at = here();
+        emitBytes({0x48, 0x89, 0x54, 0x24, off_rdx});
+        emitBytes({0x4c, 0x89, 0x44, 0x24, off_r8});
+        emitBytes({0x4c, 0x89, 0x4c, 0x24, off_r9});
+        emitBytes({0x4c, 0x89, 0x54, 0x24, off_r10});
+        emitBytes({0x4c, 0x89, 0x5c, 0x24, off_r11});
         emitBytes({0xc7, 0x84, 0x24, 0x78, 0x00, 0x00, 0x00});
         emitBytes({
             static_cast<uint8_t>(pc & 0xff),
@@ -1555,12 +1555,11 @@ class Encoder {
             static_cast<uint8_t>((pc >> 16) & 0xff),
             static_cast<uint8_t>((pc >> 24) & 0xff),
         });
-        asmLineAt(at, "mov dword [rsp+120], " + std::to_string(pc));
-        at = here();
+        emitBytes(
+            {0xc7, 0x84, 0x24, 0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); // mov dword
+                                                                                 // [rsp+124], 0
         emitBytes({0x48, 0x8d, 0x0c, 0x24});
-        asmLineAt(at, "lea rcx, [rsp]");
         uint64_t addr = reinterpret_cast<uint64_t>(fnAddr);
-        at            = here();
         emitByte(0x48);
         emitByte(0xb8);
         emitBytes({
@@ -1573,21 +1572,16 @@ class Encoder {
             static_cast<uint8_t>((addr >> 48) & 0xff),
             static_cast<uint8_t>((addr >> 56) & 0xff),
         });
-        std::ostringstream hex;
-        hex << "0x" << std::hex << addr;
-        asmLineAt(at, "mov rax, " + hex.str());
-        at = here();
         emitBytes({0xff, 0xd0});
-        asmLineAt(at, "call rax");
-        at = here();
         emitBytes({0x48, 0x8b, 0x44, 0x24, off_rax});
-        asmLineAt(at, "mov rax, [rsp+112]");
-        at = here();
         emitBytes({0x48, 0x8b, 0x4c, 0x24, off_rcx});
-        asmLineAt(at, "mov rcx, [rsp+104]");
-        at = here();
-        emitBytes({0x48, 0x81, 0xc4, 0x88, 0x00, 0x00, 0x00});
-        asmLineAt(at, "add rsp, 136");
+        emitBytes({0x48, 0x8b, 0x54, 0x24, off_rdx});
+        emitBytes({0x4c, 0x8b, 0x44, 0x24, off_r8});
+        emitBytes({0x4c, 0x8b, 0x4c, 0x24, off_r9});
+        emitBytes({0x4c, 0x8b, 0x54, 0x24, off_r10});
+        emitBytes({0x4c, 0x8b, 0x5c, 0x24, off_r11});
+        emitBytes({0x48, 0x81, 0xc4, 0x88, 0x00, 0x00, 0x00}); // add rsp, 136
+        asmLineAt(blockStart, "debug_trace pc=" + std::to_string(pc));
     }
 
     // call rel32
@@ -1718,10 +1712,23 @@ class Encoder {
     }
 
     // call [rax] - call through rax (used after movRaxImm64)
+    // Win64: call 前 RSP 必须 16 字节对齐。JIT 由 call 进入故 RSP=8(mod 16)，sub 32 仍为 8；
+    // 改为 sub 40（32 字节 shadow + 8 字节对齐），使 call 前 RSP=0(mod 16)。
     void callRax() {
-        size_t at = here();
+        size_t at;
+#if defined(_WIN32) || defined(_WIN64)
+        at = here();
+        emitBytes({0x48, 0x83, 0xec, 0x28}); // sub rsp, 40
+        asmLineAt(at, "sub rsp, 40  ; shadow+align");
+#endif
+        at = here();
         emitBytes({0xff, 0xd0}); // call rax
         asmLineAt(at, "call rax");
+#if defined(_WIN32) || defined(_WIN64)
+        at = here();
+        emitBytes({0x48, 0x83, 0xc4, 0x28}); // add rsp, 40
+        asmLineAt(at, "add rsp, 40  ; shadow+align");
+#endif
     }
 
     // 通用 mov r64, r64（用于 MIR 编码；reg 0-7=rax..r11，8=rdi，9=rsi）

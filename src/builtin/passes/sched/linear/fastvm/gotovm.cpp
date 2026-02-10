@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Feb. 08, 2026
+ * Updated: Feb. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -433,7 +433,18 @@ label_FUNC: {
         for (size_t i = 0; i < argsCnt; ++i) {
             funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
         }
+        EXEC_WHEN_DEBUG({
+            std::string argsStr;
+            for (size_t i = 0; i < argsCnt; ++i) {
+                argsStr += std::format("{} ", currFrame->get<slot_t>(args[i]));
+            }
+            l.in("FastVM").debug(
+                "Calling JIT function of graph <{}> with args: {}",
+                targetGraph->name(),
+                argsStr);
+        });
         slot_t result = fn(funcFrame->slotBase(), currentJitCtx_);
+        l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
         framePool_.release(funcFrame);
         currFrame->set(bc->result, result);
         NEXT();
@@ -455,7 +466,19 @@ label_FUNC: {
                 for (size_t i = 0; i < argsCnt; ++i) {
                     funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
                 }
+                EXEC_WHEN_DEBUG({
+                    std::string argsStr;
+                    for (size_t i = 0; i < argsCnt; ++i) {
+                        argsStr += std::format("{} ", currFrame->get<slot_t>(args[i]));
+                    }
+                    l.in("FastVM").debug(
+                        "Calling JIT function of graph <{}> with args: {}",
+                        targetGraph->name(),
+                        argsStr);
+                });
                 slot_t result = fn(funcFrame->slotBase(), currentJitCtx_);
+                l.in("FastVM").debug("JIT function at pc={} returned result={}.", targetPc, result);
+                _timer.resume();
                 framePool_.release(funcFrame);
                 currFrame->set(bc->result, result);
                 NEXT();
@@ -503,7 +526,19 @@ label_TAIL: {
             newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
         }
         framePool_._resetTop();
-        return fn(newFrame->slotBase(), currentJitCtx_);
+        EXEC_WHEN_DEBUG({
+            std::string argsStr;
+            for (size_t i = 0; i < argsCnt; ++i) {
+                argsStr += std::format("{} ", lastFrame.get<slot_t>(args[i]));
+            }
+            l.in("FastVM").debug(
+                "Calling JIT function of graph <{}> with args: {}",
+                g->name(),
+                argsStr);
+        });
+        slot_t result = fn(newFrame->slotBase(), currentJitCtx_);
+        l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
+        return result;
     }
     Graph *targetGraph = getFuncExtraGraph(bc);
     size_t targetPc    = static_cast<size_t>(bc->fastop[1]);
@@ -522,7 +557,19 @@ label_TAIL: {
                 newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
             }
             framePool_._resetTop();
-            return fn(newFrame->slotBase(), currentJitCtx_);
+            EXEC_WHEN_DEBUG({
+                std::string argsStr;
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    argsStr += std::format("{} ", lastFrame.get<slot_t>(args[i]));
+                }
+                l.in("FastVM").debug(
+                    "Calling JIT function of graph <{}> with args: {}",
+                    g->name(),
+                    argsStr);
+            });
+            slot_t result = fn(newFrame->slotBase(), currentJitCtx_);
+            l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
+            return result;
         }
     }
     currFrame              = framePool_._acquire(targetGraph);
@@ -537,13 +584,17 @@ label_TAIL: {
 #else
     FrameView lastFrame(currFrame);
     framePool_.release(currFrame);
-    currFrame              = framePool_._acquire(bc->extra()->graph);
+    Graph *lastGraph       = currFrame->graph();
+    Graph *targetGraph     = bc->extra()->graph;
+    currFrame              = framePool_._acquire(targetGraph);
     size_t argsCnt         = bc->normCnt();
     const data_idx_t *args = bc->operands();
     for (size_t i = 0; i < argsCnt; ++i) {
         currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
     }
-    framePool_._resetTop();
+    if (targetGraph != lastGraph) {
+        framePool_._resetTop();
+    }
     pc = bc->fastop[1];
     JUMP();
 #endif

@@ -21,6 +21,9 @@
 
 #include "core/rtdata/data.h"
 
+#include <cstdint>
+#include <cstring>
+
 #if ENABLE_FASTVM_JIT
 #include "builtin/passes/sched/linear/fastvm/bytecode.h"
 #include "builtin/passes/sched/linear/fastvm/fastvm.h"
@@ -40,14 +43,14 @@ extern "C" {
 extern "C" void jitDebugTraceBody(const void *ctx) {
     if (!ctx)
         return;
-    const auto *c = static_cast<const camel::jit::JitDebugContext *>(ctx);
     EXEC_WHEN_DEBUG({
+        const auto *c = static_cast<const camel::jit::JitDebugContext *>(ctx);
         std::ostringstream os;
-        os << std::hex << std::setfill(' ');
-        os << "trace pc=" << c->pc << "\n";
+        os << "trace pc=" << static_cast<uint32_t>(c->pc) << "\n";
+        os << std::hex;
         const auto one = [&os](const char *name, uint64_t val) {
-            os << "  " << std::setw(4) << std::left << name << " " << std::right << "0x"
-               << std::setw(16) << val;
+            os << "  " << std::setfill(' ') << std::setw(4) << std::left << name << " "
+               << std::setfill('0') << std::right << "0x" << std::setw(16) << val;
         };
         one("rax", c->rax);
         os << "    ";
@@ -83,6 +86,16 @@ extern "C" void jitDebugTraceBody(const void *ctx) {
     });
 }
 
+// 将 ctx 拷入 thread_local 再调 stub，避免 stub 写回时覆盖 JIT 栈上的保存区，从而正确恢复
+// rdx/r8-r11
+void jitDebugTraceWrapper(const void *ctx) {
+    if (!ctx)
+        return;
+    static thread_local camel::jit::JitDebugContext buf;
+    std::memcpy(&buf, ctx, sizeof(camel::jit::JitDebugContext));
+    jitDebugTrace(&buf);
+}
+
 #if defined(__GNUC__) || defined(__clang__)
 // Naked 存根：在 prologue 前将 rdx,r8..r11（caller-saved）和
 // rbx,rbp,rdi,rsi,r12..r15（callee-saved）写入 ctx
@@ -109,6 +122,12 @@ void jitDebugTrace(const void *ctx) { jitDebugTraceBody(ctx); }
 #endif
 
 slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
+    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline")
+                        .info(
+                            "trampolineFunc ENTER callerSlots={} ctx={} pc={}",
+                            static_cast<void *>(callerSlots),
+                            ctx,
+                            pc));
     auto *jc     = static_cast<camel::jit::JitContext *>(ctx);
     auto *vm     = jc->vm;
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
@@ -116,36 +135,82 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
 
     size_t targetPc = static_cast<size_t>(bc.fastop[1]);
     size_t argsCnt  = bc.normCnt();
-    uint32_t count  = 0;
+    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline")
+                        .info("trampolineFunc bc: targetPc={} argsCnt={}", targetPc, argsCnt));
+    uint32_t count = 0;
     if (targetPc != 0)
         count = incFuncExtraCount(&bc);
 
     if (targetPc == 0) {
+        EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc path: JIT->JIT"));
         GraphIR::Graph *g         = getFuncExtraGraph(&bc);
         camel::jit::JitEntryFn fn = reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc));
-        FrameMeta *meta           = g->getExtra<FrameMeta, 0>();
-        if (!meta)
-            meta = installFrameMetaInfoForGraph(g);
-        size_t calleeSlotCount = meta->runtimeDataType->size();
-        slot_t *calleeSlots    = static_cast<slot_t *>(alloca(calleeSlotCount * sizeof(slot_t)));
+        EXEC_WHEN_DEBUG(l.in("JIT.Trampoline")
+                            .info(
+                                "trampolineFunc JIT->JIT graph='{}' fn={}",
+                                g->name(),
+                                static_cast<void *>(reinterpret_cast<void *>(fn))));
+        Frame *newFrame = vm->acquireFrameForCall(g);
         for (size_t i = 0; i < argsCnt; ++i)
-            calleeSlots[i + 1] = callerSlots[bc.operands()[i]];
+            newFrame->set(i + 1, callerSlots[bc.operands()[i]]);
+
+        EXEC_WHEN_DEBUG({
+            slot_t *calleeSlots = newFrame->slotBase();
+            l.in("JIT.Trampoline").info("trampolineFunc callee args (after copy) hex by byte:");
+            for (size_t i = 0; i < argsCnt; ++i) {
+                const uint8_t *p = reinterpret_cast<const uint8_t *>(&calleeSlots[i + 1]);
+                std::ostringstream hexOs;
+                hexOs << std::hex << std::setfill('0');
+                for (size_t b = 0; b < sizeof(slot_t); ++b) {
+                    if (b)
+                        hexOs << " ";
+                    hexOs << std::setw(2) << static_cast<unsigned>(p[b]);
+                }
+                l.in("JIT.Trampoline")
+                    .info("  arg[{}] calleeSlots[{}] = {}", i, i + 1, hexOs.str());
+            }
+        });
+        EXEC_WHEN_DEBUG({
+            std::string argInfo;
+            for (size_t i = 0; i < argsCnt; ++i) {
+                if (i > 0)
+                    argInfo += ", ";
+                argInfo += "arg[" + std::to_string(i) +
+                           "]=" + std::to_string(newFrame->get<slot_t>(i + 1));
+            }
+            l.in("JIT.Trampoline")
+                .info(
+                    "trampolineFunc JIT->JIT args: {} (calleeSlots[1]={})",
+                    argInfo,
+                    newFrame->get<slot_t>(1));
+        });
+        EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc about to call JIT entry"));
+        slot_t result = fn(newFrame->slotBase(), ctx);
         EXEC_WHEN_DEBUG(
-            l.in("JIT.Trampoline").debug("trampolineFunc: JIT->JIT target='{}'", g->name()));
-        return fn(calleeSlots, ctx);
+            l.in("JIT.Trampoline").info("trampolineFunc JIT->JIT return result={}", result));
+        vm->releaseFrameForCall(newFrame);
+        return result;
     }
 
+    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc path: JIT->interpreter"));
     GraphIR::Graph *targetGraph = getFuncExtraGraph(&bc);
-    EXEC_WHEN_DEBUG(
-        l.in("JIT.Trampoline")
-            .debug("trampolineFunc: JIT->interpreter target='{}'", targetGraph->name()));
+    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline")
+                        .info(
+                            "trampolineFunc JIT->interpreter target='{}' targetPc={}",
+                            targetGraph->name(),
+                            targetPc));
 
+    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc before acquireFrameForCall"));
     Frame *newFrame = vm->acquireFrameForCall(targetGraph);
     for (size_t i = 0; i < argsCnt; ++i)
         newFrame->set(i + 1, callerSlots[bc.operands()[i]]);
     (void)count;
+    EXEC_WHEN_DEBUG(
+        l.in("JIT.Trampoline").info("trampolineFunc before vm->call targetPc={}", targetPc));
     slot_t result = vm->call(targetPc, newFrame);
+    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc after vm->call result={}", result));
     vm->releaseFrameForCall(newFrame);
+    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc EXIT"));
     return result;
 }
 
@@ -164,16 +229,14 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     if (targetPc == 0) {
         GraphIR::Graph *g         = getFuncExtraGraph(&bc);
         camel::jit::JitEntryFn fn = reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc));
-        FrameMeta *meta           = g->getExtra<FrameMeta, 0>();
-        if (!meta)
-            meta = installFrameMetaInfoForGraph(g);
-        size_t calleeSlotCount = meta->runtimeDataType->size();
-        slot_t *calleeSlots    = static_cast<slot_t *>(alloca(calleeSlotCount * sizeof(slot_t)));
+        Frame *newFrame           = vm->acquireFrameForTail(g);
         for (size_t i = 0; i < argsCnt; ++i)
-            calleeSlots[i + 1] = callerSlots[bc.operands()[i]];
+            newFrame->set(i + 1, callerSlots[bc.operands()[i]]);
         EXEC_WHEN_DEBUG(
             l.in("JIT.Trampoline").debug("trampolineTail: JIT->JIT target='{}'", g->name()));
-        return fn(calleeSlots, ctx);
+        slot_t result = fn(newFrame->slotBase(), ctx);
+        vm->releaseFrameForTail(newFrame);
+        return result;
     }
 
     GraphIR::Graph *targetGraph = getFuncExtraGraph(&bc);

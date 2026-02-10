@@ -55,13 +55,13 @@
             }
         },
         {
-            "name": "RUN (jit)",
+            "name": "RUN (jit/debug)",
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
-            "args": ["-v", "--log-level debug", "${file}", "std::jit"],
+            "args": ["-v", "--log-level debug", "${file}", "std::inline", "std::jit"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": true,

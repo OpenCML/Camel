@@ -769,7 +769,7 @@ bool X64Backend::compileBytecode(
     linearScanVReg(mirBuf, &vregAlloc);
     void *debugTraceFn = nullptr;
 #ifndef NDEBUG
-    debugTraceFn = reinterpret_cast<void *>(&jitDebugTrace);
+    debugTraceFn = reinterpret_cast<void *>(&jitDebugTraceWrapper);
 #endif
     x64::encodeMirBuffer(
         mirBuf,

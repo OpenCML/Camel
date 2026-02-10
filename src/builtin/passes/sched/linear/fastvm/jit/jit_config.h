@@ -34,7 +34,7 @@ enum class JitPolicy {
 
 struct JitConfig {
     JitPolicy policy        = JitPolicy::OnDemand;
-    size_t hotThreshold     = 100;
+    size_t hotThreshold     = 1;
     size_t maxCodeCacheSize = 4 * 1024 * 1024; // 4MB
 };
 

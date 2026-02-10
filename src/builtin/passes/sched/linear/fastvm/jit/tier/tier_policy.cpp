@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 07, 2026
+ * Updated: Feb. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@ bool TierPolicy::shouldJit(uint32_t callCount) const {
         return false;
     if (config_.policy == JitPolicy::Always)
         return true;
-    return callCount >= config_.hotThreshold;
+    return callCount > config_.hotThreshold;
 }
 
 } // namespace camel::jit
