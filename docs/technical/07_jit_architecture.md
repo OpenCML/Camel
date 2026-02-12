@@ -1,6 +1,6 @@
 # FastVM JIT 架构文档
 
-本文档描述 Camel FastVM 的 **JIT 模块实现**：将字节码在运行时编译为 x86-64 机器码，与解释器、trampoline 协同工作。JIT 不依赖 Frame 对象，直接操作 `slot_t*` 动态区；FUNC/TAIL 通过 trampoline 分派；OPER 通过 trampolineOper + SlotArgsView 调用算子。
+本文档描述 Camel FastVM 的 **JIT 模块实现**：将字节码在运行时编译为 x86-64 机器码，与解释器、trampoline 协同工作。JIT 通过 **slot[0] = Frame\*** 规范统一使用 Frame：动态区 slot[0] 恒存当前 Frame\*，slot[1..] 为数据槽；FUNC/TAIL 通过 trampoline 分派；OPER 通过 trampolineOper + FrameArgsView 调用算子。
 
 ---
 
@@ -61,20 +61,65 @@ src/builtin/passes/sched/linear/fastvm/jit/
 - **slots**：动态区基址，`slot[idx]` 位于 `slots[idx]`（8 字节对齐）。
 - **ctx**：`JitContext*`，含 `vm`（FastVMSchedPass*）、`base`（Bytecode* 基址）。
 
-### 2.2 slot 布局（FrameMeta 驱动）
+### 2.1.1 x64 函数调用约定（ABI）详解
+
+**重要**：汇编中的 `call`/`ret` 和 `jmp` **不会自动保存/恢复任何通用寄存器**，仅 `call` 会将返回地址压栈、`ret` 会弹栈并跳转。寄存器的保存责任由 **ABI** 约定划分：
+
+| 类别 | SysV x64 寄存器 | Win64 寄存器 | 说明 |
+|------|-----------------|--------------|------|
+| **参数/返回值** | rdi, rsi, rdx, rcx, r8, r9（第 1–6 参）；rax（返回值） | rcx, rdx, r8, r9（第 1–4 参）；rax（返回值） | 调用前后均可被 callee 覆盖 |
+| **Caller-saved** | 参数寄存器 + r10, r11 | rcx, rdx, r8, r9, r10, r11（易失） | **Caller 负责保存**：若调用后仍需使用，caller 须在 call 前压栈/保存，call 后恢复 |
+| **Callee-saved** | rbx, rbp, r12, r13, r14, r15 | rbx, rbp, rdi, rsi, r12–r15 | **Callee 负责保存**：若 callee 使用这些寄存器，必须在返回前恢复 |
+
+**JIT 专用寄存器约定**（内部统一为 SysV 风格）：
+
+| 寄存器 | 用途 | 说明 |
+|--------|------|------|
+| **rdi** | slot base（`slot_t*`） | 所有 frame 访问 `[rdi + disp]` 的基址；**必须**在 trampoline 调用前后保存（见下） |
+| **rsi** | ctx（`JitContext*`） | 传入 trampoline 的第二参数；**Caller-saved**，若 call 后仍用 ctx 需自行保存 |
+| **rax** | 临时、返回值 | trampoline 返回结果在 rax；V* 算术也常用 |
+| **rbx–r11** | 通用/regalloc | V* 分配及临时用 |
+
+**为什么 `jmp`/`call` 不会自动保存上下文？**
+
+- **`jmp`**：仅修改 PC，不压栈、不改任何寄存器。若跳转到另一段代码，原代码的寄存器状态**完全保留**；但若 `jmp` 到子例程且不 `ret` 回来，则不存在“返回后恢复”的需求。
+- **`call`**：等价于 `push 返回地址; jmp 目标`。只压入**返回地址**，不保存任何 GPR。返回时 `ret` 只负责 `pop` 并跳回，**不恢复**任何寄存器。
+- **责任划分**：ABI 规定哪些寄存器由 **caller** 保存、哪些由 **callee** 保存。谁使用、谁负责；汇编器/CPU 不会自动插入保存/恢复代码。
+
+### 2.1.2 Trampoline 调用与 rdi 保存
+
+trampoline（`trampolineFunc`/`trampolineTail`/`trampolineOper`）内部会调用 `fn(callee_slots, ctx)`，此时按 ABI 会设置 **rdi = callee_slots**。因此：
+
+1. **从 trampoline 返回后**，rdi 已不再是 caller 的 slot base，而是 callee 的（且 callee 的 Frame 可能已被 release）。
+2. **若 caller 在 call 后继续用 rdi 访问 frame**，会错误地访问已释放的 callee frame，导致逻辑错误（如 fib 中 `fib(n-1)` 返回后继续用 rdi 取 `n-2`）。
+
+**修复**：在调用 trampoline 前 `push rdi`，返回后 `pop rdi`，保证 rdi 始终为 caller 的 slot base。MIR 已提供 `PushRdi`/`PopRdi`，`emitCallTrampoline*` 会在 FUNC/TAIL/OPER 的 call 两侧插入。
+
+**注意**：rsi（ctx）同样是 caller-saved。当前 trampoline 实现通常不会破坏 rsi，但 **ABI 不保证**。若 JIT 在 trampoline 返回后仍需 ctx（如用于下一次调用），建议同样保存/恢复 rsi，或确认 trampoline 实现不会修改它。
+
+### 2.2 slot[0] = Frame* 规范
+
+- **slot[0]**：保留，恒存当前 Frame 指针（`reinterpret_cast<slot_t>(frame)`）。解释器、gotovm、casevm 在调用 JIT 入口前写入；trampoline 在 JIT→JIT 调用前写入。
+- **slot[1..]**：正常数据槽，对应 Frame 动态区索引 1 起。
+- **用途**：
+  - trampolineOper 从 slots[0] 取 Frame，用 FrameArgsView 调用算子，无需传 Graph；
+  - trampolineFunc/TrampolineTail 从 callerSlots[0] 取 caller Frame，用 `frame->get(operand)` 取参，支持 operand 为负（静态区索引）；
+  - jitDebugTraceBody 从 rdi[0] 取 Frame，打印当前帧槽值。
+
+### 2.3 slot 布局（FrameMeta 驱动）
 
 - **编译期**：`unit.frameMeta` 来自 `graph->getExtra<FrameMeta,0>()`，用于：
   - `dynamicSlotCount = meta->runtimeDataType->size()`
   - slot 边界校验：`slotInRange(idx)`
 - **运行时**：JIT 使用 `slotDisp(idx) = idx * 8`（基址 0），直接访问 `[rdi + idx*8]`。
 
-### 2.3 FUNC 字节码 extra 打包
+### 2.4 FUNC 字节码 extra 打包
 
 - **未 JIT**：`extra.raw` 低 48 位存 `Graph*`，高 16 位存调用计数；`fastop[1]` 存目标 pc。
 - **已 JIT**：`extra.raw` 低 48 位存 `JitEntryFn`，`fastop[1]=0` 标识已替换。
 - **接口**：`getFuncExtraPtr`、`getFuncExtraCount`、`setFuncExtraPacked`、`incFuncExtraCount`。
 
-### 2.4 编译流水线（字节码 → 机器码）
+### 2.5 编译流水线（字节码 → 机器码）
 
 1. **字节码 → MIR**：`X64Backend::compileBytecode` 按 opcode 调用 `MirBuilder`，生成线性 MIR buffer（控制流 + V* 指令，vreg 由 `nextVReg` 递增分配）。
 2. **MIR 优化**：`optimizeMirBuffer`（如 Win64 下删除 prologue 后冗余 mov）。
@@ -103,7 +148,7 @@ src/builtin/passes/sched/linear/fastvm/jit/
 | TAIL | 尾调用 | trampolineTail(slots, ctx, pc) |
 | JUMP | 相对跳转 | 目标 pc 由 pcToOffset 得到 |
 | RETN | 返回 | VLoadFromFrame/MemAt → VRet（返回值 vreg→rax 后 ret） |
-| OPER | 算子调用 | trampolineOper(slots, ctx, pc, graph)；返回值 VMovFromRax + VStoreToFrame |
+| OPER | 算子调用 | trampolineOper(slots, ctx, pc)；从 slots[0] 取 Frame，FrameArgsView 调用算子 |
 | JOIN | 两路合并 | VCopy + VTest + VCmovnz，选分支值写 result 槽 |
 
 遇到不支持 opcode 或约束不满足时，`compileBytecode` 返回 `false`，该图不进入 JIT 缓存。
@@ -121,25 +166,25 @@ src/builtin/passes/sched/linear/fastvm/jit/
 1. 从 `base[pc]` 取 `extraPtr`、`targetPc`、`argsCnt`。
 2. 若 `targetPc != 0`：`incFuncExtraCount(extra)`，得到 `count`。
 3. **目标已 JIT（targetPc==0）**：
-   - `extraPtr` 为 `JitEntryFn`；`g = vm->jitFnToGraph(fn)`。
-   - 用 `alloca` 分配 callee slot 区，`calleeSlots[i+1] = callerSlots[operands[i]]`。
-   - 调用 `fn(calleeSlots, ctx)`，返回结果。
+   - `callerFrame = reinterpret_cast<Frame*>(callerSlots[0])`，用 `callerFrame->get(operands[i])` 取参（支持 operand 为负，即静态区索引）。
+   - `acquireFrameForCall/Tail(g)` 得 `newFrame`，`newFrame->slotBase()[0] = newFrame`（slot[0] 规范）。
+   - 调用 `fn(newFrame->slotBase(), ctx)`，返回结果。
 4. **目标为解释器（targetPc!=0）**：
-   - `extraPtr` 为 `Graph*`；`acquireFrameForCall/Tail(targetGraph)`。
-   - 拷贝参数到 Frame，调用 `invokeCallOrJit(targetPc, targetGraph, newFrame, ctx, count)`。
+   - 同上取 caller Frame，拷贝参数到新 Frame，调用 `vm->call(targetPc, newFrame)`。
    - 释放 Frame，返回结果。
 
 ### 4.2 trampolineOper
 
-**签名**：`extern "C" slot_t trampolineOper(slot_t* slots, void* ctx, size_t pc, GraphIR::Graph* graph)`
+**签名**：`extern "C" slot_t trampolineOper(slot_t* slots, void* ctx, size_t pc)`
 
 **逻辑**：
 
-1. 从 `base[pc]` 取 `func`、`nargs`、`wargs`、`result`。
-2. 用 `graph` 的 FrameMeta 构造 `SlotArgsView(withView)`、`SlotArgsView(normView)`。
-3. 调用 `func(withView, normView, vm->context())`，将结果写入 `slots[result]` 并返回。
+1. `frame = reinterpret_cast<Frame*>(slots[0])`（slot[0] 规范）。
+2. 从 `base[pc]` 取 `func`、`nargs`、`wargs`、`result`。
+3. 构造 `FrameArgsView(withView)`、`FrameArgsView(normView)`，调用 `func(withView, normView, vm->context())`。
+4. 将结果写入 `frame->set(result, ret)` 并返回。
 
-**SlotArgsView**：基于 `slot_t*` 实现 ArgsView，支持 `slot/setSlot/code/type`，无需分配 Frame。
+**说明**：无需传 Graph，Frame 已包含 graph、staticArea、runtimeDataType 等，FrameArgsView 直接基于 Frame 实现 ArgsView。
 
 ---
 
@@ -172,8 +217,8 @@ JIT FUNC/TAIL → trampolineFunc/Tail(callerSlots, ctx, pc)
     ├─ targetPc==0 → fn(calleeSlots, ctx)（JIT→JIT）
     └─ targetPc!=0 → invokeCallOrJit(...)（JIT→解释器）
 
-JIT OPER → trampolineOper(slots, ctx, pc, graph)
-    └─ SlotArgsView + func(withView, normView, context)
+JIT OPER → trampolineOper(slots, ctx, pc)
+    └─ FrameArgsView(frame from slots[0]) + func(withView, normView, context)
 ```
 
 ### 6.3 compileAndCacheGraph 与 bytecode patch
@@ -194,6 +239,7 @@ JIT OPER → trampolineOper(slots, ctx, pc, graph)
 
 | 问题 | 位置 | 说明 | 状态 |
 |------|------|------|------|
+| **rdi 被 trampoline 覆盖** | FUNC/TAIL/OPER 的 trampoline 调用 | trampoline 内部调用 fn(callee_slots) 会设 rdi=callee_slots；返回后 caller 若继续用 rdi 访问 frame，会错误使用已释放的 callee frame。 | ✅ 已修复：call 前后插入 push rdi / pop rdi |
 | **jitFnToGraph 返回 null** | trampolineFunc/Tail | 当 targetPc==0 时，若 `vm->jitFnToGraph(fn)` 返回 nullptr 会崩溃。 | ✅ 已修复：增加 null 检查，返回 NullSlot 并打日志 |
 | **closure 回调无 callCount** | evalMarkedOperator_* | map_arr/apply_arr 等调用 `invokeCallOrJit(..., 0)`，callCount 始终为 0，无法触发 OnDemand JIT。 | ⚠️ 未修复：需改动分层策略 |
 | **disp8 偏移限制** | x64_encoder | slot 偏移 > 127 字节时 disp8 会截断。 | ✅ 已修复：自动选择 disp8/disp32，offset 计算同步 |
@@ -220,7 +266,7 @@ JIT OPER → trampolineOper(slots, ctx, pc, graph)
 | trampolineFunc/Tail(slot_t*, void*, pc) | ✅ |
 | JIT→JIT：alloca + 直连 fn(calleeSlots, ctx) | ✅ |
 | JIT→解释器：Frame + invokeCallOrJit | ✅ |
-| trampolineOper + SlotArgsView | ✅ |
+| trampolineOper + FrameArgsView（slot[0]=Frame*） | ✅ |
 | OnDemand：incFuncExtraCount + shouldJit | ✅ |
 | Always：全图预编译 + jitCache_ | ✅ |
 | OPER JIT 支持 | ✅ |

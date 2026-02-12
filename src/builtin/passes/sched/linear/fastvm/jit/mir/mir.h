@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Feb. 10, 2026
+ * Updated: Feb. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,6 +61,8 @@ enum class MirOp : uint8_t {
     MovRegReg,
     MovRegImm32,
     MovRegImm64,
+    PushRdi, // 保存 rdi（slot base）跨越 trampoline 调用；trampoline 会覆盖 rdi
+    PopRdi,  // 恢复 rdi
     CallRax,
     JzRel32,
     JmpRel32,

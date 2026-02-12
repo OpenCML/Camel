@@ -13,8 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 10, 2026
+ * Updated: Feb. 12, 2026
  * Supported by: National Key Research and Development Program of China
+ *
+ * ---
+ * JIT 调用约定与 slot[0] 规范：
+ * 1. 动态区 slot[0] 保留，始终存放当前 Frame*（reinterpret_cast<slot_t>）。解释器/gotovm/casevm
+ *    在调用 JIT 入口前写入；trampoline 在 JIT->JIT 调用前写入。slot[1..] 为正常数据槽。
+ * 2. trampolineFunc/TrampolineTail：callerSlots[0] 即 caller Frame*，用 callerFrame->get(operand)
+ *    取参，以支持 operand 为负（静态区索引）。
+ * 3. trampolineOper：slots[0] 即当前 Frame*，用 FrameArgsView 取代 SlotArgsView，无需传 Graph。
  */
 
 #include "trampoline.h"
@@ -40,6 +48,7 @@ extern "C" {
 
 #if ENABLE_FASTVM_JIT
 // 由 jitDebugTrace 存根 tail-call，C linkage 供 asm "jmp jitDebugTraceBody" 解析
+// rdi 为当前 JIT 的 slot 基址；slot[0] 恒存 Frame*，据此打印当前帧（见上方 slot[0] 规范）
 extern "C" void jitDebugTraceBody(const void *ctx) {
     if (!ctx)
         return;
@@ -82,6 +91,11 @@ extern "C" void jitDebugTraceBody(const void *ctx) {
         os << "\n";
         one("r15", c->r15);
         os << "\n";
+        const auto *slots    = reinterpret_cast<const slot_t *>(c->rdi);
+        const auto *framePtr = reinterpret_cast<const Frame *>(slots[0]);
+        if (framePtr) {
+            framePtr->printSlotsTo(os);
+        }
         l.in("JIT.Debug").debug("{}", os.str());
     });
 }
@@ -150,42 +164,22 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
                                 "trampolineFunc JIT->JIT graph='{}' fn={}",
                                 g->name(),
                                 static_cast<void *>(reinterpret_cast<void *>(fn))));
-        Frame *newFrame = vm->acquireFrameForCall(g);
+        Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]); // slot[0] = Frame*
+        Frame *newFrame    = vm->acquireFrameForCall(g);
         for (size_t i = 0; i < argsCnt; ++i)
-            newFrame->set(i + 1, callerSlots[bc.operands()[i]]);
+            newFrame->set(
+                i + 1,
+                callerFrame->get<slot_t>(bc.operands()[i])); // operand 可负（静态区）
 
         EXEC_WHEN_DEBUG({
-            slot_t *calleeSlots = newFrame->slotBase();
-            l.in("JIT.Trampoline").info("trampolineFunc callee args (after copy) hex by byte:");
-            for (size_t i = 0; i < argsCnt; ++i) {
-                const uint8_t *p = reinterpret_cast<const uint8_t *>(&calleeSlots[i + 1]);
-                std::ostringstream hexOs;
-                hexOs << std::hex << std::setfill('0');
-                for (size_t b = 0; b < sizeof(slot_t); ++b) {
-                    if (b)
-                        hexOs << " ";
-                    hexOs << std::setw(2) << static_cast<unsigned>(p[b]);
-                }
-                l.in("JIT.Trampoline")
-                    .info("  arg[{}] calleeSlots[{}] = {}", i, i + 1, hexOs.str());
-            }
-        });
-        EXEC_WHEN_DEBUG({
-            std::string argInfo;
-            for (size_t i = 0; i < argsCnt; ++i) {
-                if (i > 0)
-                    argInfo += ", ";
-                argInfo += "arg[" + std::to_string(i) +
-                           "]=" + std::to_string(newFrame->get<slot_t>(i + 1));
-            }
-            l.in("JIT.Trampoline")
-                .info(
-                    "trampolineFunc JIT->JIT args: {} (calleeSlots[1]={})",
-                    argInfo,
-                    newFrame->get<slot_t>(1));
+            std::ostringstream os;
+            os << "trampolineFunc callee frame <" << g->name() << "> (after copy):\n";
+            newFrame->printSlotsTo(os);
+            l.in("JIT.Trampoline").info("{}", os.str());
         });
         EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc about to call JIT entry"));
-        slot_t result = fn(newFrame->slotBase(), ctx);
+        newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame); // 规范：slot[0] 存 Frame*
+        slot_t result           = fn(newFrame->slotBase(), ctx);
         EXEC_WHEN_DEBUG(
             l.in("JIT.Trampoline").info("trampolineFunc JIT->JIT return result={}", result));
         vm->releaseFrameForCall(newFrame);
@@ -201,9 +195,10 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
                             targetPc));
 
     EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc before acquireFrameForCall"));
-    Frame *newFrame = vm->acquireFrameForCall(targetGraph);
+    Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
+    Frame *newFrame    = vm->acquireFrameForCall(targetGraph);
     for (size_t i = 0; i < argsCnt; ++i)
-        newFrame->set(i + 1, callerSlots[bc.operands()[i]]);
+        newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
     (void)count;
     EXEC_WHEN_DEBUG(
         l.in("JIT.Trampoline").info("trampolineFunc before vm->call targetPc={}", targetPc));
@@ -229,12 +224,14 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     if (targetPc == 0) {
         GraphIR::Graph *g         = getFuncExtraGraph(&bc);
         camel::jit::JitEntryFn fn = reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc));
+        Frame *callerFrame        = reinterpret_cast<Frame *>(callerSlots[0]);
         Frame *newFrame           = vm->acquireFrameForTail(g);
         for (size_t i = 0; i < argsCnt; ++i)
-            newFrame->set(i + 1, callerSlots[bc.operands()[i]]);
+            newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
         EXEC_WHEN_DEBUG(
             l.in("JIT.Trampoline").debug("trampolineTail: JIT->JIT target='{}'", g->name()));
-        slot_t result = fn(newFrame->slotBase(), ctx);
+        newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
+        slot_t result           = fn(newFrame->slotBase(), ctx);
         vm->releaseFrameForTail(newFrame);
         return result;
     }
@@ -244,34 +241,31 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
         l.in("JIT.Trampoline")
             .debug("trampolineTail: JIT->interpreter target='{}'", targetGraph->name()));
 
-    Frame *newFrame = vm->acquireFrameForTail(targetGraph);
+    Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
+    Frame *newFrame    = vm->acquireFrameForTail(targetGraph);
     for (size_t i = 0; i < argsCnt; ++i)
-        newFrame->set(i + 1, callerSlots[bc.operands()[i]]);
+        newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
     (void)count;
     return vm->call(targetPc, newFrame);
 }
 
-slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc, GraphIR::Graph *graph) {
+slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc) {
     auto *jc     = static_cast<camel::jit::JitContext *>(ctx);
     auto *vm     = jc->vm;
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
     Bytecode &bc = base[pc];
 
+    Frame *frame      = reinterpret_cast<Frame *>(slots[0]); // 规范：slot[0] = Frame*
     operator_t func   = bc.extra()->func;
     data_arr_t nargs  = bc.nargs();
     data_arr_t wargs  = bc.wargs();
     data_idx_t result = bc.result;
-    FrameMeta *meta   = graph->getExtra<FrameMeta, 0>();
-    if (!meta)
-        meta = installFrameMetaInfoForGraph(graph);
 
-    SlotArgsView
-        withView(slots, meta->staticArea, meta->runtimeDataType, graph->staticDataType(), wargs);
-    SlotArgsView
-        normView(slots, meta->staticArea, meta->runtimeDataType, graph->staticDataType(), nargs);
+    FrameArgsView withView(*frame, wargs);
+    FrameArgsView normView(*frame, nargs);
 
-    slot_t ret    = func(withView, normView, vm->context());
-    slots[result] = ret;
+    slot_t ret = func(withView, normView, vm->context());
+    frame->set(result, ret);
     return ret;
 }
 
@@ -279,7 +273,7 @@ slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc, GraphIR::Graph *graph
 // JIT 关闭时仅提供占位符号，避免链接未定义；不应被调用
 slot_t trampolineFunc(slot_t *, void *, size_t) { return {}; }
 slot_t trampolineTail(slot_t *, void *, size_t) { return {}; }
-slot_t trampolineOper(slot_t *, void *, size_t, GraphIR::Graph *) { return {}; }
+slot_t trampolineOper(slot_t *, void *, size_t) { return {}; }
 #endif
 
 } // extern "C"

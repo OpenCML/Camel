@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 10, 2026
+ * Updated: Feb. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1534,6 +1534,18 @@ class Encoder {
         asmLineAt(at, "ret");
     }
 
+    // push rdi / pop rdi：trampoline 会覆盖 rdi，caller 需在调用前后保存/恢复 slot base
+    void pushRdi() {
+        size_t at = here();
+        emitByte(0x57);
+        asmLineAt(at, "push rdi");
+    }
+    void popRdi() {
+        size_t at = here();
+        emitByte(0x5f);
+        asmLineAt(at, "pop rdi");
+    }
+
     // Debug：栈 136 字节，保存区与 JitDebugContext 布局一致；JIT 调用 jitDebugTraceWrapper，
     // wrapper 将 ctx 拷入 thread_local 再调 stub，stub 只写 thread_local，不覆盖本栈，恢复正确。
     void emitDebugTraceCall(uint32_t pc, void *fnAddr) {
@@ -1712,22 +1724,22 @@ class Encoder {
     }
 
     // call [rax] - call through rax (used after movRaxImm64)
-    // Win64: call 前 RSP 必须 16 字节对齐。JIT 由 call 进入故 RSP=8(mod 16)，sub 32 仍为 8；
-    // 改为 sub 40（32 字节 shadow + 8 字节对齐），使 call 前 RSP=0(mod 16)。
+    // Win64: call 前 RSP 必须 16 字节对齐。CallRax 前必有 PushRdi，push 后 RSP=0(mod 16)，
+    // 故仅需 sub 32（shadow），无需额外 8 字节对齐；sub 40 会导致 call 前 RSP=8(mod 16)，违反 ABI。
     void callRax() {
         size_t at;
 #if defined(_WIN32) || defined(_WIN64)
         at = here();
-        emitBytes({0x48, 0x83, 0xec, 0x28}); // sub rsp, 40
-        asmLineAt(at, "sub rsp, 40  ; shadow+align");
+        emitBytes({0x48, 0x83, 0xec, 0x20}); // sub rsp, 32
+        asmLineAt(at, "sub rsp, 32  ; shadow");
 #endif
         at = here();
         emitBytes({0xff, 0xd0}); // call rax
         asmLineAt(at, "call rax");
 #if defined(_WIN32) || defined(_WIN64)
         at = here();
-        emitBytes({0x48, 0x83, 0xc4, 0x28}); // add rsp, 40
-        asmLineAt(at, "add rsp, 40  ; shadow+align");
+        emitBytes({0x48, 0x83, 0xc4, 0x20}); // add rsp, 32
+        asmLineAt(at, "add rsp, 32  ; shadow");
 #endif
     }
 
@@ -1863,8 +1875,9 @@ class Encoder {
         callRax();
     }
 
-    // Windows x64: call trampolineOper(slots, ctx, pc, graph). rdi=slots, rsi=ctx.
-    void callTrampolineOperWin64(uint32_t pc, uint64_t graphPtr, uint64_t addr) {
+    // Windows x64: call trampolineOper(slots, ctx, pc). rdi=slots, rsi=ctx. graph 从 slots[0] 即
+    // Frame* 获取
+    void callTrampolineOperWin64(uint32_t pc, uint64_t addr) {
         emitBytes({0x48, 0x89, 0xf9}); // mov rcx, rdi (arg1 slots)
         asmLine("mov rcx, rdi");
         emitBytes({0x48, 0x89, 0xf2}); // mov rdx, rsi (arg2 ctx)
@@ -1878,25 +1891,12 @@ class Encoder {
             static_cast<uint8_t>((pc >> 24) & 0xff),
         }); // mov r8d, imm32 (arg3 pc)
         asmLine("mov r8d, " + std::to_string(pc));
-        emitByte(0x49);
-        emitByte(0xb9); // mov r9, imm64 (arg4 graph)
-        emitBytes({
-            static_cast<uint8_t>(graphPtr & 0xff),
-            static_cast<uint8_t>((graphPtr >> 8) & 0xff),
-            static_cast<uint8_t>((graphPtr >> 16) & 0xff),
-            static_cast<uint8_t>((graphPtr >> 24) & 0xff),
-            static_cast<uint8_t>((graphPtr >> 32) & 0xff),
-            static_cast<uint8_t>((graphPtr >> 40) & 0xff),
-            static_cast<uint8_t>((graphPtr >> 48) & 0xff),
-            static_cast<uint8_t>((graphPtr >> 56) & 0xff),
-        });
-        asmLine("mov r9, graph");
         movRaxImm64(addr);
         callRax();
     }
 
-    // SysV x64: call trampolineOper(slots, ctx, pc, graph). rdi, rsi already set.
-    void callTrampolineOperSysV(uint32_t pc, uint64_t graphPtr, uint64_t addr) {
+    // SysV x64: call trampolineOper(slots, ctx, pc). rdi, rsi already set.
+    void callTrampolineOperSysV(uint32_t pc, uint64_t addr) {
         emitBytes({0x48, 0xc7, 0xc2}); // mov rdx, imm32 (arg3 pc)
         emitBytes({
             static_cast<uint8_t>(pc & 0xff),
@@ -1905,19 +1905,6 @@ class Encoder {
             static_cast<uint8_t>((pc >> 24) & 0xff),
         });
         asmLine("mov rdx, " + std::to_string(pc));
-        emitByte(0x48);
-        emitByte(0xb9); // mov rcx, imm64 (arg4 graph) - SysV 4th arg is rcx
-        emitBytes({
-            static_cast<uint8_t>(graphPtr & 0xff),
-            static_cast<uint8_t>((graphPtr >> 8) & 0xff),
-            static_cast<uint8_t>((graphPtr >> 16) & 0xff),
-            static_cast<uint8_t>((graphPtr >> 24) & 0xff),
-            static_cast<uint8_t>((graphPtr >> 32) & 0xff),
-            static_cast<uint8_t>((graphPtr >> 40) & 0xff),
-            static_cast<uint8_t>((graphPtr >> 48) & 0xff),
-            static_cast<uint8_t>((graphPtr >> 56) & 0xff),
-        });
-        asmLine("mov rcx, graph");
         movRaxImm64(addr);
         callRax();
     }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Feb. 10, 2026
+ * Updated: Feb. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -443,7 +443,8 @@ label_FUNC: {
                 targetGraph->name(),
                 argsStr);
         });
-        slot_t result = fn(funcFrame->slotBase(), currentJitCtx_);
+        funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
+        slot_t result            = fn(funcFrame->slotBase(), currentJitCtx_);
         l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
         framePool_.release(funcFrame);
         currFrame->set(bc->result, result);
@@ -476,7 +477,8 @@ label_FUNC: {
                         targetGraph->name(),
                         argsStr);
                 });
-                slot_t result = fn(funcFrame->slotBase(), currentJitCtx_);
+                funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
+                slot_t result            = fn(funcFrame->slotBase(), currentJitCtx_);
                 l.in("FastVM").debug("JIT function at pc={} returned result={}.", targetPc, result);
                 _timer.resume();
                 framePool_.release(funcFrame);
@@ -536,7 +538,8 @@ label_TAIL: {
                 g->name(),
                 argsStr);
         });
-        slot_t result = fn(newFrame->slotBase(), currentJitCtx_);
+        newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
+        slot_t result           = fn(newFrame->slotBase(), currentJitCtx_);
         l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
         return result;
     }
@@ -567,7 +570,8 @@ label_TAIL: {
                     g->name(),
                     argsStr);
             });
-            slot_t result = fn(newFrame->slotBase(), currentJitCtx_);
+            newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
+            slot_t result           = fn(newFrame->slotBase(), currentJitCtx_);
             l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
             return result;
         }

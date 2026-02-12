@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Feb. 08, 2026
+ * Updated: Feb. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -315,7 +315,8 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                 for (size_t i = 0; i < argsCnt; ++i) {
                     funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
                 }
-                slot_t result = fn(funcFrame->slotBase(), currentJitCtx_);
+                funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
+                slot_t result            = fn(funcFrame->slotBase(), currentJitCtx_);
                 framePool_.release(funcFrame);
                 currFrame->set(bc.result, result);
             } else {
@@ -335,7 +336,8 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                         for (size_t i = 0; i < argsCnt; ++i) {
                             funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
                         }
-                        slot_t result = fn(funcFrame->slotBase(), currentJitCtx_);
+                        funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
+                        slot_t result            = fn(funcFrame->slotBase(), currentJitCtx_);
                         framePool_.release(funcFrame);
                         currFrame->set(bc.result, result);
                         pc += bc.opsize;
@@ -382,6 +384,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                     newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
                 }
                 framePool_._resetTop();
+                newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
                 return fn(newFrame->slotBase(), currentJitCtx_);
             }
             GraphIR::Graph *targetGraph = getFuncExtraGraph(&bc);
@@ -401,6 +404,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                         newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
                     }
                     framePool_._resetTop();
+                    newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
                     return fn(newFrame->slotBase(), currentJitCtx_);
                 }
             }

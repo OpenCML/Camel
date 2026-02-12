@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Feb. 10, 2026
+ * Updated: Feb. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -81,6 +81,8 @@ class MirBuilder {
         push(m);
     }
     void emitCallRax() { push(MirOp::CallRax, 0, 0); }
+    void emitPushRdi() { push(MirOp::PushRdi, 0, 0); }
+    void emitPopRdi() { push(MirOp::PopRdi, 0, 0); }
     void emitRet() { push(MirOp::Ret, 0, 0); }
     /** Debug 构建下在每两条指令间插入；pc 为当前字节码 pc，供 jitDebugTrace 打印 */
     void emitDebugTrace(uint32_t pc) {
@@ -530,34 +532,42 @@ class MirBuilder {
     }
 
     // Win64: 准备 trampoline(slots, ctx, pc) 并 call rax。优化 pass 可删前两条 mov。
+    // trampoline 会调用 fn(callee_slots) 覆盖 rdi，故需 push/pop 保存 caller 的 slot base
     void emitCallTrampolineWin64(uint32_t pc, uint64_t trampolineAddr) {
+        emitPushRdi();
         emitMovRegReg(kRegRcx, kRegRdi);
         emitMovRegReg(kRegRdx, kRegRsi);
         emitMovRegImm32(kRegR8, pc);
         emitMovRegImm64(kRegRax, trampolineAddr);
         emitCallRax();
+        emitPopRdi();
     }
-    void emitCallTrampolineOperWin64(uint32_t pc, uint64_t graphPtr, uint64_t trampolineAddr) {
+    void emitCallTrampolineOperWin64(uint32_t pc, uint64_t trampolineAddr) {
+        emitPushRdi();
         emitMovRegReg(kRegRcx, kRegRdi);
         emitMovRegReg(kRegRdx, kRegRsi);
         emitMovRegImm32(kRegR8, pc);
-        emitMovRegImm64(kRegR9, graphPtr);
         emitMovRegImm64(kRegRax, trampolineAddr);
         emitCallRax();
+        emitPopRdi();
     }
 
     // SysV：rdi/rsi 已是 slots/ctx，设 rdx=pc、rax=addr 后 call
+    // trampoline 会调用 fn(callee_slots) 覆盖 rdi，故需 push/pop 保存 caller 的 slot base
     void emitCallTrampolineSysV(uint32_t pc, uint64_t trampolineAddr) {
+        emitPushRdi();
         emitMovRegImm32(kRegRdx, pc);
         emitMovRegImm64(kRegRax, trampolineAddr);
         emitCallRax();
+        emitPopRdi();
     }
-    // SysV：第 3 参 pc→rdx，第 4 参 graph→rcx，rax=addr，call
-    void emitCallTrampolineOperSysV(uint32_t pc, uint64_t graphPtr, uint64_t trampolineAddr) {
+    // SysV：第 3 参 pc→rdx，rax=addr，call（graph 从 slots[0] 即 Frame* 获取）
+    void emitCallTrampolineOperSysV(uint32_t pc, uint64_t trampolineAddr) {
+        emitPushRdi();
         emitMovRegImm32(kRegRdx, pc);
-        emitMovRegImm64(kRegRcx, graphPtr);
         emitMovRegImm64(kRegRax, trampolineAddr);
         emitCallRax();
+        emitPopRdi();
     }
 
   private:

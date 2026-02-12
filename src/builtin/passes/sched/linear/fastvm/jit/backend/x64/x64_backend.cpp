@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 10, 2026
+ * Updated: Feb. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -705,12 +705,11 @@ bool X64Backend::compileBytecode(
         case OpCode::OPER: {
             if (!unit.trampolineOper)
                 return fail("pc=" + std::to_string(pc) + " no OPER trampoline");
-            uint64_t addr     = reinterpret_cast<uint64_t>(unit.trampolineOper);
-            uint64_t graphPtr = reinterpret_cast<uint64_t>(unit.graph);
+            uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineOper);
 #if defined(_WIN32) || defined(_WIN64)
-            build.emitCallTrampolineOperWin64(static_cast<uint32_t>(pc), graphPtr, addr);
+            build.emitCallTrampolineOperWin64(static_cast<uint32_t>(pc), addr);
 #else
-            build.emitCallTrampolineOperSysV(static_cast<uint32_t>(pc), graphPtr, addr);
+            build.emitCallTrampolineOperSysV(static_cast<uint32_t>(pc), addr);
 #endif
             x64::VRegId vRet = nextVReg++;
             build.emitVMovFromRax(vRet);

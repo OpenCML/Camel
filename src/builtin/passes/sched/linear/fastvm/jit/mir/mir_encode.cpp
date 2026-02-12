@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Feb. 10, 2026
+ * Updated: Feb. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -287,6 +287,12 @@ void encodeMirBuffer(
             break;
         case MirOp::Ret:
             enc.ret();
+            break;
+        case MirOp::PushRdi:
+            enc.pushRdi();
+            break;
+        case MirOp::PopRdi:
+            enc.popRdi();
             break;
         case MirOp::CallRax:
             enc.callRax();

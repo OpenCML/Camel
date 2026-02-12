@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 08, 2026
+ * Updated: Feb. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,7 +35,12 @@ struct JitContext {
 } // namespace camel::jit
 
 // C linkage for JIT call from machine code
-// JIT 传入 slot_t*（调用方动态区），不再依赖 Frame
+//
+// 调用约定：callerSlots/slots 为动态区基址；slot[0] 恒存 Frame*（见 trampoline.cpp 头部注释）。
+// trampolineFunc/TrampolineTail：callerSlots[0]=caller Frame，用于 get(operand)
+// 支持静态区（负索引）。 trampolineOper：slots[0]=当前 Frame，直接使用 FrameArgsView，无需传
+// Graph。
+//
 extern "C" slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc);
 extern "C" slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc);
-extern "C" slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc, GraphIR::Graph *graph);
+extern "C" slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc);

@@ -18,12 +18,12 @@
 - **变长指令**（BRCH、JOIN、FUNC、OPER 等）：紧跟 header 为 `operands[]`，`nargs() = operands[0..normCnt-1]`，`wargs() = operands[normCnt..normCnt+withCnt-1]`，其中 `normCnt = fastop[0]`，`withCnt = fastop[1]`。
 - **data_idx_t**：正数 = 动态区 slot 索引；负数 = 静态区索引的相反数（访问时用 `staticBase[-idx]`）。
 
-### 1.3 调用约定（Win64）
+### 1.3 调用约定（Win64 / SysV）
 
-- 入口：**rcx** = `slot_t* slots`，**rdx** = `void* ctx`。
-- Prologue 将参数复制到 **rdi** / **rsi**，便于与 SysV 一致：  
-  `mov rdi, rcx`；`mov rsi, rdx`。
-- 之后所有槽访问均为 `[rdi + disp]`，disp 为 8 的倍数。
+- **入口**：Win64 下 **rcx** = `slot_t* slots`，**rdx** = `void* ctx`；SysV 下 **rdi** = slots，**rsi** = ctx。
+- **Prologue**（Win64）：将参数复制到 **rdi** / **rsi**，便于与 SysV 一致：`mov rdi, rcx`；`mov rsi, rdx`。
+- **之后**：所有槽访问均为 `[rdi + disp]`，disp 为 8 的倍数。
+- **ABI 注意**：`rdi`、`rsi` 均为 **caller-saved**；`call` 只会压返回地址，**不会**自动保存/恢复任何寄存器。trampoline 内部会调用 `fn(callee_slots)` 并覆盖 rdi，故 FUNC/TAIL/OPER 调用 trampoline 前需 `push rdi`、返回后 `pop rdi`。详见 [07_jit_architecture.md](../technical/07_jit_architecture.md) 2.1.1。
 
 ### 1.4 寄存器用途（JIT 内）
 
