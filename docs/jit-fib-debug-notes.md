@@ -248,52 +248,15 @@ JOIN 的 MIR 顺序为：`VLoadFromFrame(v0), VLoadFromFrame(v1), VLoadFromFrame
 - JOIN 序列为：rax=w0，rcx=w1，test idx，**cmovnz result_reg, w1_reg**，存 result。正确应为 idx≠0 时把 w1 写入 result（即 result:=rcx），故应发射 **cmovnz rax, rcx**。此前发射成 **cmovnz rcx, rax**，导致 idx≠0 时把 w0 写进 rcx，最后存的仍是 rax（w0）→ 得到 2 而非 1。
 - **修复**：ModRM 改为 `(dst<<3)|src`，使 reg=dst、r/m=src，即 cmov cc dst, src。
 
-### 4. 已做修改（trace 恢复顺序，非根因）
-
-- **x64_encoder.h `emitDebugTraceCall`**：call 返回后先恢复 rdi，再恢复其它寄存器，逻辑正确；JOIN 错误来自 cmov 编码，与 trace 恢复无关。
-
-### 5. 建议下一步（若 cmov 修复后仍有问题）
-
-1. **核对 binary**：对「4 spilled」构建的 fib 镜像，在 **pc=41 的 trace 返回后** 到 **JOIN 的 test** 之间，确认是一条「push rbx; mov rbx,[rdi+24]; test rbx; pop rbx」且无其它写 rdi 或 [rdi+24] 的指令。
-2. **可选诊断**：在 JOIN 的 test 前临时把 [rdi+24] 再读到一个固定 disp 并打 trace，确认运行时 [rdi+24] 是否为 1。
-
 ---
 
-## 排查总结：可能原因 + 需要你打印的内容
+## 排查过程中曾考虑的假设（已排除，仅供参考）
 
-### 可能原因（按优先级）
-
-| 序号 | 假设 | 含义 |
-|------|------|------|
-| **1** | **执行 JOIN 时 rdi 已错** | trace(pc=41) 里 rdi 是对的，但 trace 返回后、到执行「test idx」之间，rdi 被某条指令改掉，导致 [rdi+24] 读到的是别的 frame 的 slot（多为 0）→ ZF=1 → 错误取 w0。 |
-| **2** | **执行 JOIN 时 [rdi+24] 被当成 0** | rdi 一直对，但 slot 3 在 BRCH→JOIN 之间被某处写成了 0，或 binary 里 test 的不是 [rdi+24] 而是别的寄存器（如被 VCopy 覆盖的 v2 的 reg）→ 同样 ZF=1 → 取 w0。 |
-| **3** | **trace 恢复的 rdi 被 callee 写坏** | 从 [rsp+128] 恢复出来的 rdi 在 trace 调用链里被 callee 写栈覆盖，恢复到的不是 caller 的 rdi。 |
-
-### 需要你打印的内容（便于定位是 1/2/3）
-
-在 **JOIN 的 VTest 即将执行** 时（即「test idx」那条指令执行前）打一次日志，包含下面几项即可：
-
-1. **rdi**  
-   - 当前 rdi 的值（应等于「当前 frame 的 slot 基址」，即 trace 里 frame 地址 + 某固定偏移，例如 slotBase = Frame* + 某 offset）。  
-   - 若这里 rdi 和 trace(pc=41) 里打印的不一致，则偏向 **原因 1 或 3**。
-
-2. **[rdi+24] 的取值**  
-   - 即「当前 rdi 下」slot 3 的 8 字节值（应为主路径下的 idx，这里期望为 1）。  
-   - 若 rdi 对但这里读出来是 0，则偏向 **原因 2**（slot 被写坏或 test 的不是这里）。
-
-3. **（可选）pc**  
-   - 当前 pc（例如 41 或 43），用于确认这条日志对应的是「fib(2) 的 JOIN」而不是别的 JOIN。
-
-**建议实现方式（二选一即可）：**
-
-- **方式 A（推荐）**：在 **trace 里**：当 `pc == 41` 时，在打印完现有 frame 后，多打一行：  
-  `[JOIN-dbg] pc=41 rdi=<rdi> [rdi+24]=<*(rdi+24)>`  
-  这样能确认「trace 返回前」rdi 和 [rdi+24] 是否已经不对；若这里就对，问题在 trace 返回之后（原因 1/3）。
-
-- **方式 B**：在 **JIT 里** 给 JOIN 的 VTest 前插一条「读 [rdi+24] 并调一个极小 stub」的调试调用，stub 里打印 rdi 和 *(rdi+24)。  
-  这样是「真正执行 test 前」的值；实现成本比 A 高，但能直接看到 test 前一刻的内存。
-
-把上述 **1、2（以及可选的 3）** 在「fib(2) 的 JOIN」那一次执行时的实际输出贴出来，就可以判断是 rdi 错了还是 [rdi+24] 错了，从而收窄到原因 1、2 或 3。
+| 假设 | 含义 |
+|------|------|
+| 执行 JOIN 时 rdi 已错 | trace 返回后到 test 之间 rdi 被改写，[rdi+24] 读到错误 frame → ZF=1 → 取 w0。 |
+| [rdi+24] 被当成 0 | slot 3 被写坏或 test 用了被 VCopy 覆盖的 v2 的 reg → ZF=1 → 取 w0。 |
+| trace 恢复的 rdi 被 callee 写坏 | [rsp+128] 在调用链中被覆盖，恢复到的不是 caller 的 rdi。 |
 
 ---
 

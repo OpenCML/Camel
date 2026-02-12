@@ -95,12 +95,6 @@ extern "C" void jitDebugTraceBody(const void *ctx) {
     if (framePtr) {
         framePtr->printSlotsTo(os);
     }
-    // JOIN 排查：pc=41 时为 fib(2) 的 JOIN，打印 rdi 与 [rdi+24](slot3=idx)，便于判断 test
-    // 时是否被破坏
-    if (c->pc == 41) {
-        os << "[JOIN-dbg] pc=41 rdi=0x" << std::hex << c->rdi << " [rdi+24]=" << std::dec
-           << slots[3] << "\n";
-    }
 #ifdef NDEBUG
     std::cerr << os.str() << std::flush;
 #else
@@ -108,8 +102,7 @@ extern "C" void jitDebugTraceBody(const void *ctx) {
 #endif
 }
 
-// 将 ctx 拷入 thread_local 再调 stub，避免 stub 写回时覆盖 JIT 栈上的保存区，从而正确恢复
-// rdx/r8-r11
+// 将 ctx 拷入 thread_local 再调 stub，避免 stub 写回覆盖 JIT 栈上的保存区
 void jitDebugTraceWrapper(const void *ctx) {
     if (!ctx)
         return;

@@ -128,8 +128,8 @@ void encodeMirBuffer(
             break;
         }
         case MirOp::VTest: {
-            // JOIN 传入 m.disp（dIdx）时：始终从 frame 加载并 test，不依赖 v2 的寄存器，避免
-            // VCopy(v3,v0) 与 v2 同 reg 时覆盖 idx，且避免 trace 后 rdi 恢复异常导致读到错误 slot
+            // JOIN 传入 m.disp（dIdx）时从 frame 加载并 test，不依赖 v2 的 reg，避免 VCopy(v3,v0)
+            // 与 v2 同 reg 时覆盖 idx
             int disp = -1;
             if (m.disp != 0) {
                 disp = m.disp;

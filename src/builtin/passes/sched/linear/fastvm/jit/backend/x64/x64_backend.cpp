@@ -624,10 +624,8 @@ bool X64Backend::compileBytecode(
                 build.emitVLoadFromFrame(v2, dIdx);
             else
                 build.emitVLoadFromMemAt(v2, staticSlotAddrWithComment(idxSlot));
-            build.emitVCopy(v3, v0); // v3 = w0 (then 分支结果，idx==0 时保持)
-            build.emitVTest(
-                v2,
-                dIdx); // 传入 disp，spill 时编码器可用 m.disp 加载 idx 并 test，不依赖 spilledLoad
+            build.emitVCopy(v3, v0);   // v3 = w0 (then 分支结果，idx==0 时保持)
+            build.emitVTest(v2, dIdx); // disp 供 spill 时从 frame 加载 idx 并 test
             build.emitVCmovnz(v3, v1); // idx!=0（else 分支）时 v3 = w1，与 BRCH 写的 0/1 一致
             build.emitVStoreToFrame(dr, v3);
             break;
