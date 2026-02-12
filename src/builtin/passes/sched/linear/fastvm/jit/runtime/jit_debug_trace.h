@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 10, 2026
- * Updated: Feb. 10, 2026
+ * Updated: Feb. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,3 +44,7 @@ extern "C" void jitDebugTrace(const void *ctx);
 /** 供 JIT 调用：先将 ctx 拷入 thread_local 再调 jitDebugTrace，避免 stub 覆盖调用方栈上的保存区。
  */
 extern "C" void jitDebugTraceWrapper(const void *ctx);
+
+/** Release 用：与 jitDebugTraceWrapper 同签名，空实现；用于保证 Debug/Release 生成相同 JIT 码。
+ */
+extern "C" void jitDebugTraceNoOp(const void *ctx);

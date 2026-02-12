@@ -52,52 +52,60 @@ extern "C" {
 extern "C" void jitDebugTraceBody(const void *ctx) {
     if (!ctx)
         return;
-    EXEC_WHEN_DEBUG({
-        const auto *c = static_cast<const camel::jit::JitDebugContext *>(ctx);
-        std::ostringstream os;
-        os << "trace pc=" << static_cast<uint32_t>(c->pc) << "\n";
-        os << std::hex;
-        const auto one = [&os](const char *name, uint64_t val) {
-            os << "  " << std::setfill(' ') << std::setw(4) << std::left << name << " "
-               << std::setfill('0') << std::right << "0x" << std::setw(16) << val;
-        };
-        one("rax", c->rax);
-        os << "    ";
-        one("r8", c->r8);
-        os << "\n";
-        one("rcx", c->rcx);
-        os << "    ";
-        one("r9", c->r9);
-        os << "\n";
-        one("rdx", c->rdx);
-        os << "    ";
-        one("r10", c->r10);
-        os << "\n";
-        one("rbx", c->rbx);
-        os << "    ";
-        one("r11", c->r11);
-        os << "\n";
-        one("rbp", c->rbp);
-        os << "    ";
-        one("r12", c->r12);
-        os << "\n";
-        one("rsi", c->rsi);
-        os << "    ";
-        one("r13", c->r13);
-        os << "\n";
-        one("rdi", c->rdi);
-        os << "    ";
-        one("r14", c->r14);
-        os << "\n";
-        one("r15", c->r15);
-        os << "\n";
-        const auto *slots    = reinterpret_cast<const slot_t *>(c->rdi);
-        const auto *framePtr = reinterpret_cast<const Frame *>(slots[0]);
-        if (framePtr) {
-            framePtr->printSlotsTo(os);
-        }
-        l.in("JIT.Debug").debug("{}", os.str());
-    });
+    const auto *c = static_cast<const camel::jit::JitDebugContext *>(ctx);
+    std::ostringstream os;
+    os << "trace pc=" << static_cast<uint32_t>(c->pc) << "\n";
+    os << std::hex;
+    const auto one = [&os](const char *name, uint64_t val) {
+        os << "  " << std::setfill(' ') << std::setw(4) << std::left << name << " "
+           << std::setfill('0') << std::right << "0x" << std::setw(16) << val;
+    };
+    one("rax", c->rax);
+    os << "    ";
+    one("r8", c->r8);
+    os << "\n";
+    one("rcx", c->rcx);
+    os << "    ";
+    one("r9", c->r9);
+    os << "\n";
+    one("rdx", c->rdx);
+    os << "    ";
+    one("r10", c->r10);
+    os << "\n";
+    one("rbx", c->rbx);
+    os << "    ";
+    one("r11", c->r11);
+    os << "\n";
+    one("rbp", c->rbp);
+    os << "    ";
+    one("r12", c->r12);
+    os << "\n";
+    one("rsi", c->rsi);
+    os << "    ";
+    one("r13", c->r13);
+    os << "\n";
+    one("rdi", c->rdi);
+    os << "    ";
+    one("r14", c->r14);
+    os << "\n";
+    one("r15", c->r15);
+    os << "\n";
+    const auto *slots    = reinterpret_cast<const slot_t *>(c->rdi);
+    const auto *framePtr = reinterpret_cast<const Frame *>(slots[0]);
+    if (framePtr) {
+        framePtr->printSlotsTo(os);
+    }
+    // JOIN 排查：pc=41 时为 fib(2) 的 JOIN，打印 rdi 与 [rdi+24](slot3=idx)，便于判断 test
+    // 时是否被破坏
+    if (c->pc == 41) {
+        os << "[JOIN-dbg] pc=41 rdi=0x" << std::hex << c->rdi << " [rdi+24]=" << std::dec
+           << slots[3] << "\n";
+    }
+#ifdef NDEBUG
+    std::cerr << os.str() << std::flush;
+#else
+    EXEC_WHEN_DEBUG(l.in("JIT.Debug").debug("{}", os.str()));
+#endif
 }
 
 // 将 ctx 拷入 thread_local 再调 stub，避免 stub 写回时覆盖 JIT 栈上的保存区，从而正确恢复
@@ -109,6 +117,9 @@ void jitDebugTraceWrapper(const void *ctx) {
     std::memcpy(&buf, ctx, sizeof(camel::jit::JitDebugContext));
     jitDebugTrace(&buf);
 }
+
+// Release 用：走完整 trace 路径（wrapper→stub→body），Build 模式下 body 输出到 stderr
+extern "C" void jitDebugTraceNoOp(const void *ctx) { jitDebugTraceWrapper(ctx); }
 
 #if defined(__GNUC__) || defined(__clang__)
 // Naked 存根：在 prologue 前将 rdx,r8..r11（caller-saved）和

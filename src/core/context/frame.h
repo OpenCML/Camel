@@ -199,8 +199,6 @@ class Frame : public Object {
     slot_t *slotBase() { return dynamicArea_; }
     const slot_t *slotBase() const { return dynamicArea_; }
 
-    /** JIT 规范：slotBase()[0] 即 slot[0] 由入口处存 Frame*，供 trampolineOper/debug trace
-     * 使用；slot[1..] 为数据槽。 */
     void printSlotsTo(std::ostream &os) const {
         os << "frame <" << (graph_ ? graph_->name() : "(null)") << "> at "
            << formatAddress(this, true) << ":\n";
@@ -208,7 +206,7 @@ class Frame : public Object {
             slot_t s = dynamicArea_[i];
             Type *t  = graph_->runtimeDataType()->typeAt(i);
             os << "  [" << i << "] ";
-            printSlot(os, s, t);
+            printSlotSafe(os, s, t);
             os << "\n";
         }
     }

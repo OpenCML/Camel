@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Feb. 08, 2026
+ * Updated: Feb. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,7 @@
 #include "jit/backend/backend.h"
 #include "jit/runtime/trampoline.h"
 
+#include <cstdio>
 #include <future>
 #endif
 
@@ -353,6 +354,24 @@ void FastVMSchedPass::compileAndCacheGraph(GraphIR::Graph *graph, size_t entryPc
     auto compiled = jitBackend_->compile(unit);
     if (!compiled)
         return;
+    // Debug 模式下将实际执行的 code 按 16 进制打印到日志，便于与 bindump 对比
+    EXEC_WHEN_DEBUG({
+        if (!compiled->code.empty()) {
+            const uint8_t *p              = compiled->code.data();
+            const size_t size             = compiled->code.size();
+            constexpr size_t bytesPerLine = 16;
+            l.in("JIT").info("JIT executed code for graph '{}' ({} bytes):", graph->name(), size);
+            for (size_t i = 0; i < size; i += bytesPerLine) {
+                std::string line;
+                for (size_t j = 0; j < bytesPerLine && i + j < size; ++j) {
+                    char buf[4];
+                    snprintf(buf, sizeof(buf), "%02x ", p[i + j]);
+                    line += buf;
+                }
+                l.in("JIT").info("  [{:4}] {}", static_cast<unsigned>(i), line);
+            }
+        }
+    });
     auto fn = jitBackend_->load(std::move(compiled));
     if (fn) {
         jitCache_[graph]  = fn;

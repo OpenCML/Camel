@@ -1545,13 +1545,27 @@ class Encoder {
         emitByte(0x5f);
         asmLineAt(at, "pop rdi");
     }
+    void pushRbx() {
+        size_t at = here();
+        emitByte(0x53);
+        asmLineAt(at, "push rbx");
+    }
+    void popRbx() {
+        size_t at = here();
+        emitByte(0x5b);
+        asmLineAt(at, "pop rbx");
+    }
 
     // Debug：栈 136 字节，保存区与 JitDebugContext 布局一致；JIT 调用 jitDebugTraceWrapper，
     // wrapper 将 ctx 拷入 thread_local 再调 stub，stub 只写 thread_local，不覆盖本栈，恢复正确。
+    // rdi 为 slot 基址，trace 路径会破坏 rdi，必须在 call 前保存、call 后恢复。将 rdi 额外存到
+    // [rsp+128]，恢复时从备份取，避免 callee 写 shadow/栈覆盖 [rsp+64] 导致 JOIN 等读到错误 frame。
     void emitDebugTraceCall(uint32_t pc, void *fnAddr) {
         constexpr uint8_t off_rax = 112, off_rcx = 104, off_rdx = 96;
         constexpr uint8_t off_r8 = 56, off_r9 = 48, off_r10 = 40, off_r11 = 32;
-        size_t blockStart = here();
+        constexpr uint8_t off_rdi     = 64;  // JitDebugContext.rdi
+        constexpr uint8_t off_rdi_bak = 128; // 备份，恢复时用，避免 [rsp+64] 被 callee 覆盖
+        size_t blockStart             = here();
         emitBytes({0x48, 0x81, 0xec, 0x88, 0x00, 0x00, 0x00}); // sub rsp, 136
         emitBytes({0x48, 0x89, 0x44, 0x24, off_rax});
         emitBytes({0x48, 0x89, 0x4c, 0x24, off_rcx});
@@ -1560,6 +1574,9 @@ class Encoder {
         emitBytes({0x4c, 0x89, 0x4c, 0x24, off_r9});
         emitBytes({0x4c, 0x89, 0x54, 0x24, off_r10});
         emitBytes({0x4c, 0x89, 0x5c, 0x24, off_r11});
+        emitBytes({0x48, 0x89, 0xbc, 0x24, off_rdi, 0x00, 0x00, 0x00}); // mov [rsp+64], rdi
+        emitBytes(
+            {0x48, 0x89, 0xbc, 0x24, off_rdi_bak, 0x00, 0x00, 0x00}); // mov [rsp+128], rdi 备份
         emitBytes({0xc7, 0x84, 0x24, 0x78, 0x00, 0x00, 0x00});
         emitBytes({
             static_cast<uint8_t>(pc & 0xff),
@@ -1585,6 +1602,8 @@ class Encoder {
             static_cast<uint8_t>((addr >> 56) & 0xff),
         });
         emitBytes({0xff, 0xd0});
+        // 先恢复 rdi（slot 基址），再恢复其它寄存器，避免 JOIN 等后续指令用错 frame
+        emitBytes({0x48, 0x8b, 0xbc, 0x24, off_rdi_bak, 0x00, 0x00, 0x00}); // mov rdi, [rsp+128]
         emitBytes({0x48, 0x8b, 0x44, 0x24, off_rax});
         emitBytes({0x48, 0x8b, 0x4c, 0x24, off_rcx});
         emitBytes({0x48, 0x8b, 0x54, 0x24, off_rdx});
@@ -1667,8 +1686,9 @@ class Encoder {
             rex |= 1;
         if (src >= 4 && src <= 7)
             rex |= 4;
+        // ModRM: reg=dst, r/m=src → cmove dst, src（ZF=1 时 dst:=src）
         emitByte(rex);
-        emitBytes({0x0f, 0x44, static_cast<uint8_t>(0xC0 | ((src & 7) << 3) | (dst & 7))});
+        emitBytes({0x0f, 0x44, static_cast<uint8_t>(0xC0 | ((dst & 7) << 3) | (src & 7))});
         asmLineAt(at, std::string("cmove ") + regName(dst) + ", " + regName(src));
     }
     void cmovnzRegFromReg(uint8_t dst, uint8_t src) {
@@ -1679,7 +1699,8 @@ class Encoder {
         if (src >= 4 && src <= 7)
             rex |= 4;
         emitByte(rex);
-        emitBytes({0x0f, 0x45, static_cast<uint8_t>(0xC0 | ((src & 7) << 3) | (dst & 7))});
+        // ModRM: reg=dst(目标), r/m=src(源) → cmovnz dst, src（ZF=0 时 dst:=src）
+        emitBytes({0x0f, 0x45, static_cast<uint8_t>(0xC0 | ((dst & 7) << 3) | (src & 7))});
         asmLineAt(at, std::string("cmovnz ") + regName(dst) + ", " + regName(src));
     }
 
@@ -1857,7 +1878,9 @@ class Encoder {
     }
 
     // Windows x64: call trampoline(frame, ctx, pc). Assumes rdi=frame, rsi=ctx.
+    // trampoline/callee 会覆盖 rdi，返回后 JOIN 等需用 caller 的 frame，故调用前后 push/pop rdi。
     void callTrampolineWin64(uint32_t pc, uint64_t addr) {
+        pushRdi();
         emitBytes({0x48, 0x89, 0xf9}); // mov rcx, rdi (arg1)
         asmLine("mov rcx, rdi");
         emitBytes({0x48, 0x89, 0xf2}); // mov rdx, rsi (arg2)
@@ -1873,11 +1896,13 @@ class Encoder {
         asmLine("mov r8d, " + std::to_string(pc));
         movRaxImm64(addr);
         callRax();
+        popRdi();
     }
 
     // Windows x64: call trampolineOper(slots, ctx, pc). rdi=slots, rsi=ctx. graph 从 slots[0] 即
-    // Frame* 获取
+    // Frame* 获取。trampoline 会覆盖 rdi，返回后需恢复。
     void callTrampolineOperWin64(uint32_t pc, uint64_t addr) {
+        pushRdi();
         emitBytes({0x48, 0x89, 0xf9}); // mov rcx, rdi (arg1 slots)
         asmLine("mov rcx, rdi");
         emitBytes({0x48, 0x89, 0xf2}); // mov rdx, rsi (arg2 ctx)
@@ -1893,6 +1918,7 @@ class Encoder {
         asmLine("mov r8d, " + std::to_string(pc));
         movRaxImm64(addr);
         callRax();
+        popRdi();
     }
 
     // SysV x64: call trampolineOper(slots, ctx, pc). rdi, rsi already set.

@@ -52,20 +52,54 @@ void encodeMirBuffer(
             pcToMirIndex[static_cast<size_t>(buf[i].pc)] = i;
 
     std::vector<JumpPatch> patches;
+    // 当 vreg 被 spill 时，VLoadFromFrame 不发射 load；在后续 VTest 该 vreg 时从 frame 加载并
+    // test，保证 JOIN 等分支索引正确
+    int spilledLoadVReg = -1;
+    int spilledLoadDisp = 0;
+    // JOIN 等可能连续多个 spill：仅能延迟一个给 VTest；若再遇 spill 会覆盖。把被覆盖的 (vreg,disp)
+    // 存到 spilledCopy，供 VCopy(v3,v0) 在 v0 被 spill 时从 frame 加载 w0
+    int spilledCopyVReg = -1;
+    int spilledCopyDisp = 0;
+    // BRCH 的 vRes 被 spill 时：VCopy 记下 (vRes, defaultVReg)，VCmovnz 把结果物化到
+    // rbx，VStoreToFrame 从 rbx 写回
+    int spilledDestVReg        = -1;
+    int spilledDestDefaultVReg = -1;
     for (size_t i = 0; i < buf.size(); ++i) {
         const Mir &m   = buf[i];
         startOffset[i] = enc.here();
         switch (m.op) {
         case MirOp::VLoadFromFrame: {
             int r = pregFor(static_cast<VRegId>(m.r0));
-            if (r >= 0)
+            if (r >= 0) {
                 enc.movRegFromFrame(static_cast<uint8_t>(r), m.disp);
+                if (spilledLoadVReg == static_cast<int>(m.r0))
+                    spilledLoadVReg = -1;
+                if (spilledCopyVReg == static_cast<int>(m.r0))
+                    spilledCopyVReg = -1;
+            } else {
+                // 即将用 (m.r0, m.disp) 覆盖 spilledLoad；若当前 spilledLoad 是另一 vreg
+                // 且尚未保存到 spilledCopy，则留给 VCopy 用
+                if (spilledLoadVReg >= 0 && spilledLoadVReg != static_cast<int>(m.r0) &&
+                    spilledCopyVReg < 0) {
+                    spilledCopyVReg = spilledLoadVReg;
+                    spilledCopyDisp = spilledLoadDisp;
+                }
+                spilledLoadVReg = static_cast<int>(m.r0);
+                spilledLoadDisp = m.disp;
+            }
             break;
         }
         case MirOp::VStoreToFrame: {
             int r = pregFor(static_cast<VRegId>(m.r0));
-            if (r >= 0)
+            if (r >= 0) {
                 enc.movToFrame(m.disp, static_cast<uint8_t>(r));
+                spilledDestVReg = -1;
+            } else if (static_cast<int>(m.r0) == spilledDestVReg) {
+                // BRCH 的 vRes 被 spill：VCmovnz 已把 0/1 物化到 rbx，这里写回 frame 并恢复 rbx
+                enc.movToFrame(m.disp, kRegRbx);
+                enc.popRbx();
+                spilledDestVReg = -1;
+            }
             break;
         }
         case MirOp::VLoadFromMemAt: {
@@ -77,14 +111,45 @@ void encodeMirBuffer(
         case MirOp::VCopy: {
             int dr = pregFor(static_cast<VRegId>(m.r0));
             int sr = pregFor(static_cast<VRegId>(m.r1));
-            if (dr >= 0 && sr >= 0)
+            if (dr >= 0 && sr >= 0) {
                 enc.emitMovRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(sr));
+                spilledDestVReg = -1;
+            } else if (dr >= 0 && sr < 0) {
+                // 源被 spill：从 frame 加载到目标 reg（JOIN 的 w0 物化到 v3），避免 v3 沿用残留值
+                if (static_cast<int>(m.r1) == spilledCopyVReg) {
+                    enc.movRegFromFrame(static_cast<uint8_t>(dr), spilledCopyDisp);
+                    spilledCopyVReg = -1;
+                }
+                spilledDestVReg = -1;
+            } else if (dr < 0) {
+                spilledDestVReg        = static_cast<int>(m.r0);
+                spilledDestDefaultVReg = static_cast<int>(m.r1);
+            }
             break;
         }
         case MirOp::VTest: {
-            int r = pregFor(static_cast<VRegId>(m.r0));
-            if (r >= 0)
-                enc.testRegReg(static_cast<uint8_t>(r));
+            // JOIN 传入 m.disp（dIdx）时：始终从 frame 加载并 test，不依赖 v2 的寄存器，避免
+            // VCopy(v3,v0) 与 v2 同 reg 时覆盖 idx，且避免 trace 后 rdi 恢复异常导致读到错误 slot
+            int disp = -1;
+            if (m.disp != 0) {
+                disp = m.disp;
+            } else {
+                int r = pregFor(static_cast<VRegId>(m.r0));
+                if (r >= 0) {
+                    enc.testRegReg(static_cast<uint8_t>(r));
+                    spilledLoadVReg = -1;
+                    break;
+                }
+                if (static_cast<int>(m.r0) == spilledLoadVReg)
+                    disp = spilledLoadDisp;
+            }
+            if (disp >= 0) {
+                enc.pushRbx();
+                enc.movRegFromFrame(kRegRbx, disp);
+                enc.testRegReg(kRegRbx);
+                enc.popRbx();
+            }
+            spilledLoadVReg = -1;
             break;
         }
         case MirOp::VCmove: {
@@ -97,8 +162,19 @@ void encodeMirBuffer(
         case MirOp::VCmovnz: {
             int dr = pregFor(static_cast<VRegId>(m.r0));
             int sr = pregFor(static_cast<VRegId>(m.r1));
-            if (dr >= 0 && sr >= 0)
+            if (dr >= 0 && sr >= 0) {
                 enc.cmovnzRegFromReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(sr));
+                spilledDestVReg = -1;
+            } else if (dr < 0 && static_cast<int>(m.r0) == spilledDestVReg) {
+                int defReg = pregFor(static_cast<VRegId>(spilledDestDefaultVReg));
+                if (defReg >= 0 && sr >= 0) {
+                    enc.pushRbx();
+                    enc.emitMovRegReg(kRegRbx, static_cast<uint8_t>(defReg));
+                    enc.cmovnzRegFromReg(kRegRbx, static_cast<uint8_t>(sr));
+                } else {
+                    spilledDestVReg = -1; // 无法物化，避免 VStoreToFrame 误用 rbx
+                }
+            }
             break;
         }
         case MirOp::VMovFromRax:

@@ -14,6 +14,7 @@
 | [05_graph_ir.md](05_graph_ir.md) | 图中间表示（GIR）详解 |
 | [06_runtime_and_execution.md](06_runtime_and_execution.md) | 运行时、虚拟机与调度器 |
 | [07_jit_architecture.md](07_jit_architecture.md) | FastVM JIT 模块架构设计（原稿见 [../design/JIT_ARCHITECTURE.md](../design/JIT_ARCHITECTURE.md)） |
+| [08_fastvm_bytecode_semantics.md](08_fastvm_bytecode_semantics.md) | FastVM 字节码执行语义（BRCH/JOIN 等与解释器一致约定） |
 
 ## 相关文档（docs 目录）
 

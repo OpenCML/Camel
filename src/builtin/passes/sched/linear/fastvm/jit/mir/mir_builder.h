@@ -118,10 +118,11 @@ class MirBuilder {
     void emitVCopy(VRegId dst, VRegId src) {
         push(MirOp::VCopy, static_cast<uint8_t>(dst & 0xff), static_cast<uint8_t>(src & 0xff));
     }
-    void emitVTest(VRegId vreg) {
+    void emitVTest(VRegId vreg, int32_t frameDisp = 0) {
         Mir m;
-        m.op = MirOp::VTest;
-        m.r0 = static_cast<uint8_t>(vreg & 0xff);
+        m.op   = MirOp::VTest;
+        m.r0   = static_cast<uint8_t>(vreg & 0xff);
+        m.disp = frameDisp;
         push(m);
     }
     void emitVCmove(VRegId dst, VRegId src) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -129,6 +129,48 @@ using Float64 = double;
 using Float   = Float64;
 using Bool    = bool;
 using Byte    = std::byte;
+
+/** 安全打印 slot，不访问 Object* 指针，用于 debug_trace 等可能读到未初始化值的场景 */
+inline void printSlotSafe(std::ostream &os, const slot_t data, Type *t) {
+    if (t->isGCTraced()) {
+        if (data == NullSlot) {
+            os << "null";
+            return;
+        }
+        os << "<" << t->toString() << " at 0x" << std::hex << data << std::dec << ">";
+        return;
+    }
+    // 非引用类型与 printSlot 一致
+    switch (t->code()) {
+    case TypeCode::Int32:
+        os << fromSlot<Int32>(data);
+        break;
+    case TypeCode::Int64:
+        os << fromSlot<Int64>(data);
+        break;
+    case TypeCode::Float32:
+        os << fromSlot<Float32>(data);
+        break;
+    case TypeCode::Float64:
+        os << fromSlot<Float64>(data);
+        break;
+    case TypeCode::Bool:
+        os << (fromSlot<Bool>(data) ? "true" : "false");
+        break;
+    case TypeCode::Byte:
+        os << "0x" << std::hex << static_cast<uint64_t>(data) << std::dec;
+        break;
+    case TypeCode::Void:
+        os << "null";
+        break;
+    case TypeCode::Ref:
+        os << "ref";
+        break;
+    default:
+        os << std::format("<{}>", t->toString());
+        break;
+    }
+}
 
 inline void printSlot(std::ostream &os, const slot_t data, Type *t) {
     ASSERT(

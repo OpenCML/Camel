@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 11, 2026
+ * Updated: Feb. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -178,10 +178,8 @@ bool X64Backend::compileBytecode(
     for (size_t pc = entryPc; pc < pcEnd;) {
         const Bytecode &bc = base[pc];
         build.setNextPc(static_cast<uint32_t>(pc));
-#ifndef NDEBUG
         build.emitDebugTrace(static_cast<uint32_t>(
-            pc)); // 插入到该 pc 对应 MIR 之前，jmp/ret 后仍会执行到目标 pc 的 trace
-#endif
+            pc)); // 始终插入，使 Debug/Release MIR 一致；编码时 Debug 调 wrapper、Release 调 no-op
         switch (bc.opcode) {
         case OpCode::LADD: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
@@ -589,9 +587,9 @@ bool X64Backend::compileBytecode(
                 build.emitVLoadFromMemAt(vCond, staticSlotAddrWithComment(condIdx));
             build.emitVLoadImm32(vZero, 0);
             build.emitVLoadImm32(vOne, 1);
-            build.emitVCopy(vRes, vZero);
+            build.emitVCopy(vRes, vOne); // 默认 else 分支索引 1
             build.emitVTest(vCond);
-            build.emitVCmovnz(vRes, vOne);
+            build.emitVCmovnz(vRes, vZero); // cond 为真（走 then）时写 0
             build.emitVStoreToFrame(dr, vRes);
             build.emitJzRel32(static_cast<uint32_t>(t1));
             build.emitJmpRel32(static_cast<uint32_t>(t0));
@@ -626,11 +624,11 @@ bool X64Backend::compileBytecode(
                 build.emitVLoadFromFrame(v2, dIdx);
             else
                 build.emitVLoadFromMemAt(v2, staticSlotAddrWithComment(idxSlot));
-            build.emitVCopy(v3, v0); // v3 = w0 (default)
-            build.emitVTest(v2);
-            build.emitVCmove(
-                v3,
-                v1); // if v2==0 (n>1) then v3 = v1（递归结果）；n≤1 已走第一分支直接返回
+            build.emitVCopy(v3, v0); // v3 = w0 (then 分支结果，idx==0 时保持)
+            build.emitVTest(
+                v2,
+                dIdx); // 传入 disp，spill 时编码器可用 m.disp 加载 idx 并 test，不依赖 spilledLoad
+            build.emitVCmovnz(v3, v1); // idx!=0（else 分支）时 v3 = w1，与 BRCH 写的 0/1 一致
             build.emitVStoreToFrame(dr, v3);
             break;
         }
@@ -766,9 +764,11 @@ bool X64Backend::compileBytecode(
     // 下标解析）
     VRegAllocation vregAlloc;
     linearScanVReg(mirBuf, &vregAlloc);
-    void *debugTraceFn = nullptr;
+    void *debugTraceFn =
 #ifndef NDEBUG
-    debugTraceFn = reinterpret_cast<void *>(&jitDebugTraceWrapper);
+        reinterpret_cast<void *>(&jitDebugTraceWrapper);
+#else
+        reinterpret_cast<void *>(&jitDebugTraceNoOp);
 #endif
     x64::encodeMirBuffer(
         mirBuf,
