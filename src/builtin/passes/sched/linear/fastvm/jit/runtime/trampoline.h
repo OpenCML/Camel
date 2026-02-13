@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 12, 2026
+ * Updated: Feb. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,3 +44,11 @@ struct JitContext {
 extern "C" slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc);
 extern "C" slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc);
 extern "C" slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc);
+
+#if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
+/** Win64 asm trampoline: call fn(slots,ctx), store result, jmp to return_addr (avoids Release
+ * shadow reuse). */
+extern "C" void jit_call_trampoline(
+    slot_t (*fn)(slot_t *slots, void *ctx), slot_t *slots, void *ctx, slot_t *result_out,
+    void *return_addr);
+#endif

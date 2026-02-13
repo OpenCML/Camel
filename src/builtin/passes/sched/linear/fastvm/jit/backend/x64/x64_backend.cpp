@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 12, 2026
+ * Updated: Feb. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -178,8 +178,9 @@ bool X64Backend::compileBytecode(
     for (size_t pc = entryPc; pc < pcEnd;) {
         const Bytecode &bc = base[pc];
         build.setNextPc(static_cast<uint32_t>(pc));
-        build.emitDebugTrace(static_cast<uint32_t>(
-            pc)); // 始终插入，使 Debug/Release MIR 一致；编码时 Debug 调 wrapper、Release 调 no-op
+        build.emitDebugTrace(
+            static_cast<uint32_t>(pc)); // 始终插入，使 Debug/Release MIR 一致；编码时 Debug 调
+                                        // wrapper、Release 调 no-op
         switch (bc.opcode) {
         case OpCode::LADD: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
@@ -624,8 +625,10 @@ bool X64Backend::compileBytecode(
                 build.emitVLoadFromFrame(v2, dIdx);
             else
                 build.emitVLoadFromMemAt(v2, staticSlotAddrWithComment(idxSlot));
-            build.emitVCopy(v3, v0);   // v3 = w0 (then 分支结果，idx==0 时保持)
-            build.emitVTest(v2, dIdx); // disp 供 spill 时从 frame 加载 idx 并 test
+            build.emitVCopy(v3, v0); // v3 = w0 (then 分支结果，idx==0 时保持)
+            build.emitVTest(
+                v2,
+                dIdx); // 传入 disp，spill 时编码器可用 m.disp 加载 idx 并 test，不依赖 spilledLoad
             build.emitVCmovnz(v3, v1); // idx!=0（else 分支）时 v3 = w1，与 BRCH 写的 0/1 一致
             build.emitVStoreToFrame(dr, v3);
             break;
@@ -762,11 +765,12 @@ bool X64Backend::compileBytecode(
     // 下标解析）
     VRegAllocation vregAlloc;
     linearScanVReg(mirBuf, &vregAlloc);
+    // Build：不 call wrapper，避免 JIT 内 call 导致 callee 写 [rsp] 覆盖返回地址（fn 内部 DEP）
     void *debugTraceFn =
 #ifndef NDEBUG
         reinterpret_cast<void *>(&jitDebugTraceWrapper);
 #else
-        reinterpret_cast<void *>(&jitDebugTraceNoOp);
+        nullptr;
 #endif
     x64::encodeMirBuffer(
         mirBuf,

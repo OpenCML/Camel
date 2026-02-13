@@ -248,6 +248,14 @@ JOIN 的 MIR 顺序为：`VLoadFromFrame(v0), VLoadFromFrame(v1), VLoadFromFrame
 - JOIN 序列为：rax=w0，rcx=w1，test idx，**cmovnz result_reg, w1_reg**，存 result。正确应为 idx≠0 时把 w1 写入 result（即 result:=rcx），故应发射 **cmovnz rax, rcx**。此前发射成 **cmovnz rcx, rax**，导致 idx≠0 时把 w0 写进 rcx，最后存的仍是 rax（w0）→ 得到 2 而非 1。
 - **修复**：ModRM 改为 `(dst<<3)|src`，使 reg=dst、r/m=src，即 cmov cc dst, src。
 
+### Build 模式崩溃（trace 后无法正常退出）
+
+- **现象**：Debug 构建下 fib(3) 正常结束并输出结果；Build（Release）下执行到最后一轮 trace pc=43 后崩溃、无法正常退出。
+- **原因（分 ABI）**：
+  - **Win64（含 Clang on Windows）**：调用 trampoline 时仅 `push rdi` 未预留 **32 字节 shadow space**。Windows x64 ABI 要求 caller 在 call 前 `sub rsp, 32`；callee（C++ trampoline）会使用 [rsp+0..31]，从而覆盖栈上保存的 rdi，返回后 `pop rdi` 恢复错误 → 后续 JIT 用错误 rdi 访问 frame 崩溃。
+  - **SysV**：`callTrampolineSysV` / `callTrampolineOperSysV` 未在调用前后保存/恢复 rdi（rdi 为 caller-saved），trampoline 返回后 rdi 被覆盖，同样导致崩溃。
+- **修复**：在 `x64_encoder.h` 中：**Win64** 在 `callTrampolineWin64` / `callTrampolineOperWin64` 内于 push rdi 后增加 `sub rsp, 32`、call 后 `add rsp, 32` 再 pop rdi；**SysV** 在 `callTrampolineSysV` / `callTrampolineOperSysV` 内增加 call 前 `pushRdi()`、call 后 `popRdi()`。
+
 ---
 
 ## 排查过程中曾考虑的假设（已排除，仅供参考）

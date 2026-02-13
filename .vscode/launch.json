@@ -8,8 +8,22 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/Release/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
-            "args": ["${file}"],
+            "args": ["${file}", "std::inline", "std::jit"],
             "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": false,
+                "trace": false
+            }
+        },
+        {
+            "name": "RUN (RelWithDebInfo)",
+            "cwd": "${workspaceFolder}",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/RelWithDebInfo/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/build/RelWithDebInfo",
+            "args": ["${file}", "std::inline", "std::jit"],
+            "console": "integratedTerminal",
             "logging": {
                 "moduleLoad": false,
                 "trace": false

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 12, 2026
+ * Updated: Feb. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1556,9 +1556,10 @@ class Encoder {
         asmLineAt(at, "pop rbx");
     }
 
-    // Debug trace：栈 136 字节（不可改为 128），保存区与 JitDebugContext 布局一致。
-    // rdi 存 [rsp+64] 与 [rsp+128] 双份；恢复时从 [rsp+128] 先恢复 rdi，再恢复其余 GPR。
-    // 曾简化为 128 字节且仅一处 rdi 保存，会导致运行崩溃，故保持当前布局。
+    // Debug：栈 136 字节，保存区与 JitDebugContext 布局一致；JIT 调用 jitDebugTraceWrapper，
+    // wrapper 将 ctx 拷入 thread_local 再调 stub，stub 只写 thread_local，不覆盖本栈，恢复正确。
+    // rdi 为 slot 基址，trace 路径会破坏 rdi，必须在 call 前保存、call 后恢复。将 rdi 额外存到
+    // [rsp+128]，恢复时从备份取，避免 callee 写 shadow/栈覆盖 [rsp+64] 导致 JOIN 等读到错误 frame。
     void emitDebugTraceCall(uint32_t pc, void *fnAddr) {
         constexpr uint8_t off_rax = 112, off_rcx = 104, off_rdx = 96;
         constexpr uint8_t off_r8 = 56, off_r9 = 48, off_r10 = 40, off_r11 = 32;
@@ -1587,20 +1588,25 @@ class Encoder {
             {0xc7, 0x84, 0x24, 0x7c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); // mov dword
                                                                                  // [rsp+124], 0
         emitBytes({0x48, 0x8d, 0x0c, 0x24});
-        uint64_t addr = reinterpret_cast<uint64_t>(fnAddr);
-        emitByte(0x48);
-        emitByte(0xb8);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        emitBytes({0xff, 0xd0});
+        if (fnAddr) {
+            uint64_t addr = reinterpret_cast<uint64_t>(fnAddr);
+            emitByte(0x48);
+            emitByte(0xb8);
+            emitBytes({
+                static_cast<uint8_t>(addr & 0xff),
+                static_cast<uint8_t>((addr >> 8) & 0xff),
+                static_cast<uint8_t>((addr >> 16) & 0xff),
+                static_cast<uint8_t>((addr >> 24) & 0xff),
+                static_cast<uint8_t>((addr >> 32) & 0xff),
+                static_cast<uint8_t>((addr >> 40) & 0xff),
+                static_cast<uint8_t>((addr >> 48) & 0xff),
+                static_cast<uint8_t>((addr >> 56) & 0xff),
+            });
+            emitBytes({0xff, 0xd0});
+        } else {
+            for (int i = 0; i < 16; ++i)
+                emitByte(0x90);
+        }
         // 先恢复 rdi（slot 基址），再恢复其它寄存器，避免 JOIN 等后续指令用错 frame
         emitBytes({0x48, 0x8b, 0xbc, 0x24, off_rdi_bak, 0x00, 0x00, 0x00}); // mov rdi, [rsp+128]
         emitBytes({0x48, 0x8b, 0x44, 0x24, off_rax});
