@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "fastvm.h"
 
-#ifndef ENABLE_COMPUTED_GOTO
+#if !ENABLE_FASTVM_COMPUTED_GOTO
 
 #include "utils/opperf.h"
 
@@ -60,7 +60,15 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         if (bc.opcode == OpCode::OPER) {
             tag = context_->execMgr().getNameOfAnOperator(bc.extra()->func);
         } else if (bc.opcode == OpCode::FUNC) {
+#if ENABLE_FASTVM_JIT
+            if (bc.fastop[1] != 0)
+                tag = getFuncExtraGraph(&bc)->name();
+            else
+                tag = jitFnToGraph_[reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc))]
+                          ->name();
+#else
             tag = bc.extra()->graph->name();
+#endif
         }
         opperf::ScopeTimer _timer(bc.opcode, tag);
 #else
@@ -94,10 +102,11 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         } break;
 
         case OpCode::COPY: {
-            TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
-            if (isGCTraced(srcType)) {
-                Object *srcData = currFrame->get<Object *>(bc.fastop[0]);
-                currFrame->set(bc.result, srcData->clone(mm::autoSpace(), false));
+            TypeCode srcCode = currFrame->codeAt(bc.fastop[0]);
+            if (isGCTraced(srcCode)) {
+                Object *srcData  = currFrame->get<Object *>(bc.fastop[0]);
+                Type *srcTypePtr = currFrame->typeAt<Type>(bc.fastop[0]);
+                currFrame->set(bc.result, srcData->clone(mm::autoSpace(), srcTypePtr, false));
             } else {
                 slot_t srcData = currFrame->get<slot_t>(bc.fastop[0]);
                 currFrame->set(bc.result, srcData);
@@ -105,7 +114,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         } break;
 
         case OpCode::ACCS: {
-            TypeCode srcType = currFrame->typeAt(bc.fastop[0]);
+            TypeCode srcType = currFrame->codeAt(bc.fastop[0]);
             if (srcType == TypeCode::Tuple) {
                 Tuple *t = currFrame->get<Tuple *>(bc.fastop[0]);
                 ASSERT(
@@ -149,8 +158,9 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                 if (isGCTraced(condType)) {
                     auto condData = currFrame->get<Object *>(nargs[0]);
                     for (; j < bc.withCnt(); ++j) {
-                        auto caseData = currFrame->get<Object *>(wargs[j]);
-                        if (condData->equals(caseData)) {
+                        auto caseData     = currFrame->get<Object *>(wargs[j]);
+                        Type *condTypePtr = currFrame->typeAt<Type>(nargs[0]);
+                        if (condData->equals(caseData, condTypePtr, false)) {
                             jumpIdx = j; // jump to matched case
                             break;
                         }
@@ -193,65 +203,63 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             const data_arr_t nargs = bc.nargs();
             const data_arr_t wargs = bc.wargs();
 
-            TypeCode targetType = currFrame->typeAt(nargs[0]);
-            ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
+            TypeCode srcCode = currFrame->codeAt(nargs[0]);
+            Type *srcType    = currFrame->typeAt<Type>(nargs[0]);
+            ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced in FastVM.");
+            Object *srcObj =
+                currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace(), srcType, false);
 
-            Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
-            ASSERT(target != nullptr, "FILL target data is null.");
+            ASSERT(srcObj != nullptr, "FILL target data is null.");
 
-            switch (targetType) {
+            switch (srcCode) {
             case TypeCode::Tuple: {
-                const auto &type = currFrame->typePtrAt<TupleType>(bc.result);
-                auto t           = static_cast<Tuple *>(target);
-                const auto &refs = t->layout().refs();
+                auto type = tt::as_ptr<TupleType>(srcType);
+                auto tup  = tt::as_ptr<Tuple>(srcObj);
                 ASSERT(
-                    refs.size() == bc.withCnt(),
+                    type->refCount() == bc.withCnt(),
                     std::format(
                         "Tuple layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
                         bc.withCnt(),
-                        refs.size()));
+                        type->refCount()));
+                const size_t *refs = type->refs();
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
-                    t->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+                    tup->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                 }
-                t->updateLayout(&type->layout());
             } break;
 
             case TypeCode::Array: {
-                const auto &type = currFrame->typePtrAt<ArrayType>(bc.result);
-                auto a           = static_cast<Array *>(target);
-                const auto &refs = a->layout().refs();
+                auto type = tt::as_ptr<ArrayType>(srcType);
+                auto arr  = tt::as_ptr<Array>(srcObj);
+                // 对于数组，如果 elemType 是 Ref，所有元素都是 Ref，直接使用索引
                 ASSERT(
-                    refs.size() == bc.withCnt(),
+                    arr->size() >= bc.withCnt(),
                     std::format(
-                        "Array layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+                        "Array size mismatch in FastVM. Expected at least {}, Actual: {}",
                         bc.withCnt(),
-                        refs.size()));
+                        arr->size()));
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
-                    a->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+                    arr->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
                 }
-                a->updateLayout(&type->layout());
             } break;
 
             case TypeCode::Struct: {
-                const auto &type = currFrame->typePtrAt<StructType>(bc.result);
-                auto s           = static_cast<Struct *>(target);
-                const auto &refs = s->layout().refs();
+                auto type = tt::as_ptr<StructType>(srcType);
+                auto str  = tt::as_ptr<Struct>(srcObj);
                 ASSERT(
-                    refs.size() == bc.withCnt(),
+                    type->refCount() == bc.withCnt(),
                     std::format(
                         "Struct layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
                         bc.withCnt(),
-                        refs.size()));
+                        type->refCount()));
+                const size_t *refs = type->refs();
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
-                    s->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+                    str->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
                 }
-                s->updateLayout(&type->layout());
             } break;
 
             case TypeCode::Function: {
-                // const auto &type   = currFrame->typePtrAt<FunctionType>(bc.result);
-                auto f             = static_cast<Function *>(target);
-                Tuple *closureData = f->tuple();
+                auto func          = tt::as_ptr<Function>(srcObj);
+                Tuple *closureData = func->tuple();
                 for (size_t j = 0; j < bc.withCnt(); ++j) {
                     closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
                 }
@@ -262,10 +270,10 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                     false,
                     std::format(
                         "Unsupported FILL target type {} in FastVM.",
-                        typeCodeToString(targetType)));
+                        typeCodeToString(srcCode)));
             }
 
-            currFrame->set(bc.result, target);
+            currFrame->set(bc.result, srcObj);
         } break;
 
         case OpCode::CALL: {
@@ -296,65 +304,145 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         } break;
 
         case OpCode::FUNC: {
-            // 保存当前程序计数器和栈帧
+#if ENABLE_FASTVM_JIT
+            if (bc.fastop[1] == 0) {
+                GraphIR::Graph *g = getFuncExtraGraph(&bc);
+                camel::jit::JitEntryFn fn =
+                    reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc));
+                Frame *funcFrame       = framePool_.acquire(g);
+                size_t argsCnt         = bc.normCnt();
+                const data_idx_t *args = bc.operands();
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+                }
+                funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
+                slot_t result            = fn(funcFrame->slotBase(), currentJitCtx_);
+                framePool_.release(funcFrame);
+                currFrame->set(bc.result, result);
+            } else {
+                GraphIR::Graph *targetGraph = getFuncExtraGraph(&bc);
+                size_t targetPc             = static_cast<size_t>(bc.fastop[1]);
+                uint32_t count              = incFuncExtraCount(const_cast<Bytecode *>(&bc));
+                if (tierPolicy_.shouldJit(count)) {
+                    compileAndCacheGraph(targetGraph, targetPc);
+                    const Bytecode &bc2 = bytecodes_[pc];
+                    if (bc2.fastop[1] == 0) {
+                        GraphIR::Graph *g = getFuncExtraGraph(&bc2);
+                        camel::jit::JitEntryFn fn =
+                            reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc2));
+                        Frame *funcFrame       = framePool_.acquire(g);
+                        size_t argsCnt         = bc2.normCnt();
+                        const data_idx_t *args = bc2.operands();
+                        for (size_t i = 0; i < argsCnt; ++i) {
+                            funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+                        }
+                        funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
+                        slot_t result            = fn(funcFrame->slotBase(), currentJitCtx_);
+                        framePool_.release(funcFrame);
+                        currFrame->set(bc.result, result);
+                        pc += bc.opsize;
+                        continue;
+                    }
+                }
+                push(pc, currFrame);
+                Frame *funcFrame       = framePool_.acquire(targetGraph);
+                size_t argsCnt         = bc.normCnt();
+                const data_idx_t *args = bc.operands();
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+                }
+                pc        = targetPc;
+                currFrame = funcFrame;
+                continue;
+            }
+#else
             push(pc, currFrame);
-
-            // 创建新的栈帧并设置参数
             Frame *funcFrame       = framePool_.acquire(bc.extra()->graph);
             size_t argsCnt         = bc.normCnt();
             const data_idx_t *args = bc.operands();
             for (size_t i = 0; i < argsCnt; ++i) {
                 funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
             }
-
-            // 切换到目标图的字节码位置和栈帧
             pc        = bc.fastop[1];
             currFrame = funcFrame;
-
             continue;
+#endif
         } break;
 
         case OpCode::TAIL: {
-            // 尾调用不保存程序计数器和栈帧
-            // 直接释放当前栈帧
-            // 如果当前栈帧和目标栈帧属于同一个图
-            // 栈帧池会自动复用
-            // 这间接实现了尾调用优化
+#if ENABLE_FASTVM_JIT
             FrameView lastFrame(currFrame);
             framePool_.release(currFrame);
-
-            // 创建新的栈帧并设置参数
-            // 对于刚刚释放的栈帧，栈帧池会自动复用
-            // 所以这里 currFrame 就是目标栈帧
+            if (bc.fastop[1] == 0) {
+                GraphIR::Graph *g = getFuncExtraGraph(&bc);
+                camel::jit::JitEntryFn fn =
+                    reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc));
+                Frame *newFrame        = framePool_._acquire(g);
+                size_t argsCnt         = bc.normCnt();
+                const data_idx_t *args = bc.operands();
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+                }
+                framePool_._resetTop();
+                newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
+                return fn(newFrame->slotBase(), currentJitCtx_);
+            }
+            GraphIR::Graph *targetGraph = getFuncExtraGraph(&bc);
+            size_t targetPc             = static_cast<size_t>(bc.fastop[1]);
+            uint32_t count              = incFuncExtraCount(const_cast<Bytecode *>(&bc));
+            if (tierPolicy_.shouldJit(count)) {
+                compileAndCacheGraph(targetGraph, targetPc);
+                const Bytecode &bc2 = bytecodes_[pc];
+                if (bc2.fastop[1] == 0) {
+                    GraphIR::Graph *g = getFuncExtraGraph(&bc2);
+                    camel::jit::JitEntryFn fn =
+                        reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc2));
+                    Frame *newFrame        = framePool_._acquire(g);
+                    size_t argsCnt         = bc2.normCnt();
+                    const data_idx_t *args = bc2.operands();
+                    for (size_t i = 0; i < argsCnt; ++i) {
+                        newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+                    }
+                    framePool_._resetTop();
+                    newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
+                    return fn(newFrame->slotBase(), currentJitCtx_);
+                }
+            }
+            currFrame              = framePool_._acquire(targetGraph);
+            size_t argsCnt         = bc.normCnt();
+            const data_idx_t *args = bc.operands();
+            for (size_t i = 0; i < argsCnt; ++i) {
+                currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+            }
+            framePool_._resetTop();
+            pc = targetPc;
+            continue;
+#else
+            FrameView lastFrame(currFrame);
+            framePool_.release(currFrame);
             currFrame              = framePool_._acquire(bc.extra()->graph);
             size_t argsCnt         = bc.normCnt();
             const data_idx_t *args = bc.operands();
             for (size_t i = 0; i < argsCnt; ++i) {
-                // 注意，这里的 currFrame 已经被释放了
-                // 但由于栈帧池不会对已经释放的栈帧进行格式化
-                // 所以这里仍然可以安全地获取原栈帧的数据
-                // 当然，需要通过 lastFrame 来获取数据
-                // lastFrame 中保存了原栈帧的静态数据区指针
                 currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
             }
-            // 这里需要手动 resetTop，因为 _acquire 不会 resetTop
-            // 之所以延迟 resetTop，是为了避免 resetTop 破坏刚刚释放的栈帧的数据
             framePool_._resetTop();
-
-            // 切换到目标图的字节码位置
             pc = bc.fastop[1];
-
             continue;
+#endif
         } break;
 
         case OpCode::OPER: {
-            const data_arr_t nargs = bc.nargs();
-            const data_arr_t wargs = bc.wargs();
-            auto func              = bc.extra()->func;
+            const data_arr_t nargs = bc->nargs();
+            const data_arr_t wargs = bc->wargs();
+            auto func              = bc->extra()->func;
             EXEC_WHEN_DEBUG(l.in("FastVM").debug(
                 "Executing operator {}.",
                 context_->execMgr().getNameOfAnOperator(func)));
-            func(bc.result, nargs, wargs, *currFrame, *context_);
+            FrameArgsView withView(*currFrame, wargs);
+            FrameArgsView normView(*currFrame, nargs);
+            slot_t result = func(withView, normView, *context_);
+            currFrame->set(bc.result, result);
         } break;
 
         case OpCode::SCHD: {
@@ -424,4 +512,4 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
     }
 }
 
-#endif // ENABLE_COMPUTED_GOTO
+#endif // !ENABLE_FASTVM_COMPUTED_GOTO

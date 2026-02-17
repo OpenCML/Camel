@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,13 +21,12 @@
 #include "core/rtdata/conv.h"
 
 FrameMeta *installFrameMetaInfoForGraph(GraphIR::Graph *graph) {
-    auto runtimeAreaLayout = &graph->runtimeDataType()->layout();
-    // Graph 的静态数据直接放在持久数据区，永不释放
-    const auto &layout        = graph->staticDataType()->layout();
-    Tuple *staticArea         = Tuple::create(layout, mm::permSpace());
-    const auto &staticDataArr = graph->staticDataArr();
+    const TupleType *runtimeDataType = graph->runtimeDataType();
+    const TupleType *staticDataType  = graph->staticDataType();
+    Tuple *staticArea                = Tuple::create(staticDataType->size(), mm::permSpace());
+    const auto &staticDataArr        = graph->staticDataArr();
 
-    for (size_t i = 1; i < layout.size(); ++i) {
+    for (size_t i = 1; i < staticDataType->size(); ++i) {
         const auto &elem = staticDataArr[i];
         if (elem->type()->isGCTraced()) {
             Object *elemRef = makeGCRefFromGCTracedData(elem, mm::permSpace());
@@ -40,13 +39,11 @@ FrameMeta *installFrameMetaInfoForGraph(GraphIR::Graph *graph) {
         }
     }
 
-    // 将数据存储到元数据区
-    FrameMeta *meta         = constructAt<FrameMeta>(mm::metaSpace());
-    meta->frameSize         = sizeof(Frame) + sizeof(slot_t) * runtimeAreaLayout->size();
-    meta->runtimeAreaLayout = runtimeAreaLayout;
-    meta->staticArea        = staticArea;
+    FrameMeta *meta       = constructAt<FrameMeta>(mm::metaSpace());
+    meta->frameSize       = sizeof(Frame) + sizeof(slot_t) * runtimeDataType->size();
+    meta->runtimeDataType = runtimeDataType;
+    meta->staticArea      = staticArea;
 
-    // 安装到 Graph 的 extra 中以便于查找
     graph->setExtra<FrameMeta, 0>(meta);
 
     return meta;

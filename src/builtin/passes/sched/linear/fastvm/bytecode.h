@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,7 +46,9 @@ enum class OpCode : uint8_t {
     OPER,
     SCHD, // 使用 fastop[0] 作为调度策略 ID
 
-    // 常用算子快捷指令（定长）
+    // 常用算子快捷指令（定长）：二元运算/比较，两个操作数均为 slot 索引
+    // fastop[0]、fastop[1]：>0 表示 Frame 槽，<0 表示静态区；result 为结果槽
+    // 算术：result = fastop[0] op fastop[1]；比较：result = (fastop[0] op fastop[1]) ? 1 : 0
     IADD,
     LADD,
     FADD,
@@ -232,23 +234,65 @@ struct BytecodeHeader {                  // 8 bytes
         return reinterpret_cast<const data_idx_t *>(this + 1);
     }
 
-    inline BytecodeExtra *extra() { return reinterpret_cast<BytecodeExtra *>(this + opsize - 1); }
+    inline BytecodeExtra *extra() {
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+        if (opcode == OpCode::FUNC || opcode == OpCode::TAIL)
+            return reinterpret_cast<BytecodeExtra *>(this + opsize - 2);
+#endif
+        return reinterpret_cast<BytecodeExtra *>(this + opsize - 1);
+    }
 
     inline const BytecodeExtra *extra() const {
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+        if (opcode == OpCode::FUNC || opcode == OpCode::TAIL)
+            return reinterpret_cast<const BytecodeExtra *>(this + opsize - 2);
+#endif
         return reinterpret_cast<const BytecodeExtra *>(this + opsize - 1);
     }
+
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+    // 仅对 FUNC/TAIL 有效：第二块 extra 字（count 或 JitEntryFn）
+    inline uint64_t *extra2() { return reinterpret_cast<uint64_t *>(this + opsize - 1); }
+    inline const uint64_t *extra2() const {
+        return reinterpret_cast<const uint64_t *>(this + opsize - 1);
+    }
+#endif
 };
 
 using Bytecode = BytecodeHeader;
 
 union BytecodeExtra {      // 8 bytes
     Type *pType;           // for CAST
-    GraphIR::Graph *graph; // for FUNC
+    GraphIR::Graph *graph; // for FUNC/TAIL word0: Graph* only
     operator_t func;       // for OPER
     MarkOpCode mark;       // for SCHD
+    uint64_t raw;          // generic
 
     std::string toString(OpCode opcode) const;
 };
+
+// FUNC/TAIL：第一块 extra 为 Graph*；启用了 JIT 时第二块 extra 为 count（未 JIT）或 JitEntryFn（已
+// JIT）
+inline GraphIR::Graph *getFuncExtraGraph(const BytecodeHeader *bc) { return bc->extra()->graph; }
+
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+inline uint32_t getFuncExtraCount(BytecodeHeader *bc) {
+    return static_cast<uint32_t>(*bc->extra2());
+}
+inline void *getFuncExtraFn(BytecodeHeader *bc) { return reinterpret_cast<void *>(*bc->extra2()); }
+inline void *getFuncExtraFn(const BytecodeHeader *bc) {
+    return reinterpret_cast<void *>(*bc->extra2());
+}
+inline void setFuncExtraFn(BytecodeHeader *bc, void *fn) {
+    *bc->extra2() = reinterpret_cast<uint64_t>(fn);
+    bc->fastop[1] = 0;
+}
+inline uint32_t incFuncExtraCount(BytecodeHeader *bc) {
+    uint64_t *p = bc->extra2();
+    *p          = *p + 1;
+    return static_cast<uint32_t>(*p);
+}
+#endif
 
 static_assert(sizeof(Bytecode) == 8, "Bytecode must be exactly 8 bytes");
 static_assert(sizeof(BytecodeHeader) == 8, "BytecodeHeader must be exactly 8 bytes");
@@ -262,4 +306,4 @@ Bytecode *appendBytecode(
     bytecode_vec_t &vec, OpCode opcode, data_idx_t result,
     const std::vector<data_idx_t> &fastops = {}, const std::vector<data_idx_t> &normOperands = {},
     const std::vector<data_idx_t> &withOperands = {}, bool hasExtra = false,
-    const BytecodeExtra &extra = {});
+    const BytecodeExtra &extra = {}, size_t extraUnits = 1);

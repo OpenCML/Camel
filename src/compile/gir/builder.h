@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 31, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,15 +26,15 @@
 #include "error/abort.h"
 
 #include "../gct.h"
-#include "../gir.h"
+#include "gir.h"
 
 namespace GraphIR {
 
 using void_ptr_t = void *;
 
-using node_scope_t = Scope<std::string, node_ptr_t>;
-using node_scope_ptr_t = std::shared_ptr<node_scope_t>;
-using graph_scope_t = Scope<std::string, std::shared_ptr<graph_vec_t>>;
+using node_scope_t      = Scope<std::string, node_ptr_t>;
+using node_scope_ptr_t  = std::shared_ptr<node_scope_t>;
+using graph_scope_t     = Scope<std::string, std::shared_ptr<graph_vec_t>>;
 using graph_scope_ptr_t = std::shared_ptr<graph_scope_t>;
 
 class Builder {
@@ -67,15 +67,36 @@ class Builder {
     std::unordered_map<Node *, node_wptr_t> nodeModifierMap_;
     node_ptr_t lastSyncedNode_;
 
-    std::optional<node_ptr_t> nodeAt(const std::string &name) { return nodeScope_->get(name); }
+    std::optional<node_ptr_t> nodeAt(const std::string &name) {
+        EXEC_WHEN_DEBUG([&] {
+            std::stringstream ss;
+            nodeScope_->dump(ss);
+            l.in("GIR Builder").debug("Accessing node '{}' from scope {}", name, ss.str());
+        }());
+        return nodeScope_->get(name);
+    }
     std::optional<std::shared_ptr<graph_vec_t>> graphsAt(const std::string &name) {
+        EXEC_WHEN_DEBUG([&] {
+            std::stringstream ss;
+            graphScope_->dump(
+                ss,
+                [&](std::ostream &os,
+                    const std::string &key,
+                    const std::shared_ptr<graph_vec_t> &value) {
+                    os << "[" << key << "]";
+                    for (const auto &graph : *value) {
+                        os << graph->toString() << " ";
+                    }
+                });
+            l.in("GIR Builder").debug("Accessing graph '{}' from scope {}", name, ss.str());
+        }());
         return graphScope_->get(name);
     }
 
     bool insertNode(const std::string &name, const node_ptr_t &node);
     bool insertGraph(const std::string &name, const graph_ptr_t &graph);
 
-    graph_ptr_t enterScope(const func_type_ptr_t &funcType, const std::string &name = "");
+    graph_ptr_t enterScope(FunctionType *funcType, const std::string &name = "");
     void leaveScope();
 
     node_ptr_t
@@ -88,7 +109,7 @@ class Builder {
     void_ptr_t visitDeclNode(const GCT::node_ptr_t &gct);
     graph_ptr_t visitFuncNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitDataNode(const GCT::node_ptr_t &gct);
-    type_ptr_t visitTypeNode(const GCT::node_ptr_t &gct);
+    Type *visitTypeNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitNRefNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitDRefNode(const GCT::node_ptr_t &gct);
     node_ptr_t visitCastNode(const GCT::node_ptr_t &gct);

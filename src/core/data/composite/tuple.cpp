@@ -13,48 +13,80 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tuple.h"
 #include "core/data/base.h"
+#include "core/type/composite/tuple.h"
 #include "utils/scope.h"
 #include "utils/str.h"
+#include "utils/type.h"
 
 #include "../special/null.h"
 #include "../special/ref.h"
 
 using namespace std;
 
-TupleData::TupleData(data_list_t data) : data_(data) {
-    std::vector<type_ptr_t> types;
-    size_t i = 0;
+struct TupleDataFactory::Impl {
+    TupleTypeFactory typeFactory;
+    std::vector<data_ptr_t> data;
+    std::vector<size_t> refIndices;
+};
+
+TupleDataFactory::TupleDataFactory() : impl_(std::make_unique<Impl>()) {}
+TupleDataFactory::~TupleDataFactory() = default;
+
+TupleDataFactory &TupleDataFactory::add(const data_ptr_t &e) {
+    impl_->typeFactory.add(e->type());
+    impl_->data.push_back(e);
+    if (e->type()->code() == TypeCode::Ref) {
+        impl_->refIndices.push_back(impl_->data.size() - 1);
+    }
+    return *this;
+}
+
+std::shared_ptr<TupleData> TupleDataFactory::build() {
+    Type *type = impl_->typeFactory.build();
+    return std::shared_ptr<TupleData>(
+        new TupleData(type, std::move(impl_->data), std::move(impl_->refIndices)));
+}
+
+TupleData::TupleData(Type *type, data_vec_t &&data, std::vector<size_t> &&refIndices)
+    : CompositeData(type), refIndices_(std::move(refIndices)), data_(std::move(data)) {}
+
+TupleData::TupleData(data_list_t data) : CompositeData(nullptr) {
+    TupleDataFactory f;
     for (const auto &e : data) {
-        types.push_back(e->type());
-        if (e->type()->code() == TypeCode::Ref) {
+        f.add(e);
+    }
+    auto p      = f.build();
+    type_       = p->type_;
+    data_       = std::move(p->data_);
+    refIndices_ = std::move(p->refIndices_);
+}
+
+TupleData::TupleData(Type *type, data_vec_t &&data) : CompositeData(type), data_(std::move(data)) {
+    ASSERT(type->code() == TypeCode::Tuple, "Type is not TupleType");
+    refIndices_.clear();
+    for (size_t i = 0; i < data_.size(); i++) {
+        if (data_[i] && data_[i]->type()->code() == TypeCode::Ref) {
             refIndices_.push_back(i);
         }
-        i++;
     }
-    type_ = std::make_shared<TupleType>(types);
 }
 
-TupleData::TupleData(type_ptr_t type, data_vec_t &&data)
-    : CompositeData(type), data_(std::move(data)) {
-    ASSERT(type->code() == TypeCode::Tuple, "Type is not TupleType");
-    ASSERT(
-        (*static_cast<TupleType *>(type_.get())).size() == data_.size(),
-        "Data size does not match TupleType size");
+std::shared_ptr<TupleData> TupleData::create(data_list_t data) {
+    TupleDataFactory f;
+    for (const auto &e : data) {
+        f.add(e);
+    }
+    return f.build();
 }
 
-void TupleData::emplace(const data_ptr_t &e) {
-    data_.push_back(e);
-    TupleType &tupleType = *static_cast<TupleType *>(type_.get());
-    tupleType.add(e->type());
-    if (e->type()->code() == TypeCode::Ref) {
-        refIndices_.push_back(data_.size() - 1);
-    }
+std::shared_ptr<TupleData> TupleData::create(Type *type, data_vec_t &&data) {
+    return std::make_shared<TupleData>(type, std::move(data));
 }
 
 data_ptr_t TupleData::get(size_t index) const {
@@ -93,12 +125,11 @@ void TupleData::resolve(const data_vec_t &dataList) {
 }
 
 data_ptr_t TupleData::clone(bool deep) const {
-    auto tuple   = make_shared<TupleData>();
-    tuple->type_ = type_;
+    TupleDataFactory f;
     for (const auto &e : data_) {
-        tuple->emplace(deep ? e->clone(deep) : e);
+        f.add(deep ? e->clone(deep) : e);
     }
-    return tuple;
+    return f.build();
 }
 
 const string TupleData::toString() const {
@@ -108,24 +139,25 @@ const string TupleData::toString() const {
     return str;
 }
 
-data_ptr_t TupleData::convertTo(const type_ptr_t &type) {
+data_ptr_t TupleData::convertTo(Type *type) {
     if (type->equals(type_)) {
         return tt::as_shared<TupleData>(shared_from_this());
     }
     if (type->code() == TypeCode::Tuple) {
-        const auto &tupleType = tt::as_shared<TupleType>(type);
+        auto tupleType = tt::as_ptr<TupleType>(type);
+        ASSERT(tupleType != nullptr, "Failed to cast to TupleType");
         data_vec_t data;
         data.reserve(data_.size());
         for (size_t i = 0; i < data_.size(); i++) {
-            const auto &e    = data_[i];
-            const auto &type = tupleType->typeAt(i);
-            if (type) {
-                data.push_back(e->convertTo(*type));
+            const auto &e  = data_[i];
+            Type *elemType = tupleType->typeAt(i);
+            if (elemType) {
+                data.push_back(e->convertTo(elemType));
             } else {
                 data.push_back(nullptr);
             }
         }
-        return TupleData::create(tupleType, std::move(data));
+        return TupleData::create(type, std::move(data));
     }
     return nullptr;
 }

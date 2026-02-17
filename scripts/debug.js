@@ -1,5 +1,6 @@
 import path from 'path'
 import { runCommand, copyFile, BASEDIR, logDone, logStep } from './common.js'
+import { getCmakeOptionFlags } from './cmake-opts.js'
 import { execSync } from 'child_process'
 
 function getGitVersion() {
@@ -28,8 +29,9 @@ function main() {
         (gitVersion ? `_${gitVersion}` : '')
 
     logStep(`Building Debug... (${BUILD_FOOTPRINT})`)
+    const cmakeOpts = getCmakeOptionFlags()
     runCommand(
-        `cmake .. -G "Ninja Multi-Config" -DBUILD_FOOTPRINT="${BUILD_FOOTPRINT}" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake`
+        `cmake .. -G "Ninja Multi-Config" -DBUILD_FOOTPRINT="${BUILD_FOOTPRINT}" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake ${cmakeOpts}`
     )
     runCommand('cmake --build . --config Debug')
 

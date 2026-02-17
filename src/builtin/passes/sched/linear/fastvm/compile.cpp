@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -179,19 +179,17 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
             switch (srcDataType->code()) {
             case TypeCode::Tuple: {
                 ASSERT(accNode->isNum(), "ACCS index must be numeric.");
-                index                  = accNode->index<size_t>();
-                const auto &tupleType  = tt::as_shared<TupleType>(srcDataType);
-                const auto &optEleType = tupleType->typeAt(accNode->index<size_t>());
-                if (!optEleType.has_value()) {
-                    ctx->rtmDiags()
-                        ->of(SemanticDiag::InvalidAccessIndex)
-                        .commit(to_string(accNode->index<size_t>()));
+                index                 = accNode->index<size_t>();
+                const auto &tupleType = tt::as_ptr<TupleType>(srcDataType);
+                if (index >= tupleType->size()) {
+                    ctx->rtmDiags()->of(SemanticDiag::InvalidAccessIndex).commit(to_string(index));
+                    index = 0; // 越界时回退为 0，与 Struct 无效时行为一致
                 }
                 break;
             }
             case TypeCode::Struct: {
                 ASSERT(!accNode->isNum(), "ACCS index must be string.");
-                const auto &structType = tt::as_shared<StructType>(srcDataType);
+                const auto &structType = tt::as_ptr<StructType>(srcDataType);
                 const auto &optIndex   = structType->findField(accNode->index<std::string>());
                 if (!optIndex.has_value()) {
                     ctx->rtmDiags()
@@ -280,9 +278,13 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
                 normOps,
                 {},
                 true,
-                {
-                    .graph = &(funcNode->func()->graph()),
-                });
+                {.graph = &(funcNode->func()->graph())},
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+                2
+#else
+                1
+#endif
+            );
             break;
         }
 

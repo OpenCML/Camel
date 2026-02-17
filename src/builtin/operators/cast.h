@@ -13,68 +13,41 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 29, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/context/frame.h"
 #include "core/operator.h"
 
-void __itoi__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __ltoi__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __ftoi__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __dtoi__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __stoi__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __itoi__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __ltoi__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __ftoi__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __dtoi__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __stoi__(ArgsView &with, ArgsView &norm, Context &ctx);
 
-void __itol__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __ltol__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __ftol__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __dtol__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __stol__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __itol__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __ltol__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __ftol__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __dtol__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __stol__(ArgsView &with, ArgsView &norm, Context &ctx);
 
-void __itof__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __ltof__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __ftof__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __dtof__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __stof__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __itof__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __ltof__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __ftof__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __dtof__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __stof__(ArgsView &with, ArgsView &norm, Context &ctx);
 
-void __itod__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __ltod__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __ftod__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __dtod__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __stod__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __itod__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __ltod__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __ftod__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __dtod__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __stod__(ArgsView &with, ArgsView &norm, Context &ctx);
 
-void __itos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __ltos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __ftos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __dtos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __stos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __atos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __itos__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __ltos__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __ftos__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __dtos__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __stos__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __atos__(ArgsView &with, ArgsView &norm, Context &ctx);

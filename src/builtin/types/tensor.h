@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,12 +25,12 @@
 class TensorType : public OtherType {
   private:
     std::vector<size_t> shape_;
-    type_ptr_t element_type_;
+    Type *element_type_;
     static std::unordered_map<std::string, std::string> staticMethods_;
 
   public:
     TensorType(const std::vector<size_t> &shape);
-    TensorType(const type_ptr_t &elementType, const std::vector<size_t> &shape);
+    TensorType(Type *elementType, const std::vector<size_t> &shape);
     virtual ~TensorType() noexcept = default;
 
     static TypeCode typeCode() {
@@ -39,24 +39,22 @@ class TensorType : public OtherType {
         return code;
     }
 
-    static std::shared_ptr<TensorType>
-    create(const type_ptr_t &elementType, const std::vector<size_t> &shape) {
-        return std::make_shared<TensorType>(elementType, shape);
-    }
+    static TensorType *create(Type *elementType, const std::vector<size_t> &shape);
+    static TensorType *create(const std::vector<size_t> &shape);
 
     std::vector<size_t> shape() const;
-    type_ptr_t dType() const;
+    Type *dType() const;
     static void registerStaticMethod(const std::string &methodName, const std::string &operatorUri);
     static std::string getStaticMethodUri(const std::string &methodName);
     static bool hasStaticMethod(const std::string &methodName);
 
-    static type_ptr_t Tensor(const std::vector<size_t> &shape);
-    static type_ptr_t Default();
+    static Type *Tensor(const std::vector<size_t> &shape);
+    static Type *Default();
 
     virtual std::string toString() const override;
     virtual std::string mangle() const override;
-    virtual type_ptr_t clone(bool deep = false) const override;
-    virtual bool equals(const type_ptr_t &type) const override;
+    virtual Type *clone(bool deep = false) const override;
+    virtual bool equals(Type *type) const override;
     virtual CastSafety castSafetyTo(const Type &other) const override;
-    virtual bool assignable(const type_ptr_t &type) const override;
+    virtual bool assignable(Type *type) const override;
 };

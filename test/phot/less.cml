@@ -2,6 +2,40 @@ module phot_example
 
 import { config, gen_bits, modulation, up_sample, pulse_shaper, constellation_diagram } from phot
 
+type Channel = (float[], float[])
+type Signals = (Channel, Channel)
+
+with <tip: string>
+func print_bits(bits: (int[], int[])): (int[], int[]) sync {
+    let (x_bits, y_bits) = bits
+    "{}:"->format<tip>->println
+    range(0, 10)->foreach<(i: int): void => sync {
+        (if i > 0 then ", " else "")->print
+        "{} + {}j"->format<x_bits[i], y_bits[i]>->print
+    }>
+    "..."->println
+    return bits
+}
+
+with <tip: string>
+func print_signals(signals: Signals): Signals sync {
+    let (x_channel, y_channel) = signals
+    let (x_real, x_imag) = x_channel
+    let (y_real, y_imag) = y_channel
+    "{}:"->format<tip>->println
+    range(0, 10)->foreach<(i: int): void => sync {
+        (if i > 0 then ", " else "  ")->print
+        "{:0.6f} + {:0.6f}j"->format<x_real[i], x_imag[i]>->print
+    }>
+    "..."->println
+    range(0, 10)->foreach<(i: int): void => sync {
+        (if i > 0 then ", " else "  ")->print
+        "{:0.6f} + {:0.6f}j"->format<y_real[i], y_imag[i]>->print
+    }>
+    "..."->println
+    return signals
+}
+
 func main(): int sync {
     "Configuring phot library..." ->println
     config(true)
@@ -9,10 +43,10 @@ func main(): int sync {
     let cfg = {
         num_symbols: 2^16,
         bits_per_symbol: 3,
-        roll_off: 0.01 as double,
-        total_baud: 40.0e9 as double,
-        up_sampling_factor: 4 as int,
-        reference_frequency: 193.1e12 as double
+        roll_off: 0.01,
+        total_baud: 40.0e9,
+        up_sampling_factor: 4,
+        reference_frequency: 193.1e12
     }
     "configs: {}"->format<cfg>->println
 
@@ -23,9 +57,13 @@ func main(): int sync {
 
     "Start emulating..." ->println
     gen_bits(num_bits, cfg.bits_per_symbol)
+        ->print_bits<"After gen_bits">
         ->modulation<cfg.bits_per_symbol>
+        ->print_signals<"After modulation">
         ->up_sample<cfg.up_sampling_factor>
+        ->print_signals<"After up_sample">
         ->pulse_shaper<cfg.up_sampling_factor, cfg.roll_off, cfg.total_baud>
+        ->print_signals<"After pulse_shaper">
         ->constellation_diagram<true, false>
 
     return 0

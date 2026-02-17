@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 25, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,8 +23,8 @@
 
 #include "config.h"
 
-#include "compile/builder/gct_builder.h"
-#include "compile/builder/gir_builder.h"
+#include "compile/gct/builder.h"
+#include "compile/gir/builder.h"
 #include "parse/parse.h"
 
 #include "error/base.h"
@@ -46,7 +46,7 @@ UserDefinedModule::UserDefinedModule(
     const std::string &name, const std::string &path, context_ptr_t ctx, parser_ptr_t parser)
     : Module(name, path, ctx) {
     if (parser) {
-        parser_ = parser;
+        parser_      = parser;
         diagnostics_ = parser->diagnostics();
     } else {
         diagnostics_ = std::make_shared<Diagnostics>(
@@ -100,9 +100,9 @@ bool UserDefinedModule::compile(CompileStage till) {
 
     if (stage_ < CompileStage::AST && till >= CompileStage::AST) {
         if (!gct_) {
-            auto ast = parser_->ast();
+            auto ast        = parser_->ast();
             auto gctBuilder = GCT::Builder(context_, shared_from_this());
-            gct_ = gctBuilder.build(ast, diagnostics_);
+            gct_            = gctBuilder.build(ast, diagnostics_);
             if (diagnostics_->hasErrors()) {
                 EXEC_WHEN_DEBUG(l.in("Module").error("Module '{}' failed to build GCT", name_));
                 return false;
@@ -118,7 +118,7 @@ bool UserDefinedModule::compile(CompileStage till) {
     if (stage_ < CompileStage::GIR && till >= CompileStage::GIR) {
         if (!gir_) {
             auto girBuilder = GIR::Builder(context_, shared_from_this());
-            gir_ = girBuilder.build(gct_, diagnostics_);
+            gir_            = girBuilder.build(gct_, diagnostics_);
             if (diagnostics_->hasErrors()) {
                 EXEC_WHEN_DEBUG(l.in("Module").error("Module '{}' failed to build GIR", name_));
                 return false;

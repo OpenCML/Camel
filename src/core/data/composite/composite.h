@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,15 +24,15 @@
 class CompositeData : public Data {
   public:
     CompositeData() = default;
-    CompositeData(type_ptr_t type) : Data(type) {}
+    CompositeData(Type *type) : Data(type) {}
     virtual ~CompositeData() = default;
 
     virtual std::vector<std::string> refs() const { return std::vector<std::string>(); }
     virtual bool resolved() const { return true; }
     virtual void resolve(const data_vec_t &dataList) {}
 
-    virtual bool equals(const data_ptr_t &other) const override   = 0;
-    virtual data_ptr_t clone(bool deep = false) const override    = 0;
-    virtual const std::string toString() const override           = 0;
-    virtual data_ptr_t convertTo(const type_ptr_t &type) override = 0;
+    virtual bool equals(const data_ptr_t &other) const override = 0;
+    virtual data_ptr_t clone(bool deep = false) const override  = 0;
+    virtual const std::string toString() const override         = 0;
+    virtual data_ptr_t convertTo(Type *type) override           = 0;
 };

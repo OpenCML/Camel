@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,18 @@
 #include "compile.h"
 #include "core/context/frame.h"
 
-#define ENABLE_COMPUTED_GOTO
+#include "jit/jit_config.h"
+
+#if ENABLE_FASTVM_JIT
+#include "jit/jit.h"
+#include "jit/runtime/trampoline.h"
+#include "jit/tier/tier_policy.h"
+#include <mutex>
+#endif
+
+struct FastVMConfig {
+    bool enableJit = false;
+};
 
 class FastVMSchedPass : public LinearSchedPass {
     inline static const size_t maxRecursionDepth_ = 256; // default max recursion depth
@@ -33,6 +44,17 @@ class FastVMSchedPass : public LinearSchedPass {
 
     bytecode_vec_t bytecodes_;
     std::unordered_map<GraphIR::Graph *, size_t> offsetMap_;
+
+#if ENABLE_FASTVM_JIT
+    std::unique_ptr<camel::jit::IJitBackend> jitBackend_;
+    std::unordered_map<GraphIR::Graph *, camel::jit::JitEntryFn> jitCache_;
+    std::unordered_map<camel::jit::JitEntryFn, GraphIR::Graph *> jitFnToGraph_;
+    std::mutex jitCacheMutex_;
+    camel::jit::JitConfig jitConfig_{};
+    camel::jit::TierPolicy tierPolicy_{jitConfig_};
+    void *currentJitCtx_{}; // 供解释器 FUNC/TAIL 调用 invokeCallOrJit 时使用
+    void compileAndCacheGraph(GraphIR::Graph *graph, size_t entryPc);
+#endif
 
     // 程序计数器栈和栈帧栈
     std::vector<size_t> pcStack_{maxRecursionDepth_};
@@ -50,8 +72,6 @@ class FastVMSchedPass : public LinearSchedPass {
         bytecodes_ = std::move(bytecodes);
         offsetMap_ = std::move(offsetMap);
     }
-
-    slot_t call(size_t pc, Frame *rootFrame);
 
     inline void push(size_t pc, Frame *frame) {
         pcStack_.push_back(pc);
@@ -85,8 +105,40 @@ class FastVMSchedPass : public LinearSchedPass {
         data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame);
 
   public:
-    FastVMSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};
+    FastVMSchedPass(const context_ptr_t &ctx, const FastVMConfig &config = {})
+        : LinearSchedPass(ctx)
+#if ENABLE_FASTVM_JIT
+          ,
+          jitConfig_([&config]() {
+              camel::jit::JitConfig c{};
+              c.policy = config.enableJit ? camel::jit::JitPolicy::OnDemand
+                                          : camel::jit::JitPolicy::Disabled;
+              return c;
+          }())
+#endif
+    {
+    }
     virtual ~FastVMSchedPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+
+    slot_t call(size_t pc, Frame *rootFrame);
+
+#if ENABLE_FASTVM_JIT
+    Frame *acquireFrameForCall(GraphIR::Graph *graph) { return framePool_.acquire(graph); }
+    void releaseFrameForCall(Frame *frame) { framePool_.release(frame); }
+    Frame *acquireFrameForTail(GraphIR::Graph *graph) {
+        Frame *f = framePool_._acquire(graph);
+        framePool_._resetTop();
+        return f;
+    }
+    void releaseFrameForTail(Frame *frame) { framePool_.release(frame); }
+    Context &context() { return *context_; }
+    GraphIR::Graph *jitFnToGraph(camel::jit::JitEntryFn fn) const {
+        auto it = jitFnToGraph_.find(fn);
+        return it != jitFnToGraph_.end() ? it->second : nullptr;
+    }
+    slot_t invokeCallOrJit(
+        size_t pc, GraphIR::Graph *graph, Frame *frame, void *jitCtx, uint32_t callCount = 0);
+#endif
 };

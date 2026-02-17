@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -192,7 +192,7 @@ std::string BytecodeExtra::toString(OpCode opcode) const {
 Bytecode *appendBytecode(
     bytecode_vec_t &vec, OpCode opcode, data_idx_t result, const std::vector<data_idx_t> &fastops,
     const std::vector<data_idx_t> &normOperands, const std::vector<data_idx_t> &withOperands,
-    bool hasExtra, const BytecodeExtra &extra) {
+    bool hasExtra, const BytecodeExtra &extra, size_t extraUnits) {
 
     data_idx_t normCnt = as_index(normOperands.size());
     data_idx_t withCnt = as_index(withOperands.size());
@@ -206,7 +206,7 @@ Bytecode *appendBytecode(
         operandUnits              = paddedOperandBytes / sizeof(Bytecode);
     }
 
-    size_t totalUnits = 1 + operandUnits + (hasExtra ? 1 : 0);
+    size_t totalUnits = 1 + operandUnits + (hasExtra ? extraUnits : 0);
 
     // 获取当前 vec 的插入起始位置
     size_t offset = vec.size();
@@ -240,8 +240,11 @@ Bytecode *appendBytecode(
 
     // Step 3: 写入 Extra（如果有）
     if (hasExtra) {
-        BytecodeExtra *ex = reinterpret_cast<BytecodeExtra *>(&vec[offset + totalUnits - 1]);
-        *ex               = extra;
+        BytecodeExtra *ex0 =
+            reinterpret_cast<BytecodeExtra *>(&vec[offset + totalUnits - extraUnits]);
+        *ex0 = extra;
+        for (size_t i = 1; i < extraUnits; i++)
+            *reinterpret_cast<uint64_t *>(&vec[offset + totalUnits - extraUnits + i]) = 0;
     }
 
     return header;

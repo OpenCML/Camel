@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,7 @@
 
 struct FrameMeta {
     size_t frameSize;
-    const TupleTypeLayout *runtimeAreaLayout;
+    const TupleType *runtimeDataType;
     Tuple *staticArea;
 };
 
@@ -39,18 +39,18 @@ class Frame : public Object {
     GraphIR::Graph *graph() { return graph_; }
     const GraphIR::Graph *graph() const { return graph_; }
 
-    TypeCode typeAt(GraphIR::data_idx_t index) const {
+    TypeCode codeAt(GraphIR::data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
             ASSERT(
-                idx < dynamicAreaLayout_->size(),
+                idx < dynamicAreaType_->size(),
                 std::format(
                     "[{}] Invalid argument index, idx = {}, size = {}",
                     formatAddress(const_cast<Frame *>(this), true),
                     idx,
-                    dynamicAreaLayout_->size()));
-            return dynamicAreaLayout_->typeAt(idx);
+                    dynamicAreaType_->size()));
+            return dynamicAreaType_->codeAt(idx);
         } else {
             size_t idx = static_cast<size_t>(-index);
             ASSERT(
@@ -60,24 +60,24 @@ class Frame : public Object {
                     formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     staticArea_->size()));
-            return staticArea_->typeAt(idx);
+            return graph_->staticDataType()->codeAt(idx);
         }
     }
 
-    template <typename T> std::shared_ptr<T> typePtrAt(GraphIR::data_idx_t index) const {
+    template <typename T> T *typeAt(GraphIR::data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
             ASSERT(
-                idx < dynamicAreaLayout_->size(),
+                idx < dynamicAreaType_->size(),
                 std::format(
                     "[{}] Invalid argument index, idx = {}, size = {}",
                     formatAddress(const_cast<Frame *>(this), true),
                     idx,
-                    dynamicAreaLayout_->size()));
-            auto res = graph_->runtimeDataType()->typeAt(idx);
-            ASSERT(res.has_value(), std::format("Type at index {} is null.", idx));
-            return tt::as_shared<T>(res.value());
+                    dynamicAreaType_->size()));
+            Type *res = graph_->runtimeDataType()->typeAt(idx);
+            ASSERT(res != nullptr, std::format("Type at index {} is null.", idx));
+            return tt::as_ptr<T>(res);
         } else {
             size_t idx = static_cast<size_t>(-index);
             ASSERT(
@@ -87,9 +87,9 @@ class Frame : public Object {
                     formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     staticArea_->size()));
-            auto res = graph_->staticDataType()->typeAt(idx);
-            ASSERT(res.has_value(), std::format("Type at index {} is null.", idx));
-            return tt::as_shared<T>(res.value());
+            Type *res = graph_->staticDataType()->typeAt(idx);
+            ASSERT(res != nullptr, std::format("Type at index {} is null.", idx));
+            return tt::as_ptr<T>(res);
         }
     }
 
@@ -100,12 +100,12 @@ class Frame : public Object {
             size_t idx = static_cast<size_t>(index);
             EXEC_WHEN_DEBUG([&]() {
                 ASSERT(
-                    idx < dynamicAreaLayout_->size(),
+                    idx < dynamicAreaType_->size(),
                     std::format(
                         "[{}] Invalid argument index, idx = {}, size = {}",
                         formatAddress(const_cast<Frame *>(this), true),
                         idx,
-                        dynamicAreaLayout_->size()));
+                        dynamicAreaType_->size()));
                 ASSERT(
                     dynamicArea_[idx] != kDebugUninitializedSlot,
                     std::format(
@@ -129,13 +129,13 @@ class Frame : public Object {
         }
         EXEC_WHEN_DEBUG([&]() {
             std::ostringstream oss;
-            printSlot(oss, toSlot(res), typeAt(index));
+            printSlot(oss, toSlot(res), typeAt<Type>(index));
             l.in("Frame").info(
                 "[{}] Getting data of graph <{}> at index {} ({}): {}",
                 formatAddress(const_cast<Frame *>(this), true),
                 graph_->name(),
                 index,
-                typeCodeToString(typeAt(index)),
+                typeCodeToString(codeAt(index)),
                 oss.str());
         }());
         return res;
@@ -145,24 +145,24 @@ class Frame : public Object {
         ASSERT(index != 0, "Data index is invalid.");
         EXEC_WHEN_DEBUG([&]() {
             std::ostringstream oss;
-            printSlot(oss, toSlot(value), typeAt(index));
+            printSlot(oss, toSlot(value), typeAt<Type>(index));
             l.in("Frame").info(
                 "[{}] Setting data of graph <{}> at index {} ({}): {}",
                 formatAddress(this, true),
                 graph_->name(),
                 index,
-                typeCodeToString(typeAt(index)),
+                typeCodeToString(codeAt(index)),
                 oss.str());
         }());
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
             EXEC_WHEN_DEBUG([&]() {
                 ASSERT(
-                    idx < dynamicAreaLayout_->size(),
+                    idx < dynamicAreaType_->size(),
                     std::format(
                         "Invalid argument index, idx = {}, size = {}",
                         idx,
-                        dynamicAreaLayout_->size()));
+                        dynamicAreaType_->size()));
             }());
             dynamicArea_[idx] = toSlot(value);
         } else {
@@ -179,26 +179,45 @@ class Frame : public Object {
         }
     }
 
-    virtual bool equals(const Object *other, bool deep = false) const override {
+    virtual bool equals(const Object *other, const Type *type, bool deep = false) const override {
         return false; // Frame 没有实际意义的比较
     }
 
-    virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
+    virtual Object *
+    clone(IAllocator &allocator, const Type *type, bool deep = false) const override {
         return nullptr; // 不支持克隆
     }
 
-    virtual void print(std::ostream &os) const override {
-        os << "Frame(dynamicSize=" << dynamicAreaLayout_->size()
+    virtual void print(std::ostream &os, const Type *type) const override {
+        (void)type;
+        os << "Frame(dynamicSize=" << dynamicAreaType_->size()
            << ", staticSize=" << staticArea_->size() << ")";
     }
 
     virtual void onMoved() override {}
 
-    virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
-        const auto &types = dynamicAreaLayout_->elemTypes();
-        Object **refArr   = reinterpret_cast<Object **>(dynamicArea_);
-        for (size_t i = 0; i < dynamicAreaLayout_->size(); ++i) {
-            if (isGCTraced(types[i])) {
+    slot_t *slotBase() { return dynamicArea_; }
+    const slot_t *slotBase() const { return dynamicArea_; }
+
+    void printSlotsTo(std::ostream &os) const {
+        os << "frame <" << (graph_ ? graph_->name() : "(null)") << "> at "
+           << formatAddress(this, true) << ":\n";
+        for (size_t i = 1; i < dynamicAreaType_->size(); ++i) {
+            slot_t s = dynamicArea_[i];
+            Type *t  = graph_->runtimeDataType()->typeAt(i);
+            os << "  [" << i << "] ";
+            printSlotSafe(os, s, t);
+            os << "\n";
+        }
+    }
+
+    virtual void
+    updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
+        (void)type;
+        auto codes      = dynamicAreaType_->codes();
+        Object **refArr = reinterpret_cast<Object **>(dynamicArea_);
+        for (size_t i = 0; i < dynamicAreaType_->size(); ++i) {
+            if (isGCTraced(codes[i])) {
                 if (Object *&ref = refArr[i]) {
                     ref = relocate(ref);
                 }
@@ -211,8 +230,8 @@ class Frame : public Object {
     friend class FrameView;
 
     // 这个构造函数由栈帧池调用
-    Frame(GraphIR::Graph *graph, Tuple *staticArea, const TupleTypeLayout *dynamicAreaLayout)
-        : graph_(graph), staticArea_(staticArea), dynamicAreaLayout_(dynamicAreaLayout) {
+    Frame(GraphIR::Graph *graph, Tuple *staticArea, const TupleType *dynamicAreaType)
+        : graph_(graph), staticArea_(staticArea), dynamicAreaType_(dynamicAreaType) {
         // 注意，这里不能在构造函数中初始化 dynamicArea_
         // FastVM 的优化依赖于复用刚刚释放的栈帧数据
         // 所以这里要尽量不去动 dynamicArea_，即便在 DEBUG 模式下
@@ -222,7 +241,7 @@ class Frame : public Object {
     GraphIR::Graph *graph_;
     Frame *next_;
     Tuple *staticArea_; // 外部提供的静态区
-    const TupleTypeLayout *dynamicAreaLayout_;
+    const TupleType *dynamicAreaType_;
     slot_t dynamicArea_[]; // 紧跟对象后存放动态区
 };
 
@@ -349,7 +368,7 @@ class FramePool {
             }());
             throw std::bad_alloc{};
         }
-        Frame *frame = new (top_) Frame(graph, meta->staticArea, meta->runtimeAreaLayout);
+        Frame *frame = new (top_) Frame(graph, meta->staticArea, meta->runtimeDataType);
 
         EXEC_WHEN_DEBUG([&]() {
             l.in("FramePool")
@@ -424,4 +443,93 @@ class FramePool {
 #ifndef NDEBUG
     std::vector<Frame *> frames_;
 #endif
+};
+
+class FrameArgsView : public ArgsView {
+  private:
+    Frame &frame_;
+    const data_arr_t &indices_;
+
+  public:
+    FrameArgsView(Frame &frame, const data_arr_t &indices) : frame_(frame), indices_(indices) {}
+
+    size_t size() const override { return indices_.size; }
+
+    slot_t slot(size_t index) const override {
+        ASSERT(index < indices_.size, "ArgsView index out of range");
+        GraphIR::data_idx_t dataIdx = indices_[index];
+        return frame_.get<slot_t>(dataIdx);
+    }
+
+    void setSlot(size_t index, slot_t value) override {
+        ASSERT(index < indices_.size, "ArgsView index out of range");
+        GraphIR::data_idx_t dataIdx = indices_[index];
+        frame_.set(dataIdx, value);
+    }
+
+    TypeCode code(size_t index) const override {
+        ASSERT(index < indices_.size, "ArgsView index out of range");
+        GraphIR::data_idx_t dataIdx = indices_[index];
+        return frame_.codeAt(dataIdx);
+    }
+
+    Type *type(size_t index) const override {
+        ASSERT(index < indices_.size, "ArgsView index out of range");
+        GraphIR::data_idx_t dataIdx = indices_[index];
+        return frame_.typeAt<Type>(dataIdx);
+    }
+};
+
+/**
+ * 基于 slot_t* 的 ArgsView，用于 JIT 调用 OPER 时在 C++ 栈上构造，无需 Frame
+ */
+class SlotArgsView : public ArgsView {
+  private:
+    slot_t *slots_;
+    Tuple *staticArea_;
+    const TupleType *runtimeDataType_;
+    const TupleType *staticDataType_;
+    const data_arr_t &indices_;
+
+  public:
+    SlotArgsView(
+        slot_t *slots, Tuple *staticArea, const TupleType *runtimeDataType,
+        const TupleType *staticDataType, const data_arr_t &indices)
+        : slots_(slots), staticArea_(staticArea), runtimeDataType_(runtimeDataType),
+          staticDataType_(staticDataType), indices_(indices) {}
+
+    size_t size() const override { return indices_.size; }
+
+    slot_t slot(size_t index) const override {
+        ASSERT(index < indices_.size, "ArgsView index out of range");
+        GraphIR::data_idx_t dataIdx = indices_[index];
+        if (dataIdx > 0)
+            return slots_[dataIdx];
+        return staticArea_->get<slot_t>(static_cast<size_t>(-dataIdx));
+    }
+
+    void setSlot(size_t index, slot_t value) override {
+        ASSERT(index < indices_.size, "ArgsView index out of range");
+        GraphIR::data_idx_t dataIdx = indices_[index];
+        if (dataIdx > 0)
+            slots_[dataIdx] = value;
+        else
+            staticArea_->set<slot_t>(static_cast<size_t>(-dataIdx), value);
+    }
+
+    TypeCode code(size_t index) const override {
+        ASSERT(index < indices_.size, "ArgsView index out of range");
+        GraphIR::data_idx_t dataIdx = indices_[index];
+        if (dataIdx > 0)
+            return runtimeDataType_->codeAt(static_cast<size_t>(dataIdx));
+        return staticDataType_->codeAt(static_cast<size_t>(-dataIdx));
+    }
+
+    Type *type(size_t index) const override {
+        ASSERT(index < indices_.size, "ArgsView index out of range");
+        GraphIR::data_idx_t dataIdx = indices_[index];
+        if (dataIdx > 0)
+            return runtimeDataType_->typeAt(static_cast<size_t>(dataIdx));
+        return staticDataType_->typeAt(static_cast<size_t>(-dataIdx));
+    }
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 26, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,15 +30,15 @@
 namespace GraphIR {
 class Node;
 class Graph;
-using node_ptr_t = std::shared_ptr<Node>;
-using graph_ptr_t = std::shared_ptr<Graph>;
-using graph_vec_t = std::vector<graph_ptr_t>;
+using node_ptr_t      = std::shared_ptr<Node>;
+using graph_ptr_t     = std::shared_ptr<Graph>;
+using graph_vec_t     = std::vector<graph_ptr_t>;
 using graph_vec_ptr_t = std::shared_ptr<graph_vec_t>;
 } // namespace GraphIR
 
 using entity = std::variant<GraphIR::node_ptr_t, GraphIR::graph_vec_ptr_t, oper_group_ptr_t>;
 using entity_ns_ptr_t = std::shared_ptr<Namespace<std::string, entity>>;
-using type_ns_ptr_t = std::shared_ptr<Namespace<std::string, type_ptr_t>>;
+using type_ns_ptr_t   = std::shared_ptr<Namespace<std::string, Type *>>;
 
 class Module;
 using module_ptr_t = std::shared_ptr<Module>;
@@ -70,13 +70,13 @@ class Module : public std::enable_shared_from_this<Module> {
     void importAllRefsFromMod(const module_ptr_t &mod);
     bool hasImportedRef(const Reference &ref) const;
 
-    bool exportType(const Reference &ref, const type_ptr_t &type);
+    bool exportType(const Reference &ref, Type *type);
     bool exportEntity(const Reference &ref, const entity &ent);
 
-    std::optional<type_ptr_t> getImportedType(const Reference &ref) const;
+    std::optional<Type *> getImportedType(const Reference &ref) const;
     std::optional<entity> getImportedEntity(const Reference &ref) const;
 
-    std::optional<type_ptr_t> getExportedType(const Reference &ref) const;
+    std::optional<Type *> getExportedType(const Reference &ref) const;
     std::optional<entity> getExportedEntity(const Reference &ref) const;
 
     type_ns_ptr_t exportedTypeNS() const;

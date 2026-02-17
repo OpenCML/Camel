@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,21 +22,12 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-void __abs__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __exp__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __round__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __ceil__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __floor__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __bin__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __oct__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __hex__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __sqrt__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __abs__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __exp__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __round__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __ceil__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __floor__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __bin__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __oct__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __hex__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __sqrt__(ArgsView &with, ArgsView &norm, Context &ctx);

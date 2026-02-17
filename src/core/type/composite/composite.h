@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 19, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,13 +30,13 @@ class CompositeType : public Type {
     virtual ~CompositeType() noexcept = default;
 
     // 不修改原类型，返回新的类型
-    virtual type_ptr_t resolve(const type_vec_t &typeList) const = 0;
-    virtual bool resolved() const                                = 0;
+    virtual Type *resolve(const type_vec_t &typeList) const = 0;
+    virtual bool resolved() const                           = 0;
 
     virtual std::string toString() const override                     = 0;
     virtual std::string mangle() const override                       = 0;
-    virtual type_ptr_t clone(bool deep = false) const override        = 0;
-    virtual bool equals(const type_ptr_t &type) const override        = 0;
+    virtual Type *clone(bool deep = false) const override             = 0;
+    virtual bool equals(Type *type) const override                    = 0;
     virtual CastSafety castSafetyTo(const Type &other) const override = 0;
-    virtual bool assignable(const type_ptr_t &type) const override    = 0;
+    virtual bool assignable(Type *type) const                         = 0;
 };

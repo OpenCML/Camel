@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,8 +22,7 @@
 #include "core/operator.h"
 #include "core/type/type.h"
 
-void __not_implemented__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+slot_t __not_implemented__(ArgsView &with, ArgsView &norm, Context &ctx) {
     ASSERT(false, "Not implemented");
-    return;
+    return NullSlot;
 }

@@ -10,6 +10,7 @@
 .todolist
 .opencmlrc
 .pypirc
+.camel-opts.json
 
 cmake-build-debug/
 node_modules/
@@ -24,6 +25,7 @@ out/
 *.cmo
 camel
 camel.exe
+python311.dll
 result.json
 CMakeUserPresets.json
 perf.data

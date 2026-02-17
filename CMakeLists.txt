@@ -28,8 +28,8 @@ elseif(UNIX)
 endif()
 
 file(GLOB_RECURSE SRC_FILES
-	"${PROJECT_SOURCE_DIR}/src/*.cpp"
-	"${PROJECT_SOURCE_DIR}/third_party/*.cpp"
+    "${PROJECT_SOURCE_DIR}/src/*.cpp"
+    "${PROJECT_SOURCE_DIR}/third_party/*.cpp"
 )
 
 find_package(fmt REQUIRED)
@@ -113,6 +113,8 @@ target_link_options(${PROJECT_NAME} PRIVATE
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ANTLR4CPP_STATIC)
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Options.cmake)
+
 target_include_directories(${PROJECT_NAME} PUBLIC
     ${PROJECT_SOURCE_DIR}/include
 )
@@ -132,3 +134,23 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     pybind11::embed
     Python::Python
 )
+
+if(WIN32)
+    execute_process(
+        COMMAND "${Python_EXECUTABLE}" -c
+        "import sys, pathlib; p=pathlib.Path(sys.base_prefix); print(p / f'python{sys.version_info.major}{sys.version_info.minor}.dll')"
+        OUTPUT_VARIABLE _PYTHON_DLL_PATH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    if(EXISTS "${_PYTHON_DLL_PATH}")
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${_PYTHON_DLL_PATH}"
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        )
+        message(STATUS "Found Python DLL: ${_PYTHON_DLL_PATH}")
+    else()
+        message(WARNING "Python DLL not found at: ${_PYTHON_DLL_PATH}")
+    endif()
+endif()

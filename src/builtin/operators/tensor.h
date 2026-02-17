@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,105 +21,63 @@
 
 #include "compile/gir.h"
 #include "core/context/context.h"
-#include "core/context/frame.h"
 #include "core/operator.h"
 #include "src/builtin/datas/tensor.h"
 
 // Tensor static factory methods
-void __tensor_eye__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_diag__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_linspace__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_arange__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_zeros__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_ones__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_random__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_randn__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __tensor_eye__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_diag__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_linspace__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_arange__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_zeros__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_ones__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_random__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_randn__(ArgsView &with, ArgsView &norm, Context &ctx);
 
 // Tensor arithmetic operations
-void __tensor_add__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_subtract__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_multiply__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_matmul__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_divide__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __tensor_add__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_subtract__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_multiply__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_matmul__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_divide__(ArgsView &with, ArgsView &norm, Context &ctx);
 
 // Tensor shape transformation operations
-void __tensor_shape__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_reshape__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_transpose__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_flatten__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __tensor_shape__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_reshape__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_transpose__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_flatten__(ArgsView &with, ArgsView &norm, Context &ctx);
 
 // Tensor combination operations
-void __tensor_concat__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_stack__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __tensor_concat__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_stack__(ArgsView &with, ArgsView &norm, Context &ctx);
 
 // Tensor statistical operations
-void __tensor_sum__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_mean__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_min__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_max__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_argmin__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_argmax__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_std__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __tensor_sum__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_mean__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_min__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_max__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_argmin__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_argmax__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_std__(ArgsView &with, ArgsView &norm, Context &ctx);
 
 // Tensor norm calculations
-void __tensor_norm_l1__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_norm_l2__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_norm_squared_l2__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __tensor_norm_l1__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_norm_l2__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_norm_squared_l2__(ArgsView &with, ArgsView &norm, Context &ctx);
 
 // Tensor mathematical functions
-void __tensor_sin__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_cos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_exp__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_log__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_sqrt__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_pow__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_matpow__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __tensor_sin__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_cos__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_exp__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_log__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_sqrt__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_pow__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_matpow__(ArgsView &with, ArgsView &norm, Context &ctx);
 
 // Tensor hyperbolic functions
-void __tensor_sinh__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_cosh__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __tensor_tanh__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __tensor_sinh__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_cosh__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __tensor_tanh__(ArgsView &with, ArgsView &norm, Context &ctx);
 
-void __tensor_show__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __to_float__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __tensor_show__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __to_float__(ArgsView &with, ArgsView &norm, Context &ctx);

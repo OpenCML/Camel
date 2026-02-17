@@ -13,191 +13,156 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 29, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "cast.h"
 #include "core/context/context.h"
+#include <sstream>
 
-void __itoi__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    frame.set(self, frame.get<Int>(nargs[0]));
+slot_t __itoi__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
+
+slot_t __ltoi__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Int64 v = norm.get<Int64>(0);
+    return toSlot(static_cast<Int32>(v));
 }
 
-void __ltoi__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Long v = frame.get<Long>(nargs[0]);
-    frame.set(self, static_cast<Int>(v));
+slot_t __ftoi__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Float32 v = norm.get<Float32>(0);
+    return toSlot(static_cast<Int32>(v));
 }
 
-void __ftoi__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Float v = frame.get<Float>(nargs[0]);
-    frame.set(self, static_cast<Int>(v));
+slot_t __dtoi__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Float64 v = norm.get<Float64>(0);
+    return toSlot(static_cast<Int32>(v));
 }
 
-void __dtoi__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double v = frame.get<Double>(nargs[0]);
-    frame.set(self, static_cast<Int>(v));
-}
-
-void __stoi__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    String *s = frame.get<String *>(nargs[0]);
+slot_t __stoi__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    String *s = norm.get<String *>(0);
     try {
-        Int v = std::stoi(s->toString());
-        frame.set(self, v);
+        Int32 v = std::stoi(s->toString());
+        return toSlot(v);
     } catch (...) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("__stoi__ invalid integer string");
-        frame.set(self, NullSlot);
+        return NullSlot;
     }
 }
 
-void __itol__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Int v = frame.get<Int>(nargs[0]);
-    frame.set(self, static_cast<Long>(v));
+slot_t __itol__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Int32 v = norm.get<Int32>(0);
+    return toSlot(static_cast<Int64>(v));
 }
 
-void __ltol__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    frame.set(self, frame.get<Long>(nargs[0]));
+slot_t __ltol__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
+
+slot_t __ftol__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Float32 v = norm.get<Float32>(0);
+    return toSlot(static_cast<Int64>(v));
 }
 
-void __ftol__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Float v = frame.get<Float>(nargs[0]);
-    frame.set(self, static_cast<Long>(v));
+slot_t __dtol__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Float64 v = norm.get<Float64>(0);
+    return toSlot(static_cast<Int64>(v));
 }
 
-void __dtol__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double v = frame.get<Double>(nargs[0]);
-    frame.set(self, static_cast<Long>(v));
-}
-
-void __stol__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    String *s = frame.get<String *>(nargs[0]);
+slot_t __stol__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    String *s = norm.get<String *>(0);
     try {
-        Long v = std::stoll(s->toString());
-        frame.set(self, v);
+        Int64 v = std::stoll(s->toString());
+        return toSlot(v);
     } catch (...) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("__stol__ invalid integer string");
-        frame.set(self, NullSlot);
+        return NullSlot;
     }
 }
 
-void __itof__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Int v = frame.get<Int>(nargs[0]);
-    frame.set(self, static_cast<Float>(v));
+slot_t __itof__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Int32 v = norm.get<Int32>(0);
+    return toSlot(static_cast<Float32>(v));
 }
 
-void __ltof__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Long v = frame.get<Long>(nargs[0]);
-    frame.set(self, static_cast<Float>(v));
+slot_t __ltof__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Int64 v = norm.get<Int64>(0);
+    return toSlot(static_cast<Float32>(v));
 }
 
-void __ftof__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    frame.set(self, frame.get<Float>(nargs[0]));
+slot_t __ftof__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
+
+slot_t __dtof__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Float64 v = norm.get<Float64>(0);
+    return toSlot(static_cast<Float32>(v));
 }
 
-void __dtof__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double v = frame.get<Double>(nargs[0]);
-    frame.set(self, static_cast<Float>(v));
-}
-
-void __stof__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    String *s = frame.get<String *>(nargs[0]);
+slot_t __stof__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    String *s = norm.get<String *>(0);
     try {
-        Float v = std::stof(s->toString());
-        frame.set(self, v);
+        Float32 v = std::stof(s->toString());
+        return toSlot(v);
     } catch (...) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("__stof__ invalid float string");
-        frame.set(self, NullSlot);
+        return NullSlot;
     }
 }
 
-void __itod__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Int v = frame.get<Int>(nargs[0]);
-    frame.set(self, static_cast<Double>(v));
+slot_t __itod__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Int32 v = norm.get<Int32>(0);
+    return toSlot(static_cast<Float64>(v));
 }
 
-void __ltod__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Long v = frame.get<Long>(nargs[0]);
-    frame.set(self, static_cast<Double>(v));
+slot_t __ltod__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Int64 v = norm.get<Int64>(0);
+    return toSlot(static_cast<Float64>(v));
 }
 
-void __ftod__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Float v = frame.get<Float>(nargs[0]);
-    frame.set(self, static_cast<Double>(v));
+slot_t __ftod__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Float32 v = norm.get<Float32>(0);
+    return toSlot(static_cast<Float64>(v));
 }
 
-void __dtod__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    frame.set(self, frame.get<Double>(nargs[0]));
-}
+slot_t __dtod__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
 
-void __stod__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    String *s = frame.get<String *>(nargs[0]);
+slot_t __stod__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    String *s = norm.get<String *>(0);
     try {
-        Double v = std::stod(s->toString());
-        frame.set(self, v);
+        Float64 v = std::stod(s->toString());
+        return toSlot(v);
     } catch (...) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("__stod__ invalid double string");
-        frame.set(self, NullSlot);
+        return NullSlot;
     }
 }
 
-void __itos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Int v     = frame.get<Int>(nargs[0]);
+slot_t __itos__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Int32 v   = norm.get<Int32>(0);
     String *s = String::from(std::to_string(v), mm::autoSpace());
-    frame.set(self, s);
+    return toSlot(s);
 }
 
-void __ltos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Long v    = frame.get<Long>(nargs[0]);
+slot_t __ltos__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Int64 v   = norm.get<Int64>(0);
     String *s = String::from(std::to_string(v), mm::autoSpace());
-    frame.set(self, s);
+    return toSlot(s);
 }
 
-void __ftos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Float v   = frame.get<Float>(nargs[0]);
+slot_t __ftos__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Float32 v = norm.get<Float32>(0);
     String *s = String::from(std::to_string(v), mm::autoSpace());
-    frame.set(self, s);
+    return toSlot(s);
 }
 
-void __dtos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    Double v  = frame.get<Double>(nargs[0]);
+slot_t __dtos__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Float64 v = norm.get<Float64>(0);
     String *s = String::from(std::to_string(v), mm::autoSpace());
-    frame.set(self, s);
+    return toSlot(s);
 }
 
-void __stos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    frame.set(self, frame.get<String *>(nargs[0]));
-}
+slot_t __stos__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
 
-void __atos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    String *s = frame.get<String *>(nargs[0]);
+slot_t __atos__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    String *s = norm.get<String *>(0);
     std::ostringstream oss;
     oss << s->toString();
     String *res = String::from(oss.str(), mm::autoSpace());
-    frame.set(self, res);
+    return toSlot(res);
 }

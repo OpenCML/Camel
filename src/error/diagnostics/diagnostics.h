@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Oct. 31, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,8 @@
 #include "builder.h"
 #include "messages/index.h"
 #include "range.h"
+#include "utils/assert.h"
+#include "utils/log.h"
 
 #include "fmt/core.h"
 
@@ -88,7 +90,7 @@ class DiagnosticsTotalLimitExceededException : public DiagnosticsLimitExceededBa
 
 // ---- Configuration ----
 struct DiagsConfig {
-    int total_limit = -1; // -1 means no limit
+    int total_limit                                       = -1; // -1 means no limit
     std::unordered_map<Severity, int> per_severity_limits = {};
 
     // Helper methods
@@ -177,29 +179,29 @@ template <typename DiagEnum>
 DiagnosticBuilder DiagnosticBuilder::of(DiagEnum err, Diagnostics *diag) {
     DiagnosticBuilder builder(diag);
 
-    builder.type_ = diagTypeOf(err);
-    uint32_t key = static_cast<uint32_t>(err);
-    builder.severity_ = extractSeverity(key);
-    builder.specific_ = extractSpecific(key);
-    DiagInfo info = getDiagInfo(err);
-    builder.name_ = to_string(builder.type_) + "::" + info.name;
-    builder.rawMessage_ = info.message;
+    builder.type_          = diagTypeOf(err);
+    uint32_t key           = static_cast<uint32_t>(err);
+    builder.severity_      = extractSeverity(key);
+    builder.specific_      = extractSpecific(key);
+    DiagInfo info          = getDiagInfo(err);
+    builder.name_          = to_string(builder.type_) + "::" + info.name;
+    builder.rawMessage_    = info.message;
     builder.rawSuggestion_ = info.suggestion;
-    builder.moduleName_ = diag ? diag->moduleName() : "";
-    builder.modulePath_ = diag ? diag->modulePath() : "";
+    builder.moduleName_    = diag ? diag->moduleName() : "";
+    builder.modulePath_    = diag ? diag->modulePath() : "";
 
     return builder;
 }
 
 template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args) {
     Diagnostic d;
-    d.range = range_;
+    d.range    = range_;
     d.severity = severity_;
-    d.type = type_;
+    d.type     = type_;
     d.specific = specific_;
-    d.name = name_;
+    d.name     = name_;
     try {
-        d.message = fmt::format(fmt::runtime(rawMessage_), std::forward<Args>(args)...);
+        d.message    = fmt::format(fmt::runtime(rawMessage_), std::forward<Args>(args)...);
         d.suggestion = fmt::format(fmt::runtime(rawSuggestion_), std::forward<Args>(args)...);
     } catch (const fmt::format_error &e) {
         throw DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
@@ -207,6 +209,12 @@ template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args)
     }
     d.moduleName = moduleName_;
     d.modulePath = modulePath_;
+
+    EXEC_WHEN_DEBUG([&] {
+        if (severity_ == Severity::Error) {
+            ASSERT(false, d.toText());
+        }
+    }());
 
     if (diagnostics_) {
         return diagnostics_->add(std::move(d));

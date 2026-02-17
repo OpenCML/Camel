@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 09, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "para.h"
+#include "utils/type.h"
 
 using namespace std;
 
@@ -32,17 +33,18 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{1, {false}}, {2, {false, false}}},
                         "<func: (acc: U, item: T) => U, initial: U> (collect: T[]) => U",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(with[0]);
                             if (norm[0]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &funcType  = tt::as_shared<FunctionType>(norm[0]);
-                            const auto &normTypes = funcType->normTypes();
-                            if (!normTypes[1].first->equals(vecType->elemType()))
+                            const auto &funcType = tt::as_ptr<FunctionType>(norm[0]);
+                            if (funcType->normTypesCount() < 2)
                                 return nullopt;
-                            if (!normTypes[0].first->equals(norm[1]))
+                            if (!funcType->normTypeAt(1)->equals(vecType->elemType()))
+                                return nullopt;
+                            if (!funcType->normTypeAt(0)->equals(norm[1]))
                                 return nullopt;
                             if (!funcType->exitType()->equals(norm[1]))
                                 return nullopt;
@@ -59,17 +61,16 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{1, {false}}, {1, {false}}},
                         "<func: (item: T) => void> (collect: T[]) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (with[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &vecType = tt::as_shared<ArrayType>(with[0]);
+                            const auto &vecType = tt::as_ptr<ArrayType>(with[0]);
                             if (norm[0]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &funcType = tt::as_shared<FunctionType>(norm[0]);
-                            if (funcType->normTypes().size() != 1)
+                            const auto &funcType = tt::as_ptr<FunctionType>(norm[0]);
+                            if (funcType->normTypesCount() != 1)
                                 return nullopt;
-                            const auto &normTypes = funcType->normTypes();
-                            if (!normTypes[0].first->equals(vecType->elemType()))
+                            if (!funcType->normTypeAt(0)->equals(vecType->elemType()))
                                 return nullopt;
                             if (!funcType->exitType()->equals(Type::Void()))
                                 return nullopt;

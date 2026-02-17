@@ -13,26 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 29, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/context/frame.h"
 #include "core/operator.h"
 
-void __seed__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __rand__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __randn__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __randint__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __choice__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __sample__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __shuffle__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __seed__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __rand__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __randn__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __randint__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __choice__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __sample__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __shuffle__(ArgsView &with, ArgsView &norm, Context &ctx);

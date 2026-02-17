@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Oct. 31, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -65,7 +65,7 @@ inline void setNodeTokenRangeByContexts(node_ptr_t node, const vector<Context *>
         return;
     }
     size_t start = context.front()->getStart()->getTokenIndex();
-    size_t end = context.back()->getStop()->getTokenIndex() + 1;
+    size_t end   = context.back()->getStop()->getTokenIndex() + 1;
     node->load()->setTokenRange(start, end);
 }
 
@@ -373,7 +373,7 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     ENTER("FuncDecl");
 
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
-    TokenRange typeRange = {
+    TokenRange typeRange    = {
         context->getStart()->getTokenIndex(),
         context->stmtBlock()->getStart()->getTokenIndex() + 1};
     setNodeTokenRange(funcTypeNode, typeRange);
@@ -828,7 +828,7 @@ any Builder::visitParentArgues(OpenCMLParser::ParentArguesContext *context) {
     if (context->argumentList()) {
         auto res =
             any_cast<std::pair<node_ptr_t, node_ptr_t>>(visitArgumentList(context->argumentList()));
-        dataList = res.first;
+        dataList      = res.first;
         namedDataList = res.second;
     }
     LEAVE("ParentArgues");
@@ -861,7 +861,7 @@ any Builder::visitAngledValues(OpenCMLParser::AngledValuesContext *context) {
     if (context->argumentList()) {
         auto res =
             any_cast<std::pair<node_ptr_t, node_ptr_t>>(visitArgumentList(context->argumentList()));
-        dataList = res.first;
+        dataList      = res.first;
         namedDataList = res.second;
     }
     LEAVE("AngledValues");
@@ -882,7 +882,7 @@ any Builder::visitPattern(OpenCMLParser::PatternContext *context) {
     node_ptr_t res;
     if (context->literal()) {
         Literal literal = any_cast<Literal>(visitLiteral(context->literal()));
-        res = createNodeAs<LiteralLoad>(literal);
+        res             = createNodeAs<LiteralLoad>(literal);
         setNodeTokenRangeByContext(res, context->literal());
     } else if (context->getText() == "_") {
         res = createNodeAs<NullLoad>();
@@ -903,7 +903,7 @@ any Builder::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {
     ENTER("MatchCase");
     node_ptr_t caseNode = createNodeAs<MatchCaseLoad>();
     setNodeTokenRangeByContext(caseNode, context);
-    node_ptr_t pattern = any2node(visitPattern(context->pattern(0)));
+    node_ptr_t pattern  = any2node(visitPattern(context->pattern(0)));
     node_ptr_t exprNode = any2node(visitBlockExpr(context->blockExpr()));
     *caseNode << pattern << exprNode;
     LEAVE("MatchCase");
@@ -1038,7 +1038,7 @@ any Builder::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
         } else {
             throw std::runtime_error("Invalid assignment operator: " + strOp);
         }
-        node_ptr_t rhsNode = any2node(visitLogicalOrExpr(context->logicalOrExpr(i)));
+        node_ptr_t rhsNode      = any2node(visitLogicalOrExpr(context->logicalOrExpr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
         setNodeTokenRangeByContext(dataExprNode, context->logicalOrExpr(i));
         *dataExprNode << lhsNode << rhsNode;
@@ -1057,7 +1057,7 @@ any Builder::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {
     ENTER("LogicalOrExpr");
     node_ptr_t lhsNode = any2node(visitLogicalAndExpr(context->logicalAndExpr(0)));
     for (size_t i = 1; i < context->logicalAndExpr().size(); ++i) {
-        node_ptr_t rhsNode = any2node(visitLogicalAndExpr(context->logicalAndExpr(i)));
+        node_ptr_t rhsNode      = any2node(visitLogicalAndExpr(context->logicalAndExpr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(BinaryDataOp::Or);
         setNodeTokenRangeByContext(dataExprNode, context->logicalAndExpr(i));
         *dataExprNode << lhsNode << rhsNode;
@@ -1076,7 +1076,7 @@ any Builder::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) 
     ENTER("LogicalAndExpr");
     node_ptr_t lhsNode = any2node(visitEqualityExpr(context->equalityExpr(0)));
     for (size_t i = 1; i < context->equalityExpr().size(); ++i) {
-        node_ptr_t rhsNode = any2node(visitEqualityExpr(context->equalityExpr(i)));
+        node_ptr_t rhsNode      = any2node(visitEqualityExpr(context->equalityExpr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(BinaryDataOp::And);
         setNodeTokenRangeByContext(dataExprNode, context->equalityExpr(i));
         *dataExprNode << lhsNode << rhsNode;
@@ -1109,7 +1109,7 @@ any Builder::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {
         } else {
             throw std::runtime_error("Invalid equality operator: " + strOp);
         }
-        node_ptr_t rhsNode = any2node(visitRelationalExpr(context->relationalExpr(i)));
+        node_ptr_t rhsNode      = any2node(visitRelationalExpr(context->relationalExpr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
         setNodeTokenRangeByContext(dataExprNode, context->relationalExpr(i));
         *dataExprNode << lhsNode << rhsNode;
@@ -1141,7 +1141,7 @@ any Builder::visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) 
         } else {
             throw std::runtime_error("Invalid relational operator: " + strOp);
         }
-        node_ptr_t rhsNode = any2node(visitAdditiveExpr(context->additiveExpr(i)));
+        node_ptr_t rhsNode      = any2node(visitAdditiveExpr(context->additiveExpr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
         setNodeTokenRangeByContext(dataExprNode, context->additiveExpr(i));
         *dataExprNode << lhsNode << rhsNode;
@@ -1169,7 +1169,7 @@ any Builder::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {
         } else {
             throw std::runtime_error("Invalid additive operator: " + strOp);
         }
-        node_ptr_t rhsNode = any2node(visitMultiplicativeExpr(context->multiplicativeExpr(i)));
+        node_ptr_t rhsNode      = any2node(visitMultiplicativeExpr(context->multiplicativeExpr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
         setNodeTokenRangeByContext(dataExprNode, context->multiplicativeExpr(i));
         *dataExprNode << lhsNode << rhsNode;
@@ -1203,7 +1203,7 @@ any Builder::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *c
         } else {
             throw std::runtime_error("Invalid multiplicative operator: " + strOp);
         }
-        node_ptr_t rhsNode = any2node(visitNullableExpr(context->nullableExpr(i)));
+        node_ptr_t rhsNode      = any2node(visitNullableExpr(context->nullableExpr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
         setNodeTokenRangeByContext(dataExprNode, context->nullableExpr(i));
         *dataExprNode << lhsNode << rhsNode;
@@ -1271,7 +1271,7 @@ any Builder::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
             }
             node_ptr_t dataNode = any2node(visitLinkExpr(context->linkExpr()));
             node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
-            res = createNodeAs<ReservedExprLoad>(op);
+            res                 = createNodeAs<ReservedExprLoad>(op);
             setNodeTokenRangeByContext(res, context);
             *res << dataNode << typeNode;
         }
@@ -1290,7 +1290,7 @@ any Builder::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
             throw std::runtime_error("Invalid unary operator: " + strOp);
         }
         node_ptr_t dataNode = any2node(visitLinkExpr(context->linkExpr()));
-        res = createNodeAs<UnaryExprLoad>(op);
+        res                 = createNodeAs<UnaryExprLoad>(op);
         setNodeTokenRangeByContext(res, context);
         *res << dataNode;
         break;
@@ -1313,9 +1313,9 @@ any Builder::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
     ENTER("LinkExpr");
     node_ptr_t lhsNode = any2node(visitCompExpr(context->compExpr(0)));
     for (size_t i = 1; i < context->compExpr().size(); i++) {
-        string strOp = context->children[i * 2 - 1]->getText();
+        string strOp        = context->children[i * 2 - 1]->getText();
         node_ptr_t linkNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
-        node_ptr_t rhsNode = any2node(visitCompExpr(context->compExpr(i)));
+        node_ptr_t rhsNode  = any2node(visitCompExpr(context->compExpr(i)));
         if (strOp == "?->") {
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
             setNodeTokenRangeByContext(notNullNode, context->compExpr(i));
@@ -1343,7 +1343,7 @@ any Builder::visitCompExpr(OpenCMLParser::CompExprContext *context) {
     ENTER("CompExpr");
     node_ptr_t lhsNode = any2node(visitAnnoExpr(context->annoExpr(0)));
     for (size_t i = 1; i < context->annoExpr().size(); i++) {
-        string strOp = context->children[i * 2 - 1]->getText();
+        string strOp        = context->children[i * 2 - 1]->getText();
         node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Comp);
         setNodeTokenRangeByContext(dataNode, context->annoExpr(i));
         node_ptr_t rhsNode = any2node(visitAnnoExpr(context->annoExpr(i)));
@@ -1374,25 +1374,27 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
             node_ptr_t exprNode = nullptr;
             if (tt::is_instance_of<OpenCMLParser::IndicesContext>(child)) {
                 exprNode = createNodeAs<BinaryExprLoad>(BinaryDataOp::Index);
-                setNodeTokenRangeByContext(exprNode, tt::as<OpenCMLParser::IndicesContext>(child));
+                setNodeTokenRangeByContext(
+                    exprNode,
+                    tt::as_ptr<OpenCMLParser::IndicesContext>(child));
                 node_ptr_t rhsNode =
-                    any2node(visitIndices(tt::as<OpenCMLParser::IndicesContext>(child)));
+                    any2node(visitIndices(tt::as_ptr<OpenCMLParser::IndicesContext>(child)));
                 *exprNode << lhsNode << rhsNode;
             } else if (tt::is_instance_of<OpenCMLParser::ParentArguesContext>(child)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
                 setNodeTokenRangeByContext(
                     exprNode,
-                    tt::as<OpenCMLParser::ParentArguesContext>(child));
+                    tt::as_ptr<OpenCMLParser::ParentArguesContext>(child));
                 auto [dataList, namedDataList] = any_cast<std::pair<node_ptr_t, node_ptr_t>>(
-                    visitParentArgues(tt::as<OpenCMLParser::ParentArguesContext>(child)));
+                    visitParentArgues(tt::as_ptr<OpenCMLParser::ParentArguesContext>(child)));
                 *exprNode << lhsNode << dataList << namedDataList;
             } else if (tt::is_instance_of<OpenCMLParser::AngledValuesContext>(child)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
                 setNodeTokenRangeByContext(
                     exprNode,
-                    tt::as<OpenCMLParser::AngledValuesContext>(child));
+                    tt::as_ptr<OpenCMLParser::AngledValuesContext>(child));
                 auto [dataList, namedDataList] = any_cast<std::pair<node_ptr_t, node_ptr_t>>(
-                    visitAngledValues(tt::as<OpenCMLParser::AngledValuesContext>(child)));
+                    visitAngledValues(tt::as_ptr<OpenCMLParser::AngledValuesContext>(child)));
                 *exprNode << lhsNode << dataList << namedDataList;
             }
             lhsNode = exprNode;
@@ -1503,7 +1505,7 @@ any Builder::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {
         setNodeTokenRangeByContext(res, context->identRef());
     } else if (context->literal()) {
         Literal literal = any_cast<Literal>(visitLiteral(context->literal()));
-        res = createNodeAs<LiteralLoad>(literal);
+        res             = createNodeAs<LiteralLoad>(literal);
         setNodeTokenRangeByContext(res, context->literal());
     } else if (context->dataExpr()) {
         res = any2node(visitDataExpr(context->dataExpr()));
@@ -1586,7 +1588,7 @@ any Builder::visitUnionType(OpenCMLParser::UnionTypeContext *context) {
     ENTER("UnionType");
     node_ptr_t lhsNode = any2node(visitInterType(context->interType(0)));
     for (size_t i = 1; i < context->interType().size(); ++i) {
-        node_ptr_t rhsNode = any2node(visitInterType(context->interType(i)));
+        node_ptr_t rhsNode      = any2node(visitInterType(context->interType(i)));
         node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::Union);
         setNodeTokenRangeByContext(typeExprNode, context->interType(i));
         *typeExprNode << lhsNode << rhsNode;
@@ -1605,7 +1607,7 @@ any Builder::visitInterType(OpenCMLParser::InterTypeContext *context) {
     ENTER("InterType");
     node_ptr_t lhsNode = any2node(visitDiffType(context->diffType(0)));
     for (size_t i = 1; i < context->diffType().size(); ++i) {
-        node_ptr_t rhsNode = any2node(visitDiffType(context->diffType(i)));
+        node_ptr_t rhsNode      = any2node(visitDiffType(context->diffType(i)));
         node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::Inter);
         setNodeTokenRangeByContext(typeExprNode, context->diffType(i));
         *typeExprNode << lhsNode << rhsNode;
@@ -1624,7 +1626,7 @@ any Builder::visitDiffType(OpenCMLParser::DiffTypeContext *context) {
     ENTER("DiffType");
     node_ptr_t lhsNode = any2node(visitKeyUnionDiffType(context->keyUnionDiffType(0)));
     for (size_t i = 1; i < context->keyUnionDiffType().size(); ++i) {
-        node_ptr_t rhsNode = any2node(visitKeyUnionDiffType(context->keyUnionDiffType(i)));
+        node_ptr_t rhsNode      = any2node(visitKeyUnionDiffType(context->keyUnionDiffType(i)));
         node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::Diff);
         setNodeTokenRangeByContext(typeExprNode, context->keyUnionDiffType(i));
         *typeExprNode << lhsNode << rhsNode;
@@ -1652,7 +1654,7 @@ any Builder::visitKeyUnionDiffType(OpenCMLParser::KeyUnionDiffTypeContext *conte
         } else {
             throw std::runtime_error("Invalid key union diff operator: " + strOp);
         }
-        node_ptr_t rhsNode = any2node(visitKeyInterType(context->keyInterType(i)));
+        node_ptr_t rhsNode      = any2node(visitKeyInterType(context->keyInterType(i)));
         node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(op);
         setNodeTokenRangeByContext(typeExprNode, context->keyInterType(i));
         *typeExprNode << lhsNode << rhsNode;
@@ -1671,7 +1673,7 @@ any Builder::visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) {
     ENTER("KeyInterType");
     node_ptr_t lhsNode = any2node(visitTypeUnit(context->typeUnit(0)));
     for (size_t i = 1; i < context->typeUnit().size(); ++i) {
-        node_ptr_t rhsNode = any2node(visitTypeUnit(context->typeUnit(i)));
+        node_ptr_t rhsNode      = any2node(visitTypeUnit(context->typeUnit(i)));
         node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::KeyInter);
         setNodeTokenRangeByContext(typeExprNode, context->typeUnit(i));
         *typeExprNode << lhsNode << rhsNode;
@@ -1705,7 +1707,7 @@ any Builder::visitArrayType(OpenCMLParser::ArrayTypeContext *context) {
     ENTER("ArrayType");
     node_ptr_t res = any2node(visitSpecType(context->specType()));
     if (context->children.size() > 1) {
-        size_t dims = (context->children.size() - 1) / 2;
+        size_t dims              = (context->children.size() - 1) / 2;
         node_ptr_t arrayTypeNode = createNodeAs<ArrayTypeLoad>(dims);
         setNodeTokenRangeByContext(arrayTypeNode, context);
         *arrayTypeNode << res;
@@ -1739,7 +1741,7 @@ specType
 */
 any Builder::visitSpecType(OpenCMLParser::SpecTypeContext *context) {
     ENTER("SpecType");
-    node_ptr_t res = any2node(visitPrimaryType(context->primaryType()));
+    node_ptr_t res          = any2node(visitPrimaryType(context->primaryType()));
     node_ptr_t specTypeNode = createNodeAs<TypeExprLoad>(TypeOp::Specialize);
     setNodeTokenRangeByContext(specTypeNode, context);
     if (context->typeOrData().size() > 0) {
@@ -1802,7 +1804,7 @@ structType
 */
 any Builder::visitStructType(OpenCMLParser::StructTypeContext *context) {
     ENTER("StructType");
-    node_ptr_t res = createNodeAs<StructTypeLoad>();
+    node_ptr_t res        = createNodeAs<StructTypeLoad>();
     node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("NamedType");
     setNodeTokenRangeByContext(repeatNode, context);
     for (auto &pair : context->keyTypePair()) {

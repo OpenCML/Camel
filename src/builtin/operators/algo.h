@@ -13,31 +13,23 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 29, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/context/frame.h"
 #include "core/operator.h"
 
 // void __argsort__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+//     ArgsView &with, ArgsView &norm, Context &ctx);
 // void __sort__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __insert_sort__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __insert_sort_inplace__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __quick_sort__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __quick_sort_inplace__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __merge_sort__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
-void __merge_sort_inplace__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+//     ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __insert_sort__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __insert_sort_inplace__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __quick_sort__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __quick_sort_inplace__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __merge_sort__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __merge_sort_inplace__(ArgsView &with, ArgsView &norm, Context &ctx);
 
-void __merge_sorted_arrays__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx);
+slot_t __merge_sorted_arrays__(ArgsView &with, ArgsView &norm, Context &ctx);

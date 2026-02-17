@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 11, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "statistics.h"
+#include "utils/type.h"
 
 using namespace std;
 
@@ -32,14 +33,13 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(arr: (typeas T)[]) => double",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            TypeCode elemCode =
-                                tt::as_shared<ArrayType>(norm[0])->elemType()->code();
-                            if (elemCode == TypeCode::Int || elemCode == TypeCode::Long ||
-                                elemCode == TypeCode::Float || elemCode == TypeCode::Double)
-                                return Type::Double();
+                            TypeCode elemCode = tt::as_ptr<ArrayType>(norm[0])->elemType()->code();
+                            if (elemCode == TypeCode::Int32 || elemCode == TypeCode::Int64 ||
+                                elemCode == TypeCode::Float32 || elemCode == TypeCode::Float64)
+                                return Type::Float64();
                             return nullopt;
                         }),
                 },
@@ -53,14 +53,13 @@ static const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {1, {false}}},
                         "(arr: (typeas T)[]) => double",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<type_ptr_t> {
+                            -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
-                            TypeCode elemCode =
-                                tt::as_shared<ArrayType>(norm[0])->elemType()->code();
-                            if (elemCode == TypeCode::Int || elemCode == TypeCode::Long ||
-                                elemCode == TypeCode::Float || elemCode == TypeCode::Double)
-                                return Type::Double();
+                            TypeCode elemCode = tt::as_ptr<ArrayType>(norm[0])->elemType()->code();
+                            if (elemCode == TypeCode::Int32 || elemCode == TypeCode::Int64 ||
+                                elemCode == TypeCode::Float32 || elemCode == TypeCode::Float64)
+                                return Type::Float64();
                             return nullopt;
                         }),
                 },

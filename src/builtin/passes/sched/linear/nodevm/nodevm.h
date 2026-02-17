@@ -13,8 +13,10 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Nov. 02, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
+ *
+ * NodeVM：在图节点上直接执行，无字节码编译。用于展示在 GIR 上直接执行的流程。
  */
 
 #pragma once
@@ -22,19 +24,21 @@
 #include "../linear.h"
 #include "core/context/frame.h"
 
-#include <stack>
-
 class NodeVMSchedPass : public LinearSchedPass {
-    inline static const size_t maxRecursionDepth_ = 3000; // default max recursion depth
+    inline static const size_t maxRecursionDepth_ = 256;
+
     size_t currRecursionDepth_ = 0;
-    std::stack<GraphIR::node_ptr_t> brInfoStack_;
+    FramePool framePool_{1 * MB};
     std::unordered_map<GraphIR::Graph *, std::shared_ptr<GraphIR::node_vec_t>> graphTopoNodesCache_;
 
-    data_ptr_t call(GraphIR::Graph *graph, Frame &frame);
+    slot_t call(GraphIR::Graph *graph, Frame *rootFrame);
     std::shared_ptr<GraphIR::node_vec_t> getTopoNodes(GraphIR::Graph *graph);
 
+    /// 执行一次 CALL 或 FUNC 节点，返回调用结果（供 JOIN 与 CALL/FUNC 使用）
+    slot_t doCall(const GraphIR::node_ptr_t &n, Frame *currFrame);
+
     void
-    evalMarkedOperator(const std::string uri, const GraphIR::node_ptr_t &node, Frame &currFrame);
+    evalMarkedOperator(const std::string &uri, const GraphIR::node_ptr_t &node, Frame &currFrame);
 
     void evalMarkedOperator_map_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
     void evalMarkedOperator_apply_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
@@ -43,7 +47,7 @@ class NodeVMSchedPass : public LinearSchedPass {
     void evalMarkedOperator_foreach_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
 
   public:
-    NodeVMSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {};
+    NodeVMSchedPass(const context_ptr_t &ctx) : LinearSchedPass(ctx) {}
     virtual ~NodeVMSchedPass() = default;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;

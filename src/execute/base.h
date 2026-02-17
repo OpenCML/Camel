@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,9 +43,5 @@ class NullGraphIRPass : public GraphIRPass {
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 };
-
-extern std::unordered_map<
-    std::string, std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>>
-    passRegistry;
 
 int applyPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx, std::ostream &os);

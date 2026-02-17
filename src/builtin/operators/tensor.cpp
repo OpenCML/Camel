@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 #include "builtin/types/tensor.h"
 
 // void __tensor_eye__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto n = frame.get(nargs[0]);
 //     auto intData = tt::as_shared<IntData>(n);
 //     auto tensor = TensorData::eye(intData->data());
@@ -32,14 +32,14 @@
 // }
 
 // void __tensor_diag__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto v = frame.get(nargs[0]);
 //     auto tensor = TensorData::diag(v);
 //     frame.set(self, tensor);
 // }
 
 // void __tensor_zeros__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto shapeArg = frame.get(nargs[0]);
 //     std::vector<size_t> shape;
 
@@ -54,7 +54,7 @@
 // }
 
 // void __tensor_ones__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto shapeArg = frame.get(nargs[0]);
 //     std::vector<size_t> shape;
 
@@ -69,7 +69,7 @@
 // }
 
 // void __tensor_linspace__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto start = frame.get(nargs[0]);
 //     auto stop = frame.get(nargs[1]);
 //     auto num = frame.get(nargs[2]);
@@ -83,7 +83,7 @@
 // }
 
 // void __tensor_arange__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto start = frame.get(nargs[0]);
 //     auto stop = frame.get(nargs[1]);
 
@@ -104,7 +104,7 @@
 // }
 
 // void __tensor_random__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto shapeArg = frame.get(nargs[0]);
 //     std::vector<size_t> shape;
 
@@ -132,7 +132,7 @@
 // }
 
 // void __tensor_randn__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto shapeArg = frame.get(nargs[0]);
 //     std::vector<size_t> shape;
 
@@ -161,7 +161,7 @@
 
 // // Tensor arithmetic operations
 // void __tensor_add__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor1 = frame.get(nargs[0]);
 //     auto tensor2 = frame.get(nargs[1]);
 //     auto result = tt::as_shared<TensorData>(tensor1)->add(tensor2);
@@ -169,7 +169,7 @@
 // }
 
 // void __tensor_subtract__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor1 = frame.get(nargs[0]);
 //     auto tensor2 = frame.get(nargs[1]);
 //     auto result = tt::as_shared<TensorData>(tensor1)->subtract(tensor2);
@@ -177,7 +177,7 @@
 // }
 
 // void __tensor_multiply__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto lhs = frame.get(nargs[0]);
 //     auto rhs = frame.get(nargs[1]);
 
@@ -197,7 +197,7 @@
 // }
 
 // void __tensor_matmul__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor1 = frame.get(nargs[0]);
 //     auto tensor2 = frame.get(nargs[1]);
 
@@ -206,7 +206,7 @@
 // }
 
 // void __tensor_divide__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor1 = frame.get(nargs[0]);
 //     auto tensor2 = frame.get(nargs[1]);
 
@@ -216,7 +216,7 @@
 
 // // Tensor shape transformation operations
 // void __tensor_reshape__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto shape = frame.get(nargs[1]);
 
@@ -227,14 +227,14 @@
 // }
 
 // void __tensor_transpose__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->transpose();
 //     frame.set(self, result);
 // }
 
 // void __tensor_flatten__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor_data = frame.get(nargs[0]);
 //     auto result_tensor = tt::as_shared<TensorData>(tensor_data)->flatten();
 //     frame.set(self, result_tensor);
@@ -242,7 +242,7 @@
 
 // // Tensor combination operations
 // void __tensor_concat__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor1 = frame.get(nargs[0]);
 //     auto tensor2 = frame.get(nargs[1]);
 //     auto axis_data = frame.get(nargs[2]);
@@ -252,7 +252,7 @@
 // }
 
 // void __tensor_stack__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor1 = frame.get(nargs[0]);
 //     auto tensor2 = frame.get(nargs[1]);
 //     auto result = tt::as_shared<TensorData>(tensor1)->stack(tensor2);
@@ -261,49 +261,49 @@
 
 // // Tensor statistical operations
 // void __tensor_sum__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->sum();
 //     frame.set(self, result);
 // }
 
 // void __tensor_mean__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->mean();
 //     frame.set(self, result);
 // }
 
 // void __tensor_min__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->min();
 //     frame.set(self, result);
 // }
 
 // void __tensor_max__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->max();
 //     frame.set(self, result);
 // }
 
 // void __tensor_argmin__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->argmin();
 //     frame.set(self, result);
 // }
 
 // void __tensor_argmax__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->argmax();
 //     frame.set(self, result);
 // }
 
 // void __tensor_std__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->std();
 //     frame.set(self, result);
@@ -311,21 +311,21 @@
 
 // // Tensor norm calculations
 // void __tensor_norm_l1__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->norm_l1();
 //     frame.set(self, result);
 // }
 
 // void __tensor_norm_l2__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->norm_l2();
 //     frame.set(self, result);
 // }
 
 // void __tensor_norm_squared_l2__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->norm_squared_l2();
 //     frame.set(self, result);
@@ -333,42 +333,42 @@
 
 // // Tensor mathematical functions
 // void __tensor_sin__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->sin();
 //     frame.set(self, result);
 // }
 
 // void __tensor_cos__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->cos();
 //     frame.set(self, result);
 // }
 
 // void __tensor_exp__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->exp();
 //     frame.set(self, result);
 // }
 
 // void __tensor_log__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->log();
 //     frame.set(self, result);
 // }
 
 // void __tensor_sqrt__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->sqrt();
 //     frame.set(self, result);
 // }
 
 // void __tensor_pow__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto self_data = frame.get(nargs[0]);
 //     auto tensor = tt::as_shared<TensorData>(self_data);
 //     auto exponent = frame.get(nargs[1]);
@@ -377,7 +377,7 @@
 // }
 
 // void __tensor_matpow__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto self_data = frame.get(nargs[0]);
 //     auto tensor = tt::as_shared<TensorData>(self_data);
 //     auto exponent_data = frame.get(nargs[1]);
@@ -388,21 +388,21 @@
 
 // // Tensor hyperbolic functions
 // void __tensor_sinh__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->sinh();
 //     frame.set(self, result);
 // }
 
 // void __tensor_cosh__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->cosh();
 //     frame.set(self, result);
 // }
 
 // void __tensor_tanh__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto result = tt::as_shared<TensorData>(tensor)->tanh();
 //     frame.set(self, result);
@@ -410,7 +410,7 @@
 
 // // Tensor shape operation
 // void __tensor_shape__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto tensor_data = tt::as_shared<TensorData>(tensor);
 //     auto shape = tensor_data->shape();
@@ -425,7 +425,7 @@
 // }
 
 // void __tensor_idx__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto index = frame.get(nargs[1]);
 
@@ -437,7 +437,7 @@
 // }
 
 // void __tensor_idx2d__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto tensorData = tt::as_shared<TensorData>(tensor);
 
@@ -471,7 +471,7 @@
 // }
 
 // void __tensor_show__(
-//     GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+//     ArgsView &with, ArgsView &norm, Context &ctx) {
 //     auto tensor = frame.get(nargs[0]);
 //     auto tensor_data = tt::as_shared<TensorData>(tensor);
 //     std::cout << tensor_data->toFormattedString() << std::endl;
@@ -479,100 +479,59 @@
 // }
 
 // Tensor static factory methods
-void __tensor_eye__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_diag__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_linspace__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_arange__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_zeros__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_ones__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_random__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_randn__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
+slot_t __tensor_eye__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_diag__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_linspace__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_arange__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_zeros__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_ones__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_random__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_randn__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
 
 // Tensor arithmetic operations
-void __tensor_add__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_subtract__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_multiply__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_matmul__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_divide__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
+slot_t __tensor_add__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_subtract__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_multiply__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_matmul__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_divide__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
 
 // Tensor shape transformation operations
-void __tensor_shape__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_reshape__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_transpose__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_flatten__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
+slot_t __tensor_shape__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_reshape__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_transpose__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_flatten__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
 
 // Tensor combination operations
-void __tensor_concat__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_stack__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
+slot_t __tensor_concat__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_stack__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
 
 // Tensor statistical operations
-void __tensor_sum__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_mean__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_min__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_max__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_argmin__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_argmax__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_std__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
+slot_t __tensor_sum__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_mean__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_min__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_max__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_argmin__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_argmax__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_std__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
 
 // Tensor norm calculations
-void __tensor_norm_l1__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_norm_l2__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_norm_squared_l2__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
+slot_t __tensor_norm_l1__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_norm_l2__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_norm_squared_l2__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
 
 // Tensor mathematical functions
-void __tensor_sin__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_cos__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_exp__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_log__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_sqrt__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_pow__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_matpow__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
+slot_t __tensor_sin__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_cos__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_exp__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_log__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_sqrt__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_pow__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_matpow__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
 
 // Tensor hyperbolic functions
-void __tensor_sinh__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_cosh__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __tensor_tanh__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
+slot_t __tensor_sinh__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_cosh__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __tensor_tanh__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
 
-void __tensor_show__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
-void __to_float__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {}
+slot_t __tensor_show__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }
+slot_t __to_float__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,7 +29,7 @@ data_ptr_t RefData::clone(bool deep) const { return std::make_shared<RefData>(re
 
 const std::string RefData::toString() const { return "DREF<" + ref_ + ">"; }
 
-data_ptr_t RefData::convertTo(const type_ptr_t &type) {
+data_ptr_t RefData::convertTo(Type *type) {
     if (type->equals(type_)) {
         return std::make_shared<RefData>(ref_);
     }

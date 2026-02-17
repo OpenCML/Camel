@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,13 +34,13 @@ template <typename T> class PrimaryData : public Data {
     PrimaryData() = delete;
     PrimaryData(const T &data) : Data(), data_(data) {
         if constexpr (std::is_same_v<T, int32_t>) {
-            type_ = Type::Int();
+            type_ = Type::Int32();
         } else if constexpr (std::is_same_v<T, int64_t>) {
-            type_ = Type::Long();
+            type_ = Type::Int64();
         } else if constexpr (std::is_same_v<T, float>) {
-            type_ = Type::Float();
+            type_ = Type::Float32();
         } else if constexpr (std::is_same_v<T, double>) {
-            type_ = Type::Double();
+            type_ = Type::Float64();
         } else if constexpr (std::is_same_v<T, bool>) {
             type_ = Type::Bool();
         } else if constexpr (std::is_same_v<T, char>) {
@@ -99,7 +99,7 @@ template <typename T> class PrimaryData : public Data {
         }
     }
 
-    virtual data_ptr_t convertTo(const type_ptr_t &type) override;
+    virtual data_ptr_t convertTo(Type *type) override;
 };
 
 using IntData    = PrimaryData<int32_t>;
@@ -109,19 +109,19 @@ using DoubleData = PrimaryData<double>;
 using BoolData   = PrimaryData<bool>;
 using ByteData   = PrimaryData<std::byte>;
 
-template <typename T> data_ptr_t PrimaryData<T>::convertTo(const type_ptr_t &type) {
+template <typename T> data_ptr_t PrimaryData<T>::convertTo(Type *type) {
     if (type->equals(type_)) {
         return shared_from_this();
     }
     if (type->isPrimitive()) {
         TypeCode from = type_->code(), to = type->code();
-        if (from == TypeCode::Int && to == TypeCode::Long) {
+        if (from == TypeCode::Int32 && to == TypeCode::Int64) {
             return std::make_shared<LongData>(static_cast<int64_t>(data_));
-        } else if (from == TypeCode::Long && to == TypeCode::Int) {
+        } else if (from == TypeCode::Int64 && to == TypeCode::Int32) {
             return std::make_shared<IntData>(static_cast<int32_t>(data_));
-        } else if (from == TypeCode::Float && to == TypeCode::Double) {
+        } else if (from == TypeCode::Float32 && to == TypeCode::Float64) {
             return std::make_shared<DoubleData>(static_cast<double>(data_));
-        } else if (from == TypeCode::Double && to == TypeCode::Float) {
+        } else if (from == TypeCode::Float64 && to == TypeCode::Float32) {
             return std::make_shared<FloatData>(static_cast<float>(data_));
         }
     }
@@ -141,5 +141,5 @@ class StringData : public Data {
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-    virtual data_ptr_t convertTo(const type_ptr_t &type) override;
+    virtual data_ptr_t convertTo(Type *type) override;
 };

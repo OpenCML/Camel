@@ -13,21 +13,23 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "base.h"
+#include "core/type/composite/struct.h"
+
+#include <algorithm>
 
 class Struct : public Object {
   public:
     Struct(const Struct &)            = delete;
     Struct &operator=(const Struct &) = delete;
 
-    static Struct *create(const StructTypeLayout &layout, IAllocator &allocator) {
-        size_t fieldCount = layout.fieldCount();
+    static Struct *create(size_t fieldCount, IAllocator &allocator) {
         size_t headerSize = sizeof(Struct);
         size_t dataSize   = sizeof(slot_t) * fieldCount;
         size_t totalSize  = headerSize + dataSize;
@@ -36,26 +38,31 @@ class Struct : public Object {
         if (!memory)
             throw std::bad_alloc();
 
-        Struct *s = new (memory) Struct(layout, fieldCount);
+        Struct *s = new (memory) Struct(fieldCount);
 
-        // 初始化所有引用类型的字段为 NullRef
-        Object **dataStart = reinterpret_cast<Object **>(s->data_);
-        std::fill(dataStart, dataStart + fieldCount, NullRef);
+        // 标准槽容器：全部初始化为 NullSlot（引用即 null，值类型由 set 覆盖）
+        std::fill(s->data_, s->data_ + fieldCount, NullSlot);
 
         return s;
     }
 
     size_t size() const { return size_; }
 
-    bool has(std::string_view name) const { return layout_->findField(name).has_value(); }
+    bool has(std::string_view name, const Type *type) const {
+        ASSERT(type && type->code() == TypeCode::Struct, "Type must be StructType");
+        const StructType *structType = static_cast<const StructType *>(type);
+        return structType->findField(name).has_value();
+    }
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
         return fromSlot<T>(data_[index]);
     }
 
-    template <typename T> T get(std::string_view name) const {
-        auto optIndex = layout_->findField(name);
+    template <typename T> T get(std::string_view name, const Type *type) const {
+        ASSERT(type && type->code() == TypeCode::Struct, "Type must be StructType");
+        const StructType *structType = static_cast<const StructType *>(type);
+        auto optIndex                = structType->findField(name);
         ASSERT(optIndex.has_value(), std::format("Field name not found: {}", name));
         return get<T>(optIndex.value());
     }
@@ -68,29 +75,30 @@ class Struct : public Object {
         data_[index] = toSlot(value);
     }
 
-    template <typename T> void set(std::string_view name, T value) {
-        auto optIndex = layout_->findField(name);
+    template <typename T> void set(std::string_view name, T value, const Type *type) {
+        ASSERT(type && type->code() == TypeCode::Struct, "Type must be StructType");
+        const StructType *structType = static_cast<const StructType *>(type);
+        auto optIndex                = structType->findField(name);
         ASSERT(optIndex.has_value(), std::format("Field name not found: {}", name));
         set<T>(optIndex.value(), value);
     }
 
     slot_t *data() { return data_; }
     const slot_t *data() const { return data_; }
-    const StructTypeLayout &layout() const { return *layout_; }
-    void updateLayout(const StructTypeLayout *layout) { layout_ = layout; }
-    TypeCode typeAt(size_t index) const { return layout_->fieldType(index); }
 
-    virtual bool equals(const Object *other, bool deep = false) const override {
+    virtual bool equals(const Object *other, const Type *type, bool deep = false) const override {
+        ASSERT(type && type->code() == TypeCode::Struct, "Type must be StructType");
         if (!isOfSameCls(this, other))
             return false;
 
-        const Struct *otherStruct = reinterpret_cast<const Struct *>(other);
+        const StructType *structType = static_cast<const StructType *>(type);
+        const Struct *otherStruct    = reinterpret_cast<const Struct *>(other);
 
         // 字段数量不同则不相等
-        if (size_ != otherStruct->size_)
+        if (size_ != otherStruct->size_ || size_ != structType->size())
             return false;
 
-        const auto &types   = layout_->fieldTypes();
+        auto codes          = structType->codes();
         const slot_t *dataA = data_;
         const slot_t *dataB = otherStruct->data_;
 
@@ -101,13 +109,13 @@ class Struct : public Object {
 
         // 深比较：逐字段递归比较
         for (size_t i = 0; i < size_; ++i) {
-            TypeCode type = types[i];
-            if (isGCTraced(type)) {
+            TypeCode typeCode = codes[i];
+            if (isGCTraced(typeCode)) {
                 const Object *refA = reinterpret_cast<const Object *const *>(dataA)[i];
                 const Object *refB = reinterpret_cast<const Object *const *>(dataB)[i];
                 if (refA == refB)
                     continue;
-                if (!refA->equals(refB, true))
+                if (!refA->equals(refB, structType->typeAt(i), true))
                     return false;
             } else {
                 if (dataA[i] != dataB[i])
@@ -118,22 +126,25 @@ class Struct : public Object {
         return true;
     }
 
-    virtual Object *clone(IAllocator &allocator, bool deep = false) const override {
-        Struct *newStruct = Struct::create(*layout_, allocator);
+    virtual Object *
+    clone(IAllocator &allocator, const Type *type, bool deep = false) const override {
+        ASSERT(type && type->code() == TypeCode::Struct, "Type must be StructType");
+        const StructType *structType = static_cast<const StructType *>(type);
+        auto codes                   = structType->codes();
 
-        const auto &types = layout_->fieldTypes();
+        Struct *newStruct = Struct::create(size_, allocator);
         const slot_t *src = data_;
         slot_t *dst       = newStruct->data_;
 
         for (size_t i = 0; i < size_; ++i) {
-            if (isGCTraced(types[i])) {
+            if (isGCTraced(codes[i])) {
                 const Object *oriRef = reinterpret_cast<const Object *const *>(src)[i];
                 Object *newRef       = NullRef;
 
                 if (oriRef) {
                     if (deep) {
                         // 递归克隆引用对象
-                        newRef = oriRef->clone(allocator, true);
+                        newRef = oriRef->clone(allocator, structType->typeAt(i), true);
                     } else {
                         // 浅拷贝：直接引用原指针
                         newRef = const_cast<Object *>(oriRef);
@@ -150,38 +161,43 @@ class Struct : public Object {
         return reinterpret_cast<Object *>(newStruct);
     }
 
-    virtual void print(std::ostream &os) const override {
+    virtual void print(std::ostream &os, const Type *type) const override {
+        ASSERT(type && type->code() == TypeCode::Struct, "Type must be StructType");
         if (size_ == 0) {
             os << "{}";
             return;
         }
 
+        const StructType *structType = static_cast<const StructType *>(type);
+
         os << "{ ";
 
-        const auto &names     = layout_->fieldNames();
-        const auto &types     = layout_->fieldTypes();
         const slot_t *dataPtr = data_;
 
         for (size_t i = 0; i < size_; ++i) {
             if (i > 0)
                 os << ", ";
 
-            os << names[i] << ": ";
-            printSlot(os, dataPtr[i], types[i]);
+            os << structType->fieldName(i) << ": ";
+            printSlot(os, dataPtr[i], structType->typeAt(i));
         }
 
         os << " }";
     }
 
     virtual void onMoved() override {
-        // types_ 指向外部的布局元信息，不需调整
+        // 不需要调整
     }
 
-    virtual void updateRefs(const std::function<Object *(Object *)> &relocate) override {
-        Object **refArr   = reinterpret_cast<Object **>(data_);
-        const auto &types = layout_->fieldTypes();
+    virtual void
+    updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
+        if (!type || type->code() != TypeCode::Struct)
+            return;
+        const StructType *structType = static_cast<const StructType *>(type);
+        auto codes                   = structType->codes();
+        Object **refArr              = reinterpret_cast<Object **>(data_);
         for (size_t i = 0; i < size_; ++i) {
-            if (isGCTraced(types[i])) {
+            if (isGCTraced(codes[i])) {
                 if (Object *&ref = refArr[i]) {
                     ref = relocate(ref);
                 }
@@ -190,10 +206,8 @@ class Struct : public Object {
     }
 
   private:
-    Struct(const StructTypeLayout &layout, size_t fieldCount)
-        : size_(static_cast<uint32_t>(fieldCount)), layout_(&layout) {}
+    explicit Struct(size_t fieldCount) : size_(static_cast<uint32_t>(fieldCount)) {}
 
     uint32_t size_;
-    const StructTypeLayout *layout_;
     slot_t data_[]; // 灵活数组成员
 };

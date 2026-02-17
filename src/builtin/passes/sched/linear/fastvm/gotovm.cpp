@@ -13,13 +13,34 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "fastvm.h"
 
-#ifdef ENABLE_COMPUTED_GOTO
+#include <iostream>
+
+#if ENABLE_FASTVM_COMPUTED_GOTO
+
+#if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
+/* Clang Win64: wrapper in trampoline.cpp. pc/bc in thread_local so JIT cannot overwrite stack. */
+static thread_local size_t s_jit_pc;
+static thread_local const Bytecode *s_jit_bc;
+#define JIT_SAVE_PC_BC()                                                                           \
+    do {                                                                                           \
+        s_jit_pc = pc;                                                                             \
+        s_jit_bc = bc;                                                                             \
+    } while (0)
+#define JIT_RESTORE_PC_BC()                                                                        \
+    do {                                                                                           \
+        pc = s_jit_pc;                                                                             \
+        bc = const_cast<const Bytecode *>(s_jit_bc);                                               \
+    } while (0)
+#else
+#define JIT_SAVE_PC_BC() ((void)0)
+#define JIT_RESTORE_PC_BC() ((void)0)
+#endif
 
 /**
  * Computed Goto implementation of FastVM.
@@ -161,7 +182,6 @@ label_RETN: {
     opperf::ScopeTimer _timer(bc->opcode);
 
     slot_t result = currFrame->get<slot_t>(bc->fastop[0]);
-
     if (currFrame == rootFrame) {
         return result;
     }
@@ -192,10 +212,11 @@ label_COPY: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    TypeCode srcType = currFrame->typeAt(bc->fastop[0]);
-    if (isGCTraced(srcType)) {
-        Object *srcData = currFrame->get<Object *>(bc->fastop[0]);
-        currFrame->set(bc->result, srcData->clone(mm::autoSpace(), false));
+    TypeCode srcCode = currFrame->codeAt(bc->fastop[0]);
+    if (isGCTraced(srcCode)) {
+        Object *srcData  = currFrame->get<Object *>(bc->fastop[0]);
+        Type *srcTypePtr = currFrame->typeAt<Type>(bc->fastop[0]);
+        currFrame->set(bc->result, srcData->clone(mm::autoSpace(), srcTypePtr, false));
     } else {
         slot_t srcData = currFrame->get<slot_t>(bc->fastop[0]);
         currFrame->set(bc->result, srcData);
@@ -208,7 +229,7 @@ label_ACCS: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    TypeCode srcType = currFrame->typeAt(bc->fastop[0]);
+    TypeCode srcType = currFrame->codeAt(bc->fastop[0]);
     if (srcType == TypeCode::Tuple) {
         Tuple *t = currFrame->get<Tuple *>(bc->fastop[0]);
         ASSERT(
@@ -256,13 +277,14 @@ label_BRCH: {
     } else {
         // match-case，依次判断各分支
         size_t j          = 0;
-        TypeCode condType = currFrame->typeAt(nargs[0]);
+        TypeCode condType = currFrame->codeAt(nargs[0]);
 
         if (isGCTraced(condType)) {
-            auto condData = currFrame->get<Object *>(nargs[0]);
+            Type *condTypePtr = currFrame->typeAt<Type>(nargs[0]);
+            auto condData     = currFrame->get<Object *>(nargs[0]);
             for (; j < bc->withCnt(); ++j) {
                 auto caseData = currFrame->get<Object *>(wargs[j]);
-                if (condData->equals(caseData)) {
+                if (condData->equals(caseData, condTypePtr, false)) {
                     jumpIdx = j; // jump to matched case
                     break;
                 }
@@ -284,7 +306,7 @@ label_BRCH: {
         }
     }
 
-    currFrame->set(bc->result, fromSlot<Int>(jumpIdx));
+    currFrame->set(bc->result, fromSlot<Int32>(jumpIdx));
     pc += bc->opsize + jumpIdx;
 
     JUMP();
@@ -302,7 +324,6 @@ label_JOIN: {
         "JOIN opcode choosen index out of range in FastVM.");
     slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
     currFrame->set(bc->result, result);
-
     NEXT();
 }
 
@@ -313,64 +334,61 @@ label_FILL: {
     const data_arr_t nargs = bc->nargs();
     const data_arr_t wargs = bc->wargs();
 
-    TypeCode targetType = currFrame->typeAt(nargs[0]);
-    ASSERT(isGCTraced(targetType), "FILL target type is not GC-traced in FastVM.");
+    TypeCode srcCode = currFrame->codeAt(nargs[0]);
+    Type *srcType    = currFrame->typeAt<Type>(nargs[0]);
+    ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced in FastVM.");
+    Object *srcObj = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace(), srcType, false);
 
-    Object *target = currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace());
-    ASSERT(target != nullptr, "FILL target data is null.");
+    ASSERT(srcObj != nullptr, "FILL target data is null.");
 
-    switch (targetType) {
+    switch (srcCode) {
     case TypeCode::Tuple: {
-        const auto &type = currFrame->typePtrAt<TupleType>(bc->result);
-        auto t           = static_cast<Tuple *>(target);
-        const auto &refs = t->layout().refs();
+        auto type = tt::as_ptr<TupleType>(srcType);
+        auto tup  = tt::as_ptr<Tuple>(srcObj);
         ASSERT(
-            refs.size() == bc->withCnt(),
+            type->refCount() == bc->withCnt(),
             std::format(
                 "Tuple layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
                 bc->withCnt(),
-                refs.size()));
+                type->refCount()));
+        const size_t *refs = type->refs();
         for (size_t j = 0; j < bc->withCnt(); ++j) {
-            t->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+            tup->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
         }
-        t->updateLayout(&type->layout());
     } break;
 
     case TypeCode::Array: {
-        const auto &type = currFrame->typePtrAt<ArrayType>(bc->result);
-        auto a           = static_cast<Array *>(target);
-        const auto &refs = a->layout().refs();
+        auto arr = tt::as_ptr<Array>(srcObj);
+        // 对于数组，如果 elemType 是 Ref，所有元素都是 Ref，直接使用索引
         ASSERT(
-            refs.size() == bc->withCnt(),
+            arr->size() >= bc->withCnt(),
             std::format(
-                "Array layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
+                "Array size mismatch in FastVM. Expected at least {}, Actual: {}",
                 bc->withCnt(),
-                refs.size()));
+                arr->size()));
         for (size_t j = 0; j < bc->withCnt(); ++j) {
-            a->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+            arr->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
         }
-        a->updateLayout(&type->layout());
     } break;
 
     case TypeCode::Struct: {
-        const auto &type = currFrame->typePtrAt<StructType>(bc->result);
-        auto s           = static_cast<Struct *>(target);
-        const auto &refs = s->layout().refs();
+        auto type = tt::as_ptr<StructType>(srcType);
+        auto str  = tt::as_ptr<Struct>(srcObj);
         ASSERT(
-            refs.size() == bc->withCnt(),
+            type->refCount() == bc->withCnt(),
             std::format(
                 "Struct layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
                 bc->withCnt(),
-                refs.size()));
+                type->refCount()));
+        const size_t *refs = type->refs();
         for (size_t j = 0; j < bc->withCnt(); ++j) {
-            s->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
+            str->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
         }
-        s->updateLayout(&type->layout());
     } break;
 
     case TypeCode::Function: {
-        auto f             = static_cast<Function *>(target);
-        Tuple *closureData = f->tuple();
+        auto func          = tt::as_ptr<Function>(srcObj);
+        Tuple *closureData = func->tuple();
         for (size_t j = 0; j < bc->withCnt(); ++j) {
             closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
         }
@@ -379,12 +397,10 @@ label_FILL: {
     default:
         ASSERT(
             false,
-            std::format(
-                "Unsupported FILL target type {} in FastVM.",
-                typeCodeToString(targetType)));
+            std::format("Unsupported FILL target type {} in FastVM.", typeCodeToString(srcCode)));
     }
 
-    currFrame->set(bc->result, target);
+    currFrame->set(bc->result, srcObj);
 
     NEXT();
 }
@@ -425,71 +441,210 @@ label_FUNC: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    // 保存当前程序计数器和栈帧
+#if ENABLE_FASTVM_JIT
+    // fastop[1] == 0 means this is a direct call to a JIT function
+    if (bc->fastop[1] == 0) {
+        JIT_SAVE_PC_BC(); /* save pc/bc before any call can clobber them (Build opt) */
+        Graph *targetGraph        = getFuncExtraGraph(bc);
+        camel::jit::JitEntryFn fn = reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(bc));
+        Frame *funcFrame          = framePool_.acquire(targetGraph);
+        size_t argsCnt            = bc->normCnt();
+        const data_idx_t *args    = bc->operands();
+        for (size_t i = 0; i < argsCnt; ++i) {
+            funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+        }
+        EXEC_WHEN_DEBUG({
+            std::string argsStr;
+            for (size_t i = 0; i < argsCnt; ++i) {
+                argsStr += std::format("{} ", currFrame->get<slot_t>(args[i]));
+            }
+            l.in("FastVM").debug(
+                "Calling JIT function of graph <{}> with args: {}",
+                targetGraph->name(),
+                argsStr);
+        });
+        funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
+        slot_t result;
+        result = fn(funcFrame->slotBase(), currentJitCtx_);
+        JIT_RESTORE_PC_BC();
+        l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
+        framePool_.release(funcFrame);
+        currFrame->set(bc->result, result);
+        NEXT();
+    } else {
+        // fastop[1] != 0 means this is a call to a JIT function that needs to be compiled
+        Graph *targetGraph = getFuncExtraGraph(bc);
+        size_t targetPc    = static_cast<size_t>(bc->fastop[1]);
+        uint32_t count     = incFuncExtraCount(const_cast<Bytecode *>(bc));
+        if (tierPolicy_.shouldJit(count)) {
+            compileAndCacheGraph(targetGraph, targetPc);
+            bc = &bytecodes_[pc];
+            if (bc->fastop[1] == 0) {
+                JIT_SAVE_PC_BC(); /* save pc/bc before any call can clobber them (Build opt) */
+                Graph *g = getFuncExtraGraph(bc);
+                camel::jit::JitEntryFn fn =
+                    reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(bc));
+                Frame *funcFrame       = framePool_.acquire(g);
+                size_t argsCnt         = bc->normCnt();
+                const data_idx_t *args = bc->operands();
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+                }
+                EXEC_WHEN_DEBUG({
+                    std::string argsStr;
+                    for (size_t i = 0; i < argsCnt; ++i) {
+                        argsStr += std::format("{} ", currFrame->get<slot_t>(args[i]));
+                    }
+                    l.in("FastVM").debug(
+                        "Calling JIT function of graph <{}> with args: {}",
+                        targetGraph->name(),
+                        argsStr);
+                });
+                funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
+                slot_t result;
+                result = fn(funcFrame->slotBase(), currentJitCtx_);
+                JIT_RESTORE_PC_BC();
+                framePool_.release(funcFrame);
+                currFrame->set(bc->result, result);
+                NEXT();
+            }
+        }
+        push(pc, currFrame);
+        Frame *funcFrame       = framePool_.acquire(targetGraph);
+        size_t argsCnt         = bc->normCnt();
+        const data_idx_t *args = bc->operands();
+        for (size_t i = 0; i < argsCnt; ++i) {
+            funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+        }
+        pc        = targetPc;
+        currFrame = funcFrame;
+        JUMP();
+    }
+#else
     push(pc, currFrame);
-
-    // 创建新的栈帧并设置参数
     Frame *funcFrame       = framePool_.acquire(bc->extra()->graph);
     size_t argsCnt         = bc->normCnt();
     const data_idx_t *args = bc->operands();
     for (size_t i = 0; i < argsCnt; ++i) {
         funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
     }
-
-    // 切换到目标图的字节码位置和栈帧
     pc        = bc->fastop[1];
     currFrame = funcFrame;
-
     JUMP();
+#endif
 }
 
 label_TAIL: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    // 尾调用不保存程序计数器和栈帧
-    // 直接释放当前栈帧
-    // 如果当前栈帧和目标栈帧属于同一个图
-    // 栈帧池会自动复用
-    // 这间接实现了尾调用优化
+#if ENABLE_FASTVM_JIT
     FrameView lastFrame(currFrame);
     framePool_.release(currFrame);
-
-    // 创建新的栈帧并设置参数
-    // 对于刚刚释放的栈帧，栈帧池会自动复用
-    // 所以这里 currFrame 就是目标栈帧
-    currFrame              = framePool_._acquire(bc->extra()->graph);
+    if (bc->fastop[1] == 0) {
+        Graph *g                  = getFuncExtraGraph(bc);
+        camel::jit::JitEntryFn fn = reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(bc));
+        Frame *newFrame           = framePool_._acquire(g);
+        size_t argsCnt            = bc->normCnt();
+        const data_idx_t *args    = bc->operands();
+        for (size_t i = 0; i < argsCnt; ++i) {
+            newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+        }
+        framePool_._resetTop();
+        EXEC_WHEN_DEBUG({
+            std::string argsStr;
+            for (size_t i = 0; i < argsCnt; ++i) {
+                argsStr += std::format("{} ", lastFrame.get<slot_t>(args[i]));
+            }
+            l.in("FastVM").debug(
+                "Calling JIT function of graph <{}> with args: {}",
+                g->name(),
+                argsStr);
+        });
+        newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
+        slot_t result;
+        result = fn(newFrame->slotBase(), currentJitCtx_);
+        l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
+        return result;
+    }
+    Graph *targetGraph = getFuncExtraGraph(bc);
+    size_t targetPc    = static_cast<size_t>(bc->fastop[1]);
+    uint32_t count     = incFuncExtraCount(const_cast<Bytecode *>(bc));
+    if (tierPolicy_.shouldJit(count)) {
+        compileAndCacheGraph(targetGraph, targetPc);
+        bc = &bytecodes_[pc];
+        if (bc->fastop[1] == 0) {
+            Graph *g = getFuncExtraGraph(bc);
+            camel::jit::JitEntryFn fn =
+                reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(bc));
+            Frame *newFrame        = framePool_._acquire(g);
+            size_t argsCnt         = bc->normCnt();
+            const data_idx_t *args = bc->operands();
+            for (size_t i = 0; i < argsCnt; ++i) {
+                newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+            }
+            framePool_._resetTop();
+            EXEC_WHEN_DEBUG({
+                std::string argsStr;
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    argsStr += std::format("{} ", lastFrame.get<slot_t>(args[i]));
+                }
+                l.in("FastVM").debug(
+                    "Calling JIT function of graph <{}> with args: {}",
+                    g->name(),
+                    argsStr);
+            });
+            newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
+            slot_t result;
+            result = fn(newFrame->slotBase(), currentJitCtx_);
+            l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
+            return result;
+        }
+    }
+    currFrame              = framePool_._acquire(targetGraph);
     size_t argsCnt         = bc->normCnt();
     const data_idx_t *args = bc->operands();
     for (size_t i = 0; i < argsCnt; ++i) {
-        // 注意，这里的 currFrame 已经被释放了
-        // 但由于栈帧池不会对已经释放的栈帧进行格式化
-        // 所以这里仍然可以安全地获取原栈帧的数据
-        // 当然，需要通过 lastFrame 来获取数据
-        // lastFrame 中保存了原栈帧的静态数据区指针
         currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
     }
-    // 这里需要手动 resetTop，因为 _acquire 不会 resetTop
-    // 之所以延迟 resetTop，是为了避免 resetTop 破坏刚刚释放的栈帧的数据
     framePool_._resetTop();
-
-    // 切换到目标图的字节码位置
-    pc = bc->fastop[1];
-
+    pc = targetPc;
     JUMP();
+#else
+    FrameView lastFrame(currFrame);
+    framePool_.release(currFrame);
+    Graph *lastGraph       = currFrame->graph();
+    Graph *targetGraph     = bc->extra()->graph;
+    currFrame              = framePool_._acquire(targetGraph);
+    size_t argsCnt         = bc->normCnt();
+    const data_idx_t *args = bc->operands();
+    for (size_t i = 0; i < argsCnt; ++i) {
+        currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+    }
+    if (targetGraph != lastGraph) {
+        framePool_._resetTop();
+    }
+    pc = bc->fastop[1];
+    JUMP();
+#endif
 }
 
 label_OPER: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    const data_arr_t nargs = bc->nargs();
-    const data_arr_t wargs = bc->wargs();
-    auto func              = bc->extra()->func;
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-        "Executing operator {}.",
-        context_->execMgr().getNameOfAnOperator(func)));
-    func(bc->result, nargs, wargs, *currFrame, *context_);
+    {
+        const data_arr_t nargs = bc->nargs();
+        const data_arr_t wargs = bc->wargs();
+        auto func              = bc->extra()->func;
+        EXEC_WHEN_DEBUG(l.in("FastVM").debug(
+            "Executing operator {}.",
+            context_->execMgr().getNameOfAnOperator(func)));
+        FrameArgsView withView(*currFrame, wargs);
+        FrameArgsView normView(*currFrame, nargs);
+        slot_t result = func(withView, normView, *context_);
+        currFrame->set(bc->result, result);
+    }
 
     NEXT();
 }
@@ -506,55 +661,55 @@ label_SCHD: {
     NEXT();
 }
 
-    DEF_BIN_OP_LABEL(IADD, Int, +);
-    DEF_BIN_OP_LABEL(LADD, Long, +);
-    DEF_BIN_OP_LABEL(FADD, Float, +);
-    DEF_BIN_OP_LABEL(DADD, Double, +);
+    DEF_BIN_OP_LABEL(IADD, Int32, +);
+    DEF_BIN_OP_LABEL(LADD, Int64, +);
+    DEF_BIN_OP_LABEL(FADD, Float32, +);
+    DEF_BIN_OP_LABEL(DADD, Float64, +);
 
-    DEF_BIN_OP_LABEL(ISUB, Int, -);
-    DEF_BIN_OP_LABEL(LSUB, Long, -);
-    DEF_BIN_OP_LABEL(FSUB, Float, -);
-    DEF_BIN_OP_LABEL(DSUB, Double, -);
+    DEF_BIN_OP_LABEL(ISUB, Int32, -);
+    DEF_BIN_OP_LABEL(LSUB, Int64, -);
+    DEF_BIN_OP_LABEL(FSUB, Float32, -);
+    DEF_BIN_OP_LABEL(DSUB, Float64, -);
 
-    DEF_BIN_OP_LABEL(IMUL, Int, *);
-    DEF_BIN_OP_LABEL(LMUL, Long, *);
-    DEF_BIN_OP_LABEL(FMUL, Float, *);
-    DEF_BIN_OP_LABEL(DMUL, Double, *);
+    DEF_BIN_OP_LABEL(IMUL, Int32, *);
+    DEF_BIN_OP_LABEL(LMUL, Int64, *);
+    DEF_BIN_OP_LABEL(FMUL, Float32, *);
+    DEF_BIN_OP_LABEL(DMUL, Float64, *);
 
-    DEF_BIN_DIV_LABEL(IDIV, Int, 0);
-    DEF_BIN_DIV_LABEL(LDIV, Long, 0);
-    DEF_BIN_DIV_LABEL(FDIV, Float, 0.0f);
-    DEF_BIN_DIV_LABEL(DDIV, Double, 0.0);
+    DEF_BIN_DIV_LABEL(IDIV, Int32, 0);
+    DEF_BIN_DIV_LABEL(LDIV, Int64, 0);
+    DEF_BIN_DIV_LABEL(FDIV, Float32, 0.0f);
+    DEF_BIN_DIV_LABEL(DDIV, Float64, 0.0);
 
-    DEF_BIN_OP_LABEL(ILT, Int, <);
-    DEF_BIN_OP_LABEL(LLT, Long, <);
-    DEF_BIN_OP_LABEL(FLT, Float, <);
-    DEF_BIN_OP_LABEL(DLT, Double, <);
+    DEF_BIN_OP_LABEL(ILT, Int32, <);
+    DEF_BIN_OP_LABEL(LLT, Int64, <);
+    DEF_BIN_OP_LABEL(FLT, Float32, <);
+    DEF_BIN_OP_LABEL(DLT, Float64, <);
 
-    DEF_BIN_OP_LABEL(IGT, Int, >);
-    DEF_BIN_OP_LABEL(LGT, Long, >);
-    DEF_BIN_OP_LABEL(FGT, Float, >);
-    DEF_BIN_OP_LABEL(DGT, Double, >);
+    DEF_BIN_OP_LABEL(IGT, Int32, >);
+    DEF_BIN_OP_LABEL(LGT, Int64, >);
+    DEF_BIN_OP_LABEL(FGT, Float32, >);
+    DEF_BIN_OP_LABEL(DGT, Float64, >);
 
-    DEF_BIN_OP_LABEL(IEQ, Int, ==);
-    DEF_BIN_OP_LABEL(LEQ, Int, ==);
-    DEF_BIN_OP_LABEL(FEQ, Float, ==);
-    DEF_BIN_OP_LABEL(DEQ, Double, ==);
+    DEF_BIN_OP_LABEL(IEQ, Int32, ==);
+    DEF_BIN_OP_LABEL(LEQ, Int32, ==);
+    DEF_BIN_OP_LABEL(FEQ, Float32, ==);
+    DEF_BIN_OP_LABEL(DEQ, Float64, ==);
 
-    DEF_BIN_OP_LABEL(INE, Int, !=);
-    DEF_BIN_OP_LABEL(LNE, Long, !=);
-    DEF_BIN_OP_LABEL(FNE, Float, !=);
-    DEF_BIN_OP_LABEL(DNE, Double, !=);
+    DEF_BIN_OP_LABEL(INE, Int32, !=);
+    DEF_BIN_OP_LABEL(LNE, Int64, !=);
+    DEF_BIN_OP_LABEL(FNE, Float32, !=);
+    DEF_BIN_OP_LABEL(DNE, Float64, !=);
 
-    DEF_BIN_OP_LABEL(ILE, Int, <=);
-    DEF_BIN_OP_LABEL(LLE, Long, <=);
-    DEF_BIN_OP_LABEL(FLE, Float, <=);
-    DEF_BIN_OP_LABEL(DLE, Double, <=);
+    DEF_BIN_OP_LABEL(ILE, Int32, <=);
+    DEF_BIN_OP_LABEL(LLE, Int64, <=);
+    DEF_BIN_OP_LABEL(FLE, Float32, <=);
+    DEF_BIN_OP_LABEL(DLE, Float64, <=);
 
-    DEF_BIN_OP_LABEL(IGE, Int, >=);
-    DEF_BIN_OP_LABEL(LGE, Long, >=);
-    DEF_BIN_OP_LABEL(FGE, Float, >=);
-    DEF_BIN_OP_LABEL(DGE, Double, >=);
+    DEF_BIN_OP_LABEL(IGE, Int32, >=);
+    DEF_BIN_OP_LABEL(LGE, Int64, >=);
+    DEF_BIN_OP_LABEL(FGE, Float32, >=);
+    DEF_BIN_OP_LABEL(DGE, Float64, >=);
 }
 
-#endif // ENABLE_COMPUTED_GOTO
+#endif // ENABLE_FASTVM_COMPUTED_GOTO

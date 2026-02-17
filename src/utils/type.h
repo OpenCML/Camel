@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 08, 2025
- * Updated: Oct. 18, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,9 +45,21 @@ template <typename Target, typename Source> bool is_exact_type(const Source &obj
     return typeid(obj) == typeid(Target);
 }
 
-template <typename Target, typename Source> Target *as(Source *ptr) {
+template <typename Target, typename Source> Target *as_ptr(Source *ptr) {
     static_assert(std::has_virtual_destructor_v<Source>, "Source must be a polymorphic type");
-    return dynamic_cast<Target *>(ptr);
+
+    EXEC_WHEN_DEBUG([&]() {
+        if (dynamic_cast<Target *>(ptr) == nullptr) {
+            ASSERT(
+                false,
+                std::format(
+                    "Pointer type cast failed: cannot cast from {} to {}",
+                    typeid(Source).name(),
+                    typeid(Target).name()));
+        }
+    }());
+
+    return static_cast<Target *>(ptr);
 }
 
 template <typename Target, typename Source>

@@ -13,48 +13,48 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "str.h"
 #include "compile/gir.h"
 #include "core/context/context.h"
-#include "core/context/frame.h"
+#include "core/operator.h"
+#include "core/type/composite/array.h"
 
 #include "fmt/args.h"
 #include "fmt/core.h"
 
 #include <sstream>
 
-void __format__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    String *fmtStrObj = frame.get<String *>(nargs[0]);
+slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    String *fmtStrObj = norm.get<String *>(0);
 
     std::string fmtStr = fmtStrObj->toString();
 
     fmt::dynamic_format_arg_store<fmt::format_context> store;
 
-    for (size_t i = 0; i < wargs.size; ++i) {
-        TypeCode type = frame.typeAt(wargs[i]);
+    for (size_t i = 0; i < with.size(); ++i) {
+        TypeCode type = with.code(i);
 
         switch (type) {
-        case TypeCode::Int:
-            store.push_back(frame.get<Int>(wargs[i]));
+        case TypeCode::Int32:
+            store.push_back(with.get<Int32>(i));
             break;
-        case TypeCode::Long:
-            store.push_back(frame.get<Long>(wargs[i]));
+        case TypeCode::Int64:
+            store.push_back(with.get<Int64>(i));
             break;
-        case TypeCode::Float:
-            store.push_back(frame.get<Float>(wargs[i]));
+        case TypeCode::Float32:
+            store.push_back(with.get<Float32>(i));
             break;
-        case TypeCode::Double:
-            store.push_back(frame.get<Double>(wargs[i]));
+        case TypeCode::Float64:
+            store.push_back(with.get<Float64>(i));
             break;
         default:
             // fallback to string
             std::ostringstream oss;
-            printSlot(oss, frame.get<slot_t>(wargs[i]), type);
+            printSlot(oss, with.slot(i), with.type(i));
             store.push_back(oss.str());
             break;
         }
@@ -63,51 +63,37 @@ void __format__(
     try {
         std::string resultStr = fmt::vformat(fmtStr, store);
         String *resultObj     = String::from(resultStr, mm::autoSpace());
-        frame.set(self, resultObj);
+        return toSlot(resultObj);
     } catch (const fmt::format_error &e) {
         ctx.rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
             .commit(std::string("<format>") + std::string(e.what()));
-        frame.set(self, NullSlot);
+        return NullSlot;
     }
-
-    return;
 }
 
-void __join__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
-    String *sepObj = frame.get<String *>(wargs[0]);
+slot_t __join__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    String *sepObj = with.get<String *>(0);
     if (!sepObj) {
         ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<join>", "invalid separator");
-        frame.set(self, NullSlot);
-        return;
+        return NullSlot;
     }
     std::string separator = sepObj->toString();
 
-    Array *arrObj = frame.get<Array *>(nargs[0]);
+    Array *arrObj            = norm.get<Array *>(0);
+    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    Type *elemType           = arrType->elemType();
 
     std::ostringstream joined;
     size_t len = arrObj->size();
 
-    TypeCode elemType = arrObj->elemType();
-
-    if (isGCTraced(elemType)) {
-        // 引用类型
-        for (size_t i = 0; i < len; ++i) {
-            if (i > 0)
-                joined << separator;
-            joined << arrObj->get<Object *>(i);
-        }
-    } else {
-        // 非引用类型
-        for (size_t i = 0; i < len; ++i) {
-            if (i > 0)
-                joined << separator;
-            slot_t slot = arrObj->get<slot_t>(i);
-            printSlot(joined, slot, elemType);
-        }
+    for (size_t i = 0; i < len; ++i) {
+        if (i > 0)
+            joined << separator;
+        slot_t slot = arrObj->get<slot_t>(i);
+        printSlot(joined, slot, elemType);
     }
 
     String *resultObj = String::from(joined.str(), mm::autoSpace());
-    frame.set(self, resultObj);
+    return toSlot(resultObj);
 }

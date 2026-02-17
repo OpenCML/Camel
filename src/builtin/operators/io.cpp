@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "io.h"
 #include "compile/gir.h"
 #include "core/context/context.h"
-#include "core/context/frame.h"
+#include "core/operator.h"
 
 #include "fmt/args.h"
 #include "fmt/core.h"
@@ -28,32 +28,31 @@
 #include <iostream>
 #include <sstream>
 
-void __print__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+slot_t __print__(ArgsView &with, ArgsView &norm, Context &ctx) {
     slot_t result = NullSlot;
-    if (wargs.size > 0) {
-        String *fmtStrObj  = frame.get<String *>(wargs[0]);
+    if (with.size() > 0) {
+        String *fmtStrObj  = with.get<String *>(0);
         std::string fmtStr = fmtStrObj->toString();
 
         fmt::dynamic_format_arg_store<fmt::format_context> store;
-        for (size_t i = 0; i < nargs.size; ++i) {
-            TypeCode type = frame.typeAt(nargs[i]);
-            switch (type) {
-            case TypeCode::Int:
-                store.push_back(frame.get<Int>(wargs[i]));
+        for (size_t i = 0; i < norm.size(); ++i) {
+            TypeCode code = norm.code(i);
+            switch (code) {
+            case TypeCode::Int32:
+                store.push_back(norm.get<Int32>(i));
                 break;
-            case TypeCode::Long:
-                store.push_back(frame.get<Long>(wargs[i]));
+            case TypeCode::Int64:
+                store.push_back(norm.get<Int64>(i));
                 break;
-            case TypeCode::Float:
-                store.push_back(frame.get<Float>(wargs[i]));
+            case TypeCode::Float32:
+                store.push_back(norm.get<Float32>(i));
                 break;
-            case TypeCode::Double:
-                store.push_back(frame.get<Double>(wargs[i]));
+            case TypeCode::Float64:
+                store.push_back(norm.get<Float64>(i));
                 break;
             default:
                 std::ostringstream oss;
-                printSlot(oss, frame.get<slot_t>(wargs[i]), type);
+                printSlot(oss, norm.slot(i), norm.type(i));
                 store.push_back(oss.str());
                 break;
             }
@@ -68,51 +67,49 @@ void __print__(
                 .commit(std::string("<format>") + std::string(e.what()));
         }
 
-        if (nargs.size > 0) {
-            result = frame.get<slot_t>(nargs[0]);
+        if (norm.size() > 0) {
+            result = norm.slot(0);
         }
     } else {
-        for (size_t i = 0; i < nargs.size; i++) {
+        for (size_t i = 0; i < norm.size(); i++) {
             if (i > 0) {
                 std::cout << " ";
             } else {
-                result = frame.get<slot_t>(nargs[i]);
+                result = norm.slot(i);
             }
-            TypeCode type = frame.typeAt(nargs[i]);
-            slot_t data   = frame.get<slot_t>(nargs[i]);
-            printSlot(std::cout, data, type);
+            slot_t data = norm.slot(i);
+            printSlot(std::cout, data, norm.type(i));
         }
     }
 
-    frame.set(self, result);
+    return result;
 }
 
-void __println__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+slot_t __println__(ArgsView &with, ArgsView &norm, Context &ctx) {
     slot_t result = NullSlot;
-    if (wargs.size > 0) {
-        String *fmtStrObj  = frame.get<String *>(wargs[0]);
+    if (with.size() > 0) {
+        String *fmtStrObj  = with.get<String *>(0);
         std::string fmtStr = fmtStrObj->toString();
 
         fmt::dynamic_format_arg_store<fmt::format_context> store;
-        for (size_t i = 0; i < nargs.size; ++i) {
-            TypeCode type = frame.typeAt(nargs[i]);
-            switch (type) {
-            case TypeCode::Int:
-                store.push_back(frame.get<Int>(wargs[i]));
+        for (size_t i = 0; i < norm.size(); ++i) {
+            TypeCode code = norm.code(i);
+            switch (code) {
+            case TypeCode::Int32:
+                store.push_back(norm.get<Int32>(i));
                 break;
-            case TypeCode::Long:
-                store.push_back(frame.get<Long>(wargs[i]));
+            case TypeCode::Int64:
+                store.push_back(norm.get<Int64>(i));
                 break;
-            case TypeCode::Float:
-                store.push_back(frame.get<Float>(wargs[i]));
+            case TypeCode::Float32:
+                store.push_back(norm.get<Float32>(i));
                 break;
-            case TypeCode::Double:
-                store.push_back(frame.get<Double>(wargs[i]));
+            case TypeCode::Float64:
+                store.push_back(norm.get<Float64>(i));
                 break;
             default:
                 std::ostringstream oss;
-                printSlot(oss, frame.get<slot_t>(wargs[i]), type);
+                printSlot(oss, norm.slot(i), norm.type(i));
                 store.push_back(oss.str());
                 break;
             }
@@ -127,37 +124,34 @@ void __println__(
                 .commit(std::string("<format>") + std::string(e.what()));
         }
 
-        if (nargs.size > 0) {
-            result = frame.get<slot_t>(nargs[0]);
+        if (norm.size() > 0) {
+            result = norm.slot(0);
         }
     } else {
-        for (size_t i = 0; i < nargs.size; i++) {
+        for (size_t i = 0; i < norm.size(); i++) {
             if (i > 0) {
                 std::cout << " ";
             } else {
-                result = frame.get<slot_t>(nargs[i]);
+                result = norm.slot(i);
             }
-            TypeCode type = frame.typeAt(nargs[i]);
-            slot_t data   = frame.get<slot_t>(nargs[i]);
-            printSlot(std::cout, data, type);
+            slot_t data = norm.slot(i);
+            printSlot(std::cout, data, norm.type(i));
         }
     }
 
-    frame.set(self, result);
     std::cout << std::endl;
+    return result;
 }
 
-void __input__(
-    GraphIR::data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &frame, Context &ctx) {
+slot_t __input__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::stringstream oss;
 
-    for (size_t i = 0; i < nargs.size; i++) {
+    for (size_t i = 0; i < norm.size(); i++) {
         if (i > 0) {
             oss << " ";
         }
-        TypeCode type = frame.typeAt(nargs[i]);
-        slot_t data   = frame.get<slot_t>(nargs[i]);
-        printSlot(oss, data, type);
+        slot_t data = norm.slot(i);
+        printSlot(oss, data, norm.type(i));
     }
 
     std::cout << oss.str();
@@ -165,5 +159,6 @@ void __input__(
     std::string input;
     std::getline(std::cin, input);
 
-    frame.set(self, String::from(input, mm::autoSpace()));
+    String *str = String::from(input, mm::autoSpace());
+    return toSlot(str);
 }
