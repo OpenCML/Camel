@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 13, 2026
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  *
  * ---
@@ -114,16 +114,6 @@ void jitDebugTraceWrapper(const void *ctx) {
 
 // Release 用：走完整 trace 路径（wrapper→stub→body），Build 模式下 body 输出到 stderr
 extern "C" void jitDebugTraceNoOp(const void *ctx) { jitDebugTraceWrapper(ctx); }
-
-#if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
-__attribute__((noinline)) extern "C" slot_t
-jit_call_wrapper(slot_t (*fn)(slot_t *slots, void *ctx), slot_t *slots, void *ctx) {
-    asm volatile("" ::: "memory");
-    slot_t ret = fn(slots, ctx);
-    asm volatile("" ::: "memory");
-    return ret;
-}
-#endif
 
 #if defined(__GNUC__) || defined(__clang__)
 // Naked 存根：在 prologue 前将 rdx,r8..r11（caller-saved）和

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Feb. 13, 2026
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,31 +23,10 @@
 
 #if ENABLE_FASTVM_COMPUTED_GOTO
 
-#if (defined(__x86_64__) || defined(_M_X64)) && defined(__GNUC__) && !defined(__clang__)
-/* asm goto (GCC only): no output operands; pass &result and store in asm. */
-#define JIT_CALL_ASM_LABEL_INNER(line) __jit_after_##line
-#define JIT_CALL_ASM_LABEL(line) JIT_CALL_ASM_LABEL_INNER(line)
-#define JIT_CALL_ASM(result, fn, slots, ctx)                                                       \
-    do {                                                                                           \
-        slot_t *__res = &(result);                                                                 \
-        asm goto("sub $32, %%rsp\n\t"                                                              \
-                 "callq *%1\n\t"                                                                   \
-                 "movq %%rax, (%4)\n\t"                                                            \
-                 "add $40, %%rsp\n\t"                                                              \
-                 "jmp %l0\n\t"                                                                     \
-                 :                                                                                 \
-                 : "r"(fn), "c"(slots), "d"(ctx), "r"(__res)                                       \
-                 : "rax", "memory"                                                                 \
-                 : JIT_CALL_ASM_LABEL(__LINE__));                                                  \
-        JIT_CALL_ASM_LABEL(__LINE__) :;                                                            \
-    } while (0)
-#elif (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
+#if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
 /* Clang Win64: wrapper in trampoline.cpp. pc/bc in thread_local so JIT cannot overwrite stack. */
-__attribute__((noinline)) extern "C" slot_t
-jit_call_wrapper(slot_t (*fn)(slot_t *slots, void *ctx), slot_t *slots, void *ctx);
 static thread_local size_t s_jit_pc;
 static thread_local const Bytecode *s_jit_bc;
-#define JIT_CALL_ASM(result, fn, slots, ctx) ((result) = jit_call_wrapper((fn), (slots), (ctx)))
 #define JIT_SAVE_PC_BC()                                                                           \
     do {                                                                                           \
         s_jit_pc = pc;                                                                             \
@@ -59,7 +38,6 @@ static thread_local const Bytecode *s_jit_bc;
         bc = const_cast<const Bytecode *>(s_jit_bc);                                               \
     } while (0)
 #else
-#define JIT_CALL_ASM(result, fn, slots, ctx) ((result) = (fn)((slots), (ctx)))
 #define JIT_SAVE_PC_BC() ((void)0)
 #define JIT_RESTORE_PC_BC() ((void)0)
 #endif
@@ -200,17 +178,10 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
     JUMP();
 
 label_RETN: {
-#ifdef NDEBUG
-    std::cerr << "[BuildTrace] gotovm: label_RETN entry" << std::endl;
-#endif
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     slot_t result = currFrame->get<slot_t>(bc->fastop[0]);
-#ifdef NDEBUG
-    std::cerr << "[BuildTrace] gotovm: RETN result=" << result
-              << " isRoot=" << (currFrame == rootFrame) << std::endl;
-#endif
     if (currFrame == rootFrame) {
         return result;
     }
@@ -342,27 +313,17 @@ label_BRCH: {
 }
 
 label_JOIN: {
-#ifdef NDEBUG
-    std::cerr << "[BuildTrace] gotovm: label_JOIN entry" << std::endl;
-#endif
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     const data_arr_t nargs = bc->nargs();
     const data_arr_t wargs = bc->wargs();
     int32_t brIndex        = currFrame->get<int32_t>(nargs[0]);
-#ifdef NDEBUG
-    std::cerr << "[BuildTrace] gotovm: JOIN brIndex=" << brIndex << " withCnt=" << bc->withCnt()
-              << std::endl;
-#endif
     ASSERT(
         brIndex >= 0 && static_cast<size_t>(brIndex) < bc->withCnt(),
         "JOIN opcode choosen index out of range in FastVM.");
     slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
     currFrame->set(bc->result, result);
-#ifdef NDEBUG
-    std::cerr << "[BuildTrace] gotovm: JOIN done result=" << result << " next NEXT" << std::endl;
-#endif
     NEXT();
 }
 
@@ -504,18 +465,11 @@ label_FUNC: {
         });
         funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
         slot_t result;
-        JIT_CALL_ASM(result, fn, funcFrame->slotBase(), currentJitCtx_);
+        result = fn(funcFrame->slotBase(), currentJitCtx_);
         JIT_RESTORE_PC_BC();
         l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
         framePool_.release(funcFrame);
-        // #ifdef NDEBUG
-        //         std::cerr << "[BuildTrace] gotovm: after release, before set result=" <<
-        //         bc->result << std::endl;
-        // #endif
         currFrame->set(bc->result, result);
-        // #ifdef NDEBUG
-        //         std::cerr << "[BuildTrace] gotovm: after set, about to NEXT" << std::endl;
-        // #endif
         NEXT();
     } else {
         // fastop[1] != 0 means this is a call to a JIT function that needs to be compiled
@@ -548,28 +502,10 @@ label_FUNC: {
                 });
                 funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
                 slot_t result;
-                JIT_CALL_ASM(result, fn, funcFrame->slotBase(), currentJitCtx_);
+                result = fn(funcFrame->slotBase(), currentJitCtx_);
                 JIT_RESTORE_PC_BC();
-                // #ifdef NDEBUG
-                //                 std::cerr << "[BuildTrace] gotovm(tiered): JIT returned pc=" <<
-                //                 pc << " result=" << result << std::endl;
-                // #endif
-                // l.in("FastVM").debug("JIT function at pc={} returned result={}.", targetPc,
-                // result); _timer.resume();
-                // #ifdef NDEBUG
-                //                 std::cerr << "[BuildTrace] gotovm(tiered): before release" <<
-                //                 std::endl;
-                // #endif
                 framePool_.release(funcFrame);
-                // #ifdef NDEBUG
-                //                 std::cerr << "[BuildTrace] gotovm(tiered): after release before
-                //                 set result=" << bc->result << std::endl;
-                // #endif
                 currFrame->set(bc->result, result);
-                // #ifdef NDEBUG
-                //                 std::cerr << "[BuildTrace] gotovm(tiered): after set about to
-                //                 NEXT" << std::endl;
-                // #endif
                 NEXT();
             }
         }
@@ -627,7 +563,7 @@ label_TAIL: {
         });
         newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
         slot_t result;
-        JIT_CALL_ASM(result, fn, newFrame->slotBase(), currentJitCtx_);
+        result = fn(newFrame->slotBase(), currentJitCtx_);
         l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
         return result;
     }
@@ -660,7 +596,7 @@ label_TAIL: {
             });
             newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
             slot_t result;
-            JIT_CALL_ASM(result, fn, newFrame->slotBase(), currentJitCtx_);
+            result = fn(newFrame->slotBase(), currentJitCtx_);
             l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
             return result;
         }
