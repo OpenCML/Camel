@@ -13,22 +13,28 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "pass.h"
+#include "common/scope.h"
 #include "error/diagnostics/diagnostics.h"
 
 #include "builtin/passes/rewrite/inline/inline.h"
 #include "builtin/passes/sched/linear/fastvm/bcdump.h"
 #include "builtin/passes/sched/linear/fastvm/fastvm.h"
+#include "builtin/passes/sched/linear/fastvm/jit/dump/asmdump.h"
+#include "builtin/passes/sched/linear/fastvm/jit/dump/bindump.h"
+#include "builtin/passes/sched/linear/fastvm/jit/dump/mirdump.h"
 #include "builtin/passes/sched/linear/nodevm/nodevm.h"
 #include "builtin/passes/sched/parallel/taskflow/taskflow.h"
 #include "builtin/passes/trans/dot/graphviz.h"
 #include "builtin/passes/trans/tns/topo_node_seq.h"
 
 #include "macro/macro.h"
+
+#include <format>
 
 using namespace GraphIR;
 
@@ -37,50 +43,127 @@ graph_ptr_t NullGraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
     return Graph::null();
 }
 
-using PassFactory = std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>;
+using PassFactory  = std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>;
+using PassScope    = Scope<std::string, PassFactory, std::string>;
+using PassScopePtr = scope_ptr_t<std::string, PassFactory, std::string>;
 
-std::unordered_map<std::string, PassFactory> passRegistry = {
-    {
-        "std::null",
-        [](const context_ptr_t &ctx) { return std::make_unique<NullGraphIRPass>(ctx); },
-    },
-    {
-        "std::macro",
-        [](const context_ptr_t &ctx) { return std::make_unique<MacroRewritePass>(ctx); },
-    },
-    {
-        "std::graphviz",
-        [](const context_ptr_t &ctx) { return std::make_unique<GraphVizDumpPass>(ctx); },
-    },
-    {
-        "std::topo_node_seq",
-        [](const context_ptr_t &ctx) { return std::make_unique<TopoNodeSeqDumpPass>(ctx); },
-    },
-    {
-        "std::nodevm",
-        [](const context_ptr_t &ctx) { return std::make_unique<NodeVMSchedPass>(ctx); },
-    },
-    {
-        "std::fastvm",
-        [](const context_ptr_t &ctx) { return std::make_unique<FastVMSchedPass>(ctx); },
-    },
-    {
-        "std::inline",
-        [](const context_ptr_t &ctx) { return std::make_unique<InlineRewritePass>(ctx); },
-    },
-    {
-        "std::taskflow",
-        [](const context_ptr_t &ctx) { return std::make_unique<TaskflowExecSchedPass>(ctx); },
-    },
-    {
-        "std::bytecode",
-        [](const context_ptr_t &ctx) { return std::make_unique<BytecodeDumpPass>(ctx); },
-    },
-    {
-        "std::linked_bytecode",
-        [](const context_ptr_t &ctx) { return std::make_unique<LinkedBytecodeDumpPass>(ctx); },
-    },
+namespace {
+
+std::vector<std::string> splitPath(const std::string &path) {
+    std::vector<std::string> result;
+    size_t start = 0;
+    while (start < path.size()) {
+        size_t pos = path.find("::", start);
+        if (pos == std::string::npos) {
+            result.push_back(path.substr(start));
+            break;
+        }
+        result.push_back(path.substr(start, pos - start));
+        start = pos + 2;
+    }
+    return result;
+}
+
+PassFactory lookupInScope(PassScopePtr scope, const std::vector<std::string> &path) {
+    if (path.empty())
+        return nullptr;
+    for (size_t i = 0; i < path.size() - 1; ++i) {
+        scope = scope->enter(path[i]);
+        if (!scope)
+            return nullptr;
+    }
+    auto opt = scope->get(path.back(), false);
+    return opt ? *opt : nullptr;
+}
+
+void collectPassPaths(
+    PassScopePtr scope, const std::string &prefix, std::vector<std::string> &out) {
+    for (const auto &[key, _] : scope->map()) {
+        out.push_back(prefix.empty() ? key : prefix + "::" + key);
+    }
+    scope->forEachNamedInner([&](const std::string &name, const PassScopePtr &child) {
+        collectPassPaths(child, prefix.empty() ? name : prefix + "::" + name, out);
+    });
+}
+
+// 嵌套初始化列表：def(factory) 叶子节点，def(factory, {...}) 带子域，scope({...}) 纯子域
+struct PassDef {
+    std::optional<PassFactory> value;
+    std::vector<std::pair<std::string, PassDef>> children;
 };
+
+PassDef def(PassFactory f) { return PassDef{.value = std::move(f), .children = {}}; }
+
+PassDef def(PassFactory f, std::initializer_list<std::pair<const char *, PassDef>> list) {
+    PassDef r{.value = std::move(f), .children = {}};
+    for (const auto &[k, v] : list)
+        r.children.emplace_back(k, v);
+    return r;
+}
+
+PassDef scope(std::initializer_list<std::pair<const char *, PassDef>> list) {
+    PassDef r;
+    for (const auto &[k, v] : list)
+        r.children.emplace_back(k, v);
+    return r;
+}
+
+void buildPassScope(PassScopePtr s, const PassDef &def) {
+    for (const auto &[name, child] : def.children) {
+        if (child.value)
+            s->insert(name, *child.value);
+        if (!child.children.empty()) {
+            auto sub = s->enter(name);
+            buildPassScope(sub, child);
+        }
+    }
+}
+
+#define PASS(T) [](const context_ptr_t &ctx) { return std::make_unique<T>(ctx); }
+#define PASS1(T, A) [](const context_ptr_t &ctx) { return std::make_unique<T>(ctx, A); }
+
+PassScopePtr initPassScope() {
+    auto root = PassScope::create();
+    buildPassScope(
+        root,
+        scope({
+            {
+                "std",
+                scope({
+                    {"null", def(PASS(NullGraphIRPass))},
+                    {"macro", def(PASS(MacroRewritePass))},
+                    {"graphviz", def(PASS(GraphVizDumpPass))},
+                    {"topo_node_seq", def(PASS(TopoNodeSeqDumpPass))},
+                    {"nodevm", def(PASS(NodeVMSchedPass))},
+                    {"fastvm",
+                     def(PASS(FastVMSchedPass),
+                         {
+                             {"bytecode", def(PASS(BytecodeDumpPass))},
+                             {"linked_bytecode", def(PASS(LinkedBytecodeDumpPass))},
+                             {"jit",
+                              def(PASS1(FastVMSchedPass, FastVMConfig{.enableJit = true}),
+                                  {
+                                      {"dump",
+                                       scope({
+                                           {"asm", def(PASS(JitAsmDumpPass))},
+                                           {"bin", def(PASS(JitBinaryDumpPass))},
+                                           {"rmir", def(PASS(JitRmirDumpPass))},
+                                           {"mir", def(PASS(JitMirDumpPass))},
+                                       })},
+                                  })},
+                         })},
+                    {"inline", def(PASS(InlineRewritePass))},
+                    {"taskflow", def(PASS(TaskflowExecSchedPass))},
+                }),
+            },
+        }));
+    return root;
+}
+
+#undef PASS
+#undef PASS1
+
+const PassScopePtr passScope = initPassScope();
 
 std::unordered_map<std::string, std::string> passAliases = {
     // 标准调度器
@@ -92,6 +175,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::lnr", "std::fastvm"},
     {"std::prl", "std::taskflow"},
     {"std::fvm", "std::fastvm"},
+    {"std::jit", "std::fastvm::jit"},
     {"std::nvm", "std::nodevm"},
     {"std::svm", "std::stackvm"},
     {"std::tf", "std::taskflow"},
@@ -100,25 +184,54 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::dot", "std::graphviz"},
     {"std::gir", "std::graphviz"},
     {"std::tns", "std::topo_node_seq"},
-    {"std::bc", "std::bytecode"},
-    {"std::lbc", "std::linked_bytecode"},
+    {"std::bc", "std::fastvm::bytecode"},
+    {"std::lbc", "std::fastvm::linked_bytecode"},
+    {"std::bin", "std::fastvm::jit::dump::bin"},
+    {"std::asm", "std::fastvm::jit::dump::asm"},
+    {"std::rmir", "std::fastvm::jit::dump::rmir"},
+    {"std::mir", "std::fastvm::jit::dump::mir"},
 };
 
+} // namespace
+
 PassFactory findPassFactory(const std::string &name, std::ostream &os) {
-    std::string stdName = name;
-    auto aliasIt        = passAliases.find(name);
+    // 1. 解析别名
+    std::string resolved = name;
+    auto aliasIt         = passAliases.find(name);
     if (aliasIt != passAliases.end()) {
-        stdName = aliasIt->second;
+        resolved = aliasIt->second;
     }
 
-    auto regIt = passRegistry.find(stdName);
-    if (regIt != passRegistry.end()) {
-        return regIt->second;
+    // 2. 含 :: 的完整路径：按域分级查找
+    if (resolved.find("::") != std::string::npos) {
+        auto path = splitPath(resolved);
+        if (!path.empty()) {
+            auto factory = lookupInScope(passScope, path);
+            if (factory)
+                return factory;
+        }
+    } else {
+        // 3. 无 ::：先查 std::name，再查全局 name
+        auto stdPath = splitPath("std::" + resolved);
+        auto factory = lookupInScope(passScope, stdPath);
+        if (factory)
+            return factory;
+        auto globalPath = std::vector<std::string>{resolved};
+        factory         = lookupInScope(passScope, globalPath);
+        if (factory)
+            return factory;
     }
 
+    // 未找到，输出可用 pass 列表
     os << std::format("Pass <{}> not found, available passes are:\n", name);
-    for (const auto &[alias, pass] : passAliases) {
-        os << std::format("  {} -> {}\n", alias, pass);
+    std::vector<std::string> allPaths;
+    collectPassPaths(passScope, "", allPaths);
+    for (const auto &p : allPaths) {
+        os << std::format("  {}\n", p);
+    }
+    os << std::format("Available aliases are:\n");
+    for (const auto &[alias, target] : passAliases) {
+        os << std::format("  {} -> {}\n", alias, target);
     }
     os << std::endl;
 

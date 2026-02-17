@@ -13,13 +13,34 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 17, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "fastvm.h"
 
-#ifdef ENABLE_COMPUTED_GOTO
+#include <iostream>
+
+#if ENABLE_FASTVM_COMPUTED_GOTO
+
+#if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
+/* Clang Win64: wrapper in trampoline.cpp. pc/bc in thread_local so JIT cannot overwrite stack. */
+static thread_local size_t s_jit_pc;
+static thread_local const Bytecode *s_jit_bc;
+#define JIT_SAVE_PC_BC()                                                                           \
+    do {                                                                                           \
+        s_jit_pc = pc;                                                                             \
+        s_jit_bc = bc;                                                                             \
+    } while (0)
+#define JIT_RESTORE_PC_BC()                                                                        \
+    do {                                                                                           \
+        pc = s_jit_pc;                                                                             \
+        bc = const_cast<const Bytecode *>(s_jit_bc);                                               \
+    } while (0)
+#else
+#define JIT_SAVE_PC_BC() ((void)0)
+#define JIT_RESTORE_PC_BC() ((void)0)
+#endif
 
 /**
  * Computed Goto implementation of FastVM.
@@ -161,7 +182,6 @@ label_RETN: {
     opperf::ScopeTimer _timer(bc->opcode);
 
     slot_t result = currFrame->get<slot_t>(bc->fastop[0]);
-
     if (currFrame == rootFrame) {
         return result;
     }
@@ -304,7 +324,6 @@ label_JOIN: {
         "JOIN opcode choosen index out of range in FastVM.");
     slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
     currFrame->set(bc->result, result);
-
     NEXT();
 }
 
@@ -422,58 +441,192 @@ label_FUNC: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    // 保存当前程序计数器和栈帧
+#if ENABLE_FASTVM_JIT
+    // fastop[1] == 0 means this is a direct call to a JIT function
+    if (bc->fastop[1] == 0) {
+        JIT_SAVE_PC_BC(); /* save pc/bc before any call can clobber them (Build opt) */
+        Graph *targetGraph        = getFuncExtraGraph(bc);
+        camel::jit::JitEntryFn fn = reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(bc));
+        Frame *funcFrame          = framePool_.acquire(targetGraph);
+        size_t argsCnt            = bc->normCnt();
+        const data_idx_t *args    = bc->operands();
+        for (size_t i = 0; i < argsCnt; ++i) {
+            funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+        }
+        EXEC_WHEN_DEBUG({
+            std::string argsStr;
+            for (size_t i = 0; i < argsCnt; ++i) {
+                argsStr += std::format("{} ", currFrame->get<slot_t>(args[i]));
+            }
+            l.in("FastVM").debug(
+                "Calling JIT function of graph <{}> with args: {}",
+                targetGraph->name(),
+                argsStr);
+        });
+        funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
+        slot_t result;
+        result = fn(funcFrame->slotBase(), currentJitCtx_);
+        JIT_RESTORE_PC_BC();
+        l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
+        framePool_.release(funcFrame);
+        currFrame->set(bc->result, result);
+        NEXT();
+    } else {
+        // fastop[1] != 0 means this is a call to a JIT function that needs to be compiled
+        Graph *targetGraph = getFuncExtraGraph(bc);
+        size_t targetPc    = static_cast<size_t>(bc->fastop[1]);
+        uint32_t count     = incFuncExtraCount(const_cast<Bytecode *>(bc));
+        if (tierPolicy_.shouldJit(count)) {
+            compileAndCacheGraph(targetGraph, targetPc);
+            bc = &bytecodes_[pc];
+            if (bc->fastop[1] == 0) {
+                JIT_SAVE_PC_BC(); /* save pc/bc before any call can clobber them (Build opt) */
+                Graph *g = getFuncExtraGraph(bc);
+                camel::jit::JitEntryFn fn =
+                    reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(bc));
+                Frame *funcFrame       = framePool_.acquire(g);
+                size_t argsCnt         = bc->normCnt();
+                const data_idx_t *args = bc->operands();
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+                }
+                EXEC_WHEN_DEBUG({
+                    std::string argsStr;
+                    for (size_t i = 0; i < argsCnt; ++i) {
+                        argsStr += std::format("{} ", currFrame->get<slot_t>(args[i]));
+                    }
+                    l.in("FastVM").debug(
+                        "Calling JIT function of graph <{}> with args: {}",
+                        targetGraph->name(),
+                        argsStr);
+                });
+                funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
+                slot_t result;
+                result = fn(funcFrame->slotBase(), currentJitCtx_);
+                JIT_RESTORE_PC_BC();
+                framePool_.release(funcFrame);
+                currFrame->set(bc->result, result);
+                NEXT();
+            }
+        }
+        push(pc, currFrame);
+        Frame *funcFrame       = framePool_.acquire(targetGraph);
+        size_t argsCnt         = bc->normCnt();
+        const data_idx_t *args = bc->operands();
+        for (size_t i = 0; i < argsCnt; ++i) {
+            funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+        }
+        pc        = targetPc;
+        currFrame = funcFrame;
+        JUMP();
+    }
+#else
     push(pc, currFrame);
-
-    // 创建新的栈帧并设置参数
     Frame *funcFrame       = framePool_.acquire(bc->extra()->graph);
     size_t argsCnt         = bc->normCnt();
     const data_idx_t *args = bc->operands();
     for (size_t i = 0; i < argsCnt; ++i) {
         funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
     }
-
-    // 切换到目标图的字节码位置和栈帧
     pc        = bc->fastop[1];
     currFrame = funcFrame;
-
     JUMP();
+#endif
 }
 
 label_TAIL: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    // 尾调用不保存程序计数器和栈帧
-    // 直接释放当前栈帧
-    // 如果当前栈帧和目标栈帧属于同一个图
-    // 栈帧池会自动复用
-    // 这间接实现了尾调用优化
+#if ENABLE_FASTVM_JIT
     FrameView lastFrame(currFrame);
     framePool_.release(currFrame);
-
-    // 创建新的栈帧并设置参数
-    // 对于刚刚释放的栈帧，栈帧池会自动复用
-    // 所以这里 currFrame 就是目标栈帧
-    currFrame              = framePool_._acquire(bc->extra()->graph);
+    if (bc->fastop[1] == 0) {
+        Graph *g                  = getFuncExtraGraph(bc);
+        camel::jit::JitEntryFn fn = reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(bc));
+        Frame *newFrame           = framePool_._acquire(g);
+        size_t argsCnt            = bc->normCnt();
+        const data_idx_t *args    = bc->operands();
+        for (size_t i = 0; i < argsCnt; ++i) {
+            newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+        }
+        framePool_._resetTop();
+        EXEC_WHEN_DEBUG({
+            std::string argsStr;
+            for (size_t i = 0; i < argsCnt; ++i) {
+                argsStr += std::format("{} ", lastFrame.get<slot_t>(args[i]));
+            }
+            l.in("FastVM").debug(
+                "Calling JIT function of graph <{}> with args: {}",
+                g->name(),
+                argsStr);
+        });
+        newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
+        slot_t result;
+        result = fn(newFrame->slotBase(), currentJitCtx_);
+        l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
+        return result;
+    }
+    Graph *targetGraph = getFuncExtraGraph(bc);
+    size_t targetPc    = static_cast<size_t>(bc->fastop[1]);
+    uint32_t count     = incFuncExtraCount(const_cast<Bytecode *>(bc));
+    if (tierPolicy_.shouldJit(count)) {
+        compileAndCacheGraph(targetGraph, targetPc);
+        bc = &bytecodes_[pc];
+        if (bc->fastop[1] == 0) {
+            Graph *g = getFuncExtraGraph(bc);
+            camel::jit::JitEntryFn fn =
+                reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(bc));
+            Frame *newFrame        = framePool_._acquire(g);
+            size_t argsCnt         = bc->normCnt();
+            const data_idx_t *args = bc->operands();
+            for (size_t i = 0; i < argsCnt; ++i) {
+                newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+            }
+            framePool_._resetTop();
+            EXEC_WHEN_DEBUG({
+                std::string argsStr;
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    argsStr += std::format("{} ", lastFrame.get<slot_t>(args[i]));
+                }
+                l.in("FastVM").debug(
+                    "Calling JIT function of graph <{}> with args: {}",
+                    g->name(),
+                    argsStr);
+            });
+            newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
+            slot_t result;
+            result = fn(newFrame->slotBase(), currentJitCtx_);
+            l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
+            return result;
+        }
+    }
+    currFrame              = framePool_._acquire(targetGraph);
     size_t argsCnt         = bc->normCnt();
     const data_idx_t *args = bc->operands();
     for (size_t i = 0; i < argsCnt; ++i) {
-        // 注意，这里的 currFrame 已经被释放了
-        // 但由于栈帧池不会对已经释放的栈帧进行格式化
-        // 所以这里仍然可以安全地获取原栈帧的数据
-        // 当然，需要通过 lastFrame 来获取数据
-        // lastFrame 中保存了原栈帧的静态数据区指针
         currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
     }
-    // 这里需要手动 resetTop，因为 _acquire 不会 resetTop
-    // 之所以延迟 resetTop，是为了避免 resetTop 破坏刚刚释放的栈帧的数据
     framePool_._resetTop();
-
-    // 切换到目标图的字节码位置
-    pc = bc->fastop[1];
-
+    pc = targetPc;
     JUMP();
+#else
+    FrameView lastFrame(currFrame);
+    framePool_.release(currFrame);
+    Graph *lastGraph       = currFrame->graph();
+    Graph *targetGraph     = bc->extra()->graph;
+    currFrame              = framePool_._acquire(targetGraph);
+    size_t argsCnt         = bc->normCnt();
+    const data_idx_t *args = bc->operands();
+    for (size_t i = 0; i < argsCnt; ++i) {
+        currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+    }
+    if (targetGraph != lastGraph) {
+        framePool_._resetTop();
+    }
+    pc = bc->fastop[1];
+    JUMP();
+#endif
 }
 
 label_OPER: {
@@ -559,4 +712,4 @@ label_SCHD: {
     DEF_BIN_OP_LABEL(DGE, Float64, >=);
 }
 
-#endif // ENABLE_COMPUTED_GOTO
+#endif // ENABLE_FASTVM_COMPUTED_GOTO

@@ -13,11 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "gir_builder.h"
+#include "builder.h"
 
 #include "utils/log.h"
 #include "utils/scope.h"

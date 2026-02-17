@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@
 #include "error/abort.h"
 
 #include "../gct.h"
-#include "../gir.h"
+#include "gir.h"
 
 namespace GraphIR {
 
@@ -69,16 +69,17 @@ class Builder {
 
     std::optional<node_ptr_t> nodeAt(const std::string &name) {
         EXEC_WHEN_DEBUG([&] {
-            l.in("GIR Builder").debug("Accessing node '{}' from scope ", name);
-            nodeScope_->dump(std::cout, 0);
+            std::stringstream ss;
+            nodeScope_->dump(ss);
+            l.in("GIR Builder").debug("Accessing node '{}' from scope {}", name, ss.str());
         }());
         return nodeScope_->get(name);
     }
     std::optional<std::shared_ptr<graph_vec_t>> graphsAt(const std::string &name) {
         EXEC_WHEN_DEBUG([&] {
-            l.in("GIR Builder").debug("Accessing graph '{}' from scope ", name);
+            std::stringstream ss;
             graphScope_->dump(
-                std::cout,
+                ss,
                 [&](std::ostream &os,
                     const std::string &key,
                     const std::shared_ptr<graph_vec_t> &value) {
@@ -86,8 +87,8 @@ class Builder {
                     for (const auto &graph : *value) {
                         os << graph->toString() << " ";
                     }
-                },
-                0);
+                });
+            l.in("GIR Builder").debug("Accessing graph '{}' from scope {}", name, ss.str());
         }());
         return graphScope_->get(name);
     }

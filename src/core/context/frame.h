@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -195,6 +195,21 @@ class Frame : public Object {
     }
 
     virtual void onMoved() override {}
+
+    slot_t *slotBase() { return dynamicArea_; }
+    const slot_t *slotBase() const { return dynamicArea_; }
+
+    void printSlotsTo(std::ostream &os) const {
+        os << "frame <" << (graph_ ? graph_->name() : "(null)") << "> at "
+           << formatAddress(this, true) << ":\n";
+        for (size_t i = 1; i < dynamicAreaType_->size(); ++i) {
+            slot_t s = dynamicArea_[i];
+            Type *t  = graph_->runtimeDataType()->typeAt(i);
+            os << "  [" << i << "] ";
+            printSlotSafe(os, s, t);
+            os << "\n";
+        }
+    }
 
     virtual void
     updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
@@ -462,5 +477,59 @@ class FrameArgsView : public ArgsView {
         ASSERT(index < indices_.size, "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         return frame_.typeAt<Type>(dataIdx);
+    }
+};
+
+/**
+ * 基于 slot_t* 的 ArgsView，用于 JIT 调用 OPER 时在 C++ 栈上构造，无需 Frame
+ */
+class SlotArgsView : public ArgsView {
+  private:
+    slot_t *slots_;
+    Tuple *staticArea_;
+    const TupleType *runtimeDataType_;
+    const TupleType *staticDataType_;
+    const data_arr_t &indices_;
+
+  public:
+    SlotArgsView(
+        slot_t *slots, Tuple *staticArea, const TupleType *runtimeDataType,
+        const TupleType *staticDataType, const data_arr_t &indices)
+        : slots_(slots), staticArea_(staticArea), runtimeDataType_(runtimeDataType),
+          staticDataType_(staticDataType), indices_(indices) {}
+
+    size_t size() const override { return indices_.size; }
+
+    slot_t slot(size_t index) const override {
+        ASSERT(index < indices_.size, "ArgsView index out of range");
+        GraphIR::data_idx_t dataIdx = indices_[index];
+        if (dataIdx > 0)
+            return slots_[dataIdx];
+        return staticArea_->get<slot_t>(static_cast<size_t>(-dataIdx));
+    }
+
+    void setSlot(size_t index, slot_t value) override {
+        ASSERT(index < indices_.size, "ArgsView index out of range");
+        GraphIR::data_idx_t dataIdx = indices_[index];
+        if (dataIdx > 0)
+            slots_[dataIdx] = value;
+        else
+            staticArea_->set<slot_t>(static_cast<size_t>(-dataIdx), value);
+    }
+
+    TypeCode code(size_t index) const override {
+        ASSERT(index < indices_.size, "ArgsView index out of range");
+        GraphIR::data_idx_t dataIdx = indices_[index];
+        if (dataIdx > 0)
+            return runtimeDataType_->codeAt(static_cast<size_t>(dataIdx));
+        return staticDataType_->codeAt(static_cast<size_t>(-dataIdx));
+    }
+
+    Type *type(size_t index) const override {
+        ASSERT(index < indices_.size, "ArgsView index out of range");
+        GraphIR::data_idx_t dataIdx = indices_[index];
+        if (dataIdx > 0)
+            return runtimeDataType_->typeAt(static_cast<size_t>(dataIdx));
+        return staticDataType_->typeAt(static_cast<size_t>(-dataIdx));
     }
 };

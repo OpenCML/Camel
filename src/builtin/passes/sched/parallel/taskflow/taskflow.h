@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,6 @@
 #include "../parallel.h"
 #include "core/context/frame.h"
 
-#include <atomic>
 #include <taskflow/algorithm/for_each.hpp>
 #include <taskflow/taskflow.hpp>
 #include <unordered_map>
@@ -36,6 +35,7 @@ class TaskflowExecSchedPass : public ParallelSchedPass {
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 
     tf::Taskflow mainFlow_; // 主任务流
+    FramePool framePool_{1 * MB};
 
     // 元信息（目前存 BRCH->JOIN 的配对关系）
     struct GraphInfos {
@@ -69,8 +69,8 @@ class TaskflowExecSchedPass : public ParallelSchedPass {
   private:
     tf::Executor executor_;
 
-    // 为一次图实例执行构建并运行任务流，返回 exit 值
-    data_ptr_t evalGraphTF(GraphIR::Graph *graph, Frame *frame);
+    // 为一次图实例执行构建并运行任务流，返回 exit 值（slot_t）
+    slot_t evalGraphTF(GraphIR::Graph *graph, Frame *frame);
 
     // 递归构建所有图的元信息
     void buildGraphsInfo(GraphIR::Graph *rootGraph);

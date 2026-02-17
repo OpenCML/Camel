@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 06, 2026
+ * Updated: Feb. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -88,13 +88,13 @@ std::string Type::mangle() const {
 
     switch (code_) {
     case TypeCode::Int32:
-        return "i";
+        return "i32";
     case TypeCode::Int64:
-        return "l";
+        return "i";
     case TypeCode::Float32:
-        return "f";
+        return "f32";
     case TypeCode::Float64:
-        return "d";
+        return "f";
     case TypeCode::Bool:
         return "b";
     case TypeCode::Byte:

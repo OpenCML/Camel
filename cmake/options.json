@@ -1,0 +1,17 @@
+{
+    "$schema": "options schema - options are overridden by npm run config",
+    "options": [
+        {
+            "name": "ENABLE_FASTVM_JIT",
+            "description": "Enable JIT compilation (x64 only)",
+            "default": "ON",
+            "type": "platform"
+        },
+        {
+            "name": "ENABLE_FASTVM_COMPUTED_GOTO",
+            "description": "Use computed goto in interpreter",
+            "default": "ON",
+            "type": "bool"
+        }
+    ]
+}
