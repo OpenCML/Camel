@@ -13,20 +13,20 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builder.h"
 
-#include "core/data/composite/array.h"
-#include "core/data/composite/struct.h"
-#include "core/data/composite/tuple.h"
-#include "parse/ast/type.h"
-#include "utils/escape.h"
-#include "utils/scope.h"
-#include "utils/token.h"
-#include "utils/type.h"
+#include "camel/core/data/composite/array.h"
+#include "camel/core/data/composite/struct.h"
+#include "camel/core/data/composite/tuple.h"
+#include "camel/parse/ast/type.h"
+#include "camel/utils/escape.h"
+#include "camel/utils/scope.h"
+#include "camel/utils/token.h"
+#include "camel/utils/type.h"
 
 #define DEBUG_LEVEL -1
 

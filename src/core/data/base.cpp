@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "data.h"
-#include "utils/assert.h"
+#include "camel/core/data/base.h"
+#include "camel/core/data/null.h"
 
 using namespace std;
 

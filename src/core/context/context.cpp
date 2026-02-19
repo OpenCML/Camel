@@ -13,17 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Oct. 24, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include <filesystem>
 
-#include "compile/gir.h"
-#include "context.h"
-#include "core/module/userdef.h"
-#include "utils/log.h"
-#include "utils/str.h"
+#include "camel/compile/gir.h"
+#include "camel/core/context/context.h"
+#include "camel/core/module/builtin.h"
+#include "camel/core/module/userdef.h"
+#include "camel/utils/log.h"
+#include "camel/utils/str.h"
 
 namespace fs = std::filesystem;
 using namespace strutil;
@@ -77,8 +78,8 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 
 context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &diagConf) {
     context_ptr_t ctx = std::shared_ptr<Context>(new Context(entryConf, diagConf));
-    ctx->exeMgr_ = std::make_unique<ExecutorManager>(ctx);
-    ctx->rtmDiags_ = std::make_shared<Diagnostics>("main", entryConf.entryFile);
+    ctx->exeMgr_      = std::make_unique<ExecutorManager>(ctx);
+    ctx->rtmDiags_    = std::make_shared<Diagnostics>("main", entryConf.entryFile);
     ctx->rtmDiags_->setConfig(diagConf);
     ctx->modules_[""] = ctx->getBuiltinModule("").value();
     EXEC_WHEN_DEBUG(
@@ -157,14 +158,14 @@ std::string Context::resolveRelativeModuleName(
     const std::string &currentModule, const std::string &importName) {
 
     int level = 0;
-    size_t i = 0;
+    size_t i  = 0;
     while (i < importName.size() && importName[i] == '.') {
         ++level;
         ++i;
     }
 
     std::string remaining = importName.substr(i);
-    auto base = split(currentModule, '.');
+    auto base             = split(currentModule, '.');
 
     if (static_cast<size_t>(level) > base.size()) {
         throw CamelBaseException("Too many dots in relative import: " + importName);

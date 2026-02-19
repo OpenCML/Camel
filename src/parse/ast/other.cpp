@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Jul. 03, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "other.h"
-#include "utils/str.h"
+#include "camel/parse/ast/other.h"
+#include "camel/utils/str.h"
 
 namespace AbstractSyntaxTree {
 

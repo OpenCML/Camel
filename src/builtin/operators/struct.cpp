@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "struct.h"
-#include "compile/gir.h"
-#include "core/context/context.h"
-#include "core/operator.h"
+#include "camel/compile/gir.h"
+#include "camel/core/context/context.h"
+#include "camel/core/operator.h"
 
 slot_t __len_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *s = norm.get<String *>(0);

@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builtin.h"
-#include "compile/gir.h"
-#include "core/context/frame.h"
-#include "utils/log.h"
+#include "camel/compile/gir.h"
+#include "camel/core/context/frame.h"
+#include "camel/utils/log.h"
 
 #include "../operators/algo.h"
 #include "../operators/cast.h"

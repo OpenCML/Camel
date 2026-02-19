@@ -6,7 +6,7 @@ function getChangedFiles() {
         return output
             .split('\n')
             .map((f) => f.trim())
-            .filter((f) => f.match(/\.(cpp|h)$/) && f.startsWith('src/'))
+            .filter((f) => f.match(/\.(cpp|h)$/) && (f.startsWith('src/') || f.startsWith('include/')))
     } catch (err) {
         console.error('Error getting changed files from git:', err)
         return []

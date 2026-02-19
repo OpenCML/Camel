@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "utils/assert.h"
+#include "camel/utils/assert.h"
 
 #include <functional>
 #include <iterator>

@@ -13,16 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "conv.h"
-#include "./data.h"
-#include "core/data/data.h"
-#include "core/type/composite/array.h"
-#include "core/type/composite/struct.h"
-#include "core/type/composite/tuple.h"
+#include "camel/core/rtdata/conv.h"
+#include "camel/core/data/composite/array.h"
+#include "camel/core/data/composite/func.h"
+#include "camel/core/data/composite/struct.h"
+#include "camel/core/data/composite/tuple.h"
 
 slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
     ASSERT(data != nullptr, "Data is null.");

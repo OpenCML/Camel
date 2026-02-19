@@ -13,11 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "userdef.h"
+#include "camel/core/module/userdef.h"
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
@@ -27,11 +27,11 @@
 #include "compile/gir/builder.h"
 #include "parse/parse.h"
 
-#include "error/base.h"
-#include "error/diagnostics/diagnostics.h"
-#include "error/listener.h"
+#include "camel/core/error/base.h"
+#include "camel/core/error/diagnostics.h"
+#include "camel/core/error/listener.h"
 
-#include "utils/log.h"
+#include "camel/utils/log.h"
 
 #include <filesystem>
 

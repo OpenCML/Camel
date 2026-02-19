@@ -13,16 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 10, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include <iostream>
 
+#include "camel/utils/log.h"
+#include "camel/utils/str.h"
 #include "clipp/clipp.h"
 #include "config.h"
-#include "utils/log.h"
-#include "utils/str.h"
 
 #ifndef BUILD_FOOTPRINT
 #define BUILD_FOOTPRINT "%y%m%d_%H%M%S"
@@ -35,54 +35,54 @@ namespace CmdLineArgs {
 Command selectedCommand = Command::Run;
 
 namespace Global {
-bool verbose = false;
+bool verbose    = false;
 string logLevel = "off";
 } // namespace Global
 
 namespace Run {
-string outputFile = "";
-string package = "";
-string schedular = "";
-string errorFormat = "text";
-string stdLibPath = "";          // "" means use the default path
+string outputFile          = "";
+string package             = "";
+string schedular           = "";
+string errorFormat         = "text";
+string stdLibPath          = ""; // "" means use the default path
 vector<string> includeDirs = {}; // Include directories
 vector<string> targetFiles = {};
 
-bool profile = false;
-bool noCache = false;
-bool semanticOnly = false;
+bool profile        = false;
+bool noCache        = false;
+bool semanticOnly   = false;
 unsigned int repeat = 1;
-int maxThreads = -1; // -1 means use the maximum number of threads
+int maxThreads      = -1; // -1 means use the maximum number of threads
 } // namespace Run
 
 namespace Format {
-string quotePrefer = "";     // Quote preference (default to single quotes)
-string configFile = "";      // Configuration file path
-bool useTabs = false;        // Whether to use tabs for indentation
-bool inplace = false;        // Whether to modify the input file in place
-bool ignoreDefiFile = false; // Whether to ignore the definition file
-unsigned int tabSize = 4;    // Indentation size in spaces
-unsigned int maxWidth = 80;  // Max line width
+string quotePrefer    = "";    // Quote preference (default to single quotes)
+string configFile     = "";    // Configuration file path
+bool useTabs          = false; // Whether to use tabs for indentation
+bool inplace          = false; // Whether to modify the input file in place
+bool ignoreDefiFile   = false; // Whether to ignore the definition file
+unsigned int tabSize  = 4;     // Indentation size in spaces
+unsigned int maxWidth = 80;    // Max line width
 }; // namespace Format
 
 namespace Check {
-bool lexical = false;          // Whether to check lexical errors
-bool syntaxOnly = false;       // Whether to check syntax only
-bool ignoreDefiFile = false;   // Whether to ignore the definition file
-string outputFormat = "text";  // Output format (text or json)
-string configFilePath = "";    // Configuration file path
-unsigned int maxWaring = 1000; // Max warnings
+bool lexical           = false;  // Whether to check lexical errors
+bool syntaxOnly        = false;  // Whether to check syntax only
+bool ignoreDefiFile    = false;  // Whether to ignore the definition file
+string outputFormat    = "text"; // Output format (text or json)
+string configFilePath  = "";     // Configuration file path
+unsigned int maxWaring = 1000;   // Max warnings
 } // namespace Check
 
 namespace Inspect {
 bool dumpTokens = false; // Whether to dump tokens
-bool dumpCST = false;    // Whether to dump Concrete Syntax Tree
-bool dumpAST = false;    // Whether to dump Abstract Syntax Tree
-bool dumpGCT = false;    // Whether to dump Graph Construction Tree
-bool dumpGIR = false;    // Whether to dump Graph Intermediate Representation
-bool dumpTNS = false;    // Whether to dump Topological Node Sequence
-bool geneCode = false;   // Whether to generate code from GIR
-int passUntil = -1;      // Pass until the given pass
+bool dumpCST    = false; // Whether to dump Concrete Syntax Tree
+bool dumpAST    = false; // Whether to dump Abstract Syntax Tree
+bool dumpGCT    = false; // Whether to dump Graph Construction Tree
+bool dumpGIR    = false; // Whether to dump Graph Intermediate Representation
+bool dumpTNS    = false; // Whether to dump Topological Node Sequence
+bool geneCode   = false; // Whether to generate code from GIR
+int passUntil   = -1;    // Pass until the given pass
 } // namespace Inspect
 
 } // namespace CmdLineArgs
@@ -157,10 +157,10 @@ void printCliArgs(Command selected) {
 
 bool parseArgs(int argc, char *argv[]) {
     bool showVersion = false; // Version information
-    bool showHelp = false;    // Help information
-    bool showDocs = false;    // Documentation information
-    bool showAbout = false;   // About information
-    bool showZen = false;     // Show Zen of Camel
+    bool showHelp    = false; // Help information
+    bool showDocs    = false; // Documentation information
+    bool showAbout   = false; // About information
+    bool showZen     = false; // Show Zen of Camel
 
     auto globalOps =
         ((option("-v", "--verbose").set(Global::verbose) % "enable verbose output"),

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Oct. 12, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,8 +23,8 @@
 #include <unordered_set>
 
 #include "antlr4-runtime/antlr4-runtime.h"
+#include "camel/utils/assert.h"
 #include "parse/antlr/OpenCMLVisitor.h"
-#include "utils/assert.h"
 
 class Formatter : public OpenCMLVisitor {
   private:
@@ -33,9 +33,9 @@ class Formatter : public OpenCMLVisitor {
 
     // bool compact = false;
     // unsigned int threshold = 80;
-    std::string indent = "    ";
-    std::string newline = "\r\n";
-    bool preferSemis = false;
+    std::string indent          = "    ";
+    std::string newline         = "\r\n";
+    bool preferSemis            = false;
     QuotePreference quotePrefer = QuotePreference::Single;
 
     std::string currentIndent = "";
@@ -100,32 +100,32 @@ class Formatter : public OpenCMLVisitor {
     }
 
     enum FormatListFlags {
-        PaddingSP = 1 << 0,  // Padding with spaces
-        PaddingNL = 1 << 1,  // Padding with new lines
-        Multiline = 1 << 2,  // Force multi-line formatting
-        InOneLine = 1 << 3,  // Force in one line
-        PushScope = 1 << 4,  // Push indent for multi-line
-        TrailingC = 1 << 5,  // Include trailing comma
-        PLeftOnly = 1 << 6,  // Padding on left only
+        PaddingSP  = 1 << 0, // Padding with spaces
+        PaddingNL  = 1 << 1, // Padding with new lines
+        Multiline  = 1 << 2, // Force multi-line formatting
+        InOneLine  = 1 << 3, // Force in one line
+        PushScope  = 1 << 4, // Push indent for multi-line
+        TrailingC  = 1 << 5, // Include trailing comma
+        PLeftOnly  = 1 << 6, // Padding on left only
         PRightOnly = 1 << 7, // Padding on right only
     };
 
     template <typename T>
     std::string formatList(
         const std::vector<T *> &list, const antlr4::ParserRuleContext *context,
-        const std::string iComma, // inline comma
-        const std::string nComma, // new line comma
-        int flags = 0,            // combined flags
-        int maxSkips = 2,         // maximum number of line skips
+        const std::string iComma,                               // inline comma
+        const std::string nComma,                               // new line comma
+        int flags                                          = 0, // combined flags
+        int maxSkips                                       = 2, // maximum number of line skips
         std::vector<std::pair<size_t, size_t>> tokenRanges = {}) {
         // Parse flags
-        bool tComma = flags & TrailingC;
-        bool paddingSP = flags & PaddingSP;
-        bool paddingNL = flags & PaddingNL;
-        bool multiLine = flags & Multiline;
-        bool inOneLine = flags & InOneLine;
-        bool pushScope = flags & PushScope;
-        bool pLeftOnly = flags & PLeftOnly;
+        bool tComma     = flags & TrailingC;
+        bool paddingSP  = flags & PaddingSP;
+        bool paddingNL  = flags & PaddingNL;
+        bool multiLine  = flags & Multiline;
+        bool inOneLine  = flags & InOneLine;
+        bool pushScope  = flags & PushScope;
+        bool pLeftOnly  = flags & PLeftOnly;
         bool pRightOnly = flags & PRightOnly;
 
         std::string result;
@@ -138,8 +138,8 @@ class Formatter : public OpenCMLVisitor {
             // TODO: handle empty list to proc comments
             // here temporarily ignores the ctrl flags
             const size_t firstTokIdx = context->getStart()->getTokenIndex();
-            const size_t lastTokIdx = context->getStop()->getTokenIndex();
-            bool foundComment = false;
+            const size_t lastTokIdx  = context->getStop()->getTokenIndex();
+            bool foundComment        = false;
             if (pushScope) {
                 pushIndent();
             }
@@ -173,10 +173,10 @@ class Formatter : public OpenCMLVisitor {
                     "Token ranges should match the list size plus one for reverse lookup");
                 if (!reverse) {
                     start = tokenRanges[index].first;
-                    end = tokenRanges[index].second;
+                    end   = tokenRanges[index].second;
                 } else {
                     start = tokenRanges[list.size()].first;
-                    end = tokenRanges[list.size()].second;
+                    end   = tokenRanges[list.size()].second;
                 }
             } else {
                 if (!reverse) {
@@ -278,11 +278,11 @@ class Formatter : public OpenCMLVisitor {
         }
 
         int lastCommentLines = 0;
-        size_t lastLine = list[0]->getStop()->getLine();
+        size_t lastLine      = list[0]->getStop()->getLine();
 
         for (size_t i = 0; i < list.size(); i++) {
             const size_t currLine = list[i]->getStart()->getLine();
-            int remainedSkips = currLine - lastLine - lastCommentLines;
+            int remainedSkips     = currLine - lastLine - lastCommentLines;
 
             if (multiLine && i != 0) {
                 // sometimes the elements are written in one line
@@ -301,9 +301,9 @@ class Formatter : public OpenCMLVisitor {
 
             if (i == 0 && list[0]->getStart()->getTokenIndex() > 0) {
                 auto [predCmtStart, predCmtEnd] = findCmtRange(0, true);
-                int cmtSkips = 0;
+                int cmtSkips                    = 0;
                 for (size_t j = predCmtStart; j < predCmtEnd; j++) {
-                    const auto &comment = tokens[j];
+                    const auto &comment     = tokens[j];
                     const auto &commentText = comment->getText();
 
                     cmtSkips = comment->getLine() - lastStopLine;
@@ -328,10 +328,10 @@ class Formatter : public OpenCMLVisitor {
                 result += multiLine ? nComma : iComma;
             }
 
-            lastStopLine = list[i]->getStop()->getLine();
+            lastStopLine                    = list[i]->getStop()->getLine();
             auto [predCmtStart, predCmtEnd] = findCmtRange(i, false);
             for (size_t j = predCmtStart; j < predCmtEnd; j++) {
-                const auto &comment = tokens[j];
+                const auto &comment     = tokens[j];
                 const auto &commentText = comment->getText();
 
                 const int cmtSkips = comment->getLine() - lastStopLine;
@@ -349,11 +349,11 @@ class Formatter : public OpenCMLVisitor {
             }
 
             if (predCmtStart < predCmtEnd) {
-                const size_t currLineEnd = list[i]->getStop()->getLine();
-                const auto &lastComment = tokens[predCmtEnd - 1];
-                const auto &lastText = lastComment->getText();
+                const size_t currLineEnd        = list[i]->getStop()->getLine();
+                const auto &lastComment         = tokens[predCmtEnd - 1];
+                const auto &lastText            = lastComment->getText();
                 const size_t lastCommentLineEnd = lastComment->getLine() + countLines(lastText);
-                lastCommentLines = lastCommentLineEnd - currLineEnd;
+                lastCommentLines                = lastCommentLineEnd - currLineEnd;
             } else {
                 lastCommentLines = 0;
             }

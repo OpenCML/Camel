@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 24, 2025
- * Updated: Sep. 26, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,10 +26,10 @@
 #include "antlr/OpenCMLLexer.h"
 #include "antlr/OpenCMLParser.h"
 
-#include "ast_builder.h"
+#include "ast/builder.h"
 #include "cst_dumper.h"
 
-#include "error/diagnostics/diagnostics.h"
+#include "camel/core/error/diagnostics.h"
 
 class ParserErrorListener : public antlr4::BaseErrorListener {
   protected:
@@ -65,7 +65,7 @@ class CamelParser {
     std::unique_ptr<OpenCMLParser> parser_;
 
     antlr4::tree::ParseTree *cst_ = nullptr;
-    AST::node_ptr_t ast_ = nullptr;
+    AST::node_ptr_t ast_          = nullptr;
 
     bool buildCST() {
         auto interpreter = parser_->getInterpreter<antlr4::atn::ParserATNSimulator>();
@@ -95,7 +95,7 @@ class CamelParser {
 
     bool buildAST() {
         auto constructor = AST::Builder();
-        ast_ = constructor.build(cst_, diagnostics_);
+        ast_             = constructor.build(cst_, diagnostics_);
 
         if (diagnostics_->hasErrors()) {
             ast_ = nullptr;
@@ -120,7 +120,7 @@ class CamelParser {
     bool parse(std::istream &is) {
         input_.load(is);
 
-        lexer_ = std::make_unique<OpenCMLLexer>(&input_);
+        lexer_  = std::make_unique<OpenCMLLexer>(&input_);
         tokens_ = std::make_unique<antlr4::CommonTokenStream>(lexer_.get());
         parser_ = std::make_unique<OpenCMLParser>(tokens_.get());
 

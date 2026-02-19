@@ -13,15 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tensor.h"
 #include "builtin/types/tensor.h"
-#include "core/data/primary.h"
-#include "error/diagnostics/diagnostics.h"
-#include "utils/log.h"
+#include "camel/core/data/primary.h"
+#include "camel/core/error/diagnostics.h"
+#include "camel/utils/log.h"
 
 #include <algorithm>
 #include <cmath>

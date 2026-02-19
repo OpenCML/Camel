@@ -13,11 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 27, 2025
- * Updated: Oct. 28, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "memperf.h"
+#include "camel/utils/memperf.h"
 
 #include <cstdlib>
 #include <iomanip>
@@ -33,15 +33,15 @@ PerfMonitor &instance() {
 }
 
 void PerfMonitor::start() {
-    running = true;
+    running            = true;
     stats.start_cycles = rdtsc();
-    stats.start_time = std::chrono::steady_clock::now();
+    stats.start_time   = std::chrono::steady_clock::now();
 }
 
 void PerfMonitor::stop() {
-    running = false;
+    running             = false;
     uint64_t end_cycles = rdtsc();
-    stats.end_time = std::chrono::steady_clock::now();
+    stats.end_time      = std::chrono::steady_clock::now();
     stats.total_cycles += (end_cycles - stats.start_cycles);
 }
 
@@ -107,7 +107,7 @@ void PerfMonitor::report(std::ostream &os) {
     double elapsed_seconds =
         std::chrono::duration<double>(stats.end_time - stats.start_time).count();
     double seconds_per_cycle = (elapsed_seconds / static_cast<double>(stats.total_cycles));
-    double ns_per_cycle = seconds_per_cycle * 1e9;
+    double ns_per_cycle      = seconds_per_cycle * 1e9;
 
     os << std::fixed << std::setprecision(4);
 
@@ -203,8 +203,8 @@ size_t PerfMonitor::bucket_index(size_t size) {
 // 拦截全局 new/delete
 void *operator new(std::size_t size) {
     auto start = memperf::rdtsc();
-    void *p = std::malloc(size);
-    auto end = memperf::rdtsc();
+    void *p    = std::malloc(size);
+    auto end   = memperf::rdtsc();
     memperf::instance().record_alloc(size, end - start);
     if (!p)
         throw std::bad_alloc();
@@ -221,8 +221,8 @@ void operator delete(void *p) noexcept {
 
 void *operator new[](std::size_t size) {
     auto start = memperf::rdtsc();
-    void *p = std::malloc(size);
-    auto end = memperf::rdtsc();
+    void *p    = std::malloc(size);
+    auto end   = memperf::rdtsc();
     memperf::instance().record_alloc(size, end - start);
     if (!p)
         throw std::bad_alloc();

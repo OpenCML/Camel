@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "union.h"
-#include "core/mm/mm.h"
-#include "utils/assert.h"
-#include "utils/log.h"
+#include "camel/core/type/composite/union.h"
+#include "camel/core/mm.h"
+#include "camel/utils/assert.h"
+#include "camel/utils/log.h"
 
 using namespace std;
 

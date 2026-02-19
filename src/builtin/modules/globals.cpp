@@ -13,17 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "globals.h"
 #include "builtin/executors/builtin.h"
 #include "builtin/types/tensor.h"
-#include "core/context/context.h"
+#include "camel/core/context/context.h"
 
-#include "utils/assert.h"
-#include "utils/log.h"
+#include "camel/utils/assert.h"
+#include "camel/utils/log.h"
 
 using namespace std;
 

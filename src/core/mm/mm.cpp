@@ -13,27 +13,26 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 10, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "mm.h"
-
-#include "mm.h"
+#include "camel/core/mm.h"
 
 namespace mm { // Memory Management
 
 // 由 GC 系统自动管理，需要从根对象可达
 GenerationalAllocatorWithGC &autoSpace() {
-    static GenerationalAllocatorWithGC allocator(GenerationalAllocatorWithGC::Config{
-        .birthSize             = 32 * MB, // 32 MB
-        .havenSize             = 4 * MB,  // 4 MB
-        .elderGenSize          = 64 * MB, // 64 MB
-        .promotionAgeThreshold = 4,       // 晋升阈值
-        .largeObjThreshold     = 4 * KB,  // 大对象阈值
-        .minorGCTriggerRatio   = 0.9f,    // 小垃圾回收触发比例
-        .majorGCTriggerRatio   = 0.8f     // 大垃圾回收触发比例
-    });
+    static GenerationalAllocatorWithGC allocator(
+        GenerationalAllocatorWithGC::Config{
+            .birthSize             = 32 * MB, // 32 MB
+            .havenSize             = 4 * MB,  // 4 MB
+            .elderGenSize          = 64 * MB, // 64 MB
+            .promotionAgeThreshold = 4,       // 晋升阈值
+            .largeObjThreshold     = 4 * KB,  // 大对象阈值
+            .minorGCTriggerRatio   = 0.9f,    // 小垃圾回收触发比例
+            .majorGCTriggerRatio   = 0.8f     // 大垃圾回收触发比例
+        });
     return allocator;
 }
 

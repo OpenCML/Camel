@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tensor.h"
-#include "core/mm/mm.h"
-#include "utils/assert.h"
+#include "camel/core/mm.h"
+#include "camel/utils/assert.h"
 
 using namespace std;
 

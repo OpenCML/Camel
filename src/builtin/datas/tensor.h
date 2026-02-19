@@ -13,15 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-// #include "core/data/other/other.h"
-// #include "core/type/other.h"
-#include "core/rtdata/array.h"
+// #include "camel/core/data/other/other.h"
+// #include "camel/core/type/other.h"
+#include "camel/core/rtdata/array.h"
 
 // #include <memory>
 // #include <vector>

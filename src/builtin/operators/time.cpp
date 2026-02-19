@@ -13,15 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "time.h"
-#include "compile/gir.h"
-#include "core/context/context.h"
-#include "core/operator.h"
-#include "utils/strpt.h"
+#include "camel/compile/gir.h"
+#include "camel/core/context/context.h"
+#include "camel/core/operator.h"
+#include "camel/utils/strpt.h"
 
 namespace GIR = GraphIR;
 

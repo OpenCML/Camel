@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "error/runtime.h"
-#include "execute/executor/executor.h"
+#include "camel/core/error/runtime.h"
+#include "camel/execute/executor.h"
 
 class BasicBuiltinExecutor : public Executor {
   public:

@@ -13,17 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "base.h"
-
-#include "composite/composite.h"
-#include "core/mm/mm.h"
-#include "other.h"
-#include "utils/log.h"
-#include "utils/type.h"
+#include "camel/core/type/base.h"
+#include "camel/core/mm.h"
+#include "camel/core/type/composite/composite.h"
+#include "camel/core/type/other.h"
+#include "camel/utils/log.h"
+#include "camel/utils/type.h"
 
 using namespace std;
 

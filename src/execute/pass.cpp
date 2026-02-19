@@ -13,24 +13,24 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "pass.h"
-#include "common/scope.h"
-#include "error/diagnostics/diagnostics.h"
+#include "camel/execute/pass.h"
+#include "camel/common/scope.h"
+#include "camel/core/error/diagnostics.h"
 
-#include "builtin/passes/rewrite/inline/inline.h"
-#include "builtin/passes/sched/linear/fastvm/bcdump.h"
-#include "builtin/passes/sched/linear/fastvm/fastvm.h"
-#include "builtin/passes/sched/linear/fastvm/jit/dump/asmdump.h"
-#include "builtin/passes/sched/linear/fastvm/jit/dump/bindump.h"
-#include "builtin/passes/sched/linear/fastvm/jit/dump/mirdump.h"
-#include "builtin/passes/sched/linear/nodevm/nodevm.h"
-#include "builtin/passes/sched/parallel/taskflow/taskflow.h"
-#include "builtin/passes/trans/dot/graphviz.h"
-#include "builtin/passes/trans/tns/topo_node_seq.h"
+#include "passes/opt/inline/inline.h"
+#include "passes/sched/fastvm/bcdump.h"
+#include "passes/sched/fastvm/fastvm.h"
+#include "passes/sched/fastvm/jit/dump/asmdump.h"
+#include "passes/sched/fastvm/jit/dump/bindump.h"
+#include "passes/sched/fastvm/jit/dump/mirdump.h"
+#include "passes/sched/nodevm/nodevm.h"
+#include "passes/sched/taskflow/taskflow.h"
+#include "passes/trans/dot/graphviz.h"
+#include "passes/trans/tns/topo_node_seq.h"
 
 #include "macro/macro.h"
 

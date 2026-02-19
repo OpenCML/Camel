@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "init.h"
-#include "core/type/type.h"
+#include "camel/core/type.h"
 
 using namespace std;
 

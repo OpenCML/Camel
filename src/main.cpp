@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -23,27 +23,27 @@
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
-#include "builtin/passes/trans/dot/graphviz.h"
-#include "builtin/passes/trans/tns/topo_node_seq.h"
-#include "codegen/source/generator.h"
+#include "camel/core/error/base.h"
+#include "camel/core/error/diagnostics.h"
+#include "camel/core/error/listener.h"
+#include "camel/core/mm.h"
+#include "camel/core/module/userdef.h"
+#include "camel/core/type.h"
+#include "camel/utils/env.h"
+#include "camel/utils/log.h"
+#include "camel/utils/memperf.h"
 #include "config.h"
-#include "core/mm/mm.h"
-#include "core/module/userdef.h"
-#include "core/type/type.h"
-#include "error/base.h"
-#include "error/diagnostics/diagnostics.h"
-#include "error/listener.h"
 #include "parse/antlr/OpenCMLLexer.h"
 #include "parse/antlr/OpenCMLParser.h"
-#include "parse/ast_builder.h"
+#include "parse/ast/builder.h"
 #include "parse/cst_dumper.h"
 #include "parse/parse.h"
+#include "passes/trans/dot/graphviz.h"
+#include "passes/trans/tns/topo_node_seq.h"
+#include "service/codegen/source/generator.h"
 #include "service/formatter/fmt.h"
 #include "service/profiler/advanced/advanced_tracer.h"
 #include "service/profiler/core/trace.h"
-#include "utils/env.h"
-#include "utils/log.h"
-#include "utils/memperf.h"
 
 #include <chrono>
 #include <filesystem>

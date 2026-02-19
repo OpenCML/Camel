@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "resolver.h"
+#include "camel/core/type/resolver.h"
 
-#include "utils/assert.h"
+#include "camel/utils/assert.h"
 
 std::optional<FunctionType *> StaticFuncTypeResolver::resolve(
     const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const {

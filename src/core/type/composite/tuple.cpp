@@ -13,17 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "tuple.h"
-#include "core/mm/alloc/allocator.h"
-#include "core/mm/mm.h"
-#include "error/diagnostics/diagnostics.h"
-#include "utils/assert.h"
-#include "utils/log.h"
-#include "utils/type.h"
+#include "camel/core/type/composite/tuple.h"
+#include "camel/core/error/diagnostics.h"
+#include "camel/core/mm.h"
+#include "camel/core/mm/alloc/allocator.h"
+#include "camel/utils/assert.h"
+#include "camel/utils/log.h"
+#include "camel/utils/type.h"
 
 using namespace std;
 
