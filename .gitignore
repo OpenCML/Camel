@@ -23,7 +23,7 @@ dist/
 out/
 
 *.cmo
-camel
+./camel
 camel.exe
 python311.dll
 result.json
