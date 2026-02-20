@@ -27,6 +27,7 @@
         "format": "node ./scripts/format.js",
         "setver": "node ./scripts/setver.js",
         "gitcnt": "node ./scripts/gitcnt.js",
+        "code-stats": "python ./scripts/code_stats.py",
         "fix:vsc": "node ./scripts/fix.js vsc",
         "pypi:rollup": "node ./scripts/pypi_rollup.js",
         "pypi:upload": "python -m twine upload --repository testpypi dist/pypi/*",
