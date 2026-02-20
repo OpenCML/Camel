@@ -22,6 +22,7 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/module/builtin.h"
+#include "camel/core/module/dynamic.h"
 #include "camel/core/module/userdef.h"
 #include "camel/utils/log.h"
 #include "camel/utils/str.h"
@@ -181,44 +182,64 @@ std::string Context::resolveRelativeModuleName(
     return join(base, ".");
 }
 
-std::string Context::getModulePath(const std::string &moduleName) {
+std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &moduleName) {
     std::string relativePath = moduleName;
     std::replace(relativePath.begin(), relativePath.end(), '.', '/');
-    relativePath += ".cml";
+    fs::path relPath(relativePath);
+    fs::path parentDir = relPath.parent_path();
+    std::string stem   = relPath.filename().string();
+    if (stem.empty())
+        stem = relPath.string();
+
+    auto tryDir = [&](const fs::path &base) -> std::pair<std::string, bool> {
+        fs::path dir = base / parentDir;
+        if (!fs::exists(dir) || !fs::is_directory(dir))
+            return {"", false};
+        fs::path cmoPath = dir / (stem + ".cmo");
+        if (fileExists(cmoPath.string()))
+            return {cmoPath.string(), true};
+        for (const auto &entry : fs::directory_iterator(dir)) {
+            if (!entry.is_regular_file())
+                continue;
+            fs::path p = entry.path();
+            if (p.stem() == stem)
+                return {p.string(), (p.extension() == ".cmo")};
+        }
+        return {"", false};
+    };
 
     for (const auto &dir : entryConfig_.searchPaths) {
         if (dir.empty())
-            continue; // skip empty search paths
+            continue;
         fs::path basePath = fs::path(dir);
-        if (!basePath.is_absolute()) {
+        if (!basePath.is_absolute())
             basePath = fs::path(entryConfig_.entryDir) / basePath;
-        }
-
-        fs::path fullPath = basePath / relativePath;
-        if (fileExists(fullPath.string())) {
-            return fullPath.string();
-        }
+        auto [path, isCmo] = tryDir(basePath);
+        if (!path.empty())
+            return {path, isCmo};
     }
 
-    // fallback: root/relativePath
-    fs::path fallbackPath = fs::path(entryConfig_.entryDir) / relativePath;
-    if (fileExists(fallbackPath.string())) {
-        return fallbackPath.string();
-    }
+    auto [path, isCmo] = tryDir(fs::path(entryConfig_.entryDir));
+    if (!path.empty())
+        return {path, isCmo};
+    return {"", false};
+}
 
-    return "";
+std::string Context::getModulePath(const std::string &moduleName) {
+    return getModulePathAndKind(moduleName).first;
 }
 
 bool Context::moduleFileExists(const std::string &moduleName) {
-    return !getModulePath(moduleName).empty();
+    return !getModulePathAndKind(moduleName).first.empty();
 }
 
 module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
-    std::string path = getModulePath(moduleName);
-    if (!path.empty()) {
-        return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
-    }
-    return nullptr;
+    auto [path, isCmo] = getModulePathAndKind(moduleName);
+    if (path.empty())
+        return nullptr;
+    if (isCmo)
+        return loadCmoModule(moduleName, path, shared_from_this());
+    return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
 }
 
 GraphIR::graph_ptr_t Context::rootGraph() const {

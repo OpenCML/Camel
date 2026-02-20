@@ -6,6 +6,14 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 export const BASEDIR = path.dirname(path.dirname(__filename))
 
+const isWindows = process.platform === 'win32'
+const executableName = `camel${isWindows ? '.exe' : ''}`
+const libName = isWindows
+    ? 'libcamel.dll'
+    : process.platform === 'darwin'
+      ? 'libcamel.dylib'
+      : 'libcamel.so'
+
 const colors = {
     reset: '\x1b[0m',
     cyan: '\x1b[36m',
@@ -81,4 +89,91 @@ export function copyDir(src, dest) {
             copyFile(srcFile, destFile)
         }
     })
+}
+
+/** 供 build/debug/profile 使用：git describe 生成版本后缀 */
+export function getGitVersion() {
+    try {
+        const output = execSync('git describe --tags --always --dirty', {
+            cwd: BASEDIR,
+            stdio: ['ignore', 'pipe', 'ignore'],
+            encoding: 'utf-8'
+        })
+            .trim()
+            .replace(/-/g, '_')
+        return `${output}`
+    } catch {
+        return ''
+    }
+}
+
+/**
+ * 执行 Conan 检查、CMake 配置与构建。
+ * @param {'Release'|'Debug'|'RelWithDebInfo'} config
+ * @param {string} cmakeOptionFlags - 来自 getCmakeOptionFlags() 的 -D 参数
+ */
+export function runCmakeBuild(config, cmakeOptionFlags) {
+    process.chdir(BASEDIR)
+    const buildDir = path.join(BASEDIR, 'build')
+    const conanToolchain = path.join(buildDir, 'conan_toolchain.cmake')
+    if (!fs.existsSync(conanToolchain)) {
+        logStep('build/ or conan_toolchain.cmake missing, running conan install...')
+        runCommand('conan install . --output-folder=build --build=missing', { cwd: BASEDIR })
+        runCommand('conan install . --output-folder=build --build=missing --settings=build_type=Debug', {
+            cwd: BASEDIR
+        })
+        runCommand('conan install . --output-folder=build --build=missing --settings=build_type=RelWithDebInfo', {
+            cwd: BASEDIR
+        })
+    }
+    process.chdir(buildDir)
+
+    const gitVersion = getGitVersion()
+    const BUILD_FOOTPRINT =
+        new Date().toISOString().replace(/[-:]/g, '').replace(/[T]/g, '_').slice(2, 15) +
+        (gitVersion ? `_${gitVersion}` : '')
+
+    logStep(`Building ${config}... (${BUILD_FOOTPRINT})`)
+    const cmakeEnv = getCmakeEnv()
+    const clangFlags = getCmakeClangFlags()
+    runCommand(
+        `cmake .. -G "Ninja Multi-Config" -DBUILD_FOOTPRINT="${BUILD_FOOTPRINT}" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake ${clangFlags} ${cmakeOptionFlags}`,
+        cmakeEnv ? { env: cmakeEnv } : {}
+    )
+    runCommand(`cmake --build . --config ${config}`, cmakeEnv ? { env: cmakeEnv } : {})
+}
+
+/**
+ * 将构建产物复制到项目根目录与 stdlib：camel 可执行文件、libcamel、以及 libs/* 下的所有 .cmo 到 stdlib/。
+ * @param {'Release'|'Debug'|'RelWithDebInfo'} config
+ */
+export function copyBuildArtifacts(config) {
+    const exeSrcDir = path.join(BASEDIR, 'build', 'tools', 'camel-cli', config)
+    const libSrcDir = path.join(BASEDIR, 'build', config)
+    const libsBuildDir = path.join(BASEDIR, 'build', 'libs')
+    const stdlibDir = path.join(BASEDIR, 'stdlib')
+
+    copyFile(path.join(exeSrcDir, executableName), path.join(BASEDIR, executableName))
+    const libSrc = path.join(libSrcDir, libName)
+    if (fs.existsSync(libSrc)) {
+        copyFile(libSrc, path.join(BASEDIR, libName))
+    }
+
+    if (fs.existsSync(libsBuildDir)) {
+        if (!fs.existsSync(stdlibDir)) {
+            fs.mkdirSync(stdlibDir, { recursive: true })
+        }
+        const subdirs = fs.readdirSync(libsBuildDir, { withFileTypes: true })
+        for (const ent of subdirs) {
+            if (!ent.isDirectory()) continue
+            const configDir = path.join(libsBuildDir, ent.name, config)
+            if (!fs.existsSync(configDir)) continue
+            const files = fs.readdirSync(configDir)
+            for (const f of files) {
+                if (f.endsWith('.cmo')) {
+                    copyFile(path.join(configDir, f), path.join(stdlibDir, f))
+                }
+            }
+        }
+    }
 }
