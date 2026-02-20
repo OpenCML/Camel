@@ -30,14 +30,30 @@ export function logFail(message) {
     console.error(`${colors.red}[FAIL]${colors.reset} ${message}`)
 }
 
-export function runCommand(command) {
+export function runCommand(command, options = {}) {
     try {
         logStep(`Running: ${command}`)
-        execSync(command, { stdio: 'inherit' })
+        execSync(command, { stdio: 'inherit', ...options })
     } catch (error) {
         logFail(`Error executing command: ${command}\n${error}`)
         process.exit(1)
     }
+}
+
+/** Windows: 避免 node_modules/.bin/rc 被 CMake 当作 Resource Compiler，将含 node_modules 的 PATH 项移到末尾 */
+export function getCmakeEnv() {
+    if (process.platform !== 'win32') return undefined
+    const pathParts = (process.env.PATH || '').split(path.delimiter)
+    const normal = pathParts.filter((p) => !p.includes('node_modules'))
+    const nodeParts = pathParts.filter((p) => p.includes('node_modules'))
+    if (nodeParts.length === 0) return undefined
+    return { ...process.env, PATH: [...normal, ...nodeParts].join(path.delimiter) }
+}
+
+/** Windows + Clang: 显式指定编译器，因 Conan 工具链可能未设置，CMake 会误选 MSVC */
+export function getCmakeClangFlags() {
+    if (process.platform !== 'win32') return ''
+    return '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_RC_COMPILER=llvm-rc'
 }
 
 export function removeDir(dir) {

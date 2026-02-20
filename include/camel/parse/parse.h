@@ -23,8 +23,8 @@
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
-#include "antlr/OpenCMLLexer.h"
-#include "antlr/OpenCMLParser.h"
+#include "camel/parse/antlr/OpenCMLLexer.h"
+#include "camel/parse/antlr/OpenCMLParser.h"
 
 #include "ast/builder.h"
 #include "cst_dumper.h"

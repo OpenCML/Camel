@@ -23,10 +23,10 @@
 #include <regex>
 #include <string>
 
-#include "../antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime/antlr4-runtime.h"
 #include "camel/common/scope.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/parse/antlr/OpenCMLVisitor.h"
 #include "camel/parse/ast.h"
 
 namespace AbstractSyntaxTree {

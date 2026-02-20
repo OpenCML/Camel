@@ -5,7 +5,10 @@ if(NOT DEFINED BUILD_FOOTPRINT)
     string(TIMESTAMP BUILD_FOOTPRINT "%y%m%d_%H%M%S")
 endif()
 
-set_source_files_properties("${PROJECT_SOURCE_DIR}/src/config.cpp" PROPERTIES COMPILE_DEFINITIONS BUILD_FOOTPRINT="${BUILD_FOOTPRINT}")
+# CLI 的 config 在 camel-cli 中编译，此处仅用于 BUILD_FOOTPRINT 占位（由 camel-cli 传入）
+if(NOT DEFINED BUILD_FOOTPRINT_FOR_CLI)
+    set(BUILD_FOOTPRINT_FOR_CLI "${BUILD_FOOTPRINT}")
+endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -27,10 +30,15 @@ elseif(UNIX)
     add_definitions(-DPLATFORM_LINUX)
 endif()
 
-file(GLOB_RECURSE SRC_FILES
+file(GLOB_RECURSE _ALL_SRC
     "${PROJECT_SOURCE_DIR}/src/*.cpp"
     "${PROJECT_SOURCE_DIR}/third_party/*.cpp"
 )
+list(REMOVE_ITEM _ALL_SRC
+    "${PROJECT_SOURCE_DIR}/src/main.cpp"
+    "${PROJECT_SOURCE_DIR}/src/config.cpp"
+)
+set(LIBCAMEL_SRC ${_ALL_SRC})
 
 find_package(fmt REQUIRED)
 find_package(GTest REQUIRED)
@@ -61,10 +69,17 @@ endif()
 find_package(pybind11 REQUIRED)
 
 add_definitions(-DNOMINMAX)
-add_executable(${PROJECT_NAME} ${SRC_FILES})
 
-target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
-set_target_properties(${PROJECT_NAME} PROPERTIES
+# 共享库：camel 核心（libcamel）
+add_library(libcamel SHARED ${LIBCAMEL_SRC})
+
+# Windows: 导出所有符号供 camel-cli 和 tools 链接
+if(WIN32)
+    set_target_properties(libcamel PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
+endif()
+
+target_compile_features(libcamel PRIVATE cxx_std_23)
+set_target_properties(libcamel PROPERTIES
     CXX_STANDARD 23
     CXX_STANDARD_REQUIRED ON
     CXX_EXTENSIONS OFF
@@ -83,7 +98,12 @@ if(result)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO FALSE)
 endif()
 
-target_compile_options(${PROJECT_NAME} PRIVATE
+# 选项通过 interface 库统一应用，便于 libcamel 与 camel-cli 共享
+add_library(camel_options INTERFACE)
+set(CAMEL_OPTIONS_TARGET camel_options)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Options.cmake)
+
+target_compile_options(libcamel PRIVATE
     $<$<CONFIG:Release>:-O3>
     $<$<CONFIG:RelWithDebInfo>:-O2>
     $<$<CONFIG:RelWithDebInfo>:-g3>
@@ -107,25 +127,24 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     # -ffast-math # 不要开启这个，在build模式优化下会导致计算结果失真
 )
 
-target_link_options(${PROJECT_NAME} PRIVATE
+target_link_options(libcamel PRIVATE
     $<$<CONFIG:RelWithDebInfo>:-no-pie>
 )
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE ANTLR4CPP_STATIC)
+target_compile_definitions(libcamel PRIVATE ANTLR4CPP_STATIC CAMEL_DLL_EXPORTS)
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Options.cmake)
-
-target_include_directories(${PROJECT_NAME} PUBLIC
+target_include_directories(libcamel PUBLIC
     ${PROJECT_SOURCE_DIR}/include
 )
-target_include_directories(${PROJECT_NAME} PRIVATE
+target_include_directories(libcamel PRIVATE
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/third_party
     ${PROJECT_SOURCE_DIR}/third_party/antlr4-runtime
     ${PROJECT_SOURCE_DIR}
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE
+target_link_libraries(libcamel PRIVATE
+    camel_options
     fmt::fmt
     gtest::gtest
     nlohmann_json::nlohmann_json
@@ -135,22 +154,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Python::Python
 )
 
-if(WIN32)
-    execute_process(
-        COMMAND "${Python_EXECUTABLE}" -c
-        "import sys, pathlib; p=pathlib.Path(sys.base_prefix); print(p / f'python{sys.version_info.major}{sys.version_info.minor}.dll')"
-        OUTPUT_VARIABLE _PYTHON_DLL_PATH
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-
-    if(EXISTS "${_PYTHON_DLL_PATH}")
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${_PYTHON_DLL_PATH}"
-                $<TARGET_FILE_DIR:${PROJECT_NAME}>
-        )
-        message(STATUS "Found Python DLL: ${_PYTHON_DLL_PATH}")
-    else()
-        message(WARNING "Python DLL not found at: ${_PYTHON_DLL_PATH}")
-    endif()
-endif()
+# CLI 与工具：链接 libcamel 的 shell（camel-cli 在 tools 下）
+add_subdirectory(tools)

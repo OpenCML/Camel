@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,7 @@
 
 #include <string>
 
-enum class Command { Run, Info, Format, Check, Inspect };
+enum class Command { Run, Info, Check, Inspect };
 
 bool parseArgs(int argc, char *argv[]);
 
@@ -50,16 +50,6 @@ extern bool semanticOnly;
 extern unsigned int repeat;
 extern int maxThreads;
 } // namespace Run
-
-namespace Format {
-extern std::string quotePrefer; // Quote preference (default to single quotes)
-extern std::string configFile;  // Configuration file path
-extern bool useTabs;            // Whether to use tabs for indentation
-extern bool inplace;            // Whether to modify the input file in place
-extern bool ignoreDefiFile;     // Whether to ignore the definition file
-extern unsigned int tabSize;    // Indentation size in spaces
-extern unsigned int maxWidth;   // Max line width
-}; // namespace Format
 
 namespace Check {
 extern bool lexical;               // Whether to check lexical errors

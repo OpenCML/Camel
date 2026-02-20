@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Dec. 31, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,14 @@
     } while (0)
 #else
 #define EXEC_WHEN_DEBUG(code)
+#endif
+
+#if defined(_WIN32) && !defined(CAMEL_DLL_EXPORTS)
+#define CAMEL_LOG_API __declspec(dllimport)
+#elif defined(_WIN32)
+#define CAMEL_LOG_API __declspec(dllexport)
+#else
+#define CAMEL_LOG_API
 #endif
 
 #ifdef NDEBUG
@@ -68,7 +76,7 @@ class Logger {
 #include <mutex>
 
 #ifndef NDEBUG
-extern const std::string filteredLoggerScope;
+extern CAMEL_LOG_API const std::string filteredLoggerScope;
 #endif
 
 class Logger {
@@ -206,4 +214,4 @@ class Logger {
 
 #endif // NDEBUG
 
-extern Logger l;
+extern CAMEL_LOG_API Logger l;

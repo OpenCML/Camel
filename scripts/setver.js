@@ -17,10 +17,10 @@ fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 4))
 logDone('Updated package.json')
 
 // update version in src/config.h
-let configContent = fs.readFileSync('src/config.h', 'utf8')
+let configContent = fs.readFileSync('tools/camel-cli/config.h', 'utf8')
 configContent = configContent.replace(/#define VERSION ".*"/, `#define VERSION "${ver}"`)
-fs.writeFileSync('src/config.h', configContent)
-logDone('Updated src/config.h')
+fs.writeFileSync('tools/camel-cli/config.h', configContent)
+logDone('Updated tools/camel-cli/config.h')
 
 // update version in pypi/camel-lang/pyproject.toml
 let pyprojectContent = fs.readFileSync('pypi/camel-lang/pyproject.toml', 'utf8')

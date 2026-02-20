@@ -16,6 +16,7 @@ cmake-build-debug/
 node_modules/
 antlr/.antlr/
 src/parse/antlr
+include/camel/parse/antlr
 vendor/
 legacy/
 build/
@@ -25,6 +26,9 @@ out/
 *.cmo
 ./camel
 camel.exe
+libcamel.dll
+libcamel.dylib
+libcamel.so
 python311.dll
 result.json
 CMakeUserPresets.json

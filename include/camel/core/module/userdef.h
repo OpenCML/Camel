@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 #include "camel/compile/gct.h"
 #include "camel/compile/gir.h"
 
-#include "parse/parse.h"
+#include "camel/parse/parse.h"
 
 class Context;
 using context_ptr_t = std::shared_ptr<Context>;

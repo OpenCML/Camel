@@ -2,7 +2,7 @@ import { execSync } from 'child_process'
 
 function getChangedFiles() {
     try {
-        const output = execSync('git diff --name-only HEAD', { encoding: 'utf-8' })
+        const output = execSync('git diff --name-only --diff-filter=ACMR HEAD', { encoding: 'utf-8' })
         return output
             .split('\n')
             .map((f) => f.trim())

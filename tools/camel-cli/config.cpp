@@ -23,6 +23,7 @@
 #include "camel/utils/str.h"
 #include "clipp/clipp.h"
 #include "config.h"
+#include "build_config.h"
 
 #ifndef BUILD_FOOTPRINT
 #define BUILD_FOOTPRINT "%y%m%d_%H%M%S"
@@ -55,16 +56,6 @@ unsigned int repeat = 1;
 int maxThreads      = -1; // -1 means use the maximum number of threads
 } // namespace Run
 
-namespace Format {
-string quotePrefer    = "";    // Quote preference (default to single quotes)
-string configFile     = "";    // Configuration file path
-bool useTabs          = false; // Whether to use tabs for indentation
-bool inplace          = false; // Whether to modify the input file in place
-bool ignoreDefiFile   = false; // Whether to ignore the definition file
-unsigned int tabSize  = 4;     // Indentation size in spaces
-unsigned int maxWidth = 80;    // Max line width
-}; // namespace Format
-
 namespace Check {
 bool lexical           = false;  // Whether to check lexical errors
 bool syntaxOnly        = false;  // Whether to check syntax only
@@ -89,25 +80,8 @@ int passUntil   = -1;    // Pass until the given pass
 
 using namespace CmdLineArgs;
 using namespace CmdLineArgs::Run;
-using namespace CmdLineArgs::Format;
 using namespace CmdLineArgs::Check;
 using namespace CmdLineArgs::Inspect;
-
-void _printFormatArgs() {
-    cout << "Format args: " << endl;
-    cout << "\ttab-size:" << tabSize << endl;
-    cout << "\tuse-tabs:" << useTabs << endl;
-    cout << "\tquote-prefer:" << quotePrefer << endl;
-    cout << "\tmax-width:" << maxWidth << endl;
-    cout << "\tconfig-file:" << configFile << endl;
-    cout << "\tignore:" << Format::ignoreDefiFile << endl;
-    cout << "\tinplace:" << inplace << endl;
-    cout << "\ttarget-file:";
-    for (auto &file : targetFiles) {
-        cout << file << " ";
-    }
-    cout << endl;
-}
 
 void _printCheckArgs() {
     cout << "Check args: " << endl;
@@ -115,7 +89,7 @@ void _printCheckArgs() {
     cout << "\tsyntax-only:" << syntaxOnly << endl;
     cout << "\toutput-format:" << outputFormat << endl;
     cout << "\tmax-warning:" << maxWaring << endl;
-    cout << "\tconfig-file:" << configFile << endl;
+    cout << "\tconfig-file:" << configFilePath << endl;
     cout << "\tignore:" << Check::ignoreDefiFile << endl;
     cout << "\ttarget-file:";
     for (auto &file : targetFiles) {
@@ -141,9 +115,6 @@ void _printInspectArgs() {
 
 void printCliArgs(Command selected) {
     switch (selected) {
-    case Command::Format:
-        _printFormatArgs();
-        break;
     case Command::Check:
         _printCheckArgs();
         break;
@@ -192,19 +163,6 @@ bool parseArgs(int argc, char *argv[]) {
          option("-z", "--zen").set(showZen).set(selectedCommand, Command::Info) %
              "show the Zen of Camel");
 
-    auto format =
-        (command("format").set(selectedCommand, Command::Format) % "format the code",
-         (option("-t", "--tab-size") & integer("tabsize", tabSize)) % "indentation size in spaces",
-         option("-u", "--use-tabs").set(useTabs) % "use tabs instead of spaces for indentation",
-         (option("-q", "--quote-prefer") & value("quote preference", quotePrefer = "single")) %
-             "quote preference: single or double",
-         (option("-m", "--max-width") & integer("max width", maxWidth)) % "max line width",
-         (option("-c", "--config") & value("config file path", configFile)) % "config file path",
-         option("--ignore").set(Format::ignoreDefiFile) % "ignore the definition file",
-         option("-i", "--inplace").set(inplace) % "modify the input file in place",
-         globalOps,
-         values("input", targetFiles) % "input file");
-
     auto check =
         (command("check").set(selectedCommand, Command::Check) % "check the code",
          option("-i", "--lexical-only").set(lexical) % "indentation size in spaces",
@@ -239,7 +197,7 @@ bool parseArgs(int argc, char *argv[]) {
          globalOps,
          values("input", targetFiles) % "input file");
 
-    auto cli = run | info | format | check | inspect;
+    auto cli = run | info | check | inspect;
 
     if (!parse(argc, argv, cli)) {
         cout << "Usage: " << endl;

@@ -23,8 +23,9 @@
 #include <unordered_set>
 
 #include "antlr4-runtime/antlr4-runtime.h"
+#include "camel/parse/antlr/OpenCMLVisitor.h"
 #include "camel/utils/assert.h"
-#include "parse/antlr/OpenCMLVisitor.h"
+
 
 class Formatter : public OpenCMLVisitor {
   private:

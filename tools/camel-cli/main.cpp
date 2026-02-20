@@ -29,19 +29,18 @@
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
+#include "camel/parse/antlr/OpenCMLLexer.h"
+#include "camel/parse/antlr/OpenCMLParser.h"
+#include "camel/parse/ast/builder.h"
+#include "camel/parse/cst_dumper.h"
+#include "camel/parse/parse.h"
 #include "camel/utils/env.h"
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
 #include "config.h"
-#include "parse/antlr/OpenCMLLexer.h"
-#include "parse/antlr/OpenCMLParser.h"
-#include "parse/ast/builder.h"
-#include "parse/cst_dumper.h"
-#include "parse/parse.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/tns/topo_node_seq.h"
 #include "service/codegen/source/generator.h"
-#include "service/formatter/fmt.h"
 #include "service/profiler/advanced/advanced_tracer.h"
 #include "service/profiler/core/trace.h"
 
@@ -139,13 +138,6 @@ int main(int argc, char *argv[]) {
     while (Run::repeat--) {
         try {
             parser->parse(*input);
-
-            if (selectedCommand == Command::Format) {
-                auto formatter             = Formatter(parser->getTokens());
-                const string formattedCode = any_cast<string>(formatter.visit(parser->cst()));
-                os << formattedCode;
-                return 0;
-            }
 
             if (selectedCommand == Command::Inspect) {
                 if (Inspect::dumpTokens) {

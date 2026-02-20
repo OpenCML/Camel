@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 29, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,11 +23,11 @@
 #include <regex>
 #include <string>
 
-#include "antlr/OpenCMLVisitor.h"
 #include "antlr4-runtime/antlr4-runtime.h"
+#include "camel/parse/antlr/OpenCMLVisitor.h"
 
 class CSTDumpVisitor : public OpenCMLVisitor {
-    size_t depth = 0;
+    size_t depth     = 0;
     std::ostream &os = std::cout;
     std::vector<bool> visible;
 

@@ -17,9 +17,9 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "../antlr/OpenCMLLexer.h"
+#include "camel/parse/antlr/OpenCMLLexer.h"
 
-#include "builder.h"
+#include "camel/parse/ast/builder.h"
 
 #include "camel/utils/scope.h"
 #include "camel/utils/token.h"

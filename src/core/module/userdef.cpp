@@ -21,11 +21,9 @@
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
-#include "config.h"
-
+#include "camel/parse/parse.h"
 #include "compile/gct/builder.h"
 #include "compile/gir/builder.h"
-#include "parse/parse.h"
 
 #include "camel/core/error/base.h"
 #include "camel/core/error/diagnostics.h"
