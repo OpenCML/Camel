@@ -9,7 +9,7 @@
     "scripts": {
         "prepare": "husky && node ./scripts/psrgen.js && node ./scripts/install.js",
         "upd": "node ./scripts/update.js",
-        "cnt": "tokei --exclude third_party --exclude package-lock.json --sort lines",
+        "cnt": "node ./scripts/cnt.js",
         "init": "node ./scripts/psrgen.js && node ./scripts/install.js",
         "psrgen": "node ./scripts/psrgen.js",
         "codegen": "node ./scripts/codegen.js",

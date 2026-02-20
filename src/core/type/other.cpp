@@ -13,14 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "other.h"
-#include "utils/assert.h"
-
-#include "other.h"
+#include "camel/core/type/other.h"
+#include "camel/utils/assert.h"
 
 std::mutex OtherTypeRegistry::mtx;
 std::unordered_map<std::string, TypeCode> OtherTypeRegistry::registry;

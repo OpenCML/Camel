@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "module.h"
-#include "compile/gir.h"
-#include "error/base.h"
+#include "camel/core/module/module.h"
+#include "camel/compile/gir.h"
+#include "camel/core/error/base.h"
 
 Module::Module(const std::string &name, const std::string &path, context_ptr_t ctx)
     : loaded_(false), name_(name), path_(path), context_(ctx),

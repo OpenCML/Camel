@@ -13,13 +13,13 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 22, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/operator.h"
+#include "camel/core/operator.h"
 
 // Phot configuration
 slot_t __phot_config__(ArgsView &with, ArgsView &norm, Context &ctx);

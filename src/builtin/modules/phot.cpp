@@ -13,13 +13,13 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 22, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "phot.h"
-#include "core/context/context.h"
-#include "utils/type.h"
+#include "camel/core/context/context.h"
+#include "camel/utils/type.h"
 
 #include <pybind11/embed.h>
 #include <pybind11/pybind11.h>

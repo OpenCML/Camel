@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "builtin.h"
-#include "core/data/composite/func.h"
-#include "core/operator.h"
+#include "camel/core/module/builtin.h"
+#include "camel/core/data/composite/func.h"
+#include "camel/core/operator.h"
 
 #include "builtin/modules/algo.h"
 #include "builtin/modules/fs.h"

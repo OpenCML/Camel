@@ -201,9 +201,20 @@ tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
 
 ---
 
-### 3.5 编译目标构建
+### 3.5 项目结构
 
-1. 构建 Release 版本：
+- **libcamel**：Camel 核心共享库
+- **tools/**：链接 libcamel 的独立工具
+  - `camel-cli`：主入口，生成 `camel` 可执行文件
+  - `format`：代码格式化工具 `camel-format`
+  - `codegen`：从 AST 生成代码 `camel-codegen`
+  - `profiler`：性能分析工具 `camel-profiler`
+
+构建产物位于 `build/tools/<tool>/<Config>/`，`camel` 可执行文件会复制到项目根目录。
+
+### 3.6 编译目标构建
+
+1. 构建 Release 版本（首次或删除 `build/` 后会自动执行 `conan install`）：
    ```bash
    npm run build
    ```
@@ -213,7 +224,12 @@ tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
    npm run debug
    ```
 
-3. 清理构建产物：
+3. 构建 RelWithDebInfo 版本（性能分析用）：
+   ```bash
+   npm run profile
+   ```
+
+4. 清理构建产物：
    ```bash
    npm run clean
    ```

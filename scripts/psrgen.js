@@ -3,81 +3,97 @@ import path from 'path'
 import { logStep, logDone, logFail, runCommand } from './common.js'
 import { fileURLToPath } from 'url'
 
-const searchDir = './src/parse/antlr'
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const rootDir = path.join(__dirname, '..')
+const srcAntlrDir = path.join(rootDir, 'src', 'parse', 'antlr')
+const includeAntlrDir = path.join(rootDir, 'include', 'camel', 'parse', 'antlr')
 
-function replaceInFile(filePath) {
-    fs.readFile(filePath, 'utf8', (err, data) => {
-        if (err) {
-            logFail(`Error reading file ${filePath}: ${err}`)
-            return
-        }
+// 需要统一为 parse/antlr/ 前缀的生成头文件
+const GENERATED_HEADERS = ['OpenCMLLexer.h', 'OpenCMLParser.h', 'OpenCMLVisitor.h', 'OpenCMLBaseVisitor.h']
 
-        const result = data.replace(
-            /#include "antlr4-runtime\.h"/g,
-            '#include "antlr4-runtime/antlr4-runtime.h"'
+function replaceInFileSync(filePath) {
+    let data
+    try {
+        data = fs.readFileSync(filePath, 'utf8')
+    } catch (err) {
+        logFail(`Error reading file ${filePath}: ${err}`)
+        return
+    }
+    let result = data.replace(
+        /#include "antlr4-runtime\.h"/g,
+        '#include "antlr4-runtime/antlr4-runtime.h"'
+    )
+    for (const h of GENERATED_HEADERS) {
+        const escaped = h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        result = result.replace(
+            new RegExp(`#include "${escaped}"`, 'g'),
+            `#include "camel/parse/antlr/${h}"`
         )
-
-        fs.writeFile(filePath, result, 'utf8', (err) => {
-            if (err) {
-                logFail(`Error writing file ${filePath}: ${err}`)
-            }
-        })
-    })
+    }
+    try {
+        fs.writeFileSync(filePath, result, 'utf8')
+    } catch (err) {
+        logFail(`Error writing file ${filePath}: ${err}`)
+    }
 }
 
-function walkDirAndReplace(dir) {
-    fs.readdir(dir, { withFileTypes: true }, (err, files) => {
-        if (err) {
-            logFail(`Error reading directory ${dir}: ${err}`)
-            return
+function walkDirAndReplaceSync(dir) {
+    if (!fs.existsSync(dir)) return
+    const files = fs.readdirSync(dir, { withFileTypes: true })
+    for (const file of files) {
+        const filePath = path.join(dir, file.name)
+        if (file.isDirectory()) {
+            walkDirAndReplaceSync(filePath)
+        } else if (
+            file.isFile() &&
+            (path.extname(file.name) === '.cpp' || path.extname(file.name) === '.h')
+        ) {
+            replaceInFileSync(filePath)
         }
-
-        files.forEach((file) => {
-            const filePath = path.join(dir, file.name)
-            if (file.isDirectory()) {
-                walkDirAndReplace(filePath)
-            } else if (
-                file.isFile() &&
-                (path.extname(file.name) === '.cpp' || path.extname(file.name) === '.h')
-            ) {
-                replaceInFile(filePath)
-            }
-        })
-    })
+    }
 }
 
 function moveFilesUp() {
-    const __filename = fileURLToPath(import.meta.url)
-    const __dirname = path.dirname(__filename)
-    const nestedDir = path.join(__dirname, '..', 'src', 'parse', 'antlr', 'antlr')
-    const targetDir = path.join(__dirname, '..', 'src', 'parse', 'antlr')
-
+    const nestedDir = path.join(srcAntlrDir, 'antlr')
     if (!fs.existsSync(nestedDir)) {
         logStep('No nested antlr directory found, skipping move.')
         return
-    } else {
-        logStep(`Found nested directory: ${nestedDir}, moving files up...`)
     }
-
+    logStep(`Found nested directory, moving files up...`)
     const files = fs.readdirSync(nestedDir)
-
-    files.forEach((file) => {
+    for (const file of files) {
         const srcPath = path.join(nestedDir, file)
-        const destPath = path.join(targetDir, file)
-
+        const destPath = path.join(srcAntlrDir, file)
         if (fs.existsSync(destPath)) {
             fs.unlinkSync(destPath)
         }
-
         fs.renameSync(srcPath, destPath)
-    })
-
+    }
     const remaining = fs.readdirSync(nestedDir)
     if (remaining.length === 0) {
         fs.rmdirSync(nestedDir)
         logStep('Moved files up and removed empty nested directory.')
     } else {
         logStep('Moved files up, but nested directory is not empty:', remaining)
+    }
+}
+
+function moveHeadersToInclude() {
+    if (!fs.existsSync(srcAntlrDir)) return
+    if (!fs.existsSync(includeAntlrDir)) {
+        fs.mkdirSync(includeAntlrDir, { recursive: true })
+        logStep(`Created ${includeAntlrDir}`)
+    }
+    const files = fs.readdirSync(srcAntlrDir)
+    for (const file of files) {
+        if (path.extname(file) !== '.h') continue
+        const srcPath = path.join(srcAntlrDir, file)
+        const destPath = path.join(includeAntlrDir, file)
+        if (fs.existsSync(destPath)) fs.unlinkSync(destPath)
+        fs.copyFileSync(srcPath, destPath)
+        fs.unlinkSync(srcPath)
+        logStep(`Moved ${file} to include/camel/parse/antlr/`)
     }
 }
 
@@ -89,10 +105,13 @@ function generateAntlrParser() {
     moveFilesUp()
     logDone('Generated ANTLR parser')
 
+    logStep('Moving .h files to include/camel/parse/antlr/...')
+    moveHeadersToInclude()
+    logDone('Headers moved to include')
+
     logStep('Redirecting includes in ANTLR generated files...')
-    // Replace #include "antlr4-runtime.h" with #include "antlr4-runtime/antlr4-runtime.h"
-    // in all generated files in ./src/antlr
-    walkDirAndReplace(searchDir)
+    walkDirAndReplaceSync(srcAntlrDir)
+    walkDirAndReplaceSync(includeAntlrDir)
     logDone('Redirected includes')
 }
 

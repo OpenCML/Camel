@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 11, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/operator.h"
+#include "camel/core/operator.h"
 
 slot_t __mean__(ArgsView &with, ArgsView &norm, Context &ctx);
 slot_t __stdev__(ArgsView &with, ArgsView &norm, Context &ctx);

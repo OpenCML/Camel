@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "frame.h"
-#include "core/rtdata/conv.h"
+#include "camel/core/context/frame.h"
+#include "camel/core/rtdata/conv.h"
 
 FrameMeta *installFrameMetaInfoForGraph(GraphIR::Graph *graph) {
     const TupleType *runtimeDataType = graph->runtimeDataType();

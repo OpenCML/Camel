@@ -13,16 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "array.h"
-
-#include "../special/ref.h"
-#include "core/type/composite/array.h"
-#include "error/diagnostics/diagnostics.h"
-#include "utils/type.h"
+#include "camel/core/data/composite/array.h"
+#include "camel/core/data/ref.h"
+#include "camel/core/error/diagnostics.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/utils/type.h"
 
 using namespace std;
 

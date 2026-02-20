@@ -13,11 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Sep. 16, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "strpt.h"
+#include "camel/utils/strpt.h"
 
 #include <cstdio>
 #include <cstring>
@@ -59,9 +59,9 @@ bool myStrptime(const std::string &datetime, const std::string &format, std::tm 
         i++;
     }
 
-    int matched = 0;
+    int matched            = 0;
     const char *c_datetime = datetime.c_str();
-    const char *c_format = sscanf_format.c_str();
+    const char *c_format   = sscanf_format.c_str();
 
     // 使用 sscanf_s 替代 sscanf，注意：%d 不需要额外的 buffer size
     switch (field_order.size()) {
@@ -113,11 +113,11 @@ bool myStrptime(const std::string &datetime, const std::string &format, std::tm 
 
     std::memset(&out_tm, 0, sizeof(std::tm));
     out_tm.tm_year = year ? year - 1900 : 0;
-    out_tm.tm_mon = month ? month - 1 : 0;
+    out_tm.tm_mon  = month ? month - 1 : 0;
     out_tm.tm_mday = day;
     out_tm.tm_hour = hour;
-    out_tm.tm_min = minute;
-    out_tm.tm_sec = second;
+    out_tm.tm_min  = minute;
+    out_tm.tm_sec  = second;
 
     return true;
 

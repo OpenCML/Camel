@@ -13,20 +13,20 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 01, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "profiler.h"
-#include "compile/gir.h"
-#include "core/context/context.h"
-#include "core/data/data.h"
-#include "core/data/primary.h"
-#include "core/module/builtin.h"
-#include "core/operator.h"
+#include "camel/compile/gir.h"
+#include "camel/core/context/context.h"
+#include "camel/core/data.h"
+#include "camel/core/data/primary.h"
+#include "camel/core/module/builtin.h"
+#include "camel/core/operator.h"
+#include "camel/utils/assert.h"
+#include "camel/utils/log.h"
 #include "service/profiler/core/trace.h"
-#include "utils/assert.h"
-#include "utils/log.h"
 
 #ifndef NDEBUG
 #include "service/profiler/advanced/advanced_tracer.h"

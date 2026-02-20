@@ -13,15 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tensor.h"
 #include "builtin/executors/builtin.h"
 #include "builtin/types/tensor.h"
-#include "core/context/context.h"
-#include "core/type/resolver.h"
+#include "camel/core/context/context.h"
+#include "camel/core/type/resolver.h"
 
 using namespace std;
 

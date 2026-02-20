@@ -13,19 +13,19 @@
  *
  * Author: Yuxuan Zheng
  * Created: Dec. 22, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "phot.h"
-#include "core/context/context.h"
-#include "core/mm/mm.h"
-#include "core/operator.h"
-#include "core/rtdata/array.h"
-#include "core/rtdata/tuple.h"
-#include "core/type/composite/array.h"
-#include "core/type/type.h"
-#include "utils/type.h"
+#include "camel/core/context/context.h"
+#include "camel/core/mm.h"
+#include "camel/core/operator.h"
+#include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/tuple.h"
+#include "camel/core/type.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/utils/type.h"
 
 #include <cmath>
 #include <complex>

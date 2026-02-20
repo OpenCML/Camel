@@ -1,6 +1,19 @@
 import fs from 'fs'
 import { logStep, logDone, logFail } from './common.js'
 
+// ============ 路径配置（可在此处修改所有文件路径）============
+const PATHS = {
+    grammar: './antlr/OpenCML.g4',
+    cstDumperH: './include/camel/parse/cst_dumper.h',
+    formatterH: './tools/format/fmt.h',
+    formatterCpp: './tools/format/fmt.cpp',
+    formatterTmpCpp: './tools/format/fmt.tmp.cpp',
+    astBuilderH: './include/camel/parse/ast/builder.h',
+    astBuilderCpp: './src/parse/ast/builder.cpp',
+    astBuilderTmpCpp: './src/parse/ast/builder.tmp.cpp'
+}
+// ============================================================
+
 export function parseGrammarRules(grammarText) {
     const ruleMap = new Map()
     const rulePattern = /([a-zA-Z_]+)(\s*:\s*(?:.(?!\s*;))*.?\s*;)/gs
@@ -109,7 +122,7 @@ function generateTmpCppCode(code, rules, className = 'Formatter') {
 
 function generateParserCode() {
     logStep('Parsing grammar rules...')
-    const grammarContent = fs.readFileSync('./antlr/OpenCML.g4', 'utf-8')
+    const grammarContent = fs.readFileSync(PATHS.grammar, 'utf-8')
     const rules = parseGrammarRules(grammarContent)
     logDone('Parsed grammar rules')
 
@@ -117,33 +130,33 @@ function generateParserCode() {
     let geneCode = ''
 
     logStep('Modifying CSTDumpVisitor...')
-    srcCode = fs.readFileSync('./src/parse/cst_dumper.h', 'utf-8')
+    srcCode = fs.readFileSync(PATHS.cstDumperH, 'utf-8')
     geneCode = transformHeaderCode(srcCode, rules, geneCSTDumperDeclByRuleName)
-    fs.writeFileSync('./src/parse/cst_dumper.h', geneCode)
+    fs.writeFileSync(PATHS.cstDumperH, geneCode)
     logDone('Modified CSTDumpVisitor')
 
     logStep('Modifying Formatter header code...')
-    srcCode = fs.readFileSync('./src/service/formatter/fmt.h', 'utf-8')
+    srcCode = fs.readFileSync(PATHS.formatterH, 'utf-8')
     geneCode = transformHeaderCode(srcCode, rules)
-    fs.writeFileSync('./src/service/formatter/fmt.h', geneCode)
+    fs.writeFileSync(PATHS.formatterH, geneCode)
     logDone('Modified Formatter header')
 
     logStep('Generating Formatter cpp code...')
-    srcCode = fs.readFileSync('./src/service/formatter/fmt.cpp', 'utf-8')
+    srcCode = fs.readFileSync(PATHS.formatterCpp, 'utf-8')
     geneCode = generateTmpCppCode(srcCode, rules, 'Formatter')
-    fs.writeFileSync('./src/service/formatter/fmt.tmp.cpp', geneCode)
+    fs.writeFileSync(PATHS.formatterTmpCpp, geneCode)
     logDone('Generated Formatter code')
 
     logStep('Modifying AST Builder header code...')
-    srcCode = fs.readFileSync('./src/parse/ast_builder.h', 'utf-8')
+    srcCode = fs.readFileSync(PATHS.astBuilderH, 'utf-8')
     geneCode = transformHeaderCode(srcCode, rules)
-    fs.writeFileSync('./src/parse/ast_builder.h', geneCode)
+    fs.writeFileSync(PATHS.astBuilderH, geneCode)
     logDone('Modified AST Builder header')
 
     logStep('Generating AST Builder cpp code...')
-    srcCode = fs.readFileSync('./src/parse/ast_builder.cpp', 'utf-8')
+    srcCode = fs.readFileSync(PATHS.astBuilderCpp, 'utf-8')
     geneCode = generateTmpCppCode(srcCode, rules, 'Builder')
-    fs.writeFileSync('./src/parse/ast_builder.tmp.cpp', geneCode)
+    fs.writeFileSync(PATHS.astBuilderTmpCpp, geneCode)
     logDone('Generated AST Builder code')
 }
 

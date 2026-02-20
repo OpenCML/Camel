@@ -13,16 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 18, 2024
- * Updated: Mar. 17, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "cst_dumper.h"
+#include "camel/parse/cst_dumper.h"
 
 using namespace std;
 
 any CSTDumpVisitor::dumpNode(antlr4::tree::ParseTree *context, string nodeName) {
-    bool isLast = false;
+    bool isLast   = false;
     auto children = context->children;
 
     if (visible.size() <= depth)
@@ -31,13 +31,13 @@ any CSTDumpVisitor::dumpNode(antlr4::tree::ParseTree *context, string nodeName) 
     if (depth > 0) {
         auto siblings = context->parent->children;
         if (siblings[siblings.size() - 1] == context) {
-            isLast = true;
+            isLast             = true;
             visible[depth - 1] = false;
         }
     }
 
     auto getHead = [this](bool last) -> string {
-        size_t i = 0;
+        size_t i   = 0;
         string ret = "";
         while (depth > 0 && i < depth - 1) {
             if (visible[i])
@@ -58,7 +58,7 @@ any CSTDumpVisitor::dumpNode(antlr4::tree::ParseTree *context, string nodeName) 
     os << getHead(isLast);
     os << nodeName;
     if (children.size() == 0) {
-        string raw = context->getText();
+        string raw  = context->getText();
         string text = regex_replace(raw, regex(R"(\n)"), "\\n");
         os << " " << text;
     }
@@ -71,11 +71,11 @@ any CSTDumpVisitor::dumpNode(antlr4::tree::ParseTree *context, string nodeName) 
     depth++;
 
     any result = defaultResult();
-    size_t n = children.size();
+    size_t n   = children.size();
     for (size_t i = 0; i < n; i++) {
         if (children[i]->getTreeType() == antlr4::tree::ParseTreeType::RULE) {
             any childResult = context->children[i]->accept(this);
-            result = aggregateResult(std::move(result), std::move(childResult));
+            result          = aggregateResult(std::move(result), std::move(childResult));
         } else {
             dumpNode(context->children[i], "");
         }

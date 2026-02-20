@@ -13,15 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 29, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "algo.h"
-#include "core/context/context.h"
-#include "core/operator.h"
-#include "core/type/composite/array.h"
-#include "utils/type.h"
+#include "camel/core/context/context.h"
+#include "camel/core/operator.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/utils/type.h"
 
 #include <algorithm>
 #include <stdexcept>

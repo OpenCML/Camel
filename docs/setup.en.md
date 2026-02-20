@@ -201,9 +201,20 @@ Run the following commands to install the required dependencies:
 
 ---
 
-### 3.5 Building Targets
+### 3.5 Project Structure
 
-1. Build the Release version:
+- **libcamel**: Camel core shared library
+- **tools/**: Standalone tools linking libcamel
+  - `camel-cli`: Main entry, produces `camel` executable
+  - `format`: Code formatter `camel-format`
+  - `codegen`: Code generation from AST `camel-codegen`
+  - `profiler`: Profiling tool `camel-profiler`
+
+Build outputs are under `build/tools/<tool>/<Config>/`. The `camel` executable is copied to the project root.
+
+### 3.6 Building Targets
+
+1. Build the Release version (`conan install` runs automatically when `build/` is missing):
    ```bash
    npm run build
    ```
@@ -213,7 +224,12 @@ Run the following commands to install the required dependencies:
    npm run debug
    ```
 
-3. Clean build artifacts:
+3. Build RelWithDebInfo version (for profiling):
+   ```bash
+   npm run profile
+   ```
+
+4. Clean build artifacts:
    ```bash
    npm run clean
    ```

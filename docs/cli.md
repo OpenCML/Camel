@@ -37,21 +37,6 @@ Executes the specified `.cml` file or directory as the entry point:
 
 ---
 
-## format: Code Formatter
-
-    camel format [options] <cml file or directory>
-
-- `-t`, `--tab-size <num>`: Number of spaces per indent (default: 4)  
-- `-u`, `--use-tabs`: Use tabs instead of spaces  
-- `-q`, `--quote-prefer <single|double>`: Preferred quote style for strings (default: `single`)  
-- `-m`, `--max-width <num>`: Maximum characters per line (default: 100)  
-- `-c`, `--config <file>`: Specify configuration file  
-- `--ignore`: Ignore definition files  
-- `-i`, `--inplace`: Modify source files in place instead of printing to console  
-- Available global options: `--verbose`, `--log-level`
-
----
-
 ## check: Code Health Checker
 
     camel check [options] <cml file or directory>
@@ -83,6 +68,21 @@ Executes the specified `.cml` file or directory as the entry point:
 
 ---
 
+## Related Tools
+
+Camel CLI (`camel`) handles run, check, and inspect. Formatting is provided by a separate tool:
+
+- **camel-format**: Format `.cml` source files. Usage: `camel-format [options] <file>`  
+  - `-i`, `--inplace`: Write back to file  
+  - `-t`, `--tab-size <N>`: Indent size (default 4)  
+  - `-u`, `--use-tabs`: Use tabs  
+  - `-q`, `--quote-prefer <single|double>`  
+  - `-m`, `--max-width <N>` (default 80)
+
+Other tools: `camel-codegen`, `camel-profiler`. All are built under `build/tools/`.
+
+---
+
 ## Examples
 
 ```bash
@@ -92,8 +92,8 @@ camel main.cml
 # Run and record performance
 camel -P main.cml
 
-# Format code
-camel format src/xxx.cml
+# Format code (use camel-format, not camel format)
+camel-format -i src/xxx.cml
 
 # Syntax check only and output in JSON
 camel check -s -O json src/

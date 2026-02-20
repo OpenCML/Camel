@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "execute/rewrite.h"
+#include "camel/execute/pass/opt.h"
 
 class MacroRewritePass : public GraphRewritePass {
   public:
