@@ -117,6 +117,7 @@ class Builder {
     Type *visitInferType(const AST::node_ptr_t &ast);
     Type *visitDataType(const AST::node_ptr_t &ast);
     Type *visitRefType(const AST::node_ptr_t &ast);
+    Type *visitSpecType(const AST::node_ptr_t &ast);
 };
 
 } // namespace GraphConstructTree

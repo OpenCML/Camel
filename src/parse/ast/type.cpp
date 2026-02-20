@@ -98,6 +98,8 @@ const std::string NullableTypeLoad::geneCode() const { return "?"; }
 
 const std::string TypeExprLoad::geneCode() const { return to_string(op_); }
 
+const std::string SpecTypeLoad::geneCode() const { return "<>"; }
+
 const std::string ArrayTypeLoad::geneCode() const {
     std::string result = "";
     for (size_t i = 0; i < dims_; i++) {

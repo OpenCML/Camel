@@ -25,6 +25,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/core/type/other.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
 #include "camel/utils/log.h"
@@ -117,47 +118,25 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
-            "from_py_int",
+            "from_py",
             {
                 {
-                    ":python/from_py_int",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{getPyObjectType(), false}},
-                        Type::Int64()),
-                },
-            }),
-        OperatorGroup::create(
-            "from_py_float",
-            {
-                {
-                    ":python/from_py_float",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{getPyObjectType(), false}},
-                        Type::Float64()),
-                },
-            }),
-        OperatorGroup::create(
-            "from_py_bool",
-            {
-                {
-                    ":python/from_py_bool",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{getPyObjectType(), false}},
-                        Type::Bool()),
-                },
-            }),
-        OperatorGroup::create(
-            "from_py_string",
-            {
-                {
-                    ":python/from_py_string",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{getPyObjectType(), false}},
-                        Type::String()),
+                    ":python/from_py",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "<T> (obj: PyObject<T>) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm,
+                           const ModifierSet &) -> std::optional<Type *> {
+                            if (norm.size() != 1)
+                                return std::nullopt;
+                            Type *t = norm[0];
+                            if (!t->isOtherType() || t->code() != getPyObjectType()->code())
+                                return std::nullopt;
+                            auto *o = static_cast<OtherType *>(t);
+                            if (o->paramCount() == 0)
+                                return std::nullopt;
+                            return o->params()[0];
+                        }),
                 },
             }),
     };
@@ -179,6 +158,7 @@ module_ptr_t PythonModule::create(context_ptr_t ctx) {
 bool PythonModule::load() {
     if (loaded_)
         return true;
+    // 在模块加载时完成 Python 初始化，后续 python 协议算子无需再检查
     try {
         if (!Py_IsInitialized())
             py::initialize_interpreter();

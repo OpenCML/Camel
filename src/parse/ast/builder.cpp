@@ -1742,7 +1742,7 @@ specType
 any Builder::visitSpecType(OpenCMLParser::SpecTypeContext *context) {
     ENTER("SpecType");
     node_ptr_t res          = any2node(visitPrimaryType(context->primaryType()));
-    node_ptr_t specTypeNode = createNodeAs<TypeExprLoad>(TypeOp::Specialize);
+    node_ptr_t specTypeNode = createNodeAs<SpecTypeLoad>();
     setNodeTokenRangeByContext(specTypeNode, context);
     if (context->typeOrData().size() > 0) {
         node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("TypeOrData");

@@ -6,6 +6,7 @@
 !.vscode/tasks.json
 .VSCodeCounter/
 **/.cache/
+__pycache__/
 
 .todolist
 .opencmlrc

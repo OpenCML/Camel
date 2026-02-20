@@ -21,20 +21,14 @@
 
 #include "camel/core/operator.h"
 #include "camel/core/type/base.h"
+#include "type.h"
 #include <string>
 #include <unordered_map>
-
-
-/** 模块导出的自定义类型 PyObject，表示 Python 对象句柄。由 python 模块 exportType 导出。 */
-Type *getPyObjectType();
 
 // 算子实现
 slot_t __python_eval__(ArgsView &with, ArgsView &norm, Context &ctx);
 slot_t __python_to_py__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __python_from_py_int__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __python_from_py_float__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __python_from_py_bool__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __python_from_py_string__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __python_from_py__(ArgsView &with, ArgsView &norm, Context &ctx);
 
 /** 供 python 协议 executor 使用的 URI -> operator_t 映射（key 为 suffix，如 "eval", "to_py"）。 */
 std::unordered_map<std::string, operator_t> getPythonOpsMap();

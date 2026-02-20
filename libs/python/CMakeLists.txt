@@ -6,6 +6,7 @@ cmake_minimum_required(VERSION 3.25)
 add_library(python_cmo SHARED
     module.cpp
     operators.cpp
+    type.cpp
 )
 
 target_compile_features(python_cmo PRIVATE cxx_std_23)
@@ -37,6 +38,7 @@ target_compile_options(python_cmo PRIVATE
     $<$<CONFIG:Release>:-O3>
     -Wall -Wextra
     -Wno-unused-parameter
+    -Wno-unused-private-field
 )
 
 if(WIN32)
