@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -23,7 +23,6 @@
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
-#include "camel/core/error/base.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/listener.h"
 #include "camel/core/mm.h"
@@ -263,10 +262,6 @@ int main(int argc, char *argv[]) {
             RangeConverter conv(parser->getTokens());
             d.fetchRange(conv);
             os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText()) << endl;
-            return selectedCommand == Command::Check ? 0 : 1;
-        } catch (CamelBaseException &e) {
-            os << e.what(useJsonFormat) << endl;
-            ASSERT(false, e.what(useJsonFormat));
             return selectedCommand == Command::Check ? 0 : 1;
         } catch (exception &e) {
             os << e.what() << endl;

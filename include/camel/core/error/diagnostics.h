@@ -13,13 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "base.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 #include "diagnostics/builder.h"
@@ -54,18 +53,15 @@ struct Diagnostic {
 };
 
 // ---- Exception classes ----
-class DiagnosticsLimitExceededBaseException : public CamelBaseException {
+class DiagnosticsLimitExceededBaseException : public std::exception {
   public:
-    DiagnosticsLimitExceededBaseException(const std::string &msg) : CamelBaseException(msg) {}
+    DiagnosticsLimitExceededBaseException() {}
 };
 
 class DiagnosticsLimitExceededException : public DiagnosticsLimitExceededBaseException {
   public:
     DiagnosticsLimitExceededException(Severity sev, size_t limit)
-        : DiagnosticsLimitExceededBaseException(
-              "Too many " + to_string(sev) +
-              " diagnostics exceeded limit: " + std::to_string(limit)),
-          severity_(sev), limit_(limit) {}
+        : DiagnosticsLimitExceededBaseException(), severity_(sev), limit_(limit) {}
 
     Severity severity() const { return severity_; }
     size_t limit() const { return limit_; }
@@ -78,9 +74,7 @@ class DiagnosticsLimitExceededException : public DiagnosticsLimitExceededBaseExc
 class DiagnosticsTotalLimitExceededException : public DiagnosticsLimitExceededBaseException {
   public:
     DiagnosticsTotalLimitExceededException(size_t total)
-        : DiagnosticsLimitExceededBaseException(
-              "Total diagnostic limit exceeded: " + std::to_string(total)),
-          total_limit_(total) {}
+        : DiagnosticsLimitExceededBaseException(), total_limit_(total) {}
 
     size_t totalLimit() const { return total_limit_; }
 

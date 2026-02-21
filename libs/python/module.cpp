@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/context/frame.h"
-#include "camel/core/error/runtime.h"
+#include "camel/core/error/diagnostics.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
@@ -49,9 +49,7 @@ class PythonExecutor : public Executor {
         EXEC_WHEN_DEBUG(l.in("PythonExec").debug("Evaluating operator of URI: {}", uri));
         auto it = opsMap_.find(uri);
         if (it == opsMap_.end()) {
-            throw CamelRuntimeException(
-                RuntimeExceptionCode::InvalidURI,
-                std::format("Invalid URI: {}", uri));
+            throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
         }
         std::vector<GraphIR::data_idx_t> normIndices;
         for (const auto &in : self->normInputs())

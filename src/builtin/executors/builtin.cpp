@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builtin.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/frame.h"
+#include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
 
 #include "../operators/algo.h"
@@ -410,9 +411,7 @@ void BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Fram
     EXEC_WHEN_DEBUG(l.in("BasicExec").debug("Evaluating operator of URI: {}", uri));
     auto it = opsMap_.find(uri);
     if (it == opsMap_.end()) {
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::InvalidURI,
-            std::format("Invalid URI: {}", uri));
+        throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
     }
     std::vector<GraphIR::data_idx_t> normIndices;
     for (const auto &in : self->normInputs()) {

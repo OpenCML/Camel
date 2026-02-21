@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -123,7 +123,7 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         }
     }
 
-    throw CamelBaseException(std::format("Module '{}' not found.", rawModuleName));
+    throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound).commit(rawModuleName);
 }
 
 std::vector<std::string> Context::getModuleNameCandidates(
@@ -169,7 +169,8 @@ std::string Context::resolveRelativeModuleName(
     auto base             = split(currentModule, '.');
 
     if (static_cast<size_t>(level) > base.size()) {
-        throw CamelBaseException("Too many dots in relative import: " + importName);
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Too many dots in relative import: " + importName);
     }
 
     base.resize(base.size() - level);
@@ -255,10 +256,12 @@ GraphIR::graph_ptr_t Context::mainGraph() const {
     ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
     const auto optMainGraphSet = gir->getSubGraphsByName("main");
     if (!optMainGraphSet.has_value()) {
-        throw CamelBaseException("Main graph not found in GraphIR of main module.");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Main graph not found in GraphIR of main module.");
     }
     if (optMainGraphSet->empty()) {
-        throw CamelBaseException("Main graph set is empty in GraphIR of main module.");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Main graph set is empty in GraphIR of main module.");
     }
     return *optMainGraphSet.value().begin();
 }

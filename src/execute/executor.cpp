@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/execute/executor.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/frame.h"
+#include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
 
 std::optional<operator_t> Executor::find(const std::string &uri) {
@@ -51,7 +52,7 @@ void ExecutorManager::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &fr
     EXEC_WHEN_DEBUG(l.in("ExecMgr").debug("Evaluating operator of URI: {}", uri));
     const size_t pos = uri.find(":");
     if (pos == std::string::npos) {
-        throw CamelRuntimeException(RuntimeExceptionCode::InvalidURI, "Invalid URI format");
+        throw DiagnosticBuilder::of(SemanticDiag::InvalidOperatorURI).commit(uri);
     }
     const std::string protocol = uri.substr(0, pos);
     auto itExec                = loadedExecutors.find(protocol);
@@ -61,9 +62,7 @@ void ExecutorManager::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &fr
     }
     auto itFact = executorFactories.find(protocol);
     if (itFact == executorFactories.end()) {
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::InvalidURI,
-            std::format("Protocol <{}> not found.", protocol));
+        throw DiagnosticBuilder::of(SemanticDiag::UnrecognizedExecutorProtocol).commit(protocol);
     }
     EXEC_WHEN_DEBUG(l.in("ExecMgr").info("Loading executor for protocol <{}>", protocol));
     auto executor = itFact->second();

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -888,7 +888,8 @@ any Builder::visitPattern(OpenCMLParser::PatternContext *context) {
         res = createNodeAs<NullLoad>();
         setNodeTokenRangeByContext(res, context);
     } else {
-        throw CamelBaseException("visitPattern: not implemented yet");
+        throw DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
+            .commit("visitPattern: not implemented yet");
     }
     LEAVE("Pattern");
     return res;
@@ -964,7 +965,8 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
     } break;
 
     default:
-        throw CamelBaseException("visitCtrlExpr: unsupported control expression type");
+        throw DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
+            .commit("visitCtrlExpr: unsupported control expression type");
     }
     LEAVE("CtrlExpr");
     return ctrlNode;
