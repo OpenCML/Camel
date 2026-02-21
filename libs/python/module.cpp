@@ -27,6 +27,7 @@
 #include "camel/core/type/resolver.h"
 #include "operators.h"
 
+#include <fstream>
 #include <optional>
 #include <pybind11/embed.h>
 #include <pybind11/pybind11.h>
@@ -38,62 +39,110 @@
 
 namespace py = pybind11;
 
-// 确保 Python 解释器能够找到虚拟环境中的包
-static void ensure_python_path() {
+// 在 Py_Initialize 之前设置 Python Home 为 venv 的 base Python（来自 pyvenv.cfg）。
+// 指向 venv 本身会触发 codec 错误，指向 base Python 可消除 "Could not find platform independent libraries" 警告。
+static void set_python_home_from_venv() {
+    std::string venv_path;
+#ifdef _WIN32
+    char *venv_env = nullptr;
+    size_t len     = 0;
+    if (_dupenv_s(&venv_env, &len, "VIRTUAL_ENV") == 0 && venv_env != nullptr) {
+        venv_path = std::string(venv_env);
+        free(venv_env);
+    }
+#else
+    const char *venv_env = std::getenv("VIRTUAL_ENV");
+    if (venv_env)
+        venv_path = std::string(venv_env);
+#endif
+    if (venv_path.empty())
+        return;
+#ifdef _WIN32
+    std::string cfg_path = venv_path + "\\pyvenv.cfg";
+#else
+    std::string cfg_path = venv_path + "/pyvenv.cfg";
+#endif
+    std::ifstream f(cfg_path);
+    if (!f)
+        return;
+    std::string line, home_path;
+    while (std::getline(f, line)) {
+        if (line.find("home") == 0) {
+            size_t eq = line.find('=');
+            if (eq != std::string::npos) {
+                home_path = line.substr(eq + 1);
+                size_t s = home_path.find_first_not_of(" \t");
+                if (s != std::string::npos)
+                    home_path = home_path.substr(s);
+                break;
+            }
+        }
+    }
+    if (home_path.empty())
+        return;
+    wchar_t *whome = Py_DecodeLocale(home_path.c_str(), nullptr);
+    if (!whome)
+        return;
+    static std::wstring python_home_storage;
+    python_home_storage = whome;
+    PyMem_RawFree(whome);
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+    Py_SetPythonHome(python_home_storage.c_str());
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+}
+
+// 初始化后确保 venv 的 site-packages 在 sys.path 中。
+static void ensure_site_packages_in_path() {
+    if (!Py_IsInitialized())
+        return;
+    std::string venv_path;
+#ifdef _WIN32
+    char *venv_env = nullptr;
+    size_t len     = 0;
+    if (_dupenv_s(&venv_env, &len, "VIRTUAL_ENV") == 0 && venv_env != nullptr) {
+        venv_path = std::string(venv_env);
+        free(venv_env);
+    }
+#else
+    const char *venv_env = std::getenv("VIRTUAL_ENV");
+    if (venv_env)
+        venv_path = std::string(venv_env);
+#endif
+    if (venv_path.empty())
+        return;
+    std::string site_packages_path;
+#ifdef _WIN32
+    site_packages_path = venv_path + "\\Lib\\site-packages";
+#else
+    site_packages_path = venv_path + "/lib/python";
     try {
-        if (!Py_IsInitialized())
+        py::module_ sys = py::module_::import("sys");
+        std::string ver = py::str(sys.attr("version_info").attr("major")).cast<std::string>() + "." +
+                          py::str(sys.attr("version_info").attr("minor")).cast<std::string>();
+        site_packages_path += ver + "/site-packages";
+    } catch (...) {
+        site_packages_path += "3.11/site-packages"; // fallback
+    }
+#endif
+    try {
+        py::module_ sys = py::module_::import("sys");
+        py::module_ os  = py::module_::import("os");
+        py::list   path = sys.attr("path");
+        if (!os.attr("path").attr("exists")(site_packages_path).cast<bool>())
             return;
-
-        py::module_ sys  = py::module_::import("sys");
-        py::module_ site = py::module_::import("site");
-        py::module_ os   = py::module_::import("os");
-
-        std::string venv_path;
-#ifdef _WIN32
-        char *venv_env = nullptr;
-        size_t len     = 0;
-        if (_dupenv_s(&venv_env, &len, "VIRTUAL_ENV") == 0 && venv_env != nullptr) {
-            venv_path = std::string(venv_env);
-            free(venv_env);
+        for (size_t j = 0; j < path.size(); ++j) {
+            std::string path_str = py::str(path[j]).cast<std::string>();
+            std::string norm_p   = os.attr("path").attr("normpath")(site_packages_path).cast<std::string>();
+            std::string norm_j   = os.attr("path").attr("normpath")(path_str).cast<std::string>();
+            if (norm_p == norm_j || site_packages_path == path_str)
+                return;
         }
-#else
-        const char *venv_env = std::getenv("VIRTUAL_ENV");
-        if (venv_env)
-            venv_path = std::string(venv_env);
-#endif
-
-        if (!venv_path.empty()) {
-            std::string python_exe = venv_path;
-#ifdef _WIN32
-            python_exe += "\\Scripts\\python.exe";
-#else
-            python_exe += "/bin/python";
-#endif
-            if (os.attr("path").attr("exists")(python_exe).cast<bool>()) {
-                sys.attr("executable") = python_exe;
-                sys.attr("prefix")     = venv_path;
-            }
-        }
-
-        site.attr("main")();
-
-        py::list site_packages = site.attr("getsitepackages")().cast<py::list>();
-        py::list path          = sys.attr("path");
-        for (size_t i = 0; i < site_packages.size(); ++i) {
-            std::string pkg_path = py::str(site_packages[i]).cast<std::string>();
-            bool exists          = false;
-            for (size_t j = 0; j < path.size(); ++j) {
-                std::string path_str = py::str(path[j]).cast<std::string>();
-                if (pkg_path == path_str ||
-                    os.attr("path").attr("normpath")(pkg_path).cast<std::string>() ==
-                        os.attr("path").attr("normpath")(path_str).cast<std::string>()) {
-                    exists = true;
-                    break;
-                }
-            }
-            if (!exists && os.attr("path").attr("exists")(pkg_path).cast<bool>())
-                path.insert(0, pkg_path);
-        }
+        path.attr("insert")(0, site_packages_path);
     } catch (...) {
         // 失败时继续，不阻塞加载
     }
@@ -294,9 +343,11 @@ bool PythonModule::load() {
         return true;
     // 在模块加载时完成 Python 初始化，后续 python 协议算子无需再检查
     try {
-        if (!Py_IsInitialized())
+        if (!Py_IsInitialized()) {
+            set_python_home_from_venv();
             py::initialize_interpreter();
-        ensure_python_path();
+            ensure_site_packages_in_path();
+        }
     } catch (const std::exception &e) {
         context_->rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
