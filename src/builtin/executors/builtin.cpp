@@ -31,7 +31,6 @@
 #include "../operators/ops.h"
 #include "../operators/os.h"
 #include "../operators/other.h"
-#include "../operators/phot.h"
 #include "../operators/plot.h"
 #include "../operators/profiler.h"
 #include "../operators/rand.h"
@@ -377,14 +376,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         // plot
         {"plot/plot", __plot__},
-
-        // phot
-        {"phot/config", __phot_config__},
-        {"phot/gen_bits", __phot_gen_bits__},
-        {"phot/modulation", __phot_modulation__},
-        {"phot/up_sample", __phot_up_sample__},
-        {"phot/pulse_shaper", __phot_pulse_shaper__},
-        {"phot/constellation_diagram", __phot_constellation_diagram__},
 
         // profiler
         {"profiler/begin", __profiler_begin__},
