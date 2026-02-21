@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,4 +43,4 @@ class PyObjectType : public OtherType {
     OtherType *cloneWithParams(std::span<Type *const> params) const override;
 };
 
-Type *getPyObjectType();
+PyObjectType *getPyObjectType();

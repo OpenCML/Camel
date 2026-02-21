@@ -104,21 +104,22 @@ int main(int argc, char *argv[]) {
     // if targetFile is absolute, the entryDir is the parent directory of targetFile
     std::string entryDir = fs::absolute(entryPath).parent_path().string();
 
+    auto addIfNonEmpty = [](std::vector<std::string> &v, const std::string &s) {
+        if (!s.empty())
+            v.push_back(fs::absolute(fs::path(s)).string());
+    };
+    std::vector<std::string> searchPaths;
+
+    searchPaths.push_back(entryDir);
+    addIfNonEmpty(searchPaths, getEnv("CAMEL_PACKAGES"));
+    addIfNonEmpty(searchPaths, Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB") : Run::stdLibPath);
+    addIfNonEmpty(searchPaths, (fs::path(entryDir) / "stdlib").string());
+
     context_ptr_t ctx = Context::create(
         EntryConfig{
-            .entryDir  = entryDir,
-            .entryFile = targetFile,
-            .searchPaths =
-                {
-                    entryDir,
-                    fs::absolute(
-                        fs::path(
-                            Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                                    : Run::stdLibPath))
-                        .string(),
-                    getEnv("CAMEL_PACKAGES"),
-                    getEnv("CAMEL_HOME", camelPath.string()),
-                },
+            .entryDir    = entryDir,
+            .entryFile   = targetFile,
+            .searchPaths = std::move(searchPaths),
         },
         DiagsConfig{
             .total_limit         = -1,

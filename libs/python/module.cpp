@@ -18,7 +18,6 @@
  */
 
 #include "module.h"
-#include "operators.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/context/frame.h"
@@ -29,10 +28,11 @@
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
 #include "camel/utils/log.h"
+#include "operators.h"
 
+#include <optional>
 #include <pybind11/embed.h>
 #include <pybind11/pybind11.h>
-#include <optional>
 
 namespace py = pybind11;
 
@@ -77,24 +77,55 @@ class PythonExecutor : public Executor {
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
-            "eval",
+            "pycall",
             {
                 {
-                    ":python/eval",
+                    "python:pycall",
                     DynamicFuncTypeResolver::create(
-                        {{-1, {}}, {-1, {}}},
+                        {{0, {}}, {-1, {}}},
                         "(fn: string, ...args: PyObject[]) => PyObject",
-                        [](const type_vec_t &with, const type_vec_t &norm,
-                           const ModifierSet &) -> std::optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> std::optional<Type *> {
                             if (norm.size() < 1)
                                 return std::nullopt;
                             if (norm[0]->code() != TypeCode::String)
                                 return std::nullopt;
-                            Type *pyObj = getPyObjectType();
                             for (size_t i = 1; i < norm.size(); ++i) {
-                                if (!pyObj->assignable(norm[i]))
+                                if (norm[i]->code() != PyObjectType::typeCode())
                                     return std::nullopt;
                             }
+                            return getPyObjectType();
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "pyeval",
+            {
+                {
+                    "python:pyeval",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(script: string) => PyObject",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> std::optional<Type *> {
+                            if (norm[0]->code() != TypeCode::String)
+                                return std::nullopt;
+                            return getPyObjectType();
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "py_import",
+            {
+                {
+                    "python:py_import",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(module_name: string) => PyObject",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> std::optional<Type *> {
+                            if (norm[0]->code() != TypeCode::String)
+                                return std::nullopt;
                             return getPyObjectType();
                         }),
                 },
@@ -103,15 +134,14 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             "to_py",
             {
                 {
-                    ":python/to_py",
+                    "python:to_py",
                     DynamicFuncTypeResolver::create(
-                        {{-1, {}}, {1, {false}}},
-                        "<T> (x: T) => PyObject",
-                        [](const type_vec_t &with, const type_vec_t &norm,
-                           const ModifierSet &) -> std::optional<Type *> {
-                            if (norm.size() != 1)
-                                return std::nullopt;
-                            return getPyObjectType();
+                        {{0, {}}, {1, {false}}},
+                        "(x: T) => PyObject<T>",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> std::optional<Type *> {
+                            return getPyObjectType()->cloneWithParams(
+                                std::span<Type *const>(norm.data(), 1));
                         }),
                 },
             }),
@@ -119,16 +149,14 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             "from_py",
             {
                 {
-                    ":python/from_py",
+                    "python:from_py",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
-                        "<T> (obj: PyObject<T>) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm,
-                           const ModifierSet &) -> std::optional<Type *> {
-                            if (norm.size() != 1)
-                                return std::nullopt;
+                        "(obj: PyObject<T>) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> std::optional<Type *> {
                             Type *t = norm[0];
-                            if (!t->isOtherType() || t->code() != getPyObjectType()->code())
+                            if (!t->isOtherType() || t->code() != PyObjectType::typeCode())
                                 return std::nullopt;
                             auto *o = static_cast<OtherType *>(t);
                             if (o->paramCount() == 0)
@@ -149,9 +177,7 @@ PythonModule::PythonModule(context_ptr_t ctx) : BuiltinModule("python", ctx) {
         exportEntity(group->name(), group);
 }
 
-module_ptr_t PythonModule::create(context_ptr_t ctx) {
-    return std::make_shared<PythonModule>(ctx);
-}
+module_ptr_t PythonModule::create(context_ptr_t ctx) { return std::make_shared<PythonModule>(ctx); }
 
 bool PythonModule::load() {
     if (loaded_)
@@ -176,8 +202,5 @@ bool PythonModule::load() {
 
 extern "C" {
 
-Module *camel_module_create(Context *ctx) {
-    return new PythonModule(ctx->shared_from_this());
-}
-
+Module *camel_module_create(Context *ctx) { return new PythonModule(ctx->shared_from_this()); }
 }

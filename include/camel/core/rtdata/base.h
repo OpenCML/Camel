@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -176,6 +176,10 @@ inline void printSlot(std::ostream &os, const slot_t data, Type *t) {
     ASSERT(
         data != DeadSlot,
         std::format("Accessing uninitialized slot in printSlot: {}", t->toString()));
+    if (t->isOtherType()) {
+        os << t->toString();
+        return;
+    }
     if (t->isGCTraced()) {
         if (data == NullSlot) {
             os << "null";

@@ -33,7 +33,7 @@ TypeCode registerOtherType(const std::string &typeName, TypeFlag flags) {
 }
 
 std::string OtherType::typeName() const {
-    ASSERT((static_cast<uint32_t>(code_) & 0xF0000000) == 0xF0000000, "Not an OtherType");
+    ASSERT(::isOtherType(code_), "Not an OtherType");
     return OtherTypeRegistry::getTypeName(code_);
 }
 

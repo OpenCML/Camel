@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -100,7 +100,7 @@ OtherType *PyObjectType::cloneWithParams(std::span<Type *const> params) const {
     return new (mem) PyObjectType(code_, params.size(), p);
 }
 
-Type *getPyObjectType() {
-    static Type *instance = PyObjectType::create();
+PyObjectType *getPyObjectType() {
+    static PyObjectType *instance = PyObjectType::create();
     return instance;
 }

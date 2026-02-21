@@ -1,1 +1,6 @@
-import { eval } from python
+import { pyeval } from python
+
+func main() sync {
+    pyeval('1+1')
+    return 0
+}

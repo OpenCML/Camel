@@ -25,6 +25,11 @@ set_target_properties(python_cmo PROPERTIES
     PREFIX ""
 )
 
+# Windows: 导出 camel_module_create 等符号，供 loadCmoModule 通过 GetProcAddress 查找
+if(WIN32)
+    set_target_properties(python_cmo PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
+endif()
+
 # 与 libcamel 头文件依赖一致，避免包含 context 等时缺 fmt、antlr4 等
 target_link_libraries(python_cmo PRIVATE
     libcamel

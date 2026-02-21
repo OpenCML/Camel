@@ -11,8 +11,8 @@ const executableName = `camel${isWindows ? '.exe' : ''}`
 const libName = isWindows
     ? 'libcamel.dll'
     : process.platform === 'darwin'
-      ? 'libcamel.dylib'
-      : 'libcamel.so'
+        ? 'libcamel.dylib'
+        : 'libcamel.so'
 
 const colors = {
     reset: '\x1b[0m',
@@ -156,6 +156,16 @@ export function copyBuildArtifacts(config) {
     copyFile(path.join(exeSrcDir, executableName), path.join(BASEDIR, executableName))
     const libSrc = path.join(libSrcDir, libName)
     if (fs.existsSync(libSrc)) {
+        // 把exe复制到libSrc的同级目录以便调试
+        copyFile(path.join(exeSrcDir, executableName), path.join(libSrcDir, executableName))
+        // debug模式下额外复制.pdb文件
+        if (config === 'Debug') {
+            const pdbName = `${executableName.replace('.exe', '')}.pdb`
+            const pdbSrc = path.join(exeSrcDir, pdbName)
+            if (fs.existsSync(pdbSrc)) {
+                copyFile(pdbSrc, path.join(libSrcDir, pdbName))
+            }
+        }
         copyFile(libSrc, path.join(BASEDIR, libName))
     }
 

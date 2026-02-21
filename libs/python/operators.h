@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,9 @@
 #include <unordered_map>
 
 // 算子实现
-slot_t __python_eval__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __python_pycall__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __python_pyeval__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __python_py_import__(ArgsView &with, ArgsView &norm, Context &ctx);
 slot_t __python_to_py__(ArgsView &with, ArgsView &norm, Context &ctx);
 slot_t __python_from_py__(ArgsView &with, ArgsView &norm, Context &ctx);
 
