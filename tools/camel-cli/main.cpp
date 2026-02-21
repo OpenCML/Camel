@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
     searchPaths.push_back(entryDir);
     addIfNonEmpty(searchPaths, getEnv("CAMEL_PACKAGES"));
     addIfNonEmpty(searchPaths, Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB") : Run::stdLibPath);
-    addIfNonEmpty(searchPaths, (fs::path(entryDir) / "stdlib").string());
+    addIfNonEmpty(searchPaths, (camelPath / "stdlib").string());
 
     context_ptr_t ctx = Context::create(
         EntryConfig{

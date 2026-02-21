@@ -77,38 +77,87 @@ class PythonExecutor : public Executor {
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
-            "pycall",
+            "py_call",
             {
                 {
-                    "python:pycall",
+                    "python:py_call",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {-1, {}}},
-                        "(fn: string, ...args: PyObject[]) => PyObject",
+                        "(fn: string | PyObject, ...args: PyObject[]) => PyObject",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> std::optional<Type *> {
                             if (norm.size() < 1)
                                 return std::nullopt;
-                            if (norm[0]->code() != TypeCode::String)
+                            if (norm[0]->code() != TypeCode::String &&
+                                norm[0]->code() != PyObjectType::typeCode())
                                 return std::nullopt;
-                            for (size_t i = 1; i < norm.size(); ++i) {
-                                if (norm[i]->code() != PyObjectType::typeCode())
-                                    return std::nullopt;
-                            }
                             return getPyObjectType();
                         }),
                 },
             }),
         OperatorGroup::create(
-            "pyeval",
+            "py_exec",
             {
                 {
-                    "python:pyeval",
+                    "python:py_exec",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
-                        "(script: string) => PyObject",
+                        "(code: string) => PyObject",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::String)
+                            if (norm.size() < 1 || norm[0]->code() != TypeCode::String)
+                                return std::nullopt;
+                            return getPyObjectType();
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "py_eval",
+            {
+                {
+                    "python:py_eval",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(expr: string) => PyObject",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> std::optional<Type *> {
+                            if (norm.size() < 1 || norm[0]->code() != TypeCode::String)
+                                return std::nullopt;
+                            return getPyObjectType();
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "py_run",
+            {
+                {
+                    "python:py_run",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(file_path: string) => PyObject",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> std::optional<Type *> {
+                            if (norm.size() < 1 || norm[0]->code() != TypeCode::String)
+                                return std::nullopt;
+                            return getPyObjectType();
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "py_attr",
+            {
+                {
+                    "python:py_attr",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(obj: PyObject, attr: string) => PyObject",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> std::optional<Type *> {
+                            if (norm.size() < 2)
+                                return std::nullopt;
+                            if (norm[0]->code() != PyObjectType::typeCode())
+                                return std::nullopt;
+                            if (norm[1]->code() != TypeCode::String)
                                 return std::nullopt;
                             return getPyObjectType();
                         }),

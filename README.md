@@ -152,6 +152,10 @@ func main(): int sync {
 - **Pluggable optimization**: Extend compiler passes via composable functors instead of fragile AST manipulation
 - **Unified backend support**: Generate optimized code for multiple targets from shared graph representation
 
+## Modules & Extensions
+
+- **Python Integration**: Use the `python` module to embed Python. Supports `py_call`, `py_eval`, `py_run`, `to_py`/`from_py`, and more. See [libs/python/README.md](libs/python/README.md) for API reference.
+
 ## 📚 Learn More
 
 - [Build Yourself](docs/setup.md) - Environment setup and installation guide
