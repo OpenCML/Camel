@@ -1,6 +1,6 @@
 # Camel：一种用于统一 AI 开发的图原生编程语言
 
-[English](README.md) | 中文简体
+[English](../README.md) | 中文简体
 
 [![许可证：MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![WIP](https://img.shields.io/badge/status-WIP-yellow.svg)
@@ -103,6 +103,8 @@ func main() sync {
 camel hello.cml
 ```
 
+---
+
 ### 进阶用法
 
 计算等差数列的和并统计执行时间：
@@ -132,40 +134,60 @@ func main(): int sync {
 
 ### 面向 AI 研究人员
 
-- **类 Python 的原型设计**：使用直观的运算符和自然的语法构建计算图  
-- **所见即所得的执行模型**：代码即计算图——没有 JIT 魔法或隐藏的控制流  
-- **自文档化架构**：显式的图结构降低了遗留代码的复杂性  
+- **类 Python 的原型设计**：使用直观的运算符和自然的语法构建计算图
+- **所见即所得的执行模型**：代码即计算图——没有 JIT 魔法或隐藏的控制流
+- **自文档化架构**：显式的图结构降低了遗留代码的复杂性
 
 ### 面向 AI 工程师
 
-- **编译时优化**：静态图分析支持内存复用和算子融合  
-- **单源部署**：一次编写，可优化运行于服务器 CPU 到边缘 TPU，无需更改代码  
-- **从设计上保障可维护性**：强类型系统消除张量维度错误，显式图结构减少技术债务  
+- **编译时优化**：静态图分析支持内存复用和算子融合
+- **单源部署**：一次编写，可优化运行于服务器 CPU 到边缘 TPU，无需更改代码
+- **从设计上保障可维护性**：强类型系统消除张量维度错误，显式图结构减少技术债务
 
 ### 面向框架开发者
 
-- **无需再使用追踪技巧**：一等图中间表示（IR）通过语言语义直接捕捉用户意图  
-- **可插拔的优化机制**：通过可组合的函数对象扩展编译器优化通道，避免脆弱的 AST 操作  
+- **无需再使用追踪技巧**：一等图中间表示（IR）通过语言语义直接捕捉用户意图
+- **可插拔的优化机制**：通过可组合的函数对象扩展编译器优化通道，避免脆弱的 AST 操作
 - **统一后端支持**：基于共享的图表示为多种目标生成优化后的代码
+
+## 模块与扩展
+
+### Python 集成
+
+使用 `python` 模块嵌入 Python。支持 `py_call`、`py_eval`、`py_run`、`wrap`/`unwrap` 等。详见 [libs/python/README.md](../libs/python/README.md) 的 API 参考。
+
+**类型转换** — `unwrap` 将 Python 对象转换回 Camel。因为 `py_eval`/`py_call` 返回裸的 `PyObject`，你必须在 `unwrap` 之前使用 `as PyObject<T>` 指定目标类型：
+
+```camel
+import { PyObject, py_eval, unwrap } from python
+
+func main(): int sync {
+    let res = py_eval("1 + 1") as PyObject<int>
+    print(unwrap(res))
+    return 0
+}
+```
 
 ## 📚 了解更多
 
-- [自行构建](docs/setup.cn.md) - 环境设置和安装指南
+- [自行构建](setup.cn.md) - 环境设置和安装指南
 - [WIP] [文档](https://docs.opencml.com/) - 语言规范和API参考
-- [WIP] [示例](examples/) - 从MNIST训练到分布式管道
+- [WIP] [示例](../examples/) - 从MNIST训练到分布式管道
 - [WIP] [白皮书](https://arxiv.org/abs/xxxx.xxxx) - 深入了解编译器架构
 
 ## 🤝 贡献
 
-欢迎贡献！请查看我们的：
+欢迎贡献！请查看：
 
-- [WIP] [问题跟踪](https://github.com/OpenCML/Camel/issues) - 标记为`beginner-friendly`的好的首个问题
-- [WIP] [路线图](ROADMAP.md) - 计划的功能，如量子后端支持
-- [WIP] [风格指南](CONTRIBUTING.md#style-guide) - 代码格式和设计模式
+- [贡献指南](CONTRIBUTING.cn.md) - 如何贡献、开发环境与风格指南
+- [行为准则](CODE_OF_CONDUCT.cn.md) - 社区标准与行为规范
+- [安全政策](SECURITY.cn.md) - 如何报告安全漏洞
+- [问题跟踪](https://github.com/OpenCML/Camel/issues) - 标有 `beginner-friendly` 的入门友好 Issue
+- [路线图](../ROADMAP.md) - 计划功能（开发中）
 
 ## 📜 许可证
 
-本项目贡献者编写的代码根据 [MIT 许可证](LICENSE) 授权。
+本项目贡献者编写的代码根据 [MIT 许可证](../LICENSE) 授权。
 
 来自 antlr4 的第三方代码根据 BSD-3-Clause 许可证授权。
 
