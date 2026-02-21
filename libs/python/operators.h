@@ -27,6 +27,7 @@
 
 // 算子实现
 slot_t __python_py_call__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __python_py_call_kw__(ArgsView &with, ArgsView &norm, Context &ctx);
 slot_t __python_py_exec__(ArgsView &with, ArgsView &norm, Context &ctx);
 slot_t __python_py_eval__(ArgsView &with, ArgsView &norm, Context &ctx);
 slot_t __python_py_run__(ArgsView &with, ArgsView &norm, Context &ctx);

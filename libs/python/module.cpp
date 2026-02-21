@@ -17,7 +17,6 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "executor.h"
 #include "module.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
@@ -25,7 +24,9 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/resolver.h"
+#include "executor.h"
 #include "operators.h"
+
 
 #include <fstream>
 #include <optional>
@@ -40,7 +41,8 @@
 namespace py = pybind11;
 
 // 在 Py_Initialize 之前设置 Python Home 为 venv 的 base Python（来自 pyvenv.cfg）。
-// 指向 venv 本身会触发 codec 错误，指向 base Python 可消除 "Could not find platform independent libraries" 警告。
+// 指向 venv 本身会触发 codec 错误，指向 base Python 可消除 "Could not find platform independent
+// libraries" 警告。
 static void set_python_home_from_venv() {
     std::string venv_path;
 #ifdef _WIN32
@@ -71,7 +73,7 @@ static void set_python_home_from_venv() {
             size_t eq = line.find('=');
             if (eq != std::string::npos) {
                 home_path = line.substr(eq + 1);
-                size_t s = home_path.find_first_not_of(" \t");
+                size_t s  = home_path.find_first_not_of(" \t");
                 if (s != std::string::npos)
                     home_path = home_path.substr(s);
                 break;
@@ -122,8 +124,8 @@ static void ensure_site_packages_in_path() {
     site_packages_path = venv_path + "/lib/python";
     try {
         py::module_ sys = py::module_::import("sys");
-        std::string ver = py::str(sys.attr("version_info").attr("major")).cast<std::string>() + "." +
-                          py::str(sys.attr("version_info").attr("minor")).cast<std::string>();
+        std::string ver = py::str(sys.attr("version_info").attr("major")).cast<std::string>() +
+                          "." + py::str(sys.attr("version_info").attr("minor")).cast<std::string>();
         site_packages_path += ver + "/site-packages";
     } catch (...) {
         site_packages_path += "3.11/site-packages"; // fallback
@@ -132,13 +134,14 @@ static void ensure_site_packages_in_path() {
     try {
         py::module_ sys = py::module_::import("sys");
         py::module_ os  = py::module_::import("os");
-        py::list   path = sys.attr("path");
+        py::list path   = sys.attr("path");
         if (!os.attr("path").attr("exists")(site_packages_path).cast<bool>())
             return;
         for (size_t j = 0; j < path.size(); ++j) {
             std::string path_str = py::str(path[j]).cast<std::string>();
-            std::string norm_p   = os.attr("path").attr("normpath")(site_packages_path).cast<std::string>();
-            std::string norm_j   = os.attr("path").attr("normpath")(path_str).cast<std::string>();
+            std::string norm_p =
+                os.attr("path").attr("normpath")(site_packages_path).cast<std::string>();
+            std::string norm_j = os.attr("path").attr("normpath")(path_str).cast<std::string>();
             if (norm_p == norm_j || site_packages_path == path_str)
                 return;
         }
@@ -167,6 +170,50 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             if (norm[0]->code() != TypeCode::String &&
                                 norm[0]->code() != PyObjectType::typeCode())
                                 return std::nullopt;
+                            for (size_t i = 1; i < norm.size(); ++i)
+                                if (!norm[i] || norm[i]->code() != PyObjectType::typeCode())
+                                    return std::nullopt;
+                            return getPyObjectType();
+                        }),
+                },
+                {
+                    "python:py_call_kw",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {-1, {}}},
+                        "(fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: "
+                        "Struct<...PyObject>) => PyObject",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> std::optional<Type *> {
+                            if (norm.size() < 1 || norm.size() > 3)
+                                return std::nullopt;
+                            if (norm[0]->code() != TypeCode::String &&
+                                norm[0]->code() != PyObjectType::typeCode())
+                                return std::nullopt;
+                            if (norm.size() >= 2) {
+                                if (norm[1]->code() == TypeCode::Array) {
+                                    auto *arr = static_cast<ArrayType *>(norm[1]);
+                                    if (!arr->elemType() ||
+                                        arr->elemType()->code() != PyObjectType::typeCode())
+                                        return std::nullopt;
+                                } else if (norm[1]->code() == TypeCode::Tuple) {
+                                    auto *tup = static_cast<TupleType *>(norm[1]);
+                                    for (size_t i = 0; i < tup->size(); ++i)
+                                        if (!tup->typeAt(i) ||
+                                            tup->typeAt(i)->code() != PyObjectType::typeCode())
+                                            return std::nullopt;
+                                } else {
+                                    return std::nullopt;
+                                }
+                            }
+                            if (norm.size() == 3) {
+                                if (norm[2]->code() != TypeCode::Struct)
+                                    return std::nullopt;
+                                auto *st = static_cast<StructType *>(norm[2]);
+                                for (size_t i = 0; i < st->size(); ++i)
+                                    if (!st->typeAt(i) ||
+                                        st->typeAt(i)->code() != PyObjectType::typeCode())
+                                        return std::nullopt;
+                            }
                             return getPyObjectType();
                         }),
                 },
@@ -290,10 +337,10 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
-            "wrap",
+            "py_wrap",
             {
                 {
-                    "python:wrap",
+                    "python:py_wrap",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(x: T) => PyObject<T>",
@@ -305,10 +352,10 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
-            "unwrap",
+            "py_unwrap",
             {
                 {
-                    "python:unwrap",
+                    "python:py_unwrap",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(obj: PyObject<T>) => T",
