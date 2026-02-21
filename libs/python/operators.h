@@ -32,8 +32,10 @@ slot_t __python_py_eval__(ArgsView &with, ArgsView &norm, Context &ctx);
 slot_t __python_py_run__(ArgsView &with, ArgsView &norm, Context &ctx);
 slot_t __python_py_attr__(ArgsView &with, ArgsView &norm, Context &ctx);
 slot_t __python_py_import__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __python_to_py__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __python_from_py__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __python_py_print__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __python_py_println__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __python_wrap__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __python_upwrap__(ArgsView &with, ArgsView &norm, Context &ctx);
 
-/** 供 python 协议 executor 使用的 URI -> operator_t 映射（key 为 suffix，如 "eval", "to_py"）。 */
+/** 供 python 协议 executor 使用的 URI -> operator_t 映射（key 为 suffix，如 "eval", "wrap"）。 */
 std::unordered_map<std::string, operator_t> getPythonOpsMap();

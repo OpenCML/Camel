@@ -18,6 +18,7 @@
  */
 
 #include <filesystem>
+#include <unordered_set>
 
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
@@ -86,6 +87,73 @@ context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &d
     EXEC_WHEN_DEBUG(
         l.in("Context").info("Context initialized using entry config {}", entryConf.toString()));
     return ctx;
+}
+
+void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
+    auto allMods = allUserModules();
+    std::vector<module_ptr_t> modsErr;
+    for (const auto &mod : allMods) {
+        auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
+        if (ud && ud->diagnostics() && ud->diagnostics()->hasErrors()) {
+            modsErr.push_back(mod);
+        }
+    }
+    if (json && !modsErr.empty()) {
+        os << "[\n";
+        bool first = true;
+        for (const auto &mod : modsErr) {
+            auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
+            if (!ud || !ud->diagnostics())
+                continue;
+            if (!first)
+                os << ",\n";
+            ud->diagnostics()->dump(os, true, false);
+            first = false;
+        }
+        os << "\n]\n" << std::flush;
+    } else {
+        for (const auto &mod : modsErr) {
+            auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
+            if (!ud || !ud->diagnostics())
+                continue;
+            if (mod != mainModule_) {
+                std::vector<std::string> importers;
+                for (const auto &other : allMods) {
+                    if (other != mod && other->imports(mod)) {
+                        importers.push_back(other->name());
+                    }
+                }
+                if (!importers.empty()) {
+                    os << "[imported by " << join(importers, ", ") << "]\n";
+                }
+            }
+            ud->diagnostics()->dump(os, false);
+        }
+    }
+}
+
+std::vector<module_ptr_t> Context::allUserModules() const {
+    std::vector<module_ptr_t> result;
+    std::unordered_set<module_ptr_t> seen;
+
+    if (mainModule_) {
+        if (std::dynamic_pointer_cast<UserDefinedModule>(mainModule_)) {
+            result.push_back(mainModule_);
+            seen.insert(mainModule_);
+        }
+    }
+
+    for (const auto &[name, mod] : modules_) {
+        if (name.empty())
+            continue;
+        if (seen.count(mod))
+            continue;
+        if (std::dynamic_pointer_cast<UserDefinedModule>(mod)) {
+            result.push_back(mod);
+            seen.insert(mod);
+        }
+    }
+    return result;
 }
 
 module_ptr_t

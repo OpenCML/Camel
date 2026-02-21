@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -152,16 +152,17 @@ void Diagnostics::fetchAll(const std::vector<antlr4::Token *> &tokens) {
         d.fetchRange(conv);
 }
 
-void Diagnostics::dump(std::ostream &os, bool json) const {
+void Diagnostics::dump(std::ostream &os, bool json, bool wrapInArray) const {
     std::lock_guard<std::mutex> lk(mtx_);
-    if (json)
+    if (json && wrapInArray)
         os << "[\n";
     os << strutil::join(storage_, (json ? ",\n" : "\n"), [json](const Diagnostic &d) {
         return json ? d.toJson() : d.toText();
     });
-    if (json)
+    if (json && wrapInArray)
         os << "\n]";
-    os << "\n" << std::flush;
+    if (wrapInArray)
+        os << "\n" << std::flush;
 }
 
 void Diagnostics::clear() {

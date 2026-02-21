@@ -111,7 +111,8 @@ class Diagnostics {
 
     Diagnostic &add(Diagnostic &&d);
     void fetchAll(const std::vector<antlr4::Token *> &tokens);
-    void dump(std::ostream &os, bool json = false) const;
+    /// When wrapInArray=false, outputs only the joined items (no brackets) for merging
+    void dump(std::ostream &os, bool json = false, bool wrapInArray = true) const;
     void clear();
 
     const std::string &moduleName() const { return moduleName_; }

@@ -96,6 +96,15 @@ void Module::importAllRefsFromMod(const module_ptr_t &mod) {
     importedEntityCache_.clear();
 }
 
+bool Module::imports(const module_ptr_t &mod) const {
+    for (const auto &[ref, mods] : importedRefModMap_) {
+        if (std::find(mods.begin(), mods.end(), mod) != mods.end()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Module::markImportedRefFromMod(const Reference &ref, const module_ptr_t &mod) {
     auto &vec = importedRefModMap_[ref];
     if (std::find(vec.begin(), vec.end(), mod) == vec.end()) {

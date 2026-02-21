@@ -17,62 +17,89 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include "executor.h"
 #include "module.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
-#include "camel/core/context/frame.h"
-#include "camel/core/error/diagnostics.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/resolver.h"
-#include "camel/execute/executor.h"
-#include "camel/utils/log.h"
 #include "operators.h"
 
 #include <optional>
 #include <pybind11/embed.h>
 #include <pybind11/pybind11.h>
+#include <string>
+
+#ifdef _WIN32
+#include <stdlib.h>
+#endif
 
 namespace py = pybind11;
 
-using data_arr_t = RawArray<const GraphIR::data_idx_t>;
+// 确保 Python 解释器能够找到虚拟环境中的包
+static void ensure_python_path() {
+    try {
+        if (!Py_IsInitialized())
+            return;
+
+        py::module_ sys  = py::module_::import("sys");
+        py::module_ site = py::module_::import("site");
+        py::module_ os   = py::module_::import("os");
+
+        std::string venv_path;
+#ifdef _WIN32
+        char *venv_env = nullptr;
+        size_t len     = 0;
+        if (_dupenv_s(&venv_env, &len, "VIRTUAL_ENV") == 0 && venv_env != nullptr) {
+            venv_path = std::string(venv_env);
+            free(venv_env);
+        }
+#else
+        const char *venv_env = std::getenv("VIRTUAL_ENV");
+        if (venv_env)
+            venv_path = std::string(venv_env);
+#endif
+
+        if (!venv_path.empty()) {
+            std::string python_exe = venv_path;
+#ifdef _WIN32
+            python_exe += "\\Scripts\\python.exe";
+#else
+            python_exe += "/bin/python";
+#endif
+            if (os.attr("path").attr("exists")(python_exe).cast<bool>()) {
+                sys.attr("executable") = python_exe;
+                sys.attr("prefix")     = venv_path;
+            }
+        }
+
+        site.attr("main")();
+
+        py::list site_packages = site.attr("getsitepackages")().cast<py::list>();
+        py::list path          = sys.attr("path");
+        for (size_t i = 0; i < site_packages.size(); ++i) {
+            std::string pkg_path = py::str(site_packages[i]).cast<std::string>();
+            bool exists          = false;
+            for (size_t j = 0; j < path.size(); ++j) {
+                std::string path_str = py::str(path[j]).cast<std::string>();
+                if (pkg_path == path_str ||
+                    os.attr("path").attr("normpath")(pkg_path).cast<std::string>() ==
+                        os.attr("path").attr("normpath")(path_str).cast<std::string>()) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists && os.attr("path").attr("exists")(pkg_path).cast<bool>())
+                path.insert(0, pkg_path);
+        }
+    } catch (...) {
+        // 失败时继续，不阻塞加载
+    }
+}
 
 namespace {
-
-class PythonExecutor : public Executor {
-  public:
-    PythonExecutor(context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
-        : Executor(ctx, std::move(ops)) {}
-
-    void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) override {
-        EXEC_WHEN_DEBUG(l.in("PythonExec").debug("Evaluating operator of URI: {}", uri));
-        auto it = opsMap_.find(uri);
-        if (it == opsMap_.end()) {
-            throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
-        }
-        std::vector<GraphIR::data_idx_t> normIndices;
-        for (const auto &in : self->normInputs())
-            normIndices.push_back(in->index());
-        std::vector<GraphIR::data_idx_t> withIndices;
-        for (const auto &in : self->withInputs())
-            withIndices.push_back(in->index());
-
-        data_arr_t nargs = data_arr_t{
-            normIndices.data(),
-            static_cast<GraphIR::arr_size_t>(normIndices.size()),
-        };
-        data_arr_t wargs = data_arr_t{
-            withIndices.data(),
-            static_cast<GraphIR::arr_size_t>(withIndices.size()),
-        };
-
-        FrameArgsView withView(frame, wargs);
-        FrameArgsView normView(frame, nargs);
-        slot_t result = it->second(withView, normView, *context_);
-        frame.set(self->index(), result);
-    }
-};
 
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
@@ -180,10 +207,44 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
-            "to_py",
+            "py_print",
             {
                 {
-                    "python:to_py",
+                    "python:py_print",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {-1, {false}}},
+                        "(...objs: PyObject[]) => PyObject?",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> std::optional<Type *> {
+                            for (Type *t : norm)
+                                if (!t->isOtherType() || t->code() != PyObjectType::typeCode())
+                                    return std::nullopt;
+                            return norm.empty() ? Type::Void() : norm[0];
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "py_println",
+            {
+                {
+                    "python:py_println",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {-1, {false}}},
+                        "(...objs: PyObject[]) => PyObject?",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> std::optional<Type *> {
+                            for (Type *t : norm)
+                                if (!t->isOtherType() || t->code() != PyObjectType::typeCode())
+                                    return std::nullopt;
+                            return norm.empty() ? Type::Void() : norm[0];
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "wrap",
+            {
+                {
+                    "python:wrap",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(x: T) => PyObject<T>",
@@ -195,10 +256,10 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
-            "from_py",
+            "unwrap",
             {
                 {
-                    "python:from_py",
+                    "python:unwrap",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(obj: PyObject<T>) => T",
@@ -235,6 +296,7 @@ bool PythonModule::load() {
     try {
         if (!Py_IsInitialized())
             py::initialize_interpreter();
+        ensure_python_path();
     } catch (const std::exception &e) {
         context_->rtmDiags()
             ->of(RuntimeDiag::RuntimeError)
@@ -242,9 +304,7 @@ bool PythonModule::load() {
         return false;
     }
     context_ptr_t ctx = context_;
-    context_->registerExecutorFactory("python", [ctx]() {
-        return std::make_shared<PythonExecutor>(ctx, getPythonOpsMap());
-    });
+    context_->registerExecutorFactory("python", [ctx]() { return createPythonExecutor(ctx); });
     loaded_ = true;
     return true;
 }

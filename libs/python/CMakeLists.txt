@@ -4,6 +4,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 add_library(python_cmo SHARED
+    executor.cpp
     module.cpp
     operators.cpp
     type.cpp

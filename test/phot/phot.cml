@@ -1,0 +1,93 @@
+module phot
+
+import {
+    wrap,
+    unwrap,
+    py_call,
+    py_exec,
+    py_eval,
+    py_print,
+    PyObject
+} from python
+
+// 与 clean.cml 一致的类型定义，供调用方使用
+type Channel = (float[], float[])
+type Signals = (Channel, Channel)
+
+// 初始化：注册 Python 端转换辅助函数（无 numpy 依赖）
+func _init_helpers() sync {
+    py_exec("
+import sys, os
+
+_cand = os.path.join(os.getcwd(), 'test', 'phot')
+if os.path.isfile(os.path.join(_cand, 'phot.py')):
+    sys.path.insert(0, _cand)
+
+import phot
+
+def _phot_to_bits_pair(py_result):
+    r = py_result
+    return [list(r[0]), list(r[1])]
+
+def _phot_to_signals_pair(py_result):
+    r = py_result
+    def ch(c):
+        if c and isinstance(c[0], complex):
+            return [[x.real for x in c], [x.imag for x in c]]
+        return [[float(x) for x in c], [0.0] * len(c)]
+    return [ch(r[0]), ch(r[1])]
+
+# Camel 的 wrap(signals) 得到 ((rx, ix), (ry, iy))，转为 phot 期望的 [x_complex, y_complex]
+def _signals_from_camel(tup):
+    rx, ix = tup[0][0], tup[0][1]
+    ry, iy = tup[1][0], tup[1][1]
+    x = [complex(r, i) for r, i in zip(rx, ix)]
+    y = [complex(r, i) for r, i in zip(ry, iy)]
+    return [x, y]
+")
+}
+
+export func config(plot: bool) sync {
+    _init_helpers()
+    py_call('phot.config', wrap(plot))
+}
+
+export func gen_bits(num_bits: int, bits_per_symbol: int): (int[], int[]) sync {
+    _init_helpers()
+    print('gen_bits')
+    let raw = py_call('phot.gen_bits', wrap(num_bits), wrap(bits_per_symbol))
+    let converted = py_call('_phot_to_bits_pair', raw)
+    py_print(converted)
+    let result = unwrap(converted as PyObject<(int[], int[])>)
+    print(result)
+    return result
+}
+
+with <bits_per_symbol: int>
+export func modulation(bits: (int[], int[])): Signals sync {
+    let raw = py_call('phot.modulation', wrap(bits), wrap(bits_per_symbol))
+    let converted = py_call('_phot_to_signals_pair', raw)
+    return unwrap(converted as PyObject<Signals>)
+}
+
+with <up_sampling_factor: int>
+export func up_sample(signals: Signals): Signals sync {
+    let signals_for_phot = py_call('_signals_from_camel', wrap(signals))
+    let raw = py_call('phot.up_sample', signals_for_phot, wrap(up_sampling_factor))
+    let converted = py_call('_phot_to_signals_pair', raw)
+    return unwrap(converted as PyObject<Signals>)
+}
+
+with <up_sampling_factor: int, roll_off: float, total_baud: float>
+export func pulse_shaper(signals: Signals): Signals sync {
+    let signals_for_phot = py_call('_signals_from_camel', wrap(signals))
+    let raw = py_call('phot.pulse_shaper', signals_for_phot, wrap(up_sampling_factor), wrap(roll_off), wrap(total_baud))
+    let converted = py_call('_phot_to_signals_pair', raw)
+    return unwrap(converted as PyObject<Signals>)
+}
+
+with <is_plot: bool, isdata: bool>
+export func constellation_diagram(signals: Signals) sync {
+    let signals_for_phot = py_call('_signals_from_camel', wrap(signals))
+    py_call('phot.constellation_diagram', signals_for_phot, wrap(is_plot), wrap(isdata))
+}

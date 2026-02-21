@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,9 @@
 
 #include <fstream>
 #include <memory>
+#include <ostream>
 #include <unordered_map>
+#include <vector>
 
 namespace GraphIR {
 class Graph;
@@ -83,6 +85,14 @@ class Context : public std::enable_shared_from_this<Context> {
     const ExecutorManager &execMgr() const { return *exeMgr_; }
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }
+
+    /// Returns main module plus all UserDefinedModules from modules_ (excluding builtin)
+    std::vector<module_ptr_t> allUserModules() const;
+
+    /// Dump diagnostics from main and all imported modules that have errors; json=true for JSON
+    /// format
+    void dumpAllModuleDiagnostics(std::ostream &os, bool json) const;
+
     void registerExecutorFactory(std::string name, executor_factory_t fact);
     void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame);
 

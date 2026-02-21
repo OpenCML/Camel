@@ -4,6 +4,7 @@
 .vscode/*
 !.vscode/launch.json
 !.vscode/tasks.json
+!.vscode/settings.json
 .VSCodeCounter/
 **/.cache/
 __pycache__/

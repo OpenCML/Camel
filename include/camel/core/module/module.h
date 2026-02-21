@@ -77,6 +77,9 @@ class Module : public std::enable_shared_from_this<Module> {
     bool exportType(const Reference &ref, Type *type);
     bool exportEntity(const Reference &ref, const entity &ent);
 
+    /// Returns true if this module imports the given module
+    bool imports(const module_ptr_t &mod) const;
+
     std::optional<Type *> getImportedType(const Reference &ref) const;
     std::optional<entity> getImportedEntity(const Reference &ref) const;
 

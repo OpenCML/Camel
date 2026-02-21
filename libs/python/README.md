@@ -27,22 +27,31 @@
 |------|------|------|
 | `py_import` | `(module_name: string) => PyObject` | 导入 Python 模块，返回模块对象。 |
 | `py_attr` | `(obj: PyObject, attr: string) => PyObject` | 获取对象属性。`attr` 可含 `.` 表示链式访问（如 `"a.b.c"`）。 |
+| `py_print` | `(...objs: PyObject[]) => PyObject?` | 调用 Python `print(..., end='')` 输出，不换行；透传首个参数。 |
+| `py_println` | `(...objs: PyObject[]) => PyObject?` | 调用 Python `print(...)` 输出并换行；透传首个参数。 |
 
 ### 类型互转
 
 | 算子 | 签名 | 说明 |
 |------|------|------|
-| `to_py` | `(x: T) => PyObject<T>` | Camel → Python：将 Camel 值转为 Python 对象。支持 Int/Float/Bool/String/Array/Tuple/Struct 及嵌套。 |
-| `from_py` | `(obj: PyObject<T>) => T` | Python → Camel：将 Python 对象按目标类型转回 Camel。需指定泛型 `PyObject<T>`。 |
+| `wrap` | `(x: T) => PyObject<T>` | Camel → Python：将 Camel 值转为 Python 对象。支持 Int/Float/Bool/String/Array/Tuple/Struct 及嵌套。 |
+| `unwrap` | `(obj: PyObject<T>) => T` | Python → Camel：将 Python 对象按目标类型转回 Camel。**必须**通过 `as PyObject<T>` 指定目标类型。 |
+
+**`unwrap` 必须配合 `as` 使用**：`py_eval` / `py_call` 返回的是裸 `PyObject`（无类型参数），而 `unwrap` 需根据 `PyObject<T>` 的 `T` 决定返回类型并完成转换。因此必须先将结果用 `as PyObject<T>` 转为带泛型参数的 `PyObject<T>` 再传给 `unwrap`，例如：
+
+```cml
+let obj = py_call(some_fn, wrap(42))   // 返回 PyObject
+let val = unwrap(obj as PyObject<int>) // 指定 T=int，返回 int
+```
 
 ## 示例
 
 ```cml
-import { py_call, py_eval, py_import, py_attr, py_exec, py_run, to_py, from_py } from python
+import { py_call, py_eval, py_import, py_attr, py_exec, py_run, wrap, unwrap } from python
 
 func main() sync {
     // 调用 builtins.print
-    py_call("print", to_py("Hello from Camel!"))
+    py_call("print", wrap("Hello from Camel!"))
 
     // 表达式求值
     let sum_obj = py_eval("1 + 2 * 3")
@@ -51,7 +60,7 @@ func main() sync {
     // 导入模块并获取属性
     let math = py_import("math")
     let sqrt = py_attr(math, "sqrt")
-    let result = py_call(sqrt, to_py(16))
+    let result = py_call(sqrt, wrap(16))
 
     // 执行代码字符串
     py_exec("print('Exec: Hello!')")
@@ -59,7 +68,8 @@ func main() sync {
     // 执行脚本文件
     py_run("scripts/hello.py")
 
-    // 类型互转：from_py 需传入带泛型参数的 PyObject<T>
+    // 类型互转：unwrap 需配合 as PyObject<T> 指定目标类型
+    let val = unwrap(py_eval("1+1") as PyObject<int>)
     return 0
 }
 ```

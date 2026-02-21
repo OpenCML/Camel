@@ -23,6 +23,7 @@
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
+#include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/listener.h"
 #include "camel/core/mm.h"
@@ -197,13 +198,8 @@ int main(int argc, char *argv[]) {
             }
 
             if (!mainModule->loaded()) {
-                if (selectedCommand == Command::Check) {
-                    mainModule->diagnostics()->dump(os, useJsonFormat);
-                    return 0;
-                } else {
-                    mainModule->diagnostics()->dump(os, useJsonFormat);
-                    return 1;
-                }
+                ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+                return selectedCommand == Command::Check ? 0 : 1;
             }
 
             if (selectedCommand == Command::Run) {
@@ -257,7 +253,7 @@ int main(int argc, char *argv[]) {
             }
 
         } catch (DiagnosticsLimitExceededBaseException &e) {
-            mainModule->diagnostics()->dump(os, useJsonFormat);
+            ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
             return selectedCommand == Command::Check ? 0 : 1;
         } catch (Diagnostic &d) {
             RangeConverter conv(parser->getTokens());

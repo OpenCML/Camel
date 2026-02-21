@@ -174,7 +174,7 @@ inline void printSlot(std::ostream &os, const slot_t data, Type *t) {
         data != DeadSlot,
         std::format("Accessing uninitialized slot in printSlot: {}", t->toString()));
     if (t->isOtherType()) {
-        os << t->toString();
+        os << "<" << t->toString() << ">";
         return;
     }
     if (t->isGCTraced()) {
