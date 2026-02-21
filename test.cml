@@ -1,7 +1,0 @@
-type Point = int
-
-func main(): int sync {
-    let a: Point<int[][]> = [[1]]
-    print(a)
-    return 0
-}

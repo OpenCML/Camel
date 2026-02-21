@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Feb. 21, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -425,17 +425,11 @@ slot_t __python_py_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
     try {
         py::tuple args(norm.size());
         for (size_t i = 0; i < norm.size(); ++i) {
-            if (norm.type(i)->code() != PyObjectType::typeCode()) {
-                ctx.rtmDiags()
-                    ->of(RuntimeDiag::RuntimeError)
-                    .commit("python.py_print: all arguments must be PyObject");
-                return NullSlot;
-            }
             PythonObjectHolder *h = unwrapPyObject(norm.slot(i), ctx);
             if (!h) return NullSlot;
             args[i] = h->obj;
         }
-        print_fn(*args, py::arg("end") = ""); // 不换行
+        print_fn(*args, py::arg("end") = "", py::arg("flush") = true); // 不换行，立即刷新
         return norm.size() == 0 ? NullSlot : norm.slot(0);
     } catch (const py::error_already_set &e) {
         ctx.rtmDiags()
@@ -450,17 +444,11 @@ slot_t __python_py_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
     try {
         py::tuple args(norm.size());
         for (size_t i = 0; i < norm.size(); ++i) {
-            if (norm.type(i)->code() != PyObjectType::typeCode()) {
-                ctx.rtmDiags()
-                    ->of(RuntimeDiag::RuntimeError)
-                    .commit("python.py_println: all arguments must be PyObject");
-                return NullSlot;
-            }
             PythonObjectHolder *h = unwrapPyObject(norm.slot(i), ctx);
             if (!h) return NullSlot;
             args[i] = h->obj;
         }
-        print_fn(*args); // 默认换行
+        print_fn(*args, py::arg("flush") = true); // 默认换行，立即刷新
         return norm.size() == 0 ? NullSlot : norm.slot(0);
     } catch (const py::error_already_set &e) {
         ctx.rtmDiags()

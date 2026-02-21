@@ -54,12 +54,9 @@ export func config(plot: bool) sync {
 
 export func gen_bits(num_bits: int, bits_per_symbol: int): (int[], int[]) sync {
     _init_helpers()
-    print('gen_bits')
     let raw = py_call('phot.gen_bits', wrap(num_bits), wrap(bits_per_symbol))
     let converted = py_call('_phot_to_bits_pair', raw)
-    py_print(converted)
     let result = unwrap(converted as PyObject<(int[], int[])>)
-    print(result)
     return result
 }
 
