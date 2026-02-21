@@ -13,19 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "tuple.h"
-#include "core/data/base.h"
-#include "core/type/composite/tuple.h"
-#include "utils/scope.h"
-#include "utils/str.h"
-#include "utils/type.h"
-
-#include "../special/null.h"
-#include "../special/ref.h"
+#include "camel/core/data/composite/tuple.h"
+#include "camel/core/data/base.h"
+#include "camel/core/data/null.h"
+#include "camel/core/data/ref.h"
+#include "camel/utils/scope.h"
+#include "camel/utils/str.h"
+#include "camel/utils/type.h"
 
 using namespace std;
 

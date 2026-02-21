@@ -13,20 +13,20 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include <fstream>
 #include <iostream>
 
-#include "common/scope.h"
-#include "core/context/context.h"
-#include "core/module/module.h"
-#include "error/abort.h"
+#include "camel/common/scope.h"
+#include "camel/core/context/context.h"
+#include "camel/core/error/abort.h"
+#include "camel/core/module/module.h"
 
-#include "../gct.h"
-#include "gir.h"
+#include "camel/compile/gct.h"
+#include "camel/compile/gir.h"
 
 namespace GraphIR {
 

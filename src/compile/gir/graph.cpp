@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "compile/gir.h"
-#include "error/diagnostics/diagnostics.h"
+#include "camel/compile/gir.h"
+#include "camel/core/error/diagnostics.h"
 
 namespace GraphIR {
 

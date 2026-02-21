@@ -87,6 +87,7 @@
 - **ExitNode**：图的唯一出口，可带 dataIndex_ 指向返回值槽位。
 - **BrchNode / JoinNode**：与 BRCH/JOIN 字节码对应，用于条件分支与汇合。
 - **AccsNode**：accsIndex_ 为字段名或下标，用于 FILL/ACCS 等字节码的语义。
+- **CastNode**：运行时类型转换；由 GCT 的 `CastLoad` 在 `visitCastNode` 中生成，normInputs 为待转换的值节点，dataType 为目标类型。
 
 ## 7. 与字节码的对应
 

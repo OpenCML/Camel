@@ -1,7 +1,7 @@
 {
     "name": "camel-scripts",
     "private": true,
-    "version": "0.1.14",
+    "version": "0.1.15",
     "type": "module",
     "pre-commit": [
         "upd"
@@ -9,7 +9,7 @@
     "scripts": {
         "prepare": "husky && node ./scripts/psrgen.js && node ./scripts/install.js",
         "upd": "node ./scripts/update.js",
-        "cnt": "tokei --exclude third_party --exclude package-lock.json --sort lines",
+        "cnt": "node ./scripts/cnt.js",
         "init": "node ./scripts/psrgen.js && node ./scripts/install.js",
         "psrgen": "node ./scripts/psrgen.js",
         "codegen": "node ./scripts/codegen.js",
@@ -27,6 +27,7 @@
         "format": "node ./scripts/format.js",
         "setver": "node ./scripts/setver.js",
         "gitcnt": "node ./scripts/gitcnt.js",
+        "code-stats": "python ./scripts/code_stats.py",
         "fix:vsc": "node ./scripts/fix.js vsc",
         "pypi:rollup": "node ./scripts/pypi_rollup.js",
         "pypi:upload": "python -m twine upload --repository testpypi dist/pypi/*",

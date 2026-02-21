@@ -13,15 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 20, 2025
- * Updated: Dec. 11, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "advanced_tracer.h"
 #include "../analysis/perfetto_integration.h"
 #include "../core/trace.h"
+#include "camel/utils/log.h"
 #include "scope_guard.h"
-#include "utils/log.h"
 
 #include <atomic>
 #include <iostream>
@@ -38,8 +38,9 @@ class ProfilingCleanup {
     ~ProfilingCleanup() {
         if (g_profiling_enabled && !g_profiling_stopped) {
             l.in("Profiler")
-                .warn("Profiling was enabled but not properly stopped with enable(false). "
-                      "Performance data may not have been saved.");
+                .warn(
+                    "Profiling was enabled but not properly stopped with enable(false). "
+                    "Performance data may not have been saved.");
         }
     }
 };

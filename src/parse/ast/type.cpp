@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "type.h"
-#include "utils/str.h"
+#include "camel/parse/ast/type.h"
+#include "camel/utils/str.h"
 
 namespace AbstractSyntaxTree {
 
@@ -97,6 +97,8 @@ const std::string FuncTypeLoad::toString() const {
 const std::string NullableTypeLoad::geneCode() const { return "?"; }
 
 const std::string TypeExprLoad::geneCode() const { return to_string(op_); }
+
+const std::string SpecTypeLoad::geneCode() const { return "<>"; }
 
 const std::string ArrayTypeLoad::geneCode() const {
     std::string result = "";

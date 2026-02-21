@@ -37,21 +37,6 @@
 
 ---
 
-## format：代码格式化工具
-
-    camel format [options] <cml文件或目录>
-
-- `-t`, `--tab-size <num>`：缩进空格数（默认为 4）
-- `-u`, `--use-tabs`：使用制表符代替空格
-- `-q`, `--quote-prefer <single|double>`：默认使用的字符串引号类型（默认为 `single`）
-- `-m`, `--max-width <num>`：一行最大字符数（默认 100）
-- `-c`, `--config <file>`：指定配置文件路径
-- `--ignore`：忽略定义文件
-- `-i`, `--inplace`：就地修改源文件，而不是输出到控制台
-- 可用的通用选项：`--verbose`, `--log-level`
-
----
-
 ## check：代码健康检查
 
     camel check [options] <cml文件或目录>
@@ -83,6 +68,21 @@
 
 ---
 
+## 相关工具（Related Tools）
+
+`camel` CLI 负责 run、check、inspect。代码格式化由独立工具提供：
+
+- **camel-format**：格式化 `.cml` 源文件。用法：`camel-format [options] <file>`
+  - `-i`, `--inplace`：写回原文件
+  - `-t`, `--tab-size <N>`：缩进大小（默认 4）
+  - `-u`, `--use-tabs`：使用制表符
+  - `-q`, `--quote-prefer <single|double>`
+  - `-m`, `--max-width <N>`（默认 80）
+
+其他工具：`camel-codegen`、`camel-profiler`。均在 `build/tools/` 下构建。
+
+---
+
 ## 示例
 
 ```bash
@@ -92,8 +92,8 @@ camel main.cml
 # 执行并记录性能
 camel -P main.cml
 
-# 格式化代码
-camel format src/xxx.cml
+# 格式化代码（使用 camel-format，不是 camel format）
+camel-format -i src/xxx.cml
 
 # 只检查语法并输出为 JSON
 camel check -s -O json src/

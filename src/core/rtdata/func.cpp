@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 17, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "func.h"
-#include "compile/gir.h"
+#include "camel/core/rtdata/func.h"
+#include "camel/compile/gir.h"
 
 const TupleType *Function::tupleType() const { return graph_->closureType(); }
 

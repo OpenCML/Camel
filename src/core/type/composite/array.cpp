@@ -13,15 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "array.h"
-#include "core/mm/mm.h"
-#include "error/diagnostics/diagnostics.h"
-#include "utils/assert.h"
-#include "utils/log.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/core/error/diagnostics.h"
+#include "camel/core/mm.h"
+#include "camel/utils/assert.h"
+#include "camel/utils/log.h"
 
 using namespace std;
 
@@ -136,8 +136,8 @@ bool ArrayType::equals(Type *other) const {
     return elemType_->equals(otherArr.elemType_);
 }
 
-CastSafety ArrayType::castSafetyTo(const Type &other) const {
-    if (this == &other) {
+CastSafety ArrayType::castSafetyTo(Type *targetType) const {
+    if (this == targetType) {
         return CastSafety::Safe;
     }
     return CastSafety::Forbidden;

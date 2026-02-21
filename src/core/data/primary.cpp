@@ -13,13 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "primary.h"
-
-#include "utils/escape.h"
+#include "camel/core/data/primary.h"
+#include "camel/utils/escape.h"
 
 StringData::StringData(const std::string &data) : Data(Type::String()), data_(data) {}
 

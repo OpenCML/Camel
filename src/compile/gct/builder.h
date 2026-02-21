@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,13 +23,13 @@
 #include <regex>
 #include <string>
 
-#include "common/scope.h"
-#include "compile/gct.h"
-#include "core/context/context.h"
-#include "core/module/module.h"
-#include "error/abort.h"
-#include "error/diagnostics/diagnostics.h"
-#include "parse/ast/ast.h"
+#include "camel/common/scope.h"
+#include "camel/compile/gct.h"
+#include "camel/core/context/context.h"
+#include "camel/core/error/abort.h"
+#include "camel/core/error/diagnostics.h"
+#include "camel/core/module/module.h"
+#include "camel/parse/ast.h"
 
 namespace GraphConstructTree {
 using void_ptr_t = void *;
@@ -117,6 +117,7 @@ class Builder {
     Type *visitInferType(const AST::node_ptr_t &ast);
     Type *visitDataType(const AST::node_ptr_t &ast);
     Type *visitRefType(const AST::node_ptr_t &ast);
+    Type *visitSpecType(const AST::node_ptr_t &ast);
 };
 
 } // namespace GraphConstructTree

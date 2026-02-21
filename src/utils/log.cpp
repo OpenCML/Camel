@@ -13,11 +13,20 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Dec. 19, 2025
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "log.h"
+#include "camel/utils/log.h"
+
+#ifndef NDEBUG
+Logger::Level Logger::globalLogLevel_ = Logger::Level::Debug;
+bool Logger::verboseEnabled_          = false;
+std::ofstream Logger::logFile_;
+std::mutex Logger::logMutex_;
+
+void Logger::SetVerbose(bool enable) { verboseEnabled_ = enable; }
+#endif
 
 Logger l("");
 

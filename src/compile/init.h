@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Oct. 17, 2024
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,8 +21,8 @@
 
 #include <string>
 
-#include "common/scope.h"
-#include "core/data/data.h"
+#include "camel/common/scope.h"
+#include "camel/core/data.h"
 
 extern Scope<std::string, data_ptr_t> globalRootScope;
 

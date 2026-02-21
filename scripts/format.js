@@ -2,11 +2,11 @@ import { execSync } from 'child_process'
 
 function getChangedFiles() {
     try {
-        const output = execSync('git diff --name-only HEAD', { encoding: 'utf-8' })
+        const output = execSync('git diff --name-only --diff-filter=ACMR HEAD', { encoding: 'utf-8' })
         return output
             .split('\n')
             .map((f) => f.trim())
-            .filter((f) => f.match(/\.(cpp|h)$/) && f.startsWith('src/'))
+            .filter((f) => f.match(/\.(cpp|h)$/) && (f.startsWith('src/') || f.startsWith('include/')))
     } catch (err) {
         console.error('Error getting changed files from git:', err)
         return []

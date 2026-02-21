@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Oct. 12, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include <stdexcept>
 
-#include "data.h"
-#include "utils/str.h"
+#include "camel/parse/ast/data.h"
+#include "camel/utils/str.h"
 
 namespace AbstractSyntaxTree {
 

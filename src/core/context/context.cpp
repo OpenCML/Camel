@@ -13,17 +13,20 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Oct. 24, 2025
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include <filesystem>
+#include <unordered_set>
 
-#include "compile/gir.h"
-#include "context.h"
-#include "core/module/userdef.h"
-#include "utils/log.h"
-#include "utils/str.h"
+#include "camel/compile/gir.h"
+#include "camel/core/context/context.h"
+#include "camel/core/module/builtin.h"
+#include "camel/core/module/dynamic.h"
+#include "camel/core/module/userdef.h"
+#include "camel/utils/log.h"
+#include "camel/utils/str.h"
 
 namespace fs = std::filesystem;
 using namespace strutil;
@@ -77,13 +80,80 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 
 context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &diagConf) {
     context_ptr_t ctx = std::shared_ptr<Context>(new Context(entryConf, diagConf));
-    ctx->exeMgr_ = std::make_unique<ExecutorManager>(ctx);
-    ctx->rtmDiags_ = std::make_shared<Diagnostics>("main", entryConf.entryFile);
+    ctx->exeMgr_      = std::make_unique<ExecutorManager>(ctx);
+    ctx->rtmDiags_    = std::make_shared<Diagnostics>("main", entryConf.entryFile);
     ctx->rtmDiags_->setConfig(diagConf);
     ctx->modules_[""] = ctx->getBuiltinModule("").value();
     EXEC_WHEN_DEBUG(
         l.in("Context").info("Context initialized using entry config {}", entryConf.toString()));
     return ctx;
+}
+
+void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
+    auto allMods = allUserModules();
+    std::vector<module_ptr_t> modsErr;
+    for (const auto &mod : allMods) {
+        auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
+        if (ud && ud->diagnostics() && ud->diagnostics()->hasErrors()) {
+            modsErr.push_back(mod);
+        }
+    }
+    if (json && !modsErr.empty()) {
+        os << "[\n";
+        bool first = true;
+        for (const auto &mod : modsErr) {
+            auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
+            if (!ud || !ud->diagnostics())
+                continue;
+            if (!first)
+                os << ",\n";
+            ud->diagnostics()->dump(os, true, false);
+            first = false;
+        }
+        os << "\n]\n" << std::flush;
+    } else {
+        for (const auto &mod : modsErr) {
+            auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
+            if (!ud || !ud->diagnostics())
+                continue;
+            if (mod != mainModule_) {
+                std::vector<std::string> importers;
+                for (const auto &other : allMods) {
+                    if (other != mod && other->imports(mod)) {
+                        importers.push_back(other->name());
+                    }
+                }
+                if (!importers.empty()) {
+                    os << "[imported by " << join(importers, ", ") << "]\n";
+                }
+            }
+            ud->diagnostics()->dump(os, false);
+        }
+    }
+}
+
+std::vector<module_ptr_t> Context::allUserModules() const {
+    std::vector<module_ptr_t> result;
+    std::unordered_set<module_ptr_t> seen;
+
+    if (mainModule_) {
+        if (std::dynamic_pointer_cast<UserDefinedModule>(mainModule_)) {
+            result.push_back(mainModule_);
+            seen.insert(mainModule_);
+        }
+    }
+
+    for (const auto &[name, mod] : modules_) {
+        if (name.empty())
+            continue;
+        if (seen.count(mod))
+            continue;
+        if (std::dynamic_pointer_cast<UserDefinedModule>(mod)) {
+            result.push_back(mod);
+            seen.insert(mod);
+        }
+    }
+    return result;
 }
 
 module_ptr_t
@@ -121,7 +191,7 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         }
     }
 
-    throw CamelBaseException(std::format("Module '{}' not found.", rawModuleName));
+    throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound).commit(rawModuleName);
 }
 
 std::vector<std::string> Context::getModuleNameCandidates(
@@ -157,17 +227,18 @@ std::string Context::resolveRelativeModuleName(
     const std::string &currentModule, const std::string &importName) {
 
     int level = 0;
-    size_t i = 0;
+    size_t i  = 0;
     while (i < importName.size() && importName[i] == '.') {
         ++level;
         ++i;
     }
 
     std::string remaining = importName.substr(i);
-    auto base = split(currentModule, '.');
+    auto base             = split(currentModule, '.');
 
     if (static_cast<size_t>(level) > base.size()) {
-        throw CamelBaseException("Too many dots in relative import: " + importName);
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Too many dots in relative import: " + importName);
     }
 
     base.resize(base.size() - level);
@@ -180,44 +251,64 @@ std::string Context::resolveRelativeModuleName(
     return join(base, ".");
 }
 
-std::string Context::getModulePath(const std::string &moduleName) {
+std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &moduleName) {
     std::string relativePath = moduleName;
     std::replace(relativePath.begin(), relativePath.end(), '.', '/');
-    relativePath += ".cml";
+    fs::path relPath(relativePath);
+    fs::path parentDir = relPath.parent_path();
+    std::string stem   = relPath.filename().string();
+    if (stem.empty())
+        stem = relPath.string();
+
+    auto tryDir = [&](const fs::path &base) -> std::pair<std::string, bool> {
+        fs::path dir = base / parentDir;
+        if (!fs::exists(dir) || !fs::is_directory(dir))
+            return {"", false};
+        fs::path cmoPath = dir / (stem + ".cmo");
+        if (fileExists(cmoPath.string()))
+            return {cmoPath.string(), true};
+        for (const auto &entry : fs::directory_iterator(dir)) {
+            if (!entry.is_regular_file())
+                continue;
+            fs::path p = entry.path();
+            if (p.stem() == stem)
+                return {p.string(), (p.extension() == ".cmo")};
+        }
+        return {"", false};
+    };
 
     for (const auto &dir : entryConfig_.searchPaths) {
         if (dir.empty())
-            continue; // skip empty search paths
+            continue;
         fs::path basePath = fs::path(dir);
-        if (!basePath.is_absolute()) {
+        if (!basePath.is_absolute())
             basePath = fs::path(entryConfig_.entryDir) / basePath;
-        }
-
-        fs::path fullPath = basePath / relativePath;
-        if (fileExists(fullPath.string())) {
-            return fullPath.string();
-        }
+        auto [path, isCmo] = tryDir(basePath);
+        if (!path.empty())
+            return {path, isCmo};
     }
 
-    // fallback: root/relativePath
-    fs::path fallbackPath = fs::path(entryConfig_.entryDir) / relativePath;
-    if (fileExists(fallbackPath.string())) {
-        return fallbackPath.string();
-    }
+    auto [path, isCmo] = tryDir(fs::path(entryConfig_.entryDir));
+    if (!path.empty())
+        return {path, isCmo};
+    return {"", false};
+}
 
-    return "";
+std::string Context::getModulePath(const std::string &moduleName) {
+    return getModulePathAndKind(moduleName).first;
 }
 
 bool Context::moduleFileExists(const std::string &moduleName) {
-    return !getModulePath(moduleName).empty();
+    return !getModulePathAndKind(moduleName).first.empty();
 }
 
 module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
-    std::string path = getModulePath(moduleName);
-    if (!path.empty()) {
-        return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
-    }
-    return nullptr;
+    auto [path, isCmo] = getModulePathAndKind(moduleName);
+    if (path.empty())
+        return nullptr;
+    if (isCmo)
+        return loadCmoModule(moduleName, path, shared_from_this());
+    return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
 }
 
 GraphIR::graph_ptr_t Context::rootGraph() const {
@@ -233,10 +324,12 @@ GraphIR::graph_ptr_t Context::mainGraph() const {
     ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
     const auto optMainGraphSet = gir->getSubGraphsByName("main");
     if (!optMainGraphSet.has_value()) {
-        throw CamelBaseException("Main graph not found in GraphIR of main module.");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Main graph not found in GraphIR of main module.");
     }
     if (optMainGraphSet->empty()) {
-        throw CamelBaseException("Main graph set is empty in GraphIR of main module.");
+        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
+            .commit("Main graph set is empty in GraphIR of main module.");
     }
     return *optMainGraphSet.value().begin();
 }

@@ -6,11 +6,20 @@
 
 | 脚本 | 说明 |
 |------|------|
-| `npm run build` | Release 构建，生成 `camel` 可执行文件 |
+| `npm run build` | Release 构建，生成 `camel` 及 `camel-format`、`camel-codegen`、`camel-profiler` 可执行文件 |
 | `npm run debug` | Debug 构建 |
-| `npm run check` | 代码健康检查 |
-| `npm run format` | 代码格式化 |
+| `npm run profile` | RelWithDebInfo 构建（性能分析用） |
+| `npm run check` | 代码健康检查（`camel check`） |
+| `npm run format` | 使用 clang-format 格式化 `src/` 和 `include/` 下的 C++ 源文件 |
 | `npm run clean` | 清理构建产物 |
+
+## 构建产物路径
+
+- `camel` 可执行文件：`build/tools/camel-cli/<Config>/camel[.exe]`，构建脚本会复制到项目根目录
+- `camel-format`、`camel-codegen`、`camel-profiler`：`build/tools/<tool>/<Config>/`
+- `libcamel` 动态库：`build/<Config>/`
+
+首次构建或删除 `build/` 后，`npm run build` 会自动执行 `conan install` 生成依赖。
 
 ## test：交互式测试运行器
 
@@ -54,7 +63,7 @@ npm run test -- linear "run {file} --pass-until 3"
 
 ### 注意事项
 
-1. 运行前需先执行 `npm run build` 生成 `camel` 可执行文件
+1. 运行前需先执行 `npm run build` 生成 `camel` 可执行文件（复制至项目根目录）
 2. **必须使用 `--`**：`npm run test -- linear "template"`，否则 npm 会消费 `-v`、`--log-level` 等参数
 3. 若 npm 仍消费参数，可用环境变量兜底：
 

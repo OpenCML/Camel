@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "os.h"
-#include "compile/gir.h"
-#include "core/context/context.h"
-#include "core/operator.h"
+#include "camel/compile/gir.h"
+#include "camel/core/context/context.h"
+#include "camel/core/operator.h"
 
 #include <memory>
 #include <thread>
@@ -210,7 +210,9 @@ slot_t __whoami__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __exit__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    throw CamelRuntimeException(RuntimeExceptionCode::ForceExit, "<exit> operator invoked");
+    ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<exit> operator invoked");
+    exit(1);
+    return NullSlot;
 }
 
 slot_t __set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, Context &ctx) {

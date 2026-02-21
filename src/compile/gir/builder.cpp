@@ -13,16 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builder.h"
 
-#include "utils/log.h"
-#include "utils/scope.h"
-#include "utils/str.h"
-#include "utils/type.h"
+#include "camel/utils/log.h"
+#include "camel/utils/scope.h"
+#include "camel/utils/str.h"
+#include "camel/utils/type.h"
 
 #define DEBUG_LEVEL -1
 
@@ -407,9 +407,21 @@ node_ptr_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
 
 node_ptr_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ENTER("CAST");
-    node_ptr_t res = nullptr;
+    const auto &res = visit(gct->at(0));
+    ASSERT(res.type() == typeid(node_ptr_t), "Unexpected result type from child of CAST node.");
+    node_ptr_t valueNode = any_cast<node_ptr_t>(res);
+    ASSERT(valueNode != nullptr, "Cast node value is null.");
+    const auto &castLoad = gct->loadAs<GCT::CastLoad>();
+    Type *targetType     = castLoad->targetType();
+    if (valueNode->dataType()->castSafetyTo(targetType) != CastSafety::Safe) {
+        diags_->of(SemanticDiag::DynamicCastForbidden)
+            .commit(valueNode->dataType()->toString(), targetType->toString());
+        throw BuildAbortException();
+    }
+    node_ptr_t castNode = CastNode::create(*currGraph_, targetType);
+    Node::link(LinkType::Norm, valueNode, castNode);
     LEAVE("CAST");
-    return res;
+    return castNode;
 }
 
 node_ptr_t Builder::visitVariNode(const GCT::node_ptr_t &gct) {

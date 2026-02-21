@@ -13,17 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "ops.h"
 #include "builtin/datas/tensor.h"
 #include "builtin/types/tensor.h"
-#include "compile/gir.h"
-#include "core/context/context.h"
-#include "core/operator.h"
-#include "utils/assert.h"
+#include "camel/compile/gir.h"
+#include "camel/core/context/context.h"
+#include "camel/core/operator.h"
+#include "camel/utils/assert.h"
 
 #include <cmath>
 

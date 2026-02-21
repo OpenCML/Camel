@@ -13,23 +13,23 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 28, 2025
- * Updated: Oct. 19, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/module/builtin.h"
+#include "camel/core/module/builtin.h"
 #include <string>
 #ifndef NDEBUG
 class ProfilerBuiltinModule : public BuiltinModule {
   private:
-    bool enabled_ = false;
-    bool tracing_ = false;
-    bool realtime_analysis_ = false;
-    std::string output_file_ = "profiler_reports/camel_trace.json";
-    std::string perfetto_output_file_ = "profiler_reports/camel_trace.perfetto-trace";
-    std::string call_graph_output_file_ = "profiler_reports/call_graph.dot";
+    bool enabled_                            = false;
+    bool tracing_                            = false;
+    bool realtime_analysis_                  = false;
+    std::string output_file_                 = "profiler_reports/camel_trace.json";
+    std::string perfetto_output_file_        = "profiler_reports/camel_trace.perfetto-trace";
+    std::string call_graph_output_file_      = "profiler_reports/call_graph.dot";
     std::string detailed_report_output_file_ = "profiler_reports/detailed_report.md";
 
   public:

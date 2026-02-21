@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "compile/gir/types.h"
-#include "utils/assert.h"
+#include "camel/compile/gir/types.h"
+#include "camel/utils/assert.h"
 
 namespace GraphIR {
 

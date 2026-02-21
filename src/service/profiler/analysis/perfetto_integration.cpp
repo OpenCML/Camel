@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 27, 2025
- * Updated: Oct. 04, 2025
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "perfetto_integration.h"
 #include "../core/trace.h"
-#include "utils/log.h"
+#include "camel/utils/log.h"
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -49,7 +49,7 @@ PerfettoIntegration &PerfettoIntegration::getInstance() {
 
 void PerfettoIntegration::startTracing(const std::string &output_file) {
     tracingEnabled_ = true;
-    outputFile_ = output_file;
+    outputFile_     = output_file;
     events_.clear();
 
     recordEventInstant("perfetto_tracing_started", "perfetto");
@@ -65,15 +65,15 @@ void PerfettoIntegration::stopAndOpenPerfetto() {
 
 #ifdef _WIN32
     char *profile_mode = nullptr;
-    size_t len = 0;
-    errno_t err = _dupenv_s(&profile_mode, &len, "CAMEL_PROFILE_MODE");
+    size_t len         = 0;
+    errno_t err        = _dupenv_s(&profile_mode, &len, "CAMEL_PROFILE_MODE");
     bool auto_open = (err == 0 && profile_mode != nullptr && std::string(profile_mode) == "FULL");
     if (profile_mode) {
         free(profile_mode);
     }
 #else
     const char *profile_mode = std::getenv("CAMEL_PROFILE_MODE");
-    bool auto_open = (profile_mode && std::string(profile_mode) == "FULL");
+    bool auto_open           = (profile_mode && std::string(profile_mode) == "FULL");
 #endif
 
     if (auto_open) {
@@ -91,11 +91,11 @@ void PerfettoIntegration::recordEventBegin(const std::string &name, const std::s
         return;
 
     PerfettoTraceEvent event;
-    event.name = name;
-    event.category = category;
-    event.phase = 'B';
+    event.name      = name;
+    event.category  = category;
+    event.phase     = 'B';
     event.timestamp = getCurrentTimestamp();
-    event.threadId = getCurrentThreadId();
+    event.threadId  = getCurrentThreadId();
 
     events_.push_back(event);
 }
@@ -105,11 +105,11 @@ void PerfettoIntegration::recordEventEnd(const std::string &name, const std::str
         return;
 
     PerfettoTraceEvent event;
-    event.name = name;
-    event.category = category;
-    event.phase = 'E';
+    event.name      = name;
+    event.category  = category;
+    event.phase     = 'E';
     event.timestamp = getCurrentTimestamp();
-    event.threadId = getCurrentThreadId();
+    event.threadId  = getCurrentThreadId();
 
     events_.push_back(event);
 }
@@ -119,11 +119,11 @@ void PerfettoIntegration::recordEventInstant(const std::string &name, const std:
         return;
 
     PerfettoTraceEvent event;
-    event.name = name;
-    event.category = category;
-    event.phase = 'i';
+    event.name      = name;
+    event.category  = category;
+    event.phase     = 'i';
     event.timestamp = getCurrentTimestamp();
-    event.threadId = getCurrentThreadId();
+    event.threadId  = getCurrentThreadId();
 
     events_.push_back(event);
 }
@@ -162,8 +162,8 @@ void PerfettoIntegration::generatePerfettoFile() {
         if (!first) {
             file << ",\n";
         }
-        first = false;
-        std::string name = event.name;
+        first                = false;
+        std::string name     = event.name;
         std::string category = event.category;
 
         for (auto it = name.begin(); it != name.end(); ++it) {
@@ -195,8 +195,9 @@ void PerfettoIntegration::generatePerfettoFile() {
 
 void PerfettoIntegration::openPerfettoInBrowser(bool auto_open) {
     l.in("Profiler")
-        .info("To view trace results, manually open https://ui.perfetto.dev/ and load the trace "
-              "file.");
+        .info(
+            "To view trace results, manually open https://ui.perfetto.dev/ and load the trace "
+            "file.");
 }
 
 } // namespace profiler

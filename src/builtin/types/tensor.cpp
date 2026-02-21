@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "tensor.h"
-#include "core/mm/mm.h"
-#include "utils/assert.h"
+#include "camel/core/mm.h"
+#include "camel/utils/assert.h"
+
+#include <span>
 
 using namespace std;
 
@@ -32,12 +34,15 @@ TensorType::TensorType(const vector<size_t> &shape)
     }
 }
 
-TensorType::TensorType(Type *elementType, const vector<size_t> &shape)
+TensorType::TensorType(Type *elementType, const std::vector<size_t> &shape)
     : OtherType(typeCode()), shape_(shape), element_type_(elementType) {
     if (shape_.size() == 0) {
         throw invalid_argument("Tensor shape must at least have 1 dim");
     }
 }
+
+TensorType::TensorType(TypeCode code, size_t paramCount, Type **params)
+    : OtherType(code, paramCount, params), shape_(), element_type_(nullptr) {}
 
 vector<size_t> TensorType::shape() const { return shape_; }
 
@@ -75,6 +80,16 @@ Type *TensorType::Tensor(const std::vector<size_t> &shape) { return TensorType::
 Type *TensorType::Default() { return TensorType::create(Type::Float32(), std::vector<size_t>{0}); }
 
 string TensorType::toString() const {
+    if (paramCount_ > 0 && params_) {
+        string result = "Tensor<";
+        for (size_t i = 0; i < paramCount_; ++i) {
+            if (i > 0)
+                result += ", ";
+            result += params_[i] ? params_[i]->toString() : "?";
+        }
+        result += ">";
+        return result;
+    }
     string result = "Tensor<[";
     for (const auto &dim : shape_) {
         result += to_string(dim) + ", ";
@@ -94,6 +109,15 @@ string TensorType::toString() const {
 }
 
 std::string TensorType::mangle() const {
+    if (paramCount_ > 0 && params_) {
+        std::string result = "T";
+        for (size_t i = 0; i < paramCount_; ++i) {
+            if (i > 0)
+                result += "_";
+            result += params_[i] ? params_[i]->mangle() : "X";
+        }
+        return result;
+    }
     std::string result = "T";
     for (size_t dim : shape_) {
         result += std::to_string(dim) + ",";
@@ -118,11 +142,22 @@ Type *TensorType::clone(bool deep) const {
 }
 
 bool TensorType::equals(Type *other) const {
-    if (this == other) {
+    if (this == other)
         return true;
-    }
-    if (!other || other->code() != typeCode()) {
+    if (!other || !other->isOtherType() || other->code() != typeCode())
         return false;
+    const auto *o = static_cast<const OtherType *>(other);
+    if (paramCount_ > 0 && params_) {
+        if (o->paramCount() != paramCount_)
+            return false;
+        std::span<Type *const> op = o->paramsSpan();
+        for (size_t i = 0; i < paramCount_; ++i) {
+            if ((params_[i] != nullptr) != (op[i] != nullptr))
+                return false;
+            if (params_[i] && !params_[i]->equals(op[i]))
+                return false;
+        }
+        return true;
     }
     const TensorType &otherMatrix = dynamic_cast<const TensorType &>(*other);
     return shape_ == otherMatrix.shape_ && (element_type_ == otherMatrix.element_type_ ||
@@ -130,8 +165,8 @@ bool TensorType::equals(Type *other) const {
                                              element_type_->equals(otherMatrix.element_type_)));
 }
 
-CastSafety TensorType::castSafetyTo(const Type &other) const {
-    if (this == &other) {
+CastSafety TensorType::castSafetyTo(Type *targetType) const {
+    if (this == targetType) {
         return CastSafety::Safe;
     }
     return CastSafety::Forbidden;
@@ -144,4 +179,11 @@ bool TensorType::assignable(Type *type) const {
     }
     // 暂时先不考虑元素类型和形状的兼容性问题
     return true;
+}
+
+OtherType *TensorType::cloneWithParams(std::span<Type *const> params) const {
+    Type **p  = OtherType::copyParams(params);
+    void *mem = mm::permSpace().alloc(sizeof(TensorType), alignof(TensorType));
+    ASSERT(mem != nullptr, "Failed to allocate TensorType from permSpace");
+    return new (mem) TensorType(typeCode(), params.size(), p);
 }

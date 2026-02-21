@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "builtin.h"
-#include "core/data/composite/func.h"
-#include "core/operator.h"
+#include "camel/core/module/builtin.h"
+#include "camel/core/data/composite/func.h"
+#include "camel/core/operator.h"
 
 #include "builtin/modules/algo.h"
 #include "builtin/modules/fs.h"
@@ -29,7 +29,6 @@
 #include "builtin/modules/math.h"
 #include "builtin/modules/os.h"
 #include "builtin/modules/para.h"
-#include "builtin/modules/phot.h"
 #include "builtin/modules/plot.h"
 #include "builtin/modules/profiler.h"
 #include "builtin/modules/random.h"
@@ -58,7 +57,6 @@ std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_pt
         {"tensor", [](context_ptr_t ctx) { return TensorBuiltinModule::create(ctx); }},
         {"statistics", [](context_ptr_t ctx) { return StatisticsBuiltinModule::create(ctx); }},
         {"plot", [](context_ptr_t ctx) { return PlotBuiltinModule::create(ctx); }},
-        {"phot", [](context_ptr_t ctx) { return PhotBuiltinModule::create(ctx); }},
 
 #ifndef NDEBUG
         {"profiler", [](context_ptr_t ctx) { return ProfilerBuiltinModule::create(ctx); }},

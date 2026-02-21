@@ -13,10 +13,10 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 19, 2024
- * Updated: Oct. 19, 2024
+ * Updated: Feb. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "scope.h"
+#include "camel/utils/scope.h"
 
 size_t __depth__ = 0;

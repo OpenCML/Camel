@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 11, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "statistics.h"
-#include "utils/type.h"
+#include "camel/utils/type.h"
 
 using namespace std;
 

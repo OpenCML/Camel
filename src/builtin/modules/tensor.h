@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 25, 2025
+ * Updated: Feb. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "core/module/builtin.h"
+#include "camel/core/module/builtin.h"
 
 class TensorBuiltinModule : public BuiltinModule {
   public:
