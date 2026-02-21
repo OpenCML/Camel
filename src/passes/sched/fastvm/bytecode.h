@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,7 @@
 enum class OpCode : uint8_t {
     // 定长参数指令
     RETN,
-    CAST,
+    CAST, // 使用 fastop[0] 作为待转换的 slot 索引，extra 存储目标类型
     COPY, // 使用 fastop[0] 作为待拷贝索引
     ACCS, // fastop[0] 作为目标索引，fastop[1] 作为访问的下标
     JUMP, // 使用 fastop[0] 作为跳转目标地址

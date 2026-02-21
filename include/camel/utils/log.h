@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,7 +93,7 @@ class Logger {
         logFile_.open(filename, std::ios::app);
     }
 
-    static void SetVerbose(bool enable) { verboseEnabled_ = enable; }
+    static CAMEL_LOG_API void SetVerbose(bool enable);
 
     Logger(
         const std::string &scope = "", std::shared_ptr<Logger> parent = nullptr,
@@ -159,10 +159,10 @@ class Logger {
     std::optional<Level> localLogLevel_;
     Level effectiveLogLevel_;
 
-    static inline Level globalLogLevel_ = Level::Debug;
-    static inline bool verboseEnabled_  = false;
-    static inline std::ofstream logFile_;
-    static inline std::mutex logMutex_;
+    static CAMEL_LOG_API Level globalLogLevel_;
+    static CAMEL_LOG_API bool verboseEnabled_;
+    static CAMEL_LOG_API std::ofstream logFile_;
+    static CAMEL_LOG_API std::mutex logMutex_;
 
     static std::string levelToTag(Level level) {
         switch (level) {
@@ -204,7 +204,7 @@ class Logger {
 
         std::lock_guard<std::mutex> lock(logMutex_);
 
-        std::cout << std::format("[{}] <{}> {}\n", tag, scope_, message);
+        std::cout << std::format("[{}] <{}> {}\n", tag, scope_, message) << std::flush;
 
         if (logFile_.is_open()) {
             logFile_ << fullMessage << std::endl;

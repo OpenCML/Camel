@@ -12,32 +12,16 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Jul. 13, 2025
- * Updated: Oct. 28, 2025
+ * Created: Feb. 21, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "base.h"
+#include <cstdint>
 
-enum class RuntimeExceptionCode {
-    Success,
-    InvalidWithParameter,
-    InvalidNormParameter,
-    InvalidURI,
-    UnsupportedOperator,
-    ErrorOnExecution,
-    UnknownError,
-    ForceExit
-};
+using slot_t = uint64_t;
 
-class CamelRuntimeException : public CamelBaseException {
-    RuntimeExceptionCode code_;
-
-  public:
-    CamelRuntimeException(RuntimeExceptionCode code, const std::string &msg)
-        : CamelBaseException(msg), code_(code) {}
-
-    RuntimeExceptionCode code() const { return code_; }
-};
+constexpr slot_t NullSlot = 0;
+constexpr slot_t DeadSlot = 0xDEADBEAFDEADBEAFULL;

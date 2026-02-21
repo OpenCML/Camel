@@ -13,13 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/type.h"
 

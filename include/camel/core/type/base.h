@@ -13,11 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
+
+#include "camel/core/slot.h"
 
 #include <memory>
 #include <string>
@@ -140,7 +142,8 @@ class Type {
     virtual Type *clone(bool deep = false) const;
 
     virtual bool equals(Type *type) const;
-    virtual CastSafety castSafetyTo(const Type &other) const;
+    virtual CastSafety castSafetyTo(Type *targetType) const;
+    virtual slot_t castSlotTo(slot_t value, Type *targetType) const;
     bool assignable(Type *type) const;
 
     bool operator==(Type *other) const = delete;

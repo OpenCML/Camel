@@ -159,6 +159,20 @@ tf::Task TaskflowExecSchedPass::buildCopyTask(FlowT &flowLike, const node_ptr_t 
 }
 
 template <typename FlowT>
+tf::Task TaskflowExecSchedPass::buildCastTask(FlowT &flowLike, const node_ptr_t &n, Frame *frame) {
+    return flowLike
+        .emplace([n, frame]() {
+            const auto &inputNode = n->normInputs().front();
+            Type *srcType         = frame->typeAt<Type>(inputNode->index());
+            Type *tgtType         = n->dataType();
+            slot_t value          = frame->get<slot_t>(inputNode->index());
+            slot_t result         = srcType->castSlotTo(value, tgtType);
+            frame->set(n->index(), result);
+        })
+        .name("CAST");
+}
+
+template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildFillTask(FlowT &flowLike, const node_ptr_t &n, Frame *frame) {
     return flowLike
         .emplace([n, frame]() {
@@ -460,6 +474,9 @@ void TaskflowExecSchedPass::buildNormalNodeTasks(
             break;
         case NodeType::COPY:
             t = buildCopyTask(flowLike, n, frame);
+            break;
+        case NodeType::CAST:
+            t = buildCastTask(flowLike, n, frame);
             break;
         case NodeType::FILL:
             t = buildFillTask(flowLike, n, frame);

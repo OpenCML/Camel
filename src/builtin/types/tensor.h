@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,6 +33,11 @@ class TensorType : public OtherType {
     TensorType(Type *elementType, const std::vector<size_t> &shape);
     virtual ~TensorType() noexcept = default;
 
+  protected:
+    /** 供 cloneWithParams 使用：仅带 code 与 params，无 shape/element_type。 */
+    TensorType(TypeCode code, size_t paramCount, Type **params);
+
+  public:
     static TypeCode typeCode() {
         static TypeCode code =
             OtherTypeRegistry::registerType("Tensor", TypeFlag::Composite | TypeFlag::GC_Traced);
@@ -55,6 +60,7 @@ class TensorType : public OtherType {
     virtual std::string mangle() const override;
     virtual Type *clone(bool deep = false) const override;
     virtual bool equals(Type *type) const override;
-    virtual CastSafety castSafetyTo(const Type &other) const override;
+    virtual CastSafety castSafetyTo(Type *targetType) const override;
     virtual bool assignable(Type *type) const override;
+    OtherType *cloneWithParams(std::span<Type *const> params) const override;
 };

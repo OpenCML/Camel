@@ -154,5 +154,8 @@ target_link_libraries(libcamel PRIVATE
     Python::Python
 )
 
+# 外源模块示例：python 单独编译为 python.cmo，放入搜索路径即可 import python
+add_subdirectory(libs/python)
+
 # CLI 与工具：链接 libcamel 的 shell（camel-cli 在 tools 下）
 add_subdirectory(tools)

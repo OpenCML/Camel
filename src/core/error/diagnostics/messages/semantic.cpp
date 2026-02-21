@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,6 +43,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ModuleNotFound",
                 "Module not found at path: {0}.",
                 "Check if the module path is correct.",
+            },
+        },
+        {
+            SemanticDiag::ModuleParseFailed,
+            {
+                "ModuleParseFailed",
+                "Failed to parse module file: {0}.",
+                "Check the file for syntax errors.",
             },
         },
         {
@@ -219,6 +227,31 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Failed to static cast literal data '{0}' to type '{1}'.",
                 "Ensure the literal value is compatible with the target type or use an appropriate "
                 "conversion.",
+            },
+        },
+        {
+            SemanticDiag::DynamicCastForbidden,
+            {
+                "DynamicCastForbidden",
+                "Dynamic cast from '{0}' to '{1}' is not allowed.",
+                "Use types that allow safe conversion, or ensure the conversion is valid.",
+            },
+        },
+        {
+            SemanticDiag::InvalidOperatorURI,
+            {
+                "InvalidOperatorURI",
+                "Invalid operator URI format: '{0}'. Expected 'protocol:path'.",
+                "Use a valid operator URI in the form protocol:path (e.g. std:add).",
+            },
+        },
+        {
+            SemanticDiag::UnrecognizedExecutorProtocol,
+            {
+                "UnrecognizedExecutorProtocol",
+                "Executor protocol '{0}' not found.",
+                "Check that the protocol is registered or refer to the documentation for supported "
+                "operator protocols.",
             },
         },
 

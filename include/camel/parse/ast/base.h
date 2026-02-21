@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,6 @@
 
 #include "camel/common/ref.h"
 #include "camel/common/tree.h"
-#include "camel/core/error/base.h"
 #include "camel/core/error/diagnostics/range.h"
 #include "camel/core/func.h"
 #include "camel/core/impl.h"

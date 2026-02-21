@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development
  * Program of China
  */
@@ -23,7 +23,7 @@
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
-#include "camel/core/error/base.h"
+#include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/listener.h"
 #include "camel/core/mm.h"
@@ -105,21 +105,22 @@ int main(int argc, char *argv[]) {
     // if targetFile is absolute, the entryDir is the parent directory of targetFile
     std::string entryDir = fs::absolute(entryPath).parent_path().string();
 
+    auto addIfNonEmpty = [](std::vector<std::string> &v, const std::string &s) {
+        if (!s.empty())
+            v.push_back(fs::absolute(fs::path(s)).string());
+    };
+    std::vector<std::string> searchPaths;
+
+    searchPaths.push_back(entryDir);
+    addIfNonEmpty(searchPaths, getEnv("CAMEL_PACKAGES"));
+    addIfNonEmpty(searchPaths, Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB") : Run::stdLibPath);
+    addIfNonEmpty(searchPaths, (camelPath / "stdlib").string());
+
     context_ptr_t ctx = Context::create(
         EntryConfig{
-            .entryDir  = entryDir,
-            .entryFile = targetFile,
-            .searchPaths =
-                {
-                    entryDir,
-                    fs::absolute(
-                        fs::path(
-                            Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB", "./stdlib")
-                                                    : Run::stdLibPath))
-                        .string(),
-                    getEnv("CAMEL_PACKAGES"),
-                    getEnv("CAMEL_HOME", camelPath.string()),
-                },
+            .entryDir    = entryDir,
+            .entryFile   = targetFile,
+            .searchPaths = std::move(searchPaths),
         },
         DiagsConfig{
             .total_limit         = -1,
@@ -197,13 +198,8 @@ int main(int argc, char *argv[]) {
             }
 
             if (!mainModule->loaded()) {
-                if (selectedCommand == Command::Check) {
-                    mainModule->diagnostics()->dump(os, useJsonFormat);
-                    return 0;
-                } else {
-                    mainModule->diagnostics()->dump(os, useJsonFormat);
-                    return 1;
-                }
+                ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+                return selectedCommand == Command::Check ? 0 : 1;
             }
 
             if (selectedCommand == Command::Run) {
@@ -257,16 +253,12 @@ int main(int argc, char *argv[]) {
             }
 
         } catch (DiagnosticsLimitExceededBaseException &e) {
-            mainModule->diagnostics()->dump(os, useJsonFormat);
+            ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
             return selectedCommand == Command::Check ? 0 : 1;
         } catch (Diagnostic &d) {
             RangeConverter conv(parser->getTokens());
             d.fetchRange(conv);
             os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText()) << endl;
-            return selectedCommand == Command::Check ? 0 : 1;
-        } catch (CamelBaseException &e) {
-            os << e.what(useJsonFormat) << endl;
-            ASSERT(false, e.what(useJsonFormat));
             return selectedCommand == Command::Check ? 0 : 1;
         } catch (exception &e) {
             os << e.what() << endl;

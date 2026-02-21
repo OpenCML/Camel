@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -141,7 +141,7 @@ class StructType : public CompositeType {
     virtual std::string mangle() const override;
     virtual Type *clone(bool deep = false) const override;
     virtual bool equals(Type *type) const override;
-    virtual CastSafety castSafetyTo(const Type &other) const override;
+    virtual CastSafety castSafetyTo(Type *targetType) const override;
     virtual bool assignable(Type *type) const override;
 
   private:

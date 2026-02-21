@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,9 @@
 
 #include <fstream>
 #include <memory>
+#include <ostream>
 #include <unordered_map>
+#include <vector>
 
 namespace GraphIR {
 class Graph;
@@ -52,12 +54,15 @@ class Context : public std::enable_shared_from_this<Context> {
 
     exec_mgr_uptr_t exeMgr_;
     diagnostics_ptr_t rtmDiags_;
+    std::unordered_map<std::string, void *> loadedDllHandles_; // .cmo 路径 -> 句柄，保证 DLL 不卸载
 
     std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
     std::vector<std::string>
     getModuleNameCandidates(const std::string &currentModule, const std::string &rawImportName);
     std::string
     resolveRelativeModuleName(const std::string &currentModule, const std::string &importName);
+    /** 查找模块对应文件：任意后缀；.cmo 视为动态库，其余视为源码。first 为空表示未找到。 */
+    std::pair<std::string, bool> getModulePathAndKind(const std::string &moduleName);
     std::string getModulePath(const std::string &moduleName);
     bool moduleFileExists(const std::string &moduleName);
     module_ptr_t tryLoadModule(const std::string &moduleName);
@@ -80,8 +85,19 @@ class Context : public std::enable_shared_from_this<Context> {
     const ExecutorManager &execMgr() const { return *exeMgr_; }
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }
+
+    /// Returns main module plus all UserDefinedModules from modules_ (excluding builtin)
+    std::vector<module_ptr_t> allUserModules() const;
+
+    /// Dump diagnostics from main and all imported modules that have errors; json=true for JSON
+    /// format
+    void dumpAllModuleDiagnostics(std::ostream &os, bool json) const;
+
     void registerExecutorFactory(std::string name, executor_factory_t fact);
     void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame);
+
+    /** 由 loadCmoModule 调用，保存已加载 .cmo 的句柄以防被卸载。 */
+    void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }
 
     module_ptr_t
     importModule(const std::string &rawModuleName, const std::string &currentModuleName = "");

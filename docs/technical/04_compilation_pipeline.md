@@ -46,7 +46,9 @@
 ### 2.4 GCT → GIR
 
 - **GIR Builder**（`compile/builder/gir_builder.cpp`）遍历 GCT，生成 **GraphIR** 命名空间下的 **Graph** 与 **Node**。
-- 每个函数体对应一个 **Graph**，内含 **Node**（DATA, PORT, OPER, CALL, FUNC, BRCH, JOIN, EXIT 等）及 Norm/With/Ctrl 边。
+- 每个 GCT `LoadType` 对应一个 `visitXxxNode`：递归访问子节点、创建 GIR 节点、用 `Node::link(LinkType, from, to)` 建立边。
+- 典型模式：单子节点（如 ACCS、CAST、VARI、WAIT）访问 `gct->at(0)` 得到值节点，创建目标 GIR 节点后以 `Norm` 边连接 `valueNode → targetNode`。
+- 每个函数体对应一个 **Graph**，内含 **Node**（DATA, PORT, OPER, CALL, FUNC, BRCH, JOIN, EXIT, CAST 等）及 Norm/With/Ctrl 边。
 - 子函数对应子图，通过 `Graph::addSubGraph` 等与根图关联。
 
 ### 2.5 图优化与 Pass

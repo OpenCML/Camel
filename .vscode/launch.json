@@ -47,7 +47,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/Debug/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/build/Debug",
-            "args": ["-v", "--log-level debug", "${file}"],
+            "args": ["-v", "--log-level", "debug", "${file}"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": true,

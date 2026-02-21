@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -152,9 +152,22 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
 
         // 根据节点类型设置操作码和额外信息
         switch (node->type()) {
-        case NodeType::CAST:
-            ASSERT(false, "CAST node not implemented.");
+        case NodeType::CAST: {
+            const auto &inputNode = node->normInputs().front();
+            Type *targetType      = node->dataType();
+            BytecodeExtra extra;
+            extra.pType = targetType;
+            appendBytecode(
+                bytecodes,
+                OpCode::CAST,
+                node->index(),
+                {inputNode->index()},
+                {},
+                {},
+                true,
+                extra);
             break;
+        }
 
         case NodeType::COPY:
             appendBytecode(

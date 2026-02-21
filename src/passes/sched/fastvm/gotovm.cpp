@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -203,7 +203,12 @@ label_CAST: {
     EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
-    ASSERT(false, "CAST opcode not implemented in FastVM.");
+    Type *targetType  = bc->extra()->pType;
+    data_idx_t srcIdx = bc->fastop[0];
+    Type *srcType     = currFrame->typeAt<Type>(srcIdx);
+    slot_t value      = currFrame->get<slot_t>(srcIdx);
+    slot_t result     = srcType->castSlotTo(value, targetType);
+    currFrame->set(bc->result, result);
 
     NEXT();
 }

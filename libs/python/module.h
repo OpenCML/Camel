@@ -12,16 +12,21 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Jul. 13, 2025
- * Updated: Oct. 08, 2025
+ * Created: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "base.h"
+#include "camel/core/module/builtin.h"
 
-class CompileAbortException : public CamelBaseException {
+class PythonModule : public BuiltinModule {
   public:
-    CompileAbortException(const std::string &msg) : CamelBaseException(msg) {}
+    PythonModule(context_ptr_t ctx);
+    ~PythonModule() override = default;
+
+    bool load() override;
+
+    static module_ptr_t create(context_ptr_t ctx);
 };

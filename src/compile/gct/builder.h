@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -117,6 +117,7 @@ class Builder {
     Type *visitInferType(const AST::node_ptr_t &ast);
     Type *visitDataType(const AST::node_ptr_t &ast);
     Type *visitRefType(const AST::node_ptr_t &ast);
+    Type *visitSpecType(const AST::node_ptr_t &ast);
 };
 
 } // namespace GraphConstructTree

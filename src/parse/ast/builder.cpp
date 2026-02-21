@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -888,7 +888,8 @@ any Builder::visitPattern(OpenCMLParser::PatternContext *context) {
         res = createNodeAs<NullLoad>();
         setNodeTokenRangeByContext(res, context);
     } else {
-        throw CamelBaseException("visitPattern: not implemented yet");
+        throw DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
+            .commit("visitPattern: not implemented yet");
     }
     LEAVE("Pattern");
     return res;
@@ -964,7 +965,8 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
     } break;
 
     default:
-        throw CamelBaseException("visitCtrlExpr: unsupported control expression type");
+        throw DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
+            .commit("visitCtrlExpr: unsupported control expression type");
     }
     LEAVE("CtrlExpr");
     return ctrlNode;
@@ -1742,7 +1744,7 @@ specType
 any Builder::visitSpecType(OpenCMLParser::SpecTypeContext *context) {
     ENTER("SpecType");
     node_ptr_t res          = any2node(visitPrimaryType(context->primaryType()));
-    node_ptr_t specTypeNode = createNodeAs<TypeExprLoad>(TypeOp::Specialize);
+    node_ptr_t specTypeNode = createNodeAs<SpecTypeLoad>();
     setNodeTokenRangeByContext(specTypeNode, context);
     if (context->typeOrData().size() > 0) {
         node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("TypeOrData");

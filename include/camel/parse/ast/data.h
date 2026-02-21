@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "base.h"
+#include "camel/core/error/diagnostics.h"
 
 namespace AbstractSyntaxTree {
 
@@ -189,7 +190,8 @@ class MatchCaseLoad : public DataLoad {
 
     const std::string toString() const override { return "MatchCase" + this->status(); }
     const std::string geneCode() const override {
-        throw CamelBaseException("MatchCaseLoad::geneCode() not implemented");
+        throw DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
+            .commit("MatchCaseLoad::geneCode() not implemented");
     }
 };
 
