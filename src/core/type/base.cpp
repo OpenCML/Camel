@@ -13,16 +13,20 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/type/base.h"
 #include "camel/core/mm.h"
+#include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/core/type/other.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
+
+#include <sstream>
 
 using namespace std;
 
@@ -128,24 +132,235 @@ bool Type::equals(Type *type) const {
     return code_ == type->code_;
 }
 
-CastSafety Type::castSafetyTo(const Type &other) const {
+CastSafety Type::castSafetyTo(Type *targetType) const {
     ASSERT(!::isComposite(code_), "Composite type cannot call Type::castSafetyTo");
     ASSERT(!::isOtherType(code_), "Other type cannot call Type::castSafetyTo");
 
+    if (!targetType)
+        return CastSafety::Forbidden;
+
     // 这里要先排除掉辅助类型
-    if (::isAuxiliary(code_) || ::isAuxiliary(other.code())) {
+    if (::isAuxiliary(code_) || ::isAuxiliary(targetType->code())) {
         return CastSafety::Forbidden;
     }
 
     // 排除掉辅助类型后，原始类型只剩8个
-    if (::isPrimitive(code_) && ::isPrimitive(other.code())) {
+    if (::isPrimitive(code_) && ::isPrimitive(targetType->code())) {
         const int thisIndex  = static_cast<int>(code_) & 0b1111;
-        const int otherIndex = static_cast<int>(other.code()) & 0b1111;
+        const int otherIndex = static_cast<int>(targetType->code()) & 0b1111;
         return static_cast<CastSafety>(primitiveTypeConvMatrix[thisIndex][otherIndex]);
     }
 
     // 剩余所有类型默认不允许转换
     return CastSafety::Forbidden;
+}
+
+slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
+    ASSERT(!::isComposite(code_), "castSlotTo not implemented for composite types");
+    ASSERT(!::isOtherType(code_), "castSlotTo not implemented for other types");
+    ASSERT(targetType != nullptr, "castSlotTo target type is null");
+    ASSERT(
+        castSafetyTo(targetType) == CastSafety::Safe,
+        "castSlotTo only allowed when castSafetyTo returns Safe");
+
+    const TypeCode from = code_;
+    const TypeCode to   = targetType->code();
+
+    using ::Bool;
+    using ::Byte;
+    using ::Float32;
+    using ::Float64;
+    using ::Int32;
+    using ::Int64;
+
+#define DO_CONV(FromT, ToT, expr) return toSlot(static_cast<ToT>(expr))
+
+    // Same type
+    if (from == to)
+        return value;
+
+    switch (from) {
+    case TypeCode::Int32: {
+        Int32 v = fromSlot<Int32>(static_cast<slot_t>(value));
+        switch (to) {
+        case TypeCode::Int64:
+            DO_CONV(Int32, Int64, v);
+        case TypeCode::Float32:
+            DO_CONV(Int32, Float32, v);
+        case TypeCode::Float64:
+            DO_CONV(Int32, Float64, v);
+        case TypeCode::Bool:
+            DO_CONV(Int32, Bool, v != 0);
+        case TypeCode::Byte:
+            DO_CONV(Int32, Byte, static_cast<Byte>(v & 0xFF));
+        case TypeCode::String: {
+            ::String *s = ::String::from(std::to_string(v), mm::autoSpace());
+            return toSlot(s);
+        }
+        default:
+            ASSERT(false, "castSlotTo Int32->unsupported target");
+        }
+    }
+    case TypeCode::Int64: {
+        Int64 v = fromSlot<Int64>(static_cast<slot_t>(value));
+        switch (to) {
+        case TypeCode::Int32:
+            DO_CONV(Int64, Int32, v);
+        case TypeCode::Float32:
+            DO_CONV(Int64, Float32, v);
+        case TypeCode::Float64:
+            DO_CONV(Int64, Float64, v);
+        case TypeCode::Bool:
+            DO_CONV(Int64, Bool, v != 0);
+        case TypeCode::Byte:
+            DO_CONV(Int64, Byte, static_cast<Byte>(v & 0xFF));
+        case TypeCode::String: {
+            ::String *s = ::String::from(std::to_string(v), mm::autoSpace());
+            return toSlot(s);
+        }
+        default:
+            ASSERT(false, "castSlotTo Int64->unsupported target");
+        }
+    }
+    case TypeCode::Float32: {
+        Float32 v = fromSlot<Float32>(static_cast<slot_t>(value));
+        switch (to) {
+        case TypeCode::Int32:
+            DO_CONV(Float32, Int32, v);
+        case TypeCode::Int64:
+            DO_CONV(Float32, Int64, v);
+        case TypeCode::Float64:
+            DO_CONV(Float32, Float64, v);
+        case TypeCode::Bool:
+            DO_CONV(Float32, Bool, v != 0);
+        case TypeCode::Byte:
+            DO_CONV(Float32, Byte, static_cast<Byte>(static_cast<int>(v) & 0xFF));
+        case TypeCode::String: {
+            ::String *s = ::String::from(std::to_string(v), mm::autoSpace());
+            return toSlot(s);
+        }
+        default:
+            ASSERT(false, "castSlotTo Float32->unsupported target");
+        }
+    }
+    case TypeCode::Float64: {
+        Float64 v = fromSlot<Float64>(static_cast<slot_t>(value));
+        switch (to) {
+        case TypeCode::Int32:
+            DO_CONV(Float64, Int32, v);
+        case TypeCode::Int64:
+            DO_CONV(Float64, Int64, v);
+        case TypeCode::Float32:
+            DO_CONV(Float64, Float32, v);
+        case TypeCode::Bool:
+            DO_CONV(Float64, Bool, v != 0);
+        case TypeCode::Byte:
+            DO_CONV(Float64, Byte, static_cast<Byte>(static_cast<int>(v) & 0xFF));
+        case TypeCode::String: {
+            ::String *s = ::String::from(std::to_string(v), mm::autoSpace());
+            return toSlot(s);
+        }
+        default:
+            ASSERT(false, "castSlotTo Float64->unsupported target");
+        }
+    }
+    case TypeCode::Bool: {
+        Bool v = fromSlot<Bool>(static_cast<slot_t>(value));
+        switch (to) {
+        case TypeCode::Int32:
+            DO_CONV(Bool, Int32, v ? 1 : 0);
+        case TypeCode::Int64:
+            DO_CONV(Bool, Int64, v ? 1 : 0);
+        case TypeCode::Float32:
+            DO_CONV(Bool, Float32, v ? 1.0f : 0.0f);
+        case TypeCode::Float64:
+            DO_CONV(Bool, Float64, v ? 1.0 : 0.0);
+        case TypeCode::Byte:
+            DO_CONV(Bool, Byte, v ? static_cast<Byte>(1) : static_cast<Byte>(0));
+        case TypeCode::String: {
+            ::String *s = ::String::from(v ? "true" : "false", mm::autoSpace());
+            return toSlot(s);
+        }
+        default:
+            ASSERT(false, "castSlotTo Bool->unsupported target");
+        }
+    }
+    case TypeCode::Byte: {
+        Byte v = fromSlot<Byte>(static_cast<slot_t>(value));
+        switch (to) {
+        case TypeCode::Int32:
+            DO_CONV(Byte, Int32, static_cast<int>(v));
+        case TypeCode::Int64:
+            DO_CONV(Byte, Int64, static_cast<int>(v));
+        case TypeCode::Float32:
+            DO_CONV(Byte, Float32, static_cast<int>(v));
+        case TypeCode::Float64:
+            DO_CONV(Byte, Float64, static_cast<int>(v));
+        case TypeCode::Bool:
+            DO_CONV(Byte, Bool, v != static_cast<Byte>(0));
+        case TypeCode::String: {
+            std::ostringstream oss;
+            oss << "0x" << std::hex << static_cast<uint64_t>(v);
+            ::String *s = ::String::from(oss.str(), mm::autoSpace());
+            return toSlot(s);
+        }
+        default:
+            ASSERT(false, "castSlotTo Byte->unsupported target");
+        }
+    }
+    case TypeCode::Void:
+        if (to == TypeCode::String) {
+            ::String *s = ::String::from("null", mm::autoSpace());
+            return toSlot(s);
+        }
+        ASSERT(false, "castSlotTo Void->unsupported target");
+    case TypeCode::String: {
+        ::String *s = reinterpret_cast<::String *>(static_cast<uintptr_t>(value));
+        switch (to) {
+        case TypeCode::Int32: {
+            try {
+                Int32 v = std::stoi(s->toString());
+                return toSlot(v);
+            } catch (...) {
+                ASSERT(false, "castSlotTo String->Int32 parse failed");
+            }
+        }
+        case TypeCode::Int64: {
+            try {
+                Int64 v = std::stoll(s->toString());
+                return toSlot(v);
+            } catch (...) {
+                ASSERT(false, "castSlotTo String->Int64 parse failed");
+            }
+        }
+        case TypeCode::Float32: {
+            try {
+                Float32 v = std::stof(s->toString());
+                return toSlot(v);
+            } catch (...) {
+                ASSERT(false, "castSlotTo String->Float32 parse failed");
+            }
+        }
+        case TypeCode::Float64: {
+            try {
+                Float64 v = std::stod(s->toString());
+                return toSlot(v);
+            } catch (...) {
+                ASSERT(false, "castSlotTo String->Float64 parse failed");
+            }
+        }
+        case TypeCode::String:
+            return value;
+        default:
+            ASSERT(false, "castSlotTo String->unsupported target");
+        }
+    }
+    default:
+        ASSERT(false, "castSlotTo unsupported source type");
+    }
+
+#undef DO_CONV
+    return 0; // unreachable
 }
 
 bool Type::assignable(Type *type) const {

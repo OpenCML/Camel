@@ -146,6 +146,8 @@ Module: main
 | **EXIT** | 返回（return） |
 | **BRCH** | 条件分支 |
 | **CASE** | 分支分支（(true)/(else)/(value)） |
+| **ACCS** | 下标/字段访问，子节点 0 为被访问对象 |
+| **CAST** | 运行时类型转换，子节点 0 为待转换的值 |
 
 ### 4.4 示例（hello.cml 的 GCT）
 
@@ -172,6 +174,15 @@ EXEC
 - **FUNC: main** 下 **SYNC**：多个 **NREF**（idx, start, res, duration）各自绑定 **DATA** 或 **LINK**（now、fib、format、println），最后 **EXIT: return** → **DATA: 0L**。
 
 GCT 中的 **DREF** 对应算子或函数符号，**LINK/WITH** 表示参数传递与调用关系，**BRCH/CASE** 对应 if-then-else 或 match，为后续转为 GIR 的节点与边做准备。
+
+### 4.6 特殊语义：`as` 关键字与类型转换
+
+`as` 表达式的处理分两类：
+
+1. **静态字面量可转换**：左操作数为 `DATA`（编译期常量）且 `convertTo(targetType)` 成功时，直接产生新的 `DataLoad`，无需 GCT 节点。
+2. **需运行时转换**：左操作数为变量、调用结果等非 `DATA` 时，用 `CastLoad(targetType)` 包装，子节点 0 为原始值节点。若静态字面量转换失败，则报语义错误。
+
+GIR Builder 在 `visitCastNode` 中递归访问子节点 0、创建 `CastNode`，并以 `Norm` 边将值节点连接到 `CastNode`。
 
 ---
 

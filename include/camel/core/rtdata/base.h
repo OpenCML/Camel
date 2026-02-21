@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/slot.h"
 #include "camel/core/type.h"
 #include "camel/utils/brpred.h"
 
@@ -73,10 +74,6 @@ template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b
     return vptrA == vptrB;
 }
 
-using slot_t = uint64_t;
-
-constexpr slot_t NullSlot = 0;
-constexpr slot_t DeadSlot = 0xDEADBEAFDEADBEAFULL;
 constexpr Object *NullRef = nullptr;
 
 template <typename T> constexpr slot_t toSlot(const T &value) noexcept {
@@ -176,6 +173,10 @@ inline void printSlot(std::ostream &os, const slot_t data, Type *t) {
     ASSERT(
         data != DeadSlot,
         std::format("Accessing uninitialized slot in printSlot: {}", t->toString()));
+    if (t->isOtherType()) {
+        os << "<" << t->toString() << ">";
+        return;
+    }
     if (t->isGCTraced()) {
         if (data == NullSlot) {
             os << "null";

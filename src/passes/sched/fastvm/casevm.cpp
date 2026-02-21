@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,7 +98,12 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         } break;
 
         case OpCode::CAST: {
-            ASSERT(false, "CAST opcode not implemented in FastVM.");
+            Type *targetType  = bc.extra()->pType;
+            data_idx_t srcIdx = bc.fastop[0];
+            Type *srcType     = currFrame->typeAt<Type>(srcIdx);
+            slot_t value      = currFrame->get<slot_t>(srcIdx);
+            slot_t result     = srcType->castSlotTo(value, targetType);
+            currFrame->set(bc.result, result);
         } break;
 
         case OpCode::COPY: {

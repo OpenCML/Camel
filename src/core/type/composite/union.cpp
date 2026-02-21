@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -173,8 +173,8 @@ bool UnionType::equals(Type *other) const {
     return true;
 }
 
-CastSafety UnionType::castSafetyTo(const Type &other) const {
-    if (this == &other) {
+CastSafety UnionType::castSafetyTo(Type *targetType) const {
+    if (this == targetType) {
         return CastSafety::Safe;
     }
     return CastSafety::Forbidden;

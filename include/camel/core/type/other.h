@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <span>
 #include <string>
 #include <unordered_map>
 
@@ -63,18 +64,41 @@ class OtherTypeRegistry {
     static std::atomic<uint32_t> counter;
 };
 
+/** 供外部模块（如 python.cmo）注册 Other 类型，避免直接引用 OtherTypeRegistry
+ * 的静态数据导致链接失败。 */
+TypeCode registerOtherType(const std::string &typeName, TypeFlag flags);
+
 class OtherType : public Type {
   public:
     OtherType() = delete;
-    OtherType(TypeCode code) : Type(code) {}
+    explicit OtherType(TypeCode code) : Type(code), paramCount_(0), params_(nullptr) {}
     virtual ~OtherType() noexcept = default;
 
     std::string typeName() const;
 
-    virtual std::string toString() const override                     = 0;
-    virtual std::string mangle() const override                       = 0;
-    virtual Type *clone(bool deep = false) const override             = 0;
-    virtual bool equals(Type *type) const override                    = 0;
-    virtual CastSafety castSafetyTo(const Type &other) const override = 0;
-    virtual bool assignable(Type *type) const                         = 0;
+    size_t paramCount() const { return paramCount_; }
+    Type *const *params() const { return params_; }
+    std::span<Type *const> paramsSpan() const {
+        return params_ ? std::span<Type *const>(params_, paramCount_) : std::span<Type *const>();
+    }
+
+    virtual OtherType *cloneWithParams(std::span<Type *const> params) const = 0;
+
+    virtual std::string toString() const override                    = 0;
+    virtual std::string mangle() const override                      = 0;
+    virtual Type *clone(bool deep = false) const override            = 0;
+    virtual bool equals(Type *type) const override                   = 0;
+    virtual CastSafety castSafetyTo(Type *targetType) const override = 0;
+    virtual bool assignable(Type *type) const                        = 0;
+
+  protected:
+    OtherType(TypeCode code, size_t paramCount, Type **params)
+        : Type(code), paramCount_(paramCount), params_(params) {}
+
+    /** 子类实现 cloneWithParams 时可用：在 permSpace 分配并拷贝 params 数组，返回指针。 */
+    static Type **copyParams(std::span<Type *const> params);
+
+  protected:
+    size_t paramCount_;
+    Type **params_;
 };

@@ -13,11 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "camel/compile/gir.h"
+#include "camel/compile/gir/nodes.h"
 #include "camel/utils/log.h"
 #include <functional>
 

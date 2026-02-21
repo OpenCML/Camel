@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -288,6 +288,6 @@ bool StructType::equals(Type *type) const {
     return true;
 }
 
-CastSafety StructType::castSafetyTo(const Type &) const { return CastSafety::Unsafe; }
+CastSafety StructType::castSafetyTo(Type *) const { return CastSafety::Forbidden; }
 
 bool StructType::assignable(Type *type) const { return equals(type); }

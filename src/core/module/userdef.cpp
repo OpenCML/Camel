@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,6 @@
 #include "compile/gct/builder.h"
 #include "compile/gir/builder.h"
 
-#include "camel/core/error/base.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/listener.h"
 
@@ -79,10 +78,10 @@ bool UserDefinedModule::compile(CompileStage till) {
         if (!parser_->ast()) {
             std::ifstream ifs(path_);
             if (!ifs.good()) {
-                throw CamelBaseException("Cannot open file: " + path_);
+                throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound).commit(path_);
             }
             if (!parser_->parse(ifs)) {
-                throw CamelBaseException("Failed to parse file: " + path_);
+                throw DiagnosticBuilder::of(SemanticDiag::ModuleParseFailed).commit(path_);
             }
         }
         if (diagnostics_->hasErrors()) {

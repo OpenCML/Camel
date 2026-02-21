@@ -15,6 +15,7 @@
 | [06_runtime_and_execution.md](06_runtime_and_execution.md) | 运行时、虚拟机与调度器 |
 | [07_jit_architecture.md](07_jit_architecture.md) | FastVM JIT 模块架构设计（原稿见 [../design/JIT_ARCHITECTURE.md](../design/JIT_ARCHITECTURE.md)） |
 | [08_fastvm_bytecode_semantics.md](08_fastvm_bytecode_semantics.md) | FastVM 字节码执行语义（BRCH/JOIN 等与解释器一致约定） |
+| [09_operator_registration.md](09_operator_registration.md) | 算子注册：OperatorGroup、DynamicFuncTypeResolver、Executor、URI 格式及注意事项 |
 
 ## 相关文档（docs 目录）
 

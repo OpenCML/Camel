@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builtin.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/frame.h"
+#include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
 
 #include "../operators/algo.h"
@@ -30,7 +31,6 @@
 #include "../operators/ops.h"
 #include "../operators/os.h"
 #include "../operators/other.h"
-#include "../operators/phot.h"
 #include "../operators/plot.h"
 #include "../operators/profiler.h"
 #include "../operators/rand.h"
@@ -377,14 +377,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // plot
         {"plot/plot", __plot__},
 
-        // phot
-        {"phot/config", __phot_config__},
-        {"phot/gen_bits", __phot_gen_bits__},
-        {"phot/modulation", __phot_modulation__},
-        {"phot/up_sample", __phot_up_sample__},
-        {"phot/pulse_shaper", __phot_pulse_shaper__},
-        {"phot/constellation_diagram", __phot_constellation_diagram__},
-
         // profiler
         {"profiler/begin", __profiler_begin__},
         {"profiler/end", __profiler_end__},
@@ -410,9 +402,7 @@ void BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Fram
     EXEC_WHEN_DEBUG(l.in("BasicExec").debug("Evaluating operator of URI: {}", uri));
     auto it = opsMap_.find(uri);
     if (it == opsMap_.end()) {
-        throw CamelRuntimeException(
-            RuntimeExceptionCode::InvalidURI,
-            std::format("Invalid URI: {}", uri));
+        throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
     }
     std::vector<GraphIR::data_idx_t> normIndices;
     for (const auto &in : self->normInputs()) {

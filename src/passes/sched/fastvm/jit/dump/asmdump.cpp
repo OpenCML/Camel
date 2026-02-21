@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 07, 2026
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -65,6 +65,7 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
             .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
             .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
+            .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
             .asmOut         = &os,
         };
 

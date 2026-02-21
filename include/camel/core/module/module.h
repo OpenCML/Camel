@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -54,7 +55,10 @@ class Module : public std::enable_shared_from_this<Module> {
     context_ptr_t context_;
     type_ns_ptr_t exportedTypeNS_;
     entity_ns_ptr_t exportedEntityNS_;
-    std::unordered_map<Reference, module_ptr_t> importedRefModMap_;
+    /// 同一 ref 可能来自多个模块（同名函数/算子重载），按 ref 聚合模块列表
+    std::unordered_map<Reference, std::vector<module_ptr_t>> importedRefModMap_;
+    /// 合并后的导入 entity 缓存，避免每次查询都做多模块合并
+    mutable std::unordered_map<Reference, entity> importedEntityCache_;
 
   public:
     Module(const std::string &name, const std::string &path, context_ptr_t ctx);
@@ -72,6 +76,9 @@ class Module : public std::enable_shared_from_this<Module> {
 
     bool exportType(const Reference &ref, Type *type);
     bool exportEntity(const Reference &ref, const entity &ent);
+
+    /// Returns true if this module imports the given module
+    bool imports(const module_ptr_t &mod) const;
 
     std::optional<Type *> getImportedType(const Reference &ref) const;
     std::optional<entity> getImportedEntity(const Reference &ref) const;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -136,8 +136,8 @@ bool ArrayType::equals(Type *other) const {
     return elemType_->equals(otherArr.elemType_);
 }
 
-CastSafety ArrayType::castSafetyTo(const Type &other) const {
-    if (this == &other) {
+CastSafety ArrayType::castSafetyTo(Type *targetType) const {
+    if (this == targetType) {
         return CastSafety::Safe;
     }
     return CastSafety::Forbidden;

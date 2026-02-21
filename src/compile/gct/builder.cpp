@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "camel/core/data/composite/array.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/data/composite/tuple.h"
+#include "camel/core/type/other.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
 #include "camel/utils/scope.h"
@@ -922,7 +923,13 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         if (dataNode->type() == LoadType::DATA) {
             const auto &dataLoad = dataNode->loadAs<DataLoad>();
             const auto &data     = dataLoad->data();
-            auto convertedData   = data->convertTo(type);
+            if (data->type()->castSafetyTo(type) != CastSafety::Safe) {
+                diags_->of(SemanticDiag::LiteralStaticCastFailed)
+                    .at(ast->load()->tokenRange())
+                    .commit(data->toString(), type->toString());
+                throw BuildAbortException();
+            }
+            auto convertedData = data->convertTo(type);
             if (convertedData) {
                 res = createNodeAs<DataLoad>(convertedData);
             } else {
@@ -932,10 +939,8 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 throw BuildAbortException();
             }
         } else {
-            diags_->of(SemanticDiag::FeatureNotSupported)
-                .at(ast->load()->tokenRange())
-                .commit("dynamic type casting (a.k.a. `as` keyword)");
-            res = dataNode;
+            res = createNodeAs<CastLoad>(type);
+            *res << dataNode;
         }
     } break;
 
@@ -1299,6 +1304,9 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     case AST::TypeType::Func:
         res = visitFuncType(ast);
         break;
+    case AST::TypeType::Spec:
+        res = visitSpecType(ast);
+        break;
     case AST::TypeType::Unit:
         res = visitUnitType(ast);
         break;
@@ -1644,6 +1652,41 @@ Type *Builder::visitDataType(const AST::node_ptr_t &ast) {
     throw BuildAbortException();
     LEAVE("DataType");
     return nullptr;
+}
+
+/*
+SpecType : Type base, RepeatedLoad typeOrData ;
+*/
+Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
+    ENTER("SpecType");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for SpecType");
+    ASSERT(ast->size() >= 1, "SpecType must have base type");
+    Type *base = visitType(ast->atAs<AST::TypeLoad>(0));
+    if (ast->size() < 2) {
+        LEAVE("SpecType");
+        return base;
+    }
+    type_vec_t typeArgs;
+    const auto &argsNode = ast->atAs<AST::RepeatedLoad>(1);
+    for (const auto &child : *argsNode) {
+        if (child->type() == AST::LoadType::Type) {
+            typeArgs.push_back(visitType(child));
+        }
+    }
+    if (typeArgs.empty()) {
+        LEAVE("SpecType");
+        return base;
+    }
+    if (!base->isOtherType()) {
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("Only OtherType is allowed to have generic params");
+        throw BuildAbortException();
+    }
+    Type *res = static_cast<OtherType *>(base)->cloneWithParams(
+        std::span<Type *const>(typeArgs.data(), typeArgs.size()));
+    LEAVE("SpecType");
+    return res;
 }
 
 /*

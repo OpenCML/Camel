@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -91,6 +91,9 @@ class TaskflowExecSchedPass : public GraphSchedulePass {
 
     template <typename FlowT>
     tf::Task buildCopyTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, Frame *frame);
+
+    template <typename FlowT>
+    tf::Task buildCastTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, Frame *frame);
 
     template <typename FlowT>
     tf::Task buildFillTask(FlowT &flowLike, const GraphIR::node_ptr_t &n, Frame *frame);
