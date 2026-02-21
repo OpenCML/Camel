@@ -85,8 +85,13 @@ bool PyObjectType::equals(Type *type) const {
     return true;
 }
 
-CastSafety PyObjectType::castSafetyTo(const Type &other) const {
-    return other.code() == code_ ? CastSafety::Safe : CastSafety::Forbidden;
+CastSafety PyObjectType::castSafetyTo(Type *targetType) const {
+    return targetType && targetType->code() == code_ ? CastSafety::Safe : CastSafety::Forbidden;
+}
+
+slot_t PyObjectType::castSlotTo(slot_t value, Type *targetType) const {
+    (void)targetType;
+    return value;
 }
 
 bool PyObjectType::assignable(Type *type) const {

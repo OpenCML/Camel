@@ -9,6 +9,7 @@ import {
     py_import,
     to_py,
     from_py,
+    PyObject
 } from python
 
 func main(): int sync {
@@ -35,8 +36,8 @@ func main(): int sync {
 
     // 5. py_eval: 表达式求值
     println("\n[5] py_eval('1 + 2 * 3')")
-    let sum_result = py_eval("1 + 2 * 3")
-    py_call("print", sum_result)
+    let sum_result = py_eval("1 + 2 * 3") as PyObject<int>
+    py_call("print", from_py(sum_result))
 
     println("\n[5b] py_eval(\"'hello' + ' world'\")")
     let str_result = py_eval("'hello' + ' world'")

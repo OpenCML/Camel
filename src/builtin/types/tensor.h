@@ -60,7 +60,7 @@ class TensorType : public OtherType {
     virtual std::string mangle() const override;
     virtual Type *clone(bool deep = false) const override;
     virtual bool equals(Type *type) const override;
-    virtual CastSafety castSafetyTo(const Type &other) const override;
+    virtual CastSafety castSafetyTo(Type *targetType) const override;
     virtual bool assignable(Type *type) const override;
     OtherType *cloneWithParams(std::span<Type *const> params) const override;
 };

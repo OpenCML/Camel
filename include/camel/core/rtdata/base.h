@@ -20,6 +20,7 @@
 #pragma once
 
 #include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/slot.h"
 #include "camel/core/type.h"
 #include "camel/utils/brpred.h"
 
@@ -73,10 +74,6 @@ template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b
     return vptrA == vptrB;
 }
 
-using slot_t = uint64_t;
-
-constexpr slot_t NullSlot = 0;
-constexpr slot_t DeadSlot = 0xDEADBEAFDEADBEAFULL;
 constexpr Object *NullRef = nullptr;
 
 template <typename T> constexpr slot_t toSlot(const T &value) noexcept {

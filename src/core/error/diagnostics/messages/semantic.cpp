@@ -230,6 +230,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::DynamicCastForbidden,
+            {
+                "DynamicCastForbidden",
+                "Dynamic cast from '{0}' to '{1}' is not allowed.",
+                "Use types that allow safe conversion, or ensure the conversion is valid.",
+            },
+        },
+        {
             SemanticDiag::InvalidOperatorURI,
             {
                 "InvalidOperatorURI",

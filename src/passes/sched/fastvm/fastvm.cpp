@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -75,6 +75,8 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 .entryPc        = entryPc,
                 .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
                 .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
+                .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
+                .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
             };
             futures.emplace_back(
                 g,
@@ -351,6 +353,7 @@ void FastVMSchedPass::compileAndCacheGraph(GraphIR::Graph *graph, size_t entryPc
         .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
         .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
         .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
+        .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
     };
     auto compiled = jitBackend_->compile(unit);
     if (!compiled)

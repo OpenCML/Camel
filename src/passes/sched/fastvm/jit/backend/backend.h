@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,6 +45,7 @@ struct CompilationUnit {
     void *trampolineFunc = nullptr; // FUNC trampoline
     void *trampolineTail = nullptr; // TAIL trampoline
     void *trampolineOper = nullptr; // OPER trampoline
+    void *trampolineCast = nullptr; // CAST trampoline
     std::ostream *asmOut = nullptr; // 若设置，编译时输出汇编指令
     // 若设置，编译后填入每条指令的 (起始偏移, 长度, 汇编文本)，供 bindump 按指令分解机器码
     std::vector<std::tuple<size_t, size_t, std::string>> *instructionBoundaries = nullptr;

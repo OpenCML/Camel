@@ -49,9 +49,10 @@ enum class SemanticDiag : uint32_t {
     ClosureCaptureAfterSelfCall  = 0x000014,
     ImportNameNotExported        = 0x000015,
     LiteralStaticCastFailed      = 0x000016,
-    ModuleParseFailed            = 0x000017,
-    InvalidOperatorURI           = 0x000018,
-    UnrecognizedExecutorProtocol = 0x000019,
+    DynamicCastForbidden         = 0x000017,
+    ModuleParseFailed            = 0x000018,
+    InvalidOperatorURI           = 0x000019,
+    UnrecognizedExecutorProtocol = 0x00001A,
 
     // Warnings
     FeatureNotSupported     = 0x100000,

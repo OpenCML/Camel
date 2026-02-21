@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -229,7 +229,12 @@ slot_t NodeVMSchedPass::call(Graph *graph, Frame *rootFrame) {
 
             switch (n->type()) {
             case NodeType::CAST: {
-                ASSERT(false, "CAST node not implemented in NodeVM.");
+                const auto &inputNode = n->normInputs().front();
+                Type *srcType         = currFrame->typeAt<Type>(inputNode->index());
+                Type *tgtType         = n->dataType();
+                slot_t value          = currFrame->get<slot_t>(inputNode->index());
+                slot_t result         = srcType->castSlotTo(value, tgtType);
+                currFrame->set(n->index(), result);
             } break;
 
             case NodeType::COPY: {

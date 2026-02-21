@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -923,7 +923,13 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         if (dataNode->type() == LoadType::DATA) {
             const auto &dataLoad = dataNode->loadAs<DataLoad>();
             const auto &data     = dataLoad->data();
-            auto convertedData   = data->convertTo(type);
+            if (data->type()->castSafetyTo(type) != CastSafety::Safe) {
+                diags_->of(SemanticDiag::LiteralStaticCastFailed)
+                    .at(ast->load()->tokenRange())
+                    .commit(data->toString(), type->toString());
+                throw BuildAbortException();
+            }
+            auto convertedData = data->convertTo(type);
             if (convertedData) {
                 res = createNodeAs<DataLoad>(convertedData);
             } else {
@@ -933,10 +939,8 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 throw BuildAbortException();
             }
         } else {
-            diags_->of(SemanticDiag::FeatureNotSupported)
-                .at(ast->load()->tokenRange())
-                .commit("dynamic type casting (a.k.a. `as` keyword)");
-            res = dataNode;
+            res = createNodeAs<CastLoad>(type);
+            *res << dataNode;
         }
     } break;
 

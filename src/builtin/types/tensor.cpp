@@ -165,8 +165,8 @@ bool TensorType::equals(Type *other) const {
                                              element_type_->equals(otherMatrix.element_type_)));
 }
 
-CastSafety TensorType::castSafetyTo(const Type &other) const {
-    if (this == &other) {
+CastSafety TensorType::castSafetyTo(Type *targetType) const {
+    if (this == targetType) {
         return CastSafety::Safe;
     }
     return CastSafety::Forbidden;

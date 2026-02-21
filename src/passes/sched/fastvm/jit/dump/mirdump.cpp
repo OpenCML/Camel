@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 08, 2026
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -64,6 +64,7 @@ static graph_ptr_t applyMirDump(
         mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineFunc)] = "trampolineFunc";
         mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineTail)] = "trampolineTail";
         mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineOper)] = "trampolineOper";
+        mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineCast)] = "trampolineCast";
 
         camel::jit::CompilationUnit unit{
             .graph          = g,
@@ -73,6 +74,7 @@ static graph_ptr_t applyMirDump(
             .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
             .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
             .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
+            .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
             .asmOut         = nullptr,
             .mirOut         = &os,
             .mirSlotOnly    = slotOnly,

@@ -1,0 +1,7 @@
+import { PyObject, py_eval, from_py } from python
+
+func main(): int sync {
+    let res = py_eval('1 + 1') as PyObject<int>
+    print(from_py(res))
+    return 0
+}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,10 +33,10 @@ class CompositeType : public Type {
     virtual Type *resolve(const type_vec_t &typeList) const = 0;
     virtual bool resolved() const                           = 0;
 
-    virtual std::string toString() const override                     = 0;
-    virtual std::string mangle() const override                       = 0;
-    virtual Type *clone(bool deep = false) const override             = 0;
-    virtual bool equals(Type *type) const override                    = 0;
-    virtual CastSafety castSafetyTo(const Type &other) const override = 0;
-    virtual bool assignable(Type *type) const                         = 0;
+    virtual std::string toString() const override                    = 0;
+    virtual std::string mangle() const override                      = 0;
+    virtual Type *clone(bool deep = false) const override            = 0;
+    virtual bool equals(Type *type) const override                   = 0;
+    virtual CastSafety castSafetyTo(Type *targetType) const override = 0;
+    virtual bool assignable(Type *type) const                        = 0;
 };

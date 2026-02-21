@@ -154,7 +154,21 @@ func main(): int sync {
 
 ## Modules & Extensions
 
-- **Python Integration**: Use the `python` module to embed Python. Supports `py_call`, `py_eval`, `py_run`, `to_py`/`from_py`, and more. See [libs/python/README.md](libs/python/README.md) for API reference.
+### Python Integration
+
+Use the `python` module to embed Python. Supports `py_call`, `py_eval`, `py_run`, `to_py`/`from_py`, and more. See [libs/python/README.md](libs/python/README.md) for API reference.
+
+**Type conversion with `as`** — When calling Python functions like `py_eval`, use the `as` keyword to specify the expected type:
+
+```camel
+import { PyObject, py_eval, from_py } from python
+
+func main(): int sync {
+    let res = py_eval('1 + 1') as PyObject<int>
+    print(from_py(res))
+    return 0
+}
+```
 
 ## 📚 Learn More
 

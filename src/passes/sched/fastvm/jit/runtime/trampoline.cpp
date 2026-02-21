@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 21, 2026
  * Supported by: National Key Research and Development Program of China
  *
  * ---
@@ -274,11 +274,29 @@ slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc) {
     return ret;
 }
 
+slot_t trampolineCast(slot_t *slots, void *ctx, size_t pc) {
+    auto *jc     = static_cast<camel::jit::JitContext *>(ctx);
+    auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
+    Bytecode &bc = base[pc];
+
+    Frame *frame          = reinterpret_cast<Frame *>(slots[0]); // 规范：slot[0] = Frame*
+    data_idx_t srcIdx     = bc.fastop[0];
+    Type *targetType      = bc.extra()->pType;
+    data_idx_t resultSlot = bc.result;
+
+    Type *srcType = frame->typeAt<Type>(srcIdx);
+    slot_t value  = frame->get<slot_t>(srcIdx);
+    slot_t result = srcType->castSlotTo(value, targetType);
+    frame->set(resultSlot, result);
+    return result;
+}
+
 #else
 // JIT 关闭时仅提供占位符号，避免链接未定义；不应被调用
 slot_t trampolineFunc(slot_t *, void *, size_t) { return {}; }
 slot_t trampolineTail(slot_t *, void *, size_t) { return {}; }
 slot_t trampolineOper(slot_t *, void *, size_t) { return {}; }
+slot_t trampolineCast(slot_t *, void *, size_t) { return {}; }
 #endif
 
 } // extern "C"
