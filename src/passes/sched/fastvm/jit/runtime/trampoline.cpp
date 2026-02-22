@@ -286,7 +286,7 @@ slot_t trampolineCast(slot_t *slots, void *ctx, size_t pc) {
 
     Type *srcType = frame->typeAt<Type>(srcIdx);
     slot_t value  = frame->get<slot_t>(srcIdx);
-    slot_t result = srcType->castSlotTo(value, targetType);
+    slot_t result = targetType->castSlotFrom(value, srcType);
     frame->set(resultSlot, result);
     return result;
 }

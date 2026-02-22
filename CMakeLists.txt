@@ -37,6 +37,31 @@ file(GLOB_RECURSE _ALL_SRC
 list(REMOVE_ITEM _ALL_SRC
     "${PROJECT_SOURCE_DIR}/src/main.cpp"
     "${PROJECT_SOURCE_DIR}/src/config.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/plot.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/plot.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/io.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/io.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/os.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/os.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/math.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/math.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/time.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/time.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/random.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/rand.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/algo.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/algo.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/statistics.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/statistics.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/this.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/this.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/fs.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/re.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/sys.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/json.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/para.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/tensor.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/tensor.cpp"
 )
 set(LIBCAMEL_SRC ${_ALL_SRC})
 
@@ -45,28 +70,6 @@ find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(Taskflow REQUIRED)
 find_package(Eigen3 REQUIRED)
-
-# 优先使用当前目录的 venv（最可靠）
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/venv/Scripts/python.exe")
-    set(Python_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/venv")
-    message(STATUS "Found venv in current directory: ${CMAKE_CURRENT_SOURCE_DIR}/venv")
-elseif(DEFINED ENV{VIRTUAL_ENV})
-    set(Python_ROOT_DIR "$ENV{VIRTUAL_ENV}")
-    message(STATUS "Using Python from VIRTUAL_ENV: $ENV{VIRTUAL_ENV}")
-endif()
-
-# 查找 Python（包含 Interpreter 和 Development 组件）
-find_package(Python COMPONENTS Interpreter Development REQUIRED)
-
-# 验证找到的 Python 是否在虚拟环境中
-if(Python_EXECUTABLE)
-    message(STATUS "Python executable: ${Python_EXECUTABLE}")
-    if(NOT "${Python_EXECUTABLE}" MATCHES "venv")
-        message(WARNING "Python executable is not from virtual environment! This may cause module import issues.")
-    endif()
-endif()
-
-find_package(pybind11 REQUIRED)
 
 add_definitions(-DNOMINMAX)
 
@@ -150,12 +153,25 @@ target_link_libraries(libcamel PRIVATE
     nlohmann_json::nlohmann_json
     Taskflow::Taskflow
     Eigen3::Eigen
-    pybind11::embed
-    Python::Python
 )
 
-# 外源模块示例：python 单独编译为 python.cmo，放入搜索路径即可 import python
-add_subdirectory(libs/python)
+# 外源模块：python / pyplot / io 等编译为 .cmo
+add_subdirectory(modules/python)
+add_subdirectory(modules/pyplot)
+add_subdirectory(modules/io)
+add_subdirectory(modules/os)
+add_subdirectory(modules/math)
+add_subdirectory(modules/time)
+add_subdirectory(modules/random)
+add_subdirectory(modules/algo)
+add_subdirectory(modules/statistics)
+add_subdirectory(modules/this)
+add_subdirectory(modules/fs)
+add_subdirectory(modules/re)
+add_subdirectory(modules/sys)
+add_subdirectory(modules/json)
+add_subdirectory(modules/para)
+add_subdirectory(modules/tensor)
 
 # CLI 与工具：链接 libcamel 的 shell（camel-cli 在 tools 下）
 add_subdirectory(tools)

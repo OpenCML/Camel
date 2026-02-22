@@ -1,0 +1,30 @@
+module main
+
+import { exists, is_file, is_dir, mkdir, mkdirs, read_text, write_text } from fs
+
+func main(): int sync {
+    println("=== FS Module Basic Tests ===")
+
+    let dir = "test/tmp"
+    let path = "test/tmp/fs_test_tmp.txt"
+    let content = "hello from fs module"
+
+    println("\n[1] exists(dir) before mkdirs =", exists(dir))
+    println("[2] mkdirs(dir)")
+    let ok = mkdirs(dir)
+    println("  mkdirs ok =", ok)
+    println("[3] exists(dir) after mkdirs =", exists(dir))
+    println("[4] is_dir(dir) =", is_dir(dir))
+
+    println("\n[5] write_text(path, content)")
+    write_text(path, content)
+
+    println("\n[6] exists(path) =", exists(path))
+    println("[7] is_file(path) =", is_file(path))
+    println("[8] read_text(path)")
+    let read = read_text(path)
+    println("  content =", read)
+
+    println("\n=== FS tests completed ===")
+    return 0
+}

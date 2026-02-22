@@ -6,25 +6,25 @@ For reference only; these are implemented in the runtime.
 // io
 
 inner func print(args: any...): void {
-    return ':io/print'
+    return 'io:print'
 }
 
 inner func println(args: any...): void {
-    return ':io/println'
+    return 'io:println'
 }
 
 inner func input(prompt: string): string {
-    return ':io/input'
+    return 'io:input'
 }
 
 // os
 
 inner func exit(code: int): void {
-    return ':os/exit'
+    return 'os:exit'
 }
 
 inner func sleep(seconds: number): void {
-    return ':os/sleep'
+    return 'os:sleep'
 }
 
 // str
@@ -107,15 +107,15 @@ inner func format(args: any...): string {
 // math
 
 inner func abs(value: number): number {
-    return ':math/abs'
+    return 'math:abs'
 }
 
 inner func sqrt(value: number): number {
-    return ':math/sqrt'
+    return 'math:sqrt'
 }
 
 inner func pow(base: number, exponent: number): number {
-    return ':math/pow'
+    return ':op/pow'
 }
 
 inner func sin(value: number): number {
@@ -135,23 +135,23 @@ inner func log(value: number): number {
 }
 
 inner func exp(value: number): number {
-    return ':math/exp'
+    return 'math:exp'
 }
 
 inner func round(value: number): int {
-    return ':math/round'
+    return 'math:round'
 }
 
 inner func floor(value: number): int {
-    return ':math/floor'
+    return 'math:floor'
 }
 
 inner func ceil(value: number): int {
-    return ':math/ceil'
+    return 'math:ceil'
 }
 
 inner func random(min: int, max: int): int {
-    return ':math/random'
+    return 'rand:randint'
 }
 
 // list
@@ -292,17 +292,17 @@ inner func difference(other: Set<any>): Set<any> {
 
 // time
 
-inner func now(): string {
-    return ':time/now'
+inner func now(): number {
+    return 'time:now'
 }
 
 with <time: number>
 inner func strftime(format_str: string): string {
-    return ':time/strftime'
+    return 'time:strftime'
 }
 
 inner func strptime(format_str: string, time_str: string): number {
-    return ':time/strptime'
+    return 'time:strptime'
 }
 
 // sys

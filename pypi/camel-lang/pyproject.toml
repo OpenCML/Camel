@@ -32,12 +32,14 @@ Documentation = "https://docs.opencml.com"
 Repository = "https://github.com/OpenCML/Camel"
 Issues = "https://github.com/OpenCML/Camel/issues"
 
+# camel 通过 setup.py scripts 直接安装为原生二进制，不再经 cli.py
 [project.scripts]
-camel = "camel.cli:camel"
 cpm = "camel.cli:cpm"
 
 [tool.setuptools]
 include-package-data = true
+# script-files 由 pypi_rollup 在构建前按平台注入，将 camel 可执行文件直接安装到 PATH
+script-files = []
 
 [tool.setuptools.package-data]
 camel = [".cmlenv/*"]

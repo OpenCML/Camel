@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -112,7 +112,7 @@ void Graph::setOutput(const node_ptr_t &node) {
     Type *actualExitType = node->dataType();
     if (funcType_->hasExitType()) {
         Type *declaredExitType = funcType_->exitType();
-        if (!actualExitType->assignable(declaredExitType)) {
+        if (!declaredExitType->assignableFrom(actualExitType)) {
             throw DiagnosticBuilder::of(SemanticDiag::ReturnTypeMismatch)
                 .commit(
                     actualExitType->toString(),

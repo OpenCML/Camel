@@ -1,0 +1,19 @@
+module main
+
+// os 模块基础测试（不含 exit、set_terminal_raw_mode 等会终止或需交互的）
+import { whoami, sleep } from os
+
+func main(): int sync {
+    println("=== OS Module Basic Tests ===")
+
+    println("\n[1] whoami()")
+    let user = whoami()
+    println("  user =", user)
+
+    println("\n[2] sleep(0)")
+    sleep(0)
+    println("  sleep(0) OK")
+
+    println("\n=== OS tests completed ===")
+    return 0
+}

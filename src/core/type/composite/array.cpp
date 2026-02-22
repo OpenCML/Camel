@@ -136,11 +136,12 @@ bool ArrayType::equals(Type *other) const {
     return elemType_->equals(otherArr.elemType_);
 }
 
-CastSafety ArrayType::castSafetyTo(Type *targetType) const {
-    if (this == targetType) {
+CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
+    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
+        return *r;
+    if (this == sourceType)
         return CastSafety::Safe;
-    }
     return CastSafety::Forbidden;
 }
 
-bool ArrayType::assignable(Type *type) const { return equals(type); }
+bool ArrayType::assignableFrom(Type *sourceType) const { return equals(sourceType); }

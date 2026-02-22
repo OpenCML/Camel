@@ -1,0 +1,17 @@
+name: 问题 / 讨论
+description: 提问或发起一般性讨论
+title: "[Question] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        欢迎提问或参与讨论！对于使用问题，也可查阅 [文档](https://docs.opencml.com/)。
+  - type: textarea
+    id: question
+    attributes:
+      label: 问题或讨论主题
+      description: 请描述你的问题或想讨论的内容
+      placeholder: 例如：如何实现自定义的 graph operator？
+    validations:
+      required: true

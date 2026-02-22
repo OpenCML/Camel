@@ -1,11 +1,11 @@
 {
   "terminal.integrated.env.windows": {
-    "PATH": "${workspaceFolder};${env:PATH}"
+    "PATH": "${workspaceFolder}\\out\\latest;${env:PATH}"
   },
   "terminal.integrated.env.osx": {
-    "PATH": "${workspaceFolder}:${env:PATH}"
+    "PATH": "${workspaceFolder}/out/latest:${env:PATH}"
   },
   "terminal.integrated.env.linux": {
-    "PATH": "${workspaceFolder}:${env:PATH}"
+    "PATH": "${workspaceFolder}/out/latest:${env:PATH}"
   }
 }

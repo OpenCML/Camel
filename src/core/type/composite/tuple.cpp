@@ -267,11 +267,12 @@ bool TupleType::equals(Type *other) const {
     return true;
 }
 
-CastSafety TupleType::castSafetyTo(Type *targetType) const {
-    if (this == targetType) {
+CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
+    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
+        return *r;
+    if (this == sourceType)
         return CastSafety::Safe;
-    }
     return CastSafety::Forbidden;
 }
 
-bool TupleType::assignable(Type *type) const { return equals(type); }
+bool TupleType::assignableFrom(Type *sourceType) const { return equals(sourceType); }

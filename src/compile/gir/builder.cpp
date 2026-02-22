@@ -413,9 +413,10 @@ node_ptr_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     const auto &castLoad = gct->loadAs<GCT::CastLoad>();
     Type *targetType     = castLoad->targetType();
-    if (valueNode->dataType()->castSafetyTo(targetType) != CastSafety::Safe) {
+    Type *sourceType     = valueNode->dataType();
+    if (targetType->castSafetyFrom(sourceType) != CastSafety::Safe) {
         diags_->of(SemanticDiag::DynamicCastForbidden)
-            .commit(valueNode->dataType()->toString(), targetType->toString());
+            .commit(sourceType->toString(), targetType->toString());
         throw BuildAbortException();
     }
     node_ptr_t castNode = CastNode::create(*currGraph_, targetType);

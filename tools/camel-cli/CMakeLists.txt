@@ -51,33 +51,21 @@ target_include_directories(camel PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-# 运行时能找到 libcamel：与可执行文件同目录或 RPATH
+# 运行时能找到 libcamel：可执行文件同目录或 ./libs（与 Windows SetDllDirectory 行为一致）
 if(APPLE)
     set_target_properties(camel PROPERTIES
-        BUILD_RPATH "@loader_path"
-        INSTALL_RPATH "@loader_path"
+        BUILD_RPATH "@loader_path;@loader_path/libs"
+        INSTALL_RPATH "@loader_path;@loader_path/libs"
     )
 elseif(UNIX)
     set_target_properties(camel PROPERTIES
-        BUILD_RPATH "$ORIGIN"
-        INSTALL_RPATH "$ORIGIN"
+        BUILD_RPATH "$ORIGIN;$ORIGIN/libs"
+        INSTALL_RPATH "$ORIGIN;$ORIGIN/libs"
     )
 endif()
 
-# Windows: 将 Python DLL 复制到 camel 可执行文件目录（与 libcamel 一致）
+# Windows: 延迟加载 libcamel，使 main 开头可调用 SetDllDirectory，从而支持从 ./libs 查找 libcamel.dll
 if(WIN32)
-    execute_process(
-        COMMAND "${Python_EXECUTABLE}" -c
-        "import sys, pathlib; p=pathlib.Path(sys.base_prefix); print(p / f'python{sys.version_info.major}{sys.version_info.minor}.dll')"
-        OUTPUT_VARIABLE _PYTHON_DLL_PATH
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if(EXISTS "${_PYTHON_DLL_PATH}")
-        add_custom_command(TARGET camel POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${_PYTHON_DLL_PATH}"
-                $<TARGET_FILE_DIR:camel>
-        )
-        message(STATUS "Python DLL for camel CLI: ${_PYTHON_DLL_PATH}")
-    endif()
+    target_link_libraries(camel PRIVATE delayimp)
+    target_link_options(camel PRIVATE "-Xlinker" "/DELAYLOAD:libcamel.dll")
 endif()

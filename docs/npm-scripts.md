@@ -77,3 +77,43 @@ npm run test -- linear "run {file} --pass-until 3"
    # Bash
    TEST_TEMPLATE="-v --log-level debug {file} std::nvm" npm run test -- linear
    ```
+
+## 批量测试脚本（test:all / test:modules / test:run）
+
+除交互式 `test` 外，项目提供以下批量运行脚本，用于一次性执行所有测试并汇总结果：
+
+| 脚本 | 说明 |
+|------|------|
+| `npm run test:all` | 运行全部测试（`test/modules/` + `test/run/` 下所有 suite） |
+| `npm run test:modules` | 仅运行 `test/modules/` 下的模块测试 |
+| `npm run test:run` | 仅运行 `test/run/` 下所有 suite（linear、nn、para 等） |
+| `npm run test:run:linear` | 仅运行 `test/run/linear/` |
+| `npm run test:run:nn` | 仅运行 `test/run/nn/` |
+| `npm run test:run:para` | 仅运行 `test/run/para/` |
+
+### 使用方式
+
+```bash
+# 运行全部测试
+npm run test:all
+
+# 只跑模块测试
+npm run test:modules
+
+# 只跑 run 测试，所有 suite
+npm run test:run
+
+# 只跑 linear suite
+npm run test:run:linear
+```
+
+### 输出说明
+
+- 每个测试执行后输出 `✓`（通过）或 `✗`（失败）
+- 结束时汇总通过数 / 总数
+- 若有失败，会列出失败用例及错误信息
+- 任一失败时以非零退出码退出，便于 CI 集成
+
+### 依赖
+
+运行前需先执行 `npm run build` 生成 `camel` 可执行文件。
