@@ -173,12 +173,12 @@ bool UnionType::equals(Type *other) const {
     return true;
 }
 
-CastSafety UnionType::castSafetyTo(Type *targetType) const {
-    if (auto r = Type::checkCastSafetyWithAny(code(), targetType))
+CastSafety UnionType::castSafetyFrom(Type *sourceType) const {
+    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
         return *r;
-    if (this == targetType)
+    if (this == sourceType)
         return CastSafety::Safe;
     return CastSafety::Forbidden;
 }
 
-bool UnionType::assignable(Type *type) const { return equals(type); }
+bool UnionType::assignableFrom(Type *sourceType) const { return equals(sourceType); }

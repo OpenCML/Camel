@@ -123,8 +123,8 @@ class TupleType : public CompositeType {
     virtual std::string mangle() const override;
     virtual Type *clone(bool deep = false) const override;
     virtual bool equals(Type *type) const override;
-    virtual CastSafety castSafetyTo(Type *targetType) const override;
-    virtual bool assignable(Type *type) const override;
+    virtual CastSafety castSafetyFrom(Type *sourceType) const override;
+    virtual bool assignableFrom(Type *sourceType) const override;
 
   private:
     // 从预计算 layout + 数据指针一次拷贝

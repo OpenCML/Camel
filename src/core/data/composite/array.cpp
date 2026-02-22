@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,7 +37,7 @@ ArrayDataFactory::~ArrayDataFactory() = default;
 ArrayDataFactory &ArrayDataFactory::add(const data_ptr_t &e) {
     if (!impl_->elemType) {
         impl_->elemType = e->type();
-    } else if (!e->type()->assignable(impl_->elemType)) {
+    } else if (!impl_->elemType->assignableFrom(e->type())) {
         throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
             .commit("Array", e->type()->toString(), impl_->elemType->toString());
     }

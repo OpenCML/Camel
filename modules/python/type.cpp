@@ -85,18 +85,20 @@ bool PyObjectType::equals(Type *type) const {
     return true;
 }
 
-CastSafety PyObjectType::castSafetyTo(Type *targetType) const {
-    if (auto r = Type::checkCastSafetyWithAny(code_, targetType))
+CastSafety PyObjectType::castSafetyFrom(Type *sourceType) const {
+    if (auto r = Type::checkCastSafetyWithAny(code_, sourceType))
         return *r;
-    return targetType && targetType->code() == code_ ? CastSafety::Safe : CastSafety::Forbidden;
+    return sourceType && sourceType->code() == code_ ? CastSafety::Safe : CastSafety::Forbidden;
 }
 
-slot_t PyObjectType::castSlotTo(slot_t value, Type *targetType) const {
-    (void)targetType;
+slot_t PyObjectType::castSlotFrom(slot_t value, Type *sourceType) const {
+    (void)sourceType;
     return value;
 }
 
-bool PyObjectType::assignable(Type *type) const { return type && type->code() == code_; }
+bool PyObjectType::assignableFrom(Type *sourceType) const {
+    return sourceType && sourceType->code() == code_;
+}
 
 OtherType *PyObjectType::cloneWithParams(std::span<Type *const> params) const {
     Type **p  = OtherType::copyParams(params);

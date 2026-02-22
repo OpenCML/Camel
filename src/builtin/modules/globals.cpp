@@ -943,7 +943,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            if (!norm[0]->assignable(norm[1]))
+                            if (!norm[1]->assignableFrom(norm[0]))
                                 return nullopt;
                             return norm[0];
                         }),
@@ -1732,7 +1732,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (with[1]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_ptr<FunctionType>(with[1]);
-                            if (!funcType->assignable(FunctionType::create()))
+                            if (!FunctionType::create()->assignableFrom(funcType))
                                 return nullopt;
                             if (!funcType->exitType()->equals(Type::Bool()))
                                 return nullopt;

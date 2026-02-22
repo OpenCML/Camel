@@ -165,17 +165,17 @@ bool TensorType::equals(Type *other) const {
                                              element_type_->equals(otherMatrix.element_type_)));
 }
 
-CastSafety TensorType::castSafetyTo(Type *targetType) const {
-    if (auto r = Type::checkCastSafetyWithAny(code(), targetType))
+CastSafety TensorType::castSafetyFrom(Type *sourceType) const {
+    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
         return *r;
-    if (this == targetType)
+    if (this == sourceType)
         return CastSafety::Safe;
     return CastSafety::Forbidden;
 }
 
-bool TensorType::assignable(Type *type) const {
+bool TensorType::assignableFrom(Type *sourceType) const {
     // 目标必须是 Tensor 类型
-    if (!type || type->code() != typeCode()) {
+    if (!sourceType || sourceType->code() != typeCode()) {
         return false;
     }
     // 暂时先不考虑元素类型和形状的兼容性问题

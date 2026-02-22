@@ -150,6 +150,19 @@ def _git_tags_at(repo_path: Path, commit_hash: str) -> list[str]:
     return [t.strip() for t in r.stdout.strip().splitlines() if t.strip()]
 
 
+def _git_dirty_commits(repo_path: Path, branch: str) -> list[str]:
+    """Return commit hashes in branch..HEAD (reachable from HEAD, not from branch), oldest first."""
+    r = subprocess.run(
+        ["git", "rev-list", "--reverse", branch + "..HEAD"],
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode != 0:
+        return []
+    return [h.strip().lower() for h in r.stdout.strip().splitlines() if h.strip()]
+
+
 def main() -> int:
     branch = (sys.argv[1] if len(sys.argv) > 1 else "main").strip()
     repo_path = Path(__file__).resolve().parent.parent
@@ -215,6 +228,28 @@ def main() -> int:
         hash_to_cumulative_by_lang[h] = dict(running_by_lang)
     print("\r  %d commits" % total_commits, flush=True)
 
+    # Aggregate "dirty" commits: in HEAD but not in branch (branch..HEAD)
+    dirty_hashes = _git_dirty_commits(repo_path, branch)
+    dirty_cumulative: int | None = None
+    dirty_by_lang: dict[str, int] | None = None
+    if dirty_hashes:
+        dirty_hashes = [_expand_hash(repo_path, h) if len(h) != 40 else h for h in dirty_hashes]
+        print("Computing diff stats for %d dirty commits (branch..HEAD)..." % len(dirty_hashes), flush=True)
+        base_total = running_total
+        base_by_lang = dict(running_by_lang)
+        for h in dirty_hashes:
+            try:
+                for c in Repository(str(repo_path), single=h).traverse_commits():
+                    ins, dels = _commit_ins_dels(c, exclude_paths=True)
+                    base_total += ins - dels
+                    for lang, (a, b) in _commit_ins_dels_by_lang(c).items():
+                        base_by_lang[lang] = base_by_lang.get(lang, 0) + (a - b)
+                    break
+            except Exception:
+                pass
+        dirty_cumulative = base_total
+        dirty_by_lang = base_by_lang
+
     print("Fetching tags for branch commits...", flush=True)
     tags_per_commit = [_git_tags_at(repo_path, h) for h in hashes]
 
@@ -228,23 +263,38 @@ def main() -> int:
 
     cumulative = [_get_cum(h) for h in hashes]
     n = n_branch
+    has_dirty = dirty_cumulative is not None and dirty_by_lang is not None
+
+    # Append dirty* point when branch tip is behind HEAD
+    if has_dirty:
+        cumulative = cumulative + [dirty_cumulative]
+        n_plot = n + 1
+    else:
+        n_plot = n
 
     # Languages that appear (ordered): known first, then Other, then rest
     all_langs = set()
     for h in hashes:
         all_langs.update(_get_cum_by_lang(h).keys())
+    if has_dirty:
+        all_langs.update((dirty_by_lang or {}).keys())
     ordered_langs = [x for x in LANG_ORDER if x in all_langs and x != "Other"]
     ordered_langs += sorted(all_langs - set(LANG_ORDER) - {"Other"})
 
     left_langs = [x for x in ordered_langs if x == "C/C++"]
     right_langs = [x for x in ordered_langs if x != "C/C++"]
 
-    x = list(range(n))
+    def _series_for_lang(lang: str) -> list[int]:
+        s = [_get_cum_by_lang(h).get(lang, 0) for h in hashes]
+        if has_dirty and dirty_by_lang is not None:
+            s.append(dirty_by_lang.get(lang, 0))
+        return s
+
+    x = list(range(n_plot))
     fig, ax_left = plt.subplots(figsize=(14, 6))
     ax_left.plot(x, cumulative, label="Cumulative total", color="black", alpha=0.9, linewidth=1.2)
     for lang in left_langs:
-        series = [_get_cum_by_lang(h).get(lang, 0) for h in hashes]
-        ax_left.plot(x, series, label=lang, color="#1f77b4", alpha=0.85)
+        ax_left.plot(x, _series_for_lang(lang), label=lang, color="#1f77b4", alpha=0.85)
     ax_left.set_xlabel("Commit index")
     ax_left.set_ylabel("Lines (cumulative)", color="black")
     ax_left.tick_params(axis="y", labelcolor="black")
@@ -254,27 +304,32 @@ def main() -> int:
     ax_right = ax_left.twinx()
     colors = ("#2ca02c", "#ff7f0e", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22")
     for idx, lang in enumerate(right_langs):
-        series = [_get_cum_by_lang(h).get(lang, 0) for h in hashes]
-        ax_right.plot(x, series, label=lang, color=colors[idx % len(colors)], alpha=0.85)
+        ax_right.plot(x, _series_for_lang(lang), label=lang, color=colors[idx % len(colors)], alpha=0.85)
     ax_right.set_ylabel("Lines by language (cumulative net)", color="black")
     ax_right.tick_params(axis="y", labelcolor="black")
     if right_langs:
         ax_right.legend(loc="upper right", fontsize=7)
 
-    # Tags: all at bottom as x-axis labels, slanted to fit
+    # Tags: all at bottom as x-axis labels, slanted to fit; append dirty* when present
     tag_indices = [i for i in range(n) if i < len(tags_per_commit) and tags_per_commit[i]]
-    if tag_indices:
-        tick_positions = tag_indices
+    if tag_indices or has_dirty:
+        tick_positions = list(tag_indices)
         tick_labels = [tags_per_commit[i][0] for i in tag_indices]
+        if has_dirty:
+            tick_positions.append(n_plot - 1)
+            tick_labels.append("dirty*")
         ax_left.set_xticks(tick_positions)
         ax_left.set_xticklabels(tick_labels, fontsize=6, rotation=45, ha="right")
     else:
-        step = max(1, n // 20)
-        tick_positions = sorted(set(list(range(0, n, step)) + [n - 1]))
+        step = max(1, n_plot // 20)
+        tick_positions = sorted(set(list(range(0, n_plot, step)) + [n_plot - 1]))
         ax_left.set_xticks(tick_positions)
         ax_left.set_xticklabels([str(i) for i in tick_positions], fontsize=7)
 
-    fig.suptitle("Branch: %s (plot: first-parent | cumulative: all commits, excl. %s)" % (branch, ", ".join(EXCLUDE_PREFIXES)))
+    title = "Branch: %s (plot: first-parent | cumulative: all commits, excl. %s)" % (branch, ", ".join(EXCLUDE_PREFIXES))
+    if has_dirty:
+        title += " | dirty* = branch..HEAD"
+    fig.suptitle(title)
     fig.tight_layout()
     fig.subplots_adjust(bottom=0.22)
     plt.show()

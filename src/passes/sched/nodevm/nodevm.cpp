@@ -233,7 +233,7 @@ slot_t NodeVMSchedPass::call(Graph *graph, Frame *rootFrame) {
                 Type *srcType         = currFrame->typeAt<Type>(inputNode->index());
                 Type *tgtType         = n->dataType();
                 slot_t value          = currFrame->get<slot_t>(inputNode->index());
-                slot_t result         = srcType->castSlotTo(value, tgtType);
+                slot_t result         = tgtType->castSlotFrom(value, srcType);
                 currFrame->set(n->index(), result);
             } break;
 

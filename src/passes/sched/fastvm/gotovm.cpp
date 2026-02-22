@@ -207,7 +207,7 @@ label_CAST: {
     data_idx_t srcIdx = bc->fastop[0];
     Type *srcType     = currFrame->typeAt<Type>(srcIdx);
     slot_t value      = currFrame->get<slot_t>(srcIdx);
-    slot_t result     = srcType->castSlotTo(value, targetType);
+    slot_t result     = targetType->castSlotFrom(value, srcType);
     currFrame->set(bc->result, result);
 
     NEXT();

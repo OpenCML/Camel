@@ -125,8 +125,8 @@ class Type {
   protected:
     TypeCode code_;
 
-    /** Any 类型 cast 规则：任何类型与 Any 互相转换均为 Safe，供子类 castSafetyTo 复用 */
-    static std::optional<CastSafety> checkCastSafetyWithAny(TypeCode fromCode, Type *targetType);
+    /** Any 类型 cast 规则：任何类型与 Any 互相转换均为 Safe，供子类 castSafetyFrom 复用 */
+    static std::optional<CastSafety> checkCastSafetyWithAny(TypeCode targetCode, Type *sourceType);
 
   public:
     Type() = delete;
@@ -146,9 +146,9 @@ class Type {
     virtual Type *clone(bool deep = false) const;
 
     virtual bool equals(Type *type) const;
-    virtual CastSafety castSafetyTo(Type *targetType) const;
-    virtual slot_t castSlotTo(slot_t value, Type *targetType) const;
-    bool assignable(Type *type) const;
+    virtual CastSafety castSafetyFrom(Type *sourceType) const;
+    virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const;
+    bool assignableFrom(Type *sourceType) const;
 
     bool operator==(Type *other) const = delete;
     bool operator!=(Type *other) const = delete;

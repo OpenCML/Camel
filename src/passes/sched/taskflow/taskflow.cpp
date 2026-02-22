@@ -166,7 +166,7 @@ tf::Task TaskflowExecSchedPass::buildCastTask(FlowT &flowLike, const node_ptr_t 
             Type *srcType         = frame->typeAt<Type>(inputNode->index());
             Type *tgtType         = n->dataType();
             slot_t value          = frame->get<slot_t>(inputNode->index());
-            slot_t result         = srcType->castSlotTo(value, tgtType);
+            slot_t result         = tgtType->castSlotFrom(value, srcType);
             frame->set(n->index(), result);
         })
         .name("CAST");

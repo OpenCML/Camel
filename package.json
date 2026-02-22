@@ -38,7 +38,7 @@
         "gitcnt": "node ./scripts/gitcnt.js",
         "code-stats": "python ./scripts/code_stats.py",
         "fix:vsc": "node ./scripts/fix.js vsc",
-        "pypi:rollup": "node ./scripts/pypi_rollup.js",
+        "pypi:rollup": "node ./scripts/pypi-rollup.js",
         "pypi:upload": "python -m twine upload --repository testpypi dist/pypi/*",
         "pypi:upload:release": "python -m twine upload --repository pypi dist/pypi/*",
         "pypi:install": "pip install --index-url https://test.pypi.org/simple/ camel-lang",

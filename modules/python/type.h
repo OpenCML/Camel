@@ -38,9 +38,9 @@ class PyObjectType : public OtherType {
     std::string mangle() const override;
     Type *clone(bool deep = false) const override;
     bool equals(Type *type) const override;
-    CastSafety castSafetyTo(Type *targetType) const override;
-    slot_t castSlotTo(slot_t value, Type *targetType) const override;
-    bool assignable(Type *type) const override;
+    CastSafety castSafetyFrom(Type *sourceType) const override;
+    slot_t castSlotFrom(slot_t value, Type *sourceType) const override;
+    bool assignableFrom(Type *sourceType) const override;
     OtherType *cloneWithParams(std::span<Type *const> params) const override;
 };
 
