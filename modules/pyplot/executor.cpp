@@ -10,18 +10,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "executor.h"
-#include "operators.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/operator.h"
 #include "camel/execute/executor.h"
 #include "camel/utils/log.h"
+#include "operators.h"
 
 #include <string>
 #include <vector>
@@ -34,7 +34,8 @@ class PyplotExecutor : public Executor {
         : Executor(ctx, std::move(ops)) {}
 
     void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) override {
-        EXEC_WHEN_DEBUG(l.in("PyplotExec").debug("Evaluating operator of URI: {}", uri));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("PyplotExec").debug("Evaluating operator of URI: {}", uri));
         auto it = opsMap_.find(uri);
         if (it == opsMap_.end()) {
             throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);

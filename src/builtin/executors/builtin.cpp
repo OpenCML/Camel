@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -259,7 +259,8 @@ executor_ptr_t BasicBuiltinExecutor::create(context_ptr_t ctx) {
 }
 
 void BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
-    EXEC_WHEN_DEBUG(l.in("BasicExec").debug("Evaluating operator of URI: {}", uri));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("BasicExec").debug("Evaluating operator of URI: {}", uri));
     auto it = opsMap_.find(uri);
     if (it == opsMap_.end()) {
         throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,9 +93,11 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             },
             true);
         EXEC_WHEN_DEBUG([&]() {
-            l.in("Topo").debug("Topologically sorted nodes for graph {}:", graph->name());
+            GetDefaultLogger().in("Topo").debug(
+                "Topologically sorted nodes for graph {}:",
+                graph->name());
             for (const auto &n : sortedNodes) {
-                l.in("Topo").debug("  {}", n->toString());
+                GetDefaultLogger().in("Topo").debug("  {}", n->toString());
             }
             if (sortedNodes.size() != graph->nodes().size() - 1) {
                 GraphIR::node_vec_t unreachableNodes;
@@ -112,7 +114,7 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
                     }
                     nodeStrs += node->toString();
                 }
-                l.in("Topo").warn(
+                GetDefaultLogger().in("Topo").warn(
                     "Unreachable nodes in graph {} detected: {}",
                     graph->name(),
                     nodeStrs);

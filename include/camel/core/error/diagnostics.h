@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,8 @@
 #include "diagnostics/messages/index.h"
 #include "diagnostics/range.h"
 
-#include "fmt/core.h"
+#include <format>
+#include <tuple>
 
 // ---- Diagnostic structure ----
 struct Diagnostic {
@@ -196,9 +197,13 @@ template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args)
     d.specific = specific_;
     d.name     = name_;
     try {
-        d.message    = fmt::format(fmt::runtime(rawMessage_), std::forward<Args>(args)...);
-        d.suggestion = fmt::format(fmt::runtime(rawSuggestion_), std::forward<Args>(args)...);
-    } catch (const fmt::format_error &e) {
+        auto arg_storage = std::make_tuple(std::forward<Args>(args)...);
+        auto make_args   = [&] {
+            return std::apply([](auto &...a) { return std::make_format_args(a...); }, arg_storage);
+        };
+        d.message    = std::vformat(rawMessage_, make_args());
+        d.suggestion = std::vformat(rawSuggestion_, make_args());
+    } catch (const std::format_error &e) {
         throw DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
             .commit("Error formatting diagnostic message: " + std::string(e.what()));
     }

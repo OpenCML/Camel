@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 27, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,7 +57,7 @@ void PerfettoIntegration::startTracing(const std::string &output_file) {
 
 void PerfettoIntegration::stopAndOpenPerfetto() {
     if (!tracingEnabled_) {
-        l.in("Profiler").warn("Tracing was not started, nothing to stop.");
+        GetDefaultLogger().in("Profiler").warn("Tracing was not started, nothing to stop.");
         return;
     }
 
@@ -194,7 +194,8 @@ void PerfettoIntegration::generatePerfettoFile() {
 }
 
 void PerfettoIntegration::openPerfettoInBrowser(bool auto_open) {
-    l.in("Profiler")
+    GetDefaultLogger()
+        .in("Profiler")
         .info(
             "To view trace results, manually open https://ui.perfetto.dev/ and load the trace "
             "file.");

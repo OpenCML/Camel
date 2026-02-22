@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -66,12 +66,15 @@ bool UserDefinedModule::compile(CompileStage till) {
         return true;
     }
     if (stage_ == CompileStage::Done) {
-        EXEC_WHEN_DEBUG(l.in("Module").warn("Module '{}' already built", name_));
+        EXEC_WHEN_DEBUG(GetDefaultLogger().in("Module").warn("Module '{}' already built", name_));
         return true;
     }
     if (stage_ == CompileStage::None) {
         EXEC_WHEN_DEBUG(
-            l.in("Module").info("Start compiling module '{}' from file '{}'.", name_, path_));
+            GetDefaultLogger().in("Module").info(
+                "Start compiling module '{}' from file '{}'.",
+                name_,
+                path_));
     }
 
     if (stage_ == CompileStage::None && till > CompileStage::None) {
@@ -85,12 +88,14 @@ bool UserDefinedModule::compile(CompileStage till) {
             }
         }
         if (diagnostics_->hasErrors()) {
-            EXEC_WHEN_DEBUG(l.in("Module").error("Module '{}' failed to parse", name_));
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger().in("Module").error("Module '{}' failed to parse", name_));
             return false;
         }
         if (till == CompileStage::AST) {
             stage_ = CompileStage::AST;
-            EXEC_WHEN_DEBUG(l.in("Module").info("Module '{}' built successfully.", name_));
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger().in("Module").info("Module '{}' built successfully.", name_));
             return true;
         }
     }
@@ -101,13 +106,17 @@ bool UserDefinedModule::compile(CompileStage till) {
             auto gctBuilder = GCT::Builder(context_, shared_from_this());
             gct_            = gctBuilder.build(ast, diagnostics_);
             if (diagnostics_->hasErrors()) {
-                EXEC_WHEN_DEBUG(l.in("Module").error("Module '{}' failed to build GCT", name_));
+                EXEC_WHEN_DEBUG(
+                    GetDefaultLogger().in("Module").error(
+                        "Module '{}' failed to build GCT",
+                        name_));
                 return false;
             }
         }
         if (till == CompileStage::GCT) {
             stage_ = CompileStage::GCT;
-            EXEC_WHEN_DEBUG(l.in("Module").info("Module '{}' built successfully.", name_));
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger().in("Module").info("Module '{}' built successfully.", name_));
             return true;
         }
     }
@@ -117,18 +126,22 @@ bool UserDefinedModule::compile(CompileStage till) {
             auto girBuilder = GIR::Builder(context_, shared_from_this());
             gir_            = girBuilder.build(gct_, diagnostics_);
             if (diagnostics_->hasErrors()) {
-                EXEC_WHEN_DEBUG(l.in("Module").error("Module '{}' failed to build GIR", name_));
+                EXEC_WHEN_DEBUG(
+                    GetDefaultLogger().in("Module").error(
+                        "Module '{}' failed to build GIR",
+                        name_));
                 return false;
             }
         }
         if (till == CompileStage::GIR) {
             stage_ = CompileStage::GIR;
-            EXEC_WHEN_DEBUG(l.in("Module").info("Module '{}' built successfully.", name_));
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger().in("Module").info("Module '{}' built successfully.", name_));
             return true;
         }
     }
 
     stage_ = CompileStage::Done;
-    EXEC_WHEN_DEBUG(l.in("Module").info("Module '{}' built successfully.", name_));
+    EXEC_WHEN_DEBUG(GetDefaultLogger().in("Module").info("Module '{}' built successfully.", name_));
     return true;
 }

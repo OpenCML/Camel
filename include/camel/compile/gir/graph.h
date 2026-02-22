@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,11 +45,15 @@ class Graph : public std::enable_shared_from_this<Graph> {
         : name_(name), outer_(graph), funcType_(funcType), staticDataType_(TupleType::create()),
           runtimeDataType_(TupleType::create()), closureType_(TupleType::create()) {
         EXEC_WHEN_DEBUG(
-            l.in("GIR").debug("Created Graph: {}", name_.empty() ? "<anonymous>" : name_));
+            GetDefaultLogger().in("GIR").debug(
+                "Created Graph: {}",
+                name_.empty() ? "<anonymous>" : name_));
     }
     ~Graph() {
         EXEC_WHEN_DEBUG(
-            l.in("GIR").debug("Destroyed Graph: {}", name_.empty() ? "<anonymous>" : name_));
+            GetDefaultLogger().in("GIR").debug(
+                "Destroyed Graph: {}",
+                name_.empty() ? "<anonymous>" : name_));
     };
 
     static graph_ptr_t create(

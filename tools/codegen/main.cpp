@@ -8,6 +8,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/mm.h"
 #include "camel/utils/env.h"
+#include "camel/utils/dll_path.h"
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -15,6 +16,7 @@
 namespace fs = std::filesystem;
 
 int main(int argc, char *argv[]) {
+    camel::utils::setupLibrarySearchPath();
     std::string inputPath;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];

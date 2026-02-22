@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -220,7 +220,10 @@ void Graph::addSubGraph(const graph_ptr_t &graph) {
             existing.find(graph) == existing.end(),
             std::format("Subgraph with name '{}' already exists.", graph->mangledName()));
         existing.insert(graph);
-        l.in("GIR").debug("Added subgraph '{}' to graph '{}'.", graph->mangledName(), name_);
+        GetDefaultLogger().in("GIR").debug(
+            "Added subgraph '{}' to graph '{}'.",
+            graph->mangledName(),
+            name_);
     }
     graph->outer_ = shared_from_this();
 }
@@ -231,7 +234,10 @@ void Graph::delSubGraph(const graph_ptr_t &graph) {
     if (subGraphs_.find(graph->name()) != subGraphs_.end()) {
         auto &existing = subGraphs_[graph->name()];
         existing.erase(graph);
-        l.in("GIR").debug("Removed subgraph '{}' from graph '{}'.", graph->mangledName(), name_);
+        GetDefaultLogger().in("GIR").debug(
+            "Removed subgraph '{}' from graph '{}'.",
+            graph->mangledName(),
+            name_);
         if (existing.empty()) {
             subGraphs_.erase(graph->name());
         }
@@ -246,13 +252,16 @@ void Graph::addDependency(const graph_ptr_t &graph) {
     }
     dependencies_.insert(graph);
     graph->dependents_.insert(shared_from_this());
-    l.in("GIR").debug("Added dependency: Graph '{}' depends on graph '{}'.", name_, graph->name());
+    GetDefaultLogger().in("GIR").debug(
+        "Added dependency: Graph '{}' depends on graph '{}'.",
+        name_,
+        graph->name());
 }
 
 void Graph::delDependency(const graph_ptr_t &graph) {
     dependencies_.erase(graph);
     graph->dependents_.erase(shared_from_this());
-    l.in("GIR").debug(
+    GetDefaultLogger().in("GIR").debug(
         "Removed dependency: Graph '{}' no longer depends on graph '{}'.",
         name_,
         graph->name());
@@ -330,23 +339,29 @@ graph_ptr_t Graph::clone() const {
 
 node_ptr_t Graph::inlineNode(const node_ptr_t &node, bool forceSync) {
     if (node->graph() != *this) {
-        EXEC_WHEN_DEBUG(l.in("GIR").debug(
-            "Cannot inline node {} from different graph {} into graph {}.",
-            node->toString(),
-            node->graph().name(),
-            name_));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("GIR").debug(
+                "Cannot inline node {} from different graph {} into graph {}.",
+                node->toString(),
+                node->graph().name(),
+                name_));
         return nullptr;
     }
 
     if (node->type() != NodeType::FUNC) {
-        EXEC_WHEN_DEBUG(l.in("GIR").debug(
-            "Cannot inline non-FUNC node {} in graph {}.",
-            node->toString(),
-            name_));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("GIR").debug(
+                "Cannot inline non-FUNC node {} in graph {}.",
+                node->toString(),
+                name_));
         return nullptr;
     }
 
-    EXEC_WHEN_DEBUG(l.in("GIR").debug("Inlining node {} in graph {}.", node->toString(), name_));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("GIR").debug(
+            "Inlining node {} in graph {}.",
+            node->toString(),
+            name_));
 
     const auto &funcNode = tt::as_shared<FuncNode>(node);
     auto &targetGraph    = funcNode->func()->graph();
@@ -443,11 +458,11 @@ node_ptr_t Graph::inlineNode(const node_ptr_t &node, bool forceSync) {
 
 void Graph::rearrange() {
     if (!dirty_) {
-        l.in("GIR").debug("Graph {} is not dirty, no need to rearrange.", name_);
+        GetDefaultLogger().in("GIR").debug("Graph {} is not dirty, no need to rearrange.", name_);
         return;
     }
 
-    l.in("GIR").debug("Rearranging graph {}.", name_);
+    GetDefaultLogger().in("GIR").debug("Rearranging graph {}.", name_);
 
     data_idx_t stcIdx = -1, rtmIdx = 1;
     data_vec_t newStaticDataArr{Data::null()};

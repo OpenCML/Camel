@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -178,8 +178,10 @@ class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<lo
                         visible.push_back(true);
                     if (depth > 0) {
                         if (node.parent_ == nullptr) {
-                            EXEC_WHEN_DEBUG(l.in("Tree.dumpTree")
-                                                .warn("Node <{}> has no parent!", node.toString()));
+                            EXEC_WHEN_DEBUG(
+                                GetDefaultLogger()
+                                    .in("Tree.dumpTree")
+                                    .warn("Node <{}> has no parent!", node.toString()));
                         } else if (index == node.parent_->size() - 1) {
                             isLast                = true;
                             visible.at(depth - 1) = false;

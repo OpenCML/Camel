@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -226,5 +226,3 @@ class Logger {
 };
 
 #endif // NDEBUG
-
-inline Logger &l = GetDefaultLogger();

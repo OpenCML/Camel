@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -65,13 +65,14 @@ loadCmoModule(const std::string &moduleName, const std::string &path, const cont
 
     void *handle = openDll(path);
     if (!handle) {
-        EXEC_WHEN_DEBUG(l.in("Context").warn("Failed to load .cmo: {}", path));
+        EXEC_WHEN_DEBUG(GetDefaultLogger().in("Context").warn("Failed to load .cmo: {}", path));
         return nullptr;
     }
 
     auto factory = getSymbol<CamelModuleFactory>(handle, "camel_module_create");
     if (!factory) {
-        EXEC_WHEN_DEBUG(l.in("Context").warn("camel_module_create not found in: {}", path));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("Context").warn("camel_module_create not found in: {}", path));
         closeDll(handle);
         return nullptr;
     }

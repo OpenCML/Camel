@@ -14,9 +14,8 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Feb. 22, 2026
- * Supported by: National Key Research and Development
- * Program of China
+ * Updated: Feb. 23, 2026
+ * Supported by: National Key Research and Development Program of China
  */
 
 #include "nlohmann/json.hpp"
@@ -34,6 +33,7 @@
 #include "camel/parse/ast/builder.h"
 #include "camel/parse/cst_dumper.h"
 #include "camel/parse/parse.h"
+#include "camel/utils/dll_path.h"
 #include "camel/utils/env.h"
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
@@ -51,9 +51,6 @@
 #include <iostream>
 #include <queue>
 
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 using namespace antlr4;
 using namespace std;
@@ -67,20 +64,7 @@ using namespace CLI;
 string targetFile = "";
 
 int main(int argc, char *argv[]) {
-#ifdef _WIN32
-    // 支持从 ./libs 查找 libcamel.dll（配合 delay load，需在首次使用 libcamel 前调用）
-    {
-        wchar_t path[MAX_PATH];
-        if (GetModuleFileNameW(nullptr, path, MAX_PATH)) {
-            std::wstring exePath(path);
-            size_t last = exePath.find_last_of(L"\\/");
-            if (last != std::wstring::npos) {
-                std::wstring libsDir = exePath.substr(0, last + 1) + L"libs";
-                SetDllDirectoryW(libsDir.c_str());
-            }
-        }
-    }
-#endif
+    camel::utils::setupLibrarySearchPath();
     if (!parseArgs(argc, argv))
         return 0;
 
@@ -96,7 +80,7 @@ int main(int argc, char *argv[]) {
     if (Run::targetFiles.empty() || Run::targetFiles[0] == "") {
         input      = std::make_unique<istream>(std::cin.rdbuf());
         targetFile = "stdin"; // for error reporting
-        EXEC_WHEN_DEBUG(l.in("Main").info("Reading from standard input."));
+        EXEC_WHEN_DEBUG(GetDefaultLogger().in("Main").info("Reading from standard input."));
     } else {
         targetFile = Run::targetFiles[0];
         auto file  = std::make_unique<std::ifstream>(targetFile);
@@ -105,7 +89,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         input = std::move(file);
-        EXEC_WHEN_DEBUG(l.in("Main").info("Reading from file '{}'.", targetFile));
+        EXEC_WHEN_DEBUG(GetDefaultLogger().in("Main").info("Reading from file '{}'.", targetFile));
     }
     diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
     if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {

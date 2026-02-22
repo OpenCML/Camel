@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -64,7 +64,7 @@ class BumpPointerAllocator : public IAllocator {
         std::byte *result = top_ + sizeof(ObjectHeader);
 
         EXEC_WHEN_DEBUG([&]() {
-            l.in("BumpPtr").debug(
+            GetDefaultLogger().in("BumpPtr").debug(
                 "[{}] Allocated {} bytes ({}) from {}, obj size {}, now top at {}",
                 formatAddress(start_, true),
                 total_size,
@@ -100,7 +100,7 @@ class BumpPointerAllocator : public IAllocator {
         auto newTop = reinterpret_cast<std::byte *>(ptr) - sizeof(ObjectHeader);
 
         EXEC_WHEN_DEBUG([&] {
-            l.in("BumpPtr").debug(
+            GetDefaultLogger().in("BumpPtr").debug(
                 "[{}] Freeing object at {}, now top at {}",
                 formatAddress(start_, true),
                 formatAddress(ptr, true),

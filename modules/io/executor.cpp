@@ -12,7 +12,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,7 +36,8 @@ class IOExecutor : public Executor {
         : Executor(ctx, std::move(ops)) {}
 
     void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) override {
-        EXEC_WHEN_DEBUG(l.in("IOExec").debug("Evaluating operator of URI: {}", uri));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("IOExec").debug("Evaluating operator of URI: {}", uri));
         auto it = opsMap_.find(uri);
         if (it == opsMap_.end()) {
             throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);

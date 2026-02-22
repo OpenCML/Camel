@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1829,7 +1829,8 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
 }
 
 bool GlobalsBuiltinModule::load() {
-    EXEC_WHEN_DEBUG(l.in("GlobalsBuiltinModule").info("Loading basic built-in module."));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("GlobalsBuiltinModule").info("Loading basic built-in module."));
     if (loaded_) {
         return true;
     }
