@@ -66,6 +66,9 @@ class Logger {
     template <typename... Args> void error(std::format_string<Args...>, Args &&...) const {}
 };
 
+/** Returns the default logger instance. Exported as function for delay-load compatibility. */
+CAMEL_LOG_API Logger &GetDefaultLogger();
+
 #else
 
 #include <algorithm>
@@ -75,23 +78,33 @@ class Logger {
 #include <iostream>
 #include <mutex>
 
-#ifndef NDEBUG
-extern CAMEL_LOG_API const std::string filteredLoggerScope;
-#endif
+// Forward declarations and function API (must appear before Logger for delay-load compatibility)
+class Logger;
+enum class LogLevel : int { Debug = 0, Info = 1, Warn = 2, Error = 3, Off = 4 };
+CAMEL_LOG_API const std::string &GetFilteredLoggerScope();
+CAMEL_LOG_API LogLevel GetGlobalLogLevel();
+CAMEL_LOG_API void SetGlobalLogLevel(LogLevel level);
+CAMEL_LOG_API bool IsVerboseEnabled();
+CAMEL_LOG_API void Logger_DoLog(
+    const std::string &scope, LogLevel effectiveLevel, LogLevel level, const std::string &message);
+CAMEL_LOG_API Logger &GetDefaultLogger();
 
 class Logger {
   public:
-    enum class Level { Debug = 0, Info = 1, Warn = 2, Error = 3, Off = 4 };
+    using Level = LogLevel;
 
-    static void SetLogLevel(Level level) { globalLogLevel_ = level; }
+    friend CAMEL_LOG_API const std::string &GetFilteredLoggerScope();
+    friend CAMEL_LOG_API LogLevel GetGlobalLogLevel();
+    friend CAMEL_LOG_API void SetGlobalLogLevel(LogLevel level);
+    friend CAMEL_LOG_API bool IsVerboseEnabled();
+    friend CAMEL_LOG_API void Logger_DoLog(
+        const std::string &scope, LogLevel effectiveLevel, LogLevel level,
+        const std::string &message);
+    friend CAMEL_LOG_API Logger &GetDefaultLogger();
 
-    static void SetLogFile(const std::string &filename) {
-        std::lock_guard<std::mutex> lock(logMutex_);
-        if (logFile_.is_open()) {
-            logFile_.close();
-        }
-        logFile_.open(filename, std::ios::app);
-    }
+    static void SetLogLevel(Level level) { SetGlobalLogLevel(level); }
+
+    static CAMEL_LOG_API void SetLogFile(const std::string &filename);
 
     static CAMEL_LOG_API void SetVerbose(bool enable);
 
@@ -103,13 +116,13 @@ class Logger {
             if (parent_) {
                 effectiveLogLevel_ = std::min(*localLogLevel_, parent_->effectiveLogLevel_);
             } else {
-                effectiveLogLevel_ = std::min(*localLogLevel_, globalLogLevel_);
+                effectiveLogLevel_ = std::min(*localLogLevel_, GetGlobalLogLevel());
             }
         } else {
             if (parent_) {
                 effectiveLogLevel_ = parent_->effectiveLogLevel_;
             } else {
-                effectiveLogLevel_ = globalLogLevel_;
+                effectiveLogLevel_ = GetGlobalLogLevel();
             }
         }
     }
@@ -123,33 +136,50 @@ class Logger {
 
     bool filtered() const {
 #ifndef NDEBUG
-        return filteredLoggerScope.empty() || this->scope_ == filteredLoggerScope;
+        const std::string &scope = GetFilteredLoggerScope();
+        return scope.empty() || this->scope_ == scope;
 #else
-        return true
+        return true;
 #endif
     }
 
     template <typename... Args> void info(std::format_string<Args...> fmt, Args &&...args) const {
-        if (verboseEnabled_ && filtered()) {
-            log(Level::Info, std::format(fmt, std::forward<Args>(args)...));
+        if (IsVerboseEnabled() && filtered()) {
+            Logger_DoLog(
+                scope_,
+                effectiveLogLevel_,
+                Level::Info,
+                std::format(fmt, std::forward<Args>(args)...));
         }
     }
 
     template <typename... Args> void warn(std::format_string<Args...> fmt, Args &&...args) const {
-        if (verboseEnabled_ && filtered()) {
-            log(Level::Warn, std::format(fmt, std::forward<Args>(args)...));
+        if (IsVerboseEnabled() && filtered()) {
+            Logger_DoLog(
+                scope_,
+                effectiveLogLevel_,
+                Level::Warn,
+                std::format(fmt, std::forward<Args>(args)...));
         }
     }
 
     template <typename... Args> void debug(std::format_string<Args...> fmt, Args &&...args) const {
-        if (verboseEnabled_ && filtered()) {
-            log(Level::Debug, std::format(fmt, std::forward<Args>(args)...));
+        if (IsVerboseEnabled() && filtered()) {
+            Logger_DoLog(
+                scope_,
+                effectiveLogLevel_,
+                Level::Debug,
+                std::format(fmt, std::forward<Args>(args)...));
         }
     }
 
     template <typename... Args> void error(std::format_string<Args...> fmt, Args &&...args) const {
-        if (verboseEnabled_ && filtered()) {
-            log(Level::Error, std::format(fmt, std::forward<Args>(args)...));
+        if (IsVerboseEnabled() && filtered()) {
+            Logger_DoLog(
+                scope_,
+                effectiveLogLevel_,
+                Level::Error,
+                std::format(fmt, std::forward<Args>(args)...));
         }
     }
 
@@ -159,10 +189,10 @@ class Logger {
     std::optional<Level> localLogLevel_;
     Level effectiveLogLevel_;
 
-    static CAMEL_LOG_API Level globalLogLevel_;
-    static CAMEL_LOG_API bool verboseEnabled_;
-    static CAMEL_LOG_API std::ofstream logFile_;
-    static CAMEL_LOG_API std::mutex logMutex_;
+    static Level globalLogLevel_;
+    static bool verboseEnabled_;
+    static std::ofstream logFile_;
+    static std::mutex logMutex_;
 
     static std::string levelToTag(Level level) {
         switch (level) {
@@ -193,25 +223,8 @@ class Logger {
             return "UNKNOWN";
         }
     }
-
-    void log(Level level, const std::string &message) const {
-        if (level < effectiveLogLevel_)
-            return;
-
-        std::string tag         = levelToTag(level);
-        std::string plainTag    = levelToPlain(level);
-        std::string fullMessage = std::format("[{}] <{}> {}", plainTag, scope_, message);
-
-        std::lock_guard<std::mutex> lock(logMutex_);
-
-        std::cout << std::format("[{}] <{}> {}\n", tag, scope_, message) << std::flush;
-
-        if (logFile_.is_open()) {
-            logFile_ << fullMessage << std::endl;
-        }
-    }
 };
 
 #endif // NDEBUG
 
-extern CAMEL_LOG_API Logger l;
+inline Logger &l = GetDefaultLogger();
