@@ -18,7 +18,7 @@
  */
 
 #include "compile.h"
-#include "builtin/algo/topo.h"
+#include "camel/common/algo/topo.h"
 
 #include <algorithm>
 #include <cstddef>

@@ -1,5 +1,5 @@
 #include "taskflow.h"
-#include "builtin/algo/topo.h"
+#include "camel/common/algo/topo.h"
 #include "camel/compile/gir/nodes.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/module.h"

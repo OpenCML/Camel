@@ -21,40 +21,12 @@
 #include "camel/core/data/composite/func.h"
 #include "camel/core/operator.h"
 
-#include "builtin/modules/algo.h"
-#include "builtin/modules/fs.h"
 #include "builtin/modules/globals.h"
-#include "builtin/modules/io.h"
-#include "builtin/modules/json.h"
-#include "builtin/modules/math.h"
-#include "builtin/modules/os.h"
-#include "builtin/modules/para.h"
 #include "builtin/modules/profiler.h"
-#include "builtin/modules/random.h"
-#include "builtin/modules/re.h"
-#include "builtin/modules/statistics.h"
-#include "builtin/modules/sys.h"
-#include "builtin/modules/tensor.h"
-#include "builtin/modules/this.h"
-#include "builtin/modules/time.h"
 
 std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_ptr_t ctx)>>
     builtinModuleFactories = {
         {"", [](context_ptr_t ctx) { return GlobalsBuiltinModule::create(ctx); }},
-        {"io", [](context_ptr_t ctx) { return IOBuiltinModule::create(ctx); }},
-        {"fs", [](context_ptr_t ctx) { return FileBuiltinModule::create(ctx); }},
-        {"os", [](context_ptr_t ctx) { return OSBuiltinModule::create(ctx); }},
-        {"re", [](context_ptr_t ctx) { return REBuiltinModule::create(ctx); }},
-        {"sys", [](context_ptr_t ctx) { return SysBuiltinModule::create(ctx); }},
-        {"math", [](context_ptr_t ctx) { return MathBuiltinModule::create(ctx); }},
-        {"time", [](context_ptr_t ctx) { return TimeBuiltinModule::create(ctx); }},
-        {"algo", [](context_ptr_t ctx) { return AlgoBuiltinModule::create(ctx); }},
-        {"json", [](context_ptr_t ctx) { return JsonBuiltinModule::create(ctx); }},
-        {"random", [](context_ptr_t ctx) { return RandomBuiltinModule::create(ctx); }},
-        {"this", [](context_ptr_t ctx) { return ThisBuiltinModule::create(ctx); }},
-        {"para", [](context_ptr_t ctx) { return ParaBuiltinModule::create(ctx); }},
-        {"tensor", [](context_ptr_t ctx) { return TensorBuiltinModule::create(ctx); }},
-        {"statistics", [](context_ptr_t ctx) { return StatisticsBuiltinModule::create(ctx); }},
 
 #ifndef NDEBUG
         {"profiler", [](context_ptr_t ctx) { return ProfilerBuiltinModule::create(ctx); }},

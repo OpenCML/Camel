@@ -39,6 +39,29 @@ list(REMOVE_ITEM _ALL_SRC
     "${PROJECT_SOURCE_DIR}/src/config.cpp"
     "${PROJECT_SOURCE_DIR}/src/builtin/operators/plot.cpp"
     "${PROJECT_SOURCE_DIR}/src/builtin/modules/plot.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/io.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/io.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/os.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/os.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/math.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/math.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/time.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/time.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/random.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/rand.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/algo.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/algo.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/statistics.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/statistics.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/this.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/this.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/fs.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/re.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/sys.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/json.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/para.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/modules/tensor.cpp"
+    "${PROJECT_SOURCE_DIR}/src/builtin/operators/tensor.cpp"
 )
 set(LIBCAMEL_SRC ${_ALL_SRC})
 
@@ -132,9 +155,23 @@ target_link_libraries(libcamel PRIVATE
     Eigen3::Eigen
 )
 
-# 外源模块：python / pyplot 编译为 .cmo，共享 Python DLL
+# 外源模块：python / pyplot / io 等编译为 .cmo
 add_subdirectory(modules/python)
 add_subdirectory(modules/pyplot)
+add_subdirectory(modules/io)
+add_subdirectory(modules/os)
+add_subdirectory(modules/math)
+add_subdirectory(modules/time)
+add_subdirectory(modules/random)
+add_subdirectory(modules/algo)
+add_subdirectory(modules/statistics)
+add_subdirectory(modules/this)
+add_subdirectory(modules/fs)
+add_subdirectory(modules/re)
+add_subdirectory(modules/sys)
+add_subdirectory(modules/json)
+add_subdirectory(modules/para)
+add_subdirectory(modules/tensor)
 
 # CLI 与工具：链接 libcamel 的 shell（camel-cli 在 tools 下）
 add_subdirectory(tools)

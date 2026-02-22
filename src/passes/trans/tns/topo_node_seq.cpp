@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "topo_node_seq.h"
-#include "builtin/algo/topo.h"
+#include "camel/common/algo/topo.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 

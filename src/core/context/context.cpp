@@ -179,6 +179,9 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         if (module) {
             EXEC_WHEN_DEBUG(
                 l.in("Context").debug("Module '{}' loaded from file '{}'.", name, module->path()));
+            if (!module->loaded()) {
+                module->load();
+            }
             modules_[name] = module;
             return module;
         }
@@ -260,8 +263,8 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
     if (stem.empty())
         stem = relPath.string();
 
-    auto tryDir = [&](const fs::path &base) -> std::pair<std::string, bool> {
-        fs::path dir = base / parentDir;
+    /// 在给定目录中查找模块文件：优先 .cmo，其次任意同名文件
+    auto findModuleInDir = [&](const fs::path &dir) -> std::pair<std::string, bool> {
         if (!fs::exists(dir) || !fs::is_directory(dir))
             return {"", false};
         fs::path cmoPath = dir / (stem + ".cmo");
@@ -275,6 +278,16 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
                 return {p.string(), (p.extension() == ".cmo")};
         }
         return {"", false};
+    };
+
+    auto tryDir = [&](const fs::path &base) -> std::pair<std::string, bool> {
+        fs::path dir       = base / parentDir;
+        auto [path, isCmo] = findModuleInDir(dir);
+        if (!path.empty())
+            return {path, isCmo};
+        // 若 dir/stem 为文件夹，则进一步在子目录中查找同名文件（.cmo 或文本源文件）
+        fs::path subdir = dir / stem;
+        return findModuleInDir(subdir);
     };
 
     for (const auto &dir : entryConfig_.searchPaths) {

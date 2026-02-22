@@ -1,0 +1,22 @@
+module main
+
+// algo 模块基础测试
+import { sort, merge_sorted_arrays } from algo
+
+func main(): int sync {
+    println("=== Algo Module Basic Tests ===")
+
+    println("\n[1] sort (in-place)")
+    var arr = [3, 1, 2]
+    sort(arr)
+    println("  sort([3,1,2]) ->", arr)
+
+    println("\n[2] merge_sorted_arrays")
+    let a = [1, 3, 5]
+    let b = [2, 4, 6]
+    let merged = merge_sorted_arrays(a, b)
+    println("  merge_sorted_arrays([1,3,5], [2,4,6]) ->", merged)
+
+    println("\n=== Algo tests completed ===")
+    return 0
+}

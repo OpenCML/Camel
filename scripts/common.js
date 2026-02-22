@@ -73,7 +73,7 @@ export function removeDir(dir) {
 
 export function copyFile(src, dest) {
     fs.copyFileSync(src, dest)
-    console.log(`Copied: ${src} to ${dest}`)
+    // console.log(`Copied: ${src} to ${dest}`)
 }
 
 export function copyDir(src, dest) {
@@ -204,4 +204,5 @@ export function copyBuildArtifacts(config) {
             }
         }
     }
+    logDone(`Copied all build artifacts`)
 }

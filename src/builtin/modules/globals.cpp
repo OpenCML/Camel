@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1338,12 +1338,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<Type *> { return norm[0]; }),
                 },
             }),
-        // ======= IO =======
+        // ======= IO（实现位于 io.cmo）======
         OperatorGroup::create(
             "input",
             {
                 {
-                    ":io/input",
+                    "io:input",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(prompt: string) => string",
@@ -1359,7 +1359,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "print",
             {
                 {
-                    ":io/print",
+                    "io:print",
                     DynamicFuncTypeResolver::create(
                         {{-1, {}}, {-1, {}}},
                         "<fmt?: string> (...args: any) => void",
@@ -1379,7 +1379,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "println",
             {
                 {
-                    ":io/println",
+                    "io:println",
                     DynamicFuncTypeResolver::create(
                         {{-1, {}}, {-1, {}}},
                         "<fmt?: string> (...args: any) => void",
@@ -1395,12 +1395,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // ======= OS =======
+        // ======= OS（实现位于 os.cmo）======
         OperatorGroup::create(
             "sleep",
             {
                 {
-                    ":os/sleep",
+                    "os:sleep",
                     StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void()),
                 },
             }),
@@ -1408,7 +1408,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "exit",
             {
                 {
-                    ":os/exit",
+                    "os:exit",
                     StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void()),
                 },
             }),
@@ -1834,6 +1834,9 @@ bool GlobalsBuiltinModule::load() {
         return true;
     }
     context_->registerExecutorFactory("", [&]() { return BasicBuiltinExecutor::create(context_); });
+    // 预加载 io、os 模块以注册 executor（供 globals 中 print/input/println、sleep/exit 使用）
+    context_->importModule("io", "");
+    context_->importModule("os", "");
     loaded_ = true;
     return true;
 }

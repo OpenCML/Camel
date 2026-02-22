@@ -1,0 +1,33 @@
+module main
+
+// random 模块基础测试
+import { seed, rand, randn, randint, choice, shuffle } from random
+
+func main(): int sync {
+    println("=== Random Module Basic Tests ===")
+
+    seed(42)
+
+    println("\n[1] rand()")
+    let r = rand()
+    println("  rand() =", r)
+
+    println("\n[2] randn()")
+    let n = randn()
+    println("  randn() =", n)
+
+    println("\n[3] randint(0, 10)")
+    let i = randint(0, 10)
+    println("  randint(0, 10) =", i)
+
+    println("\n[4] choice([1, 2, 3])")
+    let c = choice([1, 2, 3])
+    println("  choice =", c)
+
+    println("\n[5] shuffle([1, 2, 3, 4, 5])")
+    let s = shuffle([1, 2, 3, 4, 5])
+    println("  shuffle =", s)
+
+    println("\n=== Random tests completed ===")
+    return 0
+}

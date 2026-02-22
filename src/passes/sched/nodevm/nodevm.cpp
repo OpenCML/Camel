@@ -18,7 +18,7 @@
  */
 
 #include "nodevm.h"
-#include "builtin/algo/topo.h"
+#include "camel/common/algo/topo.h"
 #include "camel/compile/gir/nodes.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"

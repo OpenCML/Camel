@@ -1,0 +1,18 @@
+module main
+
+import { get_env, get_cwd } from sys
+
+func main(): int sync {
+    println("=== Sys Module Basic Tests ===")
+
+    println("\n[1] get_env('PATH')")
+    let path = get_env("PATH")
+    println("  get_env OK, PATH len =", path->len)
+
+    println("\n[2] get_cwd()")
+    let cwd = get_cwd()
+    println("  cwd =", cwd)
+
+    println("\n=== Sys tests completed ===")
+    return 0
+}

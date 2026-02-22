@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "bcdump.h"
-#include "builtin/algo/topo.h"
+#include "camel/common/algo/topo.h"
 #include "compile.h"
 
 using namespace GraphIR;
