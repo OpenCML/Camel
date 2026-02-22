@@ -166,9 +166,10 @@ bool TensorType::equals(Type *other) const {
 }
 
 CastSafety TensorType::castSafetyTo(Type *targetType) const {
-    if (this == targetType) {
+    if (auto r = Type::checkCastSafetyWithAny(code(), targetType))
+        return *r;
+    if (this == targetType)
         return CastSafety::Safe;
-    }
     return CastSafety::Forbidden;
 }
 

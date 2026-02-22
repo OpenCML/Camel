@@ -482,6 +482,8 @@ bool FunctionType::equals(Type *other) const {
 }
 
 CastSafety FunctionType::castSafetyTo(Type *targetType) const {
+    if (auto r = Type::checkCastSafetyWithAny(code(), targetType))
+        return *r;
     if (this == targetType)
         return CastSafety::Safe;
     return CastSafety::Forbidden;

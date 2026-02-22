@@ -1,8 +1,5 @@
-import {
-    runCmakeBuild,
-    copyBuildArtifacts,
-    logDone
-} from './common.js'
+import { execSync } from 'child_process'
+import { runCmakeBuild, copyBuildArtifacts, logDone, BASEDIR } from './common.js'
 import { getCmakeOptionFlags } from './cmake-opts.js'
 
 export default function main() {
@@ -10,6 +7,7 @@ export default function main() {
     const cmakeOpts = getCmakeOptionFlags()
     runCmakeBuild(config, cmakeOpts)
     copyBuildArtifacts(config)
+    execSync('node scripts/collect-out.js profile', { cwd: BASEDIR, stdio: 'inherit' })
     logDone('Profile build completed')
 }
 

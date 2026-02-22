@@ -132,14 +132,26 @@ bool Type::equals(Type *type) const {
     return code_ == type->code_;
 }
 
+std::optional<CastSafety> Type::checkCastSafetyWithAny(TypeCode fromCode, Type *targetType) {
+    if (!targetType)
+        return CastSafety::Forbidden;
+    // 通用规则：任何类型 <-> Any 均为 Safe
+    if (fromCode == TypeCode::Any || targetType->code() == TypeCode::Any)
+        return CastSafety::Safe;
+    return std::nullopt;
+}
+
 CastSafety Type::castSafetyTo(Type *targetType) const {
     ASSERT(!::isComposite(code_), "Composite type cannot call Type::castSafetyTo");
     ASSERT(!::isOtherType(code_), "Other type cannot call Type::castSafetyTo");
 
+    if (auto r = checkCastSafetyWithAny(code_, targetType))
+        return *r;
+
     if (!targetType)
         return CastSafety::Forbidden;
 
-    // 这里要先排除掉辅助类型
+    // 这里要先排除掉辅助类型（Any 已由 checkCastSafetyWithAny 处理）
     if (::isAuxiliary(code_) || ::isAuxiliary(targetType->code())) {
         return CastSafety::Forbidden;
     }
@@ -156,12 +168,16 @@ CastSafety Type::castSafetyTo(Type *targetType) const {
 }
 
 slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
-    ASSERT(!::isComposite(code_), "castSlotTo not implemented for composite types");
-    ASSERT(!::isOtherType(code_), "castSlotTo not implemented for other types");
     ASSERT(targetType != nullptr, "castSlotTo target type is null");
     ASSERT(
         castSafetyTo(targetType) == CastSafety::Safe,
         "castSlotTo only allowed when castSafetyTo returns Safe");
+    // Any 与任何类型互相转换时直接透传 slot 值（需在所有 ASSERT 之前，以支持 composite 等类型）
+    if (code_ == TypeCode::Any || targetType->code() == TypeCode::Any)
+        return value;
+
+    ASSERT(!::isComposite(code_), "castSlotTo not implemented for composite types");
+    ASSERT(!::isOtherType(code_), "castSlotTo not implemented for other types");
 
     const TypeCode from = code_;
     const TypeCode to   = targetType->code();
@@ -372,16 +388,17 @@ bool Type::assignable(Type *type) const {
     // 内置类型，含有 Ref 类型的复合类型必须 resolve 后才能赋值给其他类型
     ASSERT(code_ != TypeCode::Ref && type->code_ != TypeCode::Ref, "Ref type cannot be assigned");
 
-    // any 类型可以接受任何类型的赋值，但不可以赋值给其他类型
-    if (type->code_ == TypeCode::Any)
-        return true;
-    if (code_ == TypeCode::Any)
-        return false;
-
     // Void 类型可以接受任何类型的赋值，但不可以赋值给其他类型
     if (type->code_ == TypeCode::Void)
         return true;
     if (code_ == TypeCode::Void)
+        return false;
+
+    // 任何类型可赋给 Any（目标为 Any 时接受任意来源）
+    if (type->code_ == TypeCode::Any)
+        return true;
+    // Any 不可赋给其他类型（来源为 Any 且目标非 Any）
+    if (code_ == TypeCode::Any)
         return false;
 
     // 复合类型需要重载 assignable 方法处理

@@ -288,6 +288,10 @@ bool StructType::equals(Type *type) const {
     return true;
 }
 
-CastSafety StructType::castSafetyTo(Type *) const { return CastSafety::Forbidden; }
+CastSafety StructType::castSafetyTo(Type *targetType) const {
+    if (auto r = Type::checkCastSafetyWithAny(code(), targetType))
+        return *r;
+    return CastSafety::Forbidden;
+}
 
 bool StructType::assignable(Type *type) const { return equals(type); }

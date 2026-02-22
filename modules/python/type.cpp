@@ -86,6 +86,8 @@ bool PyObjectType::equals(Type *type) const {
 }
 
 CastSafety PyObjectType::castSafetyTo(Type *targetType) const {
+    if (auto r = Type::checkCastSafetyWithAny(code_, targetType))
+        return *r;
     return targetType && targetType->code() == code_ ? CastSafety::Safe : CastSafety::Forbidden;
 }
 
@@ -94,12 +96,10 @@ slot_t PyObjectType::castSlotTo(slot_t value, Type *targetType) const {
     return value;
 }
 
-bool PyObjectType::assignable(Type *type) const {
-    return type && type->code() == code_;
-}
+bool PyObjectType::assignable(Type *type) const { return type && type->code() == code_; }
 
 OtherType *PyObjectType::cloneWithParams(std::span<Type *const> params) const {
-    Type **p = OtherType::copyParams(params);
+    Type **p  = OtherType::copyParams(params);
     void *mem = mm::autoSpace().alloc(sizeof(PyObjectType), alignof(PyObjectType));
     ASSERT(mem != nullptr, "Failed to allocate PyObjectType from autoSpace");
     return new (mem) PyObjectType(code_, params.size(), p);

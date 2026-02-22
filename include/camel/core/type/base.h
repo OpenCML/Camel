@@ -22,6 +22,7 @@
 #include "camel/core/slot.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -123,6 +124,9 @@ using type_vec_t = std::vector<Type *>;
 class Type {
   protected:
     TypeCode code_;
+
+    /** Any 类型 cast 规则：任何类型与 Any 互相转换均为 Safe，供子类 castSafetyTo 复用 */
+    static std::optional<CastSafety> checkCastSafetyWithAny(TypeCode fromCode, Type *targetType);
 
   public:
     Type() = delete;
