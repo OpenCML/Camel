@@ -48,8 +48,8 @@ func main(): int sync {
     py_exec("print('Exec: Hello from exec!')")
 
     // 7. py_run: 执行脚本文件
-    println("\n[7] py_run('test/libs/python/hello.py')")
-    py_run("test/libs/python/hello.py")
+    println("\n[7] py_run('test/modules/python/hello.py')")
+    py_run("test/modules/python/hello.py")
 
     // 8. py_attr: 链式访问 math.sqrt
     println("\n[8] py_attr(math, 'sqrt') -> math.sqrt(16)")

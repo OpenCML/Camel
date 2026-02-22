@@ -31,7 +31,6 @@
 #include "../operators/ops.h"
 #include "../operators/os.h"
 #include "../operators/other.h"
-#include "../operators/plot.h"
 #include "../operators/profiler.h"
 #include "../operators/rand.h"
 #include "../operators/statistics.h"
@@ -373,9 +372,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // statistics
         {"statistics/mean", __mean__},
         {"statistics/stdev", __stdev__},
-
-        // plot
-        {"plot/plot", __plot__},
 
         // profiler
         {"profiler/begin", __profiler_begin__},

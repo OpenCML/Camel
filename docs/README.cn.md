@@ -154,7 +154,7 @@ func main(): int sync {
 
 ### Python 集成
 
-使用 `python` 模块嵌入 Python。支持 `py_call`、`py_eval`、`py_run`、`wrap`/`unwrap` 等。详见 [libs/python/README.md](../libs/python/README.md) 的 API 参考。
+使用 `python` 模块嵌入 Python。支持 `py_call`、`py_eval`、`py_run`、`wrap`/`unwrap` 等。详见 [libs/python/README.md](../modules/python/README.md) 的 API 参考。
 
 **类型转换** — `unwrap` 将 Python 对象转换回 Camel。因为 `py_eval`/`py_call` 返回裸的 `PyObject`，你必须在 `unwrap` 之前使用 `as PyObject<T>` 指定目标类型：
 

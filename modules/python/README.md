@@ -82,10 +82,10 @@ func main() sync {
 
 ## 测试
 
-测试用例位于 `test/libs/python/`：
+测试用例位于 `test/modules/python/`：
 
 ```bash
-camel run test/libs/python/main.cml
+camel run test/modules/python/main.cml
 ```
 
 ## 与内置模块的区别

@@ -29,7 +29,6 @@
 #include "builtin/modules/math.h"
 #include "builtin/modules/os.h"
 #include "builtin/modules/para.h"
-#include "builtin/modules/plot.h"
 #include "builtin/modules/profiler.h"
 #include "builtin/modules/random.h"
 #include "builtin/modules/re.h"
@@ -56,7 +55,6 @@ std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_pt
         {"para", [](context_ptr_t ctx) { return ParaBuiltinModule::create(ctx); }},
         {"tensor", [](context_ptr_t ctx) { return TensorBuiltinModule::create(ctx); }},
         {"statistics", [](context_ptr_t ctx) { return StatisticsBuiltinModule::create(ctx); }},
-        {"plot", [](context_ptr_t ctx) { return PlotBuiltinModule::create(ctx); }},
 
 #ifndef NDEBUG
         {"profiler", [](context_ptr_t ctx) { return ProfilerBuiltinModule::create(ctx); }},

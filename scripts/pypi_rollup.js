@@ -1,10 +1,10 @@
 import path from 'path'
-import { runCommand, copyDir, removeDir, BASEDIR, logStep, logDone } from './common.js'
+import fs from 'fs'
+import { runCommand, copyDir, copyFile, removeDir, BASEDIR, getTag, executableName, libName, logStep, logDone } from './common.js'
 import { ensureDirSync } from 'fs-extra/esm'
 import build from './build.js'
 import { execSync } from 'child_process'
 import os from 'os'
-import fs from 'fs'
 
 function getPythonPlatformTag() {
     const platform = os.platform()
@@ -52,13 +52,41 @@ function main() {
     build()
     logDone('Project built')
 
+    logStep('Collecting build artifacts to out/')
+    runCommand('node scripts/collect-out.js build')
+    const outTag = process.env.CAMEL_PYPI_TAG || getTag()
+    const OUT_ROOT = path.join(BASEDIR, 'out', outTag)
+    logDone(`Using out/${outTag}/`)
+
     logStep('Copying files to pypi directory')
     const PYPI_BASE = path.join(BASEDIR, 'pypi', 'camel-lang')
     const CAMEL_BASE = path.join(PYPI_BASE, 'src', 'camel')
+    const BIN_DIR = path.join(CAMEL_BASE, '.cmlenv', 'bin')
+    fs.mkdirSync(BIN_DIR, { recursive: true })
 
-    copyDir(path.join(BASEDIR, 'build', 'Release'), path.join(CAMEL_BASE, '.cmlenv', 'bin'))
-    copyDir(path.join(BASEDIR, 'stdlib'), path.join(CAMEL_BASE, '.cmlenv', 'lib', 'std'))
+    const exePath = path.join(OUT_ROOT, executableName)
+    const libPath = path.join(OUT_ROOT, 'libs', libName)
+    if (fs.existsSync(exePath)) copyFile(exePath, path.join(BIN_DIR, executableName))
+    if (fs.existsSync(libPath)) copyFile(libPath, path.join(BIN_DIR, libName))
+
+    const includeSrc = path.join(OUT_ROOT, 'include')
+    const stdlibSrc = path.join(OUT_ROOT, 'stdlib')
+    if (fs.existsSync(includeSrc)) copyDir(includeSrc, path.join(CAMEL_BASE, '.cmlenv', 'include'))
+    if (fs.existsSync(stdlibSrc)) copyDir(stdlibSrc, path.join(CAMEL_BASE, '.cmlenv', 'lib', 'std'))
     logDone('Files copied')
+
+    const scriptFiles = [
+        `src/camel/.cmlenv/bin/${executableName}`,
+        `src/camel/.cmlenv/bin/${libName}`
+    ].filter((p) => fs.existsSync(path.join(PYPI_BASE, p)))
+    const pyprojectPath = path.join(PYPI_BASE, 'pyproject.toml')
+    const pyprojectOriginal = fs.readFileSync(pyprojectPath, 'utf-8')
+    const scriptFilesStr = scriptFiles.map((s) => `"${s}"`).join(', ')
+    fs.writeFileSync(
+        pyprojectPath,
+        pyprojectOriginal.replace(/script-files = \[[^\]]*\]/, `script-files = [${scriptFilesStr}]`)
+    )
+    logStep(`Configured script-files: [${scriptFiles.join(', ')}]`)
 
     logStep('Building wheel')
     process.chdir(PYPI_BASE)
@@ -83,6 +111,7 @@ function main() {
     logDone('Wheel moved')
 
     logStep('Cleaning up')
+    fs.writeFileSync(pyprojectPath, pyprojectOriginal)
     removeDir(path.join(PYPI_BASE, 'dist'))
     removeDir(path.join(PYPI_BASE, 'build'))
     removeDir(path.join(CAMEL_BASE, '.cmlenv'))

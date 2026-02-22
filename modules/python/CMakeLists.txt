@@ -1,7 +1,17 @@
 # python 模块：作为 .cmo 外源动态库示例，单独编译为 python.cmo
 # 使用方式：将 python.cmo 放入模块搜索路径，在 Camel 中 import python 即可加载
+# 本模块是唯一依赖 Python / pybind11 的构建目标
 
 cmake_minimum_required(VERSION 3.25)
+
+# 仅本模块需要 Python
+if(EXISTS "${CMAKE_SOURCE_DIR}/venv/Scripts/python.exe")
+    set(Python_ROOT_DIR "${CMAKE_SOURCE_DIR}/venv")
+elseif(DEFINED ENV{VIRTUAL_ENV})
+    set(Python_ROOT_DIR "$ENV{VIRTUAL_ENV}")
+endif()
+find_package(Python COMPONENTS Interpreter Development REQUIRED)
+find_package(pybind11 REQUIRED)
 
 add_library(python_cmo SHARED
     executor.cpp

@@ -46,9 +46,14 @@
 
 #include <chrono>
 #include <filesystem>
+#include <string>
 #include <iomanip>
 #include <iostream>
 #include <queue>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 using namespace antlr4;
 using namespace std;
@@ -62,6 +67,20 @@ using namespace CLI;
 string targetFile = "";
 
 int main(int argc, char *argv[]) {
+#ifdef _WIN32
+    // 支持从 ./libs 查找 libcamel.dll（配合 delay load，需在首次使用 libcamel 前调用）
+    {
+        wchar_t path[MAX_PATH];
+        if (GetModuleFileNameW(nullptr, path, MAX_PATH)) {
+            std::wstring exePath(path);
+            size_t last = exePath.find_last_of(L"\\/");
+            if (last != std::wstring::npos) {
+                std::wstring libsDir = exePath.substr(0, last + 1) + L"libs";
+                SetDllDirectoryW(libsDir.c_str());
+            }
+        }
+    }
+#endif
     if (!parseArgs(argc, argv))
         return 0;
 
