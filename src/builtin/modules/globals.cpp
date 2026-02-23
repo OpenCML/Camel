@@ -1338,12 +1338,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<Type *> { return norm[0]; }),
                 },
             }),
-        // ======= IO（实现位于 io.cmo）======
+        // ======= IO（内置 input/print/println）======
         OperatorGroup::create(
             "input",
             {
                 {
-                    "io:input",
+                    ":io/input",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(prompt: string) => string",
@@ -1359,7 +1359,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "print",
             {
                 {
-                    "io:print",
+                    ":io/print",
                     DynamicFuncTypeResolver::create(
                         {{-1, {}}, {-1, {}}},
                         "<fmt?: string> (...args: any) => void",
@@ -1379,7 +1379,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "println",
             {
                 {
-                    "io:println",
+                    ":io/println",
                     DynamicFuncTypeResolver::create(
                         {{-1, {}}, {-1, {}}},
                         "<fmt?: string> (...args: any) => void",
@@ -1835,9 +1835,6 @@ bool GlobalsBuiltinModule::load() {
         return true;
     }
     context_->registerExecutorFactory("", [&]() { return BasicBuiltinExecutor::create(context_); });
-    // 预加载 io、os 模块以注册 executor（供 globals 中 print/input/println、sleep/exit 使用）
-    context_->importModule("io", "");
-    context_->importModule("os", "");
     loaded_ = true;
     return true;
 }

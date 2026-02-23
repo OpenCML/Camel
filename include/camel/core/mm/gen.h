@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -197,8 +197,9 @@ class GenerationalAllocatorWithGC : public IAllocator {
     };
 
     GenerationalAllocatorWithGC(const Config &config)
-        : birthSpace_(config.birthSize), havenSpace_(config.havenSize),
-          cacheSpace_(config.havenSize), elderGenSpace_(config.elderGenSize), largeObjSpace_(),
+        : birthSpace_(config.birthSize, "auto.birth"), havenSpace_(config.havenSize, "auto.haven"),
+          cacheSpace_(config.havenSize, "auto.cache"),
+          elderGenSpace_(config.elderGenSize, "auto.elder"), largeObjSpace_("auto.large"),
           promotionAgeThreshold_(config.promotionAgeThreshold),
           largeObjThreshold_(config.largeObjThreshold),
           minorGCTriggerRatio_(config.minorGCTriggerRatio),

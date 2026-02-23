@@ -3,18 +3,18 @@ Built-in global function signatures.
 For reference only; these are implemented in the runtime.
 */
 
-// io
+// io（内置 input/print/println）
 
 inner func print(args: any...): void {
-    return 'io:print'
+    return ':io/print'
 }
 
 inner func println(args: any...): void {
-    return 'io:println'
+    return ':io/println'
 }
 
 inner func input(prompt: string): string {
-    return 'io:input'
+    return ':io/input'
 }
 
 // os

@@ -12,4 +12,4 @@ target_compile_options(camel-pr PRIVATE
 target_link_options(camel-pr PRIVATE $<$<CONFIG:RelWithDebInfo>:-no-pie>)
 
 target_libcamel_tool_options(camel-pr)
-target_link_libcamel(camel-pr)
+target_link_libcamel_with_json(camel-pr)

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,10 @@
 #include "camel/utils/log.h"
 #include "header.h"
 
+#ifndef NDEBUG
+#include "camel/core/mm/debug_hook.h"
+#endif
+
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -34,7 +38,8 @@
 
 class FreeListAllocator : public IAllocator {
   public:
-    explicit FreeListAllocator(size_t capacity) : capacity_(capacity) {
+    explicit FreeListAllocator(size_t capacity, const char *debugRegion = nullptr)
+        : capacity_(capacity), debugRegion_(debugRegion) {
         size_t aligned_capacity = alignUp(capacity, alignof(slot_t));
         size_t num_units        = aligned_capacity / sizeof(slot_t);
 
@@ -77,7 +82,13 @@ class FreeListAllocator : public IAllocator {
                     installHeader(blockStart, curr->size);
                     *prevPtr = curr->next;
                 }
-
+#ifndef NDEBUG
+                if (debugRegion_) {
+                    size_t allocSize = (remaining >= sizeof(FreeBlock)) ? total_size : curr->size;
+                    mm::invokePostAllocHook(
+                        mm::AllocEvent{blockStart + sizeof(ObjectHeader), allocSize, debugRegion_});
+                }
+#endif
                 return blockStart + sizeof(ObjectHeader);
             }
 
@@ -357,6 +368,7 @@ class FreeListAllocator : public IAllocator {
     };
 
     size_t capacity_;
+    const char *debugRegion_{nullptr}; // Debug 模式下用于 hook
     std::unique_ptr<slot_t[]> buffer_;
     std::byte *start_;
     std::byte *end_;

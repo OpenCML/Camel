@@ -24,6 +24,7 @@
 #include "camel/utils/log.h"
 
 #include "../operators/cast.h"
+#include "../operators/io.h"
 #include "../operators/macro.h"
 #include "../operators/ops.h"
 #include "../operators/other.h"
@@ -211,6 +212,11 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/inv_i", __builtin__inv__},
         {"op/inv_l", __builtin__inv__},
         {"op/inv", __builtin__inv__},
+
+        // io（内置 input/print/println）
+        {"io/input", __op_input__},
+        {"io/print", __op_print__},
+        {"io/println", __op_println__},
 
         // string
         {"str/format", __format__},

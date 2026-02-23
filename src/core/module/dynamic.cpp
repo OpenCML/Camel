@@ -62,7 +62,6 @@ template <typename F> F getSymbol(void *handle, const char *name) {
 
 module_ptr_t
 loadCmoModule(const std::string &moduleName, const std::string &path, const context_ptr_t &ctx) {
-
     void *handle = openDll(path);
     if (!handle) {
         EXEC_WHEN_DEBUG(GetDefaultLogger().in("Context").warn("Failed to load .cmo: {}", path));

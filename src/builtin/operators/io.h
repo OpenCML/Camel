@@ -16,13 +16,11 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "operators.h"
+#pragma once
+
 #include "camel/core/operator.h"
+#include "camel/core/type.h"
 
-#include <string>
-#include <unordered_map>
-
-std::unordered_map<std::string, operator_t> getIOOpsMap() {
-    // input/print/println 已移至内置算子（src/builtin/operators/io.cpp）
-    return {};
-}
+slot_t __op_print__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __op_println__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __op_input__(ArgsView &with, ArgsView &norm, Context &ctx);

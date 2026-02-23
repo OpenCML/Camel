@@ -1,14 +1,13 @@
 /**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
- * You can use this software according to the terms and
- * conditions of the MIT license. You may obtain a copy of
- * the MIT license at: [https://opensource.org/license/mit]
+ * You can use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
  *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT
- * WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *
  * See the the MIT license for more details.
  *
@@ -25,6 +24,9 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/listener.h"
 #include "camel/core/mm.h"
+#ifndef NDEBUG
+#include "camel/core/mm/debug_hook.h"
+#endif
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
 #include "camel/execute/pass/base.h"
@@ -181,6 +183,14 @@ bool cmdRun() {
     // Start memory monitor: periodic GC region scan, HTTP server + Web UI
     if (!g_memMonitor.isRunning()) {
         g_memMonitor.start(8765);
+#ifndef NDEBUG
+        // Debug build: step-on-alloc - pause after each GC allocation, wait for Web UI continue
+        g_memMonitor.enableAllocStep(true);
+        mm::setPostAllocDebugHook([](const mm::AllocEvent *evt) {
+            if (evt)
+                g_memMonitor.pauseAndWaitForContinue(evt->ptr, evt->size, evt->space);
+        });
+#endif
     }
 
     try {
@@ -246,6 +256,9 @@ void repl() {
             printVersion();
         } else if (cmd == "q" || cmd == "quit" || cmd == "exit") {
             if (g_memMonitor.isRunning()) {
+#ifndef NDEBUG
+                mm::clearPostAllocDebugHook();
+#endif
                 g_memMonitor.stop();
             }
             cout << "Goodbye." << endl;

@@ -25,6 +25,10 @@
 #include "camel/utils/log.h"
 #include "header.h"
 
+#ifndef NDEBUG
+#include "camel/core/mm/debug_hook.h"
+#endif
+
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -34,7 +38,8 @@
 
 class BumpPointerAllocator : public IAllocator {
   public:
-    BumpPointerAllocator(size_t capacity) : capacity_(capacity) {
+    BumpPointerAllocator(size_t capacity, const char *debugRegion = nullptr)
+        : capacity_(capacity), debugRegion_(debugRegion) {
         // capacity 是字节数，向上对齐
         size_t aligned_capacity = alignUp(capacity, alignof(slot_t));
         size_t num_units        = aligned_capacity / sizeof(slot_t);
@@ -90,6 +95,11 @@ class BumpPointerAllocator : public IAllocator {
         }());
 
         top_ = newTop;
+#ifndef NDEBUG
+        if (debugRegion_) {
+            mm::invokePostAllocHook(mm::AllocEvent{result, total_size, debugRegion_});
+        }
+#endif
         return result;
     }
 
@@ -161,6 +171,7 @@ class BumpPointerAllocator : public IAllocator {
 
   private:
     size_t capacity_;
+    const char *debugRegion_{nullptr}; // Debug 模式下用于 hook，nullptr 表示不 hook
     std::unique_ptr<uint64_t[]> buffer_;
     std::byte *start_;
     std::byte *top_;

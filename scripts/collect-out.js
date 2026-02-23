@@ -77,6 +77,9 @@ function collect(config) {
     const libPath = path.join(libSrcDir, libName)
     if (fs.existsSync(libPath)) {
         fs.copyFileSync(libPath, path.join(libsDir, libName))
+        if (isWindows) {
+            fs.copyFileSync(libPath.replace('.dll', '.pdb'), path.join(libsDir, libName.replace('.dll', '.pdb')))
+        }
     } else {
         logWarn(`Library not found: ${libPath}`)
     }
@@ -117,7 +120,7 @@ function collect(config) {
             if (!fs.existsSync(configDir)) continue
             const files = fs.readdirSync(configDir)
             for (const f of files) {
-                if (f.endsWith('.cmo')) {
+                if (f.endsWith('.cmo') || f.endsWith('.pdb')) {
                     fs.copyFileSync(path.join(configDir, f), path.join(stdlibDir, f))
                 }
             }

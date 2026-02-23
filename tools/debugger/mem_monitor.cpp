@@ -1,16 +1,27 @@
 /**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
+ * You can use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
  * Updated: Feb. 23, 2026
+ * Supported by: National Key Research and Development Program of China
  */
 
 #include "mem_monitor.h"
 #include "camel/core/mm/profiler.h"
 
 #include <httplib.h>
+#include <sstream>
 #include <chrono>
 #include <iostream>
 #include <mutex>
@@ -55,11 +66,23 @@ const char *const kWebUIHtml = R"HTML(
     .age { color: #d29922; }
     .refresh { margin-bottom: 16px; color: #8b949e; font-size: 0.875rem; }
     .error { color: #f85149; padding: 16px; }
+    .toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+    .btn { padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 0.875rem; }
+    .btn-continue { background: #238636; color: white; }
+    .btn-continue:hover { background: #2ea043; }
+    .btn-continue:disabled { background: #30363d; color: #8b949e; cursor: not-allowed; }
+    .step-status { color: #d29922; font-size: 0.875rem; }
+    .last-alloc { font-size: 0.8rem; color: #8b949e; font-family: Consolas, monospace; }
   </style>
 </head>
 <body>
   <h1>Camel GC Memory Layout</h1>
-  <div class="refresh">Auto-refresh 500ms | <a href="/api/snapshot" style="color:#58a6ff">Raw JSON</a></div>
+  <div class="toolbar">
+    <div class="refresh">Auto-refresh 500ms | <a href="/api/snapshot" style="color:#58a6ff">Raw JSON</a></div>
+    <button id="btn-continue" class="btn btn-continue">Continue</button>
+    <span id="step-status" class="step-status"></span>
+    <span id="last-alloc" class="last-alloc"></span>
+  </div>
   <div id="content"></div>
   <script>
     function fmtBytes(n) {
@@ -109,12 +132,31 @@ const char *const kWebUIHtml = R"HTML(
       div.innerHTML = html;
     }
     function fetchData() {
-      fetch('/api/snapshot').then(r=>r.json()).then(render).catch(e=>{
+      fetch('/api/snapshot').then(r=>r.json()).then(d=>{ render(d); return d; }).catch(e=>{
         document.getElementById('content').innerHTML = '<div class="error">Failed to fetch data: ' + e + '</div>';
       });
     }
+    document.getElementById('btn-continue').onclick = function() {
+      this.disabled = true;
+      document.getElementById('step-status').textContent = '';
+      fetch('/api/continue', { method: 'POST' }).then(()=>{}).catch(()=>{});
+    };
+    function pollStepStatus() {
+      fetch('/api/step-paused').then(r=>r.json()).then(d=>{
+        const btn = document.getElementById('btn-continue');
+        const st = document.getElementById('step-status');
+        if (d.paused) { btn.disabled = false; st.textContent = 'Paused after alloc – click Continue'; }
+        else { btn.disabled = true; st.textContent = ''; }
+      }).catch(()=>{});
+      fetch('/api/last-alloc').then(r=>r.json()).then(d=>{
+        const la = document.getElementById('last-alloc');
+        if (d.ptr !== undefined) la.textContent = 'Last: ' + (d.space||'?') + ' 0x' + d.ptr.toString(16) + ' ' + fmtBytes(d.size||0);
+        else la.textContent = '';
+      }).catch(()=>{});
+    }
     fetchData();
     setInterval(fetchData, 500);
+    setInterval(pollStepStatus, 200);
   </script>
 </body>
 </html>
@@ -140,11 +182,44 @@ void MemMonitor::start(int port) {
               << " (open in browser to view GC memory layout)" << std::endl;
 }
 
+void MemMonitor::pauseAndWaitForContinue(const void *ptr, size_t size, const char *space) {
+    if (!allocStepEnabled_ || !running_)
+        return;
+    try {
+        std::ostringstream oss;
+        oss << "{\"ptr\":" << reinterpret_cast<uintptr_t>(ptr) << ",\"size\":" << size
+            << ",\"space\":\"" << (space ? space : "") << "\"}";
+        {
+            std::lock_guard<std::mutex> lock(jsonMutex_);
+            lastAllocJson_ = oss.str();
+        }
+        std::string json = mm::profiler::snapshotToJson();
+        {
+            std::lock_guard<std::mutex> lock(jsonMutex_);
+            latestJson_ = std::move(json);
+        }
+    } catch (const std::exception &e) {
+        std::cerr << "[MemMonitor] Snapshot exception: " << e.what() << std::endl;
+    }
+    paused_.store(true);
+    continueRequested_.store(false);
+    {
+        std::unique_lock<std::mutex> lock(continueMutex_);
+        continueCond_.wait(lock, [this] {
+            return continueRequested_.load() || !running_ || !allocStepEnabled_;
+        });
+    }
+    paused_.store(false);
+}
+
 void MemMonitor::stop() {
     if (!running_) return;
     running_  = false;
     scanStop_ = true;
     httpStop_ = true;
+    allocStepEnabled_   = false;
+    continueRequested_  = true;
+    continueCond_.notify_all();
 
     // Signal HTTP server to stop (listen is blocking)
     auto *svr = reinterpret_cast<httplib::Server *>(serverPtr_.load());
@@ -189,7 +264,23 @@ void MemMonitor::httpServerLoop() {
         }
     });
 
-    svr.set_payload_max_length(0);
+    svr.Get("/api/step-paused", [this](const httplib::Request &, httplib::Response &res) {
+        res.set_content(paused_.load() ? "{\"paused\":true}" : "{\"paused\":false}",
+                       "application/json");
+    });
+
+    svr.Get("/api/last-alloc", [this](const httplib::Request &, httplib::Response &res) {
+        std::lock_guard<std::mutex> lock(jsonMutex_);
+        res.set_content(lastAllocJson_.empty() ? "{}" : lastAllocJson_, "application/json");
+    });
+
+    svr.Post("/api/continue", [this](const httplib::Request &, httplib::Response &res) {
+        continueRequested_.store(true);
+        continueCond_.notify_one();
+        res.set_content("{\"ok\":true}", "application/json");
+    });
+
+    svr.set_payload_max_length(1024);
     svr.set_keep_alive_timeout(1);
 
     if (!svr.listen("127.0.0.1", port_)) {
