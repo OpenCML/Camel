@@ -81,7 +81,8 @@ bool UserDefinedModule::compile(CompileStage till) {
         if (!parser_->ast()) {
             std::ifstream ifs(path_);
             if (!ifs.good()) {
-                throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound).commit(path_);
+                throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound)
+                    .commit(name_, "module file not found or unreadable: " + path_);
             }
             if (!parser_->parse(ifs)) {
                 throw DiagnosticBuilder::of(SemanticDiag::ModuleParseFailed).commit(path_);

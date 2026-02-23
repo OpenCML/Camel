@@ -24,6 +24,7 @@ function(add_camel_module)
   else()
     set(_sources executor.cpp module.cpp operators.cpp)
   endif()
+  list(APPEND _sources ${CMAKE_SOURCE_DIR}/modules/camel_module_abi.cpp)
 
   add_library(${_target} SHARED ${_sources})
 

@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <filesystem>
 #include <string>
 
 #ifdef _WIN32
@@ -37,6 +38,37 @@
 
 namespace camel {
 namespace utils {
+
+/** 返回当前进程可执行文件所在目录；失败时返回空 path。 */
+inline std::filesystem::path getExecutableDirectory() {
+#ifdef _WIN32
+    wchar_t path[MAX_PATH];
+    if (!GetModuleFileNameW(nullptr, path, MAX_PATH))
+        return {};
+    std::filesystem::path p(path);
+    return p.has_filename() ? p.parent_path() : p;
+#elif defined(__linux__)
+    char buf[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len <= 0)
+        return {};
+    buf[len] = '\0';
+    std::filesystem::path p(buf);
+    return p.has_filename() ? p.parent_path() : p;
+#elif defined(__APPLE__)
+    char buf[PATH_MAX];
+    uint32_t size = sizeof(buf);
+    if (_NSGetExecutablePath(buf, &size) != 0)
+        return {};
+    char resolved[PATH_MAX];
+    if (realpath(buf, resolved) == nullptr)
+        return {};
+    std::filesystem::path p(resolved);
+    return p.has_filename() ? p.parent_path() : p;
+#else
+    return {};
+#endif
+}
 
 // 设置库搜索路径，以 exe 所在目录为 base：
 // 1) base (./)  2) base/libs (./libs)  3) base/../libs (../libs)  4) 系统默认

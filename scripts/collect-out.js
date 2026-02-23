@@ -77,7 +77,7 @@ function collect(config) {
     const libPath = path.join(libSrcDir, libName)
     if (fs.existsSync(libPath)) {
         fs.copyFileSync(libPath, path.join(libsDir, libName))
-        if (isWindows) {
+        if (isWindows && config === 'Debug') {
             fs.copyFileSync(libPath.replace('.dll', '.pdb'), path.join(libsDir, libName.replace('.dll', '.pdb')))
         }
     } else {

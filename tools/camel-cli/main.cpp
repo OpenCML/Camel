@@ -102,7 +102,9 @@ int main(int argc, char *argv[]) {
 
     bool useJsonFormat = (errorFormat == "json");
 
-    fs::path camelPath = fs::current_path();
+    fs::path camelPath = camel::utils::getExecutableDirectory();
+    if (camelPath.empty())
+        camelPath = fs::current_path();
     fs::path entryPath(targetFile);
     // if targetFile is relative (or "stdin"), the entryDir is the current working directory
     // if targetFile is absolute, the entryDir is the parent directory of targetFile
@@ -117,6 +119,7 @@ int main(int argc, char *argv[]) {
     searchPaths.push_back(entryDir);
     addIfNonEmpty(searchPaths, getEnv("CAMEL_PACKAGES"));
     addIfNonEmpty(searchPaths, Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB") : Run::stdLibPath);
+    addIfNonEmpty(searchPaths, camelPath.string());
     addIfNonEmpty(searchPaths, (camelPath / "stdlib").string());
     addIfNonEmpty(searchPaths, (camelPath.parent_path() / "stdlib").string());
 
