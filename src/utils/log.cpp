@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/utils/log.h"
 
+#include <algorithm>
 #include <mutex>
 
 static Logger defaultLogger("");
@@ -28,17 +29,40 @@ Logger &GetDefaultLogger() { return defaultLogger; }
 #ifndef NDEBUG
 Logger::Level Logger::globalLogLevel_ = Logger::Level::Debug;
 bool Logger::verboseEnabled_          = false;
-std::ofstream Logger::logFile_;
 std::mutex Logger::logMutex_;
+std::vector<Logger::StreamEntry> Logger::outputStreams_;
+size_t Logger::nextStreamHandle_ = 0;
 
 void Logger::SetVerbose(bool enable) { verboseEnabled_ = enable; }
 
-void Logger::SetLogFile(const std::string &filename) {
+size_t Logger::AddOutputStream(std::ostream *os) {
+    if (!os)
+        return 0;
     std::lock_guard<std::mutex> lock(logMutex_);
-    if (logFile_.is_open()) {
-        logFile_.close();
+    size_t h = ++nextStreamHandle_;
+    outputStreams_.emplace_back(h, os);
+    return h;
+}
+
+void Logger::RemoveOutputStream(size_t handle) {
+    if (handle == 0)
+        return;
+    std::lock_guard<std::mutex> lock(logMutex_);
+    outputStreams_.erase(
+        std::remove_if(
+            outputStreams_.begin(),
+            outputStreams_.end(),
+            [handle](const StreamEntry &e) { return e.first == handle; }),
+        outputStreams_.end());
+}
+
+void Logger::WriteToAllStreams(const std::string &message) {
+    std::lock_guard<std::mutex> lock(logMutex_);
+    for (const auto &e : outputStreams_) {
+        if (e.second) {
+            *e.second << message << '\n' << std::flush;
+        }
     }
-    logFile_.open(filename, std::ios::app);
 }
 
 Logger::Level GetGlobalLogLevel() { return Logger::globalLogLevel_; }
@@ -80,14 +104,14 @@ void Logger_DoLog(
     const std::string &message) {
     if (level < effectiveLevel)
         return;
-    std::string tag         = levelToTag(level);
     std::string plainTag    = levelToPlain(level);
     std::string fullMessage = std::format("[{}] <{}> {}", plainTag, scope, message);
 
     std::lock_guard<std::mutex> lock(Logger::logMutex_);
-    std::cout << std::format("[{}] <{}> {}\n", tag, scope, message) << std::flush;
-    if (Logger::logFile_.is_open()) {
-        Logger::logFile_ << fullMessage << std::endl;
+    for (const auto &e : Logger::outputStreams_) {
+        if (e.second) {
+            *e.second << fullMessage << '\n' << std::flush;
+        }
     }
 }
 

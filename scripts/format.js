@@ -4,6 +4,7 @@ const dirs = [
     'src',
     'include',
     'modules',
+    'tools',
 ]
 
 function getChangedFiles() {

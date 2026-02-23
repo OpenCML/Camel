@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Feb. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -65,6 +65,11 @@ class FreeListAllocator : public IAllocator {
             ASSERT(curr->size % alignof(slot_t) == 0, "Unaligned free block");
 
             if (LIKELY(curr->size >= total_size)) {
+#ifndef NDEBUG
+                if (debugRegion_) {
+                    mm::invokePreAllocHook(mm::PreAllocEvent{total_size, debugRegion_});
+                }
+#endif
                 std::byte *blockStart = reinterpret_cast<std::byte *>(curr);
                 size_t remaining      = curr->size - total_size;
 

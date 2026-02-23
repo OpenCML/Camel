@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 19, 2025
- * Updated: Dec. 31, 2025
+ * Updated: Feb. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <source_location>
+#include <stdexcept>
 #include <string>
 
 #ifdef _WIN32
@@ -36,9 +37,53 @@
 
 namespace cml {
 
+/** Thrown when ASSERT fails and a custom assert handler is set (e.g. by debugger). */
+class AssertionFailure : public std::runtime_error {
+  public:
+    explicit AssertionFailure(
+        const std::string &expression, const std::string &suggestion,
+        const std::source_location &location = std::source_location::current())
+        : std::runtime_error(buildMessage(expression, suggestion, location)),
+          expression_(expression), suggestion_(suggestion), location_(location) {}
+
+    const std::string &expression() const { return expression_; }
+    const std::string &suggestion() const { return suggestion_; }
+    const std::source_location &location() const { return location_; }
+
+  private:
+    static std::string buildMessage(
+        const std::string &expression, const std::string &suggestion,
+        const std::source_location &location) {
+        std::string msg = "Assertion failed: " + expression;
+        if (!suggestion.empty())
+            msg += " (" + suggestion + ")";
+        msg += " at " + std::string(location.file_name()) + ":" + std::to_string(location.line());
+        return msg;
+    }
+    std::string expression_;
+    std::string suggestion_;
+    std::source_location location_;
+};
+
+using AssertHandlerFn = void (*)(
+    const std::string &expression, const std::string &suggestion,
+    const std::source_location &location);
+
+inline AssertHandlerFn &get_assert_handler_ref() {
+    static AssertHandlerFn g_assert_handler = nullptr;
+    return g_assert_handler;
+}
+inline void set_assert_handler(AssertHandlerFn h) { get_assert_handler_ref() = h; }
+inline AssertHandlerFn get_assert_handler() { return get_assert_handler_ref(); }
+
 inline void handle_assert_failure(
     const std::string &expression, const std::string &suggestion,
     const std::source_location location = std::source_location::current()) {
+    AssertHandlerFn handler = get_assert_handler();
+    if (handler) {
+        handler(expression, suggestion, location);
+        std::abort();
+    }
     std::cerr << "\n\033[1;31mCamel Debug Assertion Failed:\033[0m\n"
               << "\033[1;32m    Location   : \033[0m" << location.file_name() << "("
               << location.line() << ")\n"
@@ -59,7 +104,6 @@ inline void handle_assert_failure(
             std::cerr << "<\033[1;36m" << i << "\033[0m> " << trace[i] << "\n";
         }
     }
-    // ENABLE_ABORT_BEHAVIOR();
 #else
     std::cerr << "\n\033[1;31mStack Trace:\033[0m (not available on this platform)\n";
 #endif

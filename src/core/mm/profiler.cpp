@@ -6,7 +6,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 23, 2026
+ * Updated: Feb. 24, 2026
  */
 
 #include "camel/core/mm.h"
@@ -14,7 +14,7 @@
 #include "nlohmann/json.hpp"
 
 #include <cstdint>
-#include <sstream>
+#include <cstring>
 
 namespace mm {
 namespace profiler {
@@ -31,6 +31,9 @@ static json bumpRegionToJson(const char *name, const BumpPointerAllocator &alloc
 
     std::vector<json> objects;
     alloc.iterateAllocated([&](ObjectHeader *hdr) {
+        // 跳过已转发对象（逻辑上已迁出，由目标代表）
+        if (hdr->forwarded())
+            return;
         objects.push_back({
             {"addr", reinterpret_cast<uintptr_t>(hdr)},
             {"size", hdr->size()},
@@ -82,6 +85,21 @@ static json freeListRegionToJson(const char *name, const FreeListAllocator &allo
         {"objectCount", objects.size()},
         {"objects", objects},
     };
+}
+
+// 按名称获取 Bump 区域指针（仅当前已启用的 region）
+static const BumpPointerAllocator *getBumpRegionByName(const char *name) {
+    auto &autoSp = autoSpace();
+    if (strcmp(name, "birthSpace") == 0)
+        return &autoSp.birthSpace();
+    if (strcmp(name, "havenSpace") == 0)
+        return &autoSp.havenSpace();
+    if (strcmp(name, "cacheSpace") == 0)
+        return &autoSp.cacheSpace();
+    BumpPointerAllocator &permSp = permSpace();
+    if (strcmp(name, "permSpace") == 0)
+        return &permSp;
+    return nullptr;
 }
 
 // LargeObject 区域：无连续块，仅对象列表
@@ -137,6 +155,99 @@ std::string snapshotToJson() {
     };
 
     return root.dump(2);
+}
+
+std::string regionMemoryRawToJson(const char *regionName, size_t offset, size_t limit) {
+    const size_t kMaxLimit = 4096;
+    if (limit == 0 || limit > kMaxLimit)
+        limit = kMaxLimit;
+
+    const BumpPointerAllocator *alloc = getBumpRegionByName(regionName);
+    if (!alloc) {
+        return json{{"error", "unknown or unsupported region"}}.dump();
+    }
+
+    const std::byte *start = alloc->start();
+    const std::byte *top   = alloc->top();
+    const std::byte *end   = alloc->end();
+    size_t used            = (start && top) ? static_cast<size_t>(top - start) : 0;
+    size_t capacity        = (start && end) ? static_cast<size_t>(end - start) : 0;
+
+    if (offset >= capacity) {
+        return json{
+            {"region", regionName},
+            {"offset", offset},
+            {"limit", 0},
+            {"used", used},
+            {"capacity", capacity},
+            {"data", json::array()},
+            {"hasMore", false},
+        }
+            .dump();
+    }
+
+    size_t avail       = (offset + limit > capacity) ? (capacity - offset) : limit;
+    json data          = json::array();
+    const std::byte *p = start + offset;
+    for (size_t i = 0; i < avail; ++i)
+        data.push_back(static_cast<uint8_t>(p[i]));
+
+    return json{
+        {"region", regionName},
+        {"offset", offset},
+        {"limit", avail},
+        {"used", used},
+        {"capacity", capacity},
+        {"data", data},
+        {"hasMore", offset + avail < capacity},
+    }
+        .dump();
+}
+
+std::string regionObjectsToJson(const char *regionName, size_t offset, size_t limit) {
+    const size_t kMaxLimit = 200;
+    if (limit == 0 || limit > kMaxLimit)
+        limit = kMaxLimit;
+
+    const BumpPointerAllocator *alloc = getBumpRegionByName(regionName);
+    if (!alloc) {
+        return json{
+            {"error", "unknown or unsupported region"},
+            {"objects", json::array()},
+            {"total", 0},
+            {"hasMore", false}}
+            .dump();
+    }
+
+    std::vector<json> objects;
+    size_t total   = 0;
+    size_t skipped = 0;
+    alloc->iterateAllocated([&](ObjectHeader *hdr) {
+        total++;
+        if (skipped < offset) {
+            skipped++;
+            return;
+        }
+        if (objects.size() < limit) {
+            objects.push_back({
+                {"addr", reinterpret_cast<uintptr_t>(hdr)},
+                {"size", hdr->size()},
+                {"age", static_cast<int>(hdr->age())},
+                {"region", static_cast<int>(hdr->region())},
+            });
+        }
+    });
+
+    const uintptr_t regionStart =
+        (alloc->start() != nullptr) ? reinterpret_cast<uintptr_t>(alloc->start()) : 0;
+    return json{
+        {"region", regionName},
+        {"regionStart", regionStart},
+        {"objects", objects},
+        {"total", total},
+        {"hasMore", offset + objects.size() < total},
+    }
+        .dump();
 }
 
 } // namespace profiler

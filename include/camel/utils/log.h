@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Feb. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,7 +48,12 @@ class Logger {
     enum class Level { Debug = 0, Info = 1, Warn = 2, Error = 3, Off = 4 };
 
     static void SetLogLevel(Level) {}
-    static void SetLogFile(const std::string &) {}
+    /// Add an output stream; returns a handle for removal. Caller keeps stream valid.
+    static size_t AddOutputStream(std::ostream *) { return 0; }
+    /// Remove a stream by handle returned from AddOutputStream.
+    static void RemoveOutputStream(size_t) {}
+    /// Write a raw line to all registered streams (e.g. for debugger messages).
+    static void WriteToAllStreams(const std::string &) {}
     static void SetVerbose(bool) {}
 
     Logger(
@@ -74,9 +79,9 @@ CAMEL_LOG_API Logger &GetDefaultLogger();
 #include <algorithm>
 #include <chrono>
 #include <ctime>
-#include <fstream>
 #include <iostream>
 #include <mutex>
+#include <vector>
 
 // Forward declarations and function API (must appear before Logger for delay-load compatibility)
 class Logger;
@@ -104,7 +109,12 @@ class Logger {
 
     static void SetLogLevel(Level level) { SetGlobalLogLevel(level); }
 
-    static CAMEL_LOG_API void SetLogFile(const std::string &filename);
+    /// Add an output stream; returns a handle for removal. Caller keeps stream valid.
+    static CAMEL_LOG_API size_t AddOutputStream(std::ostream *os);
+    /// Remove a stream by handle returned from AddOutputStream.
+    static CAMEL_LOG_API void RemoveOutputStream(size_t handle);
+    /// Write a raw line to all registered streams (no level/scope).
+    static CAMEL_LOG_API void WriteToAllStreams(const std::string &message);
 
     static CAMEL_LOG_API void SetVerbose(bool enable);
 
@@ -191,8 +201,10 @@ class Logger {
 
     static Level globalLogLevel_;
     static bool verboseEnabled_;
-    static std::ofstream logFile_;
     static std::mutex logMutex_;
+    using StreamEntry = std::pair<size_t, std::ostream *>;
+    static std::vector<StreamEntry> outputStreams_;
+    static size_t nextStreamHandle_;
 
     static std::string levelToTag(Level level) {
         switch (level) {

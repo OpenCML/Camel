@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 23, 2026
+ * Updated: Feb. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,13 +21,13 @@
 
 #ifndef NDEBUG
 
+#include "camel/core/debug_breakpoint.h"
 #include <atomic>
 
 namespace mm {
 
 namespace {
 
-// 使用函数内 static，避免全局静态初始化顺序导致的延迟加载问题
 using HookFn = void (*)(const AllocEvent *);
 std::atomic<HookFn> &getPostAllocHook() {
     static std::atomic<HookFn> hook{nullptr};
@@ -40,7 +40,12 @@ void setPostAllocDebugHook(void (*fn)(const AllocEvent *evt)) { getPostAllocHook
 
 void clearPostAllocDebugHook() { getPostAllocHook().store(nullptr); }
 
+void invokePreAllocHook(const PreAllocEvent &evt) {
+    camel::DebugBreakpoint::Hit("alloc_before", &evt);
+}
+
 void invokePostAllocHook(const AllocEvent &evt) {
+    camel::DebugBreakpoint::Hit("alloc", &evt);
     auto *h = getPostAllocHook().load(std::memory_order_relaxed);
     if (h)
         h(&evt);
@@ -52,6 +57,7 @@ void invokePostAllocHook(const AllocEvent &evt) {
 
 namespace mm {
 
+void invokePreAllocHook(const PreAllocEvent &) {}
 void setPostAllocDebugHook(void (*)(const AllocEvent *)) {}
 void clearPostAllocDebugHook() {}
 void invokePostAllocHook(const AllocEvent &) {}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Feb. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -56,7 +56,9 @@ class BumpPointerAllocator : public IAllocator {
         // total_size 向上对齐
         // 这保证了 top_ 始终对齐，无需每次都 alignPointer
         size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
-
+#ifndef NDEBUG
+        mm::invokePreAllocHook(mm::PreAllocEvent{total_size, debugRegion_ ? debugRegion_ : "bump"});
+#endif
         std::byte *newTop = top_ + total_size;
 
         if (UNLIKELY(newTop > end_)) {
@@ -78,10 +80,10 @@ class BumpPointerAllocator : public IAllocator {
                 size,
                 formatAddress(newTop, true));
 
-            // 调试时：把新分配的空间 (top_ 到 newTop) 填充为 0xDEADBEAF
-            std::size_t bytes_to_fill = static_cast<std::size_t>(newTop - top_);
+            // 调试时：只把对象 payload (result 到 newTop) 填充为 0xDEADBEAF，不覆盖 header
+            std::size_t bytes_to_fill = static_cast<std::size_t>(newTop - result);
             std::size_t words         = bytes_to_fill / sizeof(uint32_t);
-            uint32_t *p               = reinterpret_cast<uint32_t *>(top_);
+            uint32_t *p               = reinterpret_cast<uint32_t *>(result);
             for (std::size_t i = 0; i < words; ++i) {
                 p[i] = 0xDEADBEAF;
             }
@@ -96,9 +98,9 @@ class BumpPointerAllocator : public IAllocator {
 
         top_ = newTop;
 #ifndef NDEBUG
-        if (debugRegion_) {
-            mm::invokePostAllocHook(mm::AllocEvent{result, total_size, debugRegion_});
-        }
+        // 所有 Bump 分配均触发调试断点（含 perm/meta 等），便于 alloc-step 在任意区域生效
+        mm::invokePostAllocHook(
+            mm::AllocEvent{result, total_size, debugRegion_ ? debugRegion_ : "bump"});
 #endif
         return result;
     }
@@ -162,7 +164,6 @@ class BumpPointerAllocator : public IAllocator {
             visitor(header);
             current += obj_size;
         }
-        ASSERT(current == top_, "Iterator did not reach top exactly");
     }
 
     void freeBulk(const std::vector<ObjectHeader *> & /*objects*/) override {

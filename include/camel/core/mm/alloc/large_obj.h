@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Feb. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,7 +49,11 @@ class LargeObjectAllocator : public IAllocator {
 
         // total_size 向上对齐到 slot_t
         size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
-
+#ifndef NDEBUG
+        if (debugRegion_) {
+            mm::invokePreAllocHook(mm::PreAllocEvent{total_size, debugRegion_});
+        }
+#endif
         std::byte *raw = reinterpret_cast<std::byte *>(
             ::operator new(total_size, std::align_val_t(alignof(slot_t))));
 
