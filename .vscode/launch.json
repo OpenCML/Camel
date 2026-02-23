@@ -45,8 +45,8 @@
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["-v", "--log-level", "debug", "${file}"],
             "console": "externalTerminal",
             "logging": {

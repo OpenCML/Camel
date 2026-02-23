@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -71,7 +71,9 @@ class Builder {
         EXEC_WHEN_DEBUG([&] {
             std::stringstream ss;
             nodeScope_->dump(ss);
-            l.in("GIR Builder").debug("Accessing node '{}' from scope {}", name, ss.str());
+            GetDefaultLogger()
+                .in("GIR Builder")
+                .debug("Accessing node '{}' from scope {}", name, ss.str());
         }());
         return nodeScope_->get(name);
     }
@@ -88,7 +90,9 @@ class Builder {
                         os << graph->toString() << " ";
                     }
                 });
-            l.in("GIR Builder").debug("Accessing graph '{}' from scope {}", name, ss.str());
+            GetDefaultLogger()
+                .in("GIR Builder")
+                .debug("Accessing graph '{}' from scope {}", name, ss.str());
         }());
         return graphScope_->get(name);
     }

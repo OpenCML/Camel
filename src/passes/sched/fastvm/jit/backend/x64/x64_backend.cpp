@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -148,7 +148,8 @@ bool X64Backend::compileBytecode(
             else
                 ++spilled;
         }
-        l.in("JIT.Backend")
+        GetDefaultLogger()
+            .in("JIT.Backend")
             .debug(
                 "RegAlloc for graph '{}': {} slots in reg, {} spilled (rax/rcx/rdx/rbx/r8-r11)",
                 unit.graph->name(),

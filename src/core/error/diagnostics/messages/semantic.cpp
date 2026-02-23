@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,8 +41,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::ModuleNotFound,
             {
                 "ModuleNotFound",
-                "Module not found at path: {0}.",
-                "Check if the module path is correct.",
+                "Module '{0}' not found. {1}",
+                "Check if the module path is correct or add the directory to search paths.",
             },
         },
         {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -420,10 +420,11 @@ bool Type::assignableFrom(Type *sourceType) const {
 }
 
 Type *Type::create(TypeCode code) {
-    EXEC_WHEN_DEBUG(l.in("Type").debug(
-        "Allocating Type: {}, size: {} bytes",
-        typeCodeToString(code),
-        sizeof(Type)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("Type").debug(
+            "Allocating Type: {}, size: {} bytes",
+            typeCodeToString(code),
+            sizeof(Type)));
     void *mem = mm::permSpace().alloc(sizeof(Type), alignof(Type));
     ASSERT(mem != nullptr, "Failed to allocate Type from permSpace");
     return new (mem) Type(code);

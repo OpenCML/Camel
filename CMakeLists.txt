@@ -40,7 +40,6 @@ list(REMOVE_ITEM _ALL_SRC
     "${PROJECT_SOURCE_DIR}/src/builtin/operators/plot.cpp"
     "${PROJECT_SOURCE_DIR}/src/builtin/modules/plot.cpp"
     "${PROJECT_SOURCE_DIR}/src/builtin/modules/io.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/operators/io.cpp"
     "${PROJECT_SOURCE_DIR}/src/builtin/modules/os.cpp"
     "${PROJECT_SOURCE_DIR}/src/builtin/operators/os.cpp"
     "${PROJECT_SOURCE_DIR}/src/builtin/modules/math.cpp"

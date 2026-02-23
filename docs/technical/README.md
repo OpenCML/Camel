@@ -22,6 +22,7 @@
 - [../language/README.md](../language/README.md) — **语言参考（详细版）**：按主题分章，含大量示例
 - [../setup.cn.md](../setup.cn.md) / [../setup.en.md](../setup.en.md) — 开发环境配置
 - [../cli.cn.md](../cli.cn.md) / [../cli.md](../cli.md) — CLI 使用说明
+- [../../tools/debugger/README.md](../../tools/debugger/README.md) — 调试器（camel-db）与按类型断点 API（libcamel `DebugBreakpoint`）
 - [../Camel.asdl](../Camel.asdl) — AST 结构定义（ASDL 格式，实现用）
 
 ## 术语速查

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,7 +39,8 @@ std::string Diagnostic::toText() const {
     int ln = -1, ch = -1;
 
     if (std::holds_alternative<TokenRange>(range)) {
-        l.in("Diag").warn("TokenRange should be converted to CharRange before toText()");
+        GetDefaultLogger().in("Diag").warn(
+            "TokenRange should be converted to CharRange before toText()");
     } else if (std::holds_alternative<CharRange>(range)) {
         CharRange r = std::get<CharRange>(range);
         ln          = static_cast<int>(r.start.line + 1);
@@ -67,7 +68,8 @@ std::string Diagnostic::toJson() const {
     if (std::holds_alternative<CharRange>(range)) {
         r = std::get<CharRange>(range);
     } else if (std::holds_alternative<TokenRange>(range)) {
-        l.in("Diag").warn("TokenRange should be converted to CharRange before toJson()");
+        GetDefaultLogger().in("Diag").warn(
+            "TokenRange should be converted to CharRange before toJson()");
     }
     oss << "{"
         << "\"range\":{\"start\":{\"line\":" << r.start.line

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 10, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,13 +38,13 @@ GenerationalAllocatorWithGC &autoSpace() {
 
 // 元数据区，手动管理分配和释放
 FreeListAllocator &metaSpace() {
-    static FreeListAllocator allocator(16 * MB); // 16 MB
+    static FreeListAllocator allocator(16 * MB, "meta"); // 16 MB
     return allocator;
 }
 
 // 永久代，只分配，不释放
 BumpPointerAllocator &permSpace() {
-    static BumpPointerAllocator allocator(32 * MB); // 32 MB
+    static BumpPointerAllocator allocator(32 * MB, "perm"); // 32 MB
     return allocator;
 }
 

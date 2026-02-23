@@ -12,20 +12,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "camel/core/operator.h"
-#include "camel/core/type.h"
 
 #include <string>
 #include <unordered_map>
-
-slot_t __io_print__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __io_println__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __io_input__(ArgsView &with, ArgsView &norm, Context &ctx);
 
 std::unordered_map<std::string, operator_t> getIOOpsMap();

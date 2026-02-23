@@ -7,6 +7,7 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/listener.h"
 #include "camel/utils/log.h"
+#include "camel/utils/dll_path.h"
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -14,6 +15,7 @@
 namespace fs = std::filesystem;
 
 int main(int argc, char *argv[]) {
+    camel::utils::setupLibrarySearchPath();
     std::string inputPath;
     bool inplace = false;
     [[maybe_unused]] unsigned tabSize = 4;

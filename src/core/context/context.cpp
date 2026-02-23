@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,7 +60,8 @@ inline bool fileExists(const std::string &path) {
 }
 
 std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
-    EXEC_WHEN_DEBUG(l.in("Context").debug("Looking for built-in module: <{}>", name));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("Context").debug("Looking for built-in module: <{}>", name));
     auto it = builtinModules_.find(name);
     if (it != builtinModules_.end()) {
         return it->second;
@@ -68,7 +69,8 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 
     auto factoryIt = builtinModuleFactories.find(name);
     if (factoryIt != builtinModuleFactories.end()) {
-        EXEC_WHEN_DEBUG(l.in("Context").debug("Loading built-in module: <{}>", name));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("Context").debug("Loading built-in module: <{}>", name));
         module_ptr_t module = factoryIt->second(shared_from_this());
         module->load(); // instantly load the builtin module
         builtinModules_[name] = module;
@@ -85,7 +87,9 @@ context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &d
     ctx->rtmDiags_->setConfig(diagConf);
     ctx->modules_[""] = ctx->getBuiltinModule("").value();
     EXEC_WHEN_DEBUG(
-        l.in("Context").info("Context initialized using entry config {}", entryConf.toString()));
+        GetDefaultLogger().in("Context").info(
+            "Context initialized using entry config {}",
+            entryConf.toString()));
     return ctx;
 }
 
@@ -162,23 +166,29 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         return modules_[""]; // builtin module already loaded
     }
 
-    EXEC_WHEN_DEBUG(l.in("Context").info(
-        "Importing module '{}' from current module '{}'.",
-        rawModuleName,
-        currentModuleName));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("Context").info(
+            "Importing module '{}' from current module '{}'.",
+            rawModuleName,
+            currentModuleName));
+    lastCmoLoadError_.clear();
     auto candidates = getModuleNameCandidates(currentModuleName, rawModuleName);
 
     for (const auto &name : candidates) {
         auto it = modules_.find(name);
         if (it != modules_.end()) {
-            EXEC_WHEN_DEBUG(l.in("Context").debug("Module '{}' found in cache.", name));
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger().in("Context").debug("Module '{}' found in cache.", name));
             return it->second;
         }
 
         module_ptr_t module = tryLoadModule(name);
         if (module) {
             EXEC_WHEN_DEBUG(
-                l.in("Context").debug("Module '{}' loaded from file '{}'.", name, module->path()));
+                GetDefaultLogger().in("Context").debug(
+                    "Module '{}' loaded from file '{}'.",
+                    name,
+                    module->path()));
             if (!module->loaded()) {
                 module->load();
             }
@@ -188,13 +198,49 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
 
         auto builtin = getBuiltinModule(name);
         if (builtin.has_value()) {
-            EXEC_WHEN_DEBUG(l.in("Context").debug("Module '{}' found in built-in modules.", name));
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger().in("Context").debug(
+                    "Module '{}' found in built-in modules.",
+                    name));
             modules_[name] = builtin.value();
             return builtin.value();
         }
     }
 
-    throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound).commit(rawModuleName);
+    std::string firstCandidate = candidates.empty() ? rawModuleName : candidates.front();
+    std::ostringstream reason;
+    bool hadCmoLoadError = !lastCmoLoadError_.empty();
+    if (hadCmoLoadError) {
+        reason << "Found .cmo but load failed: " << lastCmoLoadError_;
+        lastCmoLoadError_.clear();
+        std::vector<std::string> pathBases = getSearchPathBases();
+        if (!pathBases.empty()) {
+            reason << " Search paths tried:";
+            for (const auto &p : pathBases)
+                reason << "\n  " << p;
+        }
+    } else {
+        std::vector<std::string> diagLines = getModuleSearchDiagnostics(firstCandidate);
+        if (!diagLines.empty()) {
+            reason << "Search attempts:";
+            for (const auto &line : diagLines)
+                reason << "\n  " << line;
+        }
+        if (candidates.size() > 1) {
+            if (reason.tellp() > 0)
+                reason << " ";
+            reason << "Also tried module name(s): ";
+            for (size_t i = 1; i < candidates.size(); ++i)
+                reason << (i > 1 ? ", " : "") << "'" << candidates[i] << "'";
+        }
+    }
+    std::string reasonStr = reason.str();
+    if (reasonStr.empty())
+        reasonStr = "No matching module file or builtin.";
+    while (!reasonStr.empty() && reasonStr.back() == '\n')
+        reasonStr.pop_back();
+    reasonStr += "\n";
+    throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound).commit(rawModuleName, reasonStr);
 }
 
 std::vector<std::string> Context::getModuleNameCandidates(
@@ -263,7 +309,8 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
     if (stem.empty())
         stem = relPath.string();
 
-    /// 在给定目录中查找模块文件：优先 .cmo，其次任意同名文件
+    /// 在给定目录 D 中的查找顺序：1) D/xx.cmo  2) D/xx.*（任意同名文本/源文件）
+    /// 若 D/xx 为目录，则再查：3) D/xx/xx.cmo  4) D/xx/xx.*
     auto findModuleInDir = [&](const fs::path &dir) -> std::pair<std::string, bool> {
         if (!fs::exists(dir) || !fs::is_directory(dir))
             return {"", false};
@@ -285,7 +332,6 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
         auto [path, isCmo] = findModuleInDir(dir);
         if (!path.empty())
             return {path, isCmo};
-        // 若 dir/stem 为文件夹，则进一步在子目录中查找同名文件（.cmo 或文本源文件）
         fs::path subdir = dir / stem;
         return findModuleInDir(subdir);
     };
@@ -307,6 +353,73 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
     return {"", false};
 }
 
+std::vector<std::string> Context::getModuleSearchDiagnostics(const std::string &moduleName) const {
+    std::string relativePath = moduleName;
+    std::replace(relativePath.begin(), relativePath.end(), '.', '/');
+    fs::path relPath(relativePath);
+    fs::path parentDir = relPath.parent_path();
+    std::string stem   = relPath.filename().string();
+    if (stem.empty())
+        stem = relPath.string();
+
+    std::vector<std::string> out;
+
+    auto reasonInDir = [&](const fs::path &dir) -> std::string {
+        if (!fs::exists(dir))
+            return "path does not exist";
+        if (!fs::is_directory(dir))
+            return "not a directory";
+        fs::path cmoPath = dir / (stem + ".cmo");
+        if (fileExists(cmoPath.string()))
+            return ""; // found, caller should not use this for failed attempt
+        for (const auto &entry : fs::directory_iterator(dir)) {
+            if (!entry.is_regular_file())
+                continue;
+            fs::path p = entry.path();
+            if (p.stem() == stem)
+                return ""; // found
+        }
+        return "no file '" + stem + ".cmo' or '" + stem + ".*' in directory";
+    };
+
+    auto tryDirAndRecord = [&](const fs::path &base) {
+        fs::path dir       = base / parentDir;
+        std::string reason = reasonInDir(dir);
+        if (!reason.empty())
+            out.push_back(fs::absolute(dir).string() + ": " + reason);
+        fs::path subdir       = dir / stem;
+        std::string subReason = reasonInDir(subdir);
+        if (!subReason.empty())
+            out.push_back(fs::absolute(subdir).string() + ": " + subReason);
+    };
+
+    for (const auto &dir : entryConfig_.searchPaths) {
+        if (dir.empty())
+            continue;
+        fs::path basePath = fs::path(dir);
+        if (!basePath.is_absolute())
+            basePath = fs::path(entryConfig_.entryDir) / basePath;
+        tryDirAndRecord(basePath);
+    }
+    tryDirAndRecord(fs::path(entryConfig_.entryDir));
+
+    return out;
+}
+
+std::vector<std::string> Context::getSearchPathBases() const {
+    std::vector<std::string> out;
+    for (const auto &dir : entryConfig_.searchPaths) {
+        if (dir.empty())
+            continue;
+        fs::path basePath = fs::path(dir);
+        if (!basePath.is_absolute())
+            basePath = fs::path(entryConfig_.entryDir) / basePath;
+        out.push_back(fs::absolute(basePath).string());
+    }
+    out.push_back(fs::absolute(fs::path(entryConfig_.entryDir)).string());
+    return out;
+}
+
 std::string Context::getModulePath(const std::string &moduleName) {
     return getModulePathAndKind(moduleName).first;
 }
@@ -319,8 +432,13 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
     auto [path, isCmo] = getModulePathAndKind(moduleName);
     if (path.empty())
         return nullptr;
-    if (isCmo)
-        return loadCmoModule(moduleName, path, shared_from_this());
+    if (isCmo) {
+        std::string err;
+        module_ptr_t mod = loadCmoModule(moduleName, path, shared_from_this(), &err);
+        if (!mod && !err.empty())
+            lastCmoLoadError_ = std::move(err);
+        return mod;
+    }
     return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
 }
 

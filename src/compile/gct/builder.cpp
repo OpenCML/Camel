@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -171,10 +171,12 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     const auto &path = load->getPath();
     const auto &refs = load->getRefs();
 
-    // Attempt to import the module
+    // Attempt to import the module (importModule throws ModuleNotFound with detail on failure)
     const module_ptr_t &mod = context_->importModule(path, module_->name());
     if (!mod) {
-        diags_->of(SemanticDiag::ModuleNotFound).at(load->tokenRange()).commit(path);
+        diags_->of(SemanticDiag::ModuleNotFound)
+            .at(load->tokenRange())
+            .commit(path, "import returned empty.");
         throw BuildAbortException();
     }
 

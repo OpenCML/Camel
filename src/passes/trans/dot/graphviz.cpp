@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -198,7 +198,8 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     for (auto &[_, subGraphs] : graph->subGraphs()) {
         for (const auto &subGraph : subGraphs) {
             EXEC_WHEN_DEBUG(
-                l.in("GraphViz")
+                GetDefaultLogger()
+                    .in("GraphViz")
                     .debug("Dumping subgraph '{}' of graph '{}'", subGraph->name(), graph->name()));
             pushIndent();
             res += dumpGraph(subGraph);
@@ -209,7 +210,8 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
     // Dump dependency graphs if any
     for (const auto &dep : graph->dependencies()) {
         EXEC_WHEN_DEBUG(
-            l.in("GraphViz")
+            GetDefaultLogger()
+                .in("GraphViz")
                 .debug("Dumping dependency graph '{}' of graph '{}'", dep->name(), graph->name()));
         pushIndent();
         res += dumpGraph(dep);

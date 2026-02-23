@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -130,7 +130,7 @@ class Frame : public Object {
         EXEC_WHEN_DEBUG([&]() {
             std::ostringstream oss;
             printSlot(oss, toSlot(res), typeAt<Type>(index));
-            l.in("Frame").info(
+            GetDefaultLogger().in("Frame").info(
                 "[{}] Getting data of graph <{}> at index {} ({}): {}",
                 formatAddress(const_cast<Frame *>(this), true),
                 graph_->name(),
@@ -146,7 +146,7 @@ class Frame : public Object {
         EXEC_WHEN_DEBUG([&]() {
             std::ostringstream oss;
             printSlot(oss, toSlot(value), typeAt<Type>(index));
-            l.in("Frame").info(
+            GetDefaultLogger().in("Frame").info(
                 "[{}] Setting data of graph <{}> at index {} ({}): {}",
                 formatAddress(this, true),
                 graph_->name(),
@@ -317,7 +317,8 @@ class FramePool {
 
     inline Frame *_acquire(GraphIR::Graph *graph) {
         EXEC_WHEN_DEBUG([&]() {
-            l.in("FramePool")
+            GetDefaultLogger()
+                .in("FramePool")
                 .info(
                     "[{}] Acquire request for graph <{}>, top = {}, end = {}",
                     formatAddress(this, true),
@@ -330,7 +331,8 @@ class FramePool {
         Frame *lastFrame = reinterpret_cast<Frame *>(top_);
         if (lastFrame->graph_ == graph) {
             EXEC_WHEN_DEBUG([&]() {
-                l.in("FramePool")
+                GetDefaultLogger()
+                    .in("FramePool")
                     .info(
                         "[{}] Reusing existing frame of graph <{}> at {}",
                         formatAddress(this, true),
@@ -348,7 +350,8 @@ class FramePool {
         if (meta == nullptr) {
             meta = installFrameMetaInfoForGraph(graph);
             EXEC_WHEN_DEBUG([&]() {
-                l.in("FramePool")
+                GetDefaultLogger()
+                    .in("FramePool")
                     .info(
                         "[{}] Installed FrameMeta for graph <{}>",
                         formatAddress(this, true),
@@ -358,7 +361,8 @@ class FramePool {
         size_t frameSize = meta->frameSize;
         if (top_ + frameSize > end_) {
             EXEC_WHEN_DEBUG([&]() {
-                l.in("FramePool")
+                GetDefaultLogger()
+                    .in("FramePool")
                     .error(
                         "[{}] Out of memory: top = {}, need = {}, end = {}",
                         formatAddress(this, true),
@@ -371,7 +375,8 @@ class FramePool {
         Frame *frame = new (top_) Frame(graph, meta->staticArea, meta->runtimeDataType);
 
         EXEC_WHEN_DEBUG([&]() {
-            l.in("FramePool")
+            GetDefaultLogger()
+                .in("FramePool")
                 .info(
                     "[{}] Allocated new Frame for graph <{}> at {}, size = {}",
                     formatAddress(this, true),
@@ -397,7 +402,8 @@ class FramePool {
 
     inline void release(Frame *frame) {
         EXEC_WHEN_DEBUG([&]() {
-            l.in("FramePool")
+            GetDefaultLogger()
+                .in("FramePool")
                 .info(
                     "[{}] Releasing frame of graph <{}> at {}",
                     formatAddress(this, true),
@@ -421,7 +427,8 @@ class FramePool {
 
         EXEC_WHEN_DEBUG([&]() {
             frames_.pop_back();
-            l.in("FramePool")
+            GetDefaultLogger()
+                .in("FramePool")
                 .info(
                     "[{}] Frame released. New top = {}",
                     formatAddress(this, true),

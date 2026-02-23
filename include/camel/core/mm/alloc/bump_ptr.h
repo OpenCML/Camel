@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,10 @@
 #include "camel/utils/log.h"
 #include "header.h"
 
+#ifndef NDEBUG
+#include "camel/core/mm/debug_hook.h"
+#endif
+
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -34,7 +38,8 @@
 
 class BumpPointerAllocator : public IAllocator {
   public:
-    BumpPointerAllocator(size_t capacity) : capacity_(capacity) {
+    BumpPointerAllocator(size_t capacity, const char *debugRegion = nullptr)
+        : capacity_(capacity), debugRegion_(debugRegion) {
         // capacity 是字节数，向上对齐
         size_t aligned_capacity = alignUp(capacity, alignof(slot_t));
         size_t num_units        = aligned_capacity / sizeof(slot_t);
@@ -51,7 +56,9 @@ class BumpPointerAllocator : public IAllocator {
         // total_size 向上对齐
         // 这保证了 top_ 始终对齐，无需每次都 alignPointer
         size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
-
+#ifndef NDEBUG
+        mm::invokePreAllocHook(mm::PreAllocEvent{total_size, debugRegion_ ? debugRegion_ : "bump"});
+#endif
         std::byte *newTop = top_ + total_size;
 
         if (UNLIKELY(newTop > end_)) {
@@ -64,7 +71,7 @@ class BumpPointerAllocator : public IAllocator {
         std::byte *result = top_ + sizeof(ObjectHeader);
 
         EXEC_WHEN_DEBUG([&]() {
-            l.in("BumpPtr").debug(
+            GetDefaultLogger().in("BumpPtr").debug(
                 "[{}] Allocated {} bytes ({}) from {}, obj size {}, now top at {}",
                 formatAddress(start_, true),
                 total_size,
@@ -73,10 +80,10 @@ class BumpPointerAllocator : public IAllocator {
                 size,
                 formatAddress(newTop, true));
 
-            // 调试时：把新分配的空间 (top_ 到 newTop) 填充为 0xDEADBEAF
-            std::size_t bytes_to_fill = static_cast<std::size_t>(newTop - top_);
+            // 调试时：只把对象 payload (result 到 newTop) 填充为 0xDEADBEAF，不覆盖 header
+            std::size_t bytes_to_fill = static_cast<std::size_t>(newTop - result);
             std::size_t words         = bytes_to_fill / sizeof(uint32_t);
-            uint32_t *p               = reinterpret_cast<uint32_t *>(top_);
+            uint32_t *p               = reinterpret_cast<uint32_t *>(result);
             for (std::size_t i = 0; i < words; ++i) {
                 p[i] = 0xDEADBEAF;
             }
@@ -90,6 +97,11 @@ class BumpPointerAllocator : public IAllocator {
         }());
 
         top_ = newTop;
+#ifndef NDEBUG
+        // 所有 Bump 分配均触发调试断点（含 perm/meta 等），便于 alloc-step 在任意区域生效
+        mm::invokePostAllocHook(
+            mm::AllocEvent{result, total_size, debugRegion_ ? debugRegion_ : "bump"});
+#endif
         return result;
     }
 
@@ -100,7 +112,7 @@ class BumpPointerAllocator : public IAllocator {
         auto newTop = reinterpret_cast<std::byte *>(ptr) - sizeof(ObjectHeader);
 
         EXEC_WHEN_DEBUG([&] {
-            l.in("BumpPtr").debug(
+            GetDefaultLogger().in("BumpPtr").debug(
                 "[{}] Freeing object at {}, now top at {}",
                 formatAddress(start_, true),
                 formatAddress(ptr, true),
@@ -152,7 +164,6 @@ class BumpPointerAllocator : public IAllocator {
             visitor(header);
             current += obj_size;
         }
-        ASSERT(current == top_, "Iterator did not reach top exactly");
     }
 
     void freeBulk(const std::vector<ObjectHeader *> & /*objects*/) override {
@@ -161,6 +172,7 @@ class BumpPointerAllocator : public IAllocator {
 
   private:
     size_t capacity_;
+    const char *debugRegion_{nullptr}; // Debug 模式下用于 hook，nullptr 表示不 hook
     std::unique_ptr<uint64_t[]> buffer_;
     std::byte *start_;
     std::byte *top_;

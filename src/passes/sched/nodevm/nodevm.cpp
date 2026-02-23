@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -55,9 +55,11 @@ std::shared_ptr<node_vec_t> NodeVMSchedPass::getTopoNodes(Graph *graph) {
         );
 
         EXEC_WHEN_DEBUG([&]() {
-            l.in("Topo").debug("Topologically sorted nodes for graph {}:", graph->name());
+            GetDefaultLogger().in("Topo").debug(
+                "Topologically sorted nodes for graph {}:",
+                graph->name());
             for (const auto &n : sortedNodes) {
-                l.in("Topo").debug("  {}", n->toString());
+                GetDefaultLogger().in("Topo").debug("  {}", n->toString());
             }
             size_t totalNodeCnt =
                 graph->nodes().size() + graph->ports().size() + graph->closure().size();
@@ -76,7 +78,7 @@ std::shared_ptr<node_vec_t> NodeVMSchedPass::getTopoNodes(Graph *graph) {
                     }
                     nodeStrs += node->toString();
                 }
-                l.in("Topo").warn(
+                GetDefaultLogger().in("Topo").warn(
                     "Unreachable nodes in graph {} detected: {}",
                     graph->name(),
                     nodeStrs);

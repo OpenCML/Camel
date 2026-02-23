@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -86,7 +86,8 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
 
             g->rearrange();
 
-            l.in("InlinePass")
+            GetDefaultLogger()
+                .in("InlinePass")
                 .info(
                     "Inlined FUNC node {} (graph {}) between BRCH and JOIN node {} in graph {}.",
                     path->toString(),

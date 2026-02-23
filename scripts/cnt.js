@@ -15,7 +15,7 @@ const rootDir = path.dirname(__dirname)
 
 const EXCLUDES = ['third_party', 'package-lock.json']
 const EXCLUDE_CODE_LANGS = ['Markdown', 'Autoconf', 'SVG', 'Plain Text']
-const COL_WIDTHS = { lang: 15, files: 6, lines: 7, code: 8, cmnt: 7, blank: 6 }
+const COL_WIDTHS = { lang: 14, files: 7, lines: 7, code: 7, cmnt: 7, blank: 7 }
 const MAX_COL = 55
 
 function runTokeiJson(inputDirs = []) {
@@ -76,8 +76,8 @@ function printTable(rows, title) {
         ' Lang'.padEnd(lang + 1) +
             'Files'.padStart(files) +
             'Lines'.padStart(lines + 1) +
-            'Code'.padStart(code + 1) +
-            'Cmnt'.padStart(cmnt + 1) +
+            'Codes'.padStart(code + 1) +
+            'Cmnts'.padStart(cmnt + 1) +
             'Blank'.padStart(blank + 1)
     )
     console.log(sep)
@@ -195,7 +195,7 @@ function main() {
         console.log('-'.repeat(MAX_COL))
     }
 
-    printTable(codeRows, ' Code (excl. Markdown, Autoconf, SVG, Plain Text)')
+    printTable(codeRows, ' Code')
     const totalLines = totalCode + totalCmnt + totalBlank
     console.log(
         (' Total').padEnd(COL_WIDTHS.lang + 1) +

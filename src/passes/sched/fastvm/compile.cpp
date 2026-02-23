@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -90,9 +90,11 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
 
     // Debug 模式下打印拓扑排序结果并检查不可达节点
     EXEC_WHEN_DEBUG([&]() {
-        l.in("Topo").debug("Topologically sorted nodes for graph {}:", graph->name());
+        GetDefaultLogger().in("Topo").debug(
+            "Topologically sorted nodes for graph {}:",
+            graph->name());
         for (const auto &node : topoSortedNodes) {
-            l.in("Topo").debug("  {}", node->toString());
+            GetDefaultLogger().in("Topo").debug("  {}", node->toString());
         }
 
         size_t totalNodeCount =
@@ -114,7 +116,7 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
                 unreachableInfo += node->toString();
             }
 
-            l.in("Topo").warn(
+            GetDefaultLogger().in("Topo").warn(
                 "Unreachable nodes in graph {} detected: {}",
                 graph->name(),
                 unreachableInfo);

@@ -12,7 +12,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,64 +29,8 @@
 namespace {
 
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "input",
-            {
-                {
-                    "io:input",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(prompt: string) => string",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (!norm[0]->equals(Type::String()))
-                                return std::nullopt;
-                            return Type::String();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "print",
-            {
-                {
-                    "io:print",
-                    DynamicFuncTypeResolver::create(
-                        {{-1, {}}, {-1, {}}},
-                        "<fmt?: string> (...args: any) => void",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (with.size() > 0 && with[0]->code() != TypeCode::String) {
-                                return std::nullopt;
-                            }
-                            if (norm.size() < 1) {
-                                return Type::Void();
-                            }
-                            return norm[0];
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "println",
-            {
-                {
-                    "io:println",
-                    DynamicFuncTypeResolver::create(
-                        {{-1, {}}, {-1, {}}},
-                        "<fmt?: string> (...args: any) => void",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (with.size() > 0 && with[0]->code() != TypeCode::String) {
-                                return std::nullopt;
-                            }
-                            if (norm.size() < 1) {
-                                return Type::Void();
-                            }
-                            return norm[0];
-                        }),
-                },
-            }),
-    };
+    // input/print/println 已移至内置算子（globals），io 模块保留给其它不常见算子
+    static const std::vector<oper_group_ptr_t> groups = {};
     return groups;
 }
 

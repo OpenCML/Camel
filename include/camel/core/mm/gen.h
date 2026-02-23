@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -197,8 +197,9 @@ class GenerationalAllocatorWithGC : public IAllocator {
     };
 
     GenerationalAllocatorWithGC(const Config &config)
-        : birthSpace_(config.birthSize), havenSpace_(config.havenSize),
-          cacheSpace_(config.havenSize), elderGenSpace_(config.elderGenSize), largeObjSpace_(),
+        : birthSpace_(config.birthSize, "auto.birth"), havenSpace_(config.havenSize, "auto.haven"),
+          cacheSpace_(config.havenSize, "auto.cache"),
+          elderGenSpace_(config.elderGenSize, "auto.elder"), largeObjSpace_("auto.large"),
           promotionAgeThreshold_(config.promotionAgeThreshold),
           largeObjThreshold_(config.largeObjThreshold),
           minorGCTriggerRatio_(config.minorGCTriggerRatio),
@@ -315,6 +316,13 @@ class GenerationalAllocatorWithGC : public IAllocator {
             throw;
         }
     }
+
+    // 调试器/Profiler：获取各子区域（用于内存可视化）
+    const BumpPointerAllocator &birthSpace() const { return birthSpace_; }
+    const BumpPointerAllocator &havenSpace() const { return havenSpace_; }
+    const BumpPointerAllocator &cacheSpace() const { return cacheSpace_; }
+    const FreeListAllocator &elderGenSpace() const { return elderGenSpace_; }
+    const LargeObjectAllocator &largeObjSpace() const { return largeObjSpace_; }
 
     // Major GC：清理整个堆
     void majorGC() {

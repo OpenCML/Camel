@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,9 +47,10 @@ bool Node::hasDeepLinkedTo(const node_ptr_t &node, size_t maxJumps) const {
     dfs = [&](const node_ptr_t &current, size_t jumpsLeft) -> bool {
         ASSERT(current, "Current node is null in DFS.");
         if (jumpsLeft == 0) {
-            EXEC_WHEN_DEBUG(l.in("GIR").warn(
-                "Deep link check reached max jumps at node: {}.",
-                node->toString()));
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger().in("GIR").warn(
+                    "Deep link check reached max jumps at node: {}.",
+                    node->toString()));
             return false;
         }
 
@@ -131,11 +132,12 @@ void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
             (type == LinkType::With ? "W" : (type == LinkType::Norm ? "N" : "C")),
             to->toString()));
 
-    EXEC_WHEN_DEBUG(l.in("GIR").debug(
-        "Linking nodes: {} -{}-> {}",
-        from->toString(),
-        (type == LinkType::With ? "W" : (type == LinkType::Norm ? "N" : "C")),
-        to->toString()));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("GIR").debug(
+            "Linking nodes: {} -{}-> {}",
+            from->toString(),
+            (type == LinkType::With ? "W" : (type == LinkType::Norm ? "N" : "C")),
+            to->toString()));
 
     switch (type) {
     case LinkType::With:
@@ -168,7 +170,10 @@ bool Node::unlink(const node_ptr_t &from, const node_ptr_t &to) {
             to->toString()));
 
     EXEC_WHEN_DEBUG(
-        l.in("GIR").debug("Unlinking nodes: {} -X- {}", from->toString(), to->toString()));
+        GetDefaultLogger().in("GIR").debug(
+            "Unlinking nodes: {} -X- {}",
+            from->toString(),
+            to->toString()));
 
     auto &toNormInputs = to->normInputs_;
     if (std::find(toNormInputs.begin(), toNormInputs.end(), from) != toNormInputs.end()) {
@@ -214,7 +219,10 @@ bool Node::replace(const node_ptr_t &oldNode, const node_ptr_t &newNode) {
     ASSERT(oldNode && newNode, "Cannot replace null nodes.");
     ASSERT(oldNode != newNode, "Cannot replace a node with itself.");
     EXEC_WHEN_DEBUG(
-        l.in("GIR").debug("Replacing node: {} -> {}", oldNode->toString(), newNode->toString()));
+        GetDefaultLogger().in("GIR").debug(
+            "Replacing node: {} -> {}",
+            oldNode->toString(),
+            newNode->toString()));
 
     for (const auto &in : oldNode->withInputs_) {
         Node::link(LinkType::With, in, newNode);

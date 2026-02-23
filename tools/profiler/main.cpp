@@ -10,8 +10,10 @@
 #include "service/profiler/advanced/advanced_tracer.h"
 #include "service/profiler/core/trace.h"
 #endif
+#include "camel/utils/dll_path.h"
 
 int main(int argc, char *argv[]) {
+    camel::utils::setupLibrarySearchPath();
     std::string mode = (argc > 1) ? argv[1] : "help";
     if (mode == "-h" || mode == "--help" || mode == "help") {
         std::cerr << "Usage: camel-profiler <start|stop|report>\n"

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,10 +25,17 @@
 #include <cstdint>
 #include <sstream>
 
+#ifndef NDEBUG
+#include <array>
+#endif
+
 using slot_t                                    = uint64_t;
 static constexpr slot_t kDebugUninitializedSlot = 0xDEADBEEFDEADBEEFULL;
 
 struct ObjectHeader {
+#ifndef NDEBUG
+    std::array<char, 8> leadingBytes_{'=', 'H', 'E', 'A', 'D', 'E', 'R', '='};
+#endif
     union {
         size_t raw_;
         struct {
@@ -140,7 +147,11 @@ struct ObjectHeader {
 };
 
 // 静态断言确保大小
+#ifndef NDEBUG
+static_assert(sizeof(ObjectHeader) == 16, "ObjectHeader must be 16 bytes");
+#else
 static_assert(sizeof(ObjectHeader) == 8, "ObjectHeader must be 8 bytes");
+#endif
 
 inline std::byte *alignPointer(std::byte *ptr, size_t align) {
     uintptr_t p       = reinterpret_cast<uintptr_t>(ptr);
@@ -154,9 +165,10 @@ inline void installHeader(std::byte *addr, size_t total_alloc_size) {
 }
 
 template <typename T = void> inline T *payloadOf(ObjectHeader *header) {
-    return reinterpret_cast<T *>(header + 1);
+    return reinterpret_cast<T *>(reinterpret_cast<std::byte *>(header) + sizeof(ObjectHeader));
 }
 
 template <typename T = void> inline ObjectHeader *headerOf(T *payload) {
-    return reinterpret_cast<ObjectHeader *>(payload) - 1;
+    return reinterpret_cast<ObjectHeader *>(
+        reinterpret_cast<std::byte *>(payload) - sizeof(ObjectHeader));
 }

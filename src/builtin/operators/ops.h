@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,27 +51,27 @@ slot_t __builtin__assn_and__(ArgsView &with, ArgsView &norm, Context &ctx);
 slot_t __builtin__assn_or__(ArgsView &with, ArgsView &norm, Context &ctx);
 
 template <typename T> slot_t __builtin__lt__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    T l = norm.get<T>(0);
-    T r = norm.get<T>(1);
-    return toSlot(Bool(l < r));
+    T lhs = norm.get<T>(0);
+    T rhs = norm.get<T>(1);
+    return toSlot(Bool(lhs < rhs));
 }
 
 template <typename T> slot_t __builtin__le__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    T l = norm.get<T>(0);
-    T r = norm.get<T>(1);
-    return toSlot(Bool(l <= r));
+    T lhs = norm.get<T>(0);
+    T rhs = norm.get<T>(1);
+    return toSlot(Bool(lhs <= rhs));
 }
 
 template <typename T> slot_t __builtin__gt__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    T l = norm.get<T>(0);
-    T r = norm.get<T>(1);
-    return toSlot(Bool(l > r));
+    T lhs = norm.get<T>(0);
+    T rhs = norm.get<T>(1);
+    return toSlot(Bool(lhs > rhs));
 }
 
 template <typename T> slot_t __builtin__ge__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    T l = norm.get<T>(0);
-    T r = norm.get<T>(1);
-    return toSlot(Bool(l >= r));
+    T lhs = norm.get<T>(0);
+    T rhs = norm.get<T>(1);
+    return toSlot(Bool(lhs >= rhs));
 }
 
 slot_t __builtin__eq__(ArgsView &with, ArgsView &norm, Context &ctx);
