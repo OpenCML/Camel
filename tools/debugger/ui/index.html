@@ -8,6 +8,7 @@
 </head>
 <body>
   <div class="app-root">
+  <div class="app-body">
   <aside class="app-sidebar" id="app-sidebar">
     <div class="sidebar-head">
       <span class="sidebar-brand">Camel Debugger</span>
@@ -23,7 +24,17 @@
         <span class="sidebar-icon">▣</span>
         <span class="sidebar-label">Memory monitor</span>
       </a>
+      <a href="#/graph" class="sidebar-item" id="sidebar-graph" title="Visual GIR">
+        <span class="sidebar-icon">◇</span>
+        <span class="sidebar-label">Visual GIR</span>
+      </a>
     </nav>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Tasks</div>
+      <div id="sidebar-tasks" class="sidebar-tasks">
+        <div class="sidebar-tasks-empty">No running tasks</div>
+      </div>
+    </div>
     <div class="sidebar-section">
       <div class="sidebar-section-title">Scripts</div>
       <div id="sidebar-scripts" class="sidebar-scripts"></div>
@@ -40,7 +51,7 @@
     </div>
   </div>
   <nav class="nav">
-    <h1><a href="#/" style="color:inherit;text-decoration:none;">Camel Debugger</a></h1>
+    <h1 class="nav-title" id="nav-title"><a href="#/" style="color:inherit;text-decoration:none;">Camel Debugger</a></h1>
     <div class="nav-api-status" id="control-status">API: checking…</div>
   </nav>
   <div id="page-home" class="page active">
@@ -53,10 +64,13 @@
     <div class="control-row">
       <label><input type="checkbox" id="opt-memory-monitor" checked /> Enable memory monitor</label>
     </div>
-    <h2 style="margin-top:16px">Breakpoint types</h2>
-    <div class="control-row" id="breakpoint-types-container">
-      <span class="control-status">Loading…</span>
+    <div class="control-row">
+      <label><input type="checkbox" id="opt-alloc-step" /> Pause on alloc (initial breakpoint)</label>
+      <span id="alloc-breakpoint-hint" class="control-hint" style="display:none; margin-left: 0.5em;"></span>
     </div>
+    <h2 style="margin-top:16px">Camel Runtime pipeline</h2>
+    <p class="control-hint">Click a stage to set a breakpoint (red dot = stop before this stage). Takes effect on Run.</p>
+    <div class="pipeline-wrap" id="pipeline-wrap" role="group" aria-label="Pipeline breakpoints"></div>
     <div class="control-row">
       <button type="button" class="btn btn-run" id="btn-run">Run</button>
     </div>
@@ -70,9 +84,17 @@
   <div class="toolbar">
     <div class="refresh">Auto-refresh when memory scan on (1.5s) | <a href="/api/snapshot" style="color:#58a6ff">Raw JSON</a></div>
     <label class="toolbar-setting"><input type="checkbox" id="opt-verbose-monitor" /> Verbose</label>
+    <div class="toolbar-breakpoints" id="monitor-breakpoints">
+      <span class="toolbar-label">Breakpoints:</span>
+      <span id="monitor-breakpoint-types"></span>
+      <span class="toolbar-label">Spaces:</span>
+      <span id="monitor-space-breakpoints"></span>
+    </div>
     <button id="btn-continue" class="btn btn-continue">Continue</button>
-    <button id="btn-restart" class="btn btn-continue" style="background:#b62324" disabled>Restart</button>
+    <button id="btn-restart" class="btn btn-continue" style="background:#238636" disabled title="Run again">Restart</button>
+    <button id="btn-terminate" class="btn btn-continue" style="background:#b62324" disabled title="Stop task (takes effect at breakpoint)">Terminate</button>
     <span id="step-status" class="step-status"></span>
+    <span id="task-state-badge" class="task-state-badge" aria-live="polite"></span>
     <span id="last-alloc" class="last-alloc"></span>
   </div>
   <div class="monitor-body">
@@ -115,24 +137,46 @@
         </div>
       </div>
     </div>
-    <div class="log-resize-handle" id="log-resize-handle" title="Drag to resize">
-      <span class="log-toggle" id="log-toggle" aria-hidden="true">◀</span>
-    </div>
-    <aside class="log-sidebar" id="log-sidebar">
-      <div class="log-panel">
-        <div class="log-panel-header">
-          <span class="panel-title">Verbose log</span>
-          <div class="log-panel-actions">
-            <button type="button" id="btn-log-clear" class="btn-icon" title="Clear log" aria-label="Clear log">⌫</button>
-            <button type="button" class="log-toggle-inner btn-icon" id="log-toggle-inner" title="Collapse">▶</button>
-          </div>
-        </div>
-        <pre id="log-content" class="log-content"></pre>
+  </div>
+  </div>
+  <div id="page-graph" class="page graph-page">
+    <div class="graph-placeholder-card">
+      <p class="graph-placeholder-title">Visual GIR</p>
+      <p class="graph-placeholder-desc">View the GIR (Graph IR) for the script that was run. Load a file on Home, click Run, then come here and click Refresh to render the graph.</p>
+      <div class="graph-toolbar">
+        <button type="button" class="btn btn-continue" id="graph-refresh-btn">Refresh</button>
+        <span class="graph-hint">Fetches DOT from the current run and renders below.</span>
       </div>
-    </aside>
+    </div>
+    <div id="graph-status" class="graph-status" aria-live="polite">Click Refresh to fetch the GIR graph for the current run; if not run yet, load and Run from Home first.</div>
+    <div id="graph-container" class="graph-container">
+      <p class="graph-container-placeholder">GIR graph will appear here after you click Refresh (requires a completed run).</p>
+    </div>
+    </div>
+    </div>
   </div>
   </div>
+  <div class="log-resize-handle" id="log-resize-handle" title="Drag to resize height">
+    <span class="log-toggle" id="log-toggle" aria-hidden="true">▲</span>
   </div>
+  <aside class="app-log-panel" id="log-sidebar" role="complementary" aria-label="Log output">
+    <div class="log-panel">
+      <div class="log-panel-header">
+        <div class="log-tabs" role="tablist">
+          <button type="button" class="log-tab active" id="log-tab-debugger" data-log-tab="debugger" role="tab" aria-selected="true">Debugger</button>
+          <button type="button" class="log-tab" id="log-tab-task" data-log-tab="task" role="tab" aria-selected="false">Task</button>
+        </div>
+        <div class="log-panel-actions">
+          <button type="button" id="btn-log-clear" class="btn-icon" title="Clear log" aria-label="Clear log">⌫</button>
+          <button type="button" class="log-toggle-inner btn-icon" id="log-toggle-inner" title="Collapse">▶</button>
+        </div>
+      </div>
+      <div class="log-contents">
+        <pre id="log-content-debugger" class="log-content" data-log-tab="debugger" aria-hidden="false"></pre>
+        <pre id="log-content-task" class="log-content" data-log-tab="task" aria-hidden="true"></pre>
+      </div>
+    </div>
+  </aside>
   </div>
 
   <script type="module" src="js/app.js"></script>

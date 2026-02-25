@@ -4,6 +4,7 @@
 
 import * as api from './api.js';
 import * as monitor from './monitor.js';
+import * as graph from './graph.js';
 
 const OPEN_SCRIPTS_KEY = 'camel-db-open-scripts';
 const SIDEBAR_COLLAPSED_KEY = 'camel-db-sidebar-collapsed';
@@ -25,6 +26,7 @@ function getScriptPathFromRoute() {
 }
 
 let openScripts = [];
+let lastTargetFile = '';
 function loadOpenScripts() {
   try {
     const raw = sessionStorage.getItem(OPEN_SCRIPTS_KEY);
@@ -48,6 +50,40 @@ function addOpenScript(path) {
   if (openScripts.length > 20) openScripts = openScripts.slice(0, 20);
   saveOpenScripts();
   renderSidebarScripts();
+}
+
+function renderSidebarTasks(tasks) {
+  const el = document.getElementById('sidebar-tasks');
+  if (!el) return;
+  const currentId = api.getCurrentTaskId();
+  const aliveTasks = tasks ? tasks.filter((t) => t.taskState !== 'exited') : [];
+  if (!tasks || tasks.length === 0) {
+    el.innerHTML = '<div class="sidebar-tasks-empty">No running tasks</div>';
+    return;
+  }
+  el.innerHTML = tasks
+    .map((t) => {
+      const label = (t.scriptPath && t.scriptPath.split(/[/\\]/).pop()) || t.id;
+      const active = t.id === currentId ? ' active' : '';
+      const exited = t.taskState === 'exited' ? ' exited' : '';
+      return '<a href="#" class="sidebar-task' + active + exited + '" data-task-id="' + escapeHtml(t.id) + '" title="' + escapeHtml(t.scriptPath || t.id) + '">' + escapeHtml(label) + ' <span class="task-state-tag">' + escapeHtml(t.taskState || '') + '</span></a>';
+    })
+    .join('');
+  el.querySelectorAll('.sidebar-task').forEach((a) => {
+    a.onclick = (e) => {
+      e.preventDefault();
+      const id = a.getAttribute('data-task-id');
+      if (id) api.setCurrentTaskId(id);
+      el.querySelectorAll('.sidebar-task').forEach((x) => x.classList.toggle('active', x.getAttribute('data-task-id') === id));
+    };
+  });
+  // If current task exited, auto-select first alive task (or clear selection)
+  if (currentId) {
+    const currentTask = tasks.find((t) => t.id === currentId);
+    if (currentTask && currentTask.taskState === 'exited' && aliveTasks.length > 0) {
+      api.setCurrentTaskId(aliveTasks[0].id);
+    }
+  }
 }
 
 function renderSidebarScripts() {
@@ -80,10 +116,31 @@ function updateSidebarActive() {
   document.querySelectorAll('.sidebar-script').forEach((a) => a.classList.remove('active'));
   if (r === '/') document.getElementById('sidebar-home')?.classList.add('active');
   else if (r === '/monitor' && !scriptPath) document.getElementById('sidebar-monitor')?.classList.add('active');
+  else if (r === '/graph') document.getElementById('sidebar-graph')?.classList.add('active');
   else if (scriptPath) {
     const scriptEl = document.querySelector('.sidebar-script[href="#/script/' + encodeURIComponent(scriptPath) + '"]');
     if (scriptEl) scriptEl.classList.add('active');
   }
+}
+
+function getPageTitle() {
+  const r = getRoute();
+  const scriptPath = getScriptPathFromRoute();
+  if (r === '/') return 'Home';
+  if (r === '/monitor' && !scriptPath) return 'Memory monitor';
+  if (r === '/graph') return 'Visual GIR';
+  if (scriptPath) return scriptPath.split(/[/\\]/).pop() || scriptPath;
+  return 'Camel Debugger';
+}
+
+function updateNavTitle() {
+  const el = document.getElementById('nav-title');
+  if (!el) return;
+  const title = getPageTitle();
+  const isHome = getRoute() === '/';
+  el.innerHTML = isHome
+    ? '<a href="#/" style="color:inherit;text-decoration:none;">' + escapeHtml(title) + '</a>'
+    : escapeHtml(title);
 }
 
 function applyRoute() {
@@ -91,24 +148,85 @@ function applyRoute() {
   const scriptPath = getScriptPathFromRoute();
   if (scriptPath) addOpenScript(scriptPath);
   const isMonitor = r === '/monitor' || r.indexOf('/script/') === 0;
-  document.getElementById('page-home').classList.toggle('active', !isMonitor);
+  const isGraph = r === '/graph';
+  document.getElementById('page-home').classList.toggle('active', !isMonitor && !isGraph);
   document.getElementById('page-monitor').classList.toggle('active', isMonitor);
+  document.getElementById('page-graph').classList.toggle('active', isGraph);
   updateSidebarActive();
+  updateNavTitle();
   if (isMonitor) monitor.fetchData();
+  if (isGraph) graph.fetchAndRender();
 }
 
 let memoryMonitorRunning = false;
 const breakpointTypeLabels = { alloc: 'Memory alloc' };
 
+// Camel Runtime pipeline (from pipeline diagram): id used in API, label for display
+const PIPELINE_STAGES = [
+  { id: 'CTS', label: 'CTS' },
+  { id: 'CST', label: 'CST' },
+  { id: 'AST', label: 'AST' },
+  { id: 'GCT', label: 'GCT' },
+  { id: 'GIR-M', label: 'GIR-M' },
+  { id: 'GIR-E', label: 'GIR-E' },
+  { id: 'GIR-R1', label: 'GIR-R1' },
+  { id: 'GIR-Rn', label: 'GIR-Rn' },
+  { id: 'GIR-Z', label: 'GIR-Z' },
+];
+function initPipelineAndSpaceBreakpoints() {
+  const pipelineWrap = document.getElementById('pipeline-wrap');
+  if (!pipelineWrap) return;
+  pipelineWrap.innerHTML = '';
+  PIPELINE_STAGES.forEach((stage, i) => {
+    if (i) pipelineWrap.appendChild(createArrow());
+    const el = document.createElement('span');
+    el.className = 'pipeline-stage';
+    el.setAttribute('data-stage', stage.id);
+    el.title = 'Click to set or clear breakpoint';
+    el.innerHTML = '<span class="bp-dot"></span><span>' + escapeHtml(stage.label) + '</span>';
+    el.onclick = function () { this.classList.toggle('bp-on'); };
+    pipelineWrap.appendChild(el);
+  });
+}
+
+function createArrow() {
+  const span = document.createElement('span');
+  span.className = 'pipeline-arrow';
+  span.textContent = '→';
+  return span;
+}
+
+function getSelectedBreakSpaces() {
+  const sel = [];
+  const wrap = document.getElementById('monitor-space-breakpoints');
+  if (wrap) wrap.querySelectorAll('.space-bp-item.bp-on').forEach((el) => {
+    const id = el.getAttribute('data-space');
+    if (id) sel.push(id);
+  });
+  return sel;
+}
+
+function getSelectedBreakStages() {
+  const sel = [];
+  document.querySelectorAll('.pipeline-stage.bp-on').forEach((el) => {
+    const id = el.getAttribute('data-stage');
+    if (id) sel.push(id);
+  });
+  return sel;
+}
+
 function loadBreakpointTypes() {
   const container = document.getElementById('breakpoint-types-container');
   if (!container) return;
-  api.fetchBreakpointTypes().then((d) => {
+  api.fetchBreakpointTypes(api.getCurrentTaskId()).then((d) => {
     const known = d.known || [];
-    const enabled = (d.enabled || []).reduce((o, k) => {
+    const enabledList = d.enabled || [];
+    const enabled = enabledList.reduce((o, k) => {
       o[k] = true;
       return o;
     }, {});
+    const allocStepCb = document.getElementById('opt-alloc-step');
+    if (allocStepCb) allocStepCb.checked = enabledList.includes('alloc');
     container.innerHTML = '';
     if (known.length === 0) {
       container.innerHTML = '<span class="control-status">No breakpoint types (run once to register)</span>';
@@ -126,7 +244,7 @@ function loadBreakpointTypes() {
         container.querySelectorAll('input[data-type]').forEach((c) => {
           if (c.checked) list.push(c.getAttribute('data-type'));
         });
-        api.postBreakpointTypes(list).catch(() => {});
+        api.postBreakpointTypes(list, api.getCurrentTaskId()).catch(() => {});
       };
       label.appendChild(cb);
       label.appendChild(document.createTextNode(breakpointTypeLabels[type] || type));
@@ -162,28 +280,96 @@ function updateAssertionOverlay(state) {
 function updateControlStatus() {
   api.fetchState().then((d) => {
     if (!d || typeof d !== 'object') return;
-    memoryMonitorRunning = !!d.memoryMonitorRunning;
-    updateAssertionOverlay(d.assertionError ? d : null);
     const st = document.getElementById('control-status');
     const verboseCb = document.getElementById('opt-verbose');
     const verboseMon = document.getElementById('opt-verbose-monitor');
-    if (d.verbose !== undefined) {
-      if (verboseCb) verboseCb.checked = !!d.verbose;
-      if (verboseMon) verboseMon.checked = !!d.verbose;
+    api.setCurrentTaskIdFromState(d);
+    const taskId = api.getCurrentTaskId();
+    const tasks = d.tasks || [];
+    const selectedTask = taskId ? tasks.find((t) => t.id === taskId) : null;
+    const taskStateFromTask = selectedTask ? selectedTask.taskState : null;
+    const taskState = taskStateFromTask != null ? taskStateFromTask : (d.taskState || 'idle');
+
+    function applyTaskSettings(settings) {
+      if (!settings) return;
+      if (settings.memoryMonitorRunning !== undefined) memoryMonitorRunning = !!settings.memoryMonitorRunning;
+      if (settings.verbose !== undefined && (verboseCb || verboseMon)) {
+        const v = !!settings.verbose;
+        if (verboseCb) verboseCb.checked = v;
+        if (verboseMon) verboseMon.checked = v;
+      }
+      const allocHint = document.getElementById('alloc-breakpoint-hint');
+      if (allocHint && settings.allocBreakpointsAvailable !== undefined) {
+        if (settings.allocBreakpointsAvailable === false) {
+          allocHint.textContent = '(requires Debug build)';
+          allocHint.style.display = 'inline';
+        } else {
+          allocHint.style.display = 'none';
+        }
+      }
     }
-    if (!st) return;
-    if (!d.serverRunning) {
-      st.innerHTML = '<span class="err">API: not running</span> – start camel-db and run <code>serve</code>';
-      return;
+
+    function renderStatusBar() {
+      if (!st) return;
+      if (!d.serverRunning) {
+        st.innerHTML = '<span class="err">API: not running</span> – start camel-db and run <code>serve</code>';
+        return;
+      }
+      const taskStateLabels = { idle: 'No task', loaded: 'Loaded', running: 'Running', paused: 'Paused', completed: 'Completed', terminated: 'Terminated', exited: 'Exited' };
+      st.innerHTML = '<span class="ok">API: connected</span>';
+      st.innerHTML += ' · Task: <span class="task-state-inline">' + escapeHtml(taskStateLabels[taskState] || taskState) + '</span>';
+      if (d.hasFile && d.targetFile) {
+        lastTargetFile = d.targetFile;
+        st.innerHTML += ' · <code>' + escapeHtml((d.targetFile.split(/[/\\]/).pop()) || d.targetFile) + '</code>';
+        const inp = document.getElementById('input-file-path');
+        if (inp && inp.value !== d.targetFile) inp.value = d.targetFile;
+        addOpenScript(d.targetFile);
+      } else {
+        lastTargetFile = '';
+      }
+      if (memoryMonitorRunning) st.innerHTML += ' · Memory scan on';
     }
-    st.innerHTML = '<span class="ok">API: connected</span>';
-    if (d.hasFile && d.targetFile) {
-      st.innerHTML += ' · Loaded: <code>' + escapeHtml(d.targetFile) + '</code>';
-      const inp = document.getElementById('input-file-path');
-      if (inp && inp.value !== d.targetFile) inp.value = d.targetFile;
-      addOpenScript(d.targetFile);
+
+    if (taskId) {
+      // 获取任务级设置（verbose、memory monitor 等）
+      api.fetchSettings(taskId).then((settings) => {
+        applyTaskSettings(settings);
+        renderStatusBar();
+      }).catch(() => {
+        if (d.verbose !== undefined && (verboseCb || verboseMon)) {
+          if (verboseCb) verboseCb.checked = !!d.verbose;
+          if (verboseMon) verboseMon.checked = !!d.verbose;
+        }
+        renderStatusBar();
+      });
+      // 获取任务级 assertion error（从子进程的 /api/state）
+      if (taskState !== 'exited') {
+        api.fetchState(taskId).then((taskData) => {
+          updateAssertionOverlay(taskData && taskData.assertionError ? taskData : null);
+        }).catch(() => {
+          updateAssertionOverlay(null);
+        });
+      } else {
+        updateAssertionOverlay(null);
+      }
+    } else {
+      // 无任务时，assertion error 直接从全局 state 获取
+      updateAssertionOverlay(d.assertionError ? d : null);
+      if (d.memoryMonitorRunning !== undefined) memoryMonitorRunning = !!d.memoryMonitorRunning;
+      if (d.verbose !== undefined && (verboseCb || verboseMon)) {
+        if (verboseCb) verboseCb.checked = !!d.verbose;
+        if (verboseMon) verboseMon.checked = !!d.verbose;
+      }
+      const allocHint = document.getElementById('alloc-breakpoint-hint');
+      if (allocHint && d.allocBreakpointsAvailable === false) {
+        allocHint.textContent = '(requires Debug build)';
+        allocHint.style.display = 'inline';
+      } else if (allocHint) {
+        allocHint.style.display = 'none';
+      }
+      renderStatusBar();
     }
-    if (d.memoryMonitorRunning) st.innerHTML += ' · Memory scan on';
+    renderSidebarTasks(tasks);
     loadBreakpointTypes();
   }).catch(() => {
     updateAssertionOverlay(null);
@@ -212,12 +398,15 @@ function initRunPage() {
   document.getElementById('btn-run').onclick = function () {
     const path = document.getElementById('input-file-path').value.trim();
     const memoryMonitor = document.getElementById('opt-memory-monitor').checked;
-    const allocCb = document.querySelector('#breakpoint-types-container input[data-type="alloc"]');
-    const allocStep = allocCb ? allocCb.checked : false;
+    const allocStepEl = document.getElementById('opt-alloc-step');
+    const allocStep = allocStepEl ? allocStepEl.checked : false;
+    const breakSpaces = getSelectedBreakSpaces();
+    const breakStages = getSelectedBreakStages();
     const statusEl = document.getElementById('control-status');
     const btn = this;
     btn.disabled = true;
     location.hash = path ? '#/script/' + encodeURIComponent(path) : '#/monitor';
+    const runOpts = { memoryMonitor, allocStep, breakSpaces, breakStages };
     function done(ok, err) {
       btn.disabled = false;
       updateControlStatus();
@@ -231,23 +420,31 @@ function initRunPage() {
             done(false, d.error || 'Load failed');
             return;
           }
-          return api.postRun({ memoryMonitor, allocStep });
+          return api.postRun(runOpts);
         })
         .then((d) => {
           if (d && !d.ok) done(false, d.error);
-          else done(true);
+          else {
+            done(true);
+            setTimeout(updateControlStatus, 400);
+          }
         })
         .catch((e) => done(false, e.message || e));
     } else {
       api
-        .postRun({ memoryMonitor, allocStep })
-        .then((d) => done(d.ok, d.ok ? null : d.error || 'Run failed'))
+        .postRun(runOpts)
+        .then((d) => {
+          done(d.ok, d.ok ? null : d.error || 'Run failed');
+          if (d && d.ok) {
+            setTimeout(updateControlStatus, 400);
+          }
+        })
         .catch((e) => done(false, e.message || e));
     }
   };
 
   function setVerboseFromCheckbox(checked) {
-    api.postSettings({ verbose: checked }).then((d) => {
+    api.postSettings({ verbose: checked }, api.getCurrentTaskId()).then((d) => {
       if (!d.ok) updateControlStatus();
     }).catch(() => updateControlStatus());
   }
@@ -261,6 +458,20 @@ function initRunPage() {
     const h = document.getElementById('opt-verbose');
     if (h) h.checked = this.checked;
   };
+
+  const allocStepEl = document.getElementById('opt-alloc-step');
+  if (allocStepEl) {
+    allocStepEl.onchange = function () {
+      const wantAlloc = !!this.checked;
+      api.fetchBreakpointTypes(api.getCurrentTaskId()).then((bt) => {
+        let enabled = Array.isArray(bt.enabled) ? [...bt.enabled] : [];
+        const hasAlloc = enabled.includes('alloc');
+        if (wantAlloc && !hasAlloc) enabled.push('alloc');
+        else if (!wantAlloc && hasAlloc) enabled = enabled.filter((x) => x !== 'alloc');
+        return api.postBreakpointTypes(enabled, api.getCurrentTaskId());
+      }).then(() => updateControlStatus()).catch(() => updateControlStatus());
+    };
+  }
 }
 
 function initSidebar() {
@@ -283,31 +494,30 @@ function initSidebar() {
 }
 
 function main() {
-  // 状态轮询优先注册，避免后续 init 抛错导致不再轮询
+  // Register status poll first so init errors do not stop polling
   setInterval(updateControlStatus, 2000);
   updateControlStatus();
 
   loadOpenScripts();
   renderSidebarScripts();
   initSidebar();
+  initPipelineAndSpaceBreakpoints();
   const assertionRestartBtn = document.getElementById('assertion-overlay-restart');
   if (assertionRestartBtn) {
     assertionRestartBtn.onclick = function () {
-      api.postRestart().then(() => updateControlStatus()).catch(() => updateControlStatus());
+      api.postRestart(api.getCurrentTaskId()).then(() => updateControlStatus()).catch(() => updateControlStatus());
     };
   }
   window.addEventListener('hashchange', applyRoute);
   monitor.initMonitor();
+  graph.initGraph();
   initRunPage();
   applyRoute();
   setInterval(() => {
     if (memoryMonitorRunning && getRoute() !== '/') monitor.fetchData(false);
   }, 1500);
   setInterval(monitor.pollStepStatus, 1000);
-  setInterval(() => {
-    const r = getRoute();
-    if (r === '/monitor' || r.indexOf('/script/') === 0) monitor.pollLog();
-  }, 800);
+  setInterval(monitor.pollLog, 800);
 }
 
 main();
