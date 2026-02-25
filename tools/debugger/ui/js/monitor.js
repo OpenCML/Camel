@@ -46,7 +46,12 @@ let hexTotalPages = 1;
 let objNextOffset = 0;
 let objTotal = 0;
 let objRegionStart = 0;
-let logNextOffset = 0;
+let logNextOffsetDebugger = 0;
+let logNextOffsetTask = 0;
+/** 'debugger' = parent process log; 'task' = current task (child) log */
+let logTab = 'debugger';
+/** When current task changes, reset Task log offset and clear so we show the right task's log. */
+let lastLogTaskId = null;
 /** When set, hex view will highlight this byte range (region-relative). Cleared after render. */
 let hexHighlightRange = null;
 
@@ -153,10 +158,21 @@ export function render(data) {
     totalCap += r.capacity || 0;
   });
 
+  const source = data.source != null ? String(data.source) : '';
+  const allZero = totalUsed === 0 && data.regions.length > 0;
+
   let html = '<div class="summary">';
+  if (source) {
+    const safe = (source || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    html += '<div class="card snapshot-source" title="Which process produced this snapshot">From: ' + safe + '</div>';
+  }
   html += '<div class="card"><h3>Regions</h3><div class="val">' + data.regions.length + '</div></div>';
   html += '<div class="card"><h3>Used / Total</h3><div class="val">' + fmtBytes(totalUsed) + ' / ' + fmtBytes(totalCap) + '</div></div>';
-  html += '</div><div class="regions">';
+  html += '</div>';
+  if (allZero) {
+    html += '<p class="monitor-hint">All regions empty (paused before first allocation?). Click <strong>Continue</strong> to see allocations.</p>';
+  }
+  html += '<div class="regions">';
 
   if (birth || haven || cache) {
     html += '<div class="region-group region-group-young">';
@@ -221,7 +237,7 @@ function loadHexPage() {
   if (panelLoader) panelLoader.classList.add('visible');
   hexPagination.style.display = 'none';
 
-  return api.fetchRegionMemory(currentRegionName, offsetBytes, limitBytes).then((d) => {
+  return api.fetchRegionMemory(currentRegionName, offsetBytes, limitBytes, api.getCurrentTaskId()).then((d) => {
     if (panelLoader) panelLoader.classList.remove('visible');
     const offsetEl = document.getElementById('hex-page-offset');
     if (d.error) {
@@ -281,7 +297,7 @@ function loadObjPage() {
   const isFirst = objNextOffset === 0;
   if (isFirst && panelLoader) panelLoader.classList.add('visible');
   return api
-    .fetchRegionObjects(currentRegionName, objNextOffset, PAGE_SIZE_OBJ)
+    .fetchRegionObjects(currentRegionName, objNextOffset, PAGE_SIZE_OBJ, api.getCurrentTaskId())
     .then((d) => {
       if (isFirst && panelLoader) panelLoader.classList.remove('visible');
       if (isFirst) tbody.innerHTML = '';
@@ -337,8 +353,13 @@ export function fetchData(showSpinner = true) {
   const content = document.getElementById('content');
   const contentLoader = document.getElementById('content-loader');
   if (showSpinner !== false && contentLoader) contentLoader.classList.add('visible');
+  // Sync state so current task is set, then fetch snapshot for that target (ensures child process data when a task is running)
   return api
-    .fetchSnapshot()
+    .fetchState()
+    .then((state) => {
+      api.setCurrentTaskIdFromState(state);
+      return api.fetchSnapshot(api.getCurrentTaskId());
+    })
     .then((d) => {
       if (contentLoader) contentLoader.classList.remove('visible');
       render(d);
@@ -362,7 +383,7 @@ export function refreshMonitorViews() {
       promises.push(loadObjPage());
     }
   }
-  const lastAllocPromise = api.fetchLastAlloc().then((d) => {
+  const lastAllocPromise = api.fetchLastAlloc(api.getCurrentTaskId()).then((d) => {
     const la = document.getElementById('last-alloc');
     if (la) la.textContent = formatLastAlloc(d);
   }).catch(() => {});
@@ -448,7 +469,7 @@ export function initMonitor() {
     this.disabled = true;
     document.getElementById('btn-restart').disabled = true;
     document.getElementById('step-status').textContent = '';
-    api.postContinue().then(() => refreshMonitorViews()).catch(() => {});
+    api.postContinue(api.getCurrentTaskId()).then(() => refreshMonitorViews()).catch(() => {});
   };
 
   let restarting = false;
@@ -458,7 +479,7 @@ export function initMonitor() {
     restarting = true;
     document.getElementById('step-status').textContent = 'Restarting…';
     document.getElementById('last-alloc').textContent = '';
-    api.postRestart().then(() => {
+    api.postRestart(api.getCurrentTaskId()).then(() => {
       refreshMonitorViews();
       document.getElementById('step-status').textContent = '';
       restarting = false;
@@ -468,36 +489,146 @@ export function initMonitor() {
     });
   };
 
-  const btnLogClear = document.getElementById('btn-log-clear');
-  if (btnLogClear) {
-    btnLogClear.onclick = function () {
-      const el = document.getElementById('log-content');
-      if (el) el.textContent = '';
+  const terminateBtn = document.getElementById('btn-terminate');
+  if (terminateBtn) {
+    terminateBtn.onclick = function () {
+      this.disabled = true;
+      document.getElementById('step-status').textContent = 'Terminating…';
+      api.postTerminate(api.getCurrentTaskId()).then(() => {
+        document.getElementById('step-status').textContent = '';
+      }).catch(() => {
+        document.getElementById('step-status').textContent = '';
+      });
     };
   }
 
+  const btnLogClear = document.getElementById('btn-log-clear');
+  if (btnLogClear) {
+    btnLogClear.onclick = function () {
+      const isTask = logTab === 'task';
+      const el = document.getElementById(isTask ? 'log-content-task' : 'log-content-debugger');
+      if (el) el.textContent = '';
+      if (isTask) logNextOffsetTask = 0; else logNextOffsetDebugger = 0;
+    };
+  }
+
+  initMonitorBreakpoints();
   initLogSidebar();
 }
 
+const MONITOR_SPACE_OPTIONS = [
+  { id: 'perm', label: 'perm' },
+  { id: 'meta', label: 'meta' },
+  { id: 'auto.birth', label: 'birth' },
+  { id: 'auto.haven', label: 'haven' },
+  { id: 'auto.elder', label: 'elder' },
+  { id: 'auto.large', label: 'large' },
+  { id: 'bump', label: 'bump' },
+];
+
+function initMonitorBreakpoints() {
+  const typesEl = document.getElementById('monitor-breakpoint-types');
+  const spacesEl = document.getElementById('monitor-space-breakpoints');
+  if (!typesEl || !spacesEl) return;
+
+  api.fetchBreakpointTypes(api.getCurrentTaskId()).then((d) => {
+    const known = d.known || [];
+    const enabled = (d.enabled || []).reduce((o, k) => { o[k] = true; return o; }, {});
+    typesEl.innerHTML = '';
+    known.forEach((type) => {
+      const label = document.createElement('label');
+      label.className = 'toolbar-setting';
+      label.style.marginRight = '8px';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.setAttribute('data-type', type);
+      cb.checked = !!enabled[type];
+      cb.onchange = function () {
+        const list = [];
+        typesEl.querySelectorAll('input[data-type]').forEach((c) => {
+          if (c.checked) list.push(c.getAttribute('data-type'));
+        });
+        api.postBreakpointTypes(list, api.getCurrentTaskId()).catch(() => {});
+      };
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(type === 'alloc' ? 'Alloc' : type));
+      typesEl.appendChild(label);
+    });
+  }).catch(() => {});
+
+  function renderSpaceToggles(selected) {
+    const set = new Set(selected || []);
+    spacesEl.innerHTML = MONITOR_SPACE_OPTIONS.map((s) => {
+      const on = set.has(s.id);
+      return '<span class="space-bp-item' + (on ? ' bp-on' : '') + '" data-space="' + escapeHtml(s.id) + '" title="Pause only on alloc in this space"><span class="bp-dot"></span><span>' + escapeHtml(s.label) + '</span></span>';
+    }).join('');
+    spacesEl.querySelectorAll('.space-bp-item').forEach((el) => {
+      el.onclick = function () {
+        this.classList.toggle('bp-on');
+        const list = [];
+        spacesEl.querySelectorAll('.space-bp-item.bp-on').forEach((e) => {
+          const id = e.getAttribute('data-space');
+          if (id) list.push(id);
+        });
+        api.postBreakpointSpaces(list, api.getCurrentTaskId()).catch(() => {});
+      };
+    });
+  }
+  function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+  api.fetchBreakpointSpaces(api.getCurrentTaskId()).then((d) => {
+    renderSpaceToggles(d.breakSpaces || []);
+  }).catch(() => renderSpaceToggles([]));
+}
+
 const LOG_SIDEBAR_STORAGE_KEY = 'camel-db-log-sidebar';
-const LOG_SIDEBAR_MIN = 200;
-const LOG_SIDEBAR_MAX = 800;
-const LOG_SIDEBAR_DEFAULT = 360;
+const LOG_PANEL_HEIGHT_MIN = 120;
+const LOG_PANEL_HEIGHT_MAX = 800;
+const LOG_PANEL_HEIGHT_DEFAULT = 280;
 
 function initLogSidebar() {
   const sidebar = document.getElementById('log-sidebar');
   const handle = document.getElementById('log-resize-handle');
   const toggleInner = document.getElementById('log-toggle-inner');
+  const tabDebugger = document.getElementById('log-tab-debugger');
+  const tabTask = document.getElementById('log-tab-task');
+  const contentDebugger = document.getElementById('log-content-debugger');
+  const contentTask = document.getElementById('log-content-task');
   if (!sidebar || !handle) return;
 
-  let saved = { width: LOG_SIDEBAR_DEFAULT, collapsed: false };
+  function setLogTab(to) {
+    logTab = to;
+    const isTask = to === 'task';
+    if (tabDebugger) {
+      tabDebugger.classList.toggle('active', !isTask);
+      tabDebugger.setAttribute('aria-selected', !isTask ? 'true' : 'false');
+    }
+    if (tabTask) {
+      tabTask.classList.toggle('active', isTask);
+      tabTask.setAttribute('aria-selected', isTask ? 'true' : 'false');
+    }
+    if (contentDebugger) contentDebugger.setAttribute('aria-hidden', isTask ? 'true' : 'false');
+    if (contentTask) contentTask.setAttribute('aria-hidden', isTask ? 'false' : 'true');
+  }
+  if (tabDebugger) tabDebugger.onclick = () => setLogTab('debugger');
+  if (tabTask) tabTask.onclick = () => setLogTab('task');
+  setLogTab(logTab);
+
+  let saved = { height: LOG_PANEL_HEIGHT_DEFAULT, collapsed: false };
   try {
     const raw = sessionStorage.getItem(LOG_SIDEBAR_STORAGE_KEY);
-    if (raw) saved = { ...saved, ...JSON.parse(raw) };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed.height === 'number') saved.height = parsed.height;
+      if (typeof parsed.collapsed === 'boolean') saved.collapsed = parsed.collapsed;
+    }
   } catch (_) {}
-  const clamp = (v) => Math.max(LOG_SIDEBAR_MIN, Math.min(LOG_SIDEBAR_MAX, v));
+  const clamp = (v) => Math.max(LOG_PANEL_HEIGHT_MIN, Math.min(LOG_PANEL_HEIGHT_MAX, v));
 
-  sidebar.style.setProperty('--log-sidebar-width', saved.width + 'px');
+  sidebar.style.setProperty('--log-panel-height', clamp(saved.height) + 'px');
   if (saved.collapsed) {
     sidebar.classList.add('collapsed');
     handle.classList.add('sidebar-collapsed');
@@ -505,10 +636,13 @@ function initLogSidebar() {
 
   function save() {
     try {
+      const height = sidebar.classList.contains('collapsed')
+        ? (parseInt(sidebar.style.getPropertyValue('--log-panel-height'), 10) || LOG_PANEL_HEIGHT_DEFAULT)
+        : (parseInt(sidebar.style.getPropertyValue('--log-panel-height'), 10) || LOG_PANEL_HEIGHT_DEFAULT);
       sessionStorage.setItem(
         LOG_SIDEBAR_STORAGE_KEY,
         JSON.stringify({
-          width: parseInt(sidebar.style.getPropertyValue('--log-sidebar-width'), 10) || LOG_SIDEBAR_DEFAULT,
+          height,
           collapsed: sidebar.classList.contains('collapsed'),
         })
       );
@@ -524,7 +658,7 @@ function initLogSidebar() {
   function expand() {
     sidebar.classList.remove('collapsed');
     handle.classList.remove('sidebar-collapsed');
-    handle.setAttribute('title', 'Drag to resize');
+    handle.setAttribute('title', 'Drag to resize height');
     save();
   }
 
@@ -539,7 +673,7 @@ function initLogSidebar() {
   });
 
   if (sidebar.classList.contains('collapsed')) handle.setAttribute('title', 'Click to expand log');
-  else handle.setAttribute('title', 'Drag to resize');
+  else handle.setAttribute('title', 'Drag to resize height');
 
   let dragging = false;
   handle.addEventListener('mousedown', (e) => {
@@ -548,13 +682,13 @@ function initLogSidebar() {
     e.preventDefault();
     e.stopPropagation();
     dragging = true;
-    const startX = e.clientX;
-    const startW = parseInt(sidebar.style.getPropertyValue('--log-sidebar-width'), 10) || LOG_SIDEBAR_DEFAULT;
+    const startY = e.clientY;
+    const startH = parseInt(sidebar.style.getPropertyValue('--log-panel-height'), 10) || LOG_PANEL_HEIGHT_DEFAULT;
     function onMove(ev) {
       if (!dragging) return;
-      const delta = startX - ev.clientX;
-      const newW = clamp(startW + delta);
-      sidebar.style.setProperty('--log-sidebar-width', newW + 'px');
+      const delta = startY - ev.clientY;
+      const newH = clamp(startH + delta);
+      sidebar.style.setProperty('--log-panel-height', newH + 'px');
     }
     function onUp() {
       dragging = false;
@@ -564,25 +698,62 @@ function initLogSidebar() {
       document.body.style.userSelect = '';
       save();
     }
-    document.body.style.cursor = 'col-resize';
+    document.body.style.cursor = 'ns-resize';
     document.body.style.userSelect = 'none';
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   });
 }
 
-/** Poll /api/log and append new lines to #log-content. Call when on monitor page. */
+/** Append log lines to a pre element and update offset. */
+function appendLogLines(el, lines, nextOffset, isDebuggerTab) {
+  if (!el || !lines.length) return;
+  lines.forEach((line) => {
+    el.appendChild(document.createTextNode(line + '\n'));
+  });
+  if (isDebuggerTab) logNextOffsetDebugger = nextOffset;
+  else logNextOffsetTask = nextOffset;
+  el.scrollTop = el.scrollHeight;
+}
+
+/** Poll /api/log: always fetch parent log for Debugger tab; when a task is selected, also fetch that task's log for Task tab. */
 export function pollLog() {
-  api.fetchLog(logNextOffset).then((d) => {
-    const lines = d.lines || [];
-    logNextOffset = d.nextOffset != null ? d.nextOffset : logNextOffset + lines.length;
-    const el = document.getElementById('log-content');
-    if (!el || lines.length === 0) return;
-    lines.forEach((line) => {
-      el.appendChild(document.createTextNode(line + '\n'));
-    });
-    el.scrollTop = el.scrollHeight;
-  }).catch(() => {});
+  const elDebugger = document.getElementById('log-content-debugger');
+  const elTask = document.getElementById('log-content-task');
+  const taskId = api.getCurrentTaskId();
+
+  if (taskId !== lastLogTaskId) {
+    lastLogTaskId = taskId;
+    logNextOffsetTask = 0;
+    if (elTask) {
+      elTask.textContent = '';
+      elTask.setAttribute('title', taskId ? 'Log for current task: ' + taskId : 'Select a task in the sidebar to see its log');
+    }
+    const tabTask = document.getElementById('log-tab-task');
+    if (tabTask) tabTask.setAttribute('title', taskId ? 'Task log: ' + taskId : 'Select a task to view its log');
+  }
+
+  // 1) Parent process log → Debugger tab
+  api
+    .fetchLog(logNextOffsetDebugger, null)
+    .then((d) => {
+      const lines = d.lines || [];
+      const next = d.nextOffset != null ? d.nextOffset : logNextOffsetDebugger + lines.length;
+      appendLogLines(elDebugger, lines, next, true);
+    })
+    .catch(() => {});
+
+  // 2) Task (child) log → Task tab (only when we have a task id)
+  if (taskId) {
+    api
+      .fetchLog(logNextOffsetTask, taskId)
+      .then((d) => {
+        const lines = d.lines || [];
+        const next = d.nextOffset != null ? d.nextOffset : logNextOffsetTask + lines.length;
+        appendLogLines(elTask, lines, next, false);
+      })
+      .catch(() => {});
+  }
 }
 
 function formatPauseReason(d) {
@@ -601,23 +772,55 @@ function formatLastAlloc(d) {
   return 'Last: ' + space + ' ' + sizeStr;
 }
 
+const TASK_STATE_LABELS = { idle: 'No task', loaded: 'Loaded', running: 'Running', paused: 'Paused', completed: 'Completed', terminated: 'Terminated', exited: 'Exited' };
+
 export function pollStepStatus() {
-  api.fetchStepPaused().then((d) => {
+  api.fetchStepPaused(api.getCurrentTaskId()).then((d) => {
     const btn = document.getElementById('btn-continue');
     const st = document.getElementById('step-status');
-    const restartBtn = document.getElementById('btn-restart');
-    if (d.paused) {
-      btn.disabled = false;
-      restartBtn.disabled = false;
-      st.textContent = formatPauseReason(d);
+    if (d && d.error) {
+      if (btn) btn.disabled = true;
+      if (st) st.textContent = '';
+      return;
+    }
+    if (d && d.paused) {
+      if (btn) btn.disabled = false;
+      if (st) st.textContent = formatPauseReason(d);
     } else {
-      btn.disabled = true;
-      restartBtn.disabled = true;
-      st.textContent = '';
+      if (btn) btn.disabled = true;
+      if (st && !st.textContent.includes('…')) st.textContent = '';
+    }
+  }).catch(() => {
+    const btn = document.getElementById('btn-continue');
+    const st = document.getElementById('step-status');
+    if (btn) btn.disabled = true;
+    if (st) st.textContent = '';
+  });
+  api.fetchState().then((d) => {
+    const taskId = api.getCurrentTaskId();
+    const tasks = (d && d.tasks) || [];
+    const task = taskId ? tasks.find((t) => t.id === taskId) : null;
+    const taskState = task ? task.taskState : (d && d.taskState) || 'idle';
+    const restartBtn = document.getElementById('btn-restart');
+    const terminateBtn = document.getElementById('btn-terminate');
+    const badge = document.getElementById('task-state-badge');
+    if (restartBtn) {
+      restartBtn.disabled = !['paused', 'completed', 'terminated'].includes(taskState) || taskState === 'exited';
+    }
+    if (terminateBtn) {
+      terminateBtn.disabled = !['running', 'paused'].includes(taskState) || taskState === 'exited';
+    }
+    if (badge) {
+      badge.textContent = TASK_STATE_LABELS[taskState] || taskState;
+      badge.className = 'task-state-badge task-state-' + taskState;
     }
   }).catch(() => {});
-  api.fetchLastAlloc().then((d) => {
+  api.fetchLastAlloc(api.getCurrentTaskId()).then((d) => {
     const la = document.getElementById('last-alloc');
+    if (d && d.error) { if (la) la.textContent = ''; return; }
     if (la) la.textContent = formatLastAlloc(d);
-  }).catch(() => {});
+  }).catch(() => {
+    const la = document.getElementById('last-alloc');
+    if (la) la.textContent = '';
+  });
 }
