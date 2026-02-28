@@ -54,9 +54,15 @@ export function useApi() {
     return jsonFetch(url)
   }
 
-  async function fetchState(target = null) {
-    const url = target != null && target !== '' ? '/api/state?target=' + encodeURIComponent(target) : '/api/state'
-    return jsonFetch(url)
+  /** 全局状态（任务列表 + 聚合的 paused/pauseReason/lastAlloc/assertionError）。仅 GET /api/state，无 target。 */
+  async function fetchState() {
+    return jsonFetch('/api/state')
+  }
+
+  /** 单个任务状态（worker 的 state，含 assertionError 等）。GET /api/task-state?target=<taskId>。 */
+  async function fetchTaskState(taskId) {
+    if (taskId == null || taskId === '') return {}
+    return jsonFetch('/api/task-state?target=' + encodeURIComponent(String(taskId)))
   }
 
   async function fetchSettings(target = null) {
@@ -78,6 +84,12 @@ export function useApi() {
   async function fetchBreakpointSpaces(target = null) {
     const url = target != null && target !== '' ? '/api/breakpoint-spaces?target=' + encodeURIComponent(target) : '/api/breakpoint-spaces'
     return jsonFetch(url)
+  }
+
+  /** Pipeline stages (compile + passes + GIR-Z) for the task. GET /api/pipeline?target=<taskId>. */
+  async function fetchPipeline(target = null) {
+    if (target == null || target === '') return { stages: [] }
+    return jsonFetch('/api/pipeline?target=' + encodeURIComponent(String(target)))
   }
 
   async function postBreakpointSpaces(breakSpaces, target = null) {
@@ -126,12 +138,26 @@ export function useApi() {
     return jsonFetch('/api/settings', { method: 'POST', body: JSON.stringify(body) })
   }
 
-  async function fetchGirDot(path = null, target = null) {
+  async function fetchGirJson(path = null, graphId = null, target = null) {
     const params = new URLSearchParams()
     if (path) params.set('path', path)
+    if (graphId != null && graphId !== '') params.set('graphId', graphId)
     if (target != null && target !== '') params.set('target', target)
     const q = params.toString()
-    return jsonFetch('/api/gir-dot' + (q ? '?' + q : ''))
+    return jsonFetch('/api/gir-json' + (q ? '?' + q : ''))
+  }
+
+  async function fetchGirBreakpoints(target = null) {
+    const params = new URLSearchParams()
+    if (target != null && target !== '') params.set('target', target)
+    const q = params.toString()
+    return jsonFetch('/api/gir-breakpoints' + (q ? '?' + q : ''))
+  }
+
+  async function postGirBreakpoints(nodeIds, target = null) {
+    const body = { nodeIds: Array.isArray(nodeIds) ? nodeIds : [] }
+    if (target != null && target !== '') body.target = target
+    return jsonFetch('/api/gir-breakpoints', { method: 'POST', body: JSON.stringify(body) })
   }
 
   return {
@@ -142,11 +168,13 @@ export function useApi() {
     fetchRegionMemory,
     fetchRegionObjects,
     fetchState,
+    fetchTaskState,
     fetchSettings,
     fetchLog,
     fetchListDir,
     fetchBreakpointTypes,
     fetchBreakpointSpaces,
+    fetchPipeline,
     postBreakpointSpaces,
     postBreakpointTypes,
     postFile,
@@ -155,6 +183,8 @@ export function useApi() {
     postRestart,
     postTerminate,
     postSettings,
-    fetchGirDot,
+    fetchGirJson,
+    fetchGirBreakpoints,
+    postGirBreakpoints,
   }
 }

@@ -46,8 +46,7 @@ void clearRunState() {
     st.mainModule.reset();
 }
 
-RunOutcome
-runScriptOnce(const std::string &targetFile, bool enableMemoryMonitor, bool enableAllocStep) {
+RunOutcome runScriptOnce(const std::string &targetFile) {
     auto file = std::make_unique<std::ifstream>(targetFile);
     if (!file->is_open()) {
         std::cout << "Error: cannot open file " << targetFile << std::endl;
@@ -57,26 +56,21 @@ runScriptOnce(const std::string &targetFile, bool enableMemoryMonitor, bool enab
 
     auto &srv = getServer();
     if (srv.isRunning()) {
-        if (enableMemoryMonitor)
-            srv.startMemoryScan();
-        if (enableAllocStep) {
-            srv.enableAllocStep(true);
+        srv.startMemoryScan();
+        bool hasAllocBreakSpaces = !srv.getAllocBreakSpaces().empty();
+        srv.enableAllocStep(hasAllocBreakSpaces);
 #ifndef NDEBUG
+        if (hasAllocBreakSpaces) {
             camel::DebugBreakpoint::EnableType("alloc_before");
             camel::DebugBreakpoint::EnableType("alloc");
-#endif
         } else {
-            srv.enableAllocStep(false);
-#ifndef NDEBUG
             camel::DebugBreakpoint::DisableType("alloc_before");
             camel::DebugBreakpoint::DisableType("alloc");
-#endif
         }
+#endif
     }
 
-    std::string runMsg = "Running " + targetFile +
-                         " (memory monitor=" + (enableMemoryMonitor ? "on" : "off") +
-                         ", alloc step=" + (enableAllocStep ? "on" : "off") + ")";
+    std::string runMsg = "Running " + targetFile;
     std::cout << runMsg << std::endl;
     Logger::WriteToAllStreams(runMsg);
     getTaskState() = "running";
@@ -97,8 +91,8 @@ runScriptOnce(const std::string &targetFile, bool enableMemoryMonitor, bool enab
             return RunOutcome::Failed;
         }
 
-        std::vector<std::string> passes;
-        int retCode = applyPasses(passes, st.ctx, std::cout);
+        std::vector<std::string> passes = getState().runPasses;
+        int retCode                     = applyPasses(passes, st.ctx, std::cout);
         if (retCode != 0) {
             const auto &diags = st.ctx->rtmDiags();
             if (diags->hasErrors())

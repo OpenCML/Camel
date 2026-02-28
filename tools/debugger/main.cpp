@@ -128,10 +128,10 @@ int main(int argc, char *argv[]) {
             }
         });
 
-    // 查询类 API（getState、getGirDot）不经过命令派发，由 HTTP 层直接回调，减少间接层且与 DAP
+    // 查询类 API（getState、getGirJson）不经过命令派发，由 HTTP 层直接回调，减少间接层且与 DAP
     // 风格一致。
     debugger::DebuggerServer &srv = debugger::getServer();
-    srv.setQueryCallbacks(debugger::getStateJson, debugger::getGirDot);
+    srv.setQueryCallbacks(debugger::getStateJson, debugger::getGirJson);
 
 #ifndef NDEBUG
     // 父进程仅注册 breakpoint type（供 GET /api/breakpoint-types 返回 known types），不注册

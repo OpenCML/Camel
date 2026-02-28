@@ -61,13 +61,20 @@ export function renderHexView(container, raw, prevLines = {}, options = {}) {
   const used = raw.used != null ? raw.used : 0
 
   const lines = bytesToHexLines(data, baseOffset, BYTES_PER_LINE)
-  container.innerHTML = ''
 
   if (lines.length === 0) {
-    container.innerHTML = '<div class="view-placeholder">No data for this region.</div>'
+    if (container.replaceChildren) {
+      const placeholder = document.createElement('div')
+      placeholder.className = 'view-placeholder'
+      placeholder.textContent = 'No data for this region.'
+      container.replaceChildren(placeholder)
+    } else {
+      container.innerHTML = '<div class="view-placeholder">No data for this region.</div>'
+    }
     return
   }
 
+  const fragment = document.createDocumentFragment()
   lines.forEach((line) => {
     const lineStart = line.offset
     const lineEnd = lineStart + BYTES_PER_LINE
@@ -85,7 +92,7 @@ export function renderHexView(container, raw, prevLines = {}, options = {}) {
     if (cls.includes('hex-partial')) {
       const pct = Math.round(((used - lineStart) / BYTES_PER_LINE) * 100)
       div.style.background =
-        'linear-gradient(to right, rgba(35,134,54,0.2) 0%, rgba(35,134,54,0.2) ' +
+        'linear-gradient(to right, rgba(35,134,54,0.28) 0%, rgba(35,134,54,0.28) ' +
         pct +
         '%, rgba(48,54,61,0.4) ' +
         pct +
@@ -99,8 +106,15 @@ export function renderHexView(container, raw, prevLines = {}, options = {}) {
       '</span> <span class="hex-ascii">' +
       line.ascii +
       '</span>'
-    container.appendChild(div)
+    fragment.appendChild(div)
   })
+
+  if (container.replaceChildren) {
+    container.replaceChildren(fragment)
+  } else {
+    container.innerHTML = ''
+    container.appendChild(fragment)
+  }
 
   if (diffFadeMs > 0) {
     setTimeout(() => {

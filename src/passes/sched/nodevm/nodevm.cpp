@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "nodevm.h"
 #include "camel/common/algo/topo.h"
 #include "camel/compile/gir/nodes.h"
+#include "camel/core/debug_breakpoint.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
 
@@ -228,6 +229,11 @@ slot_t NodeVMSchedPass::call(Graph *graph, Frame *rootFrame) {
 
         for (size_t i = 0; i < nodes.size(); ++i) {
             const node_ptr_t &n = nodes[i];
+
+#ifndef NDEBUG
+            if (camel::DebugBreakpoint::IsEnabled("gir_node"))
+                camel::DebugBreakpoint::Hit("gir_node", n.get());
+#endif
 
             switch (n->type()) {
             case NodeType::CAST: {

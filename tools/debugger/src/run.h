@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 26, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -30,7 +30,7 @@ enum class RunOutcome {
 };
 
 void clearRunState();
-RunOutcome
-runScriptOnce(const std::string &targetFile, bool enableMemoryMonitor, bool enableAllocStep);
+/// 执行一次脚本。内存扫描始终开启；断点按统一模型由当前配置决定，Run/Restart 时由父进程同步。
+RunOutcome runScriptOnce(const std::string &targetFile);
 
 } // namespace debugger

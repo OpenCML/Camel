@@ -180,12 +180,20 @@ void unregisterTask(int port) {
 }
 
 void setTaskState(int port, const std::string &taskState) {
-    std::lock_guard<std::mutex> lock(g_tasksMutex);
-    for (auto &t : g_tasks)
-        if (t.port == port) {
-            t.taskState = taskState;
-            break;
-        }
+    std::string scriptPath;
+    {
+        std::lock_guard<std::mutex> lock(g_tasksMutex);
+        for (auto &t : g_tasks)
+            if (t.port == port) {
+                scriptPath  = t.scriptPath;
+                t.taskState = taskState;
+                break;
+            }
+    }
+    if (taskState == "exited" && !scriptPath.empty()) {
+        std::string msg = "Task " + std::to_string(port) + " exited (" + scriptPath + ").\n";
+        Logger::WriteToAllStreams(msg);
+    }
 }
 
 std::vector<TaskInfo> getTasks() {
@@ -227,6 +235,20 @@ int resolveTargetToPort(const std::string &target) {
             alive.push_back(&t);
     if (alive.size() == 1)
         return alive[0]->port;
+    return 0;
+}
+
+int getTaskPortByTargetIncludingExited(const std::string &target) {
+    if (target.empty())
+        return 0;
+    std::lock_guard<std::mutex> lock(g_tasksMutex);
+    for (const auto &t : g_tasks)
+        if (t.id == target)
+            return t.port;
+    int port = std::atoi(target.c_str());
+    for (const auto &t : g_tasks)
+        if (t.port == port)
+            return t.port;
     return 0;
 }
 

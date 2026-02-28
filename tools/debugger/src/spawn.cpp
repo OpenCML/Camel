@@ -85,8 +85,7 @@ void pipeReaderThread(int workerPort, HANDLE hRead) {
 } // namespace
 #endif
 
-std::pair<bool, int> spawnWorker(
-    const std::string &path, bool memoryMonitor, bool allocStep, bool sendRun, int desiredPort) {
+std::pair<bool, int> spawnWorker(const std::string &path, bool sendRun, int desiredPort) {
     auto &st = getState();
     if (!st.hasFile() && path.empty())
         return {false, 0};
@@ -211,9 +210,9 @@ std::pair<bool, int> spawnWorker(
         getTaskState() = "running";
     return {true, workerPort};
 #else
-    (void)memoryMonitor;
-    (void)allocStep;
-    (void)workerPort;
+    (void)path;
+    (void)sendRun;
+    (void)desiredPort;
     return {false, 0};
 #endif
 }

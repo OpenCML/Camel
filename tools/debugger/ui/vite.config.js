@@ -4,6 +4,9 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   base: './',
+  optimizeDeps: {
+    include: ['@vue-flow/core', 'dagre'],
+  },
   server: {
     port: 5173,
     proxy: {

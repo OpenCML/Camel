@@ -64,6 +64,8 @@ struct DebuggerState {
     context_ptr_t ctx;
     std::shared_ptr<UserDefinedModule> mainModule;
     std::shared_ptr<CamelParser> parser;
+    /// Pass 列表：与 CLI 的 Run::targetFiles[1:] 一致，空时 applyPasses 使用 std::fallback。
+    std::vector<std::string> runPasses;
 
     bool hasFile() const { return !targetFile.empty(); }
 };
@@ -93,7 +95,10 @@ void unregisterTask(int port);
 void setTaskState(int port, const std::string &taskState);
 std::vector<TaskInfo> getTasks();
 /// 将 API 的 target（id 或 port 字符串）解析为端口号，空时先看前台任务再回退到单任务，用于转发。
+/// 仅返回非 exited 任务的端口；exited 任务返回 0。
 int resolveTargetToPort(const std::string &target);
+/// 同上，但包含已退出的任务，用于返回已退出任务的缓存数据（如 log、父进程 settings）。
+int getTaskPortByTargetIncludingExited(const std::string &target);
 
 /// 主进程 CLI 前台任务：未显式指定 target 时默认作用于此任务。
 std::string getForegroundTaskId();

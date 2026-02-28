@@ -112,7 +112,7 @@ buildArgsJson(const std::string &commandName, const std::string &replCmd, const 
         return R"({"path":")" + escapeJsonString(arg) + R"("})";
 
     if (commandName == "launch")
-        return R"({"memoryMonitor":true,"allocStep":false})";
+        return "{}";
 
     if (commandName == "startServer") {
         int port = 8765;
@@ -137,7 +137,7 @@ buildArgsJson(const std::string &commandName, const std::string &replCmd, const 
     }
 
     if (commandName == "setBreakpointFilter") {
-        // breakpoint-filter / alloc-breakpoint-spaces <space1> [space2 ...]
+        // breakpoint-filter / alloc-breakpoint-spaces（统一断点模型，按空间类型）
         std::string list = trim(arg);
         if (list.empty())
             return R"({"breakSpaces":[]})";
@@ -205,7 +205,7 @@ Usage:
 Options (startup):
   -s, --serve [port]   Start API server on port (default 8765) before REPL
   -f, --file <path>    Load file to debug (same as positional file.cml)
-  -r, --run            Run loaded file once after startup (memory monitor on, alloc-step off)
+  -r, --run            Run loaded file once after startup
   -V, --verbose        Enable verbose output from startup
   --logfile <path>     Write program output to file from startup
   --run-worker <path>  Run one script and exit (for multi-process child; no server/REPL)
@@ -220,9 +220,11 @@ REPL commands (after startup):
   restart           Restart execution
   terminate         Terminate execution
   task [id]      (fg)  Show or set foreground task (default target for continue/restart/terminate/etc.)
+  task list           List all tasks (id, port, state, path)
+  task state [id]     Show detailed state of foreground task or specified task by id
   verbose [on|off]     Enable or disable verbose output
   logfile [path]       Write program output to file (path=off to close)
-  breakpoint-filter [space1 ...]   Set alloc breakpoint spaces (empty = none, pause only when in set)
+  breakpoint-filter [space1 ...]   Set breakpoint filter (alloc spaces; empty = none)
   alloc-breakpoint-spaces [space1 ...]  Same as breakpoint-filter
   breakpoints          Show breakpoint status by type (alloc spaces, etc.)
   breakpoint-types     Set enabled breakpoint types
@@ -274,7 +276,7 @@ void printStartupBanner() {
         dispatcher.dispatch("configure", cfgArgs);
     }
     if (opts.run && getState().hasFile())
-        dispatcher.dispatch("launch", R"({"memoryMonitor":true,"allocStep":false})");
+        dispatcher.dispatch("launch", "{}");
 
     std::cout << std::endl;
     if (getServer().isRunning())
@@ -344,6 +346,16 @@ void repl() {
                     std::cout << "No foreground task set." << std::endl;
                 else
                     std::cout << "Foreground task: " << fg << std::endl;
+            } else if (arg == "list") {
+                std::string argsJson = R"({"subcommand":"list"})";
+                dispatcher.dispatch("task", argsJson);
+            } else if (arg.size() >= 5 && arg.substr(0, 5) == "state") {
+                std::string rest = trim(arg.substr(5));
+                json j;
+                j["subcommand"] = "state";
+                if (!rest.empty())
+                    j["target"] = rest;
+                dispatcher.dispatch("task", j.dump());
             } else {
                 setForegroundTaskId(arg);
                 std::cout << "Foreground task: " << arg << std::endl;

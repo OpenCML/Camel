@@ -25,11 +25,10 @@
 #include "camel/parse/parse.h"
 #include "camel/utils/env.h"
 #include "compile.h"
-#include "passes/trans/dot/graphviz.h"
+#include "gir_json.h"
 
 #include <filesystem>
 #include <fstream>
-#include <sstream>
 #include <string>
 
 namespace fs = std::filesystem;
@@ -67,7 +66,7 @@ CompilationState createCompilationStateForPath(const std::string &path) {
 
 namespace {
 
-std::pair<std::string, std::string> getGirDotFromCurrentState() {
+std::pair<std::string, std::string> getGirJsonFromCurrentState(const std::string &graphId) {
     auto &st = getState();
     if (!st.ctx)
         return {"", "run first"};
@@ -76,13 +75,11 @@ std::pair<std::string, std::string> getGirDotFromCurrentState() {
     auto graph = st.ctx->rootGraph();
     if (!graph)
         return {"", "no graph"};
-    GraphVizDumpPass pass(st.ctx);
-    std::ostringstream os;
-    pass.apply(graph, os);
-    return {os.str(), ""};
+    return getGirJson(graph, graphId);
 }
 
-std::pair<std::string, std::string> getGirDotByPath(const std::string &path) {
+std::pair<std::string, std::string>
+getGirJsonByPath(const std::string &path, const std::string &graphId) {
     if (!fs::exists(path))
         return {"", "file not found"};
     std::ifstream file(path);
@@ -97,10 +94,7 @@ std::pair<std::string, std::string> getGirDotByPath(const std::string &path) {
         auto graph = state.ctx->rootGraph();
         if (!graph)
             return {"", "no graph"};
-        GraphVizDumpPass pass(state.ctx);
-        std::ostringstream os;
-        pass.apply(graph, os);
-        return {os.str(), ""};
+        return getGirJson(graph, graphId);
     } catch (const std::exception &e) {
         return {"", std::string(e.what())};
     }
@@ -108,14 +102,15 @@ std::pair<std::string, std::string> getGirDotByPath(const std::string &path) {
 
 } // namespace
 
-std::pair<std::string, std::string> getGirDot(const std::string &path) {
+std::pair<std::string, std::string>
+getGirJson(const std::string &path, const std::string &graphId) {
     if (!path.empty())
-        return getGirDotByPath(path);
-    auto fromState = getGirDotFromCurrentState();
+        return getGirJsonByPath(path, graphId);
+    auto fromState = getGirJsonFromCurrentState(graphId);
     if (!fromState.second.empty() && fromState.second != "run first")
         return fromState;
     if (fromState.second == "run first" && getState().hasFile())
-        return getGirDotByPath(getState().targetFile);
+        return getGirJsonByPath(getState().targetFile, graphId);
     return fromState;
 }
 

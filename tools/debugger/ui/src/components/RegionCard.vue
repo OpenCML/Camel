@@ -61,12 +61,14 @@ const scaleLevels = [
 ]
 
 function fmtBytesShort(n) {
-  if (n < 1024) return n + 'B'
-  if (n < 1024 * 1024) {
-    const kb = n / 1024
+  const val = Number(n)
+  if (val !== val || val < 0) return '—'
+  if (val < 1024) return val + 'B'
+  if (val < 1024 * 1024) {
+    const kb = val / 1024
     return kb % 1 === 0 ? kb + 'KB' : kb.toFixed(1) + 'KB'
   }
-  const mb = n / (1024 * 1024)
+  const mb = val / (1024 * 1024)
   return mb % 1 === 0 ? mb + 'MB' : mb.toFixed(1) + 'MB'
 }
 

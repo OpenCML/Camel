@@ -12,10 +12,10 @@
             type="button"
             id="btn-continue"
             class="nav-debug-btn nav-debug-btn-continue"
-            title="Continue (F5)"
-            aria-label="Continue"
-            :disabled="!appStore.paused"
-            @click="onContinue"
+            :title="continueButtonTitle"
+            :aria-label="appStore.paused ? 'Continue' : 'Run'"
+            :disabled="!canRunOrContinue"
+            @click="onRunOrContinue"
           >
             <span class="nav-debug-icon">▶</span>
           </button>
@@ -73,8 +73,20 @@ const pageTitle = computed(() => {
   return parts[parts.length - 1] || t.scriptPath || 'Camel Debugger'
 })
 
-function onContinue() {
-  api.postContinue(appStore.currentTaskId).then(() => {}).catch(() => {})
+const isLoaded = computed(() => appStore.currentTask?.taskState === 'loaded')
+const canRunOrContinue = computed(
+  () => !!appStore.currentTaskId && (appStore.paused || !!isLoaded.value)
+)
+const continueButtonTitle = computed(() =>
+  appStore.paused ? 'Continue (F5)' : isLoaded.value ? 'Run' : 'Continue (F5)'
+)
+
+function onRunOrContinue() {
+  if (appStore.paused) {
+    api.postContinue(appStore.currentTaskId).then(() => {}).catch(() => {})
+  } else if (isLoaded.value) {
+    api.postRun({ target: appStore.currentTaskId }).then(() => {}).catch(() => {})
+  }
 }
 
 function onRestart() {

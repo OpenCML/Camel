@@ -38,6 +38,7 @@
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <sstream>
 #include <thread>
 
 namespace fs = std::filesystem;
@@ -45,6 +46,44 @@ namespace fs = std::filesystem;
 namespace debugger {
 
 using json = nlohmann::json;
+
+/// 将父进程保存的断点状态（节点型）推送到指定端口的 worker，供 Run/Restart
+/// 后继承；统一断点模型下各类型断点均需在 spawn/run 后同步。
+static void pushGirBreakpointsToPort(DebuggerServer &srv, int port) {
+    auto girIds = srv.getGirBreakpointNodeIds();
+    if (girIds.empty())
+        return;
+    json girBody;
+    girBody["nodeIds"] = json::array();
+    for (uintptr_t id : girIds) {
+        std::ostringstream o;
+        o << "0x" << std::hex << id;
+        girBody["nodeIds"].push_back(o.str());
+    }
+    srv.forwardPostToPort(port, "/api/gir-breakpoints", girBody.dump());
+}
+
+/// 将父进程保存的断点类型列表（含 pipeline 阶段等）推送到指定端口的 worker。
+static void pushBreakpointTypesToPort(DebuggerServer &srv, int port) {
+    auto enabled = srv.getEnabledBreakpointTypes();
+    if (enabled.empty())
+        return;
+    json body;
+    body["enabled"] = enabled;
+    srv.forwardPostToPort(port, "/api/breakpoint-types", body.dump());
+}
+
+/// 将父进程保存的断点状态（alloc spaces、GIR 节点、断点类型）一次性同步到指定端口的 worker。
+/// 用于新 spawn 或 restart 后的子进程，在发送 /api/run 之前调用，确保新进程具备完整断点配置。
+static void syncBreakpointStateToPort(DebuggerServer &srv, int port) {
+    json pushBody;
+    pushBody["breakSpaces"] = json::array();
+    for (const auto &s : srv.getAllocBreakSpaces())
+        pushBody["breakSpaces"].push_back(s);
+    srv.forwardPostToPort(port, "/api/breakpoint-spaces", pushBody.dump());
+    pushGirBreakpointsToPort(srv, port);
+    pushBreakpointTypesToPort(srv, port);
+}
 
 // ---------------------------------------------------------------------------
 // loadSource — load a .cml source file
@@ -69,7 +108,7 @@ class LoadSourceCommand final : public Command {
 
         // 打开文件即 spawn 子进程并注册为 loaded 任务；同一文件可多次打开，每次新建 worker。
         if (!getServer().isWorkerProcess()) {
-            auto [ok, workerPort] = spawnWorker(path, true, false, false);
+            auto [ok, workerPort] = spawnWorker(path, false);
             if (ok && workerPort > 0) {
                 setForegroundTaskId(std::to_string(workerPort));
                 json body;
@@ -97,17 +136,9 @@ class LaunchCommand final : public Command {
         if (getServer().isWorkerProcess())
             return CommandResult::error("run", "Error: launch is not available in worker process.");
 
-        json args          = json::parse(argsJson, nullptr, false);
-        std::string target = args.value("target", "");
-        bool memoryMonitor = args.value("memoryMonitor", true);
-        bool allocStep     = args.value("allocStep", false);
-
-        json runBody;
-        runBody["memoryMonitor"] = memoryMonitor;
-        runBody["allocStep"]     = allocStep;
-
-        std::string display = "run (memory monitor=" + std::string(memoryMonitor ? "on" : "off") +
-                              ", alloc step=" + std::string(allocStep ? "on" : "off") + ")";
+        json args           = json::parse(argsJson, nullptr, false);
+        std::string target  = args.value("target", "");
+        std::string display = "run";
 
         int port = resolveTargetToPort(target);
         if (port > 0) {
@@ -116,18 +147,14 @@ class LaunchCommand final : public Command {
                 return t.port == port;
             });
             if (it != tasks.end() && it->taskState == "loaded") {
+                std::string runBody = argsJson.empty() ? "{}" : argsJson;
+                if (!getServer().isWorkerProcess())
+                    getServer().setLastRunBody(runBody);
+                // 已加载任务：用户在前端设置的断点已实时同步到 worker，run 时无需再同步。
                 for (int retry = 0; retry < 15; ++retry) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                    if (getServer().forwardPostToPort(port, "/api/run", runBody.dump())) {
+                    if (getServer().forwardPostToPort(port, "/api/run", runBody)) {
                         setTaskState(port, "running");
-                        json pushBody;
-                        pushBody["breakSpaces"] = json::array();
-                        for (const auto &s : getServer().getAllocBreakSpaces())
-                            pushBody["breakSpaces"].push_back(s);
-                        getServer().forwardPostToPort(
-                            port,
-                            "/api/breakpoint-spaces",
-                            pushBody.dump());
                         return CommandResult::ok(
                             display,
                             "Run started (task " + std::to_string(port) + ").");
@@ -148,20 +175,15 @@ class LaunchCommand final : public Command {
         if (path.empty() || !getState().hasFile())
             return CommandResult::error(display, "Error: no task selected or load a file first.");
 
-        auto [ok, workerPort] = spawnWorker(path, memoryMonitor, allocStep);
+        auto [ok, workerPort] = spawnWorker(path, true);
         if (ok && workerPort > 0) {
             getServer().setChildPort(workerPort);
+            std::string runBody = argsJson.empty() ? "{}" : argsJson;
+            // 新 spawn 的 worker 无状态，先同步断点再 run。
+            syncBreakpointStateToPort(getServer(), workerPort);
             for (int retry = 0; retry < 15; ++retry) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                if (getServer().forwardPostToPort(workerPort, "/api/run", runBody.dump())) {
-                    json pushBody;
-                    pushBody["breakSpaces"] = json::array();
-                    for (const auto &s : getServer().getAllocBreakSpaces())
-                        pushBody["breakSpaces"].push_back(s);
-                    getServer().forwardPostToPort(
-                        workerPort,
-                        "/api/breakpoint-spaces",
-                        pushBody.dump());
+                if (getServer().forwardPostToPort(workerPort, "/api/run", runBody)) {
                     return CommandResult::ok(
                         display,
                         "Run started (worker port " + std::to_string(workerPort) + ").");
@@ -252,51 +274,51 @@ class RestartCommand final : public Command {
             srv.requestRestart();
             return CommandResult::ok("restart", "Restart.");
         }
-        // 父进程：按 target 终止对应 worker 并重新 spawn
+        // 父进程：按 target 终止对应 worker（若未退出）并重新 spawn；支持已 exited 任务（直接
+        // respawn）
         json args          = json::parse(argsJson, nullptr, false);
         std::string target = args.value("target", "");
         int port           = resolveTargetToPort(target);
+        if (port <= 0)
+            port = getTaskPortByTargetIncludingExited(target);
         if (port <= 0)
             return CommandResult::error(
                 "restart",
                 "No task selected or target invalid. Select a task in the sidebar or pass target.");
         std::vector<TaskInfo> tasks = getTasks();
         std::string scriptPath;
+        std::string taskState;
         for (const auto &t : tasks)
             if (t.port == port) {
                 scriptPath = t.scriptPath;
+                taskState  = t.taskState;
                 break;
             }
         if (scriptPath.empty())
-            return CommandResult::error("restart", "Task not found or already exited.");
-        if (!terminateWorker(port))
-            return CommandResult::error("restart", "Failed to terminate worker.");
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        bool memoryMonitor = args.value("memoryMonitor", true);
-        bool allocStep     = args.value("allocStep", false);
-        // 复用原端口与任务 id：spawn 时指定 desiredPort，不注册新任务，新进程监听原 port
-        auto [ok, newPort] = spawnWorker(scriptPath, memoryMonitor, allocStep, true, port);
+            return CommandResult::error("restart", "Task not found.");
+        if (taskState != "exited") {
+            if (!terminateWorker(port))
+                return CommandResult::error("restart", "Failed to terminate worker.");
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+        auto [ok, newPort] = spawnWorker(scriptPath, true, port);
         if (!ok || newPort <= 0)
             return CommandResult::error("restart", "Respawn failed.");
         setTaskState(port, "running");
-        json runBody;
-        runBody["memoryMonitor"] = memoryMonitor;
-        runBody["allocStep"]     = allocStep;
-        bool runSent             = false;
+        std::string runBody = srv.getLastRunBody();
+        if (runBody.empty())
+            runBody = "{}";
+        // Restart 使用新子进程，无状态，先同步断点再 run。
+        syncBreakpointStateToPort(srv, port);
+        bool runSent = false;
         for (int retry = 0; retry < 15; ++retry) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            if (srv.forwardPostToPort(port, "/api/run", runBody.dump())) {
+            if (srv.forwardPostToPort(port, "/api/run", runBody)) {
                 runSent = true;
                 break;
             }
         }
-        if (runSent) {
-            json pushBody;
-            pushBody["breakSpaces"] = json::array();
-            for (const auto &s : srv.getAllocBreakSpaces())
-                pushBody["breakSpaces"].push_back(s);
-            srv.forwardPostToPort(port, "/api/breakpoint-spaces", pushBody.dump());
-        }
+        (void)runSent;
         return CommandResult::ok("restart", "Restart (task " + std::to_string(port) + ").");
     }
 };
@@ -372,7 +394,7 @@ class ConfigureCommand final : public Command {
 class SetBreakpointFilterCommand final : public Command {
   public:
     const char *name() const override { return "setBreakpointFilter"; }
-    const char *description() const override { return "Set alloc breakpoint space filters"; }
+    const char *description() const override { return "Set breakpoint filters (alloc space type)"; }
 
     CommandResult execute(const std::string &argsJson) override {
         json args = json::parse(argsJson, nullptr, false);
@@ -471,7 +493,7 @@ class SetBreakpointTypesCommand final : public Command {
             if (std::find(known.begin(), known.end(), t) == known.end() && t != "alloc_before")
                 camel::DebugBreakpoint::EnableType(t.c_str());
 
-        getServer().enableAllocStep(toEnable.count("alloc") > 0);
+        // 断点按统一模型由 runScriptOnce 与 Run/Restart 时的同步决定
 
         std::string msg = "Breakpoint types: ";
         if (enabled.empty()) {
@@ -487,6 +509,7 @@ class SetBreakpointTypesCommand final : public Command {
         }
         auto &srv = getServer();
         if (!srv.isWorkerProcess()) {
+            srv.setEnabledBreakpointTypes(enabled);
             std::string target = args.value("target", "");
             int port           = resolveTargetToPort(target);
             if (port > 0 && srv.forwardPostToPort(
@@ -496,6 +519,69 @@ class SetBreakpointTypesCommand final : public Command {
                 msg += " (task " + std::to_string(port) + ")";
         }
         return CommandResult::ok("breakpoint-types", msg);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// task — list all tasks or print detailed state of foreground/specified task
+// ---------------------------------------------------------------------------
+class TaskCommand final : public Command {
+  public:
+    const char *name() const override { return "task"; }
+    const char *description() const override { return "List tasks or show task state"; }
+
+    CommandResult execute(const std::string &argsJson) override {
+        if (getServer().isWorkerProcess())
+            return CommandResult::error(
+                "task",
+                "task command is only available in the main process.");
+
+        json args          = json::parse(argsJson, nullptr, false);
+        std::string sub    = args.value("subcommand", "");
+        std::string target = args.value("target", "");
+
+        if (sub == "list") {
+            auto tasks = getTasks();
+            if (tasks.empty()) {
+                return CommandResult::ok("task", "No tasks.");
+            }
+            std::ostringstream oss;
+            oss << "Tasks (" << tasks.size() << "):\n";
+            for (const auto &t : tasks) {
+                oss << "  id=" << t.id << " port=" << t.port << " state=" << t.taskState
+                    << " path=" << t.scriptPath << "\n";
+            }
+            return CommandResult::ok("task", oss.str());
+        }
+
+        if (sub == "state") {
+            std::string effective = target.empty() ? getForegroundTaskId() : target;
+            if (effective.empty()) {
+                return CommandResult::error(
+                    "task",
+                    "No target specified and no foreground task set. Use 'task <id>' to set "
+                    "foreground or 'task state <id>'.");
+            }
+            auto tasks            = getTasks();
+            const TaskInfo *found = nullptr;
+            for (const auto &t : tasks) {
+                if (t.id == effective || std::to_string(t.port) == effective) {
+                    found = &t;
+                    break;
+                }
+            }
+            if (!found) {
+                return CommandResult::error("task", "Task not found: " + effective);
+            }
+            std::ostringstream oss;
+            oss << "Task " << found->id << ":\n"
+                << "  port: " << found->port << "\n"
+                << "  scriptPath: " << found->scriptPath << "\n"
+                << "  taskState: " << found->taskState << "\n";
+            return CommandResult::ok("task", oss.str());
+        }
+
+        return CommandResult::error("task", "Usage: task list | task state [target]");
     }
 };
 
@@ -533,6 +619,7 @@ void registerAllCommands(CommandDispatcher &dispatcher) {
     dispatcher.registerCommand(std::make_shared<SetBreakpointFilterCommand>());
     dispatcher.registerCommand(std::make_shared<BreakpointStatusCommand>());
     dispatcher.registerCommand(std::make_shared<SetBreakpointTypesCommand>());
+    dispatcher.registerCommand(std::make_shared<TaskCommand>());
     dispatcher.registerCommand(std::make_shared<DisconnectCommand>());
 }
 

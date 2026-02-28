@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 25, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -32,6 +32,7 @@ struct CompilationState {
 };
 
 CompilationState createCompilationStateForPath(const std::string &path);
-std::pair<std::string, std::string> getGirDot(const std::string &path);
+/// 返回 (JSON 字符串, 错误信息)。graphId 为空表示根图摘要，非空表示展开该图。
+std::pair<std::string, std::string> getGirJson(const std::string &path, const std::string &graphId);
 
 } // namespace debugger

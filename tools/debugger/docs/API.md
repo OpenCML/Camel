@@ -10,11 +10,12 @@
 - **Content-Type**：请求与响应均为 `application/json`。
 - **target 通用约定**：
   - **任务 id**：即任务对应子进程监听的**端口号**（如 `"8766"`），与 path 无关；任务唯一由 id 区分。
-  - **全局接口**：不使用 target，不转发（如 GET /api/state 无 target 时返回父进程状态）。
-  - **按任务 GET**：查询参数 `?target=<任务id>` 可选。
+  - **全局接口**：GET /api/state 仅返回父进程全局状态（任务列表 + 聚合字段），**不接受 target**，不转发。
+  - **单任务状态**：GET /api/task-state 必须带 `?target=<任务id>`，转发到该任务并返回其 state（与全局 state 结构不同，无 tasks 列表）。
+  - **按任务 GET**：其余按任务接口查询参数 `?target=<任务id>` 可选。
   - **按任务 POST**：Body 中 `"target": "<任务id>"` 可选。
-  - **无 target 时**：后端支持**前台任务**；存在前台时由服务端解析为前台任务。多任务且无 target 且无前台时返回 400。**Web UI 调用 API 时必须显式传 target**，不依赖前台机制。
-  - 任务是否暂停、last-alloc 仅通过 GET /api/state 的聚合字段获得，父进程不暴露 GET /api/step-paused、GET /api/last-alloc。
+  - **无 target 时**：后端支持**前台任务**；存在前台时由服务端解析为前台任务。多任务且无 target 且无前台时返回 400。**Web UI 调用按任务 API 时必须显式传 target**，不依赖前台机制。
+  - 任务是否暂停、last-alloc、assertionError 通过 GET /api/state 的 tasks[] 聚合字段获得，父进程不暴露 GET /api/step-paused、GET /api/last-alloc。
 - **打开文件即建任务**：POST /api/file 成功后父进程会 spawn 子进程并注册任务，任务状态为 `loaded`；同一文件可多次打开，每次新建 worker 与新任务。
 
 ---
@@ -30,22 +31,31 @@
 
 ## 3. 端点列表
 
-### 3.1 GET /api/state
+### 3.1 GET /api/state（仅全局状态）
 
-- **target**：可选。有 target 时转发到子进程，返回该任务的完整状态（含 assertionError 等）；无 target 时返回父进程状态（含 tasks 列表）。
-- **请求**：无 Body；可选查询参数 `target`。
-- **响应**（无 target，父进程状态）：
+- **用途**：获取父进程全局状态，含任务列表及每个任务的聚合字段。**不接受 target**，不转发。
+- **请求**：无 Body；无查询参数（若有 target 也会被忽略）。
+- **响应**（父进程）：
   - `serverRunning`: boolean
   - `hasFile`: boolean
   - `targetFile`: string
-  - `tasks`: array，每项 `{ "id", "port", "scriptPath", "taskState" }`；taskState 为 `"loaded"` | `"running"` | `"paused"` | `"completed"` | `"exited"` 等。
+  - `tasks`: array，每项 `{ "id", "port", "scriptPath", "taskState", ... }`；taskState 为 `"loaded"` | `"running"` | `"paused"` | `"completed"` | `"exited"` 等。
   - 当父进程**无任务**时，顶层还包含：`memoryMonitorRunning`, `taskState`, `verbose`, `allocStepEnabled`, `allocBreakpointsAvailable`。
-- **状态聚合**：无 target 时，父进程会对每个非 exited 任务请求 `/api/step-paused`、`/api/last-alloc` 并合并进该 task，在 `tasks[]` 每项中增加可选字段 `paused` (bool)、`pauseReason` (object)、`lastAlloc` (object)。详见「状态聚合」小节。
-- **错误**：有 target 但转发失败时由 tryForwardToTarget 返回 502（仅此端点可能 502）；无 target 无错误。
+- **状态聚合**：父进程会对每个非 exited 任务请求该任务的 `/api/step-paused`、`/api/last-alloc`、`/api/state`，将 `paused`、`pauseReason`、`lastAlloc`、`assertionError`（及 assertionExpression/File/Line）合并进对应 task。详见「状态聚合」小节。
+- **错误**：无。
 
 ---
 
-### 3.2 GET /api/settings
+### 3.2 GET /api/task-state（单任务状态）
+
+- **用途**：获取**单个任务**（worker）的完整 state，与全局 state 结构不同（无 tasks 列表，含 assertionError 等）。仅父进程提供；子进程请直接请求 GET /api/state。
+- **请求**：必须带查询参数 `?target=<任务id>`。
+- **响应**：转发到该任务 GET /api/state 的原始响应（worker 的 state：serverRunning、hasFile、targetFile、tasks 为空或省略，顶层可能含 assertionError、assertionExpression、assertionFile、assertionLine 等）。
+- **错误**：400（缺少 target、任务不存在或已退出）；502（连接 worker 失败或超时）。
+
+---
+
+### 3.3 GET /api/settings
 
 - **target**：可选。有 target 转发到任务；无 target 时用父进程本地数据；多任务且无 target 返回 400。
 - **请求**：无 Body；可选 `?target=`。
@@ -54,7 +64,7 @@
 
 ---
 
-### 3.3 GET /api/list-dir（仅父进程）
+### 3.4 GET /api/list-dir（仅父进程）
 
 - **用途**：供 Web UI 文件选择器浏览目录；仅父进程注册，子进程不提供。
 - **请求**：查询参数 `?dir=<路径>`，缺省为 `"."`（当前工作目录）。
@@ -63,7 +73,7 @@
 
 ---
 
-### 3.4 POST /api/file
+### 3.5 POST /api/file
 
 - **target**：无。
 - **请求**：`{ "path": "<文件路径>" }`。
@@ -72,16 +82,16 @@
 
 ---
 
-### 3.5 POST /api/run
+### 3.6 POST /api/run
 
 - **target**：必选（Web UI 必须显式传）；CLI 可省略则解析为前台任务。Run 只需指明任务 id，path 为任务状态的一部分、不参与区分任务。
-- **请求**：`{ "target": "<任务id>", "memoryMonitor": boolean, "allocStep": boolean }`（target 必选供 Web UI；memoryMonitor/allocStep 可选）。alloc 断点由用户在 Memory 页或 CLI 设置，新 worker 或转发 run 后父进程会推送当前 alloc 空间配置一次。
+- **请求**：`{ "target": "<任务id>" }`（target 可选，供 Web UI 指定任务）。run 不接收 memoryMonitor/allocStep；内存扫描与断点按统一断点模型处理，新 worker 或转发 run 后父进程会推送当前断点状态（breakpoint-spaces、gir-breakpoints 等）。
 - **响应**：由 launch 命令或 workerRunHandler 返回的 JSON。
 - **错误**：由命令或 handler 返回。若指定任务存在且为 `loaded` 则转发 /api/run；否则 fallback 或报错。
 
 ---
 
-### 3.6 GET /api/snapshot
+### 3.7 GET /api/snapshot
 
 - **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
 - **请求**：可选 `?target=`。
@@ -94,7 +104,7 @@
 
 ---
 
-### 3.7 GET /api/log
+### 3.8 GET /api/log
 
 - **target**：可选。**无 target**：仅用本进程 LogSink（父进程 Logger，Debugger tab）。**有 target**：父进程从任务日志缓冲返回该任务 log（Task tab）。
 - **请求**：`?offset=N`（可选），`?target=`（可选）。
@@ -103,7 +113,7 @@
 
 ---
 
-### 3.8 GET /api/breakpoints
+### 3.9 GET /api/breakpoints
 
 - **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
 - **请求**：可选 `?target=`。
@@ -112,7 +122,7 @@
 
 ---
 
-### 3.9 GET /api/breakpoint-types
+### 3.10 GET /api/breakpoint-types
 
 - **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
 - **请求**：可选 `?target=`。
@@ -121,7 +131,7 @@
 
 ---
 
-### 3.10 POST /api/breakpoint-types
+### 3.11 POST /api/breakpoint-types
 
 - **target**：可选（Body）。父进程先执行命令并回显，再按 target 转发到子进程。
 - **请求**：`{ "enabled": string[], "target"?: "<id>" }`。
@@ -130,16 +140,16 @@
 
 ---
 
-### 3.11 GET /api/breakpoint-spaces
+### 3.12 GET /api/breakpoint-spaces
 
-- **target**：可选。有 target 转发；无 target 时若父进程有任务则仍可能用本地 allocBreakSpaces_（实现允许无 target 时返回父进程状态）。
+- **target**：可选。有 target 转发；无 target 时若父进程有任务则仍可能用本地状态（父进程保留断点配置，统一模型下 Run/Restart 时推送）。
 - **请求**：可选 `?target=`。
-- **响应**：`{ "breakSpaces": string[] }`，空数组表示不在任何分配上暂停。
+- **响应**：`{ "breakSpaces": string[] }`，当前断点配置（分配空间型）；空数组表示该类型未设过滤。
 - **错误**：400（多任务且未指定 target 时，若 requireWorkerForLocal 触发）。
 
 ---
 
-### 3.12 POST /api/breakpoint-spaces
+### 3.13 POST /api/breakpoint-spaces
 
 - **target**：可选（Body）。父进程先执行命令并回显，再按 target 转发到子进程。
 - **请求**：`{ "breakSpaces": string[], "target"?: "<id>" }`。
@@ -148,7 +158,7 @@
 
 ---
 
-### 3.13 POST /api/settings
+### 3.14 POST /api/settings
 
 - **target**：可选（Body）。父进程先执行命令并回显，再按 target 转发到子进程。
 - **请求**：`{ "verbose"?: boolean, "logFile"?: string, "target"?: "<id>" }`；logFile 为空则关闭日志文件。
@@ -157,7 +167,7 @@
 
 ---
 
-### 3.14 POST /api/continue
+### 3.15 POST /api/continue
 
 - **target**：可选（Body）。父进程先执行命令并回显，再按 target 转发到子进程。
 - **请求**：`{ "target"?: "<id>" }`。
@@ -166,7 +176,7 @@
 
 ---
 
-### 3.15 POST /api/restart
+### 3.16 POST /api/restart
 
 - **target**：可选（Body）。父进程先执行命令并回显，再按 target 转发到子进程。
 - **请求**：`{ "target"?: "<id>" }`。
@@ -175,7 +185,7 @@
 
 ---
 
-### 3.16 POST /api/terminate
+### 3.17 POST /api/terminate
 
 - **target**：可选（Body）。父进程先执行命令并回显，再按 target 转发到子进程。
 - **请求**：`{ "target"?: "<id>" }`。
@@ -184,7 +194,7 @@
 
 ---
 
-### 3.17 GET /api/region/:name/memory
+### 3.18 GET /api/region/:name/memory
 
 - **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
 - **请求**：路径参数 `name`；查询参数 `offset`、`limit`（默认 0, 512）。
@@ -193,7 +203,7 @@
 
 ---
 
-### 3.18 GET /api/region/:name/objects
+### 3.19 GET /api/region/:name/objects
 
 - **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
 - **请求**：路径参数 `name`；查询参数 `offset`、`limit`（默认 0, 50）。
@@ -202,24 +212,42 @@
 
 ---
 
-### 3.19 GET /api/gir-dot
+### 3.20 GET /api/gir-json
 
 - **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
-- **请求**：可选 `?target=`，`?path=`。
-- **响应**：`{ "ok": true, "dot": string }` 或 `{ "ok": false, "error": "..." }`。
-- **错误**：400（多任务且未指定 target）；未配置或 getGirDot 失败时 ok false。
+- **请求**：可选 `?target=`，`?path=`，`?graphId=`。无 `graphId` 时返回根图摘要（id、name、children、dependencies）；有 `graphId` 时返回该图的 nodes、edges 及 children/dependencies 摘要。
+- **响应**：`{ "ok": true, "graph": { ... } }` 或 `{ "ok": false, "error": "..." }`。graph 的节点/边 id 为指针地址字符串（如 `"0x1a2b3c4d"`）。
+- **错误**：400（多任务且未指定 target）；未配置或 getGirJson 失败时 ok false；graphId 无效时 error "graph not found"。
+
+---
+
+### 3.21 GET /api/gir-breakpoints
+
+- **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
+- **请求**：可选 `?target=`。
+- **响应**：`{ "nodeIds": ["0x...", ...] }`，当前断点配置（节点型）id 列表。
+
+---
+
+### 3.22 POST /api/gir-breakpoints
+
+- **target**：可选。Body 中 `"target": "<任务id>"` 可选。父进程收到请求时保留一份，Run/Restart 时按统一断点模型推送给 worker。
+- **请求**：Body `{ "nodeIds": ["0x...", ...] }`，全量替换当前断点（节点型）列表。
+- **响应**：`{ "ok": true }` 或 `{ "ok": false, "error": "..." }`。
+- **说明**：执行到所列节点时（需使用 NodeVM 调度器）会暂停，GET /api/state 聚合的 pauseReason 含 `phase: "gir_node"`、`nodeId`、`graphId`。
 
 ---
 
 ## 4. 状态聚合
 
-当客户端请求 **GET /api/state** 且**无 target** 时，父进程在返回前会对 `tasks[]` 中每个 **taskState !== "exited"** 的任务，向该任务端口请求 GET /api/step-paused 与 GET /api/last-alloc，并将结果合并进对应 task 对象：
+当客户端请求 **GET /api/state** 时，父进程在返回前会对 `tasks[]` 中每个 **taskState !== "exited"** 的任务，向该任务端口请求 GET /api/step-paused、GET /api/last-alloc 与 GET /api/state，并将结果合并进对应 task 对象：
 
 - **paused** (boolean)：该任务是否当前停在断点。
-- **pauseReason** (object | 无)：当 paused 为 true 时，包含 `phase`、`size`、`space`、`ptr` 等（与 step-paused 响应一致）。
+- **pauseReason** (object | 无)：当 paused 为 true 时，包含 `phase`、`size`、`space`、`ptr` 等（与 step-paused 响应一致）；若为 GIR 节点断点则 `phase` 为 `"gir_node"`，并含 `nodeId`、`graphId`。
 - **lastAlloc** (object | 无)：最近一次分配断点信息，用于 UI 展示。
+- **assertionError**、**assertionExpression**、**assertionFile**、**assertionLine**（来自该任务 GET /api/state 的顶层字段）：若该任务发生断言失败则合并进 task，供 UI 展示。
 
-若某任务请求失败或超时，该任务不添加上述字段或使用安全默认。这样前端仅需轮询 GET /api/state 即可获知「运行中 / 停在断点」与 last-alloc，无需单独轮询 step-paused、last-alloc。
+若某任务请求失败或超时，该任务不添加上述字段或使用安全默认。这样前端仅需轮询 GET /api/state 即可获知「运行中 / 停在断点」、last-alloc 与 assertionError，无需单独请求 GET /api/task-state（除非需要该任务的完整 state 原始响应）。
 
 ---
 

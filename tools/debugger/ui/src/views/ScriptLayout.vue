@@ -16,11 +16,11 @@
     </div>
     <div class="main-panels">
       <div
-        id="panel-run"
+        id="panel-pipeline"
         class="main-panel"
-        :class="{ active: appStore.currentTab === 'run' }"
+        :class="{ active: appStore.currentTab === 'pipeline' }"
         role="tabpanel"
-        data-tab="run"
+        data-tab="pipeline"
       >
         <RunView />
       </div>
@@ -77,7 +77,7 @@ onMounted(async () => {
 })
 
 const tabs = [
-  { id: 'run', label: 'Run' },
+  { id: 'pipeline', label: 'Pipeline' },
   { id: 'memory', label: 'Memory' },
   { id: 'gir', label: 'GIR' },
 ]

@@ -9,7 +9,7 @@ const UI_STORAGE = {
 export const useAppStore = defineStore('app', {
   state: () => ({
     openScripts: [],
-    currentTab: 'run',
+    currentTab: 'pipeline',
     sidebarCollapsed: false,
     currentTaskId: null,
     tasks: [],
@@ -27,6 +27,8 @@ export const useAppStore = defineStore('app', {
     assertionError: null,
     stepStatusText: '',
     lastAllocText: '',
+    /** Pipeline breakpoint stage IDs per task: { [taskId]: string[] } */
+    pipelineBreakpointsByTask: {},
   }),
 
   getters: {
@@ -35,13 +37,27 @@ export const useAppStore = defineStore('app', {
       state.currentTaskId == null
         ? null
         : (state.tasks || []).find((t) => String(t.id) === String(state.currentTaskId)) || null,
+    /** Pipeline breakpoint stage IDs for current task (for Pipeline tab). */
+    pipelineBreakpoints: (state) => {
+      const id = state.currentTaskId
+      if (!id) return []
+      const arr = state.pipelineBreakpointsByTask[String(id)]
+      return Array.isArray(arr) ? arr : []
+    },
   },
 
   actions: {
+    setPipelineBreakpoints(stageIds) {
+      const id = this.currentTaskId
+      if (id == null) return
+      const key = String(id)
+      this.pipelineBreakpointsByTask = { ...this.pipelineBreakpointsByTask, [key]: stageIds }
+    },
+
     initFromStorage() {
       try {
         const tab = sessionStorage.getItem(UI_STORAGE.TAB)
-        if (tab && ['run', 'memory', 'gir'].includes(tab)) this.currentTab = tab
+        if (tab && ['pipeline', 'memory', 'gir'].includes(tab)) this.currentTab = tab
         const collapsed = sessionStorage.getItem(UI_STORAGE.SIDEBAR_COLLAPSED)
         if (collapsed === 'true') this.sidebarCollapsed = true
         const logCollapsed = sessionStorage.getItem(UI_STORAGE.LOG_PANEL)
@@ -83,13 +99,13 @@ export const useAppStore = defineStore('app', {
       }
       const alive = state.tasks.filter((t) => t.taskState !== 'exited')
       const ids = state.tasks.map((t) => t.id)
-      const current = this.currentTaskId ? state.tasks.find((t) => t.id === this.currentTaskId) : null
+      const current = this.currentTaskId ? state.tasks.find((t) => String(t.id) === String(this.currentTaskId)) : null
       if (current && current.taskState === 'exited') {
-        this.currentTaskId = alive.length ? alive[0].id : null
+        this.currentTaskId = alive.length ? alive[0].id : current.id
         return
       }
-      if (!this.currentTaskId || !ids.includes(this.currentTaskId)) {
-        this.currentTaskId = alive.length ? alive[0].id : null
+      if (!this.currentTaskId || !ids.some((t) => String(t.id) === String(this.currentTaskId))) {
+        this.currentTaskId = alive.length ? alive[0].id : state.tasks[0].id
       }
     },
 
@@ -130,7 +146,7 @@ export const useAppStore = defineStore('app', {
         this.stepStatusText = ''
         this.lastAllocText = ''
       }
-      this.canRestart = !!taskId && task && task.taskState !== 'exited'
+      this.canRestart = !!taskId && !!task
       this.canTerminate = !!taskId && task && task.taskState !== 'exited'
       const labels = { idle: 'No task', loaded: 'Loaded', running: 'Running', paused: 'Paused', completed: 'Completed', terminated: 'Terminated', exited: 'Exited' }
       this.apiStatus = this.serverRunning
@@ -150,6 +166,8 @@ function fmtBytes(n) {
 function formatPauseReason(d) {
   if (!d || !d.phase) return d && d.ptr !== undefined ? 'Paused after alloc – Continue or Restart' : 'Paused – Continue or Restart'
   if (d.phase === 'before') return 'Paused before alloc (size ' + fmtBytes(d.size || 0) + ', ' + (d.space || '?') + ') – Continue or Restart'
+  if (d.phase === 'pipeline') return 'Paused before stage ' + (d.stageId || '?') + ' – Continue or Restart'
+  if (d.phase === 'gir_node') return 'Paused at GIR node – Continue or Restart'
   return 'Paused after alloc (0x' + (d.ptr != null ? d.ptr.toString(16) : '0') + ', ' + fmtBytes(d.size || 0) + ') – Continue or Restart'
 }
 

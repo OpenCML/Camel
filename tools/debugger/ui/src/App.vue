@@ -34,6 +34,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import Sidebar from './components/Sidebar.vue'
 import NavHeader from './components/NavHeader.vue'
 import LogPanel from './components/LogPanel.vue'
@@ -43,6 +44,8 @@ import { useApi } from './composables/useApi'
 
 const appStore = useAppStore()
 const api = useApi()
+const router = useRouter()
+const route = useRoute()
 const resizeHandle = ref(null)
 
 const logPanelStyle = computed(() => ({
@@ -52,6 +55,9 @@ const logPanelStyle = computed(() => ({
 function pollState() {
   api.fetchState().then((d) => {
     appStore.setStateFromApi(d)
+    if (route.path === '/' && d && d.tasks && d.tasks.length > 0) {
+      router.replace('/script/' + String(d.tasks[0].id))
+    }
   }).catch(() => {
     appStore.setStateFromApi({ serverRunning: false, tasks: [] })
   })

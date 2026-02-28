@@ -23,9 +23,9 @@
  * run 参数并执行脚本。
  *
  * 设计要点：
- * - run 参数（memoryMonitor/allocStep）经父进程 spawn 后 POST /api/run 到子进程；alloc 断点由
- *   POST /api/breakpoint-spaces 单独同步。WorkerRunHandler 解析 body 写入 PendingRun，主循环 wait
- * 到 hasRun 后执行 runScriptOnce，便于 Web UI 动态改选项。
+ * - 父进程 spawn 后 POST /api/run 触发执行；WorkerRunHandler 置位 PendingRun.hasRun，主循环
+ *   执行 runScriptOnce。内存扫描与断点由 runScriptOnce
+ * 内按统一断点模型处理，各类型断点配置由父进程在 run 后同步。
  * - 子进程同样注册 Command 与 postExecuteHook，使 settings/breakpoint-types
  * 等请求在子进程内执行并回显到子进程 LogSink，供 Task 日志 tab 展示。
  */
@@ -34,6 +34,7 @@
 
 #include "nlohmann/json.hpp"
 
+#include "camel/compile/gir.h"
 #include "camel/utils/dll_path.h"
 #include "camel/utils/log.h"
 #include "command/commands.h"
@@ -51,9 +52,11 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <iostream>
 #include <mutex>
 #include <string>
@@ -86,16 +89,31 @@ std::string getEnvValue(const char *name) {
 }
 #endif
 
-/// 父进程 POST /api/run 下发的单次 run 参数，由 WorkerRunHandler
-/// 写入、主循环消费。alloc 断点空间仅通过 POST /api/breakpoint-spaces 同步，不随 run 下发。
+/// 父进程 POST /api/run 触发一次执行，由 WorkerRunHandler 置位、主循环消费。
+/// body 可含 passes（字符串数组），与 CLI 的 Run::targetFiles[1:] 一致；空则 applyPasses 用
+/// std::fallback。
 struct PendingRun {
-    bool hasRun        = false;
-    bool memoryMonitor = true;
-    bool allocStep     = false;
+    bool hasRun = false;
 };
 static std::mutex g_pendingMutex;
 static std::condition_variable g_pendingCond;
 static PendingRun g_pendingRun;
+
+static void parseRunBodyAndSetPasses(const std::string &body) {
+    try {
+        auto j  = nlohmann::json::parse(body.empty() ? "{}" : body);
+        auto it = j.find("passes");
+        if (it != j.end() && it->is_array()) {
+            std::vector<std::string> passes;
+            for (const auto &e : *it)
+                if (e.is_string())
+                    passes.push_back(e.get<std::string>());
+            getState().runPasses = std::move(passes);
+        }
+    } catch (...) {
+        getState().runPasses.clear();
+    }
+}
 } // namespace
 
 int runWorkerMode(int argc, char *argv[]) {
@@ -144,10 +162,11 @@ int runWorkerMode(int argc, char *argv[]) {
             if (!result.message.empty())
                 Logger::WriteToAllStreams(result.message + "\n");
         });
-    getServer().setQueryCallbacks(getStateJson, getGirDot);
+    getServer().setQueryCallbacks(getStateJson, getGirJson);
 #ifndef NDEBUG
     camel::DebugBreakpoint::RegisterType("alloc");
     camel::DebugBreakpoint::RegisterType("alloc_before");
+    camel::DebugBreakpoint::RegisterType("gir_node");
     camel::DebugBreakpoint::SetHandler([](const char *type, const void *ctx) {
         if (!type)
             return;
@@ -161,27 +180,32 @@ int runWorkerMode(int argc, char *argv[]) {
             auto *evt = static_cast<const mm::AllocEvent *>(ctx);
             if (evt)
                 getServer().pauseAndWaitForContinue(evt->ptr, evt->size, evt->space);
+            return;
         }
+        if (std::strcmp(type, "gir_node") == 0 && ctx != nullptr) {
+            auto *node    = static_cast<const GraphIR::Node *>(ctx);
+            uintptr_t ptr = reinterpret_cast<uintptr_t>(node);
+            if (getServer().isGirBreakpointNode(ptr)) {
+                std::string nodeId = std::format("0x{:x}", ptr);
+                std::string graphId =
+                    std::format("0x{:x}", reinterpret_cast<uintptr_t>(&node->graph()));
+                getServer().pauseAndWaitForGirBreakpoint(nodeId, graphId);
+            }
+            return;
+        }
+        // Pipeline stage breakpoints (CTS, CST, AST, GCT, std::*, GIR-Z, etc.)
+        getServer().pauseAndWaitForPipelineStage(type);
     });
 #endif
 
-    // 父进程转发 POST /api/run 时由此处处理：解析 body 写入 PendingRun
-    // 并唤醒主循环，避免子进程在未收到参数时用默认值执行。
     getServer().setWorkerRunHandler([](const std::string &body, std::string &responseBody) {
-        using json         = nlohmann::json;
-        json j             = json::parse(body, nullptr, false);
-        bool memoryMonitor = j.value("memoryMonitor", true);
-        bool allocStep     = j.value("allocStep", false);
-
+        parseRunBodyAndSetPasses(body);
         {
             std::lock_guard<std::mutex> lock(g_pendingMutex);
-            g_pendingRun.hasRun        = true;
-            g_pendingRun.memoryMonitor = memoryMonitor;
-            g_pendingRun.allocStep     = allocStep;
+            g_pendingRun.hasRun = true;
         }
         g_pendingCond.notify_one();
-
-        json out;
+        nlohmann::json out;
         out["ok"]    = true;
         responseBody = out.dump();
     });
@@ -204,7 +228,7 @@ int runWorkerMode(int argc, char *argv[]) {
             pending             = g_pendingRun;
             g_pendingRun.hasRun = false;
         }
-        RunOutcome outcome = runScriptOnce(path, pending.memoryMonitor, pending.allocStep);
+        RunOutcome outcome = runScriptOnce(path);
         (void)outcome;
     }
 

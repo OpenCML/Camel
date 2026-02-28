@@ -10,7 +10,7 @@
       <h3 class="assertion-overlay-title">Internal assertion failed</h3>
       <p class="assertion-overlay-label">Runtime assertion detail:</p>
       <pre class="assertion-overlay-message">{{ assertionMessage }}</pre>
-      <p class="assertion-overlay-hint">You can click Restart to clear and run again, or fix the script and Run from the Run tab.</p>
+      <p class="assertion-overlay-hint">You can click Restart to clear and run again, or fix the script and run again from the header (▶).</p>
       <button type="button" class="btn btn-continue" @click="onRestart">Restart</button>
     </div>
   </div>

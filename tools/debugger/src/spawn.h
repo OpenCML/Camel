@@ -24,9 +24,8 @@
  * Object，保证主进程退出时子进程被系统回收。
  *
  * 设计要点：
- * - 子进程通过环境变量 CAMEL_DB_WORKER_PORT 获知自己的 HTTP 端口，父进程不传 run
- * 参数（memoryMonitor/allocStep 等）经环境变量，改为 spawn 后通过 forwardPostToChild("/api/run",
- * body) 下发，便于动态修改。
+ * - 子进程通过环境变量 CAMEL_DB_WORKER_PORT 获知自己的 HTTP 端口；run 时父进程 POST /api/run
+ * 触发执行，内存扫描与断点由子进程内统一处理（见 runScriptOnce）。
  * - 子进程 stdout/stderr 重定向到管道，父进程 pipeReaderThread 读到后写入
  * Logger，使脚本输出出现在父进程侧（并可由 Web UI 展示）。
  */
@@ -37,12 +36,10 @@
 namespace debugger {
 
 /// 启动一个 worker 子进程（camel-db --run-worker <path>），返回 (成功?, 子进程 HTTP 端口)。仅
-/// Windows 实现。alloc 断点由父进程在 spawn 后通过 POST /api/breakpoint-spaces 推送。
-/// sendRun：true 时注册为 "running" 并由调用方转发 /api/run；false 时仅注册为 "loaded"，不发送
-/// run。 desiredPort：>0 时复用该端口（用于 restart），不注册新任务，调用方负责 setTaskState。
-std::pair<bool, int> spawnWorker(
-    const std::string &path, bool memoryMonitor, bool allocStep, bool sendRun = true,
-    int desiredPort = 0);
+/// Windows 实现。断点由父进程在 spawn/run 后按统一模型推送（breakpoint-spaces、gir-breakpoints
+/// 等）。 sendRun：true 时注册为 "running" 并由调用方转发 /api/run；false 时仅注册为 "loaded"。
+/// desiredPort：>0 时复用该端口（用于 restart），不注册新任务。
+std::pair<bool, int> spawnWorker(const std::string &path, bool sendRun = true, int desiredPort = 0);
 
 /// 终止所有已 spawn 的子进程；关闭 Job 后系统会回收 Job 内进程，避免孤儿进程。
 void terminateAllWorkers();
