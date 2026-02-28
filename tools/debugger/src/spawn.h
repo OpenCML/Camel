@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 26, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -32,16 +32,17 @@
  */
 
 #include <string>
-#include <unordered_set>
 #include <utility>
 
 namespace debugger {
 
 /// 启动一个 worker 子进程（camel-db --run-worker <path>），返回 (成功?, 子进程 HTTP 端口)。仅
-/// Windows 实现。
+/// Windows 实现。alloc 断点由父进程在 spawn 后通过 POST /api/breakpoint-spaces 推送。
+/// sendRun：true 时注册为 "running" 并由调用方转发 /api/run；false 时仅注册为 "loaded"，不发送
+/// run。 desiredPort：>0 时复用该端口（用于 restart），不注册新任务，调用方负责 setTaskState。
 std::pair<bool, int> spawnWorker(
-    const std::string &path, bool memoryMonitor, bool allocStep,
-    const std::unordered_set<std::string> &breakSpaces);
+    const std::string &path, bool memoryMonitor, bool allocStep, bool sendRun = true,
+    int desiredPort = 0);
 
 /// 终止所有已 spawn 的子进程；关闭 Job 后系统会回收 Job 内进程，避免孤儿进程。
 void terminateAllWorkers();

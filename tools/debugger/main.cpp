@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 26, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,8 @@
  *   在本机指定端口起 HTTP 服务，接收父进程转发的 /api/run 等请求并执行脚本。
  * - atexit + Job Object（spawn 内）确保主进程退出时子进程被系统回收，避免孤儿进程。
  */
+
+#include "windows_parser_guard.h"
 
 #include "camel/utils/dll_path.h"
 #include "camel/utils/log.h"

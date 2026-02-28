@@ -13,9 +13,10 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 26, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
+
 #include "spawn.h"
 #include "state.h"
 
@@ -85,9 +86,7 @@ void pipeReaderThread(int workerPort, HANDLE hRead) {
 #endif
 
 std::pair<bool, int> spawnWorker(
-    const std::string &path, bool memoryMonitor, bool allocStep,
-    const std::unordered_set<std::string> &breakSpaces) {
-    (void)breakSpaces;
+    const std::string &path, bool memoryMonitor, bool allocStep, bool sendRun, int desiredPort) {
     auto &st = getState();
     if (!st.hasFile() && path.empty())
         return {false, 0};
@@ -96,15 +95,20 @@ std::pair<bool, int> spawnWorker(
         return {false, 0};
     if (getExePath().empty())
         return {false, 0};
+    // 传绝对路径给子进程，避免子进程工作目录与父进程不一致时 exists() 失败导致立即退出。
+    std::string pathForChild = fs::absolute(scriptPath).string();
 
-    // 动态分配端口：从 parent_port+1 开始，跳过已被现有 worker 占用的端口。
-    int basePort   = getServer().port();
-    int workerPort = basePort + 1;
-    {
-        auto tasks = getTasks();
+    int workerPort = 0;
+    if (desiredPort > 0) {
+        workerPort = desiredPort; // restart：复用原端口与任务 id
+    } else {
+        int basePort = getServer().port();
+        workerPort   = basePort + 1;
+        auto tasks   = getTasks();
         std::unordered_set<int> usedPorts;
         for (const auto &t : tasks)
-            usedPorts.insert(t.port);
+            if (t.taskState != "exited")
+                usedPorts.insert(t.port);
         while (usedPorts.count(workerPort))
             ++workerPort;
     }
@@ -113,23 +117,23 @@ std::pair<bool, int> spawnWorker(
     // 创建管道：子进程 stdout/stderr 重定向到 hChildOutW，父进程从 hChildOutR 读，pipeReaderThread
     // 追加到该任务日志缓冲供 Task tab 显示。
     HANDLE hChildOutR = nullptr, hChildOutW = nullptr;
-    SECURITY_ATTRIBUTES sa = {sizeof(sa), nullptr, TRUE};
+    SECURITY_ATTRIBUTES sa = {sizeof(sa), nullptr, (BOOL)1};
     if (!CreatePipe(&hChildOutR, &hChildOutW, &sa, 0))
         return {false, 0};
     SetHandleInformation(hChildOutR, HANDLE_FLAG_INHERIT, 0); // 读端不继承，避免子进程持有
 
     std::string cmdLine;
-    cmdLine.reserve(getExePath().size() + scriptPath.size() + 32);
+    cmdLine.reserve(getExePath().size() + pathForChild.size() + 32);
     if (getExePath().find(' ') != std::string::npos)
         cmdLine += '"';
     cmdLine += getExePath();
     if (getExePath().find(' ') != std::string::npos)
         cmdLine += '"';
     cmdLine += " --run-worker ";
-    if (scriptPath.find(' ') != std::string::npos)
+    if (pathForChild.find(' ') != std::string::npos)
         cmdLine += '"';
-    cmdLine += scriptPath;
-    if (scriptPath.find(' ') != std::string::npos)
+    cmdLine += pathForChild;
+    if (pathForChild.find(' ') != std::string::npos)
         cmdLine += '"';
 
     std::string envBlock;
@@ -161,7 +165,7 @@ std::pair<bool, int> spawnWorker(
         cmdBuf.data(),
         nullptr,
         nullptr,
-        TRUE,
+        (BOOL)1,
         CREATE_NO_WINDOW,
         (LPVOID)envBlock.c_str(),
         nullptr,
@@ -180,7 +184,8 @@ std::pair<bool, int> spawnWorker(
         std::lock_guard<std::mutex> lock(g_workerMutex);
         g_workerProcesses[workerPort] = pi.hProcess;
     }
-    registerTask(workerPort, scriptPath);
+    if (desiredPort <= 0)
+        registerTask(workerPort, scriptPath, sendRun ? "running" : "loaded");
     std::thread(pipeReaderThread, workerPort, hChildOutR).detach();
     std::thread([workerPort]() {
         HANDLE hProc = nullptr;
@@ -202,7 +207,8 @@ std::pair<bool, int> spawnWorker(
             setTaskState(workerPort, "exited");
         }
     }).detach();
-    getTaskState() = "running";
+    if (sendRun)
+        getTaskState() = "running";
     return {true, workerPort};
 #else
     (void)memoryMonitor;

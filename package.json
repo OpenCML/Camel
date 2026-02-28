@@ -42,7 +42,10 @@
         "pypi:upload": "python -m twine upload --repository testpypi dist/pypi/*",
         "pypi:upload:release": "python -m twine upload --repository pypi dist/pypi/*",
         "pypi:install": "pip install --index-url https://test.pypi.org/simple/ camel-lang",
-        "gource": "gource -c 4 --frameless -f --title \"CAMEL\" --font-size 24 --hide progress --padding 1.2"
+        "gource": "gource -c 4 --frameless -f --title \"CAMEL\" --font-size 24 --hide progress --padding 1.2",
+        "debugger:ui": "npm run dev --prefix tools/debugger/ui",
+        "debugger:build": "npm run build --prefix tools/debugger/ui",
+        "debugger:serve": "python tools/debugger/serve_ui.py"
     },
     "devDependencies": {
         "fs-extra": "^11.3.0",

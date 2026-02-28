@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 26, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,12 +23,14 @@
  * run 参数并执行脚本。
  *
  * 设计要点：
- * - run 参数（memoryMonitor/allocStep/breakSpaces）不再经环境变量传递，而是父进程 spawn 后 POST
- * /api/run 到子进程， 子进程在 WorkerRunHandler 中解析 body 并写入 PendingRun，主循环 wait 到
- * hasRun 后执行 runScriptOnce，便于 Web UI 动态改选项。
+ * - run 参数（memoryMonitor/allocStep）经父进程 spawn 后 POST /api/run 到子进程；alloc 断点由
+ *   POST /api/breakpoint-spaces 单独同步。WorkerRunHandler 解析 body 写入 PendingRun，主循环 wait
+ * 到 hasRun 后执行 runScriptOnce，便于 Web UI 动态改选项。
  * - 子进程同样注册 Command 与 postExecuteHook，使 settings/breakpoint-types
  * 等请求在子进程内执行并回显到子进程 LogSink，供 Task 日志 tab 展示。
  */
+
+#include "windows_parser_guard.h"
 
 #include "nlohmann/json.hpp"
 
@@ -56,7 +58,6 @@
 #include <mutex>
 #include <string>
 #include <thread>
-#include <unordered_set>
 
 #if defined(_WIN32)
 #include <stdlib.h> // _dupenv_s
@@ -86,12 +87,11 @@ std::string getEnvValue(const char *name) {
 #endif
 
 /// 父进程 POST /api/run 下发的单次 run 参数，由 WorkerRunHandler
-/// 写入、主循环消费，避免子进程启动时尚未收到 body 就执行默认选项。
+/// 写入、主循环消费。alloc 断点空间仅通过 POST /api/breakpoint-spaces 同步，不随 run 下发。
 struct PendingRun {
     bool hasRun        = false;
     bool memoryMonitor = true;
     bool allocStep     = false;
-    std::unordered_set<std::string> breakSpaces;
 };
 static std::mutex g_pendingMutex;
 static std::condition_variable g_pendingCond;
@@ -172,20 +172,12 @@ int runWorkerMode(int argc, char *argv[]) {
         json j             = json::parse(body, nullptr, false);
         bool memoryMonitor = j.value("memoryMonitor", true);
         bool allocStep     = j.value("allocStep", false);
-        std::unordered_set<std::string> breakSpaces;
-        if (j.contains("breakSpaces") && j["breakSpaces"].is_array())
-            for (const auto &v : j["breakSpaces"])
-                if (v.is_string() && !v.get<std::string>().empty())
-                    breakSpaces.insert(v.get<std::string>());
-
-        getServer().setAllocBreakSpaces(breakSpaces);
 
         {
             std::lock_guard<std::mutex> lock(g_pendingMutex);
             g_pendingRun.hasRun        = true;
             g_pendingRun.memoryMonitor = memoryMonitor;
             g_pendingRun.allocStep     = allocStep;
-            g_pendingRun.breakSpaces   = std::move(breakSpaces);
         }
         g_pendingCond.notify_one();
 

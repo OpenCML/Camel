@@ -13,15 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 26, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
-#include "compile.h"
+
+#include "windows_parser_guard.h"
+
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/module/userdef.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/env.h"
+#include "compile.h"
 #include "passes/trans/dot/graphviz.h"
 
 #include <filesystem>

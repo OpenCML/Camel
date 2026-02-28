@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 26, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,8 +24,10 @@
  * GET /api/settings?target= 获取。
  */
 
-#include "state.h"
+#include "windows_parser_guard.h"
+
 #include "camel/utils/log.h"
+#include "state.h"
 
 #include <algorithm>
 #include <atomic>
@@ -56,6 +58,9 @@ static std::shared_ptr<std::ofstream> g_logFileStream;
 
 static std::vector<TaskInfo> g_tasks;
 static std::mutex g_tasksMutex;
+
+static std::string g_foregroundTaskId;
+static std::mutex g_foregroundMutex;
 
 /// 父进程按任务端口缓冲子进程管道输出，与父进程自身 Logger 分离，供 GET /api/log?target= 使用。
 static constexpr size_t kTaskLogMaxLines = 2000;
@@ -155,13 +160,13 @@ void setSettings(bool verbose, const std::string &logFile) {
 bool isInterrupted() { return g_interrupted.load(); }
 void setInterrupted(bool v) { g_interrupted.store(v); }
 
-void registerTask(int port, const std::string &scriptPath) {
+void registerTask(int port, const std::string &scriptPath, const std::string &initialState) {
     std::lock_guard<std::mutex> lock(g_tasksMutex);
     std::string id = std::to_string(port); // id 与 port 一致，便于 API target 解析
     for (const auto &t : g_tasks)
         if (t.port == port)
             return;
-    g_tasks.push_back({id, port, scriptPath, "running"});
+    g_tasks.push_back({id, port, scriptPath, initialState.empty() ? "running" : initialState});
 }
 
 void unregisterTask(int port) {
@@ -188,13 +193,28 @@ std::vector<TaskInfo> getTasks() {
     return g_tasks;
 }
 
+std::string getForegroundTaskId() {
+    std::lock_guard<std::mutex> lock(g_foregroundMutex);
+    return g_foregroundTaskId;
+}
+
+void setForegroundTaskId(const std::string &id) {
+    std::lock_guard<std::mutex> lock(g_foregroundMutex);
+    g_foregroundTaskId = id;
+}
+
 int resolveTargetToPort(const std::string &target) {
+    std::string effective = target;
+    if (effective.empty()) {
+        std::lock_guard<std::mutex> lock(g_foregroundMutex);
+        effective = g_foregroundTaskId;
+    }
     std::lock_guard<std::mutex> lock(g_tasksMutex);
-    if (!target.empty()) {
+    if (!effective.empty()) {
         for (const auto &t : g_tasks)
-            if (t.id == target && t.taskState != "exited")
+            if (t.id == effective && t.taskState != "exited")
                 return t.port;
-        int port = std::atoi(target.c_str());
+        int port = std::atoi(effective.c_str());
         for (const auto &t : g_tasks)
             if (t.port == port && t.taskState != "exited")
                 return t.port;

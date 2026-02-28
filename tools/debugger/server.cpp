@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 26, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,17 +29,22 @@
  * dispatch，保证“当前选中的任务”收到操作。
  */
 
-#include "server.h"
+// nlohmann 必须在解析器相关头之前（否则 ANTLR 的 EOF 会遮蔽 C 的 EOF）
+#include "nlohmann/json.hpp"
+// state.h 必须在任何会拉入 Windows 的头之前，避免 minwindef/wingdi 的 TRUE/FALSE/ERROR/IN/CONST
+// 与解析器冲突
+#include "state.h"
+
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/mm/profiler.h"
 #include "camel/utils/log.h"
 #include "command/dispatcher.h"
-#include "nlohmann/json.hpp"
-#include "state.h"
+#include "server.h"
 
 #include <chrono>
 #include <cstdlib>
 #include <deque>
+#include <filesystem>
 #include <httplib.h>
 #include <iostream>
 #include <mutex>
@@ -185,14 +190,14 @@ void DebuggerServer::pauseAndWaitForContinue(const void *ptr, size_t size, const
     assert(isWorkerProcess() && "pauseAndWaitForContinue() called in non-worker process");
     if (!allocStepEnabled_ || !running_)
         return;
-    // 若配置了 breakSpaces 过滤，仅在被列出的 space 上暂停，避免无关分配打断用户。
+    // 仅当 alloc 断点空间非空且当前 space 在集合内才暂停；空集合 = 不在任何分配上暂停。
     {
         std::lock_guard<std::mutex> lock(allocBreakSpacesMutex_);
-        if (!allocBreakSpaces_.empty()) {
-            std::string s(space ? space : "");
-            if (allocBreakSpaces_.count(s) == 0)
-                return;
-        }
+        if (allocBreakSpaces_.empty())
+            return;
+        std::string s(space ? space : "");
+        if (allocBreakSpaces_.count(s) == 0)
+            return;
     }
     try {
         std::ostringstream oss;
@@ -260,18 +265,31 @@ void DebuggerServer::setAllocBreakSpaces(std::unordered_set<std::string> spaces)
     allocBreakSpaces_ = std::move(spaces);
 }
 
+std::unordered_set<std::string> DebuggerServer::getAllocBreakSpaces() {
+    std::lock_guard<std::mutex> lock(allocBreakSpacesMutex_);
+    return allocBreakSpaces_;
+}
+
 bool DebuggerServer::forwardPostToChild(const std::string &apiPath, const std::string &body) {
     int port = childPort_.load();
     if (port <= 0)
         return false;
-    httplib::Client cli("127.0.0.1", port);
-    cli.set_connection_timeout(0, 300000);
-    auto r = cli.Post(apiPath, body, "application/json");
-    if (!r) {
+    bool ok = forwardPostToPort(port, apiPath, body);
+    if (!ok) {
         clearChildPort();
         return false;
     }
     return true;
+}
+
+bool DebuggerServer::forwardPostToPort(
+    int port, const std::string &apiPath, const std::string &body) {
+    if (port <= 0)
+        return false;
+    httplib::Client cli("127.0.0.1", port);
+    cli.set_connection_timeout(0, 300000);
+    auto r = cli.Post(apiPath, body.empty() ? "{}" : body, "application/json");
+    return static_cast<bool>(r);
 }
 
 void DebuggerServer::stop() {
@@ -455,9 +473,53 @@ void DebuggerServer::httpServerLoop() {
     // -----------------------------------------------------------------------
     // Query handlers (direct, not via Command dispatcher)
     // -----------------------------------------------------------------------
+    // GET /api/list-dir：仅父进程提供，供 Web UI 文件选择器浏览目录；返回子目录与 .cml 文件。
+    if (!isWorkerProcess()) {
+        svr.Get("/api/list-dir", [](const httplib::Request &req, httplib::Response &res) {
+            namespace fs         = std::filesystem;
+            std::string dirParam = req.get_param_value("dir");
+            if (dirParam.empty())
+                dirParam = ".";
+            fs::path root(dirParam);
+            json j;
+            j["path"]  = root.lexically_normal().string();
+            j["dirs"]  = json::array();
+            j["files"] = json::array();
+            try {
+                if (!fs::exists(root) || !fs::is_directory(root)) {
+                    j["error"] =
+                        "Not a directory or does not exist: " + j["path"].get<std::string>();
+                    res.set_content(j.dump(), "application/json");
+                    return;
+                }
+                for (const auto &e : fs::directory_iterator(root)) {
+                    try {
+                        std::string name = e.path().filename().string();
+                        if (name.empty() || name[0] == '.')
+                            continue;
+                        std::string fullPath = e.path().lexically_normal().string();
+                        if (e.is_directory()) {
+                            j["dirs"].push_back({{"name", name}, {"path", fullPath}});
+                        } else if (e.is_regular_file()) {
+                            std::string ext = e.path().extension().string();
+                            if (ext == ".cml") {
+                                j["files"].push_back({{"name", name}, {"path", fullPath}});
+                            }
+                        }
+                    } catch (...) { /* skip inaccessible entries */
+                    }
+                }
+            } catch (const std::exception &ex) {
+                j["error"] = std::string(ex.what());
+            }
+            res.set_content(j.dump(), "application/json");
+        });
+    }
+
     // GET /api/state is global: parent returns task list + global info.
     // assertionError 仅在 worker 进程（无 tasks）时输出，父进程不合并 lastRunError_（它始终为空）；
     // 前端通过 GET /api/state?target=<taskId> 获取子进程的 assertion error。
+    // 无 target 时父进程对每个非 exited 任务聚合 step-paused、last-alloc，合并进 tasks[] 后返回。
     svr.Get(
         "/api/state",
         [this, tryForwardToTarget](const httplib::Request &req, httplib::Response &res) {
@@ -477,6 +539,53 @@ void DebuggerServer::httpServerLoop() {
                             j["assertionFile"] = lastRunErrorFile_;
                         if (lastRunErrorLine_ > 0)
                             j["assertionLine"] = lastRunErrorLine_;
+                    }
+                } else if (j.contains("tasks") && j["tasks"].is_array()) {
+                    // 父进程：对每个非 exited 任务请求 step-paused、last-alloc 并合并进 task
+                    try {
+                        for (auto &task : j["tasks"]) {
+                            if (!task.contains("taskState") || task["taskState"] == "exited")
+                                continue;
+                            if (!task.contains("port") || !task["port"].is_number_integer())
+                                continue;
+                            int port = task["port"].get<int>();
+                            httplib::Client cli("127.0.0.1", port);
+                            cli.set_connection_timeout(0, 200000);
+                            auto rSp = cli.Get("/api/step-paused");
+                            if (rSp && rSp->status == 200 && !rSp->body.empty()) {
+                                try {
+                                    json sp = json::parse(rSp->body);
+                                    if (sp.contains("paused"))
+                                        task["paused"] = sp["paused"];
+                                    if (sp.contains("phase") || sp.contains("size") ||
+                                        sp.contains("space")) {
+                                        json pr;
+                                        if (sp.contains("phase"))
+                                            pr["phase"] = sp["phase"];
+                                        if (sp.contains("size"))
+                                            pr["size"] = sp["size"];
+                                        if (sp.contains("space"))
+                                            pr["space"] = sp["space"];
+                                        if (sp.contains("ptr"))
+                                            pr["ptr"] = sp["ptr"];
+                                        task["pauseReason"] = pr;
+                                    }
+                                } catch (...) { /* ignore parse error */
+                                }
+                            }
+                            auto rLa = cli.Get("/api/last-alloc");
+                            if (rLa && rLa->status == 200 && !rLa->body.empty() &&
+                                rLa->body != "{}") {
+                                try {
+                                    task["lastAlloc"] = json::parse(rLa->body);
+                                } catch (...) { /* ignore */
+                                }
+                            } else {
+                                task["lastAlloc"] = nullptr;
+                            }
+                        }
+                    } catch (...) {
+                        /* 聚合异常时保持原 j 不变 */
                     }
                 }
                 res.set_content(j.dump(), "application/json");
@@ -549,45 +658,32 @@ void DebuggerServer::httpServerLoop() {
             }
         });
 
-    svr.Get(
-        "/api/step-paused",
-        [this, tryForwardToTarget, requireNoTasksForLocal, requireWorkerForLocal](
-            const httplib::Request &req,
-            httplib::Response &res) {
-            if (tryForwardToTarget(req, res) != 0)
-                return;
-            if (requireNoTasksForLocal(res))
-                return;
-            if (requireWorkerForLocal(res))
-                return;
+    // step-paused / last-alloc：仅子进程（worker）注册；父进程不暴露，Web UI 通过 GET /api/state
+    // 聚合得到 paused/pauseReason/lastAlloc。
+    if (isWorkerProcess()) {
+        svr.Get("/api/step-paused", [this](const httplib::Request &, httplib::Response &res) {
             if (!paused_.load()) {
                 res.set_content("{\"paused\":false}", "application/json");
                 return;
             }
-            std::lock_guard<std::mutex> lock(jsonMutex_);
-            if (lastAllocJson_.empty()) {
+            try {
+                std::lock_guard<std::mutex> lock(jsonMutex_);
+                if (lastAllocJson_.empty()) {
+                    res.set_content("{\"paused\":true}", "application/json");
+                    return;
+                }
+                nlohmann::json j = nlohmann::json::parse(lastAllocJson_);
+                j["paused"]      = true;
+                res.set_content(j.dump(), "application/json");
+            } catch (...) {
                 res.set_content("{\"paused\":true}", "application/json");
-                return;
             }
-            nlohmann::json j = nlohmann::json::parse(lastAllocJson_);
-            j["paused"]      = true;
-            res.set_content(j.dump(), "application/json");
         });
-
-    svr.Get(
-        "/api/last-alloc",
-        [this, tryForwardToTarget, requireNoTasksForLocal, requireWorkerForLocal](
-            const httplib::Request &req,
-            httplib::Response &res) {
-            if (tryForwardToTarget(req, res) != 0)
-                return;
-            if (requireNoTasksForLocal(res))
-                return;
-            if (requireWorkerForLocal(res))
-                return;
+        svr.Get("/api/last-alloc", [this](const httplib::Request &, httplib::Response &res) {
             std::lock_guard<std::mutex> lock(jsonMutex_);
             res.set_content(lastAllocJson_.empty() ? "{}" : lastAllocJson_, "application/json");
         });
+    }
 
     // GET /api/log：无 target 时仅用本进程 LogSink（不转发），Debugger tab；有 target
     // 时父进程从任务日志缓冲返回，Task tab。 这样避免“无 target
@@ -648,13 +744,36 @@ void DebuggerServer::httpServerLoop() {
                 return;
             if (requireNoTasksForLocal(res))
                 return;
-            if (requireWorkerForLocal(res))
+            if (!getTasks().empty() && requireWorkerForLocal(res))
                 return;
             std::lock_guard<std::mutex> lock(allocBreakSpacesMutex_);
             json j = json::array();
             for (const auto &s : allocBreakSpaces_)
                 j.push_back(s);
             res.set_content("{\"breakSpaces\":" + j.dump() + "}", "application/json");
+        });
+
+    // 按类型返回断点状态，便于 Web UI 统一展示；支持 ?target= 转发到任务。
+    svr.Get(
+        "/api/breakpoints",
+        [this, tryForwardToTarget, requireNoTasksForLocal, requireWorkerForLocal](
+            const httplib::Request &req,
+            httplib::Response &res) {
+            if (tryForwardToTarget(req, res) != 0)
+                return;
+            if (requireNoTasksForLocal(res))
+                return;
+            if (requireWorkerForLocal(res))
+                return;
+            json out;
+            out["alloc"]           = json::object();
+            out["alloc"]["spaces"] = json::array();
+            {
+                std::lock_guard<std::mutex> lock(allocBreakSpacesMutex_);
+                for (const auto &s : allocBreakSpaces_)
+                    out["alloc"]["spaces"].push_back(s);
+            }
+            res.set_content(out.dump(), "application/json");
         });
 
     svr.Get(
@@ -768,31 +887,18 @@ void DebuggerServer::httpServerLoop() {
         }
     });
 
-    // 父进程有 target 时转发；子进程无 tasks，tryForwardToTarget 返回 0，走 dispatchAndRespond
-    // 在本地执行 requestContinue/Restart/Terminate。
-    svr.Post(
-        "/api/continue",
-        [tryForwardToTarget](const httplib::Request &req, httplib::Response &res) {
-            if (tryForwardToTarget(req, res) != 0)
-                return;
-            dispatchAndRespond("continue", req, res);
-        });
+    // 写操作一律经父进程命令执行并回显，命令内部再按 target 调用 forwardPostToPort 通知子进程。
+    svr.Post("/api/continue", [](const httplib::Request &req, httplib::Response &res) {
+        dispatchAndRespond("continue", req, res);
+    });
 
-    svr.Post(
-        "/api/restart",
-        [tryForwardToTarget](const httplib::Request &req, httplib::Response &res) {
-            if (tryForwardToTarget(req, res) != 0)
-                return;
-            dispatchAndRespond("restart", req, res);
-        });
+    svr.Post("/api/restart", [](const httplib::Request &req, httplib::Response &res) {
+        dispatchAndRespond("restart", req, res);
+    });
 
-    svr.Post(
-        "/api/terminate",
-        [tryForwardToTarget](const httplib::Request &req, httplib::Response &res) {
-            if (tryForwardToTarget(req, res) != 0)
-                return;
-            dispatchAndRespond("terminate", req, res);
-        });
+    svr.Post("/api/terminate", [](const httplib::Request &req, httplib::Response &res) {
+        dispatchAndRespond("terminate", req, res);
+    });
 
     svr.Get(
         "/api/settings",
@@ -817,29 +923,17 @@ void DebuggerServer::httpServerLoop() {
             res.set_content(j.dump(), "application/json");
         });
 
-    svr.Post(
-        "/api/settings",
-        [tryForwardToTarget](const httplib::Request &req, httplib::Response &res) {
-            if (tryForwardToTarget(req, res) != 0)
-                return;
-            dispatchAndRespond("configure", req, res);
-        });
+    svr.Post("/api/settings", [](const httplib::Request &req, httplib::Response &res) {
+        dispatchAndRespond("configure", req, res);
+    });
 
-    svr.Post(
-        "/api/breakpoint-spaces",
-        [tryForwardToTarget](const httplib::Request &req, httplib::Response &res) {
-            if (tryForwardToTarget(req, res) != 0)
-                return;
-            dispatchAndRespond("setBreakpointFilter", req, res);
-        });
+    svr.Post("/api/breakpoint-spaces", [](const httplib::Request &req, httplib::Response &res) {
+        dispatchAndRespond("setBreakpointFilter", req, res);
+    });
 
-    svr.Post(
-        "/api/breakpoint-types",
-        [tryForwardToTarget](const httplib::Request &req, httplib::Response &res) {
-            if (tryForwardToTarget(req, res) != 0)
-                return;
-            dispatchAndRespond("setBreakpointTypes", req, res);
-        });
+    svr.Post("/api/breakpoint-types", [](const httplib::Request &req, httplib::Response &res) {
+        dispatchAndRespond("setBreakpointTypes", req, res);
+    });
 
     svr.set_payload_max_length(1024);
     svr.set_keep_alive_timeout(1);

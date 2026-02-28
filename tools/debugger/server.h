@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 26, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -84,6 +84,9 @@ class DebuggerServer {
     void clearChildPort();
     int getChildPort() const { return childPort_.load(); }
     bool forwardPostToChild(const std::string &apiPath, const std::string &body = "");
+    /// Forward POST to a specific port (used by Commands after parent executes; does not modify
+    /// childPort_).
+    bool forwardPostToPort(int port, const std::string &apiPath, const std::string &body = "");
 
     // =========================================================================
     // Worker-only — memory scan, alloc breakpoints, script execution control
@@ -107,6 +110,8 @@ class DebuggerServer {
     void enableAllocStep(bool enable) { allocStepEnabled_ = enable; }
     bool allocStepEnabled() const { return allocStepEnabled_; }
     void setAllocBreakSpaces(std::unordered_set<std::string> spaces);
+    /// Return current alloc breakpoint spaces (for merging into run body when client omits them).
+    std::unordered_set<std::string> getAllocBreakSpaces();
     void clearLastRunError();
 
   private:

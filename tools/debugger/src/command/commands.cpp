@@ -13,9 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 25, 2026
- * Updated: Feb. 26, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
+
+#include "windows_parser_guard.h"
 
 // nlohmann MUST be included before any header that pulls in ANTLR (EOF conflict)
 #include "nlohmann/json.hpp"
@@ -64,6 +66,21 @@ class LoadSourceCommand final : public Command {
 
         getState().targetFile = path;
         getTaskState()        = "loaded";
+
+        // 打开文件即 spawn 子进程并注册为 loaded 任务；同一文件可多次打开，每次新建 worker。
+        if (!getServer().isWorkerProcess()) {
+            auto [ok, workerPort] = spawnWorker(path, true, false, false);
+            if (ok && workerPort > 0) {
+                setForegroundTaskId(std::to_string(workerPort));
+                json body;
+                body["ok"]     = true;
+                body["taskId"] = std::to_string(workerPort);
+                return CommandResult::ok(
+                    display,
+                    "Loaded: " + path + " (task " + std::to_string(workerPort) + ").",
+                    body.dump());
+            }
+        }
         return CommandResult::ok(display, "Loaded: " + path);
     }
 };
@@ -77,49 +94,80 @@ class LaunchCommand final : public Command {
     const char *description() const override { return "Run the loaded script in a worker process"; }
 
     CommandResult execute(const std::string &argsJson) override {
-        // launch 只在父进程中有意义（spawn 子进程）；子进程不应再 spawn，由 WorkerRunHandler 处理
-        // /api/run。
         if (getServer().isWorkerProcess())
             return CommandResult::error("run", "Error: launch is not available in worker process.");
 
         json args          = json::parse(argsJson, nullptr, false);
+        std::string target = args.value("target", "");
         bool memoryMonitor = args.value("memoryMonitor", true);
         bool allocStep     = args.value("allocStep", false);
 
-        std::unordered_set<std::string> breakSpaces;
-        if (args.contains("breakSpaces") && args["breakSpaces"].is_array())
-            for (const auto &v : args["breakSpaces"])
-                if (v.is_string() && !v.get<std::string>().empty())
-                    breakSpaces.insert(v.get<std::string>());
-
-        std::string path = args.value("path", "");
-        if (path.empty())
-            path = getState().targetFile;
+        json runBody;
+        runBody["memoryMonitor"] = memoryMonitor;
+        runBody["allocStep"]     = allocStep;
 
         std::string display = "run (memory monitor=" + std::string(memoryMonitor ? "on" : "off") +
                               ", alloc step=" + std::string(allocStep ? "on" : "off") + ")";
 
+        int port = resolveTargetToPort(target);
+        if (port > 0) {
+            auto tasks = getTasks();
+            auto it    = std::find_if(tasks.begin(), tasks.end(), [port](const TaskInfo &t) {
+                return t.port == port;
+            });
+            if (it != tasks.end() && it->taskState == "loaded") {
+                for (int retry = 0; retry < 15; ++retry) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    if (getServer().forwardPostToPort(port, "/api/run", runBody.dump())) {
+                        setTaskState(port, "running");
+                        json pushBody;
+                        pushBody["breakSpaces"] = json::array();
+                        for (const auto &s : getServer().getAllocBreakSpaces())
+                            pushBody["breakSpaces"].push_back(s);
+                        getServer().forwardPostToPort(
+                            port,
+                            "/api/breakpoint-spaces",
+                            pushBody.dump());
+                        return CommandResult::ok(
+                            display,
+                            "Run started (task " + std::to_string(port) + ").");
+                    }
+                }
+                return CommandResult::error(
+                    display,
+                    "Run forward to task " + std::to_string(port) + " failed.");
+            }
+            if (it != tasks.end() && it->taskState != "exited")
+                return CommandResult::error(
+                    display,
+                    "Task " + std::to_string(port) + " is not in loaded state.");
+        }
+
+        // 无 target 或任务不存在/已退出：fallback 为 spawn 新 worker（需已有 targetFile）
+        std::string path = getState().targetFile;
         if (path.empty() || !getState().hasFile())
-            return CommandResult::error(
-                display,
-                "Error: please load a file first with file <path>");
+            return CommandResult::error(display, "Error: no task selected or load a file first.");
 
-        getServer().setAllocBreakSpaces(breakSpaces);
-
-        auto [ok, workerPort] = spawnWorker(path, memoryMonitor, allocStep, breakSpaces);
+        auto [ok, workerPort] = spawnWorker(path, memoryMonitor, allocStep);
         if (ok && workerPort > 0) {
             getServer().setChildPort(workerPort);
             for (int retry = 0; retry < 15; ++retry) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                if (getServer().forwardPostToChild("/api/run", argsJson))
-                    break;
+                if (getServer().forwardPostToPort(workerPort, "/api/run", runBody.dump())) {
+                    json pushBody;
+                    pushBody["breakSpaces"] = json::array();
+                    for (const auto &s : getServer().getAllocBreakSpaces())
+                        pushBody["breakSpaces"].push_back(s);
+                    getServer().forwardPostToPort(
+                        workerPort,
+                        "/api/breakpoint-spaces",
+                        pushBody.dump());
+                    return CommandResult::ok(
+                        display,
+                        "Run started (worker port " + std::to_string(workerPort) + ").");
+                }
             }
         }
-
-        if (ok)
-            return CommandResult::ok(
-                display,
-                "Run started (worker port " + std::to_string(workerPort) + ").");
         return CommandResult::error(display, "Run failed to start.");
     }
 };
@@ -163,13 +211,26 @@ class ContinueCommand final : public Command {
     const char *name() const override { return "continue"; }
     const char *description() const override { return "Resume paused execution"; }
 
-    CommandResult execute(const std::string &) override {
+    CommandResult execute(const std::string &argsJson) override {
         auto &srv = getServer();
-        // 父进程：转发到子进程；子进程：直接本地执行，跳过无意义的 forwardPostToChild 尝试。
-        if (!srv.isWorkerProcess() && srv.forwardPostToChild("/api/continue"))
-            return CommandResult::ok("continue", "Continue (forwarded to worker).");
-        srv.requestContinue();
-        return CommandResult::ok("continue", "Continue.");
+        if (srv.isWorkerProcess()) {
+            srv.requestContinue();
+            return CommandResult::ok("continue", "Continue.");
+        }
+        json args          = json::parse(argsJson, nullptr, false);
+        std::string target = args.value("target", "");
+        int port           = resolveTargetToPort(target);
+        if (port <= 0)
+            port = srv.getChildPort();
+        if (port <= 0)
+            return CommandResult::error(
+                "continue",
+                "No task selected or target invalid. Select a task or pass target.");
+        if (!srv.forwardPostToPort(port, "/api/continue", argsJson.empty() ? "{}" : argsJson))
+            return CommandResult::error(
+                "continue",
+                "Target unreachable (connection failed or timeout).");
+        return CommandResult::ok("continue", "Continue (task " + std::to_string(port) + ").");
     }
 };
 
@@ -213,29 +274,30 @@ class RestartCommand final : public Command {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
         bool memoryMonitor = args.value("memoryMonitor", true);
         bool allocStep     = args.value("allocStep", false);
-        std::unordered_set<std::string> breakSpaces;
-        if (args.contains("breakSpaces") && args["breakSpaces"].is_array())
-            for (const auto &v : args["breakSpaces"])
-                if (v.is_string() && !v.get<std::string>().empty())
-                    breakSpaces.insert(v.get<std::string>());
-        auto [ok, newPort] = spawnWorker(scriptPath, memoryMonitor, allocStep, breakSpaces);
+        // 复用原端口与任务 id：spawn 时指定 desiredPort，不注册新任务，新进程监听原 port
+        auto [ok, newPort] = spawnWorker(scriptPath, memoryMonitor, allocStep, true, port);
         if (!ok || newPort <= 0)
             return CommandResult::error("restart", "Respawn failed.");
-        srv.setChildPort(newPort);
+        setTaskState(port, "running");
         json runBody;
         runBody["memoryMonitor"] = memoryMonitor;
         runBody["allocStep"]     = allocStep;
-        runBody["breakSpaces"]   = args.value("breakSpaces", json::array());
-        runBody["breakStages"]   = args.value("breakStages", json::array());
+        bool runSent             = false;
         for (int retry = 0; retry < 15; ++retry) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            if (srv.forwardPostToChild("/api/run", runBody.dump()))
+            if (srv.forwardPostToPort(port, "/api/run", runBody.dump())) {
+                runSent = true;
                 break;
+            }
         }
-        return CommandResult::ok(
-            "restart",
-            "Restart (worker " + std::to_string(port) + " terminated, new worker " +
-                std::to_string(newPort) + ").");
+        if (runSent) {
+            json pushBody;
+            pushBody["breakSpaces"] = json::array();
+            for (const auto &s : srv.getAllocBreakSpaces())
+                pushBody["breakSpaces"].push_back(s);
+            srv.forwardPostToPort(port, "/api/breakpoint-spaces", pushBody.dump());
+        }
+        return CommandResult::ok("restart", "Restart (task " + std::to_string(port) + ").");
     }
 };
 
@@ -247,12 +309,26 @@ class TerminateCommand final : public Command {
     const char *name() const override { return "terminate"; }
     const char *description() const override { return "Terminate execution"; }
 
-    CommandResult execute(const std::string &) override {
+    CommandResult execute(const std::string &argsJson) override {
         auto &srv = getServer();
-        if (!srv.isWorkerProcess() && srv.forwardPostToChild("/api/terminate"))
-            return CommandResult::ok("terminate", "Terminate (forwarded to worker).");
-        srv.requestTerminate();
-        return CommandResult::ok("terminate", "Terminate requested.");
+        if (srv.isWorkerProcess()) {
+            srv.requestTerminate();
+            return CommandResult::ok("terminate", "Terminate requested.");
+        }
+        json args          = json::parse(argsJson, nullptr, false);
+        std::string target = args.value("target", "");
+        int port           = resolveTargetToPort(target);
+        if (port <= 0)
+            port = srv.getChildPort();
+        if (port <= 0)
+            return CommandResult::error(
+                "terminate",
+                "No task selected or target invalid. Select a task or pass target.");
+        if (!srv.forwardPostToPort(port, "/api/terminate", argsJson.empty() ? "{}" : argsJson))
+            return CommandResult::error(
+                "terminate",
+                "Target unreachable (connection failed or timeout).");
+        return CommandResult::ok("terminate", "Terminate (task " + std::to_string(port) + ").");
     }
 };
 
@@ -278,6 +354,14 @@ class ConfigureCommand final : public Command {
             display += ", logfile " + (logFile.empty() ? "off" : logFile);
             msg += "\nLog file: " + (logFile.empty() ? "off" : logFile);
         }
+        auto &srv = getServer();
+        if (!srv.isWorkerProcess()) {
+            std::string target = args.value("target", "");
+            int port           = resolveTargetToPort(target);
+            if (port > 0 &&
+                srv.forwardPostToPort(port, "/api/settings", argsJson.empty() ? "{}" : argsJson))
+                msg += " (task " + std::to_string(port) + ")";
+        }
         return CommandResult::ok(display, msg);
     }
 };
@@ -298,12 +382,12 @@ class SetBreakpointFilterCommand final : public Command {
                 if (v.is_string() && !v.get<std::string>().empty())
                     breakSpaces.insert(v.get<std::string>());
 
-        std::string display = "breakpoint-filter";
+        std::string display = "alloc-breakpoint-spaces";
         std::string msg;
         if (breakSpaces.empty()) {
-            msg = "Breakpoint spaces: (all)";
+            msg = "Alloc breakpoint spaces: (none)";
         } else {
-            msg        = "Breakpoint spaces: ";
+            msg        = "Alloc breakpoint spaces: ";
             bool first = true;
             for (const auto &b : breakSpaces) {
                 if (!first)
@@ -313,8 +397,46 @@ class SetBreakpointFilterCommand final : public Command {
             }
         }
 
-        getServer().setAllocBreakSpaces(std::move(breakSpaces));
+        auto &srv = getServer();
+        srv.setAllocBreakSpaces(std::move(breakSpaces));
+        if (!srv.isWorkerProcess()) {
+            std::string target = args.value("target", "");
+            int port           = resolveTargetToPort(target);
+            if (port > 0 && srv.forwardPostToPort(
+                                port,
+                                "/api/breakpoint-spaces",
+                                argsJson.empty() ? "{}" : argsJson))
+                msg += " (task " + std::to_string(port) + ")";
+        }
         return CommandResult::ok(display, msg);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// breakpointStatus — 按类型查看当前断点状态（alloc / pipeline 等）
+// ---------------------------------------------------------------------------
+class BreakpointStatusCommand final : public Command {
+  public:
+    const char *name() const override { return "breakpointStatus"; }
+    const char *description() const override {
+        return "Show breakpoint status by type (alloc, etc.)";
+    }
+
+    CommandResult execute(const std::string &) override {
+        auto spaces     = getServer().getAllocBreakSpaces();
+        std::string msg = "alloc: ";
+        if (spaces.empty()) {
+            msg += "(none)";
+        } else {
+            bool first = true;
+            for (const auto &s : spaces) {
+                if (!first)
+                    msg += ", ";
+                msg += s;
+                first = false;
+            }
+        }
+        return CommandResult::ok("breakpoints", msg);
     }
 };
 
@@ -363,6 +485,16 @@ class SetBreakpointTypesCommand final : public Command {
                 first = false;
             }
         }
+        auto &srv = getServer();
+        if (!srv.isWorkerProcess()) {
+            std::string target = args.value("target", "");
+            int port           = resolveTargetToPort(target);
+            if (port > 0 && srv.forwardPostToPort(
+                                port,
+                                "/api/breakpoint-types",
+                                argsJson.empty() ? "{}" : argsJson))
+                msg += " (task " + std::to_string(port) + ")";
+        }
         return CommandResult::ok("breakpoint-types", msg);
     }
 };
@@ -399,6 +531,7 @@ void registerAllCommands(CommandDispatcher &dispatcher) {
     dispatcher.registerCommand(std::make_shared<TerminateCommand>());
     dispatcher.registerCommand(std::make_shared<ConfigureCommand>());
     dispatcher.registerCommand(std::make_shared<SetBreakpointFilterCommand>());
+    dispatcher.registerCommand(std::make_shared<BreakpointStatusCommand>());
     dispatcher.registerCommand(std::make_shared<SetBreakpointTypesCommand>());
     dispatcher.registerCommand(std::make_shared<DisconnectCommand>());
 }
