@@ -10,7 +10,7 @@ Usage:
 Options:
   --port PORT       Port for the UI server (default: 8080).
   --api-url URL     camel-db API base URL (default: http://127.0.0.1:8765).
-  --ui-dir DIR      Directory containing index.html (default: script_dir/ui).
+  --ui-dir DIR      Directory containing index.html (default: script_dir/ui/dist if present, else script_dir/ui).
 """
 
 import argparse
@@ -25,7 +25,13 @@ def main():
     parser = argparse.ArgumentParser(description="Serve Camel debugger Web UI and proxy API to camel-db.")
     parser.add_argument("--port", type=int, default=8080, help="UI server port (default: 8080)")
     parser.add_argument("--api-url", default="http://127.0.0.1:8765", help="camel-db API base URL")
-    parser.add_argument("--ui-dir", default=os.path.join(script_dir, "ui"), help="Directory with index.html")
+    default_ui = os.path.join(script_dir, "ui")
+    ui_dist = os.path.join(script_dir, "ui", "dist")
+    if os.path.isdir(ui_dist) and os.path.isfile(os.path.join(ui_dist, "index.html")):
+        default_ui = ui_dist
+    else:
+        print("Note: ui/dist not found. For production, run: cd tools/debugger/ui && npm run build")
+    parser.add_argument("--ui-dir", default=default_ui, help="Directory with index.html (default: ui/dist if built, else ui)")
     args = parser.parse_args()
     args.api_url = args.api_url.rstrip("/")
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 26, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -64,6 +64,8 @@ struct DebuggerState {
     context_ptr_t ctx;
     std::shared_ptr<UserDefinedModule> mainModule;
     std::shared_ptr<CamelParser> parser;
+    /// Pass 列表：与 CLI 的 Run::targetFiles[1:] 一致，空时 applyPasses 使用 std::fallback。
+    std::vector<std::string> runPasses;
 
     bool hasFile() const { return !targetFile.empty(); }
 };
@@ -87,12 +89,20 @@ void setSettings(bool verbose, const std::string &logFile);
 bool isInterrupted();
 void setInterrupted(bool v);
 
-void registerTask(int port, const std::string &scriptPath);
+void registerTask(
+    int port, const std::string &scriptPath, const std::string &initialState = "running");
 void unregisterTask(int port);
 void setTaskState(int port, const std::string &taskState);
 std::vector<TaskInfo> getTasks();
-/// 将 API 的 target（id 或 port 字符串）解析为端口号，空且仅有一任务时返回该任务端口，用于转发。
+/// 将 API 的 target（id 或 port 字符串）解析为端口号，空时先看前台任务再回退到单任务，用于转发。
+/// 仅返回非 exited 任务的端口；exited 任务返回 0。
 int resolveTargetToPort(const std::string &target);
+/// 同上，但包含已退出的任务，用于返回已退出任务的缓存数据（如 log、父进程 settings）。
+int getTaskPortByTargetIncludingExited(const std::string &target);
+
+/// 主进程 CLI 前台任务：未显式指定 target 时默认作用于此任务。
+std::string getForegroundTaskId();
+void setForegroundTaskId(const std::string &id);
 
 /// 父进程专用：子进程 stdout/stderr 管道内容按行追加到该任务日志缓冲，供 GET /api/log?target=
 /// 返回，与父进程自身 Logger 分离。

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
+#include "camel/core/debug_breakpoint.h"
 #include "camel/parse/parse.h"
 #include "compile/gct/builder.h"
 #include "compile/gir/builder.h"
@@ -106,6 +107,9 @@ bool UserDefinedModule::compile(CompileStage till) {
             auto ast        = parser_->ast();
             auto gctBuilder = GCT::Builder(context_, shared_from_this());
             gct_            = gctBuilder.build(ast, diagnostics_);
+#ifndef NDEBUG
+            camel::DebugBreakpoint::Hit("GCT", gct_.get());
+#endif
             if (diagnostics_->hasErrors()) {
                 EXEC_WHEN_DEBUG(
                     GetDefaultLogger().in("Module").error(

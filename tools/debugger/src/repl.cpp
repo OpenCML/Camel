@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 26, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,9 +29,14 @@
  * startServer/loadSource/configure/launch，使初始化也走命令模式并回显，状态可追溯。
  */
 
-#include "repl.h"
+#include "windows_parser_guard.h"
+
+// nlohmann MUST be before any header that pulls in ANTLR (EOF conflict)
+#include "nlohmann/json.hpp"
+
 #include "build_config.h"
 #include "command/dispatcher.h"
+#include "repl.h"
 #include "state.h"
 
 #include <chrono>
@@ -41,6 +46,8 @@
 #include <unordered_map>
 
 namespace debugger {
+
+using json = nlohmann::json;
 
 static const char *const VERSION = "0.1.0";
 
@@ -81,6 +88,9 @@ static const std::unordered_map<std::string, std::string> kAliases = {
     {"restart", "restart"},
     {"terminate", "terminate"},
     {"breakpoint-filter", "setBreakpointFilter"},
+    {"alloc-breakpoint-spaces", "setBreakpointFilter"},
+    {"breakpoints", "breakpointStatus"},
+    {"breakpoint-status", "breakpointStatus"},
     {"breakpoint-types", "setBreakpointTypes"},
 };
 
@@ -102,7 +112,7 @@ buildArgsJson(const std::string &commandName, const std::string &replCmd, const 
         return R"({"path":")" + escapeJsonString(arg) + R"("})";
 
     if (commandName == "launch")
-        return R"({"memoryMonitor":true,"allocStep":false})";
+        return "{}";
 
     if (commandName == "startServer") {
         int port = 8765;
@@ -126,7 +136,64 @@ buildArgsJson(const std::string &commandName, const std::string &replCmd, const 
         }
     }
 
+    if (commandName == "setBreakpointFilter") {
+        // breakpoint-filter / alloc-breakpoint-spaces（统一断点模型，按空间类型）
+        std::string list = trim(arg);
+        if (list.empty())
+            return R"({"breakSpaces":[]})";
+        std::string out = R"({"breakSpaces":[)";
+        bool first      = true;
+        for (size_t i = 0; i < list.size();) {
+            while (i < list.size() && (list[i] == ' ' || list[i] == '\t'))
+                ++i;
+            if (i >= list.size())
+                break;
+            size_t j = i;
+            while (j < list.size() && list[j] != ' ' && list[j] != '\t')
+                ++j;
+            std::string s = list.substr(i, j - i);
+            if (!s.empty()) {
+                if (!first)
+                    out += ',';
+                out += '"' + s + '"';
+                first = false;
+            }
+            i = j;
+        }
+        out += "]}";
+        return out;
+    }
+
     return "{}";
+}
+
+/// 对“按任务”命令，若 argsJson 中无 target 且当前有前台任务，则注入 target 便于命令层转发。
+static std::string
+injectForegroundTarget(const std::string &argsJson, const std::string &commandName) {
+    static const std::unordered_map<std::string, bool> kTaskCommands = {
+        {"continue", true},
+        {"restart", true},
+        {"terminate", true},
+        {"configure", true},
+        {"setBreakpointFilter", true},
+        {"setBreakpointTypes", true},
+    };
+    if (kTaskCommands.count(commandName) == 0)
+        return argsJson;
+    std::string fg = getForegroundTaskId();
+    if (fg.empty())
+        return argsJson;
+    try {
+        json j = argsJson.empty() ? json::object() : json::parse(argsJson, nullptr, false);
+        if (!j.is_object())
+            return argsJson;
+        if (j.contains("target") && !j["target"].get<std::string>().empty())
+            return argsJson;
+        j["target"] = fg;
+        return j.dump();
+    } catch (...) {
+        return argsJson;
+    }
 }
 
 void printHelp() {
@@ -138,7 +205,7 @@ Usage:
 Options (startup):
   -s, --serve [port]   Start API server on port (default 8765) before REPL
   -f, --file <path>    Load file to debug (same as positional file.cml)
-  -r, --run            Run loaded file once after startup (memory monitor on, alloc-step off)
+  -r, --run            Run loaded file once after startup
   -V, --verbose        Enable verbose output from startup
   --logfile <path>     Write program output to file from startup
   --run-worker <path>  Run one script and exit (for multi-process child; no server/REPL)
@@ -152,8 +219,15 @@ REPL commands (after startup):
   continue     (c)  Resume paused execution
   restart           Restart execution
   terminate         Terminate execution
+  task [id]      (fg)  Show or set foreground task (default target for continue/restart/terminate/etc.)
+  task list           List all tasks (id, port, state, path)
+  task state [id]     Show detailed state of foreground task or specified task by id
   verbose [on|off]     Enable or disable verbose output
   logfile [path]       Write program output to file (path=off to close)
+  breakpoint-filter [space1 ...]   Set breakpoint filter (alloc spaces; empty = none)
+  alloc-breakpoint-spaces [space1 ...]  Same as breakpoint-filter
+  breakpoints          Show breakpoint status by type (alloc spaces, etc.)
+  breakpoint-types     Set enabled breakpoint types
   help         (h)  Show this help
   version      (v)  Show version info
   quit         (q)  Exit debugger
@@ -202,7 +276,7 @@ void printStartupBanner() {
         dispatcher.dispatch("configure", cfgArgs);
     }
     if (opts.run && getState().hasFile())
-        dispatcher.dispatch("launch", R"({"memoryMonitor":true,"allocStep":false})");
+        dispatcher.dispatch("launch", "{}");
 
     std::cout << std::endl;
     if (getServer().isRunning())
@@ -265,6 +339,29 @@ void repl() {
             printVersion();
             continue;
         }
+        if (cmd == "task" || cmd == "fg") {
+            if (arg.empty()) {
+                std::string fg = getForegroundTaskId();
+                if (fg.empty())
+                    std::cout << "No foreground task set." << std::endl;
+                else
+                    std::cout << "Foreground task: " << fg << std::endl;
+            } else if (arg == "list") {
+                std::string argsJson = R"({"subcommand":"list"})";
+                dispatcher.dispatch("task", argsJson);
+            } else if (arg.size() >= 5 && arg.substr(0, 5) == "state") {
+                std::string rest = trim(arg.substr(5));
+                json j;
+                j["subcommand"] = "state";
+                if (!rest.empty())
+                    j["target"] = rest;
+                dispatcher.dispatch("task", j.dump());
+            } else {
+                setForegroundTaskId(arg);
+                std::cout << "Foreground task: " << arg << std::endl;
+            }
+            continue;
+        }
 
         auto it = kAliases.find(cmd);
         if (it != kAliases.end()) {
@@ -272,6 +369,7 @@ void repl() {
                 it->second,
                 cmd,
                 arg); // 同一命令 ID 下 REPL 参数转 JSON，与 HTTP body 一致
+            argsJson    = injectForegroundTarget(argsJson, it->second);
             auto result = dispatcher.dispatch(it->second, argsJson);
             if (it->second == "disconnect")
                 break;

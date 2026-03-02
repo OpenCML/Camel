@@ -1,0 +1,304 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * GIR 懒加载 JSON 序列化实现。
+ */
+
+#include "gir_json.h"
+#include "camel/compile/gir/nodes.h"
+#include "camel/compile/gir/types.h"
+#include "camel/utils/type.h"
+
+#include <format>
+#include <nlohmann/json.hpp>
+#include <queue>
+#include <unordered_set>
+
+namespace debugger {
+
+namespace {
+
+using json = nlohmann::json;
+using namespace GraphIR;
+
+std::string ptrToId(const void *ptr) {
+    return std::format("0x{:x}", reinterpret_cast<uintptr_t>(ptr));
+}
+
+/// 单个图的摘要：id, name, funcTypeSummary（用于 children/dependencies 数组项）
+json graphSummary(const graph_ptr_t &g) {
+    json j;
+    j["id"]   = ptrToId(g.get());
+    j["name"] = g->name();
+    if (g->funcType())
+        j["funcTypeSummary"] = g->funcType()->toString();
+    return j;
+}
+
+/// 根图摘要：无 nodes/edges，含 children 与 dependencies
+json rootSummaryToJson(const graph_ptr_t &root) {
+    json graph            = graphSummary(root);
+    graph["children"]     = json::array();
+    graph["dependencies"] = json::array();
+
+    for (const auto &[name, subSet] : root->subGraphs()) {
+        for (const auto &sub : subSet) {
+            if (sub)
+                graph["children"].push_back(graphSummary(sub));
+        }
+    }
+    for (const auto &dep : root->dependencies()) {
+        if (dep)
+            graph["dependencies"].push_back(graphSummary(dep));
+    }
+
+    return graph;
+}
+
+/// 从 root 起 BFS 查找 id 匹配的图
+graph_ptr_t findGraphById(const graph_ptr_t &root, const std::string &graphId) {
+    if (!root || graphId.empty())
+        return nullptr;
+    if (ptrToId(root.get()) == graphId)
+        return root;
+    std::queue<graph_ptr_t> q;
+    std::unordered_set<Graph *> seen;
+    q.push(root);
+    seen.insert(root.get());
+    while (!q.empty()) {
+        graph_ptr_t g = q.front();
+        q.pop();
+        for (const auto &[name, subSet] : g->subGraphs()) {
+            for (const auto &sub : subSet) {
+                if (sub && seen.insert(sub.get()).second) {
+                    if (ptrToId(sub.get()) == graphId)
+                        return sub;
+                    q.push(sub);
+                }
+            }
+        }
+        for (const auto &dep : g->dependencies()) {
+            if (dep && seen.insert(dep.get()).second) {
+                if (ptrToId(dep.get()) == graphId)
+                    return dep;
+                q.push(dep);
+            }
+        }
+    }
+    return nullptr;
+}
+
+/// 节点 label / shape / style（与 graphviz 一致）
+void nodeLabelShapeStyle(
+    const node_ptr_t &node, std::string &label, std::string &shape, std::string &style) {
+    label = "";
+    shape = "circle";
+    style = "solid";
+
+    switch (node->type()) {
+    case NodeType::DATA: {
+        auto sourceNode = tt::as_shared<DataNode>(node);
+        label           = sourceNode->data() ? sourceNode->data()->toString() : "";
+        break;
+    }
+    case NodeType::PORT: {
+        auto portNode = tt::as_shared<PortNode>(node);
+        label         = portNode->name();
+        break;
+    }
+    case NodeType::CAST:
+        label = "CAST";
+        shape = "diamond";
+        break;
+    case NodeType::COPY:
+        label = "COPY";
+        shape = "diamond";
+        break;
+    case NodeType::FILL:
+        label = "FILL";
+        shape = "diamond";
+        break;
+    case NodeType::ACCS: {
+        auto accsNode = tt::as_shared<AccsNode>(node);
+        label         = "." + accsNode->index2String();
+        shape         = "diamond";
+        break;
+    }
+    case NodeType::BRCH:
+        label = "BRCH";
+        shape = "diamond";
+        break;
+    case NodeType::JOIN:
+        label = "JOIN";
+        shape = "diamond";
+        break;
+    case NodeType::CALL:
+        label = "CALL";
+        shape = "diamond";
+        break;
+    case NodeType::BIND:
+        label = "BIND";
+        shape = "diamond";
+        break;
+    case NodeType::FUNC: {
+        func_ptr_t func = tt::as_shared<FuncNode>(node)->func();
+        label           = func->name().empty() ? func->graph().name() : func->name();
+        shape           = "Mdiamond";
+        break;
+    }
+    case NodeType::OPER: {
+        auto oper = tt::as_shared<OperNode>(node);
+        label     = oper->oper()->name();
+        shape     = "diamond";
+        break;
+    }
+    case NodeType::EXIT:
+        label = "EXIT";
+        shape = "doublecircle";
+        break;
+    case NodeType::SYNC:
+        label = "SYNC";
+        shape = "diamond";
+        style = "dashed";
+        break;
+    case NodeType::NREF:
+        label = "NREF";
+        shape = "diamond";
+        style = "dashed";
+        break;
+    case NodeType::DREF:
+        label = "DREF";
+        shape = "diamond";
+        break;
+    default:
+        label = to_string(node->type());
+        break;
+    }
+}
+
+json nodeToJson(const node_ptr_t &node, const std::string &graphId) {
+    json j;
+    j["id"]      = ptrToId(node.get());
+    j["graphId"] = graphId;
+    j["type"]    = to_string(node->type());
+    std::string label, shape, style;
+    nodeLabelShapeStyle(node, label, shape, style);
+    j["label"]   = label;
+    j["tooltip"] = node->graph().name() + "::" + node->toString();
+    j["shape"]   = shape;
+    j["style"]   = style;
+    return j;
+}
+
+/// 单图展开：nodes, edges, children, dependencies
+json expandedGraphToJson(const graph_ptr_t &graph) {
+    std::string gid   = ptrToId(graph.get());
+    json j            = graphSummary(graph);
+    j["parentId"]     = graph->isRoot() ? json() : json(ptrToId(graph->outer().get()));
+    j["children"]     = json::array();
+    j["dependencies"] = json::array();
+    j["nodes"]        = json::array();
+    j["edges"]        = json::array();
+
+    for (const auto &[name, subSet] : graph->subGraphs()) {
+        for (const auto &sub : subSet)
+            if (sub)
+                j["children"].push_back(graphSummary(sub));
+    }
+    for (const auto &dep : graph->dependencies())
+        if (dep)
+            j["dependencies"].push_back(graphSummary(dep));
+
+    node_vec_t nodes = graph->nodes();
+    nodes.push_back(graph->exitNode());
+    for (const auto &port : graph->normPorts())
+        nodes.push_back(port);
+    for (const auto &port : graph->withPorts())
+        nodes.push_back(port);
+    for (const auto &c : graph->closure())
+        nodes.push_back(c);
+
+    for (const auto &n : nodes)
+        j["nodes"].push_back(nodeToJson(n, gid));
+
+    size_t edgeId = 0;
+    auto addEdge  = [&](const node_ptr_t &from,
+                        const node_ptr_t &to,
+                        const std::string &linkType,
+                        size_t outIdx,
+                        size_t inIdx) {
+        json e;
+        e["id"]              = "e" + std::to_string(edgeId++);
+        e["sourceId"]        = ptrToId(from.get());
+        e["targetId"]        = ptrToId(to.get());
+        e["linkType"]        = linkType;
+        e["sourcePortIndex"] = outIdx;
+        e["targetPortIndex"] = inIdx;
+        j["edges"].push_back(e);
+    };
+
+    for (const auto &node : nodes) {
+        auto withInputs = node->withInputs();
+        for (size_t i = 0; i < withInputs.size(); ++i) {
+            if (withInputs[i]) {
+                size_t outIdx = 0;
+                for (const auto &out : withInputs[i]->dataOutputs()) {
+                    if (out == node)
+                        break;
+                    outIdx++;
+                }
+                addEdge(withInputs[i], node, "With", outIdx, i);
+            }
+        }
+        auto normInputs = node->normInputs();
+        for (size_t i = 0; i < normInputs.size(); ++i) {
+            if (normInputs[i]) {
+                size_t outIdx = 0;
+                for (const auto &out : normInputs[i]->dataOutputs()) {
+                    if (out == node)
+                        break;
+                    outIdx++;
+                }
+                addEdge(normInputs[i], node, "Norm", outIdx, i);
+            }
+        }
+        auto ctrlInputs = node->ctrlInputs();
+        for (size_t i = 0; i < ctrlInputs.size(); ++i) {
+            if (ctrlInputs[i]) {
+                size_t outIdx = 0;
+                for (const auto &out : ctrlInputs[i]->ctrlOutputs()) {
+                    if (out == node)
+                        break;
+                    outIdx++;
+                }
+                addEdge(ctrlInputs[i], node, "Ctrl", outIdx, i);
+            }
+        }
+    }
+
+    return j;
+}
+
+} // namespace
+
+std::pair<std::string, std::string>
+getGirJson(const graph_ptr_t &root, const std::string &graphId) {
+    if (!root)
+        return {"", "no graph"};
+
+    if (graphId.empty()) {
+        json out;
+        out["graph"] = rootSummaryToJson(root);
+        return {out.dump(), ""};
+    }
+
+    graph_ptr_t target = findGraphById(root, graphId);
+    if (!target)
+        return {"", "graph not found"};
+
+    json out;
+    out["graph"] = expandedGraphToJson(target);
+    return {out.dump(), ""};
+}
+
+} // namespace debugger
