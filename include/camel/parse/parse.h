@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 24, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,7 @@
 #include "ast/builder.h"
 #include "cst_dumper.h"
 
+#include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 
 class ParserErrorListener : public antlr4::BaseErrorListener {
@@ -89,7 +90,10 @@ class CamelParser {
                 return false;
             }
         }
-
+#ifndef NDEBUG
+        if (cst_)
+            camel::DebugBreakpoint::Hit("CST", cst_);
+#endif
         return cst_ != nullptr;
     }
 
@@ -101,7 +105,10 @@ class CamelParser {
             ast_ = nullptr;
             return false;
         }
-
+#ifndef NDEBUG
+        if (ast_)
+            camel::DebugBreakpoint::Hit("AST", ast_.get());
+#endif
         return ast_ != nullptr;
     }
 
@@ -123,7 +130,9 @@ class CamelParser {
         lexer_  = std::make_unique<OpenCMLLexer>(&input_);
         tokens_ = std::make_unique<antlr4::CommonTokenStream>(lexer_.get());
         parser_ = std::make_unique<OpenCMLParser>(tokens_.get());
-
+#ifndef NDEBUG
+        camel::DebugBreakpoint::Hit("CTS", this);
+#endif
         return buildCST() && buildAST();
     }
 

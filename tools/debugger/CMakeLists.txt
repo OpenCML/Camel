@@ -3,8 +3,24 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/../libcamel_tool.cmake)
 find_package(httplib REQUIRED)
 
-add_executable(camel-debugger main.cpp debugger_server.cpp)
-target_include_directories(camel-debugger PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+add_executable(camel-debugger
+    main.cpp
+    server.cpp
+    src/state.cpp
+    src/compile.cpp
+    src/gir_json.cpp
+    src/spawn.cpp
+    src/run.cpp
+    src/worker.cpp
+    src/repl.cpp
+    src/command/dispatcher.cpp
+    src/command/commands.cpp
+)
+target_include_directories(camel-debugger PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 set_target_properties(camel-debugger PROPERTIES
     RUNTIME_OUTPUT_NAME camel-db
     CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF
@@ -23,6 +39,5 @@ target_compile_options(camel-debugger PRIVATE
 target_link_options(camel-debugger PRIVATE $<$<CONFIG:RelWithDebInfo>:-no-pie>)
 
 target_libcamel_tool_options(camel-debugger)
-target_include_directories(camel-debugger PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libcamel(camel-debugger)
 target_link_libraries(camel-debugger PRIVATE httplib::httplib nlohmann_json::nlohmann_json)

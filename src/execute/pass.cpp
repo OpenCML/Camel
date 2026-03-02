@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/execute/pass.h"
 #include "camel/common/scope.h"
+#include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 
 #include "passes/opt/inline/inline.h"
@@ -254,6 +255,9 @@ int applyPasses(
 
         auto factory = findPassFactory(p, os);
         if (factory) {
+#ifndef NDEBUG
+            camel::DebugBreakpoint::Hit(p.c_str(), graph.get());
+#endif
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
@@ -267,6 +271,9 @@ int applyPasses(
     if (graph != Graph::null()) {
         auto factory = findPassFactory("std::fallback", os);
         if (factory) {
+#ifndef NDEBUG
+            camel::DebugBreakpoint::Hit("std::fallback", graph.get());
+#endif
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
@@ -277,5 +284,8 @@ int applyPasses(
         }
     }
 
+#ifndef NDEBUG
+    camel::DebugBreakpoint::Hit("GIR-Z", graph ? graph.get() : nullptr);
+#endif
     return 0;
 }
