@@ -135,7 +135,6 @@ slot_t NodeVMSchedPass::doCall(const node_ptr_t &n, Frame *currFrame) {
     }
 
     slot_t result = call(targetGraph, funcFrame);
-    framePool_.release(funcFrame);
     return result;
 }
 
@@ -571,12 +570,19 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
     currRecursionDepth_--;
 
     // 按约定顺序释放栈帧（见文件顶部三种情形说明）
-    // 1. 若 curr 不是 root，先释放 curr（情形二、三中 curr 可能是中途尾调用的帧）
-    if (currFrame != rootFrame)
-        framePool_.release(currFrame);
-    // 2. 若存在孪生帧且孪生帧不是 root，释放孪生帧（互尾递归时缓存的另一图帧）
-    if (twinFrame != nullptr && twinFrame != rootFrame)
-        framePool_.release(twinFrame);
+    if (twinFrame != nullptr) {
+        // 说明已经触发了相互尾调用，要把孪生帧也释放掉
+        // 相互尾调用优化时，currFrame 和 twinFrame 会互相切换
+        // 把与传入的 rootFrame 不相等的那个先释放掉即可
+        if (currFrame != rootFrame) {
+            // 1. 若 curr 不是 root，先释放 curr（情形二、三中 curr 可能是中途尾调用的帧）
+            framePool_.release(currFrame);
+        }
+        if (twinFrame != rootFrame) {
+            // 2. 若存在孪生帧且孪生帧不是 root，释放孪生帧（互尾递归时缓存的另一图帧）
+            framePool_.release(twinFrame);
+        }
+    }
     // 3. 最后释放根帧（call 拥有 rootFrame 的所有权）
     framePool_.release(rootFrame);
 
@@ -627,7 +633,6 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(const node_ptr_t &node, Frame &
         for (size_t j = 0; j < closure->size(); ++j)
             frame->set(j + 2, closure->get<slot_t>(j));
         to[i] = call(func->graph(), frame);
-        framePool_.release(frame);
     }
     currFrame.set(node->index(), res);
 }
@@ -644,18 +649,16 @@ void NodeVMSchedPass::evalMarkedOperator_apply_arr(const node_ptr_t &node, Frame
         for (size_t j = 0; j < closure->size(); ++j)
             frame->set(j + 2, closure->get<slot_t>(j));
         data[i] = call(func->graph(), frame);
-        framePool_.release(frame);
     }
     currFrame.set(node->index(), arr);
 }
 
 void NodeVMSchedPass::evalMarkedOperator_filter_arr(const node_ptr_t &node, Frame &currFrame) {
-    Array *arr             = currFrame.get<Array *>(node->normInputs().front()->index());
-    Function *func         = currFrame.get<Function *>(node->withInputs().front()->index());
-    Tuple *closure         = func->tuple();
-    const auto &retArrType = currFrame.typeAt<ArrayType>(node->index());
-    Array *filtered        = Array::create(mm::autoSpace(), arr->size());
-    slot_t *from           = arr->data();
+    Array *arr      = currFrame.get<Array *>(node->normInputs().front()->index());
+    Function *func  = currFrame.get<Function *>(node->withInputs().front()->index());
+    Tuple *closure  = func->tuple();
+    Array *filtered = Array::create(mm::autoSpace(), arr->size());
+    slot_t *from    = arr->data();
 
     for (size_t i = 0; i < arr->size(); ++i) {
         Frame *frame = framePool_.acquire(func->graph());
@@ -663,11 +666,10 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(const node_ptr_t &node, Fram
         for (size_t j = 0; j < closure->size(); ++j)
             frame->set(j + 2, closure->get<slot_t>(j));
         slot_t result = call(func->graph(), frame);
-        framePool_.release(frame);
         if (fromSlot<bool>(result))
-            filtered->append(from[i], retArrType);
+            filtered->append(from[i]);
     }
-    filtered->shrinkToFit(retArrType);
+    filtered->shrinkToFit();
     currFrame.set(node->index(), filtered);
 }
 
@@ -691,7 +693,6 @@ void NodeVMSchedPass::evalMarkedOperator_reduce_arr(const node_ptr_t &node, Fram
         for (size_t j = 0; j < closure->size(); ++j)
             frame->set(j + 3, closure->get<slot_t>(j));
         acc = call(func->graph(), frame);
-        framePool_.release(frame);
     }
     currFrame.set(node->index(), acc);
 }
@@ -708,7 +709,6 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(const node_ptr_t &node, Fra
         for (size_t j = 0; j < closure->size(); ++j)
             frame->set(j + 2, closure->get<slot_t>(j));
         call(func->graph(), frame);
-        framePool_.release(frame);
     }
     currFrame.set(node->index(), NullSlot);
 }

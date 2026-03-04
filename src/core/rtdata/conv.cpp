@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -89,18 +89,17 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
     }
 
     case TypeCode::Array: {
-        auto arrayData        = tt::as_shared<ArrayData>(data);
-        const auto &arrayType = tt::as_ptr<ArrayType>(arrayData->type());
-        Array *gcArray        = Array::create(allocator, 0);
+        auto arrayData = tt::as_shared<ArrayData>(data);
+        Array *gcArray = Array::create(allocator, 0);
         for (const auto &elem : arrayData->raw()) {
             if (elem->type()->isGCTraced()) {
                 Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);
-                gcArray->append<Object *>(elemRef, arrayType);
+                gcArray->append<Object *>(elemRef);
             } else if (elem->type()->isPrimitive()) {
                 slot_t slot = makeSlotFromPrimitiveData(elem);
-                gcArray->append<slot_t>(slot, arrayType);
+                gcArray->append<slot_t>(slot);
             } else {
-                gcArray->append<slot_t>(NullSlot, arrayType);
+                gcArray->append<slot_t>(NullSlot);
             }
         }
         return gcArray;

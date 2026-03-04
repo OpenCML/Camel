@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -205,9 +205,9 @@ class Array : public Object {
     }
 
     size_t size() const { return size_; }
-    void resize(size_t newSize, const Type *type) {
+    void resize(size_t newSize) {
         if (newSize > capacity_) {
-            reserve(newSize, type);
+            reserve(newSize);
         }
         size_ = newSize;
     }
@@ -228,17 +228,15 @@ class Array : public Object {
         dataPtr_[index] = toSlot(value);
     }
 
-    void reserve(size_t newCapacity, const Type *type) {
-        ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
+    void reserve(size_t newCapacity) {
         if (newCapacity <= capacity_)
             return;
-        reallocate(newCapacity, type);
+        reallocate(newCapacity);
     }
 
-    template <typename T> void append(const T value, const Type *type) {
-        ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
+    template <typename T> void append(const T value) {
         if (size_ >= capacity_) {
-            reserve(capacity_ * 3 / 2, type);
+            reserve(capacity_ * 3 / 2);
         }
 
         if constexpr (std::is_same_v<T, Object *>) {
@@ -258,11 +256,10 @@ class Array : public Object {
         // 保留capacity，不释放fixedArray_
     }
 
-    void shrinkToFit(const Type *type) {
-        ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
+    void shrinkToFit() {
         if (size_ == capacity_)
             return;
-        reallocate(size_ > 0 ? size_ : SMALL_ARRAY_SIZE, type);
+        reallocate(size_ > 0 ? size_ : SMALL_ARRAY_SIZE);
     }
 
     virtual bool equals(const Object *other, const Type *type, bool deep = false) const override {
@@ -397,8 +394,7 @@ class Array : public Object {
         }
     }
 
-    void reallocate(size_t newCapacity, const Type *type) {
-        ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
+    void reallocate(size_t newCapacity) {
         if (UNLIKELY(newCapacity <= SMALL_ARRAY_SIZE)) {
             if (fixedArray_ != nullptr && size_ > 0) {
                 std::memcpy(inlineData_, dataPtr_, size_ * sizeof(slot_t));
