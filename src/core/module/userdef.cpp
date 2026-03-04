@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -107,9 +107,7 @@ bool UserDefinedModule::compile(CompileStage till) {
             auto ast        = parser_->ast();
             auto gctBuilder = GCT::Builder(context_, shared_from_this());
             gct_            = gctBuilder.build(ast, diagnostics_);
-#ifndef NDEBUG
-            camel::DebugBreakpoint::Hit("GCT", gct_.get());
-#endif
+            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GCT", gct_.get()); });
             if (diagnostics_->hasErrors()) {
                 EXEC_WHEN_DEBUG(
                     GetDefaultLogger().in("Module").error(

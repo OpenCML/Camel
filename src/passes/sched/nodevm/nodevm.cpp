@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
+#include "camel/utils/log.h"
 
 #include <stack>
 
@@ -55,7 +56,7 @@ std::shared_ptr<node_vec_t> NodeVMSchedPass::getTopoNodes(Graph *graph) {
             true // skip the start node itself
         );
 
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             GetDefaultLogger().in("Topo").debug(
                 "Topologically sorted nodes for graph {}:",
                 graph->name());
@@ -84,7 +85,7 @@ std::shared_ptr<node_vec_t> NodeVMSchedPass::getTopoNodes(Graph *graph) {
                     graph->name(),
                     nodeStrs);
             }
-        }());
+        });
 
         const auto &sortedNodesPtr  = std::make_shared<node_vec_t>(std::move(sortedNodes));
         graphTopoNodesCache_[graph] = sortedNodesPtr;
@@ -174,38 +175,63 @@ slot_t NodeVMSchedPass::doCall(const node_ptr_t &n, Frame *currFrame) {
 // =============================================================================
 
 // 将节点 n（CALL 或 FUNC）的参数从 source 帧复制到 dest 帧（targetGraph 的端口与闭包）
-static void
-fillFrameForCall(Frame *dest, Graph *targetGraph, const GraphIR::node_ptr_t &n, Frame *source) {
+static inline void
+fillFrameForFunc(Frame *from, Frame *dest, Graph *graph, const GraphIR::node_ptr_t &node) {
     using namespace GraphIR;
-    node_vec_t argNodes;
-    node_vec_t closureNodes = targetGraph->closure();
-    node_vec_t portNodes    = targetGraph->ports();
 
-    if (n->type() == NodeType::CALL) {
-        argNodes = n->normInputs();
-        size_t i = 0;
-        for (; i < argNodes.size() && i < portNodes.size(); ++i)
-            dest->set(portNodes[i]->index(), source->get<slot_t>(argNodes[i]->index()));
-        Function *func = source->get<Function *>(n->withInputs().front()->index());
-        Tuple *closure = func->tuple();
-        for (size_t j = 0; j < closure->size() && j < closureNodes.size(); ++j)
-            dest->set(closureNodes[j]->index(), closure->get<slot_t>(j));
-    } else {
-        argNodes = n->normInputs();
-        size_t i = 0;
-        for (; i < argNodes.size() && i < portNodes.size(); ++i)
-            dest->set(portNodes[i]->index(), source->get<slot_t>(argNodes[i]->index()));
-        for (size_t j = 0; j < n->withInputs().size() && j < closureNodes.size(); ++j)
-            dest->set(closureNodes[j]->index(), source->get<slot_t>(n->withInputs()[j]->index()));
+    const auto &normNodes = node->normInputs();
+    const auto &normPorts = graph->normPorts();
+    ASSERT(
+        normNodes.size() == normPorts.size(),
+        "Norm nodes and ports count mismatch in fillFrameForFunc.");
+    for (size_t i = 0; i < normNodes.size(); ++i) {
+        dest->set(normPorts[i]->index(), from->get<slot_t>(normNodes[i]->index()));
+    }
+
+    const auto &withNodes = node->withInputs();
+    const auto &withPorts = graph->withPorts();
+    ASSERT(
+        withNodes.size() == withPorts.size(),
+        "With nodes and ports count mismatch in fillFrameForFunc.");
+    for (size_t i = 0; i < withNodes.size(); ++i) {
+        dest->set(withPorts[i]->index(), from->get<slot_t>(withNodes[i]->index()));
     }
 }
 
-slot_t NodeVMSchedPass::call(Graph *graph, Frame *rootFrame) {
+static inline void fillFrameForCall(
+    Frame *from, Frame *dest, Function *func, Graph *graph, const GraphIR::node_ptr_t &node) {
+    using namespace GraphIR;
+
+    const auto &normNodes = node->normInputs();
+    const auto &normPorts = graph->normPorts();
+    ASSERT(
+        normNodes.size() == normPorts.size(),
+        "Norm nodes and ports count mismatch in fillFrameForCall.");
+    for (size_t i = 0; i < normNodes.size(); ++i) {
+        dest->set(normPorts[i]->index(), from->get<slot_t>(normNodes[i]->index()));
+    }
+
+    if (graph->hasClosure()) {
+        // 处理闭包
+        Tuple *closureData = func->tuple();
+        ASSERT(closureData != nullptr, "Closure is null in fillFrameForCall.");
+        const auto &closureNodes = graph->closure();
+        ASSERT(
+            closureNodes.size() == closureData->size(),
+            "Closure nodes and tuple size mismatch in fillFrameForCall.");
+        for (size_t j = 0; j < closureNodes.size(); ++j) {
+            dest->set(closureNodes[j]->index(), closureData->get<slot_t>(j));
+        }
+    }
+}
+
+slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
     currRecursionDepth_++;
     if (currRecursionDepth_ > maxRecursionDepth_) {
         context_->rtmDiags()
             ->of(RuntimeDiag::MaxRecursionDepthExceeded)
-            .commit(graph->name(), maxRecursionDepth_);
+            .commit(rootGraph->name(), maxRecursionDepth_);
+        // 应该不会执行到这里，上面的代码应该会抛出异常
         currRecursionDepth_--;
         framePool_.release(rootFrame); // 提前返回时仍由 call 负责释放根帧
         return NullSlot;
@@ -218,7 +244,7 @@ slot_t NodeVMSchedPass::call(Graph *graph, Frame *rootFrame) {
     // currFrame：当前执行的栈帧；twinFrame：孪生帧，用于互尾递归（A 尾调 B、B 尾调 A）时复用
     Frame *currFrame = rootFrame;
     Frame *twinFrame = nullptr;
-    Graph *currGraph = graph;
+    Graph *currGraph = rootGraph;
     std::stack<node_ptr_t> brInfoStack_;
 
     // 尾调用优化主循环：loop 为 true 时不退出 C++ 栈帧，用新的 currGraph/currFrame 继续执行
@@ -230,10 +256,10 @@ slot_t NodeVMSchedPass::call(Graph *graph, Frame *rootFrame) {
         for (size_t i = 0; i < nodes.size(); ++i) {
             const node_ptr_t &n = nodes[i];
 
-#ifndef NDEBUG
-            if (camel::DebugBreakpoint::IsEnabled("gir_node"))
-                camel::DebugBreakpoint::Hit("gir_node", n.get());
-#endif
+            EXEC_WHEN_DEBUG({
+                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
+                    camel::DebugBreakpoint::Hit("gir_node", n.get());
+            });
 
             switch (n->type()) {
             case NodeType::CAST: {
@@ -392,13 +418,13 @@ slot_t NodeVMSchedPass::call(Graph *graph, Frame *rootFrame) {
 
                     if (targetGraph == currGraph) {
                         // 自递归尾调用：目标图与当前图相同，直接复用当前帧，仅重写参数
-                        fillFrameForCall(currFrame, targetGraph, execNode, lastFrame);
+                        fillFrameForFunc(lastFrame, currFrame, targetGraph, execNode);
                     } else {
                         // 跨图尾调用：需切换帧；可能为互尾递归（A↔B）或尾调到第三方（如 C）
                         if (twinFrame && twinFrame->graph() == targetGraph) {
                             // 互尾递归：孪生帧恰好是目标图的帧，直接复用，交换 curr 与 twin
                             currFrame = twinFrame;
-                            fillFrameForCall(currFrame, targetGraph, execNode, lastFrame);
+                            fillFrameForFunc(lastFrame, currFrame, targetGraph, execNode);
                             twinFrame = lastFrame;
                         } else {
                             // 非互尾：需释放旧孪生帧（若存在且非
@@ -407,7 +433,7 @@ slot_t NodeVMSchedPass::call(Graph *graph, Frame *rootFrame) {
                                 framePool_.release(twinFrame);
                             twinFrame = lastFrame;
                             currFrame = framePool_.acquire(targetGraph);
-                            fillFrameForCall(currFrame, targetGraph, execNode, lastFrame);
+                            fillFrameForFunc(lastFrame, currFrame, targetGraph, execNode);
                         }
                         currGraph = targetGraph;
                     }
@@ -419,26 +445,29 @@ slot_t NodeVMSchedPass::call(Graph *graph, Frame *rootFrame) {
             } break;
 
             case NodeType::CALL: {
+                ASSERT(n->withInputs().size() == 1, "CALL node must have exactly one with input");
+                const auto &funcNode = n->withInputs().front();
+                Function *func       = currFrame->get<Function *>(funcNode->index());
+                Graph *targetGraph   = func->graph();
+
                 bool isTailCall =
                     (i == nodes.size() - 1) && (currGraph->outputNode().get() == n.get());
                 if (isTailCall) {
                     // 尾调用：不递归 call，而是切换 currGraph/currFrame 并重入 do 循环
-                    Graph *targetGraph =
-                        currFrame->get<Function *>(n->withInputs().front()->index())->graph();
                     Frame *lastFrame = currFrame;
                     if (targetGraph == currGraph) {
-                        fillFrameForCall(currFrame, targetGraph, n, lastFrame);
+                        fillFrameForCall(lastFrame, currFrame, func, targetGraph, n);
                     } else {
                         if (twinFrame && twinFrame->graph() == targetGraph) {
                             currFrame = twinFrame;
-                            fillFrameForCall(currFrame, targetGraph, n, lastFrame);
+                            fillFrameForCall(lastFrame, currFrame, func, targetGraph, n);
                             twinFrame = lastFrame;
                         } else {
                             if (twinFrame != nullptr && twinFrame != rootFrame)
                                 framePool_.release(twinFrame);
                             twinFrame = lastFrame;
                             currFrame = framePool_.acquire(targetGraph);
-                            fillFrameForCall(currFrame, targetGraph, n, lastFrame);
+                            fillFrameForCall(lastFrame, currFrame, func, targetGraph, n);
                         }
                         currGraph = targetGraph;
                     }
@@ -457,18 +486,18 @@ slot_t NodeVMSchedPass::call(Graph *graph, Frame *rootFrame) {
                     Graph *targetGraph = &tt::as_shared<FuncNode>(n)->func()->graph();
                     Frame *lastFrame   = currFrame;
                     if (targetGraph == currGraph) {
-                        fillFrameForCall(currFrame, targetGraph, n, lastFrame);
+                        fillFrameForFunc(lastFrame, currFrame, targetGraph, n);
                     } else {
                         if (twinFrame && twinFrame->graph() == targetGraph) {
                             currFrame = twinFrame;
-                            fillFrameForCall(currFrame, targetGraph, n, lastFrame);
+                            fillFrameForFunc(lastFrame, currFrame, targetGraph, n);
                             twinFrame = lastFrame;
                         } else {
                             if (twinFrame != nullptr && twinFrame != rootFrame)
                                 framePool_.release(twinFrame);
                             twinFrame = lastFrame;
                             currFrame = framePool_.acquire(targetGraph);
-                            fillFrameForCall(currFrame, targetGraph, n, lastFrame);
+                            fillFrameForFunc(lastFrame, currFrame, targetGraph, n);
                         }
                         currGraph = targetGraph;
                     }

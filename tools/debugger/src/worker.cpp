@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -140,13 +140,13 @@ int runWorkerMode(int argc, char *argv[]) {
         return 1;
     }
 
-#ifndef NDEBUG
-    cml::set_assert_handler([](const std::string &expression,
-                               const std::string &suggestion,
-                               const std::source_location &location) {
-        throw cml::AssertionFailure(expression, suggestion, location);
+    EXEC_WHEN_DEBUG({
+        cml::set_assert_handler([](const std::string &expression,
+                                   const std::string &suggestion,
+                                   const std::source_location &location) {
+            throw cml::AssertionFailure(expression, suggestion, location);
+        });
     });
-#endif
     getState().targetFile = path;
     clearRunState();
 
@@ -163,40 +163,39 @@ int runWorkerMode(int argc, char *argv[]) {
                 Logger::WriteToAllStreams(result.message + "\n");
         });
     getServer().setQueryCallbacks(getStateJson, getGirJson);
-#ifndef NDEBUG
-    camel::DebugBreakpoint::RegisterType("alloc");
-    camel::DebugBreakpoint::RegisterType("alloc_before");
-    camel::DebugBreakpoint::RegisterType("gir_node");
-    camel::DebugBreakpoint::SetHandler([](const char *type, const void *ctx) {
-        if (!type)
-            return;
-        if (std::strcmp(type, "alloc_before") == 0) {
-            auto *evt = static_cast<const mm::PreAllocEvent *>(ctx);
-            if (evt)
-                getServer().pauseAndWaitForContinue(nullptr, evt->size, evt->space);
-            return;
-        }
-        if (std::strcmp(type, "alloc") == 0) {
-            auto *evt = static_cast<const mm::AllocEvent *>(ctx);
-            if (evt)
-                getServer().pauseAndWaitForContinue(evt->ptr, evt->size, evt->space);
-            return;
-        }
-        if (std::strcmp(type, "gir_node") == 0 && ctx != nullptr) {
-            auto *node    = static_cast<const GraphIR::Node *>(ctx);
-            uintptr_t ptr = reinterpret_cast<uintptr_t>(node);
-            if (getServer().isGirBreakpointNode(ptr)) {
-                std::string nodeId = std::format("0x{:x}", ptr);
-                std::string graphId =
-                    std::format("0x{:x}", reinterpret_cast<uintptr_t>(&node->graph()));
-                getServer().pauseAndWaitForGirBreakpoint(nodeId, graphId);
+    EXEC_WHEN_DEBUG({
+        camel::DebugBreakpoint::RegisterType("alloc");
+        camel::DebugBreakpoint::RegisterType("alloc_before");
+        camel::DebugBreakpoint::RegisterType("gir_node");
+        camel::DebugBreakpoint::SetHandler([](const char *type, const void *ctx) {
+            if (!type)
+                return;
+            if (std::strcmp(type, "alloc_before") == 0) {
+                auto *evt = static_cast<const mm::PreAllocEvent *>(ctx);
+                if (evt)
+                    getServer().pauseAndWaitForContinue(nullptr, evt->size, evt->space);
+                return;
             }
-            return;
-        }
-        // Pipeline stage breakpoints (CTS, CST, AST, GCT, std::*, GIR-Z, etc.)
-        getServer().pauseAndWaitForPipelineStage(type);
+            if (std::strcmp(type, "alloc") == 0) {
+                auto *evt = static_cast<const mm::AllocEvent *>(ctx);
+                if (evt)
+                    getServer().pauseAndWaitForContinue(evt->ptr, evt->size, evt->space);
+                return;
+            }
+            if (std::strcmp(type, "gir_node") == 0 && ctx != nullptr) {
+                auto *node    = static_cast<const GraphIR::Node *>(ctx);
+                uintptr_t ptr = reinterpret_cast<uintptr_t>(node);
+                if (getServer().isGirBreakpointNode(ptr)) {
+                    std::string nodeId = std::format("0x{:x}", ptr);
+                    std::string graphId =
+                        std::format("0x{:x}", reinterpret_cast<uintptr_t>(&node->graph()));
+                    getServer().pauseAndWaitForGirBreakpoint(nodeId, graphId);
+                }
+                return;
+            }
+            getServer().pauseAndWaitForPipelineStage(type);
+        });
     });
-#endif
 
     getServer().setWorkerRunHandler([](const std::string &body, std::string &responseBody) {
         parseRunBodyAndSetPasses(body);

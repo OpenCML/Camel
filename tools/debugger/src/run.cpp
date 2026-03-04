@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,15 +59,15 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
         srv.startMemoryScan();
         bool hasAllocBreakSpaces = !srv.getAllocBreakSpaces().empty();
         srv.enableAllocStep(hasAllocBreakSpaces);
-#ifndef NDEBUG
-        if (hasAllocBreakSpaces) {
-            camel::DebugBreakpoint::EnableType("alloc_before");
-            camel::DebugBreakpoint::EnableType("alloc");
-        } else {
-            camel::DebugBreakpoint::DisableType("alloc_before");
-            camel::DebugBreakpoint::DisableType("alloc");
-        }
-#endif
+        EXEC_WHEN_DEBUG({
+            if (hasAllocBreakSpaces) {
+                camel::DebugBreakpoint::EnableType("alloc_before");
+                camel::DebugBreakpoint::EnableType("alloc");
+            } else {
+                camel::DebugBreakpoint::DisableType("alloc_before");
+                camel::DebugBreakpoint::DisableType("alloc");
+            }
+        });
     }
 
     std::string runMsg = "Running " + targetFile;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "camel/common/scope.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/utils/log.h"
 
 #include "passes/opt/inline/inline.h"
 #include "passes/sched/fastvm/bcdump.h"
@@ -255,9 +256,7 @@ int applyPasses(
 
         auto factory = findPassFactory(p, os);
         if (factory) {
-#ifndef NDEBUG
-            camel::DebugBreakpoint::Hit(p.c_str(), graph.get());
-#endif
+            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), graph.get()); });
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
@@ -271,9 +270,7 @@ int applyPasses(
     if (graph != Graph::null()) {
         auto factory = findPassFactory("std::fallback", os);
         if (factory) {
-#ifndef NDEBUG
-            camel::DebugBreakpoint::Hit("std::fallback", graph.get());
-#endif
+            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("std::fallback", graph.get()); });
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
@@ -284,8 +281,6 @@ int applyPasses(
         }
     }
 
-#ifndef NDEBUG
-    camel::DebugBreakpoint::Hit("GIR-Z", graph ? graph.get() : nullptr);
-#endif
+    EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GIR-Z", graph ? graph.get() : nullptr); });
     return 0;
 }

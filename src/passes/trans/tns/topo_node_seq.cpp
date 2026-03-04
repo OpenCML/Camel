@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -92,7 +92,7 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 return ins;
             },
             true);
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             GetDefaultLogger().in("Topo").debug(
                 "Topologically sorted nodes for graph {}:",
                 graph->name());
@@ -119,7 +119,7 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
                     graph->name(),
                     nodeStrs);
             }
-        }());
+        });
         // 打印函数签名（含参数信息）
         oss << "FUNC: " << g->name();
         for (const auto &portNode : g->ports()) {

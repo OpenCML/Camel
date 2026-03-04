@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 01, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,49 +37,48 @@
 #include <string>
 
 slot_t __profiler_begin__(ArgsView &with, ArgsView &norm, Context &ctx) {
-#ifndef NDEBUG
-    const std::string name = "profiler_scope";
-    bool is_tracing        = profiler::AdvancedTracer::getInstance().isTracing();
-    if (is_tracing) {
-        profiler::AdvancedTracer::getInstance().traceFunctionCall(name);
-    } else {
-    }
-    std::cout << "[PROFILER] Begin: " << name << std::endl;
-#endif
+    EXEC_WHEN_DEBUG({
+        const std::string name = "profiler_scope";
+        bool is_tracing        = profiler::AdvancedTracer::getInstance().isTracing();
+        if (is_tracing) {
+            profiler::AdvancedTracer::getInstance().traceFunctionCall(name);
+        }
+        std::cout << "[PROFILER] Begin: " << name << std::endl;
+    });
     return NullSlot;
 }
 
 slot_t __profiler_end__(ArgsView &with, ArgsView &norm, Context &ctx) {
-#ifndef NDEBUG
-    const std::string name = "profiler_scope";
-    if (profiler::AdvancedTracer::getInstance().isTracing()) {
-        profiler::AdvancedTracer::getInstance().traceFunctionReturn(name);
-    }
-    std::cout << "[PROFILER] End: " << name << std::endl;
-#endif
+    EXEC_WHEN_DEBUG({
+        const std::string name = "profiler_scope";
+        if (profiler::AdvancedTracer::getInstance().isTracing()) {
+            profiler::AdvancedTracer::getInstance().traceFunctionReturn(name);
+        }
+        std::cout << "[PROFILER] End: " << name << std::endl;
+    });
     return NullSlot;
 }
 
 slot_t __profiler_instant__(ArgsView &with, ArgsView &norm, Context &ctx) {
-#ifndef NDEBUG
-    const std::string name = "instant_event";
-    if (profiler::AdvancedTracer::getInstance().isTracing()) {
-        profiler::TRACE_EVENT_INSTANT(name.c_str());
-    }
-    std::cout << "[PROFILER] Instant: " << name << std::endl;
-#endif
+    EXEC_WHEN_DEBUG({
+        const std::string name = "instant_event";
+        if (profiler::AdvancedTracer::getInstance().isTracing()) {
+            profiler::TRACE_EVENT_INSTANT(name.c_str());
+        }
+        std::cout << "[PROFILER] Instant: " << name << std::endl;
+    });
     return NullSlot;
 }
 
 slot_t __profiler_enable__(ArgsView &with, ArgsView &norm, Context &ctx) {
-#ifndef NDEBUG
-    profiler::AdvancedTracer::Config config;
-    config.enablePerfettoIntegration = true;
-    config.perfettoOutput            = "profile_reports/camel_trace.perfetto-trace";
-    config.outputFile                = "profile_reports/camel_trace.json";
-    profiler::AdvancedTracer::getInstance().initialize(config);
-    profiler::AdvancedTracer::getInstance().startTracing();
-    std::cout << "[PROFILER] Profiling enabled" << std::endl;
-#endif
+    EXEC_WHEN_DEBUG({
+        profiler::AdvancedTracer::Config config;
+        config.enablePerfettoIntegration = true;
+        config.perfettoOutput            = "profile_reports/camel_trace.perfetto-trace";
+        config.outputFile                = "profile_reports/camel_trace.json";
+        profiler::AdvancedTracer::getInstance().initialize(config);
+        profiler::AdvancedTracer::getInstance().startTracing();
+        std::cout << "[PROFILER] Profiling enabled" << std::endl;
+    });
     return NullSlot;
 }

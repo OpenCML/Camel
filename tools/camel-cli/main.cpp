@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,11 +46,10 @@
 
 #include <chrono>
 #include <filesystem>
-#include <string>
 #include <iomanip>
 #include <iostream>
 #include <queue>
-
+#include <string>
 
 using namespace antlr4;
 using namespace std;
@@ -210,7 +209,7 @@ int main(int argc, char *argv[]) {
             }
 
             if (selectedCommand == Command::Run) {
-                EXEC_WHEN_DEBUG([] {
+                EXEC_WHEN_DEBUG({
                     if (Run::profile) {
                         // Initialize and start advanced tracing using profiler configuration
                         profiler::AdvancedTracer::Config config;
@@ -219,7 +218,7 @@ int main(int argc, char *argv[]) {
                         config.outputFile     = "profile_reports/camel_trace.json";
                         profiler::start_advanced_tracing(config);
                     }
-                }());
+                });
 
                 // memperf::enable_logging(true);
 
@@ -251,12 +250,12 @@ int main(int argc, char *argv[]) {
 
                 memperf::report(os);
 
-                EXEC_WHEN_DEBUG([] {
+                EXEC_WHEN_DEBUG({
                     if (Run::profile) {
                         profiler::stop_advanced_tracing();
                         profiler::generate_advanced_report();
                     }
-                }());
+                });
             }
 
         } catch (DiagnosticsLimitExceededBaseException &e) {
