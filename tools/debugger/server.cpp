@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -337,12 +337,12 @@ void DebuggerServer::pauseAndWaitForPipelineStage(const char *stageId) {
 void DebuggerServer::setGirBreakpointNodeIds(std::unordered_set<uintptr_t> ids) {
     std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
     girBreakpointNodeIds_ = std::move(ids);
-#ifndef NDEBUG
-    if (girBreakpointNodeIds_.empty())
-        camel::DebugBreakpoint::DisableType("gir_node");
-    else
-        camel::DebugBreakpoint::EnableType("gir_node");
-#endif
+    EXEC_WHEN_DEBUG({
+        if (girBreakpointNodeIds_.empty())
+            camel::DebugBreakpoint::DisableType("gir_node");
+        else
+            camel::DebugBreakpoint::EnableType("gir_node");
+    });
 }
 
 bool DebuggerServer::isGirBreakpointNode(uintptr_t nodePtr) const {

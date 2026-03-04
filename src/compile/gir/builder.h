@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -68,17 +68,17 @@ class Builder {
     node_ptr_t lastSyncedNode_;
 
     std::optional<node_ptr_t> nodeAt(const std::string &name) {
-        EXEC_WHEN_DEBUG([&] {
+        EXEC_WHEN_DEBUG({
             std::stringstream ss;
             nodeScope_->dump(ss);
             GetDefaultLogger()
                 .in("GIR Builder")
                 .debug("Accessing node '{}' from scope {}", name, ss.str());
-        }());
+        });
         return nodeScope_->get(name);
     }
     std::optional<std::shared_ptr<graph_vec_t>> graphsAt(const std::string &name) {
-        EXEC_WHEN_DEBUG([&] {
+        EXEC_WHEN_DEBUG({
             std::stringstream ss;
             graphScope_->dump(
                 ss,
@@ -93,7 +93,7 @@ class Builder {
             GetDefaultLogger()
                 .in("GIR Builder")
                 .debug("Accessing graph '{}' from scope {}", name, ss.str());
-        }());
+        });
         return graphScope_->get(name);
     }
 

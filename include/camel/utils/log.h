@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Feb. 24, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,15 +23,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-
-#ifndef NDEBUG
-#define EXEC_WHEN_DEBUG(code)                                                                      \
-    do {                                                                                           \
-        code;                                                                                      \
-    } while (0)
-#else
-#define EXEC_WHEN_DEBUG(code)
-#endif
 
 #if defined(_WIN32) && !defined(CAMEL_DLL_EXPORTS)
 #define CAMEL_LOG_API __declspec(dllimport)
@@ -55,6 +46,7 @@ class Logger {
     /// Write a raw line to all registered streams (e.g. for debugger messages).
     static void WriteToAllStreams(const std::string &) {}
     static void SetVerbose(bool) {}
+    static void SetColorEnabled(bool) {}
 
     Logger(
         const std::string & = "", std::shared_ptr<Logger> parent = nullptr,
@@ -90,6 +82,8 @@ CAMEL_LOG_API const std::string &GetFilteredLoggerScope();
 CAMEL_LOG_API LogLevel GetGlobalLogLevel();
 CAMEL_LOG_API void SetGlobalLogLevel(LogLevel level);
 CAMEL_LOG_API bool IsVerboseEnabled();
+CAMEL_LOG_API bool IsColorEnabled();
+CAMEL_LOG_API void SetColorEnabled(bool enable);
 CAMEL_LOG_API void Logger_DoLog(
     const std::string &scope, LogLevel effectiveLevel, LogLevel level, const std::string &message);
 CAMEL_LOG_API Logger &GetDefaultLogger();
@@ -102,6 +96,8 @@ class Logger {
     friend CAMEL_LOG_API LogLevel GetGlobalLogLevel();
     friend CAMEL_LOG_API void SetGlobalLogLevel(LogLevel level);
     friend CAMEL_LOG_API bool IsVerboseEnabled();
+    friend CAMEL_LOG_API bool IsColorEnabled();
+    friend CAMEL_LOG_API void SetColorEnabled(bool);
     friend CAMEL_LOG_API void Logger_DoLog(
         const std::string &scope, LogLevel effectiveLevel, LogLevel level,
         const std::string &message);
@@ -117,6 +113,7 @@ class Logger {
     static CAMEL_LOG_API void WriteToAllStreams(const std::string &message);
 
     static CAMEL_LOG_API void SetVerbose(bool enable);
+    static void SetColorEnabled(bool enable) { ::SetColorEnabled(enable); }
 
     Logger(
         const std::string &scope = "", std::shared_ptr<Logger> parent = nullptr,
@@ -201,6 +198,7 @@ class Logger {
 
     static Level globalLogLevel_;
     static bool verboseEnabled_;
+    static bool colorEnabled_;
     static std::mutex logMutex_;
     using StreamEntry = std::pair<size_t, std::ostream *>;
     static std::vector<StreamEntry> outputStreams_;

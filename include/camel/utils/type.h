@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 08, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "camel/utils/assert.h"
-#include "camel/utils/log.h"
+#include "camel/utils/debug.h"
 
 #include <memory>
 #include <type_traits>
@@ -48,7 +48,7 @@ template <typename Target, typename Source> bool is_exact_type(const Source &obj
 template <typename Target, typename Source> Target *as_ptr(Source *ptr) {
     static_assert(std::has_virtual_destructor_v<Source>, "Source must be a polymorphic type");
 
-    EXEC_WHEN_DEBUG([&]() {
+    EXEC_WHEN_DEBUG({
         if (dynamic_cast<Target *>(ptr) == nullptr) {
             ASSERT(
                 false,
@@ -57,7 +57,7 @@ template <typename Target, typename Source> Target *as_ptr(Source *ptr) {
                     typeid(Source).name(),
                     typeid(Target).name()));
         }
-    }());
+    });
 
     return static_cast<Target *>(ptr);
 }
@@ -74,7 +74,7 @@ std::shared_ptr<Target> to_shared(const std::shared_ptr<Source> &ptr) {
 
 template <typename Target, typename Source>
 std::shared_ptr<Target> as_shared(const std::shared_ptr<Source> &ptr) {
-    EXEC_WHEN_DEBUG([&]() {
+    EXEC_WHEN_DEBUG({
         if (!is_shared_instance_of<Target, Source>(ptr)) {
             ASSERT(
                 false,
@@ -83,7 +83,7 @@ std::shared_ptr<Target> as_shared(const std::shared_ptr<Source> &ptr) {
                     typeid(Source).name(),
                     typeid(Target).name()));
         }
-    }());
+    });
     return std::static_pointer_cast<Target>(ptr);
 }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include <unordered_map>
 
 #include "camel/core/data.h"
+#include "camel/utils/debug.h"
 #include "camel/utils/exstore.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"

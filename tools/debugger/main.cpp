@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -100,15 +100,14 @@ int main(int argc, char *argv[]) {
         }
     }
 
-#ifndef NDEBUG
-    // Debug 构建下将 libcamel 的 assert 转为抛异常，便于在调试器中捕获并上报给 Web UI，而不是直接
-    // abort。
-    cml::set_assert_handler([](const std::string &expression,
-                               const std::string &suggestion,
-                               const std::source_location &location) {
-        throw cml::AssertionFailure(expression, suggestion, location);
+    EXEC_WHEN_DEBUG({
+        // Debug 构建下将 libcamel 的 assert 转为抛异常，便于在调试器中捕获并上报给 Web UI
+        cml::set_assert_handler([](const std::string &expression,
+                                   const std::string &suggestion,
+                                   const std::source_location &location) {
+            throw cml::AssertionFailure(expression, suggestion, location);
+        });
     });
-#endif
 
     // 命令模式：REPL 与 HTTP 的写操作统一经 dispatcher 派发，保证状态一致并可回显。
     auto &dispatcher = debugger::getDispatcher();
@@ -133,12 +132,11 @@ int main(int argc, char *argv[]) {
     debugger::DebuggerServer &srv = debugger::getServer();
     srv.setQueryCallbacks(debugger::getStateJson, debugger::getGirJson);
 
-#ifndef NDEBUG
-    // 父进程仅注册 breakpoint type（供 GET /api/breakpoint-types 返回 known types），不注册
-    // handler—— 父进程从不运行脚本，handler 永远不会触发；实际断点 handler 在 worker.cpp 中注册。
-    camel::DebugBreakpoint::RegisterType("alloc");
-    camel::DebugBreakpoint::RegisterType("alloc_before");
-#endif
+    EXEC_WHEN_DEBUG({
+        // 父进程仅注册 breakpoint type（供 GET /api/breakpoint-types 返回 known types）
+        camel::DebugBreakpoint::RegisterType("alloc");
+        camel::DebugBreakpoint::RegisterType("alloc_before");
+    });
 
     // Ctrl+C 仅设标志位，不直接 exit，以便 REPL 在 getline 失败时检测到后主动 stop
     // 服务器并退出，做一次干净收尾。
@@ -180,11 +178,10 @@ int main(int argc, char *argv[]) {
         }
     }
 
-#ifndef NDEBUG
-    // 未开 serve 时仍把 Logger 输出到 stdout，便于在纯 REPL 下看到 verbose/脚本输出。
-    if (!opts.serve)
-        Logger::AddOutputStream(&std::cout);
-#endif
+    EXEC_WHEN_DEBUG({
+        if (!opts.serve)
+            Logger::AddOutputStream(&std::cout);
+    });
 
     debugger::repl();
 

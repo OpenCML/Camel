@@ -620,7 +620,6 @@ void TaskflowExecSchedPass::mark_filter_arr(const node_ptr_t &node, Frame *frame
     const node_vec_t &portNodes    = g->ports();
     const node_vec_t &closureNodes = g->closure();
     const size_t n                 = arr->size();
-    const ArrayType *retArrType    = frame->typeAt<ArrayType>(node->index());
 
     std::vector<bool> keep(n, false);
     for (size_t i = 0; i < n; ++i) {
@@ -641,8 +640,8 @@ void TaskflowExecSchedPass::mark_filter_arr(const node_ptr_t &node, Frame *frame
     Array *filtered = Array::create(mm::autoSpace(), 0);
     for (size_t i = 0; i < n; ++i)
         if (keep[i])
-            filtered->append(arr->get<slot_t>(i), retArrType);
-    filtered->shrinkToFit(retArrType);
+            filtered->append(arr->get<slot_t>(i));
+    filtered->shrinkToFit();
     frame->set(node->index(), filtered);
 }
 

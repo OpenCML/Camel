@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -89,7 +89,7 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
     );
 
     // Debug 模式下打印拓扑排序结果并检查不可达节点
-    EXEC_WHEN_DEBUG([&]() {
+    EXEC_WHEN_DEBUG({
         GetDefaultLogger().in("Topo").debug(
             "Topologically sorted nodes for graph {}:",
             graph->name());
@@ -121,7 +121,7 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
                 graph->name(),
                 unreachableInfo);
         }
-    }());
+    });
 
     auto bytecodes = bytecode_vec_t();
     bytecodes.reserve(topoSortedNodes.size() * 3); // 预估容量

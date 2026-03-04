@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 24, 2025
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,7 @@
 
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/utils/log.h"
 
 class ParserErrorListener : public antlr4::BaseErrorListener {
   protected:
@@ -90,10 +91,10 @@ class CamelParser {
                 return false;
             }
         }
-#ifndef NDEBUG
-        if (cst_)
-            camel::DebugBreakpoint::Hit("CST", cst_);
-#endif
+        EXEC_WHEN_DEBUG({
+            if (cst_)
+                camel::DebugBreakpoint::Hit("CST", cst_);
+        });
         return cst_ != nullptr;
     }
 
@@ -105,10 +106,10 @@ class CamelParser {
             ast_ = nullptr;
             return false;
         }
-#ifndef NDEBUG
-        if (ast_)
-            camel::DebugBreakpoint::Hit("AST", ast_.get());
-#endif
+        EXEC_WHEN_DEBUG({
+            if (ast_)
+                camel::DebugBreakpoint::Hit("AST", ast_.get());
+        });
         return ast_ != nullptr;
     }
 
@@ -130,9 +131,7 @@ class CamelParser {
         lexer_  = std::make_unique<OpenCMLLexer>(&input_);
         tokens_ = std::make_unique<antlr4::CommonTokenStream>(lexer_.get());
         parser_ = std::make_unique<OpenCMLParser>(tokens_.get());
-#ifndef NDEBUG
-        camel::DebugBreakpoint::Hit("CTS", this);
-#endif
+        EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("CTS", this); });
         return buildCST() && buildAST();
     }
 

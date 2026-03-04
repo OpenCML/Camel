@@ -13,17 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include <iostream>
 
+#include "build_config.h"
 #include "camel/utils/log.h"
 #include "camel/utils/str.h"
 #include "clipp/clipp.h"
 #include "config.h"
-#include "build_config.h"
 
 #ifndef BUILD_FOOTPRINT
 #define BUILD_FOOTPRINT "%y%m%d_%H%M%S"
@@ -208,6 +208,9 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (Global::verbose) {
         Logger::SetVerbose(true);
+        Logger::SetColorEnabled(true);
+        Logger::AddOutputStream(&std::cout);
+
         if (!Global::logLevel.empty()) {
             std::string level{strutil::trim(Global::logLevel)};
             std::transform(level.begin(), level.end(), level.begin(), ::tolower);

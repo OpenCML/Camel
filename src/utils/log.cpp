@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Feb. 24, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,7 @@ Logger &GetDefaultLogger() { return defaultLogger; }
 #ifndef NDEBUG
 Logger::Level Logger::globalLogLevel_ = Logger::Level::Debug;
 bool Logger::verboseEnabled_          = false;
+bool Logger::colorEnabled_            = true;
 std::mutex Logger::logMutex_;
 std::vector<Logger::StreamEntry> Logger::outputStreams_;
 size_t Logger::nextStreamHandle_ = 0;
@@ -68,6 +69,8 @@ void Logger::WriteToAllStreams(const std::string &message) {
 Logger::Level GetGlobalLogLevel() { return Logger::globalLogLevel_; }
 void SetGlobalLogLevel(Logger::Level level) { Logger::globalLogLevel_ = level; }
 bool IsVerboseEnabled() { return Logger::verboseEnabled_; }
+bool IsColorEnabled() { return Logger::colorEnabled_; }
+void SetColorEnabled(bool enable) { Logger::colorEnabled_ = enable; }
 
 static std::string levelToTag(Logger::Level level) {
     switch (level) {
@@ -104,8 +107,8 @@ void Logger_DoLog(
     const std::string &message) {
     if (level < effectiveLevel)
         return;
-    std::string plainTag    = levelToPlain(level);
-    std::string fullMessage = std::format("[{}] <{}> {}", plainTag, scope, message);
+    std::string tag         = Logger::colorEnabled_ ? levelToTag(level) : levelToPlain(level);
+    std::string fullMessage = std::format("[{}] <{}> {}", tag, scope, message);
 
     std::lock_guard<std::mutex> lock(Logger::logMutex_);
     for (const auto &e : Logger::outputStreams_) {

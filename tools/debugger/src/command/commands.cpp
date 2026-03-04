@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 25, 2026
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@
 #include "dispatcher.h"
 
 #include "camel/core/debug_breakpoint.h"
+#include "camel/utils/log.h"
 #include "spawn.h"
 #include "state.h"
 
@@ -596,9 +597,7 @@ class DisconnectCommand final : public Command {
     CommandResult execute(const std::string &) override {
         auto &srv = getServer();
         if (srv.isRunning()) {
-#ifndef NDEBUG
-            mm::clearPostAllocDebugHook();
-#endif
+            EXEC_WHEN_DEBUG({ mm::clearPostAllocDebugHook(); });
             srv.stop();
         }
         return CommandResult::ok("quit", "Goodbye.");

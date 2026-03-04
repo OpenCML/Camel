@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 24, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "allocator.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/brpred.h"
+#include "camel/utils/log.h"
 #include "header.h"
 
 #ifndef NDEBUG
@@ -49,11 +50,11 @@ class LargeObjectAllocator : public IAllocator {
 
         // total_size 向上对齐到 slot_t
         size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
-#ifndef NDEBUG
-        if (debugRegion_) {
-            mm::invokePreAllocHook(mm::PreAllocEvent{total_size, debugRegion_});
-        }
-#endif
+        EXEC_WHEN_DEBUG({
+            if (debugRegion_) {
+                mm::invokePreAllocHook(mm::PreAllocEvent{total_size, debugRegion_});
+            }
+        });
         std::byte *raw = reinterpret_cast<std::byte *>(
             ::operator new(total_size, std::align_val_t(alignof(slot_t))));
 
@@ -62,11 +63,11 @@ class LargeObjectAllocator : public IAllocator {
 
         std::byte *result = raw + sizeof(ObjectHeader);
         allocated_.insert(reinterpret_cast<ObjectHeader *>(raw));
-#ifndef NDEBUG
-        if (debugRegion_) {
-            mm::invokePostAllocHook(mm::AllocEvent{result, total_size, debugRegion_});
-        }
-#endif
+        EXEC_WHEN_DEBUG({
+            if (debugRegion_) {
+                mm::invokePostAllocHook(mm::AllocEvent{result, total_size, debugRegion_});
+            }
+        });
         return result;
     }
 

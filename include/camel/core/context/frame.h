@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,7 +98,7 @@ class Frame : public Object {
         T res;
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     idx < dynamicAreaType_->size(),
                     std::format(
@@ -112,11 +112,11 @@ class Frame : public Object {
                         "[{}] Accessing uninitialized slot: idx = {}",
                         formatAddress(const_cast<Frame *>(this), true),
                         index));
-            }());
+            });
             res = fromSlot<T>(dynamicArea_[idx]);
         } else {
             size_t idx = static_cast<size_t>(-index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     idx < staticArea_->size(),
                     std::format(
@@ -124,10 +124,10 @@ class Frame : public Object {
                         formatAddress(const_cast<Frame *>(this), true),
                         idx,
                         staticArea_->size()));
-            }());
+            });
             res = staticArea_->get<T>(idx);
         }
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             std::ostringstream oss;
             printSlot(oss, toSlot(res), typeAt<Type>(index));
             GetDefaultLogger().in("Frame").info(
@@ -137,13 +137,13 @@ class Frame : public Object {
                 index,
                 typeCodeToString(codeAt(index)),
                 oss.str());
-        }());
+        });
         return res;
     }
 
     template <typename T> void set(GraphIR::data_idx_t index, T value) {
         ASSERT(index != 0, "Data index is invalid.");
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             std::ostringstream oss;
             printSlot(oss, toSlot(value), typeAt<Type>(index));
             GetDefaultLogger().in("Frame").info(
@@ -153,28 +153,28 @@ class Frame : public Object {
                 index,
                 typeCodeToString(codeAt(index)),
                 oss.str());
-        }());
+        });
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     idx < dynamicAreaType_->size(),
                     std::format(
                         "Invalid argument index, idx = {}, size = {}",
                         idx,
                         dynamicAreaType_->size()));
-            }());
+            });
             dynamicArea_[idx] = toSlot(value);
         } else {
             size_t idx = static_cast<size_t>(-index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     idx < staticArea_->size(),
                     std::format(
                         "Invalid static data index, idx = {}, size = {}",
                         idx,
                         staticArea_->size()));
-            }());
+            });
             staticArea_->set<T>(idx, value);
         }
     }
@@ -256,22 +256,22 @@ class FrameView {
         T res;
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     dynamicArea_[idx] != kDebugUninitializedSlot,
                     std::format("Accessing uninitialized slot: idx = {}", index));
-            }());
+            });
             res = fromSlot<T>(dynamicArea_[idx]);
         } else { // 静态区：index < 0
             size_t idx = static_cast<size_t>(-index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     idx < staticArea_->size(),
                     std::format(
                         "Invalid static data index, idx = {}, size = {}",
                         idx,
                         staticArea_->size()));
-            }());
+            });
             res = staticArea_->get<T>(idx);
         }
         return res;
@@ -284,14 +284,14 @@ class FrameView {
             dynamicArea_[idx] = toSlot(value);
         } else { // 静态区
             size_t idx = static_cast<size_t>(-index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     idx < staticArea_->size(),
                     std::format(
                         "Invalid static data index, idx = {}, size = {}",
                         idx,
                         staticArea_->size()));
-            }());
+            });
             staticArea_->set<T>(idx, value);
         }
     }
@@ -316,7 +316,7 @@ class FramePool {
     ~FramePool() { std::free(base_); }
 
     inline Frame *_acquire(GraphIR::Graph *graph) {
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             GetDefaultLogger()
                 .in("FramePool")
                 .info(
@@ -325,12 +325,12 @@ class FramePool {
                     graph ? graph->name() : "(null)",
                     formatAddress(top_, true),
                     formatAddress(end_, true));
-        }());
+        });
 
         // 尝试复用
         Frame *lastFrame = reinterpret_cast<Frame *>(top_);
         if (lastFrame->graph_ == graph) {
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 GetDefaultLogger()
                     .in("FramePool")
                     .info(
@@ -339,7 +339,7 @@ class FramePool {
                         graph ? graph->name() : "(null)",
                         formatAddress(lastFrame, true));
                 frames_.push_back(lastFrame);
-            }());
+            });
 
             top_ = reinterpret_cast<std::byte *>(lastFrame->next_);
             return lastFrame;
@@ -349,18 +349,18 @@ class FramePool {
         FrameMeta *meta = graph->getExtra<FrameMeta, 0>();
         if (meta == nullptr) {
             meta = installFrameMetaInfoForGraph(graph);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 GetDefaultLogger()
                     .in("FramePool")
                     .info(
                         "[{}] Installed FrameMeta for graph <{}>",
                         formatAddress(this, true),
                         graph->name());
-            }());
+            });
         }
         size_t frameSize = meta->frameSize;
         if (top_ + frameSize > end_) {
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 GetDefaultLogger()
                     .in("FramePool")
                     .error(
@@ -369,12 +369,12 @@ class FramePool {
                         formatAddress(top_, true),
                         frameSize,
                         formatAddress(end_, true));
-            }());
+            });
             throw std::bad_alloc{};
         }
         Frame *frame = new (top_) Frame(graph, meta->staticArea, meta->runtimeDataType);
 
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             GetDefaultLogger()
                 .in("FramePool")
                 .info(
@@ -383,11 +383,11 @@ class FramePool {
                     graph->name(),
                     formatAddress(frame, true),
                     frameSize);
-        }());
+        });
 
         top_ += frameSize;
 
-        EXEC_WHEN_DEBUG([&]() { frames_.push_back(frame); }());
+        EXEC_WHEN_DEBUG({ frames_.push_back(frame); });
 
         return frame;
     }
@@ -401,7 +401,7 @@ class FramePool {
     }
 
     inline void release(Frame *frame) {
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             GetDefaultLogger()
                 .in("FramePool")
                 .info(
@@ -420,12 +420,12 @@ class FramePool {
                     "{}.",
                     last->graph_->name(),
                     formatAddress(last, true)));
-        }());
+        });
 
         frame->next_ = reinterpret_cast<Frame *>(top_);
         top_         = reinterpret_cast<std::byte *>(frame);
 
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             frames_.pop_back();
             GetDefaultLogger()
                 .in("FramePool")
@@ -433,7 +433,7 @@ class FramePool {
                     "[{}] Frame released. New top = {}",
                     formatAddress(this, true),
                     formatAddress(top_, true));
-        }());
+        });
     }
 
     void foreach (const std::function<void(Frame *)> &fn) const {

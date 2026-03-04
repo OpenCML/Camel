@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "camel/utils/assert.h"
+#include "camel/utils/debug.h"
 
 #include <functional>
 #include <iterator>
@@ -60,7 +61,7 @@ auto topoSort(
         }
     }
 
-    EXEC_WHEN_DEBUG([&]() {
+    EXEC_WHEN_DEBUG({
         size_t count = std::distance(first, last);
         ASSERT(sortedNodes.size() <= count, "Graph has at least one cycle.");
         if (!allowUnreachable) {
@@ -80,7 +81,7 @@ auto topoSort(
                 ASSERT(false, msg);
             }
         }
-    }());
+    });
 
     return sortedNodes;
 }

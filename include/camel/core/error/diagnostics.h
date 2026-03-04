@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "camel/utils/assert.h"
-#include "camel/utils/log.h"
+#include "camel/utils/debug.h"
 #include "diagnostics/builder.h"
 #include "diagnostics/messages/index.h"
 #include "diagnostics/range.h"
@@ -210,11 +210,11 @@ template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args)
     d.moduleName = moduleName_;
     d.modulePath = modulePath_;
 
-    EXEC_WHEN_DEBUG([&] {
+    EXEC_WHEN_DEBUG({
         if (severity_ == Severity::Error) {
             ASSERT(false, d.toText());
         }
-    }());
+    });
 
     if (diagnostics_) {
         return diagnostics_->add(std::move(d));

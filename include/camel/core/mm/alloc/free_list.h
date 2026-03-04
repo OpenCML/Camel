@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 24, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -65,11 +65,11 @@ class FreeListAllocator : public IAllocator {
             ASSERT(curr->size % alignof(slot_t) == 0, "Unaligned free block");
 
             if (LIKELY(curr->size >= total_size)) {
-#ifndef NDEBUG
-                if (debugRegion_) {
-                    mm::invokePreAllocHook(mm::PreAllocEvent{total_size, debugRegion_});
-                }
-#endif
+                EXEC_WHEN_DEBUG({
+                    if (debugRegion_) {
+                        mm::invokePreAllocHook(mm::PreAllocEvent{total_size, debugRegion_});
+                    }
+                });
                 std::byte *blockStart = reinterpret_cast<std::byte *>(curr);
                 size_t remaining      = curr->size - total_size;
 
@@ -87,13 +87,17 @@ class FreeListAllocator : public IAllocator {
                     installHeader(blockStart, curr->size);
                     *prevPtr = curr->next;
                 }
-#ifndef NDEBUG
-                if (debugRegion_) {
-                    size_t allocSize = (remaining >= sizeof(FreeBlock)) ? total_size : curr->size;
-                    mm::invokePostAllocHook(
-                        mm::AllocEvent{blockStart + sizeof(ObjectHeader), allocSize, debugRegion_});
-                }
-#endif
+                EXEC_WHEN_DEBUG({
+                    if (debugRegion_) {
+                        size_t allocSize =
+                            (remaining >= sizeof(FreeBlock)) ? total_size : curr->size;
+                        mm::invokePostAllocHook(
+                            mm::AllocEvent{
+                                blockStart + sizeof(ObjectHeader),
+                                allocSize,
+                                debugRegion_});
+                    }
+                });
                 return blockStart + sizeof(ObjectHeader);
             }
 
@@ -117,7 +121,7 @@ class FreeListAllocator : public IAllocator {
         std::byte *blockData = reinterpret_cast<std::byte *>(header);
 
         // 检测重复释放：检查是否与任何空闲块重叠
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             FreeBlock *fb = freeList_;
             while (fb) {
                 std::byte *fb_start  = reinterpret_cast<std::byte *>(fb);
@@ -129,7 +133,7 @@ class FreeListAllocator : public IAllocator {
 
                 fb = fb->next;
             }
-        }());
+        });
 
         insertAndCoalesce(blockData, total_size);
     }
@@ -162,7 +166,7 @@ class FreeListAllocator : public IAllocator {
         }
 
         // 检测重复释放
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             for (const auto &[addr, size] : blocks) {
                 FreeBlock *fb = freeList_;
                 while (fb) {
@@ -176,7 +180,7 @@ class FreeListAllocator : public IAllocator {
                     fb = fb->next;
                 }
             }
-        }());
+        });
 
         // 逐个插入并合并
         for (const auto &[addr, size] : blocks) {

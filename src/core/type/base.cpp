@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -379,44 +379,44 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
     return 0; // unreachable
 }
 
-bool Type::assignableFrom(Type *sourceType) const {
-    if (!sourceType)
-        return false;
-    if (this == sourceType)
+bool Type::assignableFrom(Type *from) const {
+    const Type *to = this;
+
+    if (!from || to == from)
         return true;
 
     // 内置类型，含有 Ref 类型的复合类型必须 resolve 后才能赋值给其他类型
     ASSERT(
-        code_ != TypeCode::Ref && sourceType->code_ != TypeCode::Ref,
+        to->code_ != TypeCode::Ref && from->code_ != TypeCode::Ref,
         "Ref type cannot be assigned");
 
     // Void 类型可以接受任何类型的赋值，但不可以赋值给其他类型
-    if (sourceType->code_ == TypeCode::Void)
+    if (to->code_ == TypeCode::Void)
         return true;
-    if (code_ == TypeCode::Void)
+    if (from->code_ == TypeCode::Void)
         return false;
 
     // 任何类型可赋给 Any（目标为 Any 时接受任意来源）
-    if (code_ == TypeCode::Any)
+    if (to->code_ == TypeCode::Any)
         return true;
     // Any 不可赋给其他类型（来源为 Any 且目标非 Any）
-    if (sourceType->code_ == TypeCode::Any)
+    if (from->code_ == TypeCode::Any)
         return false;
 
     // 复合类型需要重载 assignableFrom 方法处理
-    if (::isComposite(code_)) {
+    if (::isComposite(to->code_)) {
         const auto &self = static_cast<const CompositeType &>(*this);
-        return self.assignableFrom(sourceType);
+        return self.assignableFrom(from);
     }
 
     // 第三方类型交由第三方自己重载的 assignableFrom 方法处理
-    if (::isOtherType(code_)) {
+    if (::isOtherType(to->code_)) {
         const auto &self = static_cast<const OtherType &>(*this);
-        return self.assignableFrom(sourceType);
+        return self.assignableFrom(from);
     }
 
     // 剩余情况只能是基础类型之间的赋值，必须相同
-    return code_ == sourceType->code_;
+    return to->code_ == from->code_;
 }
 
 Type *Type::create(TypeCode code) {

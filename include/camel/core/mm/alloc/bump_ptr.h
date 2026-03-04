@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 24, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -56,9 +56,10 @@ class BumpPointerAllocator : public IAllocator {
         // total_size 向上对齐
         // 这保证了 top_ 始终对齐，无需每次都 alignPointer
         size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
-#ifndef NDEBUG
-        mm::invokePreAllocHook(mm::PreAllocEvent{total_size, debugRegion_ ? debugRegion_ : "bump"});
-#endif
+        EXEC_WHEN_DEBUG({
+            mm::invokePreAllocHook(
+                mm::PreAllocEvent{total_size, debugRegion_ ? debugRegion_ : "bump"});
+        });
         std::byte *newTop = top_ + total_size;
 
         if (UNLIKELY(newTop > end_)) {
@@ -70,7 +71,7 @@ class BumpPointerAllocator : public IAllocator {
 
         std::byte *result = top_ + sizeof(ObjectHeader);
 
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             GetDefaultLogger().in("BumpPtr").debug(
                 "[{}] Allocated {} bytes ({}) from {}, obj size {}, now top at {}",
                 formatAddress(start_, true),
@@ -94,14 +95,14 @@ class BumpPointerAllocator : public IAllocator {
                 std::byte *byteTail = reinterpret_cast<std::byte *>(p + words);
                 std::memset(byteTail, 0xCD, remain);
             }
-        }());
+        });
 
         top_ = newTop;
-#ifndef NDEBUG
-        // 所有 Bump 分配均触发调试断点（含 perm/meta 等），便于 alloc-step 在任意区域生效
-        mm::invokePostAllocHook(
-            mm::AllocEvent{result, total_size, debugRegion_ ? debugRegion_ : "bump"});
-#endif
+        EXEC_WHEN_DEBUG({
+            // 所有 Bump 分配均触发调试断点（含 perm/meta 等），便于 alloc-step 在任意区域生效
+            mm::invokePostAllocHook(
+                mm::AllocEvent{result, total_size, debugRegion_ ? debugRegion_ : "bump"});
+        });
         return result;
     }
 
@@ -111,7 +112,7 @@ class BumpPointerAllocator : public IAllocator {
         // 将 top_ 回退到对象头部位置
         auto newTop = reinterpret_cast<std::byte *>(ptr) - sizeof(ObjectHeader);
 
-        EXEC_WHEN_DEBUG([&] {
+        EXEC_WHEN_DEBUG({
             GetDefaultLogger().in("BumpPtr").debug(
                 "[{}] Freeing object at {}, now top at {}",
                 formatAddress(start_, true),
@@ -133,7 +134,7 @@ class BumpPointerAllocator : public IAllocator {
                 std::byte *byteTail = reinterpret_cast<std::byte *>(p + words);
                 std::memset(byteTail, 0xEF, remain);
             }
-        }());
+        });
 
         top_ = newTop;
     }
