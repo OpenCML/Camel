@@ -151,9 +151,8 @@ slot_t __append_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr    = norm.get<Array *>(0);
-    Array *more   = with.get<Array *>(0);
-    Type *arrType = norm.type(0);
+    Array *arr  = norm.get<Array *>(0);
+    Array *more = with.get<Array *>(0);
 
     size_t n1 = arr->size(), n2 = more->size();
     arr->reserve(n1 + n2);
