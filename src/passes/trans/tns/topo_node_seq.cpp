@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -75,11 +75,11 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     // 依次打印节点序列
     for (const auto &g : sortedGraphs) {
         // 对节点进行拓扑排序
-        node_ptr_t exitNode = g->exitNode();
-        auto sortedNodes    = findReachable(
+        Node *exitNode   = g->exitNode();
+        auto sortedNodes = findReachable(
             exitNode,
-            [](const node_ptr_t &n) {
-                vector<node_ptr_t> ins;
+            [](Node *n) {
+                vector<Node *> ins;
                 ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
                 for (const auto &in : n->ctrlInputs()) {
                     if (&in->graph() == &n->graph()) // only consider nodes in the same graph
@@ -101,7 +101,7 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             }
             if (sortedNodes.size() != graph->nodes().size() - 1) {
                 GraphIR::node_vec_t unreachableNodes;
-                for (const auto &n : graph->nodes()) {
+                for (Node *n : graph->nodes()) {
                     if (n != exitNode &&
                         std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
                         unreachableNodes.push_back(n);
@@ -123,7 +123,7 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         // 打印函数签名（含参数信息）
         oss << "FUNC: " << g->name();
         for (const auto &portNode : g->ports()) {
-            oss << ", " << pointerToIdent(portNode.get());
+            oss << ", " << pointerToIdent(portNode);
         }
         oss << "\n";
         // 打印子图节点信息
@@ -131,50 +131,47 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             string res;
             switch (n->type()) {
             case NodeType::FUNC: {
-                func_ptr_t func = tt::as_shared<FuncNode>(n)->func();
+                func_ptr_t func = tt::as_ptr<FuncNode>(n)->func();
                 string name     = func->name().empty() ? func->graph().name() : func->name();
                 res             = format("CALL: {}", name);
                 for (const auto &inputNode : n->dataInputs()) {
-                    res += format(", {}", pointerToIdent(inputNode.get()));
+                    res += format(", {}", pointerToIdent(inputNode));
                 }
                 break;
             }
             case NodeType::OPER: {
-                auto oper   = tt::as_shared<OperNode>(n);
+                auto oper   = tt::as_ptr<OperNode>(n);
                 string name = oper->oper()->name();
                 res         = format("CALL: <{}>", name);
                 for (const auto &inputNode : n->dataInputs()) {
-                    res += format(", {}", pointerToIdent(inputNode.get()));
+                    res += format(", {}", pointerToIdent(inputNode));
                 }
                 break;
             }
             case NodeType::BRCH: {
-                auto brchNode    = tt::as_shared<BrchNode>(n);
+                auto brchNode    = tt::as_ptr<BrchNode>(n);
                 const auto &ins  = brchNode->dataInputs();
                 const auto &outs = brchNode->ctrlOutputs();
                 res              = format(
                     "BRCH: {}? {}: {}",
-                    pointerToIdent(ins[0].get()),
-                    pointerToIdent(outs[0].get()),
-                    pointerToIdent(outs[1].get()));
+                    pointerToIdent(ins[0]),
+                    pointerToIdent(outs[0]),
+                    pointerToIdent(outs[1]));
                 break;
             }
             case NodeType::JOIN: {
-                auto joinNode   = tt::as_shared<JoinNode>(n);
+                auto joinNode   = tt::as_ptr<JoinNode>(n);
                 const auto &ins = joinNode->withInputs();
-                res             = format(
-                    "JOIN: {}, {}",
-                    pointerToIdent(ins[0].get()),
-                    pointerToIdent(ins[1].get()));
+                res = format("JOIN: {}, {}", pointerToIdent(ins[0]), pointerToIdent(ins[1]));
                 break;
             }
             default:
                 res = format("NODE: {}", n->toString());
             }
-            oss << "    [" << pointerToIdent(n.get()) << "] " << res << "\n";
+            oss << "    [" << pointerToIdent(n) << "] " << res << "\n";
         }
         // 打印返回节点
-        oss << "RETN: " << pointerToIdent(g->exitNode().get()) << "\n\n";
+        oss << "RETN: " << pointerToIdent(g->exitNode()) << "\n\n";
     }
 
     oss << format("CALL: {}", graph->name()) << "\n";

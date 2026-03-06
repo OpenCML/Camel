@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -100,7 +100,7 @@ class Context : public std::enable_shared_from_this<Context> {
     void dumpAllModuleDiagnostics(std::ostream &os, bool json) const;
 
     void registerExecutorFactory(std::string name, executor_factory_t fact);
-    void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame);
+    void eval(std::string uri, GraphIR::Node *self, Frame &frame);
 
     /** 由 loadCmoModule 调用，保存已加载 .cmo 的句柄以防被卸载。 */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }

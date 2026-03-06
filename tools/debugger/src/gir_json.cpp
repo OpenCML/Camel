@@ -89,20 +89,19 @@ graph_ptr_t findGraphById(const graph_ptr_t &root, const std::string &graphId) {
 }
 
 /// 节点 label / shape / style（与 graphviz 一致）
-void nodeLabelShapeStyle(
-    const node_ptr_t &node, std::string &label, std::string &shape, std::string &style) {
+void nodeLabelShapeStyle(Node *node, std::string &label, std::string &shape, std::string &style) {
     label = "";
     shape = "circle";
     style = "solid";
 
     switch (node->type()) {
     case NodeType::DATA: {
-        auto sourceNode = tt::as_shared<DataNode>(node);
+        auto sourceNode = tt::as_ptr<DataNode>(node);
         label           = sourceNode->data() ? sourceNode->data()->toString() : "";
         break;
     }
     case NodeType::PORT: {
-        auto portNode = tt::as_shared<PortNode>(node);
+        auto portNode = tt::as_ptr<PortNode>(node);
         label         = portNode->name();
         break;
     }
@@ -119,7 +118,7 @@ void nodeLabelShapeStyle(
         shape = "diamond";
         break;
     case NodeType::ACCS: {
-        auto accsNode = tt::as_shared<AccsNode>(node);
+        auto accsNode = tt::as_ptr<AccsNode>(node);
         label         = "." + accsNode->index2String();
         shape         = "diamond";
         break;
@@ -141,13 +140,13 @@ void nodeLabelShapeStyle(
         shape = "diamond";
         break;
     case NodeType::FUNC: {
-        func_ptr_t func = tt::as_shared<FuncNode>(node)->func();
+        func_ptr_t func = tt::as_ptr<FuncNode>(node)->func();
         label           = func->name().empty() ? func->graph().name() : func->name();
         shape           = "Mdiamond";
         break;
     }
     case NodeType::OPER: {
-        auto oper = tt::as_shared<OperNode>(node);
+        auto oper = tt::as_ptr<OperNode>(node);
         label     = oper->oper()->name();
         shape     = "diamond";
         break;
@@ -176,9 +175,9 @@ void nodeLabelShapeStyle(
     }
 }
 
-json nodeToJson(const node_ptr_t &node, const std::string &graphId) {
+json nodeToJson(Node *node, const std::string &graphId) {
     json j;
-    j["id"]      = ptrToId(node.get());
+    j["id"]      = ptrToId(node);
     j["graphId"] = graphId;
     j["type"]    = to_string(node->type());
     std::string label, shape, style;
@@ -209,33 +208,32 @@ json expandedGraphToJson(const graph_ptr_t &graph) {
         if (dep)
             j["dependencies"].push_back(graphSummary(dep));
 
-    node_vec_t nodes = graph->nodes();
+    node_vec_t nodes;
+    for (Node *n : graph->nodes())
+        nodes.push_back(n);
     nodes.push_back(graph->exitNode());
-    for (const auto &port : graph->normPorts())
+    for (Node *port : graph->normPorts())
         nodes.push_back(port);
-    for (const auto &port : graph->withPorts())
+    for (Node *port : graph->withPorts())
         nodes.push_back(port);
-    for (const auto &c : graph->closure())
+    for (Node *c : graph->closure())
         nodes.push_back(c);
 
     for (const auto &n : nodes)
         j["nodes"].push_back(nodeToJson(n, gid));
 
     size_t edgeId = 0;
-    auto addEdge  = [&](const node_ptr_t &from,
-                        const node_ptr_t &to,
-                        const std::string &linkType,
-                        size_t outIdx,
-                        size_t inIdx) {
-        json e;
-        e["id"]              = "e" + std::to_string(edgeId++);
-        e["sourceId"]        = ptrToId(from.get());
-        e["targetId"]        = ptrToId(to.get());
-        e["linkType"]        = linkType;
-        e["sourcePortIndex"] = outIdx;
-        e["targetPortIndex"] = inIdx;
-        j["edges"].push_back(e);
-    };
+    auto addEdge =
+        [&](Node *from, Node *to, const std::string &linkType, size_t outIdx, size_t inIdx) {
+            json e;
+            e["id"]              = "e" + std::to_string(edgeId++);
+            e["sourceId"]        = ptrToId(from);
+            e["targetId"]        = ptrToId(to);
+            e["linkType"]        = linkType;
+            e["sourcePortIndex"] = outIdx;
+            e["targetPortIndex"] = inIdx;
+            j["edges"].push_back(e);
+        };
 
     for (const auto &node : nodes) {
         auto withInputs = node->withInputs();

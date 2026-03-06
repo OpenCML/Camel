@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,7 +43,7 @@ class Executor : public std::enable_shared_from_this<Executor> {
         : context_(ctx), opsMap_(ops) {};
     virtual ~Executor() = default;
 
-    virtual void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) = 0;
+    virtual void eval(std::string uri, GraphIR::Node *self, Frame &frame) = 0;
     std::optional<operator_t> find(const std::string &uri);
     std::string getNameOfAnOperator(const operator_t &op);
 };
@@ -62,7 +62,7 @@ class ExecutorManager {
     ~ExecutorManager() = default;
     void registerExecutorFactory(std::string name, executor_factory_t fact);
 
-    void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) const;
+    void eval(std::string uri, GraphIR::Node *self, Frame &frame) const;
     std::optional<operator_t> find(const std::string &uri) const;
     std::string getNameOfAnOperator(const operator_t &op) const;
 };

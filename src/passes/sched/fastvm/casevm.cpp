@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -292,7 +292,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             Frame *funcFrame = framePool_.acquire(targetGraph);
 
             size_t i = 0;
-            for (; i < nargs.size; ++i) {
+            for (; i < nargs.size(); ++i) {
                 funcFrame->set(i + 1, currFrame->get<slot_t>(nargs[i]));
             }
 

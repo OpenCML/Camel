@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -460,28 +460,28 @@ class FrameArgsView : public ArgsView {
   public:
     FrameArgsView(Frame &frame, const data_arr_t &indices) : frame_(frame), indices_(indices) {}
 
-    size_t size() const override { return indices_.size; }
+    size_t size() const override { return indices_.size(); }
 
     slot_t slot(size_t index) const override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         return frame_.get<slot_t>(dataIdx);
     }
 
     void setSlot(size_t index, slot_t value) override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         frame_.set(dataIdx, value);
     }
 
     TypeCode code(size_t index) const override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         return frame_.codeAt(dataIdx);
     }
 
     Type *type(size_t index) const override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         return frame_.typeAt<Type>(dataIdx);
     }
@@ -505,10 +505,10 @@ class SlotArgsView : public ArgsView {
         : slots_(slots), staticArea_(staticArea), runtimeDataType_(runtimeDataType),
           staticDataType_(staticDataType), indices_(indices) {}
 
-    size_t size() const override { return indices_.size; }
+    size_t size() const override { return indices_.size(); }
 
     slot_t slot(size_t index) const override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             return slots_[dataIdx];
@@ -516,7 +516,7 @@ class SlotArgsView : public ArgsView {
     }
 
     void setSlot(size_t index, slot_t value) override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             slots_[dataIdx] = value;
@@ -525,7 +525,7 @@ class SlotArgsView : public ArgsView {
     }
 
     TypeCode code(size_t index) const override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             return runtimeDataType_->codeAt(static_cast<size_t>(dataIdx));
@@ -533,7 +533,7 @@ class SlotArgsView : public ArgsView {
     }
 
     Type *type(size_t index) const override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             return runtimeDataType_->typeAt(static_cast<size_t>(dataIdx));

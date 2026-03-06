@@ -26,7 +26,7 @@ function logFilename(label) {
     return `${base}.log`
 }
 
-const camel = path.join(BASEDIR, 'out', 'latest', exeName)
+const camel = path.join(BASEDIR, 'out', 'latest', 'bin', exeName)
 
 function collectCmlFiles(dir, baseDir = dir) {
     const files = []
@@ -105,11 +105,6 @@ function writeLog(logPath, filePath, stdout, stderr) {
 
 function main() {
     const { modules, run, suiteFilter } = parseArgs()
-
-    if (!fs.existsSync(camel)) {
-        logFail('camel 未找到，请先执行 npm run build')
-        process.exit(1)
-    }
 
     const allFiles = []
     const labels = []

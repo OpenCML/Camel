@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -63,12 +63,12 @@ const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() 
 
 bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStrategy &opt) {
     // 从图的出口节点开始反向拓扑排序（逆序 DFS）
-    node_ptr_t exitNode = graph->exitNode();
+    Node *exitNode = graph->exitNode();
 
     auto topoSortedNodes = findReachable(
         exitNode,
-        [](const node_ptr_t &node) {
-            vector<node_ptr_t> inputs;
+        [](Node *node) {
+            vector<Node *> inputs;
             inputs.reserve(node->dataInputs().size() + node->ctrlInputs().size());
 
             // 控制输入优先（用于控制流）
@@ -101,7 +101,7 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
             graph->nodes().size() + graph->ports().size() + graph->closure().size();
         if (topoSortedNodes.size() != totalNodeCount) {
             node_vec_t unreachableNodes;
-            for (const auto &node : graph->nodes()) {
+            for (Node *node : graph->nodes()) {
                 if (node != exitNode &&
                     find(topoSortedNodes.begin(), topoSortedNodes.end(), node) ==
                         topoSortedNodes.end()) {
@@ -137,11 +137,11 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
         size_t currIdx = bytecodes.size();
 
         // 回填之前记录的 JUMP 跳转地址
-        if (brchTargetMap.find(node.get()) != brchTargetMap.end()) {
-            size_t jumpIndex = brchTargetMap[node.get()];
+        if (brchTargetMap.find(node) != brchTargetMap.end()) {
+            size_t jumpIndex = brchTargetMap[node];
             auto &header     = bytecodes[jumpIndex];
             header.fastop[0] = as_index(bytecodes.size());
-            brchTargetMap.erase(node.get());
+            brchTargetMap.erase(node);
         }
 
         vector<data_idx_t> normOps, withOps;
@@ -184,7 +184,7 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
             break;
 
         case NodeType::ACCS: {
-            const auto &accNode     = tt::as_shared<AccsNode>(node);
+            auto *accNode           = tt::as_ptr<AccsNode>(node);
             const auto &srcNode     = node->normInputs().front();
             const auto &srcDataType = srcNode->dataType();
             ASSERT(srcDataType->isComposite(), "ACCS source node must be composite.");
@@ -235,7 +235,7 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
             // 为这个 BRCH 节点的每个控制输出添加一个占位跳转指令
             for (const auto &ctrlOut : node->ctrlOutputs()) {
                 // 记录跳转目标
-                brchTargetMap[ctrlOut.get()] = bytecodes.size();
+                brchTargetMap[ctrlOut] = bytecodes.size();
                 // 占位跳转指令，目标地址稍后回填
                 appendBytecode(
                     bytecodes,
@@ -254,8 +254,8 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
             // 因为尾调用优化之后，原 Frame 就会被释放，这样 Graph 无法返回正确的值
             bool isTail = i == topoSortedNodes.size() - 1 && graph->outputNode() == node;
 
-            if (joinTargetMap.find(node.get()) != joinTargetMap.end()) {
-                for (const auto &[jumpIdx, fromIdx] : joinTargetMap[node.get()]) {
+            if (joinTargetMap.find(node) != joinTargetMap.end()) {
+                for (const auto &[jumpIdx, fromIdx] : joinTargetMap[node]) {
                     auto &jump     = bytecodes[jumpIdx];
                     auto &from     = bytecodes[fromIdx];
                     jump.fastop[0] = as_index(bytecodes.size());
@@ -263,7 +263,7 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
                         from.opcode = OpCode::TAIL;
                     }
                 }
-                joinTargetMap.erase(node.get());
+                joinTargetMap.erase(node);
             }
 
             appendBytecode(bytecodes, OpCode::JOIN, node->index(), {}, normOps, withOps);
@@ -280,8 +280,8 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
             break;
 
         case NodeType::FUNC: {
-            bool isTail   = i == topoSortedNodes.size() - 1 && graph->outputNode() == node;
-            auto funcNode = tt::as_shared<FuncNode>(node);
+            bool isTail    = i == topoSortedNodes.size() - 1 && graph->outputNode() == node;
+            auto *funcNode = tt::as_ptr<FuncNode>(node);
             // 将上下文参数合并到普通参数中，因为函数调用不区分参数类型
             // 这样还可以把 fastop[1] 留空，以便放其他内容
             normOps.insert(normOps.end(), withOps.begin(), withOps.end());
@@ -304,7 +304,7 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
         }
 
         case NodeType::OPER: {
-            auto opNode     = tt::as_shared<OperNode>(node);
+            auto *opNode    = tt::as_ptr<OperNode>(node);
             const auto &uri = opNode->oper()->uri();
 
             // 尝试内联算子
@@ -406,8 +406,8 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
         // 如果该节点的输出连接到 JOIN 节点，则插入一个跳转到 JOIN 的 JUMP
         if (node->withOutputs().size() == 1 &&
             node->withOutputs().front()->type() == NodeType::JOIN) {
-            auto joinNode = node->withOutputs().front();
-            joinTargetMap[joinNode.get()].push_back({
+            auto *joinNode = node->withOutputs().front();
+            joinTargetMap[joinNode].push_back({
                 bytecodes.size(),
                 currIdx,
             });

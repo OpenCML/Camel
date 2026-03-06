@@ -129,8 +129,9 @@ target_compile_options(libcamel PRIVATE
     # -ffast-math # 不要开启这个，在build模式优化下会导致计算结果失真
 )
 
+# -no-pie 仅用于非 Windows（GCC/Linux）；Windows 上 Clang 会报 unused 警告
 target_link_options(libcamel PRIVATE
-    $<$<CONFIG:RelWithDebInfo>:-no-pie>
+    $<$<AND:$<CONFIG:RelWithDebInfo>,$<NOT:$<PLATFORM_ID:Windows>>>:-no-pie>
 )
 
 target_compile_definitions(libcamel PRIVATE ANTLR4CPP_STATIC CAMEL_DLL_EXPORTS)

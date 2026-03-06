@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,7 +51,7 @@ void ExecutorManager::registerExecutorFactory(std::string name, executor_factory
     executorFactories[name] = fact;
 }
 
-void ExecutorManager::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) const {
+void ExecutorManager::eval(std::string uri, GraphIR::Node *self, Frame &frame) const {
     EXEC_WHEN_DEBUG(GetDefaultLogger().in("ExecMgr").debug("Evaluating operator of URI: {}", uri));
     const size_t pos = uri.find(":");
     if (pos == std::string::npos) {
