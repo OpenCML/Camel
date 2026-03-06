@@ -9,7 +9,7 @@ target_compile_options(camel-codegen PRIVATE
     $<$<CONFIG:Release>:-O3> $<$<CONFIG:RelWithDebInfo>:-O2> $<$<CONFIG:RelWithDebInfo>:-g3>
     $<$<CONFIG:RelWithDebInfo>:-fno-PIE> $<$<CONFIG:Debug>:-O0> $<$<CONFIG:Debug>:-g3>
 )
-target_link_options(camel-codegen PRIVATE $<$<CONFIG:RelWithDebInfo>:-no-pie>)
+target_link_options(camel-codegen PRIVATE $<$<AND:$<CONFIG:RelWithDebInfo>,$<NOT:$<PLATFORM_ID:Windows>>>:-no-pie>)
 
 target_libcamel_tool_options(camel-codegen)
 target_link_libcamel(camel-codegen)

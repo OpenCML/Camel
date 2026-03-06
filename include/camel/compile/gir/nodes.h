@@ -375,10 +375,12 @@ class BindNode : public Node {
 
 class FuncNode : public Node {
     func_ptr_t func_;
+    Graph *graph_; // 构造时确定，FunctionData 必然有 graph
 
   public:
     FuncNode(Graph &graph, data_idx_t index, func_ptr_t func)
-        : Node(graph, NodeType::FUNC, func->funcType()->exitType(), index), func_(func) {}
+        : Node(graph, NodeType::FUNC, func->funcType()->exitType(), index), func_(func),
+          graph_(&func_->graph()) {}
     ~FuncNode() = default;
 
     static Node *create(Graph &graph, func_ptr_t func) {
@@ -389,6 +391,8 @@ class FuncNode : public Node {
     }
 
     func_ptr_t func() const { return func_; }
+    /** 执行热路径用：构造时已缓存，直接返回，避免返回 func_ptr_t 带来的引用计数开销 */
+    Graph *graph() const { return graph_; }
     FunctionType *funcType() const {
         ASSERT(func_, "Function is not set for FunctionNode.");
         return tt::as_ptr<FunctionType>(func_->type());
@@ -408,6 +412,7 @@ class FuncNode : public Node {
 
 class OperNode : public Node {
     oper_idx_ptr_t operator_;
+    mutable ::operator_t cachedOp_ = nullptr;
 
   public:
     OperNode(Graph &graph, data_idx_t index, oper_idx_ptr_t op)
@@ -426,6 +431,9 @@ class OperNode : public Node {
         ASSERT(operator_, "Operator is not set for OperatorNode.");
         return tt::as_ptr<FunctionType>(operator_->funcType());
     }
+
+    ::operator_t getCachedOp() const { return cachedOp_; }
+    void setCachedOp(::operator_t op) const { cachedOp_ = op; }
 
     virtual std::string toString() const override {
         return std::format(

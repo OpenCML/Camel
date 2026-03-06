@@ -9,7 +9,7 @@ target_compile_options(camel-pr PRIVATE
     $<$<CONFIG:Release>:-O3> $<$<CONFIG:RelWithDebInfo>:-O2> $<$<CONFIG:RelWithDebInfo>:-g3>
     $<$<CONFIG:RelWithDebInfo>:-fno-PIE> $<$<CONFIG:Debug>:-O0> $<$<CONFIG:Debug>:-g3>
 )
-target_link_options(camel-pr PRIVATE $<$<CONFIG:RelWithDebInfo>:-no-pie>)
+target_link_options(camel-pr PRIVATE $<$<AND:$<CONFIG:RelWithDebInfo>,$<NOT:$<PLATFORM_ID:Windows>>>:-no-pie>)
 
 target_libcamel_tool_options(camel-pr)
 target_link_libcamel_with_json(camel-pr)

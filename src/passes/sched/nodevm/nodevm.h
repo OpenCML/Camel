@@ -21,8 +21,12 @@
 
 #pragma once
 
+#include <span>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
+#include "camel/compile/gir/types.h"
 #include "camel/core/context/frame.h"
 #include "camel/execute/pass/sched.h"
 
@@ -31,13 +35,25 @@ class NodeVMSchedPass : public GraphSchedulePass {
 
     size_t currRecursionDepth_ = 0;
     FramePool framePool_{1 * MB};
+    // 热路径走 Graph extra 的 O(1) 缓存；冷路径写入 topoNodesOwned_ 并挂到 extra 上
     std::unordered_set<GraphIR::Graph *> graphsWithTopoCache_;
+    std::unordered_map<GraphIR::Graph *, std::vector<GraphIR::Node *>> topoNodesOwned_;
+
+    // 复用 buffer，避免 OPER 分支内每次堆分配（先 norm 后 with，用偏移区分）
+    std::vector<GraphIR::data_idx_t> operIndices_;
 
     static constexpr size_t kTopoNodesExtraIndex = 1;
 
     slot_t call(GraphIR::Graph *graph, Frame *rootFrame);
-    std::shared_ptr<std::vector<GraphIR::Node *>> getTopoNodes(GraphIR::Graph *graph);
+    std::span<GraphIR::Node *> buildTopoNodes(GraphIR::Graph *graph);
 
+  public:
+    NodeVMSchedPass(const context_ptr_t &ctx) : GraphSchedulePass(ctx) {}
+    ~NodeVMSchedPass() override;
+
+    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+
+  private:
     void evalMarkedOperator(const std::string &uri, GraphIR::Node *node, Frame &currFrame);
 
     void evalMarkedOperator_map_arr(GraphIR::Node *node, Frame &currFrame);
@@ -45,10 +61,4 @@ class NodeVMSchedPass : public GraphSchedulePass {
     void evalMarkedOperator_filter_arr(GraphIR::Node *node, Frame &currFrame);
     void evalMarkedOperator_reduce_arr(GraphIR::Node *node, Frame &currFrame);
     void evalMarkedOperator_foreach_arr(GraphIR::Node *node, Frame &currFrame);
-
-  public:
-    NodeVMSchedPass(const context_ptr_t &ctx) : GraphSchedulePass(ctx) {}
-    ~NodeVMSchedPass() override;
-
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 };

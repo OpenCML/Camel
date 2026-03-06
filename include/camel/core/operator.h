@@ -22,7 +22,6 @@
 #include "camel/core/rtdata.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/resolver.h"
-#include "camel/utils/rawarr.h"
 
 #include <functional>
 #include <unordered_map>
@@ -41,7 +40,7 @@ using arr_size_t  = uint16_t;
 using graph_ptr_t = std::shared_ptr<Graph>;
 } // namespace GraphIR
 
-using data_arr_t = RawArray<const GraphIR::data_idx_t>;
+using data_arr_t = std::span<const GraphIR::data_idx_t>;
 
 class ArgsView {
   public:

@@ -29,38 +29,21 @@
 using namespace std;
 using namespace GraphIR;
 
-namespace {
-
-struct TopoNodesCache {
-    std::shared_ptr<std::vector<Node *>> nodes;
-};
-
-} // namespace
-
 NodeVMSchedPass::~NodeVMSchedPass() {
-    for (Graph *g : graphsWithTopoCache_) {
-        auto *cache = g->getExtra<TopoNodesCache, NodeVMSchedPass::kTopoNodesExtraIndex>();
-        if (cache) {
-            delete cache;
-            g->setExtra<TopoNodesCache, NodeVMSchedPass::kTopoNodesExtraIndex>(nullptr);
-        }
-    }
+    for (Graph *g : graphsWithTopoCache_)
+        g->setExtra<node_vec_t, kTopoNodesExtraIndex>(nullptr);
 }
 
-std::shared_ptr<std::vector<Node *>> NodeVMSchedPass::getTopoNodes(Graph *graph) {
+std::span<Node *> NodeVMSchedPass::buildTopoNodes(Graph *graph) {
     ASSERT(
         !graph->dirty(),
         std::format("Graph {} is dirty, please rearrange before executing.", graph->name()));
-
-    auto *cache = graph->getExtra<TopoNodesCache, kTopoNodesExtraIndex>();
-    if (cache)
-        return cache->nodes;
 
     Node *exitNode   = graph->exitNode();
     auto sortedNodes = findReachable(
         exitNode,
         [](Node *n) {
-            std::vector<Node *> ins;
+            node_vec_t ins;
             ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
             for (const auto &in : n->ctrlInputs()) {
                 if (&in->graph() == &n->graph()) // only consider nodes in the same graph
@@ -107,11 +90,11 @@ std::shared_ptr<std::vector<Node *>> NodeVMSchedPass::getTopoNodes(Graph *graph)
         }
     });
 
-    auto *newCache  = new TopoNodesCache();
-    newCache->nodes = std::make_shared<std::vector<Node *>>(std::move(sortedNodes));
-    graph->setExtra<TopoNodesCache, kTopoNodesExtraIndex>(newCache);
+    auto &vec = topoNodesOwned_[graph];
+    vec       = std::move(sortedNodes);
+    graph->setExtra<node_vec_t, kTopoNodesExtraIndex>(&vec);
     graphsWithTopoCache_.insert(graph);
-    return newCache->nodes;
+    return std::span(vec);
 }
 
 // =============================================================================
@@ -192,7 +175,8 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
     Frame *twinFrame = nullptr;
     Graph *currGraph = rootGraph;
 
-    auto currNodes = getTopoNodes(currGraph);
+    auto *nodesVec              = currGraph->getExtra<node_vec_t, kTopoNodesExtraIndex>();
+    std::span<Node *> currNodes = nodesVec ? std::span(*nodesVec) : buildTopoNodes(currGraph);
 
     // 用于实现分支跳转
     // tillNode 如果不为空，则跳过 tillNode 前所有节点
@@ -202,15 +186,13 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
 
 // 尾调用优化主循环：不退出 C++ 栈帧，用新的 currGraph/currFrame 继续执行
 loop_start: {
-    const auto &nodes = *currNodes;
-    size_t nodesSize  = nodes.size();
-
-    Node *lastNode      = currGraph->outputNode();
-    bool lastNodeIsJoin = lastNode->type() == NodeType::JOIN;
+    const size_t nodesSize = currNodes.size();
+    Node *lastNode         = currGraph->outputNode();
+    bool lastNodeIsJoin    = lastNode->type() == NodeType::JOIN;
 
     size_t i = 0;
     for (; i < nodesSize; ++i) {
-        Node *n = nodes[i];
+        Node *n = currNodes[i];
 
         if (tillNode) {
             if (tillNode == n) {
@@ -218,7 +200,7 @@ loop_start: {
                     GetDefaultLogger().in("NodeVM").debug(
                         "Reached tillNode [{}/{}] graph={}: {}",
                         i + 1,
-                        nodes.size(),
+                        currNodes.size(),
                         currGraph->name(),
                         n->toString()));
                 tillNode = nullptr;
@@ -227,7 +209,7 @@ loop_start: {
                     GetDefaultLogger().in("NodeVM").debug(
                         "Skipping node [{}/{}] graph={}: {}",
                         i + 1,
-                        nodes.size(),
+                        currNodes.size(),
                         currGraph->name(),
                         n->toString()));
                 continue;
@@ -238,7 +220,7 @@ loop_start: {
                 GetDefaultLogger().in("NodeVM").debug(
                     "Reached skipNode [{}/{}] graph={}: {}",
                     i + 1,
-                    nodes.size(),
+                    currNodes.size(),
                     currGraph->name(),
                     n->toString()));
             skipNode = nullptr;
@@ -251,7 +233,7 @@ loop_start: {
             GetDefaultLogger().in("NodeVM").debug(
                 "Executing node [{}/{}] graph={}: {}",
                 i + 1,
-                nodes.size(),
+                currNodes.size(),
                 currGraph->name(),
                 n->toString());
         });
@@ -453,7 +435,7 @@ loop_start: {
         } break;
 
         case NodeType::FUNC: {
-            Graph *funcGraph = &tt::as_ptr<FuncNode>(n)->func()->graph();
+            Graph *funcGraph = tt::as_ptr<FuncNode>(n)->graph();
 
             // 尾调用优化
             bool isTailCall = n == lastNode || (lastNodeIsJoin && !n->withOutputs().empty() &&
@@ -463,7 +445,7 @@ loop_start: {
                     GetDefaultLogger().in("NodeVM").debug(
                         "Optimizing tail-call for node [{}/{}] graph={}: {}",
                         i + 1,
-                        nodes.size(),
+                        currNodes.size(),
                         currGraph->name(),
                         n->toString()));
                 // enable tail-call optimization
@@ -485,7 +467,8 @@ loop_start: {
                             currFrame->graph()->name()));
                 } else {
                     // 否则需要切换到目标图的节点序列，并修改 currGraph 指向
-                    currNodes = getTopoNodes(funcGraph);
+                    nodesVec  = funcGraph->getExtra<node_vec_t, kTopoNodesExtraIndex>();
+                    currNodes = nodesVec ? std::span(*nodesVec) : buildTopoNodes(funcGraph);
                     currGraph = funcGraph;
 
                     // 即便目标图不是当前图，仍可能存在互调用尾递归现象
@@ -540,27 +523,33 @@ loop_start: {
         } break;
 
         case NodeType::OPER: {
-            auto opNode     = tt::as_ptr<OperNode>(n);
-            std::string uri = opNode->oper()->uri();
+            auto opNode = tt::as_ptr<OperNode>(n);
 
-            if (uri.starts_with(":mark/")) {
-                evalMarkedOperator(uri.substr(6), n, *currFrame);
-                break;
-            }
-
-            auto opFunc = context_->execMgr().find(uri);
+            operator_t opFunc = opNode->getCachedOp();
             if (!opFunc) {
-                context_->rtmDiags()->of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
+                const auto &uri = opNode->oper()->uri();
+                auto found      = context_->execMgr().find(uri);
+                if (found) {
+                    opFunc = *found;
+                    opNode->setCachedOp(opFunc);
+                } else {
+                    if (uri.starts_with(":mark/")) {
+                        evalMarkedOperator(uri.substr(6), n, *currFrame);
+                        break;
+                    }
+                    context_->rtmDiags()->of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
+                }
             }
 
-            std::vector<data_idx_t> normIndices, withIndices;
+            operIndices_.clear();
             for (const auto &in : n->normInputs())
-                normIndices.push_back(in->index());
+                operIndices_.push_back(in->index());
+            size_t normCnt = operIndices_.size();
             for (const auto &in : n->withInputs())
-                withIndices.push_back(in->index());
+                operIndices_.push_back(in->index());
 
-            data_arr_t nargs{normIndices.data(), normIndices.size()};
-            data_arr_t wargs{withIndices.data(), withIndices.size()};
+            data_arr_t nargs{operIndices_.data(), normCnt};
+            data_arr_t wargs{operIndices_.data() + normCnt, operIndices_.size() - normCnt};
             FrameArgsView withView(*currFrame, wargs);
             FrameArgsView normView(*currFrame, nargs);
 
@@ -592,7 +581,7 @@ loop_start: {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger()
                 .in("NodeVM")
-                .debug("Executed node [{}/{}]: {}", i + 1, nodes.size(), n->toString()));
+                .debug("Executed node [{}/{}]: {}", i + 1, currNodes.size(), n->toString()));
     }
 }
 
