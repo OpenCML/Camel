@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,5 +28,5 @@ class BasicBuiltinExecutor : public Executor {
 
     static executor_ptr_t create(context_ptr_t ctx);
 
-    virtual void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) override;
+    virtual void eval(std::string uri, GraphIR::Node *self, Frame &frame) override;
 };

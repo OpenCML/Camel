@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -53,7 +53,9 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
     while (true) {
         const Bytecode &bc = bytecodes_[pc];
         EXEC_WHEN_DEBUG(
-            l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(bc, context_)));
+            GetDefaultLogger().in("FastVM").debug(
+                "Executing bytecode: {}",
+                opCodeToString(bc, context_)));
 
 #ifdef OPPERF_ENABLED
         std::string tag;
@@ -102,7 +104,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             data_idx_t srcIdx = bc.fastop[0];
             Type *srcType     = currFrame->typeAt<Type>(srcIdx);
             slot_t value      = currFrame->get<slot_t>(srcIdx);
-            slot_t result     = srcType->castSlotTo(value, targetType);
+            slot_t result     = targetType->castSlotFrom(value, srcType);
             currFrame->set(bc.result, result);
         } break;
 
@@ -290,7 +292,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             Frame *funcFrame = framePool_.acquire(targetGraph);
 
             size_t i = 0;
-            for (; i < nargs.size; ++i) {
+            for (; i < nargs.size(); ++i) {
                 funcFrame->set(i + 1, currFrame->get<slot_t>(nargs[i]));
             }
 
@@ -441,9 +443,10 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             const data_arr_t nargs = bc->nargs();
             const data_arr_t wargs = bc->wargs();
             auto func              = bc->extra()->func;
-            EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-                "Executing operator {}.",
-                context_->execMgr().getNameOfAnOperator(func)));
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger().in("FastVM").debug(
+                    "Executing operator {}.",
+                    context_->execMgr().getNameOfAnOperator(func)));
             FrameArgsView withView(*currFrame, wargs);
             FrameArgsView normView(*currFrame, nargs);
             slot_t result = func(withView, normView, *context_);

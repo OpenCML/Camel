@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,45 +36,46 @@ data_idx_t Node::index() const {
     return dataIndex_;
 }
 
-bool Node::hasDeepLinkedTo(const node_ptr_t &node, size_t maxJumps) const {
+bool Node::hasDeepLinkedTo(Node *node, size_t maxJumps) const {
     if (maxJumps == 0) {
         return false;
     }
 
-    std::unordered_set<const void *> visited;
-    std::function<bool(const node_ptr_t &, size_t)> dfs;
+    std::unordered_set<Node *> visited;
+    std::function<bool(Node *, size_t)> dfs;
 
-    dfs = [&](const node_ptr_t &current, size_t jumpsLeft) -> bool {
+    dfs = [&](Node *current, size_t jumpsLeft) -> bool {
         ASSERT(current, "Current node is null in DFS.");
         if (jumpsLeft == 0) {
-            EXEC_WHEN_DEBUG(l.in("GIR").warn(
-                "Deep link check reached max jumps at node: {}.",
-                node->toString()));
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger().in("GIR").warn(
+                    "Deep link check reached max jumps at node: {}.",
+                    node->toString()));
             return false;
         }
 
-        visited.insert(current.get());
+        visited.insert(current);
 
-        for (const auto &out : current->withOutputs_) {
+        for (auto *out : current->withOutputs_) {
             if (out == node)
                 return true;
-            if (visited.find(out.get()) == visited.end()) {
+            if (visited.find(out) == visited.end()) {
                 if (dfs(out, jumpsLeft - 1))
                     return true;
             }
         }
-        for (const auto &out : current->normOutputs_) {
+        for (auto *out : current->normOutputs_) {
             if (out == node)
                 return true;
-            if (visited.find(out.get()) == visited.end()) {
+            if (visited.find(out) == visited.end()) {
                 if (dfs(out, jumpsLeft - 1))
                     return true;
             }
         }
-        for (const auto &out : current->ctrlOutputs_) {
+        for (auto *out : current->ctrlOutputs_) {
             if (out == node)
                 return true;
-            if (visited.find(out.get()) == visited.end()) {
+            if (visited.find(out) == visited.end()) {
                 if (dfs(out, jumpsLeft - 1))
                     return true;
             }
@@ -82,31 +83,31 @@ bool Node::hasDeepLinkedTo(const node_ptr_t &node, size_t maxJumps) const {
         return false;
     };
 
-    for (const auto &out : withOutputs_) {
+    for (auto *out : withOutputs_) {
         if (dfs(out, maxJumps - 1))
             return true;
     }
-    for (const auto &out : normOutputs_) {
+    for (auto *out : normOutputs_) {
         if (dfs(out, maxJumps - 1))
             return true;
     }
-    for (const auto &out : ctrlOutputs_) {
+    for (auto *out : ctrlOutputs_) {
         if (dfs(out, maxJumps - 1))
             return true;
     }
     return false;
 }
 
-bool Node::hasLinkedTo(const node_ptr_t &node) const {
-    for (const auto &out : withOutputs_) {
+bool Node::hasLinkedTo(Node *node) const {
+    for (auto *out : withOutputs_) {
         if (out == node)
             return true;
     }
-    for (const auto &out : normOutputs_) {
+    for (auto *out : normOutputs_) {
         if (out == node)
             return true;
     }
-    for (const auto &out : ctrlOutputs_) {
+    for (auto *out : ctrlOutputs_) {
         if (out == node)
             return true;
     }
@@ -117,7 +118,7 @@ bool Node::hasLinkedTo(const node_ptr_t &node) const {
 // Node 连边与替换
 // =============================================================================
 
-void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
+void Node::link(LinkType type, Node *from, Node *to) {
     ASSERT(
         from->nodeType_ != NodeType::DREF,
         "DREF nodes cannot be linked as input to other nodes.");
@@ -131,11 +132,12 @@ void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
             (type == LinkType::With ? "W" : (type == LinkType::Norm ? "N" : "C")),
             to->toString()));
 
-    EXEC_WHEN_DEBUG(l.in("GIR").debug(
-        "Linking nodes: {} -{}-> {}",
-        from->toString(),
-        (type == LinkType::With ? "W" : (type == LinkType::Norm ? "N" : "C")),
-        to->toString()));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("GIR").debug(
+            "Linking nodes: {} -{}-> {}",
+            from->toString(),
+            (type == LinkType::With ? "W" : (type == LinkType::Norm ? "N" : "C")),
+            to->toString()));
 
     switch (type) {
     case LinkType::With:
@@ -157,7 +159,7 @@ void Node::link(LinkType type, const node_ptr_t &from, const node_ptr_t &to) {
     }
 }
 
-bool Node::unlink(const node_ptr_t &from, const node_ptr_t &to) {
+bool Node::unlink(Node *from, Node *to) {
     ASSERT(from && to, "Cannot unlink null nodes.");
     ASSERT(from != to, "Cannot unlink a node from itself.");
     ASSERT(
@@ -168,7 +170,10 @@ bool Node::unlink(const node_ptr_t &from, const node_ptr_t &to) {
             to->toString()));
 
     EXEC_WHEN_DEBUG(
-        l.in("GIR").debug("Unlinking nodes: {} -X- {}", from->toString(), to->toString()));
+        GetDefaultLogger().in("GIR").debug(
+            "Unlinking nodes: {} -X- {}",
+            from->toString(),
+            to->toString()));
 
     auto &toNormInputs = to->normInputs_;
     if (std::find(toNormInputs.begin(), toNormInputs.end(), from) != toNormInputs.end()) {
@@ -210,11 +215,14 @@ bool Node::unlink(const node_ptr_t &from, const node_ptr_t &to) {
     return false;
 }
 
-bool Node::replace(const node_ptr_t &oldNode, const node_ptr_t &newNode) {
+bool Node::replace(Node *oldNode, Node *newNode) {
     ASSERT(oldNode && newNode, "Cannot replace null nodes.");
     ASSERT(oldNode != newNode, "Cannot replace a node with itself.");
     EXEC_WHEN_DEBUG(
-        l.in("GIR").debug("Replacing node: {} -> {}", oldNode->toString(), newNode->toString()));
+        GetDefaultLogger().in("GIR").debug(
+            "Replacing node: {} -> {}",
+            oldNode->toString(),
+            newNode->toString()));
 
     for (const auto &in : oldNode->withInputs_) {
         Node::link(LinkType::With, in, newNode);
@@ -238,36 +246,34 @@ bool Node::replace(const node_ptr_t &oldNode, const node_ptr_t &newNode) {
 }
 
 bool Node::detach() {
-    node_ptr_t self = shared_from_this();
-
     auto tempWithInputs = withInputs_;
-    for (auto &input : tempWithInputs) {
-        if (!unlink(input, self))
+    for (auto *input : tempWithInputs) {
+        if (!unlink(input, this))
             return false;
     }
     auto tempNormInputs = normInputs_;
-    for (auto &input : tempNormInputs) {
-        if (!unlink(input, self))
+    for (auto *input : tempNormInputs) {
+        if (!unlink(input, this))
             return false;
     }
     auto tempCtrlInputs = ctrlInputs_;
-    for (auto &input : tempCtrlInputs) {
-        if (!unlink(input, self))
+    for (auto *input : tempCtrlInputs) {
+        if (!unlink(input, this))
             return false;
     }
     auto tempWithOutputs = withOutputs_;
-    for (auto &output : tempWithOutputs) {
-        if (!unlink(self, output))
+    for (auto *output : tempWithOutputs) {
+        if (!unlink(this, output))
             return false;
     }
     auto tempNormOutputs = normOutputs_;
-    for (auto &output : tempNormOutputs) {
-        if (!unlink(self, output))
+    for (auto *output : tempNormOutputs) {
+        if (!unlink(this, output))
             return false;
     }
     auto tempCtrlOutputs = ctrlOutputs_;
-    for (auto &output : tempCtrlOutputs) {
-        if (!unlink(self, output))
+    for (auto *output : tempCtrlOutputs) {
+        if (!unlink(this, output))
             return false;
     }
     return true;

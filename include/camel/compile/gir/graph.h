@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include <unordered_map>
 
 #include "camel/core/data.h"
+#include "camel/utils/debug.h"
 #include "camel/utils/exstore.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
@@ -41,16 +42,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
     Graph &operator=(Graph &&other)      = delete;
 
     explicit Graph(
-        FunctionType *funcType, const graph_ptr_t &graph = nullptr, const std::string &name = "")
-        : name_(name), outer_(graph), funcType_(funcType), staticDataType_(TupleType::create()),
-          runtimeDataType_(TupleType::create()), closureType_(TupleType::create()) {
-        EXEC_WHEN_DEBUG(
-            l.in("GIR").debug("Created Graph: {}", name_.empty() ? "<anonymous>" : name_));
-    }
-    ~Graph() {
-        EXEC_WHEN_DEBUG(
-            l.in("GIR").debug("Destroyed Graph: {}", name_.empty() ? "<anonymous>" : name_));
-    };
+        FunctionType *funcType, const graph_ptr_t &graph = nullptr, const std::string &name = "");
+    ~Graph();
 
     static graph_ptr_t create(
         FunctionType *funcType, const graph_ptr_t &graph = nullptr, const std::string &name = "");
@@ -63,6 +56,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
     std::string mangledName() const { return name_ + std::format("<{}>", funcType()->mangle()); }
+    std::string stableId() const { return mangledName(); }
     std::string location() const;
     bool looped() const { return looped_; }
     bool empty() const { return nodes_.empty(); }
@@ -99,23 +93,25 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void addDependency(const graph_ptr_t &graph);
     void delDependency(const graph_ptr_t &graph);
 
-    void addNode(const node_ptr_t &node);
-    void delNode(const node_ptr_t &node);
+    Node *ownNode(node_uptr_t node);
+    void addNode(Node *node);
+    void delNode(Node *node);
 
-    void addPort(const node_ptr_t &node, bool isWith = false);
-    void addClosure(const node_ptr_t &node);
+    void addPort(Node *node, bool isWith = false);
+    void addClosure(Node *node);
     bool parameterized() const { return parameterized_; }
 
     void parametrizeClosure();
 
-    const node_ptr_t &exitNode() const;
-    const node_ptr_t &outputNode() const;
+    Node *exitNode() const;
+    Node *outputNode() const;
     bool hasOutput() const { return exitNode_ != nullptr; }
-    void setOutput(const node_ptr_t &node);
+    void setOutput(Node *node);
 
     const node_vec_t &nodes() { return nodes_; }
     node_vec_t ports() {
         node_vec_t ports;
+        ports.reserve(normPorts_.size() + withPorts_.size());
         ports.insert(ports.end(), normPorts_.begin(), normPorts_.end());
         ports.insert(ports.end(), withPorts_.begin(), withPorts_.end());
         return ports;
@@ -129,7 +125,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     graph_ptr_t clone() const;
 
-    node_ptr_t inlineNode(const node_ptr_t &node, bool forceSync = false);
+    Node *inlineNode(Node *node, bool forceSync = false);
 
     bool dirty() const { return dirty_; }
     void rearrange();
@@ -152,9 +148,10 @@ class Graph : public std::enable_shared_from_this<Graph> {
     data_vec_t staticDataArr_ = {nullptr};
     size_t runtimeDataSize_   = 1;
 
+    std::vector<node_uptr_t> ownedNodes_;
     node_vec_t normPorts_, withPorts_, closure_;
     node_vec_t nodes_;
-    node_ptr_t exitNode_;
+    Node *exitNode_ = nullptr;
 
     bool dirty_ = false;
 

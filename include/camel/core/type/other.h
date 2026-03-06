@@ -84,12 +84,12 @@ class OtherType : public Type {
 
     virtual OtherType *cloneWithParams(std::span<Type *const> params) const = 0;
 
-    virtual std::string toString() const override                    = 0;
-    virtual std::string mangle() const override                      = 0;
-    virtual Type *clone(bool deep = false) const override            = 0;
-    virtual bool equals(Type *type) const override                   = 0;
-    virtual CastSafety castSafetyTo(Type *targetType) const override = 0;
-    virtual bool assignable(Type *type) const                        = 0;
+    virtual std::string toString() const override                      = 0;
+    virtual std::string mangle() const override                        = 0;
+    virtual Type *clone(bool deep = false) const override              = 0;
+    virtual bool equals(Type *type) const override                     = 0;
+    virtual CastSafety castSafetyFrom(Type *sourceType) const override = 0;
+    virtual bool assignableFrom(Type *sourceType) const                = 0;
 
   protected:
     OtherType(TypeCode code, size_t paramCount, Type **params)

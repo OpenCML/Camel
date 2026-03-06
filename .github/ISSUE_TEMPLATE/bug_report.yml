@@ -1,0 +1,63 @@
+name: Bug 报告
+description: 报告 Camel 编译器或运行时的 Bug
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你报告 Bug！请尽量填写以下信息以便我们快速定位问题。
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 请清晰、简洁地描述遇到的问题
+      placeholder: 例如：运行 hello.cml 时出现段错误
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 如何复现该问题
+      placeholder: |
+        1. 执行 `camel hello.cml`
+        2. 输入 ...
+        3. 观察到 ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+      description: 你期望发生什么
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 实际发生了什么（错误信息、崩溃等）
+    validations:
+      required: true
+  - type: input
+    id: camel-version
+    attributes:
+      label: Camel 版本
+      placeholder: 例如：pip list | grep camel 或从源码编译的 commit
+    validations:
+      required: false
+  - type: input
+    id: environment
+    attributes:
+      label: 运行环境
+      placeholder: 例如：Ubuntu 22.04, Python 3.11, Clang 19
+    validations:
+      required: false
+  - type: textarea
+    id: minimal
+    attributes:
+      label: 最小可复现示例
+      description: 如有可能，请提供最小的 .cml 代码或命令行
+    validations:
+      required: false

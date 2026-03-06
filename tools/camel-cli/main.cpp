@@ -14,9 +14,8 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Feb. 22, 2026
- * Supported by: National Key Research and Development
- * Program of China
+ * Updated: Mar. 06, 2026
+ * Supported by: National Key Research and Development Program of China
  */
 
 #include "nlohmann/json.hpp"
@@ -34,6 +33,7 @@
 #include "camel/parse/ast/builder.h"
 #include "camel/parse/cst_dumper.h"
 #include "camel/parse/parse.h"
+#include "camel/utils/dll_path.h"
 #include "camel/utils/env.h"
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
@@ -49,6 +49,7 @@
 #include <iomanip>
 #include <iostream>
 #include <queue>
+#include <string>
 
 using namespace antlr4;
 using namespace std;
@@ -62,6 +63,7 @@ using namespace CLI;
 string targetFile = "";
 
 int main(int argc, char *argv[]) {
+    camel::utils::setupLibrarySearchPath();
     if (!parseArgs(argc, argv))
         return 0;
 
@@ -74,19 +76,19 @@ int main(int argc, char *argv[]) {
 
     std::unique_ptr<istream> input;
 
-    if (Run::targetFiles.empty() || Run::targetFiles[0] == "") {
+    if (Run::resolvedInputPath.empty()) {
         input      = std::make_unique<istream>(std::cin.rdbuf());
         targetFile = "stdin"; // for error reporting
-        EXEC_WHEN_DEBUG(l.in("Main").info("Reading from standard input."));
+        EXEC_WHEN_DEBUG(GetDefaultLogger().in("Main").info("Reading from standard input."));
     } else {
-        targetFile = Run::targetFiles[0];
+        targetFile = Run::resolvedInputPath;
         auto file  = std::make_unique<std::ifstream>(targetFile);
         if (!file->is_open()) {
             std::cerr << "Error: Cannot open file " << targetFile << endl;
             return 1;
         }
         input = std::move(file);
-        EXEC_WHEN_DEBUG(l.in("Main").info("Reading from file '{}'.", targetFile));
+        EXEC_WHEN_DEBUG(GetDefaultLogger().in("Main").info("Reading from file '{}'.", targetFile));
     }
     diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
     if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
@@ -99,7 +101,9 @@ int main(int argc, char *argv[]) {
 
     bool useJsonFormat = (errorFormat == "json");
 
-    fs::path camelPath = fs::current_path();
+    fs::path camelPath = camel::utils::getExecutableDirectory();
+    if (camelPath.empty())
+        camelPath = fs::current_path();
     fs::path entryPath(targetFile);
     // if targetFile is relative (or "stdin"), the entryDir is the current working directory
     // if targetFile is absolute, the entryDir is the parent directory of targetFile
@@ -114,7 +118,9 @@ int main(int argc, char *argv[]) {
     searchPaths.push_back(entryDir);
     addIfNonEmpty(searchPaths, getEnv("CAMEL_PACKAGES"));
     addIfNonEmpty(searchPaths, Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB") : Run::stdLibPath);
+    addIfNonEmpty(searchPaths, camelPath.string());
     addIfNonEmpty(searchPaths, (camelPath / "stdlib").string());
+    addIfNonEmpty(searchPaths, (camelPath.parent_path() / "stdlib").string());
 
     context_ptr_t ctx = Context::create(
         EntryConfig{
@@ -203,7 +209,7 @@ int main(int argc, char *argv[]) {
             }
 
             if (selectedCommand == Command::Run) {
-                EXEC_WHEN_DEBUG([] {
+                EXEC_WHEN_DEBUG({
                     if (Run::profile) {
                         // Initialize and start advanced tracing using profiler configuration
                         profiler::AdvancedTracer::Config config;
@@ -212,7 +218,7 @@ int main(int argc, char *argv[]) {
                         config.outputFile     = "profile_reports/camel_trace.json";
                         profiler::start_advanced_tracing(config);
                     }
-                }());
+                });
 
                 // memperf::enable_logging(true);
 
@@ -220,10 +226,7 @@ int main(int argc, char *argv[]) {
 
                 try {
                     try {
-                        std::vector<std::string> passes(
-                            Run::targetFiles.begin() + 1,
-                            Run::targetFiles.end());
-                        int retCode = applyPasses(passes, ctx, os);
+                        int retCode = applyPasses(Run::resolvedPassList, ctx, os);
                         if (retCode != 0) {
                             const auto &diags = ctx->rtmDiags();
                             if (diags->hasErrors()) {
@@ -244,12 +247,12 @@ int main(int argc, char *argv[]) {
 
                 memperf::report(os);
 
-                EXEC_WHEN_DEBUG([] {
+                EXEC_WHEN_DEBUG({
                     if (Run::profile) {
                         profiler::stop_advanced_tracing();
                         profiler::generate_advanced_report();
                     }
-                }());
+                });
             }
 
         } catch (DiagnosticsLimitExceededBaseException &e) {

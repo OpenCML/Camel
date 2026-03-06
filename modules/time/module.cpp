@@ -1,0 +1,71 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * You may use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Jul. 29, 2025
+ * Updated: Feb. 22, 2026
+ * Supported by: National Key Research and Development Program of China
+ */
+
+#include "module.h"
+#include "camel/compile/gir.h"
+#include "camel/core/context/context.h"
+#include "camel/core/type.h"
+#include "camel/core/type/resolver.h"
+#include "executor.h"
+#include "operators.h"
+
+namespace {
+const std::vector<oper_group_ptr_t> &getOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups = {
+        OperatorGroup::create(
+            "now",
+            {{"time:now", StaticFuncTypeResolver::create({}, {}, Type::Float64())}}),
+        OperatorGroup::create(
+            "strftime",
+            {{"time:strftime",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{Type::Float64(), false}, {Type::String(), false}},
+                  Type::String())}}),
+        OperatorGroup::create(
+            "strptime",
+            {{"time:strptime",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{Type::String(), false}, {Type::String(), false}},
+                  Type::Float64())}}),
+    };
+    return groups;
+}
+} // namespace
+
+TimeModule::TimeModule(context_ptr_t ctx) : BuiltinModule("time", ctx) {
+    for (const auto &group : getOperatorGroups())
+        exportEntity(group->name(), group);
+}
+
+module_ptr_t TimeModule::create(context_ptr_t ctx) { return std::make_shared<TimeModule>(ctx); }
+
+bool TimeModule::load() {
+    if (loaded_)
+        return true;
+    context_ptr_t ctx = context_;
+    context_->registerExecutorFactory("time", [ctx]() { return createTimeExecutor(ctx); });
+    loaded_ = true;
+    return true;
+}
+
+extern "C" {
+Module *camel_module_create(Context *ctx) { return new TimeModule(ctx->shared_from_this()); }
+}

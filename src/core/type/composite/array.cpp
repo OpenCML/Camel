@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -50,7 +50,8 @@ ArrayType *ArrayType::create(Type *elemType) {
     size_t totalSize = baseSize; // 无 refs 时，refCount_ = 0
 
     EXEC_WHEN_DEBUG(
-        l.in("ArrayType")
+        GetDefaultLogger()
+            .in("ArrayType")
             .debug("Allocating ArrayType: {}[], size: {} bytes", elemType->toString(), totalSize));
 
     void *mem = mm::permSpace().alloc(totalSize, alignof(ArrayType));
@@ -76,7 +77,8 @@ ArrayType *ArrayType::fromData(Type *elemType, size_t refCount, const size_t *re
     size_t totalSize = baseSize + refsSize;
 
     EXEC_WHEN_DEBUG(
-        l.in("ArrayType")
+        GetDefaultLogger()
+            .in("ArrayType")
             .debug("Allocating ArrayType: {}[], size: {} bytes", elemType->toString(), totalSize));
 
     void *mem = mm::permSpace().alloc(totalSize, alignof(ArrayType));
@@ -136,11 +138,12 @@ bool ArrayType::equals(Type *other) const {
     return elemType_->equals(otherArr.elemType_);
 }
 
-CastSafety ArrayType::castSafetyTo(Type *targetType) const {
-    if (this == targetType) {
+CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
+    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
+        return *r;
+    if (this == sourceType)
         return CastSafety::Safe;
-    }
     return CastSafety::Forbidden;
 }
 
-bool ArrayType::assignable(Type *type) const { return equals(type); }
+bool ArrayType::assignableFrom(Type *sourceType) const { return equals(sourceType); }

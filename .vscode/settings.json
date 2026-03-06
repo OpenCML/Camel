@@ -1,11 +1,14 @@
 {
-  "terminal.integrated.env.windows": {
-    "PATH": "${workspaceFolder};${env:PATH}"
-  },
-  "terminal.integrated.env.osx": {
-    "PATH": "${workspaceFolder}:${env:PATH}"
-  },
-  "terminal.integrated.env.linux": {
-    "PATH": "${workspaceFolder}:${env:PATH}"
-  }
+    "terminal.integrated.env.windows": {
+        "PATH": "${workspaceFolder}\\out\\latest;${workspaceFolder}\\out\\latest\\bin;${env:PATH}"
+    },
+    "terminal.integrated.env.osx": {
+        "PATH": "${workspaceFolder}/out/latest:${workspaceFolder}/out/latest/bin:${env:PATH}"
+    },
+    "terminal.integrated.env.linux": {
+        "PATH": "${workspaceFolder}/out/latest:${workspaceFolder}/out/latest/bin:${env:PATH}"
+    },
+    "cSpell.words": [
+        "Topo"
+    ]
 }

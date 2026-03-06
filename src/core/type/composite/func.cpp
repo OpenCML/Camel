@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -67,7 +67,8 @@ FunctionTypeLayout computeLayout(size_t withCount, size_t normCount) {
 FunctionMetaInfo *
 FunctionMetaInfo::create(std::vector<std::string> argNames, std::vector<std::string> closureRefs) {
     EXEC_WHEN_DEBUG(
-        l.in("FunctionMetaInfo")
+        GetDefaultLogger()
+            .in("FunctionMetaInfo")
             .debug("Allocating FunctionMetaInfo: size: {} bytes", sizeof(FunctionMetaInfo)));
     void *mem = mm::permSpace().alloc(sizeof(FunctionMetaInfo), alignof(FunctionMetaInfo));
     ASSERT(mem != nullptr, "Failed to allocate FunctionMetaInfo");
@@ -313,7 +314,8 @@ FunctionType *FunctionType::create(
     const ModifierSet &modifiers) {
     FunctionTypeLayout layout = computeLayout(withTypes.size(), normTypes.size());
     EXEC_WHEN_DEBUG(
-        l.in("FunctionType")
+        GetDefaultLogger()
+            .in("FunctionType")
             .debug(
                 "Allocating FunctionType: withCount={}, normCount={}, totalSize: {} bytes",
                 withTypes.size(),
@@ -342,13 +344,15 @@ FunctionType *FunctionType::fromFactory(FunctionTypeFactory &factory) {
             FunctionMetaInfo::create(std::move(factory.argNames_), std::move(factory.closureRefs_));
     }
 
-    EXEC_WHEN_DEBUG(l.in("FunctionType")
-                        .debug(
-                            "Allocating FunctionType(fromFactory): withCount={}, normCount={}, "
-                            "totalSize: {} bytes",
-                            withCount,
-                            normCount,
-                            layout.totalSize));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger()
+            .in("FunctionType")
+            .debug(
+                "Allocating FunctionType(fromFactory): withCount={}, normCount={}, "
+                "totalSize: {} bytes",
+                withCount,
+                normCount,
+                layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(FunctionType));
     ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
     return new (mem) FunctionType(
@@ -366,13 +370,15 @@ FunctionType *FunctionType::fromData(
     const bool *normIsVar, Type *exitType, ImplMark implMark, ModifierSet modifiers,
     const FunctionMetaInfo *metaInfo) {
     FunctionTypeLayout layout = computeLayout(withCount, normCount);
-    EXEC_WHEN_DEBUG(l.in("FunctionType")
-                        .debug(
-                            "Allocating FunctionType(fromData): withCount={}, normCount={}, "
-                            "totalSize: {} bytes",
-                            withCount,
-                            normCount,
-                            layout.totalSize));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger()
+            .in("FunctionType")
+            .debug(
+                "Allocating FunctionType(fromData): withCount={}, normCount={}, "
+                "totalSize: {} bytes",
+                withCount,
+                normCount,
+                layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(FunctionType));
     ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
     return new (mem) FunctionType(
@@ -481,13 +487,15 @@ bool FunctionType::equals(Type *other) const {
     return true;
 }
 
-CastSafety FunctionType::castSafetyTo(Type *targetType) const {
-    if (this == targetType)
+CastSafety FunctionType::castSafetyFrom(Type *sourceType) const {
+    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
+        return *r;
+    if (this == sourceType)
         return CastSafety::Safe;
     return CastSafety::Forbidden;
 }
 
-bool FunctionType::assignable(Type *other) const {
+bool FunctionType::assignableFrom(Type *other) const {
     if (this == other)
         return true;
     if (!other || other->code() != TypeCode::Function)
@@ -501,18 +509,18 @@ bool FunctionType::assignable(Type *other) const {
 
     for (size_t i = 0; i < withTypes_.size(); i++) {
         if (withIsVar_[i] != otherFunc.withIsVar_[i] ||
-            !withTypes_[i]->assignable(otherFunc.withTypes_[i]))
+            !otherFunc.withTypes_[i]->assignableFrom(withTypes_[i]))
             return false;
     }
 
     for (size_t i = 0; i < normTypes_.size(); i++) {
         if (normIsVar_[i] != otherFunc.normIsVar_[i] ||
-            !normTypes_[i]->assignable(otherFunc.normTypes_[i]))
+            !otherFunc.normTypes_[i]->assignableFrom(normTypes_[i]))
             return false;
     }
 
     if (exitType_ && otherFunc.exitType_) {
-        if (!exitType_->assignable(otherFunc.exitType_))
+        if (!exitType_->assignableFrom(otherFunc.exitType_))
             return false;
     } else if (exitType_ || otherFunc.exitType_) {
         return false;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -178,7 +178,10 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
     JUMP();
 
 label_RETN: {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("FastVM").debug(
+            "Executing bytecode: {}",
+            opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     slot_t result = currFrame->get<slot_t>(bc->fastop[0]);
@@ -200,21 +203,27 @@ label_RETN: {
 }
 
 label_CAST: {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("FastVM").debug(
+            "Executing bytecode: {}",
+            opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     Type *targetType  = bc->extra()->pType;
     data_idx_t srcIdx = bc->fastop[0];
     Type *srcType     = currFrame->typeAt<Type>(srcIdx);
     slot_t value      = currFrame->get<slot_t>(srcIdx);
-    slot_t result     = srcType->castSlotTo(value, targetType);
+    slot_t result     = targetType->castSlotFrom(value, srcType);
     currFrame->set(bc->result, result);
 
     NEXT();
 }
 
 label_COPY: {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("FastVM").debug(
+            "Executing bytecode: {}",
+            opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     TypeCode srcCode = currFrame->codeAt(bc->fastop[0]);
@@ -231,7 +240,10 @@ label_COPY: {
 }
 
 label_ACCS: {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("FastVM").debug(
+            "Executing bytecode: {}",
+            opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     TypeCode srcType = currFrame->codeAt(bc->fastop[0]);
@@ -255,7 +267,10 @@ label_ACCS: {
 }
 
 label_JUMP: {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("FastVM").debug(
+            "Executing bytecode: {}",
+            opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     pc = static_cast<arr_size_t>(bc->fastop[0]);
@@ -264,7 +279,10 @@ label_JUMP: {
 }
 
 label_BRCH: {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("FastVM").debug(
+            "Executing bytecode: {}",
+            opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     const data_arr_t nargs = bc->nargs();
@@ -318,7 +336,10 @@ label_BRCH: {
 }
 
 label_JOIN: {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("FastVM").debug(
+            "Executing bytecode: {}",
+            opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     const data_arr_t nargs = bc->nargs();
@@ -333,7 +354,10 @@ label_JOIN: {
 }
 
 label_FILL: {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("FastVM").debug(
+            "Executing bytecode: {}",
+            opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     const data_arr_t nargs = bc->nargs();
@@ -411,7 +435,10 @@ label_FILL: {
 }
 
 label_CALL: {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("FastVM").debug(
+            "Executing bytecode: {}",
+            opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     const data_arr_t nargs = bc->nargs();
@@ -422,7 +449,7 @@ label_CALL: {
     Frame *funcFrame = framePool_.acquire(targetGraph);
 
     size_t i = 0;
-    for (; i < nargs.size; ++i) {
+    for (; i < nargs.size(); ++i) {
         funcFrame->set(i + 1, currFrame->get<slot_t>(nargs[i]));
     }
 
@@ -443,7 +470,10 @@ label_CALL: {
 }
 
 label_FUNC: {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("FastVM").debug(
+            "Executing bytecode: {}",
+            opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
 #if ENABLE_FASTVM_JIT
@@ -463,7 +493,7 @@ label_FUNC: {
             for (size_t i = 0; i < argsCnt; ++i) {
                 argsStr += std::format("{} ", currFrame->get<slot_t>(args[i]));
             }
-            l.in("FastVM").debug(
+            GetDefaultLogger().in("FastVM").debug(
                 "Calling JIT function of graph <{}> with args: {}",
                 targetGraph->name(),
                 argsStr);
@@ -472,7 +502,10 @@ label_FUNC: {
         slot_t result;
         result = fn(funcFrame->slotBase(), currentJitCtx_);
         JIT_RESTORE_PC_BC();
-        l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
+        GetDefaultLogger().in("FastVM").debug(
+            "JIT function at pc={} returned result={}.",
+            pc,
+            result);
         framePool_.release(funcFrame);
         currFrame->set(bc->result, result);
         NEXT();
@@ -500,7 +533,7 @@ label_FUNC: {
                     for (size_t i = 0; i < argsCnt; ++i) {
                         argsStr += std::format("{} ", currFrame->get<slot_t>(args[i]));
                     }
-                    l.in("FastVM").debug(
+                    GetDefaultLogger().in("FastVM").debug(
                         "Calling JIT function of graph <{}> with args: {}",
                         targetGraph->name(),
                         argsStr);
@@ -540,7 +573,10 @@ label_FUNC: {
 }
 
 label_TAIL: {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("FastVM").debug(
+            "Executing bytecode: {}",
+            opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
 #if ENABLE_FASTVM_JIT
@@ -561,7 +597,7 @@ label_TAIL: {
             for (size_t i = 0; i < argsCnt; ++i) {
                 argsStr += std::format("{} ", lastFrame.get<slot_t>(args[i]));
             }
-            l.in("FastVM").debug(
+            GetDefaultLogger().in("FastVM").debug(
                 "Calling JIT function of graph <{}> with args: {}",
                 g->name(),
                 argsStr);
@@ -569,7 +605,10 @@ label_TAIL: {
         newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
         slot_t result;
         result = fn(newFrame->slotBase(), currentJitCtx_);
-        l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
+        GetDefaultLogger().in("FastVM").debug(
+            "JIT function at pc={} returned result={}.",
+            pc,
+            result);
         return result;
     }
     Graph *targetGraph = getFuncExtraGraph(bc);
@@ -594,7 +633,7 @@ label_TAIL: {
                 for (size_t i = 0; i < argsCnt; ++i) {
                     argsStr += std::format("{} ", lastFrame.get<slot_t>(args[i]));
                 }
-                l.in("FastVM").debug(
+                GetDefaultLogger().in("FastVM").debug(
                     "Calling JIT function of graph <{}> with args: {}",
                     g->name(),
                     argsStr);
@@ -602,7 +641,10 @@ label_TAIL: {
             newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
             slot_t result;
             result = fn(newFrame->slotBase(), currentJitCtx_);
-            l.in("FastVM").debug("JIT function at pc={} returned result={}.", pc, result);
+            GetDefaultLogger().in("FastVM").debug(
+                "JIT function at pc={} returned result={}.",
+                pc,
+                result);
             return result;
         }
     }
@@ -635,16 +677,20 @@ label_TAIL: {
 }
 
 label_OPER: {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("FastVM").debug(
+            "Executing bytecode: {}",
+            opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     {
         const data_arr_t nargs = bc->nargs();
         const data_arr_t wargs = bc->wargs();
         auto func              = bc->extra()->func;
-        EXEC_WHEN_DEBUG(l.in("FastVM").debug(
-            "Executing operator {}.",
-            context_->execMgr().getNameOfAnOperator(func)));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("FastVM").debug(
+                "Executing operator {}.",
+                context_->execMgr().getNameOfAnOperator(func)));
         FrameArgsView withView(*currFrame, wargs);
         FrameArgsView normView(*currFrame, nargs);
         slot_t result = func(withView, normView, *context_);
@@ -655,7 +701,10 @@ label_OPER: {
 }
 
 label_SCHD: {
-    EXEC_WHEN_DEBUG(l.in("FastVM").debug("Executing bytecode: {}", opCodeToString(*bc, context_)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("FastVM").debug(
+            "Executing bytecode: {}",
+            opCodeToString(*bc, context_)));
     opperf::ScopeTimer _timer(bc->opcode);
 
     const data_arr_t nargs = bc->nargs();

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Feb. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,12 +30,12 @@ std::optional<FunctionType *> StaticFuncTypeResolver::resolve(
         return std::nullopt; // reject
     }
     for (size_t i = 0; i < withCount; i++) {
-        if (!with[i]->assignable(funcType_->withTypeAt(i))) {
+        if (!funcType_->withTypeAt(i)->assignableFrom(with[i])) {
             return std::nullopt; // reject
         }
     }
     for (size_t i = 0; i < normCount; i++) {
-        if (!norm[i]->assignable(funcType_->normTypeAt(i))) {
+        if (!funcType_->normTypeAt(i)->assignableFrom(norm[i])) {
             return std::nullopt; // reject
         }
     }

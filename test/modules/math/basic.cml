@@ -1,0 +1,18 @@
+module main
+
+// math 模块基础测试
+import { sqrt, abs, round, ceil, floor, exp } from math
+
+func main(): int sync {
+    println("=== Math Module Basic Tests ===")
+
+    println("\n[1] sqrt(4) =", sqrt(4))
+    println("[2] abs(-3) =", abs(-3))
+    println("[3] round(3.7) =", round(3.7))
+    println("[4] ceil(3.2) =", ceil(3.2))
+    println("[5] floor(3.8) =", floor(3.8))
+    println("[6] exp(0.0) =", exp(0.0))
+
+    println("\n=== Math tests completed ===")
+    return 0
+}

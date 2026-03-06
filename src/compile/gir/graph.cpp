@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,22 @@ namespace GraphIR {
 // Graph 创建与节点管理
 // =============================================================================
 
+Graph::Graph(FunctionType *funcType, const graph_ptr_t &graph, const std::string &name)
+    : name_(name), outer_(graph), funcType_(funcType), staticDataType_(TupleType::create()),
+      runtimeDataType_(TupleType::create()), closureType_(TupleType::create()) {
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("GIR").debug(
+            "Created Graph: {}",
+            name_.empty() ? "<anonymous>" : name_));
+}
+
+Graph::~Graph() {
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("GIR").debug(
+            "Destroyed Graph: {}",
+            name_.empty() ? "<anonymous>" : name_));
+}
+
 graph_ptr_t
 Graph::create(FunctionType *funcType, const graph_ptr_t &graph, const std::string &name) {
     ASSERT(funcType->hasMetaInfo(), "Trying to create a Graph with incomplete FunctionType.");
@@ -37,7 +53,7 @@ Graph::create(FunctionType *funcType, const graph_ptr_t &graph, const std::strin
     }
     const size_t withCount = funcType->withTypesCount();
     for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
-        node_ptr_t portNode = PortNode::create(
+        Node *portNode = PortNode::create(
             *newGraph,
             funcType->normTypeAt(i),
             std::string(funcType->argNameAt(withCount + i)),
@@ -45,7 +61,7 @@ Graph::create(FunctionType *funcType, const graph_ptr_t &graph, const std::strin
         newGraph->addPort(portNode, false);
     }
     for (size_t i = 0; i < withCount; ++i) {
-        node_ptr_t portNode = PortNode::create(
+        Node *portNode = PortNode::create(
             *newGraph,
             funcType->withTypeAt(i),
             std::string(funcType->argNameAt(i)),
@@ -55,17 +71,23 @@ Graph::create(FunctionType *funcType, const graph_ptr_t &graph, const std::strin
     return newGraph;
 }
 
-void Graph::addNode(const node_ptr_t &node) {
+Node *Graph::ownNode(node_uptr_t node) {
+    Node *raw = node.get();
+    ownedNodes_.push_back(std::move(node));
+    return raw;
+}
+
+void Graph::addNode(Node *node) {
     nodes_.push_back(node);
     dirty_ = true;
 }
 
-void Graph::delNode(const node_ptr_t &node) {
+void Graph::delNode(Node *node) {
     nodes_.erase(std::remove(nodes_.begin(), nodes_.end(), node), nodes_.end());
     dirty_ = true;
 }
 
-void Graph::addPort(const node_ptr_t &node, bool isWith) {
+void Graph::addPort(Node *node, bool isWith) {
     if (isWith) {
         ASSERT(
             std::find(withPorts_.begin(), withPorts_.end(), node) == withPorts_.end(),
@@ -80,11 +102,11 @@ void Graph::addPort(const node_ptr_t &node, bool isWith) {
     dirty_ = true;
 }
 
-void Graph::addClosure(const node_ptr_t &node) {
+void Graph::addClosure(Node *node) {
     ASSERT(
         std::find(closure_.begin(), closure_.end(), node) == closure_.end(),
         "Closure node already exists in the graph.");
-    const auto &portNode = tt::as_shared<PortNode>(node);
+    auto *portNode = tt::as_ptr<PortNode>(node);
     closure_.push_back(node);
     funcType_->addClosureRef(portNode->name());
     dirty_ = true;
@@ -97,22 +119,22 @@ void Graph::parametrizeClosure() {
     rearrange();
 }
 
-const node_ptr_t &Graph::exitNode() const {
+Node *Graph::exitNode() const {
     ASSERT(exitNode_ != nullptr, std::format("Graph {} has no exit node.", name_));
     return exitNode_;
 }
-const node_ptr_t &Graph::outputNode() const {
+Node *Graph::outputNode() const {
     ASSERT(exitNode_ != nullptr, std::format("Graph {} has no exit node.", name_));
     return exitNode_->normInputs().front();
 }
 
-void Graph::setOutput(const node_ptr_t &node) {
+void Graph::setOutput(Node *node) {
     ASSERT(exitNode_ == nullptr, std::format("Graph {} already has an output node.", name_));
 
     Type *actualExitType = node->dataType();
     if (funcType_->hasExitType()) {
         Type *declaredExitType = funcType_->exitType();
-        if (!actualExitType->assignable(declaredExitType)) {
+        if (!declaredExitType->assignableFrom(actualExitType)) {
             throw DiagnosticBuilder::of(SemanticDiag::ReturnTypeMismatch)
                 .commit(
                     actualExitType->toString(),
@@ -220,7 +242,10 @@ void Graph::addSubGraph(const graph_ptr_t &graph) {
             existing.find(graph) == existing.end(),
             std::format("Subgraph with name '{}' already exists.", graph->mangledName()));
         existing.insert(graph);
-        l.in("GIR").debug("Added subgraph '{}' to graph '{}'.", graph->mangledName(), name_);
+        GetDefaultLogger().in("GIR").debug(
+            "Added subgraph '{}' to graph '{}'.",
+            graph->mangledName(),
+            name_);
     }
     graph->outer_ = shared_from_this();
 }
@@ -231,7 +256,10 @@ void Graph::delSubGraph(const graph_ptr_t &graph) {
     if (subGraphs_.find(graph->name()) != subGraphs_.end()) {
         auto &existing = subGraphs_[graph->name()];
         existing.erase(graph);
-        l.in("GIR").debug("Removed subgraph '{}' from graph '{}'.", graph->mangledName(), name_);
+        GetDefaultLogger().in("GIR").debug(
+            "Removed subgraph '{}' from graph '{}'.",
+            graph->mangledName(),
+            name_);
         if (existing.empty()) {
             subGraphs_.erase(graph->name());
         }
@@ -246,13 +274,16 @@ void Graph::addDependency(const graph_ptr_t &graph) {
     }
     dependencies_.insert(graph);
     graph->dependents_.insert(shared_from_this());
-    l.in("GIR").debug("Added dependency: Graph '{}' depends on graph '{}'.", name_, graph->name());
+    GetDefaultLogger().in("GIR").debug(
+        "Added dependency: Graph '{}' depends on graph '{}'.",
+        name_,
+        graph->name());
 }
 
 void Graph::delDependency(const graph_ptr_t &graph) {
     dependencies_.erase(graph);
     graph->dependents_.erase(shared_from_this());
-    l.in("GIR").debug(
+    GetDefaultLogger().in("GIR").debug(
         "Removed dependency: Graph '{}' no longer depends on graph '{}'.",
         name_,
         graph->name());
@@ -283,76 +314,81 @@ graph_ptr_t Graph::clone() const {
         newGraph->addDependency(dep);
     }
 
-    std::unordered_map<Node *, node_ptr_t> nodeMap;
+    std::unordered_map<Node *, Node *> nodeMap;
 
-    for (const auto &port : withPorts_) {
-        const auto &newPort = port->clone(*newGraph);
-        nodeMap[port.get()] = newPort;
+    for (Node *port : withPorts_) {
+        Node *newPort = port->clone(*newGraph);
+        nodeMap[port] = newPort;
         newGraph->withPorts_.push_back(newPort);
     }
-    for (const auto &port : normPorts_) {
-        const auto &newPort = port->clone(*newGraph);
-        nodeMap[port.get()] = newPort;
+    for (Node *port : normPorts_) {
+        Node *newPort = port->clone(*newGraph);
+        nodeMap[port] = newPort;
         newGraph->normPorts_.push_back(newPort);
     }
-    for (const auto &closureNode : closure_) {
-        const auto &newClosureNode = closureNode->clone(*newGraph);
-        nodeMap[closureNode.get()] = newClosureNode;
+    for (Node *closureNode : closure_) {
+        Node *newClosureNode = closureNode->clone(*newGraph);
+        nodeMap[closureNode] = newClosureNode;
         newGraph->closure_.push_back(newClosureNode);
     }
-    for (const auto &node : nodes_) {
-        const auto &newNode    = node->clone(*newGraph);
-        nodeMap[newNode.get()] = newNode;
+    for (Node *node : nodes_) {
+        Node *newNode = node->clone(*newGraph);
+        nodeMap[node] = newNode;
     }
 
-    for (const auto &[oldNodePtr, newNodePtr] : nodeMap) {
-        for (const auto &withInput : oldNodePtr->withInputs()) {
-            Node::link(LinkType::With, nodeMap[withInput.get()], newNodePtr);
+    for (const auto &[oldNode, newNode] : nodeMap) {
+        for (auto *withInput : oldNode->withInputs()) {
+            Node::link(LinkType::With, nodeMap[withInput], newNode);
         }
-        for (const auto &normInput : oldNodePtr->normInputs()) {
-            Node::link(LinkType::Norm, nodeMap[normInput.get()], newNodePtr);
+        for (auto *normInput : oldNode->normInputs()) {
+            Node::link(LinkType::Norm, nodeMap[normInput], newNode);
         }
-        for (const auto &ctrlInput : oldNodePtr->ctrlInputs()) {
-            Node::link(LinkType::Ctrl, nodeMap[ctrlInput.get()], newNodePtr);
+        for (auto *ctrlInput : oldNode->ctrlInputs()) {
+            Node::link(LinkType::Ctrl, nodeMap[ctrlInput], newNode);
         }
     }
 
     ASSERT(exitNode_ != nullptr, "Cloning a graph without output node.");
-    const auto &outputNode = exitNode_->normInputs().front();
-    const auto &newOutput  = nodeMap[outputNode.get()];
-    const auto &newExitNode =
-        ExitNode::create(*newGraph, newOutput->dataType(), newOutput->index());
+    Node *outputNode  = exitNode_->normInputs().front();
+    Node *newOutput   = nodeMap[outputNode];
+    Node *newExitNode = ExitNode::create(*newGraph, newOutput->dataType(), newOutput->index());
     Node::link(LinkType::Norm, newOutput, newExitNode);
     newGraph->exitNode_ = newExitNode;
 
     return newGraph;
 }
 
-node_ptr_t Graph::inlineNode(const node_ptr_t &node, bool forceSync) {
+Node *Graph::inlineNode(Node *node, bool forceSync) {
     if (node->graph() != *this) {
-        EXEC_WHEN_DEBUG(l.in("GIR").debug(
-            "Cannot inline node {} from different graph {} into graph {}.",
-            node->toString(),
-            node->graph().name(),
-            name_));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("GIR").debug(
+                "Cannot inline node {} from different graph {} into graph {}.",
+                node->toString(),
+                node->graph().name(),
+                name_));
         return nullptr;
     }
 
     if (node->type() != NodeType::FUNC) {
-        EXEC_WHEN_DEBUG(l.in("GIR").debug(
-            "Cannot inline non-FUNC node {} in graph {}.",
-            node->toString(),
-            name_));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("GIR").debug(
+                "Cannot inline non-FUNC node {} in graph {}.",
+                node->toString(),
+                name_));
         return nullptr;
     }
 
-    EXEC_WHEN_DEBUG(l.in("GIR").debug("Inlining node {} in graph {}.", node->toString(), name_));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("GIR").debug(
+            "Inlining node {} in graph {}.",
+            node->toString(),
+            name_));
 
-    const auto &funcNode = tt::as_shared<FuncNode>(node);
-    auto &targetGraph    = funcNode->func()->graph();
+    auto *funcNode    = tt::as_ptr<FuncNode>(node);
+    auto &targetGraph = funcNode->func()->graph();
 
-    node_ptr_t syncNode = SyncNode::create(*this);
-    std::unordered_map<Node *, node_ptr_t> nodeMap;
+    Node *syncNode = SyncNode::create(*this);
+    std::unordered_map<Node *, Node *> nodeMap;
 
     const auto &normPorts  = targetGraph.normPorts();
     const auto &normInputs = node->normInputs();
@@ -361,12 +397,12 @@ node_ptr_t Graph::inlineNode(const node_ptr_t &node, bool forceSync) {
         "Number of norm ports and norm inputs do not match for inlining.");
     for (size_t i = 0; i < normPorts.size(); ++i) {
         if (forceSync) {
-            node_ptr_t nrefNode = NRefNode::create(*this);
+            Node *nrefNode = NRefNode::create(*this);
             Node::link(LinkType::Ctrl, syncNode, nrefNode);
             Node::link(LinkType::Norm, normInputs[i], nrefNode);
-            nodeMap[normPorts[i].get()] = nrefNode;
+            nodeMap[normPorts[i]] = nrefNode;
         } else {
-            nodeMap[normPorts[i].get()] = normInputs[i];
+            nodeMap[normPorts[i]] = normInputs[i];
         }
     }
 
@@ -377,64 +413,61 @@ node_ptr_t Graph::inlineNode(const node_ptr_t &node, bool forceSync) {
         "Number of with ports and with inputs do not match for inlining.");
     for (size_t i = 0; i < withPorts.size(); ++i) {
         if (forceSync) {
-            node_ptr_t nrefNode = NRefNode::create(*this);
+            Node *nrefNode = NRefNode::create(*this);
             Node::link(LinkType::Ctrl, syncNode, nrefNode);
             Node::link(LinkType::Norm, withInputs[i], nrefNode);
-            nodeMap[withPorts[i].get()] = nrefNode;
+            nodeMap[withPorts[i]] = nrefNode;
         } else {
-            nodeMap[withPorts[i].get()] = withInputs[i];
+            nodeMap[withPorts[i]] = withInputs[i];
         }
     }
 
     ASSERT(targetGraph.closure().empty(), "Cannot inline a graph with closure.");
 
-    for (const auto &n : targetGraph.nodes()) {
-        const auto &clonedNode = n->clone(*this);
-        nodeMap[n.get()]       = clonedNode;
+    for (Node *n : targetGraph.nodes()) {
+        Node *clonedNode = n->clone(*this);
+        nodeMap[n]       = clonedNode;
     }
 
-    for (const auto &[oldNodePtr, newNodePtr] : nodeMap) {
-        if (forceSync && oldNodePtr->inDegree() == 0) {
-            if (oldNodePtr->type() == NodeType::PORT) {
+    for (const auto &[oldNode, newNode] : nodeMap) {
+        if (forceSync && oldNode->inDegree() == 0) {
+            if (oldNode->type() == NodeType::PORT) {
                 continue;
             }
-            Node::link(LinkType::Ctrl, syncNode, newNodePtr);
+            Node::link(LinkType::Ctrl, syncNode, newNode);
         }
 
-        for (const auto &withInput : oldNodePtr->withInputs()) {
+        for (auto *withInput : oldNode->withInputs()) {
             ASSERT(
-                nodeMap.find(withInput.get()) != nodeMap.end(),
+                nodeMap.find(withInput) != nodeMap.end(),
                 "Input node not found in node map during inlining.");
-            const auto &t = nodeMap[withInput.get()];
-            Node::link(LinkType::With, t, newNodePtr);
+            Node::link(LinkType::With, nodeMap[withInput], newNode);
         }
-        for (const auto &normInput : oldNodePtr->normInputs()) {
+        for (auto *normInput : oldNode->normInputs()) {
             ASSERT(
-                nodeMap.find(normInput.get()) != nodeMap.end(),
+                nodeMap.find(normInput) != nodeMap.end(),
                 "Input node not found in node map during inlining.");
-            const auto &t = nodeMap[normInput.get()];
-            Node::link(LinkType::Norm, t, newNodePtr);
+            Node::link(LinkType::Norm, nodeMap[normInput], newNode);
         }
-        for (const auto &ctrlInput : oldNodePtr->ctrlInputs()) {
+        for (auto *ctrlInput : oldNode->ctrlInputs()) {
             ASSERT(
-                nodeMap.find(ctrlInput.get()) != nodeMap.end(),
+                nodeMap.find(ctrlInput) != nodeMap.end(),
                 "Input node not found in node map during inlining.");
-            const auto &t = nodeMap[ctrlInput.get()];
-            Node::link(LinkType::Ctrl, t, newNodePtr);
+            Node::link(LinkType::Ctrl, nodeMap[ctrlInput], newNode);
         }
     }
 
-    const auto &targetOutput = targetGraph.exitNode()->normInputs().front();
-    ASSERT(nodeMap.find(targetOutput.get()) != nodeMap.end(), "Target output node not found.");
-    const auto &inlinedOutput = nodeMap[targetOutput.get()];
+    Node *targetOutput = targetGraph.exitNode()->normInputs().front();
+    ASSERT(nodeMap.find(targetOutput) != nodeMap.end(), "Target output node not found.");
+    Node *inlinedOutput = nodeMap[targetOutput];
 
-    for (const auto &out : node->normOutputs()) {
+    for (auto *out : node->normOutputs()) {
         Node::link(LinkType::Norm, inlinedOutput, out);
     }
-    for (const auto &out : node->withOutputs()) {
+    for (auto *out : node->withOutputs()) {
         Node::link(LinkType::With, inlinedOutput, out);
     }
-    for (const auto &out : node->ctrlOutputs()) {
+    for (auto *out : node->ctrlOutputs()) {
         Node::link(LinkType::Ctrl, inlinedOutput, out);
     }
 
@@ -443,34 +476,34 @@ node_ptr_t Graph::inlineNode(const node_ptr_t &node, bool forceSync) {
 
 void Graph::rearrange() {
     if (!dirty_) {
-        l.in("GIR").debug("Graph {} is not dirty, no need to rearrange.", name_);
+        GetDefaultLogger().in("GIR").debug("Graph {} is not dirty, no need to rearrange.", name_);
         return;
     }
 
-    l.in("GIR").debug("Rearranging graph {}.", name_);
+    GetDefaultLogger().in("GIR").debug("Rearranging graph {}.", name_);
 
     data_idx_t stcIdx = -1, rtmIdx = 1;
     data_vec_t newStaticDataArr{Data::null()};
     type_vec_t staticDataTypes{Type::Void()}, runtimeDataTypes{Type::Void()}, closureTypes;
 
-    for (auto &node : normPorts_) {
+    for (Node *node : normPorts_) {
         node->setIndex(rtmIdx++);
         runtimeDataTypes.push_back(node->dataType());
     }
-    for (auto &node : withPorts_) {
+    for (Node *node : withPorts_) {
         node->setIndex(rtmIdx++);
         runtimeDataTypes.push_back(node->dataType());
     }
-    for (auto &node : closure_) {
+    for (Node *node : closure_) {
         node->setIndex(rtmIdx++);
         runtimeDataTypes.push_back(node->dataType());
         closureTypes.push_back(node->dataType());
     }
-    for (auto &node : nodes_) {
+    for (Node *node : nodes_) {
         NodeType type = node->type();
         ASSERT(type != NodeType::DREF, "DREF nodes should not exist in finalized graph.");
         if (type == NodeType::DATA) {
-            const auto &dataNode = tt::as_shared<DataNode>(node);
+            auto *dataNode = tt::as_ptr<DataNode>(node);
             newStaticDataArr.push_back(dataNode->data());
             dataNode->setIndex(stcIdx--);
             staticDataTypes.push_back(dataNode->dataType());

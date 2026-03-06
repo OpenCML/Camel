@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,7 +32,7 @@ namespace GraphIR {
 
 using void_ptr_t = void *;
 
-using node_scope_t      = Scope<std::string, node_ptr_t>;
+using node_scope_t      = Scope<std::string, Node *>;
 using node_scope_ptr_t  = std::shared_ptr<node_scope_t>;
 using graph_scope_t     = Scope<std::string, std::shared_ptr<graph_vec_t>>;
 using graph_scope_ptr_t = std::shared_ptr<graph_scope_t>;
@@ -64,19 +64,21 @@ class Builder {
     // 记录该 Graph 是否被已经被调用过（通过 createFuncDataNode 被使用）
     // 已经被调用过的 Graph 不能再追加闭包捕获
     std::unordered_set<Graph *> usedGraphs_;
-    std::unordered_map<Node *, node_wptr_t> nodeModifierMap_;
-    node_ptr_t lastSyncedNode_;
+    std::unordered_map<Node *, Node *> nodeModifierMap_;
+    Node *lastSyncedNode_ = nullptr;
 
-    std::optional<node_ptr_t> nodeAt(const std::string &name) {
-        EXEC_WHEN_DEBUG([&] {
+    std::optional<Node *> nodeAt(const std::string &name) {
+        EXEC_WHEN_DEBUG({
             std::stringstream ss;
             nodeScope_->dump(ss);
-            l.in("GIR Builder").debug("Accessing node '{}' from scope {}", name, ss.str());
-        }());
+            GetDefaultLogger()
+                .in("GIR Builder")
+                .debug("Accessing node '{}' from scope {}", name, ss.str());
+        });
         return nodeScope_->get(name);
     }
     std::optional<std::shared_ptr<graph_vec_t>> graphsAt(const std::string &name) {
-        EXEC_WHEN_DEBUG([&] {
+        EXEC_WHEN_DEBUG({
             std::stringstream ss;
             graphScope_->dump(
                 ss,
@@ -88,40 +90,42 @@ class Builder {
                         os << graph->toString() << " ";
                     }
                 });
-            l.in("GIR Builder").debug("Accessing graph '{}' from scope {}", name, ss.str());
-        }());
+            GetDefaultLogger()
+                .in("GIR Builder")
+                .debug("Accessing graph '{}' from scope {}", name, ss.str());
+        });
         return graphScope_->get(name);
     }
 
-    bool insertNode(const std::string &name, const node_ptr_t &node);
+    bool insertNode(const std::string &name, Node *node);
     bool insertGraph(const std::string &name, const graph_ptr_t &graph);
 
     graph_ptr_t enterScope(FunctionType *funcType, const std::string &name = "");
     void leaveScope();
 
-    node_ptr_t
+    Node *
     createFuncDataNode(const graph_ptr_t &graph, bool getCallableNode, bool allowParameterization);
-    node_ptr_t resolveCrossGraphRef(const node_ptr_t &node, const std::string &name);
-    node_ptr_t resolveNodeByRef(const std::string &name);
+    Node *resolveCrossGraphRef(Node *node, const std::string &name);
+    Node *resolveNodeByRef(const std::string &name);
 
     std::any visit(const GCT::node_ptr_t &gct);
 
     void_ptr_t visitDeclNode(const GCT::node_ptr_t &gct);
     graph_ptr_t visitFuncNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitDataNode(const GCT::node_ptr_t &gct);
+    Node *visitDataNode(const GCT::node_ptr_t &gct);
     Type *visitTypeNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitNRefNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitDRefNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitCastNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitVariNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitWaitNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitLinkNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitWithNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitAccsNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitBrchNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitAnnoNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitExitNode(const GCT::node_ptr_t &gct);
-    node_ptr_t visitExecNode(const GCT::node_ptr_t &gct);
+    Node *visitNRefNode(const GCT::node_ptr_t &gct);
+    Node *visitDRefNode(const GCT::node_ptr_t &gct);
+    Node *visitCastNode(const GCT::node_ptr_t &gct);
+    Node *visitVariNode(const GCT::node_ptr_t &gct);
+    Node *visitWaitNode(const GCT::node_ptr_t &gct);
+    Node *visitLinkNode(const GCT::node_ptr_t &gct);
+    Node *visitWithNode(const GCT::node_ptr_t &gct);
+    Node *visitAccsNode(const GCT::node_ptr_t &gct);
+    Node *visitBrchNode(const GCT::node_ptr_t &gct);
+    Node *visitAnnoNode(const GCT::node_ptr_t &gct);
+    Node *visitExitNode(const GCT::node_ptr_t &gct);
+    Node *visitExecNode(const GCT::node_ptr_t &gct);
     void_ptr_t visitExptNode(const GCT::node_ptr_t &gct);
 };
 

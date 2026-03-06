@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -171,10 +171,12 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     const auto &path = load->getPath();
     const auto &refs = load->getRefs();
 
-    // Attempt to import the module
+    // Attempt to import the module (importModule throws ModuleNotFound with detail on failure)
     const module_ptr_t &mod = context_->importModule(path, module_->name());
     if (!mod) {
-        diags_->of(SemanticDiag::ModuleNotFound).at(load->tokenRange()).commit(path);
+        diags_->of(SemanticDiag::ModuleNotFound)
+            .at(load->tokenRange())
+            .commit(path, "import returned empty.");
         throw BuildAbortException();
     }
 
@@ -919,27 +921,27 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     case AST::ReservedDataOp::As: {
         const auto &rhsASTNode = ast->atAs<AST::TypeLoad>(1);
         const auto &dataNode   = visitData(lhsASTNode);
-        const auto &type       = visitType(rhsASTNode);
+        const auto &dstType    = visitType(rhsASTNode);
         if (dataNode->type() == LoadType::DATA) {
             const auto &dataLoad = dataNode->loadAs<DataLoad>();
             const auto &data     = dataLoad->data();
-            if (data->type()->castSafetyTo(type) != CastSafety::Safe) {
+            if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
                 diags_->of(SemanticDiag::LiteralStaticCastFailed)
                     .at(ast->load()->tokenRange())
-                    .commit(data->toString(), type->toString());
+                    .commit(data->toString(), dstType->toString());
                 throw BuildAbortException();
             }
-            auto convertedData = data->convertTo(type);
+            auto convertedData = data->convertTo(dstType);
             if (convertedData) {
                 res = createNodeAs<DataLoad>(convertedData);
             } else {
                 diags_->of(SemanticDiag::LiteralStaticCastFailed)
                     .at(ast->load()->tokenRange())
-                    .commit(data->toString(), type->toString());
+                    .commit(data->toString(), dstType->toString());
                 throw BuildAbortException();
             }
         } else {
-            res = createNodeAs<CastLoad>(type);
+            res = createNodeAs<CastLoad>(dstType);
             *res << dataNode;
         }
     } break;

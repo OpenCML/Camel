@@ -1,12 +1,12 @@
 # Camel: A Graph-Native Programming Language for Unified AI Development
 
-[中文简体](README.cn.md) | English
+[中文简体](docs/README.cn.md) | English
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![WIP](https://img.shields.io/badge/status-WIP-yellow.svg)
 
 <p align="center">
-  <img src='https://www.github.com/OpenCML/ImagesHosting/raw/main/camel_logo_text.png' width=800>
+  <img src='https://www.github.com/OpenCML/ImagesHosting/raw/main/GetDefaultLogger()o_text.png' width=800>
 </p>
 
 Camel is a **graph-native**, **multi-stage**, and **type-driven** domain-specific language (DSL) designed to bridge the gap between AI research and production deployment. It combines the elegance of **functional programming** with the expressiveness of **declarative programming**. It provides **born-async semantics** and highly **customizable graph manipulations**, enabling developers to write **high-level code** that compiles to **near-native performance**.
@@ -181,9 +181,11 @@ func main(): int sync {
 
 We welcome contributions! Check out our:
 
-- [WIP] [Issue Tracker](https://github.com/OpenCML/Camel/issues) - Good first issues labeled `beginner-friendly`
-- [WIP] [Roadmap](ROADMAP.md) - Planned features like quantum backend support
-- [WIP] [Style Guide](CONTRIBUTING.md#style-guide) - Code formatting and design patterns
+- [Contributing Guide](CONTRIBUTING.md) - How to contribute, development setup, and style guide
+- [Code of Conduct](CODE_OF_CONDUCT.md) - Community standards and behavior
+- [Security Policy](SECURITY.md) - How to report security vulnerabilities
+- [Issue Tracker](https://github.com/OpenCML/Camel/issues) - Good first issues labeled `beginner-friendly`
+- [Roadmap](ROADMAP.md) - Planned features (WIP)
 
 ## 📜 License
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,7 +98,7 @@ class Frame : public Object {
         T res;
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     idx < dynamicAreaType_->size(),
                     std::format(
@@ -112,11 +112,11 @@ class Frame : public Object {
                         "[{}] Accessing uninitialized slot: idx = {}",
                         formatAddress(const_cast<Frame *>(this), true),
                         index));
-            }());
+            });
             res = fromSlot<T>(dynamicArea_[idx]);
         } else {
             size_t idx = static_cast<size_t>(-index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     idx < staticArea_->size(),
                     std::format(
@@ -124,57 +124,57 @@ class Frame : public Object {
                         formatAddress(const_cast<Frame *>(this), true),
                         idx,
                         staticArea_->size()));
-            }());
+            });
             res = staticArea_->get<T>(idx);
         }
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             std::ostringstream oss;
             printSlot(oss, toSlot(res), typeAt<Type>(index));
-            l.in("Frame").info(
+            GetDefaultLogger().in("Frame").info(
                 "[{}] Getting data of graph <{}> at index {} ({}): {}",
                 formatAddress(const_cast<Frame *>(this), true),
                 graph_->name(),
                 index,
                 typeCodeToString(codeAt(index)),
                 oss.str());
-        }());
+        });
         return res;
     }
 
     template <typename T> void set(GraphIR::data_idx_t index, T value) {
         ASSERT(index != 0, "Data index is invalid.");
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             std::ostringstream oss;
             printSlot(oss, toSlot(value), typeAt<Type>(index));
-            l.in("Frame").info(
+            GetDefaultLogger().in("Frame").info(
                 "[{}] Setting data of graph <{}> at index {} ({}): {}",
                 formatAddress(this, true),
                 graph_->name(),
                 index,
                 typeCodeToString(codeAt(index)),
                 oss.str());
-        }());
+        });
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     idx < dynamicAreaType_->size(),
                     std::format(
                         "Invalid argument index, idx = {}, size = {}",
                         idx,
                         dynamicAreaType_->size()));
-            }());
+            });
             dynamicArea_[idx] = toSlot(value);
         } else {
             size_t idx = static_cast<size_t>(-index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     idx < staticArea_->size(),
                     std::format(
                         "Invalid static data index, idx = {}, size = {}",
                         idx,
                         staticArea_->size()));
-            }());
+            });
             staticArea_->set<T>(idx, value);
         }
     }
@@ -256,22 +256,22 @@ class FrameView {
         T res;
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     dynamicArea_[idx] != kDebugUninitializedSlot,
                     std::format("Accessing uninitialized slot: idx = {}", index));
-            }());
+            });
             res = fromSlot<T>(dynamicArea_[idx]);
         } else { // 静态区：index < 0
             size_t idx = static_cast<size_t>(-index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     idx < staticArea_->size(),
                     std::format(
                         "Invalid static data index, idx = {}, size = {}",
                         idx,
                         staticArea_->size()));
-            }());
+            });
             res = staticArea_->get<T>(idx);
         }
         return res;
@@ -284,14 +284,14 @@ class FrameView {
             dynamicArea_[idx] = toSlot(value);
         } else { // 静态区
             size_t idx = static_cast<size_t>(-index);
-            EXEC_WHEN_DEBUG([&]() {
+            EXEC_WHEN_DEBUG({
                 ASSERT(
                     idx < staticArea_->size(),
                     std::format(
                         "Invalid static data index, idx = {}, size = {}",
                         idx,
                         staticArea_->size()));
-            }());
+            });
             staticArea_->set<T>(idx, value);
         }
     }
@@ -316,28 +316,30 @@ class FramePool {
     ~FramePool() { std::free(base_); }
 
     inline Frame *_acquire(GraphIR::Graph *graph) {
-        EXEC_WHEN_DEBUG([&]() {
-            l.in("FramePool")
+        EXEC_WHEN_DEBUG({
+            GetDefaultLogger()
+                .in("FramePool")
                 .info(
                     "[{}] Acquire request for graph <{}>, top = {}, end = {}",
                     formatAddress(this, true),
                     graph ? graph->name() : "(null)",
                     formatAddress(top_, true),
                     formatAddress(end_, true));
-        }());
+        });
 
         // 尝试复用
         Frame *lastFrame = reinterpret_cast<Frame *>(top_);
         if (lastFrame->graph_ == graph) {
-            EXEC_WHEN_DEBUG([&]() {
-                l.in("FramePool")
+            EXEC_WHEN_DEBUG({
+                GetDefaultLogger()
+                    .in("FramePool")
                     .info(
                         "[{}] Reusing existing frame of graph <{}> at {}",
                         formatAddress(this, true),
                         graph ? graph->name() : "(null)",
                         formatAddress(lastFrame, true));
                 frames_.push_back(lastFrame);
-            }());
+            });
 
             top_ = reinterpret_cast<std::byte *>(lastFrame->next_);
             return lastFrame;
@@ -347,42 +349,45 @@ class FramePool {
         FrameMeta *meta = graph->getExtra<FrameMeta, 0>();
         if (meta == nullptr) {
             meta = installFrameMetaInfoForGraph(graph);
-            EXEC_WHEN_DEBUG([&]() {
-                l.in("FramePool")
+            EXEC_WHEN_DEBUG({
+                GetDefaultLogger()
+                    .in("FramePool")
                     .info(
                         "[{}] Installed FrameMeta for graph <{}>",
                         formatAddress(this, true),
                         graph->name());
-            }());
+            });
         }
         size_t frameSize = meta->frameSize;
         if (top_ + frameSize > end_) {
-            EXEC_WHEN_DEBUG([&]() {
-                l.in("FramePool")
+            EXEC_WHEN_DEBUG({
+                GetDefaultLogger()
+                    .in("FramePool")
                     .error(
                         "[{}] Out of memory: top = {}, need = {}, end = {}",
                         formatAddress(this, true),
                         formatAddress(top_, true),
                         frameSize,
                         formatAddress(end_, true));
-            }());
+            });
             throw std::bad_alloc{};
         }
         Frame *frame = new (top_) Frame(graph, meta->staticArea, meta->runtimeDataType);
 
-        EXEC_WHEN_DEBUG([&]() {
-            l.in("FramePool")
+        EXEC_WHEN_DEBUG({
+            GetDefaultLogger()
+                .in("FramePool")
                 .info(
                     "[{}] Allocated new Frame for graph <{}> at {}, size = {}",
                     formatAddress(this, true),
                     graph->name(),
                     formatAddress(frame, true),
                     frameSize);
-        }());
+        });
 
         top_ += frameSize;
 
-        EXEC_WHEN_DEBUG([&]() { frames_.push_back(frame); }());
+        EXEC_WHEN_DEBUG({ frames_.push_back(frame); });
 
         return frame;
     }
@@ -396,8 +401,9 @@ class FramePool {
     }
 
     inline void release(Frame *frame) {
-        EXEC_WHEN_DEBUG([&]() {
-            l.in("FramePool")
+        EXEC_WHEN_DEBUG({
+            GetDefaultLogger()
+                .in("FramePool")
                 .info(
                     "[{}] Releasing frame of graph <{}> at {}",
                     formatAddress(this, true),
@@ -414,19 +420,20 @@ class FramePool {
                     "{}.",
                     last->graph_->name(),
                     formatAddress(last, true)));
-        }());
+        });
 
         frame->next_ = reinterpret_cast<Frame *>(top_);
         top_         = reinterpret_cast<std::byte *>(frame);
 
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             frames_.pop_back();
-            l.in("FramePool")
+            GetDefaultLogger()
+                .in("FramePool")
                 .info(
                     "[{}] Frame released. New top = {}",
                     formatAddress(this, true),
                     formatAddress(top_, true));
-        }());
+        });
     }
 
     void foreach (const std::function<void(Frame *)> &fn) const {
@@ -453,28 +460,28 @@ class FrameArgsView : public ArgsView {
   public:
     FrameArgsView(Frame &frame, const data_arr_t &indices) : frame_(frame), indices_(indices) {}
 
-    size_t size() const override { return indices_.size; }
+    size_t size() const override { return indices_.size(); }
 
     slot_t slot(size_t index) const override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         return frame_.get<slot_t>(dataIdx);
     }
 
     void setSlot(size_t index, slot_t value) override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         frame_.set(dataIdx, value);
     }
 
     TypeCode code(size_t index) const override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         return frame_.codeAt(dataIdx);
     }
 
     Type *type(size_t index) const override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         return frame_.typeAt<Type>(dataIdx);
     }
@@ -498,10 +505,10 @@ class SlotArgsView : public ArgsView {
         : slots_(slots), staticArea_(staticArea), runtimeDataType_(runtimeDataType),
           staticDataType_(staticDataType), indices_(indices) {}
 
-    size_t size() const override { return indices_.size; }
+    size_t size() const override { return indices_.size(); }
 
     slot_t slot(size_t index) const override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             return slots_[dataIdx];
@@ -509,7 +516,7 @@ class SlotArgsView : public ArgsView {
     }
 
     void setSlot(size_t index, slot_t value) override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             slots_[dataIdx] = value;
@@ -518,7 +525,7 @@ class SlotArgsView : public ArgsView {
     }
 
     TypeCode code(size_t index) const override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             return runtimeDataType_->codeAt(static_cast<size_t>(dataIdx));
@@ -526,7 +533,7 @@ class SlotArgsView : public ArgsView {
     }
 
     Type *type(size_t index) const override {
-        ASSERT(index < indices_.size, "ArgsView index out of range");
+        ASSERT(index < indices_.size(), "ArgsView index out of range");
         GraphIR::data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             return runtimeDataType_->typeAt(static_cast<size_t>(dataIdx));

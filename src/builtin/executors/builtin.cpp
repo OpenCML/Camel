@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,23 +23,14 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
 
-#include "../operators/algo.h"
 #include "../operators/cast.h"
 #include "../operators/io.h"
 #include "../operators/macro.h"
-#include "../operators/math.h"
 #include "../operators/ops.h"
-#include "../operators/os.h"
 #include "../operators/other.h"
-#include "../operators/plot.h"
 #include "../operators/profiler.h"
-#include "../operators/rand.h"
-#include "../operators/statistics.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
-#include "../operators/tensor.h"
-#include "../operators/this.h"
-#include "../operators/time.h"
 
 const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     static const std::unordered_map<std::string, operator_t> map = {
@@ -222,70 +213,10 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/inv_l", __builtin__inv__},
         {"op/inv", __builtin__inv__},
 
-        {"io/input", __input__},
-        {"io/print", __print__},
-        {"io/println", __println__},
-
-        // tensor
-        {"tensor/eye", __tensor_eye__},
-        {"tensor/zeros", __tensor_zeros__},
-        {"tensor/ones", __tensor_ones__},
-        {"tensor/diag", __tensor_diag__},
-        {"tensor/linspace", __tensor_linspace__},
-        {"tensor/arange", __tensor_arange__},
-        {"tensor/random", __tensor_random__},
-        {"tensor/randn", __tensor_randn__},
-
-        {"tensor/shape", __tensor_shape__},
-
-        {"tensor/add", __tensor_add__},
-        {"tensor/subtract", __tensor_subtract__},
-        {"tensor/multiply", __tensor_multiply__},
-        {"tensor/matmul", __tensor_matmul__},
-        {"tensor/divide", __tensor_divide__},
-
-        {"tensor/reshape", __tensor_reshape__},
-        {"tensor/transpose", __tensor_transpose__},
-        {"tensor/flatten", __tensor_flatten__},
-
-        {"tensor/concat", __tensor_concat__},
-        {"tensor/stack", __tensor_stack__},
-
-        {"tensor/sum", __tensor_sum__},
-        {"tensor/mean", __tensor_mean__},
-        {"tensor/min", __tensor_min__},
-        {"tensor/max", __tensor_max__},
-        {"tensor/argmin", __tensor_argmin__},
-        {"tensor/argmax", __tensor_argmax__},
-        {"tensor/std", __tensor_std__},
-
-        {"tensor/norm_l1", __tensor_norm_l1__},
-        {"tensor/norm_l2", __tensor_norm_l2__},
-        {"tensor/norm_squared_l2", __tensor_norm_squared_l2__},
-
-        {"tensor/sin", __tensor_sin__},
-        {"tensor/cos", __tensor_cos__},
-        {"tensor/exp", __tensor_exp__},
-        {"tensor/log", __tensor_log__},
-        {"tensor/sqrt", __tensor_sqrt__},
-        {"tensor/matpow", __tensor_matpow__},
-        {"tensor/pow", __tensor_pow__},
-
-        {"tensor/sinh", __tensor_sinh__},
-        {"tensor/cosh", __tensor_cosh__},
-        {"tensor/tanh", __tensor_tanh__},
-
-        {"tensor/show", __tensor_show__},
-
-        // os
-        {"os/exit", __exit__},
-        {"os/sleep", __sleep__},
-        {"os/whoami", __whoami__},
-        {"os/set_terminal_raw_mode", __set_terminal_raw_mode__},
-        {"os/has_input", __has_input__},
-        {"os/get_char", __get_char__},
-        {"os/get_chars", __get_chars__},
-        {"os/clear_input_buffer", __clear_input_buffer__},
+        // io（内置 input/print/println）
+        {"io/input", __op_input__},
+        {"io/print", __op_print__},
+        {"io/println", __op_println__},
 
         // string
         {"str/format", __format__},
@@ -315,76 +246,11 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"struct/contains_str", __not_implemented__},
         {"struct/contains_arr", __contains_arr__},
 
-        // math
-        {"math/abs_i", __abs__},
-        {"math/abs_l", __abs__},
-        {"math/abs_f", __abs__},
-        {"math/abs_d", __abs__},
-
-        {"math/exp_f", __exp__},
-        {"math/exp_d", __exp__},
-
-        {"math/round_f", __round__},
-        {"math/round_d", __round__},
-
-        {"math/ceil_f", __ceil__},
-        {"math/ceil_d", __ceil__},
-
-        {"math/floor_f", __floor__},
-        {"math/floor_d", __floor__},
-
-        {"math/bin_i", __bin__},
-        {"math/bin_l", __bin__},
-
-        {"math/oct_i", __oct__},
-        {"math/oct_l", __oct__},
-
-        {"math/hex_i", __hex__},
-        {"math/hex_l", __hex__},
-
-        {"math/sqrt", __sqrt__},
-
-        // time
-        {"time/now", __now__},
-        {"time/strftime", __strftime__},
-        {"time/strptime", __strptime__},
-
-        // rand
-        {"rand/seed", __seed__},
-        {"rand/rand", __rand__},
-        {"rand/randn", __randn__},
-        {"rand/randint", __randint__},
-        {"rand/choice", __choice__},
-        {"rand/sample", __sample__},
-        {"rand/shuffle", __shuffle__},
-
-        // algo
-        // {"algo/argsort", __argsort__},
-        {"algo/sort", __quick_sort_inplace__}, // 默认是快速排序
-        {"algo/sorted", __quick_sort__},
-        {"algo/insert_sort", __insert_sort_inplace__},
-        {"algo/insert_sorted", __insert_sort__},
-        {"algo/quick_sort", __quick_sort_inplace__},
-        {"algo/quick_sorted", __quick_sort__},
-        {"algo/merge_sort", __merge_sort_inplace__},
-        {"algo/merge_sorted", __merge_sort__},
-        {"algo/merge_sorted_arrays", __merge_sorted_arrays__}, // 双指针合并法
-
-        // statistics
-        {"statistics/mean", __mean__},
-        {"statistics/stdev", __stdev__},
-
-        // plot
-        {"plot/plot", __plot__},
-
         // profiler
         {"profiler/begin", __profiler_begin__},
         {"profiler/end", __profiler_end__},
         {"profiler/instant", __profiler_instant__},
         {"profiler/enable", __profiler_enable__},
-
-        // this
-        {"zen", __zen__},
 
         // macro
         {"macro/cmp", __cmp__},
@@ -398,8 +264,9 @@ executor_ptr_t BasicBuiltinExecutor::create(context_ptr_t ctx) {
     return std::make_shared<BasicBuiltinExecutor>(ctx);
 }
 
-void BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
-    EXEC_WHEN_DEBUG(l.in("BasicExec").debug("Evaluating operator of URI: {}", uri));
+void BasicBuiltinExecutor::eval(std::string uri, GraphIR::Node *self, Frame &frame) {
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("BasicExec").debug("Evaluating operator of URI: {}", uri));
     auto it = opsMap_.find(uri);
     if (it == opsMap_.end()) {
         throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);

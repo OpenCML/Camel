@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/execute/pass.h"
 #include "camel/common/scope.h"
+#include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/utils/log.h"
 
 #include "passes/opt/inline/inline.h"
 #include "passes/sched/fastvm/bcdump.h"
@@ -167,8 +169,8 @@ const PassScopePtr passScope = initPassScope();
 
 std::unordered_map<std::string, std::string> passAliases = {
     // 标准调度器
-    {"std::fallback", "std::fastvm"},
-    {"std::linear", "std::fastvm"},
+    {"std::default", "std::nodevm"},
+    {"std::linear", "std::nodevm"},
     {"std::parallel", "std::taskflow"},
 
     // 常用vm缩写
@@ -254,6 +256,7 @@ int applyPasses(
 
         auto factory = findPassFactory(p, os);
         if (factory) {
+            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), graph.get()); });
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
@@ -265,8 +268,9 @@ int applyPasses(
     }
 
     if (graph != Graph::null()) {
-        auto factory = findPassFactory("std::fallback", os);
+        auto factory = findPassFactory("std::default", os);
         if (factory) {
+            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("std::default", graph.get()); });
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
@@ -277,5 +281,6 @@ int applyPasses(
         }
     }
 
+    EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GIR-Z", graph ? graph.get() : nullptr); });
     return 0;
 }

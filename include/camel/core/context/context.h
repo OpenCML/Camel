@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -55,6 +55,8 @@ class Context : public std::enable_shared_from_this<Context> {
     exec_mgr_uptr_t exeMgr_;
     diagnostics_ptr_t rtmDiags_;
     std::unordered_map<std::string, void *> loadedDllHandles_; // .cmo 路径 -> 句柄，保证 DLL 不卸载
+    /** 最近一次“找到 .cmo 但加载失败”的原因，供 ModuleNotFound 报错详情使用。 */
+    mutable std::string lastCmoLoadError_;
 
     std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
     std::vector<std::string>
@@ -66,6 +68,10 @@ class Context : public std::enable_shared_from_this<Context> {
     std::string getModulePath(const std::string &moduleName);
     bool moduleFileExists(const std::string &moduleName);
     module_ptr_t tryLoadModule(const std::string &moduleName);
+    /** 收集“未找到模块”时各搜索路径的尝试结果，用于报错详情。 */
+    std::vector<std::string> getModuleSearchDiagnostics(const std::string &moduleName) const;
+    /** 返回实际参与查找的搜索基路径（绝对路径）列表，用于 .cmo 加载失败时仅列出路径。 */
+    std::vector<std::string> getSearchPathBases() const;
 
     Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
         : entryConfig_(entryConf), diagConfig_(diagConf) {}
@@ -94,7 +100,7 @@ class Context : public std::enable_shared_from_this<Context> {
     void dumpAllModuleDiagnostics(std::ostream &os, bool json) const;
 
     void registerExecutorFactory(std::string name, executor_factory_t fact);
-    void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame);
+    void eval(std::string uri, GraphIR::Node *self, Frame &frame);
 
     /** 由 loadCmoModule 调用，保存已加载 .cmo 的句柄以防被卸载。 */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }

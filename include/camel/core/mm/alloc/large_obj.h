@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,12 @@
 #include "allocator.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/brpred.h"
+#include "camel/utils/log.h"
 #include "header.h"
+
+#ifndef NDEBUG
+#include "camel/core/mm/debug_hook.h"
+#endif
 
 #include <cstddef>
 #include <limits> // for std::numeric_limits
@@ -31,6 +36,8 @@
 
 class LargeObjectAllocator : public IAllocator {
   public:
+    explicit LargeObjectAllocator(const char *debugRegion = nullptr) : debugRegion_(debugRegion) {}
+
     ~LargeObjectAllocator() override {
         for (auto *hdr : allocated_) {
             ::operator delete(hdr, std::align_val_t(alignof(slot_t)));
@@ -43,7 +50,11 @@ class LargeObjectAllocator : public IAllocator {
 
         // total_size 向上对齐到 slot_t
         size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
-
+        EXEC_WHEN_DEBUG({
+            if (debugRegion_) {
+                mm::invokePreAllocHook(mm::PreAllocEvent{total_size, debugRegion_});
+            }
+        });
         std::byte *raw = reinterpret_cast<std::byte *>(
             ::operator new(total_size, std::align_val_t(alignof(slot_t))));
 
@@ -52,7 +63,11 @@ class LargeObjectAllocator : public IAllocator {
 
         std::byte *result = raw + sizeof(ObjectHeader);
         allocated_.insert(reinterpret_cast<ObjectHeader *>(raw));
-
+        EXEC_WHEN_DEBUG({
+            if (debugRegion_) {
+                mm::invokePostAllocHook(mm::AllocEvent{result, total_size, debugRegion_});
+            }
+        });
         return result;
     }
 
@@ -109,5 +124,6 @@ class LargeObjectAllocator : public IAllocator {
     }
 
   private:
+    const char *debugRegion_{nullptr}; // Debug 模式下用于 hook
     std::unordered_set<ObjectHeader *> allocated_;
 };

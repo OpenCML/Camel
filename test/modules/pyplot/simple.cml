@@ -1,0 +1,11 @@
+module main
+
+// 最简 pyplot 测试：单次 plot
+import { plot } from pyplot
+
+func main(): int sync {
+    let data = [1.0, 2.0, 3.0]
+    plot(data, "test/modules/pyplot/simple_out.png")
+    println("pyplot.plot OK")
+    return 0
+}

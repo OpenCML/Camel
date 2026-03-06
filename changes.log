@@ -1,130 +1,554 @@
+[0.1.16]
+New Features:
+- 内存调试器及 Debugger WebUI 初步实装，支持 GIR 可视化与渲染优化。
+- NodeVM 性能优化，GIR 节点改用裸指针以降低开销。
+- 默认 Pass 改为 NodeVM。
+
+Bug Fixes:
+- 修复 Debugger UI 下 GIR 渲染生成异常。
+- NodeVM 已知问题修复，功能初步恢复可用。
+- 修复 Array 错误接口。
+- 修复 debug 模式下编译链接失败问题。
+
+Technical Notes:
+- 内置模块拆解为独立 .cmo，模块与类型系统协同优化。
+- GIR 节点改为裸指针管理，不再使用智能指针分布式引用。
+- 移除旧 Python 内嵌方式，重构 CMake 与文档、CLI 脚本，链接过程优化。
+- 类型转换与安全检查方法更新。
+- 内置模块目录与职责整理。
+
+Others:
+- 新增开源标准文档：贡献指南、行为准则、安全策略及 Issue 模板。
+
 [0.1.15]
+New Features:
+- 模块系统升级：支持加载 .cmo 动态模块与动态链接库，构建产物与文件结构拆解重构。
+- 新增 Python 调用模块，优化模块加载逻辑与内置库交互。
+- 实装动态类型转换。
+- 移除不需要的 phot 模块。
+
+Bug Fixes:
+- 已知问题修复及细节优化。
+
+Technical Notes:
+- 代码结构与链接方式大幅调整，链接库拆解。
+- 模块系统重构，移除非诊断报错路径。
+- 新增并优化代码历史统计脚本。
 
 [0.1.14]
+New Features:
+- FastVM 初步实装 JIT 编译：支持 trampoline、异步 JIT、调试跟踪与失败原因返回。
+- MIR 层完善（虚拟寄存器、寄存器分配、溢出分配），输出格式增强。
+- 类型系统内存管理重构，改为裸指针。
+- 运行时数据与类型分离，函数/数组类型构造与算子接口重构。
+- 恢复 TaskFlow 虚拟机与 NodeVM。
+- 添加 CMake 选项、测试脚本与语言参考文档。
+- phot 模块加载与默认类型字节数更新。
+
+Bug Fixes:
+- 修复 JIT 在 build 模式下崩溃及关闭 JIT 时编译失败问题。
+- 修复 fib 计算逻辑错误与已知问题。
+
+Technical Notes:
+- 标准槽容器构造方式与字符串连接、函数闭包处理逻辑重构。
+- 项目结构与测试用例整理。
 
 [0.1.13]
+New Features:
+- FastVM 性能优化：支持静态类型转换与 as 关键字，采用密集字节码指令集与字节码链接器，执行链接后字节码，算子内联与跳转表优化分派开销。
+- 新增链接后字节码打印遍。
+- 新增 plot、phot 及部分 Python 交互算子。
+
+Bug Fixes:
+- 修复 plot 相关问题及已知问题。
+
+Technical Notes:
+- 字节码链接器实现，内联算子抽离与重新接入。
+- 代码结构整理。
 
 [0.1.12]
+New Features:
+- 栈帧管理重构：释放策略与模块实现优化，函数返回与 slot 解读逻辑改进。
+- FastVM 功能完善：字节码优化遍、性能统计模块与特殊算子实现。
+- 内置库新增统计模块，字符串格式化算子优化。
+- FILL 节点修复初步完成。
+
+Bug Fixes:
+- 修复漏释放栈帧及已知问题。
+
+Technical Notes:
+- 引入字节码优化与性能统计，FastVM 代码结构整理。
+- 测试样例更新。
 
 [0.1.11]
+New Features:
+- 引入垃圾回收（GC）系统：GC 算法与内存分配器实现，GCArray 与数据结构重构，类型编码布局与类型对象生命周期绑定。
+- 编译时到运行时数据转换打通。
+- Frame 实现调整，object 新增 equals 与 print 接口。
+- FastVM 初步适配新内存模型。
+- Graph 信息读取性能优化，移除内联算子字节码以降低开销。
+
+Bug Fixes:
+- 修复链接与部分编译错误、已知问题及警告。
+
+Technical Notes:
+- data 模块初步重构，Linux 下缺失头文件补全。
+- 部分未完成重构代码暂时注释。
 
 [0.1.10]
+New Features:
+- 张量（Tensor）计算支持与运算符、打印逻辑优化，张量计算示例整理。
+- FastVM 函数调用与尾调用优化，支持 Mark 算子。
+- 移除 to_float。
+
+Bug Fixes:
+- 修复递归嵌套函数中无法访问闭包变量的问题及已知问题。
+
+Technical Notes:
+- Tensor 算子代码与测试用例整理。
 
 [0.1.9]
+New Features:
+- 并行调度器适配现有框架，新增性能基准与归并排序测试基准，并发基准跑通。
+- 新增排序相关算子与 random 模块，排序性能优化。
+- 基础类型名不再作为关键字保留，新增类型转换算子并做部分函数重命名。
+- 默认执行遍调整。
+
+Bug Fixes:
+- 并行调度器与框架适配问题修复。
+
+Others:
+- 归并排序样例与代码结构、测试调整。
 
 [0.1.8]
+New Features:
+- 初步支持张量计算，Tensor 计算库优化并新增测试用例。
+- 添加内存性能分析工具，进行 Arena 等内存方案探索。
+
+Bug Fixes:
+- Tensor 计算库已知问题修复。
+
+Technical Notes:
+- 代码整理，函数声明与定义分离，注释补充。
 
 [0.1.7]
+New Features:
+- 支持算子内联与分支内联优化，常用算子可内联为字节码，初步实现分支内联优化遍。
+- 支持用户自定义类型与 Tensor 类型识别，增加对三方类型的赋值检测。
+- Tensor 计算库进一步完善，张量计算初步可用。
+
+Technical Notes:
+- 跨平台构建与运行优化。
 
 [0.1.6]
+New Features:
+- 新增字节码虚拟机 FastVM，完成初步设计与实现，相关模块重构。
+- 字节码设计重构，支持预编译。
+- Frame 设计优化。
+
+Bug Fixes:
+- 已知问题修复。
+
+Technical Notes:
+- 算子与 operator 类型定义重构。
+- 占位与代码整理。
 
 [0.1.5]
+New Features:
+- 初步实现闭包机制，禁止跨图连接，改为闭包传递。
+- 栈帧轻量化，线性调度器将 Frame 构造优化在栈上。
+
+Bug Fixes:
+- 修复 foreach 等算子不支持闭包的问题。
+- 函数声明与定义分离过程中的错误修正。
+- 已知问题修复。
+
+Technical Notes:
+- 函数声明与定义分离，代码整理。
 
 [0.1.4]
+New Features:
+- 移除上下文参数传递运算符，相关算子实现风格统一调整。
+- 测试样例整理为当前倡导写法。
+
+Technical Notes:
+- 算子实现与接口调整。
 
 [0.1.3]
+New Features:
+- 正式启用静态类型校验系统，完成静态类型解析与基本类型系统重构。
+- 内置算子类型解析器与类型签名、算子重载系统（二）及 TypeMangling 接入。
+- FILL 节点类型处理与 GIR 节点值类型信息完善。
+- 诊断系统与报错行为优化，诊断信息懒加载。
+- 并行调度器新增两个并行迭代算子。
+- 移除 Entity，算子实现映射更新。
+
+Bug Fixes:
+- 修复并行调度器 BRCH-JOIN 在部分条件下依赖异常的问题及已知问题。
+
+Technical Notes:
+- FuncResolver 与内置图重写遍文件结构优化。
+- 与 develop 同步。
 
 [0.1.2]
+New Features:
+- 初步引入并行解释调度器与图重写遍调度模块，支持指定图重写遍。
+- 初步添加 TypeResolver。
+- 暂时移除命名参数支持，函数类型重构。
+
+Bug Fixes:
+- 修复 TNS 打印失败问题。
+
+Others:
+- 版权注释补充。
 
 [0.1.1]
+New Features:
+- 初步引入并实现 Profiler 模块。
+
+Bug Fixes:
+- Profiler 及已知问题修复。
 
 [0.1.0]
+Technical Notes:
+- 项目文件整理与冗余文件清理，作为 0.1 线首个稳定标记版本。
 
 [0.0.22]
+New Features:
+- GIR 小规模重构以支持高阶函数：节点设计与数据存储方式调整，减少冗余智能指针，TLI 执行性能优化。
+- 支持转义序列与终端管理算子。
+- 默认整数类型改为 Int32，整数显示优化。
+- 图节点捕获追踪与 Access 节点执行实现。
+- 返回函数节点构造与函数组合运算符支持优化。
+- 新增算子，BIND 的 GCT 节点改为宏算子。
+- neuro 用例与贪吃蛇示例跑通。
+
+Bug Fixes:
+- 修复全局变量无法初始化、栈上复制 Graph 导致错误、Dict 构造中 Ref 误用等问题。
+- 热点代码优化。
+
+Technical Notes:
+- GIR 数据存储与节点类型设计重构。
+- 已知警告修复，测试用例补充与优化。
 
 [0.0.21]
+New Features:
+- 支持尾调用优化。
+- 模式匹配初步支持，Match 表达式正式支持并补全 AST。
+- struct 算子与 StructNode 优化，遍历算子调通并新增部分算子。
+- mark 运算符尝试实现，彩蛋加入。
+- Linux 适配。
+- 新增 perf 相关命令与 profile 编译/构建模式。
+
+Bug Fixes:
+- 修复 logger 在 build 模式下性能占用、参数无法传入 lambda、parsing 阶段报错异常等问题。
+- 编译错误修复。
+
+Technical Notes:
+- 部分模块重构，psrgen 脚本与文档、测试样例更新。
+- HelloWorld 与辅助脚本、pre-commit 更新。
 
 [0.0.20]
+New Features:
+- 执行机制初步完善：引入栈帧，分支功能跑通，DataLink 链接前移除 CtrlLink。
+- 基于 AST 的代码生成：inspect 新增 --gen 与 codegen，支持从 AST 生成源码。
+- 返回节点与 ReturnNode 加入，算子接口重构。
+- 算子模块重构初步完成，新增部分基础算子。
+- 诊断系统优化，成环检查加强。
+- 标准库与 LOGO 更新。
+
+Bug Fixes:
+- 修复 TNS 打印与 var 在部分情况下不可用等问题及已知问题。
+
+Others:
+- 格式化与图标、图床、Readme、测试样例更新。
 
 [0.0.19]
+New Features:
+- 拓扑执行与拓扑调度器初步实现，执行流程调通。
+- Executor 设计与加载执行流程初步实现。
+- 执行器与算子执行器初步实现，Data 支持打印。
+- 基础算子与二元运算算子补充。
+- diagnostic 与 diagCode 完善。
+- 文件结构与诊断系统重构。
+
+Bug Fixes:
+- 编译错误修复。
+
+Technical Notes:
+- 类型系统优化，算子模块与定义重构。
+- 代码结构大规模重构、格式化与命名调整。
 
 [0.0.18]
+New Features:
+- 拓扑节点序列（TNS）打印与拓扑排序遍初步实现，拓扑遍代码结构成型。
+- 图依赖与被依赖项追踪。
+- GIR 打印与模块导入行为优化。
+
+Bug Fixes:
+- 修复 Release 模式编译、Graph 自引用与返回值 GIR 构造等问题。
+- 已知细节问题修复。
+
+Technical Notes:
+- Logger 与模块加载行为优化。
 
 [0.0.17]
+New Features:
+- 模块系统初步实现：import 语法与包导入机制优化，内置模块导入与导出、搜索目录顺序查找支持。
+- GIR 打印优化。
+- Profiler 服务支持初步添加。
+- 部分基础模块就绪。
+
+Bug Fixes:
+- 已知问题修复。
+
+Technical Notes:
+- 代码统一格式化与细节调整。
 
 [0.0.16]
+New Features:
+- GIR 构造与打印模块大规模重构完成，GraphViz 打印初步实现。
+- sync 语句块与副作用控制追踪加强，分支支持加入。
+- Scope 与断言模块优化。
+
+Bug Fixes:
+- 修复子图被释放、全局算子初始化与重复添加节点等问题。
+- 图渲染与已知问题修复。
+
+Technical Notes:
+- GIR 构造与 code 侧 GIR 构造大规模重构。
 
 [0.0.15]
+New Features:
+- GCT 构造模块重构完成，tree 底层结构设计更新。
+- VARI、WAIT 节点实装，Index 语法加入。
+- AST 构造记录 token 范围，AST 打印中 WAIT 等修饰展示优化。
+- 函数结构与报错行为优化。
+- Camel 之禅文档添加。
+
+Bug Fixes:
+- 已知问题修复，S0–S4 与 full 用例通过。
+- 参数传递与模块导入的 AST 构造问题修复。
+
+Technical Notes:
+- 报错系统重构。
+- GCT 构造与 GCT 大规模重构（一）。
+- ABOUT 显示与代码细节调整。
 
 [0.0.14]
+New Features:
+- AST 构造大规模重构，语法与 ASDL 完善，AST 打印初步实现。
+- LetDecl、Implmark 与 @ 运算符加入，元数据注解语法移除。
+- Executor 框架初步添加与实现。
+- GCT 构造部分实现并推进。
+- 测试驱动开发样例添加。
+
+Bug Fixes:
+- 上下文参数传递运算符优先级调整。
+- AST 构造通过全部测试与 s0–s4 验证。
+- gct.h 与 AST 构造/打印问题修复。
+
+Technical Notes:
+- 代码架构重调，AST 与 GCT 初步区分。
+- AST 代码风格整理。
+- demo 与过时 cml 示例清理。
 
 [0.0.13]
+New Features:
+- 部分语法重构，示例代码与 MLP 目标用例添加。
+- CST->GCT 构造（一）实现。
+- Formatter 适配新语法，GCT 头文件与 Formatter 脚本可自动生成。
+- CST 打印修复与自动修复脚本加入。
+- 程序退出返回值优化。
+
+Bug Fixes:
+- CLI 与编译过程、GCT 构造相关编译问题修复。
+- 细节问题修复。
+
+Technical Notes:
+- main 函数与 json 输出细节整理。
+- Copyright 更新。
 
 [0.0.12]
+New Features:
+- CLI 重构，AST 与 GCT 初步区分，命名空间与命令细节优化。
+- 构建方式改为源码集成 ANTLR。
+- README 与 logo 更新。
+
+Bug Fixes:
+- CST 打印失败、gitcnt 统计与 CLI 问题及 warnings 修复。
+
+Technical Notes:
+- 切换至 C++23，环境配置与 Help 命令优化。
+- 辅助脚本（check、gitcnt）与说明文档、版本号更新。
 
 [0.0.11]
 New Features:
-WIP
+- 语法大幅优化与重构，支持高阶特性，复数支持移除。
+- 新语法适配（一至三）与 macro 修饰符加入，GIR 序列化可复现性增强。
+- 调式模式与 format 初步可用，Formatter 优化。
+- PyPI 模块与打包机制初步实现。
+- C++20 支持。
 
 Bug Fixes:
-WIP
+- Formatter 及相关问题修复。
+
+Technical Notes:
+- 自动脚本与 CMakeLists 优化，setver 等脚本添加。
+- 部分文档中英双语。
+- 无关依赖清理。
 
 [0.0.10]
 New Features:
-WIP
+- 添加 GraphViz 格式导出。
+- 初步实现 graphviz 的 pass，引入 Pass，文件结构调整。
+- Formatter 深度优化。
+- 提升类型与函子声明解析顺序，进一步优化 GIR 构造过程与函子 dump 效果。
 
 Bug Fixes:
-WIP
+- GIR 构造 BUG 修复：修复链接函子时错误共享函子节点、多次调用同一函子实体的问题。
+- 修复 graphviz 导出标识符无法识别、无法正确 dump 子图的问题。
+- 修复深度作用域嵌套时中间层被意外释放的问题。
+- 修复 Lambda 类型 AST 构建失败、无法正确识别三元表达式等问题。
+
+Others:
+- 若干细节调整与问题修复。
 
 [0.0.9]
 New Features:
-WIP
+- 初步添加内置算子，GIR 构造模块初步完成，GIR 构造进一步实现（五至十）。
+- 类型系统与类型数据系统进一步实现，实现序列类型数据向 PARAMS 的转换。
+- 优化语法，分号可选，加回参数可变声明。
+- 添加 SYNC 修饰符，重构 REF 解析机制，函子修饰符检查优化。
+- 更新对可变参数的 AST 支持。
+- 添加取消分号时的 Formatter 支持，减小语法在无分号时的歧义性。
 
 Bug Fixes:
-WIP
+- 修复部分逻辑错误、函数参数不可作为函子被调用、找不到某些内置函子等问题。
+- 修复 Formatter 误删注释、LINK 函子结点越界、图节点所有权导致的内存泄漏、Context 初始化异常等问题。
+- 修复不能正确识别 shared 修饰符、大量语法错误、解析非法 Map 字面量崩溃、函子参数为 DREF 时不在 AST 上等问题。
+
+Technical Notes:
+- 重构 data/type 模块文件结构，重构文件结构。
+- 大量应用命名空间优化与关键概念重命名。
+
+Others:
+- 文档与更新日期格式优化。
+- 添加代码更新日期自动填写脚本。
+- 更新协议声明。
 
 [0.0.8]
 New Features:
-WIP
+- 第三次语法重构，支持可变数据。
+- 初步完成 AST 构造模块改造（一至七），完成语法改造后其他模块适配。
+- Lambda 添加超参声明。
+- USE 语句专用于包导入，进一步优化 USE 语句。
+- CST 打印与 Formatter 模块改造完成。
+- 添加三元表达式，调整三元表达式运算符优先级。
+- 重构部分运算符语法规则。
+- 语法大幅调整，解决潜在语义冲突。
 
 Bug Fixes:
-WIP
+- 部分 BUG 修复，AST 基本可用。
 
 [0.0.7]
 New Features:
-WIP
+- 初步设计 GIR 构造模块，进一步实现 GIR/图构造模块。
+- 将 Value 类重命名为 Data 类，重命名部分数据结构。
+- 初步设计图中间表示与底层算子、函子相关数据结构。
+- 优化实体与值的构造逻辑，取消 Vec 类型对子元素原子化的限制。
+- 类型语法与错误处理优化，优化命令行参数设计，添加 Index 语法。
 
 Bug Fixes:
-WIP
+- 修复解析 null 字面量失败的问题。
+
+Technical Notes:
+- 新建部分文件。
+- 更新 Readme，补充环境安装说明。
+
+Others:
+- 若干细节增补与优化。
 
 [0.0.6]
 New Features:
-WIP
+- 初步完善 AST 构造，进一步优化 AST 构造。
+- 优化类型运算符解析优先级。
+- 提高 with 运算符的优先级。
 
 Bug Fixes:
-WIP
+- AST 构造的 case 与相关问题修复。
+- 修复某些情况下 AST 构造失败问题。
+
+Others:
+- 若干细节调整。
 
 [0.0.5]
 New Features:
-WIP
+- 初步实现 AST 构造，初步加入 GIR，优化 AST 打印样式，初步调通展示案例的 AST 构造。
+- 添加 NamedTuple 类型和值定义，NamedTuple 定义实现调整。
+- 优化数组类型字面量语法。
+- 增加 AST 节点，初步添加 AST visitor，引入 AST Node。
 
 Bug Fixes:
-WIP
+- 构造 AST 过程中部分问题与编译错误修复。
+
+Others:
+- 若干细节调整与进一步实现。
 
 [0.0.4]
 New Features:
-WIP
+- 添加自动格式化模块，自动格式化模块细节优化。
+- 优化 format 的自动换行决策算法。
+- 添加 comment 通道，初步实现注释格式化。
+- 优化部分运算符使用。
 
 Bug Fixes:
-WIP
+- 修复格式化 as 导致的崩溃。
+- 修复部分细节问题，修复并优化注释格式化模块。
+
+Others:
+- 初步引入 format 模块（尚有问题）。
+- 若干细节优化。
 
 [0.0.3]
 New Features:
-WIP
+- 前端基础基本完善，提供对 stdin 输入的支持，重新添加联合类型关键字。
+- 添加 Array 类型，更改类型关键字为首字母大写，添加 entity 类型，为 value 添加 resolved 状态。
+- 完善函子定义，添加修饰符设置，初步添加函子和语句类，实体接口初步设计。
+- 添加初级类型值的互相转换。
+- 初步设计类型系统，进一步完善类型定义与 types 系统，Lambda 添加 modifiers 支持。
+- 添加 log 模块，完善 CST 的打印效果，初步实现 CST 打印。
+- 添加 CLI 参数解析模块与 clipp 依赖。
 
 Bug Fixes:
-WIP
+- 修复部分编译问题。
+- 修复部分问题。
+
+Technical Notes:
+- 优化成员访问与文法细节。
+- 重构部分词法和文法，优化类型系统。
+- 更新类型之间的转化性检验。
+- 消除文法模糊性，极大提升解析性能。
+- 优化错误处理机制，默认使用 SLL。
+
+Others:
+- 添加格式化错误输出，调整列宽限制，调整测试样例。
+- 重新生成前端代码，简化部分语法规则，初步添加 CST Visitor。
 
 [0.0.2]
 New Features:
-WIP
+- 语法进一步优化，初步设计 AST 结构基础类型，初步添加静态语句。
+- 添加最小展示用例与函子类型字面量。
+- 使用语义谓词解决实体链中部分歧义。
+- 移除部分字面量语法以降低歧义，移除自增运算符，降低文法模糊性。
+- 紧邻多行列表沿用上一级缩进。
 
-Bug Fixes:
-WIP
+Others:
+- 若干细节调整，格式化部分示例代码。
 
 [0.0.1]
 New Features:
-WIP
+- 项目初始版本，基础前端与工具链搭建。
 
-Bug Fixes:
-WIP
+Others:
+- 初始提交与基础结构。

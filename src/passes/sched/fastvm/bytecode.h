@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,6 @@
 #include <limits>
 
 #include "camel/compile/gir.h"
-#include "camel/utils/rawarr.h"
 
 // 分布密集的字节码指令集
 // 用于加速 switch 分派，降低 CPU 分支预测失败率
@@ -136,7 +135,7 @@ enum class MarkOpCode {
 using data_idx_t = int16_t;
 using arr_size_t = uint16_t;
 
-using data_arr_t = RawArray<const data_idx_t>;
+using data_arr_t = std::span<const data_idx_t>;
 
 inline bool isSafeSizeTForIndexT(size_t value) {
     return value <= static_cast<size_t>(std::numeric_limits<data_idx_t>::max());

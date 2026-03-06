@@ -1,8 +1,7 @@
 /**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
+ * You may obtain a copy of the MIT license at:
  * [https://opensource.org/license/mit]
  *
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
@@ -13,7 +12,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +20,7 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/base.h"
 
 #include "fmt/args.h"
 #include "fmt/core.h"
@@ -28,7 +28,7 @@
 #include <iostream>
 #include <sstream>
 
-slot_t __print__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __op_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
     slot_t result = NullSlot;
     if (with.size() > 0) {
         String *fmtStrObj  = with.get<String *>(0);
@@ -85,7 +85,7 @@ slot_t __print__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return result;
 }
 
-slot_t __println__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __op_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
     slot_t result = NullSlot;
     if (with.size() > 0) {
         String *fmtStrObj  = with.get<String *>(0);
@@ -143,7 +143,7 @@ slot_t __println__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return result;
 }
 
-slot_t __input__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __op_input__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::stringstream oss;
 
     for (size_t i = 0; i < norm.size(); i++) {

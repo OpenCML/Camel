@@ -7,8 +7,8 @@ const __filename = fileURLToPath(import.meta.url)
 export const BASEDIR = path.dirname(path.dirname(__filename))
 
 const isWindows = process.platform === 'win32'
-const executableName = `camel${isWindows ? '.exe' : ''}`
-const libName = isWindows
+export const executableName = `camel${isWindows ? '.exe' : ''}`
+export const libName = isWindows
     ? 'libcamel.dll'
     : process.platform === 'darwin'
         ? 'libcamel.dylib'
@@ -73,7 +73,7 @@ export function removeDir(dir) {
 
 export function copyFile(src, dest) {
     fs.copyFileSync(src, dest)
-    console.log(`Copied: ${src} to ${dest}`)
+    // console.log(`Copied: ${src} to ${dest}`)
 }
 
 export function copyDir(src, dest) {
@@ -89,6 +89,23 @@ export function copyDir(src, dest) {
             copyFile(srcFile, destFile)
         }
     })
+}
+
+/** 当前 commit 若有 git tag 则返回该 tag，否则 "latest"。供 collect-out、pypi_rollup 等使用 */
+export function getTag() {
+    try {
+        const tags = execSync('git tag -l --points-at HEAD', {
+            cwd: BASEDIR,
+            encoding: 'utf-8'
+        })
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean)
+        if (tags.length > 0) return tags[0]
+    } catch {
+        /* ignore */
+    }
+    return 'latest'
 }
 
 /** 供 build/debug/profile 使用：git describe 生成版本后缀 */
@@ -151,9 +168,9 @@ export function copyBuildArtifacts(config) {
     const exeSrcDir = path.join(BASEDIR, 'build', 'tools', 'camel-cli', config)
     const libSrcDir = path.join(BASEDIR, 'build', config)
     const libsBuildDir = path.join(BASEDIR, 'build', 'libs')
+    const modulesBuildDir = path.join(BASEDIR, 'build', 'modules')
     const stdlibDir = path.join(BASEDIR, 'stdlib')
 
-    copyFile(path.join(exeSrcDir, executableName), path.join(BASEDIR, executableName))
     const libSrc = path.join(libSrcDir, libName)
     if (fs.existsSync(libSrc)) {
         // 把exe复制到libSrc的同级目录以便调试
@@ -166,17 +183,18 @@ export function copyBuildArtifacts(config) {
                 copyFile(pdbSrc, path.join(libSrcDir, pdbName))
             }
         }
-        copyFile(libSrc, path.join(BASEDIR, libName))
     }
 
-    if (fs.existsSync(libsBuildDir)) {
+    const cmoDirs = [libsBuildDir, modulesBuildDir]
+    for (const baseDir of cmoDirs) {
+        if (!fs.existsSync(baseDir)) continue
         if (!fs.existsSync(stdlibDir)) {
             fs.mkdirSync(stdlibDir, { recursive: true })
         }
-        const subdirs = fs.readdirSync(libsBuildDir, { withFileTypes: true })
+        const subdirs = fs.readdirSync(baseDir, { withFileTypes: true })
         for (const ent of subdirs) {
             if (!ent.isDirectory()) continue
-            const configDir = path.join(libsBuildDir, ent.name, config)
+            const configDir = path.join(baseDir, ent.name, config)
             if (!fs.existsSync(configDir)) continue
             const files = fs.readdirSync(configDir)
             for (const f of files) {
@@ -186,4 +204,5 @@ export function copyBuildArtifacts(config) {
             }
         }
     }
+    logDone(`Copied all build artifacts`)
 }

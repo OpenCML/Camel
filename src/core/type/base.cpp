@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -132,39 +132,55 @@ bool Type::equals(Type *type) const {
     return code_ == type->code_;
 }
 
-CastSafety Type::castSafetyTo(Type *targetType) const {
-    ASSERT(!::isComposite(code_), "Composite type cannot call Type::castSafetyTo");
-    ASSERT(!::isOtherType(code_), "Other type cannot call Type::castSafetyTo");
+std::optional<CastSafety> Type::checkCastSafetyWithAny(TypeCode targetCode, Type *sourceType) {
+    if (!sourceType)
+        return CastSafety::Forbidden;
+    // 通用规则：任何类型 <-> Any 均为 Safe
+    if (targetCode == TypeCode::Any || sourceType->code() == TypeCode::Any)
+        return CastSafety::Safe;
+    return std::nullopt;
+}
 
-    if (!targetType)
+CastSafety Type::castSafetyFrom(Type *sourceType) const {
+    ASSERT(!::isComposite(code_), "Composite type cannot call Type::castSafetyFrom");
+    ASSERT(!::isOtherType(code_), "Other type cannot call Type::castSafetyFrom");
+
+    if (auto r = checkCastSafetyWithAny(code_, sourceType))
+        return *r;
+
+    if (!sourceType)
         return CastSafety::Forbidden;
 
-    // 这里要先排除掉辅助类型
-    if (::isAuxiliary(code_) || ::isAuxiliary(targetType->code())) {
+    // 这里要先排除掉辅助类型（Any 已由 checkCastSafetyWithAny 处理）
+    if (::isAuxiliary(code_) || ::isAuxiliary(sourceType->code())) {
         return CastSafety::Forbidden;
     }
 
-    // 排除掉辅助类型后，原始类型只剩8个
-    if (::isPrimitive(code_) && ::isPrimitive(targetType->code())) {
-        const int thisIndex  = static_cast<int>(code_) & 0b1111;
-        const int otherIndex = static_cast<int>(targetType->code()) & 0b1111;
-        return static_cast<CastSafety>(primitiveTypeConvMatrix[thisIndex][otherIndex]);
+    // 排除掉辅助类型后，原始类型只剩8个。矩阵 [from][to]，即 [sourceIndex][targetIndex]
+    if (::isPrimitive(code_) && ::isPrimitive(sourceType->code())) {
+        const int sourceIndex = static_cast<int>(sourceType->code()) & 0b1111;
+        const int targetIndex = static_cast<int>(code_) & 0b1111;
+        return static_cast<CastSafety>(primitiveTypeConvMatrix[sourceIndex][targetIndex]);
     }
 
     // 剩余所有类型默认不允许转换
     return CastSafety::Forbidden;
 }
 
-slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
-    ASSERT(!::isComposite(code_), "castSlotTo not implemented for composite types");
-    ASSERT(!::isOtherType(code_), "castSlotTo not implemented for other types");
-    ASSERT(targetType != nullptr, "castSlotTo target type is null");
+slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
+    ASSERT(sourceType != nullptr, "castSlotFrom source type is null");
     ASSERT(
-        castSafetyTo(targetType) == CastSafety::Safe,
-        "castSlotTo only allowed when castSafetyTo returns Safe");
+        castSafetyFrom(sourceType) == CastSafety::Safe,
+        "castSlotFrom only allowed when castSafetyFrom returns Safe");
+    // Any 与任何类型互相转换时直接透传 slot 值（需在所有 ASSERT 之前，以支持 composite 等类型）
+    if (code_ == TypeCode::Any || sourceType->code() == TypeCode::Any)
+        return value;
 
-    const TypeCode from = code_;
-    const TypeCode to   = targetType->code();
+    ASSERT(!::isComposite(code_), "castSlotFrom not implemented for composite types");
+    ASSERT(!::isOtherType(code_), "castSlotFrom not implemented for other types");
+
+    const TypeCode from = sourceType->code();
+    const TypeCode to   = code_;
 
     using ::Bool;
     using ::Byte;
@@ -198,7 +214,7 @@ slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
             return toSlot(s);
         }
         default:
-            ASSERT(false, "castSlotTo Int32->unsupported target");
+            ASSERT(false, "castSlotFrom Int32->unsupported target");
         }
     }
     case TypeCode::Int64: {
@@ -219,7 +235,7 @@ slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
             return toSlot(s);
         }
         default:
-            ASSERT(false, "castSlotTo Int64->unsupported target");
+            ASSERT(false, "castSlotFrom Int64->unsupported target");
         }
     }
     case TypeCode::Float32: {
@@ -240,7 +256,7 @@ slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
             return toSlot(s);
         }
         default:
-            ASSERT(false, "castSlotTo Float32->unsupported target");
+            ASSERT(false, "castSlotFrom Float32->unsupported target");
         }
     }
     case TypeCode::Float64: {
@@ -261,7 +277,7 @@ slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
             return toSlot(s);
         }
         default:
-            ASSERT(false, "castSlotTo Float64->unsupported target");
+            ASSERT(false, "castSlotFrom Float64->unsupported target");
         }
     }
     case TypeCode::Bool: {
@@ -282,7 +298,7 @@ slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
             return toSlot(s);
         }
         default:
-            ASSERT(false, "castSlotTo Bool->unsupported target");
+            ASSERT(false, "castSlotFrom Bool->unsupported target");
         }
     }
     case TypeCode::Byte: {
@@ -305,7 +321,7 @@ slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
             return toSlot(s);
         }
         default:
-            ASSERT(false, "castSlotTo Byte->unsupported target");
+            ASSERT(false, "castSlotFrom Byte->unsupported target");
         }
     }
     case TypeCode::Void:
@@ -313,7 +329,7 @@ slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
             ::String *s = ::String::from("null", mm::autoSpace());
             return toSlot(s);
         }
-        ASSERT(false, "castSlotTo Void->unsupported target");
+        ASSERT(false, "castSlotFrom Void->unsupported target");
     case TypeCode::String: {
         ::String *s = reinterpret_cast<::String *>(static_cast<uintptr_t>(value));
         switch (to) {
@@ -322,7 +338,7 @@ slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
                 Int32 v = std::stoi(s->toString());
                 return toSlot(v);
             } catch (...) {
-                ASSERT(false, "castSlotTo String->Int32 parse failed");
+                ASSERT(false, "castSlotFrom String->Int32 parse failed");
             }
         }
         case TypeCode::Int64: {
@@ -330,7 +346,7 @@ slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
                 Int64 v = std::stoll(s->toString());
                 return toSlot(v);
             } catch (...) {
-                ASSERT(false, "castSlotTo String->Int64 parse failed");
+                ASSERT(false, "castSlotFrom String->Int64 parse failed");
             }
         }
         case TypeCode::Float32: {
@@ -338,7 +354,7 @@ slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
                 Float32 v = std::stof(s->toString());
                 return toSlot(v);
             } catch (...) {
-                ASSERT(false, "castSlotTo String->Float32 parse failed");
+                ASSERT(false, "castSlotFrom String->Float32 parse failed");
             }
         }
         case TypeCode::Float64: {
@@ -346,65 +362,69 @@ slot_t Type::castSlotTo(slot_t value, Type *targetType) const {
                 Float64 v = std::stod(s->toString());
                 return toSlot(v);
             } catch (...) {
-                ASSERT(false, "castSlotTo String->Float64 parse failed");
+                ASSERT(false, "castSlotFrom String->Float64 parse failed");
             }
         }
         case TypeCode::String:
             return value;
         default:
-            ASSERT(false, "castSlotTo String->unsupported target");
+            ASSERT(false, "castSlotFrom String->unsupported target");
         }
     }
     default:
-        ASSERT(false, "castSlotTo unsupported source type");
+        ASSERT(false, "castSlotFrom unsupported source type");
     }
 
 #undef DO_CONV
     return 0; // unreachable
 }
 
-bool Type::assignable(Type *type) const {
-    if (!type)
-        return false;
-    if (this == type)
+bool Type::assignableFrom(Type *from) const {
+    const Type *to = this;
+
+    if (!from || to == from)
         return true;
 
     // 内置类型，含有 Ref 类型的复合类型必须 resolve 后才能赋值给其他类型
-    ASSERT(code_ != TypeCode::Ref && type->code_ != TypeCode::Ref, "Ref type cannot be assigned");
-
-    // any 类型可以接受任何类型的赋值，但不可以赋值给其他类型
-    if (type->code_ == TypeCode::Any)
-        return true;
-    if (code_ == TypeCode::Any)
-        return false;
+    ASSERT(
+        to->code_ != TypeCode::Ref && from->code_ != TypeCode::Ref,
+        "Ref type cannot be assigned");
 
     // Void 类型可以接受任何类型的赋值，但不可以赋值给其他类型
-    if (type->code_ == TypeCode::Void)
+    if (to->code_ == TypeCode::Void)
         return true;
-    if (code_ == TypeCode::Void)
+    if (from->code_ == TypeCode::Void)
         return false;
 
-    // 复合类型需要重载 assignable 方法处理
-    if (::isComposite(code_)) {
+    // 任何类型可赋给 Any（目标为 Any 时接受任意来源）
+    if (to->code_ == TypeCode::Any)
+        return true;
+    // Any 不可赋给其他类型（来源为 Any 且目标非 Any）
+    if (from->code_ == TypeCode::Any)
+        return false;
+
+    // 复合类型需要重载 assignableFrom 方法处理
+    if (::isComposite(to->code_)) {
         const auto &self = static_cast<const CompositeType &>(*this);
-        return self.assignable(type);
+        return self.assignableFrom(from);
     }
 
-    // 第三方类型交由第三方自己重载的 assignable 方法处理
-    if (::isOtherType(code_)) {
+    // 第三方类型交由第三方自己重载的 assignableFrom 方法处理
+    if (::isOtherType(to->code_)) {
         const auto &self = static_cast<const OtherType &>(*this);
-        return self.assignable(type);
+        return self.assignableFrom(from);
     }
 
     // 剩余情况只能是基础类型之间的赋值，必须相同
-    return code_ == type->code_;
+    return to->code_ == from->code_;
 }
 
 Type *Type::create(TypeCode code) {
-    EXEC_WHEN_DEBUG(l.in("Type").debug(
-        "Allocating Type: {}, size: {} bytes",
-        typeCodeToString(code),
-        sizeof(Type)));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("Type").debug(
+            "Allocating Type: {}, size: {} bytes",
+            typeCodeToString(code),
+            sizeof(Type)));
     void *mem = mm::permSpace().alloc(sizeof(Type), alignof(Type));
     ASSERT(mem != nullptr, "Failed to allocate Type from permSpace");
     return new (mem) Type(code);

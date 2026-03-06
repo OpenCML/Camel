@@ -1,0 +1,22 @@
+module main
+
+import { test } from re
+
+func main(): int sync {
+    println("=== RE Module Basic Tests ===")
+
+    println("\n[1] test('\\d+', 'abc123')")
+    let r1 = test("\\d+", "abc123")
+    println("  match =", r1)
+
+    println("\n[2] test('^hello', 'hello world')")
+    let r2 = test("^hello", "hello world")
+    println("  match =", r2)
+
+    println("\n[3] test('xyz', 'hello')")
+    let r3 = test("xyz", "hello")
+    println("  match =", r3)
+
+    println("\n=== RE tests completed ===")
+    return 0
+}

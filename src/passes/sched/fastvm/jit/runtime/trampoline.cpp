@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  *
  * ---
@@ -98,7 +98,7 @@ extern "C" void jitDebugTraceBody(const void *ctx) {
 #ifdef NDEBUG
     std::cerr << os.str() << std::flush;
 #else
-    EXEC_WHEN_DEBUG(l.in("JIT.Debug").debug("{}", os.str()));
+    EXEC_WHEN_DEBUG(GetDefaultLogger().in("JIT.Debug").debug("{}", os.str()));
 #endif
 }
 
@@ -141,12 +141,14 @@ void jitDebugTrace(const void *ctx) { jitDebugTraceBody(ctx); }
 #endif
 
 slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
-    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline")
-                        .info(
-                            "trampolineFunc ENTER callerSlots={} ctx={} pc={}",
-                            static_cast<void *>(callerSlots),
-                            ctx,
-                            pc));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger()
+            .in("JIT.Trampoline")
+            .info(
+                "trampolineFunc ENTER callerSlots={} ctx={} pc={}",
+                static_cast<void *>(callerSlots),
+                ctx,
+                pc));
     auto *jc     = static_cast<camel::jit::JitContext *>(ctx);
     auto *vm     = jc->vm;
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
@@ -154,21 +156,26 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
 
     size_t targetPc = static_cast<size_t>(bc.fastop[1]);
     size_t argsCnt  = bc.normCnt();
-    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline")
-                        .info("trampolineFunc bc: targetPc={} argsCnt={}", targetPc, argsCnt));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger()
+            .in("JIT.Trampoline")
+            .info("trampolineFunc bc: targetPc={} argsCnt={}", targetPc, argsCnt));
     uint32_t count = 0;
     if (targetPc != 0)
         count = incFuncExtraCount(&bc);
 
     if (targetPc == 0) {
-        EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc path: JIT->JIT"));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc path: JIT->JIT"));
         GraphIR::Graph *g         = getFuncExtraGraph(&bc);
         camel::jit::JitEntryFn fn = reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc));
-        EXEC_WHEN_DEBUG(l.in("JIT.Trampoline")
-                            .info(
-                                "trampolineFunc JIT->JIT graph='{}' fn={}",
-                                g->name(),
-                                static_cast<void *>(reinterpret_cast<void *>(fn))));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger()
+                .in("JIT.Trampoline")
+                .info(
+                    "trampolineFunc JIT->JIT graph='{}' fn={}",
+                    g->name(),
+                    static_cast<void *>(reinterpret_cast<void *>(fn))));
         Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]); // slot[0] = Frame*
         Frame *newFrame    = vm->acquireFrameForCall(g);
         for (size_t i = 0; i < argsCnt; ++i)
@@ -180,37 +187,49 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
             std::ostringstream os;
             os << "trampolineFunc callee frame <" << g->name() << "> (after copy):\n";
             newFrame->printSlotsTo(os);
-            l.in("JIT.Trampoline").info("{}", os.str());
+            GetDefaultLogger().in("JIT.Trampoline").info("{}", os.str());
         });
-        EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc about to call JIT entry"));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc about to call JIT entry"));
         newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame); // 规范：slot[0] 存 Frame*
         slot_t result           = fn(newFrame->slotBase(), ctx);
         EXEC_WHEN_DEBUG(
-            l.in("JIT.Trampoline").info("trampolineFunc JIT->JIT return result={}", result));
+            GetDefaultLogger()
+                .in("JIT.Trampoline")
+                .info("trampolineFunc JIT->JIT return result={}", result));
         vm->releaseFrameForCall(newFrame);
         return result;
     }
 
-    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc path: JIT->interpreter"));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc path: JIT->interpreter"));
     GraphIR::Graph *targetGraph = getFuncExtraGraph(&bc);
-    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline")
-                        .info(
-                            "trampolineFunc JIT->interpreter target='{}' targetPc={}",
-                            targetGraph->name(),
-                            targetPc));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger()
+            .in("JIT.Trampoline")
+            .info(
+                "trampolineFunc JIT->interpreter target='{}' targetPc={}",
+                targetGraph->name(),
+                targetPc));
 
-    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc before acquireFrameForCall"));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc before acquireFrameForCall"));
     Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
     Frame *newFrame    = vm->acquireFrameForCall(targetGraph);
     for (size_t i = 0; i < argsCnt; ++i)
         newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
     (void)count;
     EXEC_WHEN_DEBUG(
-        l.in("JIT.Trampoline").info("trampolineFunc before vm->call targetPc={}", targetPc));
+        GetDefaultLogger()
+            .in("JIT.Trampoline")
+            .info("trampolineFunc before vm->call targetPc={}", targetPc));
     slot_t result = vm->call(targetPc, newFrame);
-    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc after vm->call result={}", result));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger()
+            .in("JIT.Trampoline")
+            .info("trampolineFunc after vm->call result={}", result));
     vm->releaseFrameForCall(newFrame);
-    EXEC_WHEN_DEBUG(l.in("JIT.Trampoline").info("trampolineFunc EXIT"));
+    EXEC_WHEN_DEBUG(GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc EXIT"));
     return result;
 }
 
@@ -234,7 +253,9 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
         for (size_t i = 0; i < argsCnt; ++i)
             newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
         EXEC_WHEN_DEBUG(
-            l.in("JIT.Trampoline").debug("trampolineTail: JIT->JIT target='{}'", g->name()));
+            GetDefaultLogger()
+                .in("JIT.Trampoline")
+                .debug("trampolineTail: JIT->JIT target='{}'", g->name()));
         newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
         slot_t result           = fn(newFrame->slotBase(), ctx);
         vm->releaseFrameForTail(newFrame);
@@ -243,7 +264,8 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
 
     GraphIR::Graph *targetGraph = getFuncExtraGraph(&bc);
     EXEC_WHEN_DEBUG(
-        l.in("JIT.Trampoline")
+        GetDefaultLogger()
+            .in("JIT.Trampoline")
             .debug("trampolineTail: JIT->interpreter target='{}'", targetGraph->name()));
 
     Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
@@ -286,7 +308,7 @@ slot_t trampolineCast(slot_t *slots, void *ctx, size_t pc) {
 
     Type *srcType = frame->typeAt<Type>(srcIdx);
     slot_t value  = frame->get<slot_t>(srcIdx);
-    slot_t result = srcType->castSlotTo(value, targetType);
+    slot_t result = targetType->castSlotFrom(value, srcType);
     frame->set(resultSlot, result);
     return result;
 }

@@ -2,51 +2,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "RUN (build)",
+            "name": "RUN",
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Release/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
-            "args": ["${file}", "std::inline", "std::jit"],
-            "console": "externalTerminal",
-            "logging": {
-                "moduleLoad": false,
-                "trace": false
-            }
-        },
-        {
-            "name": "RUN (RelWithDebInfo)",
-            "cwd": "${workspaceFolder}",
-            "type": "lldb",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/RelWithDebInfo/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/RelWithDebInfo",
-            "args": ["${file}", "std::inline", "std::jit"],
-            "console": "integratedTerminal",
-            "logging": {
-                "moduleLoad": false,
-                "trace": false
-            }
-        },
-        {
-            "name": "RUN (build) - Linux",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/Release/camel",
-            "args": ["${file}"],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
-            "environment": [],
-            "externalConsole": true
-        },
-        {
-            "name": "RUN (debug)",
-            "cwd": "${workspaceFolder}",
-            "type": "cppvsdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["-v", "--log-level", "debug", "${file}"],
             "console": "externalTerminal",
             "logging": {
@@ -55,12 +16,26 @@
             }
         },
         {
-            "name": "RUN (fastvm/debug)",
+            "name": "Debugger (debug)",
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel-db.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
+            "args": ["${file}", "-s"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": true,
+                "trace": true
+            }
+        },
+        {
+            "name": "RUN (fastvm)",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["-v", "--log-level debug", "${file}", "std::fastvm"],
             "console": "externalTerminal",
             "logging": {
@@ -69,12 +44,40 @@
             }
         },
         {
-            "name": "RUN (jit/debug)",
+            "name": "RUN (nodevm)",
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
+            "args": ["-v", "--log-level debug", "${file}", "std::nodevm"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": true,
+                "trace": true
+            }
+        },
+        {
+            "name": "RUN (nodevm/inlined)",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
+            "args": ["-v", "--log-level debug", "${file}", "std::inline", "std::nodevm"],
+            "console": "externalTerminal",
+            "logging": {
+                "moduleLoad": true,
+                "trace": true
+            }
+        },
+        {
+            "name": "RUN (jit)",
+            "cwd": "${workspaceFolder}",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["-v", "--log-level debug", "${file}", "std::inline", "std::jit"],
             "console": "externalTerminal",
             "logging": {
@@ -83,13 +86,13 @@
             }
         },
         {
-            "name": "RUN (inlined/debug)",
+            "name": "RUN (inlined)",
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
-            "args": ["-v", "--log-level debug", "${file}", "std::inline", "std::fastvm"],
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
+            "args": ["-v", "--log-level debug", "${file}", "std::inline"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": true,
@@ -100,7 +103,7 @@
             "name": "RUN (debug) - Linux",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel",
+            "program": "${workspaceFolder}/out/latest/bin/camel",
             "args": ["-v", "--log-level debug", "--profile", "${file}"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
@@ -117,12 +120,12 @@
             "miDebuggerPath": "/usr/bin/gdb"
         },
         {
-            "name": "RUN (debug/clear)",
+            "name": "RUN (clear)",
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["${file}"],
             "console": "externalTerminal",
             "logging": {
@@ -135,9 +138,9 @@
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Release/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
-            "args": ["format", "${file}"],
+            "program": "${workspaceFolder}/out/latest/bin/camel-format.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
+            "args": ["-i", "${file}"],
             "console": "integratedTerminal",
             "logging": {
                 "moduleLoad": false,
@@ -149,8 +152,8 @@
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["inspect", "-v", "--log-level debug", "--tok", "${file}"],
             "console": "externalTerminal",
             "logging": {
@@ -163,8 +166,8 @@
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["inspect", "-v", "--log-level debug", "--cst", "${file}"],
             "console": "externalTerminal",
             "logging": {
@@ -177,8 +180,8 @@
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["inspect", "-v", "--log-level debug", "--ast", "${file}"],
             "console": "externalTerminal",
             "logging": {
@@ -191,8 +194,8 @@
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["inspect", "-v", "--log-level debug", "--gct", "${file}"],
             "console": "externalTerminal",
             "logging": {
@@ -205,8 +208,8 @@
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["inspect", "-v", "--log-level debug", "--gir", "${file}"],
             "console": "externalTerminal",
             "logging": {
@@ -219,8 +222,8 @@
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["-v", "--log-level debug", "${file}", "std::inline", "std::graphviz"],
             "console": "externalTerminal",
             "logging": {
@@ -233,8 +236,8 @@
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["inspect", "-v", "--log-level debug", "--tns", "${file}"],
             "console": "externalTerminal",
             "logging": {
@@ -247,8 +250,8 @@
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["${file}", "std::bytecode"],
             "console": "externalTerminal",
             "logging": {
@@ -261,8 +264,8 @@
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["${file}", "std::inline", "std::bytecode"],
             "console": "externalTerminal",
             "logging": {
@@ -275,8 +278,8 @@
             "cwd": "${workspaceFolder}",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/camel.exe",
-            "symbolSearchPath": "${workspaceFolder}/build/Debug",
+            "program": "${workspaceFolder}/out/latest/bin/camel.exe",
+            "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
             "args": ["check", "${file}"],
             "console": "externalTerminal",
             "logging": {

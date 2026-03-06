@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "inline.h"
 
-#include "builtin/algo/topo.h"
+#include "camel/common/algo/topo.h"
 #include "camel/utils/log.h"
 
 using namespace std;
@@ -43,7 +43,7 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
             continue;
         visited.insert(g);
 
-        std::vector<std::pair<node_ptr_t, node_ptr_t>> targets;
+        std::vector<std::pair<Node *, Node *>> targets;
 
         for (const auto &brch : g->nodes()) {
             if (brch->type() == NodeType::BRCH) {
@@ -57,9 +57,8 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
         }
 
         for (const auto &[brch, path] : targets) {
-            const auto &pathGraph =
-                tt::as_shared<FuncNode>(path)->func()->graph().shared_from_this();
-            node_ptr_t syncNode = g->inlineNode(path, true);
+            const auto &pathGraph = tt::as_ptr<FuncNode>(path)->func()->graph().shared_from_this();
+            Node *syncNode        = g->inlineNode(path, true);
 
             if (!syncNode) {
                 context_->rtmDiags()
@@ -86,7 +85,8 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
 
             g->rearrange();
 
-            l.in("InlinePass")
+            GetDefaultLogger()
+                .in("InlinePass")
                 .info(
                     "Inlined FUNC node {} (graph {}) between BRCH and JOIN node {} in graph {}.",
                     path->toString(),

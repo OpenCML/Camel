@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.1.15"
+#define VERSION "0.1.16"
 
 #include <string>
 
@@ -43,6 +43,12 @@ extern std::string errorFormat;
 extern std::string stdLibPath;
 extern std::vector<std::string> scriptsDirs;
 extern std::vector<std::string> targetFiles;
+extern std::vector<std::string> passes; // from --passes (comma-separated) or positional
+extern std::string passesOpt;           // raw --passes value (e.g. "a,b,c")
+extern std::string inputFile;           // input from --input (alternative to first positional)
+// Resolved after parse (used by main): no need to branch on --input/--passes vs positional
+extern std::string resolvedInputPath;             // effective input file path (or "" for stdin)
+extern std::vector<std::string> resolvedPassList; // effective pass list for run
 
 extern bool profile;
 extern bool noCache;

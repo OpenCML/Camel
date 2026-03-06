@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -943,7 +943,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            if (!norm[0]->assignable(norm[1]))
+                            if (!norm[1]->assignableFrom(norm[0]))
                                 return nullopt;
                             return norm[0];
                         }),
@@ -1338,7 +1338,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<Type *> { return norm[0]; }),
                 },
             }),
-        // ======= IO =======
+        // ======= IO（内置 input/print/println）======
         OperatorGroup::create(
             "input",
             {
@@ -1395,12 +1395,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // ======= OS =======
+        // ======= OS（实现位于 os.cmo）======
         OperatorGroup::create(
             "sleep",
             {
                 {
-                    ":os/sleep",
+                    "os:sleep",
                     StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void()),
                 },
             }),
@@ -1408,7 +1408,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "exit",
             {
                 {
-                    ":os/exit",
+                    "os:exit",
                     StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void()),
                 },
             }),
@@ -1732,7 +1732,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (with[1]->code() != TypeCode::Function)
                                 return nullopt;
                             const auto &funcType = tt::as_ptr<FunctionType>(with[1]);
-                            if (!funcType->assignable(FunctionType::create()))
+                            if (!FunctionType::create()->assignableFrom(funcType))
                                 return nullopt;
                             if (!funcType->exitType()->equals(Type::Bool()))
                                 return nullopt;
@@ -1829,7 +1829,8 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
 }
 
 bool GlobalsBuiltinModule::load() {
-    EXEC_WHEN_DEBUG(l.in("GlobalsBuiltinModule").info("Loading basic built-in module."));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("GlobalsBuiltinModule").info("Loading basic built-in module."));
     if (loaded_) {
         return true;
     }

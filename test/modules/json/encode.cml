@@ -1,0 +1,33 @@
+module main
+
+import { encode } from json
+
+func main(): int sync {
+    println("=== JSON encode tests ===")
+
+    println("\n[1] encode primitives")
+    println("  encode(42) =", encode(42))
+    println("  encode(3.14) =", encode(3.14))
+    println("  encode(true) =", encode(true))
+    println("  encode('hello') =", encode("hello"))
+
+    println("\n[2] encode array")
+    let arr = [1, 2, 3]
+    println("  encode([1,2,3]) =", encode(arr))
+
+    println("\n[2b] encode tuple")
+    let tup = (1, "foo", true)
+    println("  encode((1,'foo',true)) =", encode(tup))
+
+    println("\n[3] encode struct")
+    let obj = { x: 10, y: "bar", flag: true }
+    println("  encode({x:10, y:'bar', flag:true}) =", encode(obj))
+
+    println("\n[4] encode with indent")
+    let orig = { id: 1, name: "test", vals: [10, 20] }
+    println("  encode(orig, 2) pretty =")
+    println(encode(orig, 2))
+
+    println("\n=== JSON encode tests completed ===")
+    return 0
+}

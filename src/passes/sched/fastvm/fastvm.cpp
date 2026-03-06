@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,23 +51,27 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     }
     camel::jit::JitContext jitCtx{this, bytecodes_.data()};
     currentJitCtx_ = &jitCtx;
-    EXEC_WHEN_DEBUG(l.in("JIT").debug(
-        "JIT policy: {}",
-        jitConfig_.policy == camel::jit::JitPolicy::Disabled
-            ? "Disabled"
-            : (jitConfig_.policy == camel::jit::JitPolicy::Always ? "Always" : "OnDemand")));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("JIT").debug(
+            "JIT policy: {}",
+            jitConfig_.policy == camel::jit::JitPolicy::Disabled
+                ? "Disabled"
+                : (jitConfig_.policy == camel::jit::JitPolicy::Always ? "Always" : "OnDemand")));
     // Always: 启动时全量预编译；OnDemand: 不预编译，运行时按需编译
     if (jitConfig_.policy == camel::jit::JitPolicy::Always) {
         EXEC_WHEN_DEBUG(
-            l.in("JIT").info("JIT Always: compiling {} graph(s) (async)", offsetMap_.size()));
+            GetDefaultLogger().in("JIT").info(
+                "JIT Always: compiling {} graph(s) (async)",
+                offsetMap_.size()));
         std::vector<std::pair<GraphIR::Graph *, std::future<camel::jit::CompiledCode *>>> futures;
         for (const auto &[g, entryPc] : offsetMap_) {
             if (jitCache_.count(g))
                 continue;
-            EXEC_WHEN_DEBUG(l.in("JIT").debug(
-                "Submitting async compile: graph '{}' entryPc={}",
-                g->name(),
-                entryPc));
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger().in("JIT").debug(
+                    "Submitting async compile: graph '{}' entryPc={}",
+                    g->name(),
+                    entryPc));
             auto *backend = jitBackend_.get();
             camel::jit::CompilationUnit unit{
                 .graph          = g,
@@ -94,26 +98,34 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 if (fn) {
                     std::lock_guard lock(jitCacheMutex_);
                     jitCache_[g] = fn;
-                    EXEC_WHEN_DEBUG(l.in("JIT").info(
-                        "Compiled & loaded: graph '{}' codeSize={} bytes",
-                        g->name(),
-                        codeSize));
+                    EXEC_WHEN_DEBUG(
+                        GetDefaultLogger().in("JIT").info(
+                            "Compiled & loaded: graph '{}' codeSize={} bytes",
+                            g->name(),
+                            codeSize));
                 } else {
-                    EXEC_WHEN_DEBUG(l.in("JIT").warn("Load failed for graph '{}'", g->name()));
+                    EXEC_WHEN_DEBUG(
+                        GetDefaultLogger().in("JIT").warn("Load failed for graph '{}'", g->name()));
                 }
             } else {
                 EXEC_WHEN_DEBUG(
-                    l.in("JIT").debug("Compile failed/skipped for graph '{}'", g->name()));
+                    GetDefaultLogger().in("JIT").debug(
+                        "Compile failed/skipped for graph '{}'",
+                        g->name()));
             }
         }
     } else if (jitConfig_.policy == camel::jit::JitPolicy::OnDemand) {
         EXEC_WHEN_DEBUG(
-            l.in("JIT").info("JIT OnDemand: start with interpreter, compile on hot threshold"));
+            GetDefaultLogger().in("JIT").info(
+                "JIT OnDemand: start with interpreter, compile on hot threshold"));
     }
     GraphIR::Graph *entryGraph = graph.get();
     auto jitIt                 = jitCache_.find(entryGraph);
     if (jitIt != jitCache_.end()) {
-        EXEC_WHEN_DEBUG(l.in("JIT").info("Executing entry graph '{}' via JIT", entryGraph->name()));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("JIT").info(
+                "Executing entry graph '{}' via JIT",
+                entryGraph->name()));
         Frame *frame = framePool_.acquire(entryGraph);
         opperf::start();
         [[maybe_unused]] slot_t result = jitIt->second(frame->slotBase(), &jitCtx);
@@ -122,9 +134,10 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
         framePool_.release(frame);
         return Graph::null();
     }
-    EXEC_WHEN_DEBUG(l.in("JIT").info(
-        "Entry graph '{}' not in JIT cache, falling back to interpreter",
-        entryGraph->name()));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("JIT").info(
+            "Entry graph '{}' not in JIT cache, falling back to interpreter",
+            entryGraph->name()));
 #endif
 
     opperf::start();
@@ -230,8 +243,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
     Function *func = currFrame.get<Function *>(wargs[0]);
     Tuple *closure = func->tuple();
 
-    const auto &retArrType = currFrame.typeAt<ArrayType>(self);
-    Array *filtered        = Array::create(mm::autoSpace(), arr->size());
+    Array *filtered = Array::create(mm::autoSpace(), arr->size());
 
     slot_t *from = arr->data();
     for (size_t i = 0; i < arr->size(); ++i) {
@@ -253,11 +265,11 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
         framePool_.release(frame);
 
         if (fromSlot<bool>(result)) {
-            filtered->append(from[i], retArrType);
+            filtered->append(from[i]);
         }
     }
 
-    filtered->shrinkToFit(retArrType);
+    filtered->shrinkToFit();
 
     currFrame.set(self, filtered);
 }
@@ -364,7 +376,10 @@ void FastVMSchedPass::compileAndCacheGraph(GraphIR::Graph *graph, size_t entryPc
             const uint8_t *p              = compiled->code.data();
             const size_t size             = compiled->code.size();
             constexpr size_t bytesPerLine = 16;
-            l.in("JIT").info("JIT executed code for graph '{}' ({} bytes):", graph->name(), size);
+            GetDefaultLogger().in("JIT").info(
+                "JIT executed code for graph '{}' ({} bytes):",
+                graph->name(),
+                size);
             for (size_t i = 0; i < size; i += bytesPerLine) {
                 std::string line;
                 for (size_t j = 0; j < bytesPerLine && i + j < size; ++j) {
@@ -372,7 +387,7 @@ void FastVMSchedPass::compileAndCacheGraph(GraphIR::Graph *graph, size_t entryPc
                     snprintf(buf, sizeof(buf), "%02x ", p[i + j]);
                     line += buf;
                 }
-                l.in("JIT").info("  [{:4}] {}", static_cast<unsigned>(i), line);
+                GetDefaultLogger().in("JIT").info("  [{:4}] {}", static_cast<unsigned>(i), line);
             }
         }
     });
@@ -388,7 +403,10 @@ void FastVMSchedPass::compileAndCacheGraph(GraphIR::Graph *graph, size_t entryPc
             }
             pc += bc.opsize;
         }
-        EXEC_WHEN_DEBUG(l.in("JIT").info("OnDemand: compiled & cached graph '{}'", graph->name()));
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("JIT").info(
+                "OnDemand: compiled & cached graph '{}'",
+                graph->name()));
     }
 }
 
@@ -399,22 +417,29 @@ slot_t FastVMSchedPass::invokeCallOrJit(
     auto it = jitCache_.find(graph);
     if (it != jitCache_.end()) {
         EXEC_WHEN_DEBUG(
-            l.in("JIT").debug("invokeCallOrJit: graph '{}' pc={} -> JIT", graph->name(), pc));
+            GetDefaultLogger().in("JIT").debug(
+                "invokeCallOrJit: graph '{}' pc={} -> JIT",
+                graph->name(),
+                pc));
         return it->second(frame->slotBase(), jitCtx);
     }
     if (tierPolicy_.shouldJit(callCount)) {
         compileAndCacheGraph(graph, pc);
         it = jitCache_.find(graph);
         if (it != jitCache_.end()) {
-            EXEC_WHEN_DEBUG(l.in("JIT").debug(
-                "invokeCallOrJit: graph '{}' pc={} -> JIT (after compile)",
-                graph->name(),
-                pc));
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger().in("JIT").debug(
+                    "invokeCallOrJit: graph '{}' pc={} -> JIT (after compile)",
+                    graph->name(),
+                    pc));
             return it->second(frame->slotBase(), jitCtx);
         }
     }
     EXEC_WHEN_DEBUG(
-        l.in("JIT").debug("invokeCallOrJit: graph '{}' pc={} -> interpreter", graph->name(), pc));
+        GetDefaultLogger().in("JIT").debug(
+            "invokeCallOrJit: graph '{}' pc={} -> interpreter",
+            graph->name(),
+            pc));
     return call(pc, frame);
 }
 #endif

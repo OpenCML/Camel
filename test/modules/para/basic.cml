@@ -1,0 +1,13 @@
+module main
+
+import para
+
+func main(): int sync {
+    println("=== Para Module Basic Tests ===")
+
+    println("\n[1] import para OK")
+    println("  para module exports unordered_reduce, unordered_foreach")
+
+    println("\n=== Para tests completed ===")
+    return 0
+}

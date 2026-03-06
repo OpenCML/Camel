@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -103,7 +103,9 @@ TupleType::TupleType(const TupleTypeLayout &layout, const std::vector<Type *> &t
 TupleType *TupleType::create() {
     TupleTypeLayout layout = computeLayout(0, 0);
     EXEC_WHEN_DEBUG(
-        l.in("TupleType").debug("Allocating TupleType: (), size: {} bytes", layout.totalSize));
+        GetDefaultLogger()
+            .in("TupleType")
+            .debug("Allocating TupleType: (), size: {} bytes", layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
     ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
     return new (mem) TupleType(layout, nullptr, nullptr, nullptr);
@@ -116,12 +118,14 @@ TupleType *TupleType::create(const std::vector<Type *> &types) {
             ++refCount;
     }
     TupleTypeLayout layout = computeLayout(types.size(), refCount);
-    EXEC_WHEN_DEBUG(l.in("TupleType")
-                        .debug(
-                            "Allocating TupleType: size={}, refCount={}, totalSize: {} bytes",
-                            layout.size,
-                            layout.refCount,
-                            layout.totalSize));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger()
+            .in("TupleType")
+            .debug(
+                "Allocating TupleType: size={}, refCount={}, totalSize: {} bytes",
+                layout.size,
+                layout.refCount,
+                layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
     ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
     return new (mem) TupleType(layout, types);
@@ -138,7 +142,8 @@ TupleType *TupleType::fromFactory(TupleTypeFactory &factory) {
     }
     TupleTypeLayout layout = computeLayout(size, refCount);
     EXEC_WHEN_DEBUG(
-        l.in("TupleType")
+        GetDefaultLogger()
+            .in("TupleType")
             .debug(
                 "Allocating TupleType(fromFactory): size={}, refCount={}, totalSize: {} bytes",
                 layout.size,
@@ -154,7 +159,8 @@ TupleType *TupleType::fromFactoryData(
     size_t refCount) {
     TupleTypeLayout layout = computeLayout(size, refCount);
     EXEC_WHEN_DEBUG(
-        l.in("TupleType")
+        GetDefaultLogger()
+            .in("TupleType")
             .debug(
                 "Allocating TupleType(fromFactoryData): size={}, refCount={}, totalSize: {} bytes",
                 size,
@@ -267,11 +273,12 @@ bool TupleType::equals(Type *other) const {
     return true;
 }
 
-CastSafety TupleType::castSafetyTo(Type *targetType) const {
-    if (this == targetType) {
+CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
+    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
+        return *r;
+    if (this == sourceType)
         return CastSafety::Safe;
-    }
     return CastSafety::Forbidden;
 }
 
-bool TupleType::assignable(Type *type) const { return equals(type); }
+bool TupleType::assignableFrom(Type *sourceType) const { return equals(sourceType); }

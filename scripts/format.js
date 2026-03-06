@@ -1,12 +1,19 @@
 import { execSync } from 'child_process'
 
+const dirs = [
+    'src',
+    'include',
+    'modules',
+    'tools',
+]
+
 function getChangedFiles() {
     try {
         const output = execSync('git diff --name-only --diff-filter=ACMR HEAD', { encoding: 'utf-8' })
         return output
             .split('\n')
             .map((f) => f.trim())
-            .filter((f) => f.match(/\.(cpp|h)$/) && (f.startsWith('src/') || f.startsWith('include/')))
+            .filter((f) => f.match(/\.(cpp|h)$/) && dirs.some(dir => f.startsWith(dir + '/')))
     } catch (err) {
         console.error('Error getting changed files from git:', err)
         return []

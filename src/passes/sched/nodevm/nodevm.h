@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  *
  * NodeVM：在图节点上直接执行，无字节码编译。用于展示在 GIR 上直接执行的流程。
@@ -21,6 +21,12 @@
 
 #pragma once
 
+#include <span>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+#include "camel/compile/gir/types.h"
 #include "camel/core/context/frame.h"
 #include "camel/execute/pass/sched.h"
 
@@ -29,26 +35,30 @@ class NodeVMSchedPass : public GraphSchedulePass {
 
     size_t currRecursionDepth_ = 0;
     FramePool framePool_{1 * MB};
-    std::unordered_map<GraphIR::Graph *, std::shared_ptr<GraphIR::node_vec_t>> graphTopoNodesCache_;
+    // 热路径走 Graph extra 的 O(1) 缓存；冷路径写入 topoNodesOwned_ 并挂到 extra 上
+    std::unordered_set<GraphIR::Graph *> graphsWithTopoCache_;
+    std::unordered_map<GraphIR::Graph *, std::vector<GraphIR::Node *>> topoNodesOwned_;
+
+    // 复用 buffer，避免 OPER 分支内每次堆分配（先 norm 后 with，用偏移区分）
+    std::vector<GraphIR::data_idx_t> operIndices_;
+
+    static constexpr size_t kTopoNodesExtraIndex = 1;
 
     slot_t call(GraphIR::Graph *graph, Frame *rootFrame);
-    std::shared_ptr<GraphIR::node_vec_t> getTopoNodes(GraphIR::Graph *graph);
-
-    /// 执行一次 CALL 或 FUNC 节点，返回调用结果（供 JOIN 与 CALL/FUNC 使用）
-    slot_t doCall(const GraphIR::node_ptr_t &n, Frame *currFrame);
-
-    void
-    evalMarkedOperator(const std::string &uri, const GraphIR::node_ptr_t &node, Frame &currFrame);
-
-    void evalMarkedOperator_map_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
-    void evalMarkedOperator_apply_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
-    void evalMarkedOperator_filter_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
-    void evalMarkedOperator_reduce_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
-    void evalMarkedOperator_foreach_arr(const GraphIR::node_ptr_t &node, Frame &currFrame);
+    std::span<GraphIR::Node *> buildTopoNodes(GraphIR::Graph *graph);
 
   public:
     NodeVMSchedPass(const context_ptr_t &ctx) : GraphSchedulePass(ctx) {}
-    virtual ~NodeVMSchedPass() = default;
+    ~NodeVMSchedPass() override;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+
+  private:
+    void evalMarkedOperator(const std::string &uri, GraphIR::Node *node, Frame &currFrame);
+
+    void evalMarkedOperator_map_arr(GraphIR::Node *node, Frame &currFrame);
+    void evalMarkedOperator_apply_arr(GraphIR::Node *node, Frame &currFrame);
+    void evalMarkedOperator_filter_arr(GraphIR::Node *node, Frame &currFrame);
+    void evalMarkedOperator_reduce_arr(GraphIR::Node *node, Frame &currFrame);
+    void evalMarkedOperator_foreach_arr(GraphIR::Node *node, Frame &currFrame);
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,10 @@
 #include "camel/utils/log.h"
 #include "header.h"
 
+#ifndef NDEBUG
+#include "camel/core/mm/debug_hook.h"
+#endif
+
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -34,7 +38,8 @@
 
 class FreeListAllocator : public IAllocator {
   public:
-    explicit FreeListAllocator(size_t capacity) : capacity_(capacity) {
+    explicit FreeListAllocator(size_t capacity, const char *debugRegion = nullptr)
+        : capacity_(capacity), debugRegion_(debugRegion) {
         size_t aligned_capacity = alignUp(capacity, alignof(slot_t));
         size_t num_units        = aligned_capacity / sizeof(slot_t);
 
@@ -60,6 +65,11 @@ class FreeListAllocator : public IAllocator {
             ASSERT(curr->size % alignof(slot_t) == 0, "Unaligned free block");
 
             if (LIKELY(curr->size >= total_size)) {
+                EXEC_WHEN_DEBUG({
+                    if (debugRegion_) {
+                        mm::invokePreAllocHook(mm::PreAllocEvent{total_size, debugRegion_});
+                    }
+                });
                 std::byte *blockStart = reinterpret_cast<std::byte *>(curr);
                 size_t remaining      = curr->size - total_size;
 
@@ -77,7 +87,17 @@ class FreeListAllocator : public IAllocator {
                     installHeader(blockStart, curr->size);
                     *prevPtr = curr->next;
                 }
-
+                EXEC_WHEN_DEBUG({
+                    if (debugRegion_) {
+                        size_t allocSize =
+                            (remaining >= sizeof(FreeBlock)) ? total_size : curr->size;
+                        mm::invokePostAllocHook(
+                            mm::AllocEvent{
+                                blockStart + sizeof(ObjectHeader),
+                                allocSize,
+                                debugRegion_});
+                    }
+                });
                 return blockStart + sizeof(ObjectHeader);
             }
 
@@ -101,7 +121,7 @@ class FreeListAllocator : public IAllocator {
         std::byte *blockData = reinterpret_cast<std::byte *>(header);
 
         // 检测重复释放：检查是否与任何空闲块重叠
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             FreeBlock *fb = freeList_;
             while (fb) {
                 std::byte *fb_start  = reinterpret_cast<std::byte *>(fb);
@@ -113,7 +133,7 @@ class FreeListAllocator : public IAllocator {
 
                 fb = fb->next;
             }
-        }());
+        });
 
         insertAndCoalesce(blockData, total_size);
     }
@@ -146,7 +166,7 @@ class FreeListAllocator : public IAllocator {
         }
 
         // 检测重复释放
-        EXEC_WHEN_DEBUG([&]() {
+        EXEC_WHEN_DEBUG({
             for (const auto &[addr, size] : blocks) {
                 FreeBlock *fb = freeList_;
                 while (fb) {
@@ -160,7 +180,7 @@ class FreeListAllocator : public IAllocator {
                     fb = fb->next;
                 }
             }
-        }());
+        });
 
         // 逐个插入并合并
         for (const auto &[addr, size] : blocks) {
@@ -357,6 +377,7 @@ class FreeListAllocator : public IAllocator {
     };
 
     size_t capacity_;
+    const char *debugRegion_{nullptr}; // Debug 模式下用于 hook
     std::unique_ptr<slot_t[]> buffer_;
     std::byte *start_;
     std::byte *end_;

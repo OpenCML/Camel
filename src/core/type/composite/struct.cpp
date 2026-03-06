@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Feb. 23, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -85,7 +85,9 @@ StructType::StructType(
 StructType *StructType::create() {
     StructTypeLayout layout = computeLayout(0, 0, 0);
     EXEC_WHEN_DEBUG(
-        l.in("StructType").debug("Allocating StructType: (), size: {} bytes", layout.totalSize));
+        GetDefaultLogger()
+            .in("StructType")
+            .debug("Allocating StructType: (), size: {} bytes", layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
     ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
     return new (mem) StructType(layout, nullptr, nullptr, nullptr, nullptr, nullptr);
@@ -131,12 +133,14 @@ StructType *StructType::fromFactoryData(
     }
 
     StructTypeLayout layout = computeLayout(size, refCount, fieldNamesData.size());
-    EXEC_WHEN_DEBUG(l.in("StructType")
-                        .debug(
-                            "Allocating StructType: size={}, refCount={}, totalSize: {} bytes",
-                            size,
-                            refCount,
-                            layout.totalSize));
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger()
+            .in("StructType")
+            .debug(
+                "Allocating StructType: size={}, refCount={}, totalSize: {} bytes",
+                size,
+                refCount,
+                layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
     ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
     return new (mem) StructType(
@@ -288,6 +292,10 @@ bool StructType::equals(Type *type) const {
     return true;
 }
 
-CastSafety StructType::castSafetyTo(Type *) const { return CastSafety::Forbidden; }
+CastSafety StructType::castSafetyFrom(Type *sourceType) const {
+    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
+        return *r;
+    return CastSafety::Forbidden;
+}
 
-bool StructType::assignable(Type *type) const { return equals(type); }
+bool StructType::assignableFrom(Type *sourceType) const { return equals(sourceType); }
