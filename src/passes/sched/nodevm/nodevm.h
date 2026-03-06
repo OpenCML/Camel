@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <unordered_set>
+
 #include "camel/core/context/frame.h"
 #include "camel/execute/pass/sched.h"
 
@@ -29,8 +31,9 @@ class NodeVMSchedPass : public GraphSchedulePass {
 
     size_t currRecursionDepth_ = 0;
     FramePool framePool_{1 * MB};
-    std::unordered_map<GraphIR::Graph *, std::shared_ptr<std::vector<GraphIR::Node *>>>
-        graphTopoNodesCache_;
+    std::unordered_set<GraphIR::Graph *> graphsWithTopoCache_;
+
+    static constexpr size_t kTopoNodesExtraIndex = 1;
 
     slot_t call(GraphIR::Graph *graph, Frame *rootFrame);
     std::shared_ptr<std::vector<GraphIR::Node *>> getTopoNodes(GraphIR::Graph *graph);
@@ -45,7 +48,7 @@ class NodeVMSchedPass : public GraphSchedulePass {
 
   public:
     NodeVMSchedPass(const context_ptr_t &ctx) : GraphSchedulePass(ctx) {}
-    virtual ~NodeVMSchedPass() = default;
+    ~NodeVMSchedPass() override;
 
     virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
 };
