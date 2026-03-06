@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,6 +40,7 @@
 #include "command/commands.h"
 #include "command/dispatcher.h"
 #include "compile.h"
+#include "gir_json.h"
 #include "run.h"
 #include "state.h"
 #include "worker.h"
@@ -91,7 +92,7 @@ std::string getEnvValue(const char *name) {
 
 /// 父进程 POST /api/run 触发一次执行，由 WorkerRunHandler 置位、主循环消费。
 /// body 可含 passes（字符串数组），与 CLI 的 Run::targetFiles[1:] 一致；空则 applyPasses 用
-/// std::fallback。
+/// std::default。
 struct PendingRun {
     bool hasRun = false;
 };
@@ -162,7 +163,11 @@ int runWorkerMode(int argc, char *argv[]) {
             if (!result.message.empty())
                 Logger::WriteToAllStreams(result.message + "\n");
         });
-    getServer().setQueryCallbacks(getStateJson, getGirJson);
+    getServer().setQueryCallbacks(
+        getStateJson,
+        [](const std::string &path, const std::string &graphId) {
+            return getGirJson(path, graphId);
+        });
     EXEC_WHEN_DEBUG({
         camel::DebugBreakpoint::RegisterType("alloc");
         camel::DebugBreakpoint::RegisterType("alloc_before");
@@ -183,9 +188,11 @@ int runWorkerMode(int argc, char *argv[]) {
                 return;
             }
             if (std::strcmp(type, "gir_node") == 0 && ctx != nullptr) {
-                auto *node    = static_cast<const GraphIR::Node *>(ctx);
-                uintptr_t ptr = reinterpret_cast<uintptr_t>(node);
-                if (getServer().isGirBreakpointNode(ptr)) {
+                auto *node           = static_cast<const GraphIR::Node *>(ctx);
+                uintptr_t ptr        = reinterpret_cast<uintptr_t>(node);
+                std::string stableId = getStableNodeId(node);
+                if (getServer().isGirBreakpointNode(ptr) ||
+                    getServer().isGirBreakpointNodeStable(stableId)) {
                     std::string nodeId = std::format("0x{:x}", ptr);
                     std::string graphId =
                         std::format("0x{:x}", reinterpret_cast<uintptr_t>(&node->graph()));

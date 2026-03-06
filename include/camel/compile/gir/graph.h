@@ -56,6 +56,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
     std::string mangledName() const { return name_ + std::format("<{}>", funcType()->mangle()); }
+    std::string stableId() const { return mangledName(); }
     std::string location() const;
     bool looped() const { return looped_; }
     bool empty() const { return nodes_.empty(); }

@@ -228,14 +228,14 @@ loop_start: {
         }
 
         EXEC_WHEN_DEBUG({
-            if (camel::DebugBreakpoint::IsEnabled("gir_node"))
-                camel::DebugBreakpoint::Hit("gir_node", n);
             GetDefaultLogger().in("NodeVM").debug(
                 "Executing node [{}/{}] graph={}: {}",
                 i + 1,
                 currNodes.size(),
                 currGraph->name(),
                 n->toString());
+            if (camel::DebugBreakpoint::IsEnabled("gir_node"))
+                camel::DebugBreakpoint::Hit("gir_node", n);
         });
 
         switch (n->type()) {

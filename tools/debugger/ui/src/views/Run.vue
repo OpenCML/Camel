@@ -46,7 +46,7 @@ const DEFAULT_STAGES = [
   { id: 'CST', label: 'CST' },
   { id: 'AST', label: 'AST' },
   { id: 'GCT', label: 'GCT' },
-  { id: 'std::fallback', label: 'fallback' },
+  { id: 'std::default', label: 'fallback' },
   { id: 'GIR-Z', label: 'GIR-Z' },
 ]
 

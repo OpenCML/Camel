@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -338,7 +338,37 @@ void DebuggerServer::setGirBreakpointNodeIds(std::unordered_set<uintptr_t> ids) 
     std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
     girBreakpointNodeIds_ = std::move(ids);
     EXEC_WHEN_DEBUG({
-        if (girBreakpointNodeIds_.empty())
+        if (girBreakpointNodeIds_.empty() && girBreakpointStableIds_.empty())
+            camel::DebugBreakpoint::DisableType("gir_node");
+        else
+            camel::DebugBreakpoint::EnableType("gir_node");
+    });
+}
+
+void DebuggerServer::setGirBreakpointNodeIdsFromStrings(const std::vector<std::string> &nodeIds) {
+    std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
+    girBreakpointNodeIds_.clear();
+    girBreakpointStableIds_.clear();
+    for (const std::string &s : nodeIds) {
+        if (s.size() >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+            size_t pos = 2;
+            if (s.find('_') == std::string::npos) {
+                try {
+                    uintptr_t u = static_cast<uintptr_t>(std::stoull(s, &pos, 16));
+                    if (pos == s.size())
+                        girBreakpointNodeIds_.insert(u);
+                    else
+                        girBreakpointStableIds_.insert(s);
+                } catch (...) {
+                    girBreakpointStableIds_.insert(s);
+                }
+            } else
+                girBreakpointStableIds_.insert(s);
+        } else
+            girBreakpointStableIds_.insert(s);
+    }
+    EXEC_WHEN_DEBUG({
+        if (girBreakpointNodeIds_.empty() && girBreakpointStableIds_.empty())
             camel::DebugBreakpoint::DisableType("gir_node");
         else
             camel::DebugBreakpoint::EnableType("gir_node");
@@ -350,9 +380,30 @@ bool DebuggerServer::isGirBreakpointNode(uintptr_t nodePtr) const {
     return girBreakpointNodeIds_.count(nodePtr) != 0;
 }
 
+bool DebuggerServer::isGirBreakpointNodeStable(const std::string &stableId) const {
+    if (stableId.empty())
+        return false;
+    std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
+    return girBreakpointStableIds_.count(stableId) != 0;
+}
+
 std::unordered_set<uintptr_t> DebuggerServer::getGirBreakpointNodeIds() const {
     std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
     return girBreakpointNodeIds_;
+}
+
+std::vector<std::string> DebuggerServer::getGirBreakpointNodeIdsForApi() const {
+    std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
+    std::vector<std::string> out;
+    std::ostringstream hex;
+    for (uintptr_t p : girBreakpointNodeIds_) {
+        hex.str("");
+        hex << "0x" << std::hex << p;
+        out.push_back(hex.str());
+    }
+    for (const std::string &s : girBreakpointStableIds_)
+        out.push_back(s);
+    return out;
 }
 
 void DebuggerServer::setEnabledBreakpointTypes(std::vector<std::string> types) {
@@ -939,15 +990,10 @@ void DebuggerServer::httpServerLoop() {
                 return;
             if (requireWorkerForLocal(res))
                 return;
-            auto ids   = getGirBreakpointNodeIds();
-            json j     = json::array();
-            auto toHex = [](uintptr_t v) {
-                std::ostringstream o;
-                o << std::hex << v;
-                return o.str();
-            };
-            for (uintptr_t p : ids)
-                j.push_back("0x" + toHex(p));
+            std::vector<std::string> ids = getGirBreakpointNodeIdsForApi();
+            json j                       = json::array();
+            for (const auto &s : ids)
+                j.push_back(s);
             json out;
             out["nodeIds"] = j;
             res.set_content(out.dump(), "application/json");
@@ -959,22 +1005,15 @@ void DebuggerServer::httpServerLoop() {
         [this, tryForwardToTarget, requireNoTasksForLocal, requireWorkerForLocal](
             const httplib::Request &req,
             httplib::Response &res) {
-            std::unordered_set<uintptr_t> ids;
+            std::vector<std::string> ids;
             try {
                 json body = json::parse(req.body.empty() ? "{}" : req.body);
                 if (body.contains("nodeIds") && body["nodeIds"].is_array()) {
-                    for (const auto &v : body["nodeIds"]) {
-                        std::string s = v.get<std::string>();
-                        uintptr_t u   = 0;
-                        if (s.size() > 2 && (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')))
-                            u = static_cast<uintptr_t>(std::stoull(s, nullptr, 16));
-                        else
-                            u = static_cast<uintptr_t>(std::stoull(s, nullptr, 0));
-                        ids.insert(u);
-                    }
+                    for (const auto &v : body["nodeIds"])
+                        ids.push_back(v.get<std::string>());
                 }
                 if (!isWorkerProcess())
-                    setGirBreakpointNodeIds(ids);
+                    setGirBreakpointNodeIdsFromStrings(ids);
             } catch (const std::exception &e) {
                 json j;
                 j["ok"]    = false;
@@ -989,7 +1028,7 @@ void DebuggerServer::httpServerLoop() {
             if (requireWorkerForLocal(res))
                 return;
             try {
-                setGirBreakpointNodeIds(std::move(ids));
+                setGirBreakpointNodeIdsFromStrings(ids);
                 res.set_content("{\"ok\":true}", "application/json");
             } catch (const std::exception &e) {
                 json j;
@@ -1010,14 +1049,14 @@ void DebuggerServer::httpServerLoop() {
                 return;
             if (requireWorkerForLocal(res))
                 return;
-            // Worker: return compile stages + runPasses (empty => std::fallback) + GIR-Z
+            // Worker: return compile stages + runPasses (empty => std::default) + GIR-Z
             json j;
             json stages = json::array();
             for (const char *id : {"CTS", "CST", "AST", "GCT"})
                 stages.push_back({{"id", id}, {"label", id}});
             const auto &passes = getState().runPasses;
             if (passes.empty()) {
-                stages.push_back({{"id", "std::fallback"}, {"label", "fallback"}});
+                stages.push_back({{"id", "std::default"}, {"label", "fallback"}});
             } else {
                 for (const auto &p : passes) {
                     std::string label = p;

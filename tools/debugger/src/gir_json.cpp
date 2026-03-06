@@ -22,6 +22,7 @@
  */
 
 #include "gir_json.h"
+#include "camel/compile/gir/graph.h"
 #include "camel/compile/gir/nodes.h"
 #include "camel/compile/gir/types.h"
 #include "camel/utils/type.h"
@@ -42,10 +43,11 @@ std::string ptrToId(const void *ptr) {
     return std::format("0x{:x}", reinterpret_cast<uintptr_t>(ptr));
 }
 
-/// 单个图的摘要：id, name, funcTypeSummary（用于 children/dependencies 数组项）
+/// 单个图的摘要：id 使用稳定 API stableId()，name, funcTypeSummary（用于 children/dependencies
+/// 数组项）
 json graphSummary(const graph_ptr_t &g) {
     json j;
-    j["id"]   = ptrToId(g.get());
+    j["id"]   = g->stableId();
     j["name"] = g->name();
     if (g->funcType())
         j["funcTypeSummary"] = g->funcType()->toString();
@@ -72,11 +74,11 @@ json rootSummaryToJson(const graph_ptr_t &root) {
     return graph;
 }
 
-/// 从 root 起 BFS 查找 id 匹配的图
+/// 从 root 起 BFS 查找 id 匹配的图（id 为 stableId）
 graph_ptr_t findGraphById(const graph_ptr_t &root, const std::string &graphId) {
     if (!root || graphId.empty())
         return nullptr;
-    if (ptrToId(root.get()) == graphId)
+    if (root->stableId() == graphId)
         return root;
     std::queue<graph_ptr_t> q;
     std::unordered_set<Graph *> seen;
@@ -88,7 +90,7 @@ graph_ptr_t findGraphById(const graph_ptr_t &root, const std::string &graphId) {
         for (const auto &[name, subSet] : g->subGraphs()) {
             for (const auto &sub : subSet) {
                 if (sub && seen.insert(sub.get()).second) {
-                    if (ptrToId(sub.get()) == graphId)
+                    if (sub->stableId() == graphId)
                         return sub;
                     q.push(sub);
                 }
@@ -96,7 +98,7 @@ graph_ptr_t findGraphById(const graph_ptr_t &root, const std::string &graphId) {
         }
         for (const auto &dep : g->dependencies()) {
             if (dep && seen.insert(dep.get()).second) {
-                if (ptrToId(dep.get()) == graphId)
+                if (dep->stableId() == graphId)
                     return dep;
                 q.push(dep);
             }
@@ -226,11 +228,12 @@ void nodeRawFields(Node *node, json &j) {
     }
 }
 
-json nodeToJson(Node *node, const std::string &graphId) {
+json nodeToJson(Node *node) {
     json j;
-    j["id"]      = ptrToId(node);
-    j["graphId"] = graphId;
-    j["type"]    = to_string(node->type());
+    j["id"]       = ptrToId(node);
+    j["graphId"]  = node->graph().stableId();
+    j["stableId"] = node->stableId();
+    j["type"]     = to_string(node->type());
     std::string label, shape, style;
     nodeLabelShapeStyle(node, label, shape, style);
     j["shape"]     = shape;
@@ -241,11 +244,10 @@ json nodeToJson(Node *node, const std::string &graphId) {
     return j;
 }
 
-/// 单图展开：nodes, edges, children, dependencies
+/// 单图展开：nodes, edges, children, dependencies；图 id 使用 stableId()
 json expandedGraphToJson(const graph_ptr_t &graph) {
-    std::string gid   = ptrToId(graph.get());
     json j            = graphSummary(graph);
-    j["parentId"]     = graph->isRoot() ? json() : json(ptrToId(graph->outer().get()));
+    j["parentId"]     = graph->isRoot() ? json() : json(graph->outer()->stableId());
     j["children"]     = json::array();
     j["dependencies"] = json::array();
     j["nodes"]        = json::array();
@@ -271,8 +273,8 @@ json expandedGraphToJson(const graph_ptr_t &graph) {
     for (Node *c : graph->closure())
         nodes.push_back(c);
 
-    for (const auto &n : nodes)
-        j["nodes"].push_back(nodeToJson(n, gid));
+    for (Node *n : nodes)
+        j["nodes"].push_back(nodeToJson(n));
 
     size_t edgeId = 0;
     auto addEdge =
@@ -330,6 +332,10 @@ json expandedGraphToJson(const graph_ptr_t &graph) {
 }
 
 } // namespace
+
+std::string getStableNodeId(const Node *node) {
+    return node ? const_cast<Node *>(node)->stableId() : std::string{};
+}
 
 std::pair<std::string, std::string>
 getGirJson(const graph_ptr_t &root, const std::string &graphId) {

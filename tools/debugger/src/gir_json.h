@@ -13,6 +13,10 @@
 #include <string>
 #include <utility>
 
+namespace GraphIR {
+class Node;
+}
+
 namespace debugger {
 
 /// 将 GIR 序列化为 JSON。
@@ -20,5 +24,8 @@ namespace debugger {
 /// 返回 (json 字符串, 错误信息)，错误为空表示成功。
 std::pair<std::string, std::string>
 getGirJson(const GraphIR::graph_ptr_t &root, const std::string &graphId);
+
+/// 返回节点的稳定 ID（graphId_nIndex），与 JSON 中 stableId 一致，用于跨 Run 断点匹配。
+std::string getStableNodeId(const GraphIR::Node *node);
 
 } // namespace debugger

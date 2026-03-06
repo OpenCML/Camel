@@ -56,6 +56,9 @@ class Node {
     Graph &graph() const { return graph_; }
     data_idx_t index() const;
     void setIndex(data_idx_t index) { dataIndex_ = index; }
+    std::string stableId() const {
+        return graph().stableId() + "_n" + std::to_string(static_cast<int>(index()));
+    }
     bool macro() const { return macro_; }
     bool constant() const { return const_; }
     void setMacro(bool m) { macro_ = m; }

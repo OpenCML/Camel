@@ -4,7 +4,13 @@
     :title="data?.tooltipText || data?.tooltip"
   >
     <Handle v-if="!isSubgraph" type="target" :position="Position.Left" />
-    <span v-if="data?.hasBreakpoint" class="gir-node-breakpoint-dot" aria-label="Breakpoint" />
+    <span
+      v-if="!isSubgraph"
+      class="gir-breakpoint-toggle"
+      :class="{ 'gir-breakpoint-toggle--active': data?.hasBreakpoint }"
+      :title="data?.hasBreakpoint ? 'Remove breakpoint' : 'Set breakpoint'"
+      aria-label="Toggle breakpoint"
+    />
     <span v-if="data?.isPaused" class="gir-node-paused-badge">●</span>
     <span class="gir-node-label">
       <template v-if="labelFragments.length">
@@ -105,15 +111,32 @@ const kindClass = computed(() => {
   text-overflow: ellipsis;
   vertical-align: middle;
 }
-.gir-node-breakpoint-dot {
+/* Clickable breakpoint toggle: always visible on non-subgraph nodes */
+.gir-breakpoint-toggle {
   position: absolute;
-  top: 4px;
+  top: 50%;
   right: 6px;
-  width: 6px;
-  height: 6px;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: #da3633;
+  border: 1.5px solid #8b949e;
+  background: transparent;
+  cursor: pointer;
   flex-shrink: 0;
+  z-index: 2;
+}
+.gir-breakpoint-toggle:hover {
+  border-color: #da3633;
+  background: rgba(218, 54, 51, 0.2);
+}
+.gir-breakpoint-toggle--active {
+  background: #da3633;
+  border-color: #da3633;
+}
+.gir-breakpoint-toggle--active:hover {
+  background: #f85149;
+  border-color: #f85149;
 }
 .gir-node-paused-badge {
   position: absolute;

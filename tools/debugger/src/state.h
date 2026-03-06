@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -64,7 +64,7 @@ struct DebuggerState {
     context_ptr_t ctx;
     std::shared_ptr<UserDefinedModule> mainModule;
     std::shared_ptr<CamelParser> parser;
-    /// Pass 列表：与 CLI 的 Run::targetFiles[1:] 一致，空时 applyPasses 使用 std::fallback。
+    /// Pass 列表：与 CLI 的 Run::targetFiles[1:] 一致，空时 applyPasses 使用 std::default
     std::vector<std::string> runPasses;
 
     bool hasFile() const { return !targetFile.empty(); }

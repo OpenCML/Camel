@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -169,8 +169,8 @@ const PassScopePtr passScope = initPassScope();
 
 std::unordered_map<std::string, std::string> passAliases = {
     // 标准调度器
-    {"std::fallback", "std::fastvm"},
-    {"std::linear", "std::fastvm"},
+    {"std::default", "std::nodevm"},
+    {"std::linear", "std::nodevm"},
     {"std::parallel", "std::taskflow"},
 
     // 常用vm缩写
@@ -268,9 +268,9 @@ int applyPasses(
     }
 
     if (graph != Graph::null()) {
-        auto factory = findPassFactory("std::fallback", os);
+        auto factory = findPassFactory("std::default", os);
         if (factory) {
-            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("std::fallback", graph.get()); });
+            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("std::default", graph.get()); });
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -122,8 +122,11 @@ class DebuggerServer {
     void clearLastRunError();
 
     void setGirBreakpointNodeIds(std::unordered_set<uintptr_t> ids);
+    void setGirBreakpointNodeIdsFromStrings(const std::vector<std::string> &nodeIds);
     bool isGirBreakpointNode(uintptr_t nodePtr) const;
+    bool isGirBreakpointNodeStable(const std::string &stableId) const;
     std::unordered_set<uintptr_t> getGirBreakpointNodeIds() const;
+    std::vector<std::string> getGirBreakpointNodeIdsForApi() const;
 
     /// 父进程保留的断点类型列表（enabled）；Run/Restart 时推送给 worker。
     void setEnabledBreakpointTypes(std::vector<std::string> types);
@@ -179,6 +182,7 @@ class DebuggerServer {
     std::unordered_set<std::string> allocBreakSpaces_;
     std::mutex allocBreakSpacesMutex_;
     std::unordered_set<uintptr_t> girBreakpointNodeIds_;
+    std::unordered_set<std::string> girBreakpointStableIds_;
     mutable std::mutex girBreakpointNodeIdsMutex_;
     std::vector<std::string> enabledBreakpointTypes_;
     mutable std::mutex enabledBreakpointTypesMutex_;

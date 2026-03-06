@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 25, 2026
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,16 +51,13 @@ using json = nlohmann::json;
 /// 将父进程保存的断点状态（节点型）推送到指定端口的 worker，供 Run/Restart
 /// 后继承；统一断点模型下各类型断点均需在 spawn/run 后同步。
 static void pushGirBreakpointsToPort(DebuggerServer &srv, int port) {
-    auto girIds = srv.getGirBreakpointNodeIds();
+    std::vector<std::string> girIds = srv.getGirBreakpointNodeIdsForApi();
     if (girIds.empty())
         return;
     json girBody;
     girBody["nodeIds"] = json::array();
-    for (uintptr_t id : girIds) {
-        std::ostringstream o;
-        o << "0x" << std::hex << id;
-        girBody["nodeIds"].push_back(o.str());
-    }
+    for (const std::string &id : girIds)
+        girBody["nodeIds"].push_back(id);
     srv.forwardPostToPort(port, "/api/gir-breakpoints", girBody.dump());
 }
 

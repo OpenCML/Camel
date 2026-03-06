@@ -3,7 +3,10 @@
     <header class="gir-header">
       <div class="gir-header-text">
         <h2 class="gir-title">Visual GIR</h2>
-        <p class="gir-desc">Click a node to select &amp; highlight inputs. Double‑click a function node to enter its subgraph, or double‑click other nodes to toggle breakpoints.</p>
+        <p class="gir-desc">
+          Click node to select; click <span class="gir-desc-bp">●</span> to toggle breakpoint; double‑click function to enter subgraph.
+          <span class="gir-help-icon" title="Click a node to select &amp; highlight inputs. Click the breakpoint icon (●) on a node to set/remove a breakpoint; double‑click a function node to enter its subgraph, or double‑click other nodes to toggle breakpoints. Graph is read‑only (no drag/edit). Use NodeVM run for breakpoints to take effect." aria-label="Help">?</span>
+        </p>
       </div>
       <div class="gir-toolbar">
         <button type="button" class="btn btn-continue" @click="fetchAndRender">Refresh</button>
@@ -29,6 +32,11 @@
         :default-viewport="{ zoom: 0.9 }"
         :fit-view-options="{ padding: 0.2, minZoom: 0.2, maxZoom: 1.5 }"
         fit-view-on-init
+        :nodes-draggable="false"
+        :nodes-connectable="false"
+        :edges-updatable="false"
+        :connect-on-click="false"
+        :zoom-on-double-click="false"
         class="gir-flow"
         @node-click="onNodeClick"
         @node-double-click="onNodeDoubleClick"
@@ -154,6 +162,7 @@ function graphToFlow(graph) {
       style: n.style,
       dataRepr: n.dataRepr,
       kind: n.kind,
+      stableId: n.stableId || null,
       hasBreakpoint: false,
       isPaused: false,
       unreachable: false
@@ -275,18 +284,25 @@ async function loadGraphById(graphId, graphName) {
   await refreshBreakpointsAndPaused()
 }
 
+function getBreakpointKey(node) {
+  return node.data?.stableId || node.id
+}
+
 function applyBreakpointStyles() {
   const bp = breakpointNodeIds.value
   const paused = pausedNodeId.value
-  flowNodes.value = flowNodes.value.map((n) => ({
-    ...n,
-    data: {
-      ...n.data,
-      hasBreakpoint: bp.has(n.id),
-      isPaused: n.id === paused
-    },
-    class: [n.class || '', bp.has(n.id) ? 'gir-breakpoint' : '', n.id === paused ? 'gir-paused' : ''].filter(Boolean).join(' ')
-  }))
+  flowNodes.value = flowNodes.value.map((n) => {
+    const key = getBreakpointKey(n)
+    return {
+      ...n,
+      data: {
+        ...n.data,
+        hasBreakpoint: bp.has(key),
+        isPaused: n.id === paused
+      },
+      class: [n.class || '', bp.has(key) ? 'gir-breakpoint' : '', n.id === paused ? 'gir-paused' : ''].filter(Boolean).join(' ')
+    }
+  })
 }
 
 async function refreshBreakpointsAndPaused() {
@@ -326,9 +342,27 @@ function highlightInputEdges(nodeId) {
   })
 }
 
-function onNodeClick({ node }) {
+function onNodeClick(evt) {
+  const { event, node } = evt
+  if (event?.target?.closest?.('.gir-breakpoint-toggle')) {
+    toggleBreakpointForNode(node)
+    return
+  }
   selectedNodeId.value = node.id
   highlightInputEdges(node.id)
+}
+
+async function toggleBreakpointForNode(node) {
+  if (node.data?.type === 'subgraph' || node.id.startsWith('subgraph:')) return
+  const key = getBreakpointKey(node)
+  const next = new Set(breakpointNodeIds.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  breakpointNodeIds.value = next
+  try {
+    await api.postGirBreakpoints([...next], appStore.currentTaskId)
+  } catch (_) {}
+  applyBreakpointStyles()
 }
 
 function enterSubgraph(graphId, graphName) {
@@ -342,15 +376,7 @@ async function onNodeDoubleClick({ node }) {
     enterSubgraph(node.data.graphId, node.data.displayLabel || node.data.graphId)
     return
   }
-  if (node.data?.type === 'subgraph' || node.id.startsWith('subgraph:')) return
-  const next = new Set(breakpointNodeIds.value)
-  if (next.has(node.id)) next.delete(node.id)
-  else next.add(node.id)
-  breakpointNodeIds.value = next
-  try {
-    await api.postGirBreakpoints([...next], appStore.currentTaskId)
-  } catch (_) {}
-  applyBreakpointStyles()
+  await toggleBreakpointForNode(node)
 }
 
 function navigateToCrumb(index) {
@@ -466,8 +492,24 @@ onUnmounted(() => {
   color: #8b949e;
   margin: 0;
   line-height: 1.4;
-  max-width: 52ch;
 }
+.gir-desc-bp { color: #da3633; }
+.gir-help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6e7681;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 50%;
+  cursor: help;
+}
+.gir-help-icon:hover { color: #58a6ff; border-color: #58a6ff; }
 .gir-toolbar {
   display: flex;
   align-items: center;
