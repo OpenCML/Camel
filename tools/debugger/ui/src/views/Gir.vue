@@ -193,9 +193,7 @@ function graphToFlow(graph) {
       labelBgPadding: portLabel ? [2, 4] : undefined,
       labelBgBorderRadius: portLabel ? 2 : undefined,
       style: { ...baseStyle },
-      data: { originalStyle: { ...baseStyle } },
-      sourceHandle: e.sourcePortIndex != null ? String(e.sourcePortIndex) : undefined,
-      targetHandle: e.targetPortIndex != null ? String(e.targetPortIndex) : undefined
+      data: { originalStyle: { ...baseStyle } }
     }
   })
   let laidOut = applyDagreLayout(nodes, edges)
