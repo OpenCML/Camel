@@ -176,6 +176,40 @@ void nodeLabelShapeStyle(
     }
 }
 
+/// 按类型写入原始字段，供前端自行拼展示；不输出 label/tooltip
+void nodeRawFields(const node_ptr_t &node, json &j) {
+    switch (node->type()) {
+    case NodeType::DATA: {
+        auto sourceNode = tt::as_shared<DataNode>(node);
+        j["dataRepr"]   = sourceNode->data() ? sourceNode->data()->toString() : "";
+        break;
+    }
+    case NodeType::PORT: {
+        auto portNode = tt::as_shared<PortNode>(node);
+        j["portName"] = portNode->name();
+        break;
+    }
+    case NodeType::ACCS: {
+        auto accsNode  = tt::as_shared<AccsNode>(node);
+        j["indexRepr"] = accsNode->index2String();
+        break;
+    }
+    case NodeType::FUNC: {
+        func_ptr_t func    = tt::as_shared<FuncNode>(node)->func();
+        j["funcName"]      = func->name();
+        j["funcGraphName"] = func->graph().name();
+        break;
+    }
+    case NodeType::OPER: {
+        auto oper     = tt::as_shared<OperNode>(node);
+        j["operName"] = oper->oper()->name();
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 json nodeToJson(const node_ptr_t &node, const std::string &graphId) {
     json j;
     j["id"]      = ptrToId(node.get());
@@ -183,10 +217,11 @@ json nodeToJson(const node_ptr_t &node, const std::string &graphId) {
     j["type"]    = to_string(node->type());
     std::string label, shape, style;
     nodeLabelShapeStyle(node, label, shape, style);
-    j["label"]   = label;
-    j["tooltip"] = node->graph().name() + "::" + node->toString();
-    j["shape"]   = shape;
-    j["style"]   = style;
+    j["shape"]     = shape;
+    j["style"]     = style;
+    j["graphName"] = node->graph().name();
+    j["nodeRepr"]  = node->toString();
+    nodeRawFields(node, j);
     return j;
 }
 
@@ -223,10 +258,10 @@ json expandedGraphToJson(const graph_ptr_t &graph) {
 
     size_t edgeId = 0;
     auto addEdge  = [&](const node_ptr_t &from,
-                        const node_ptr_t &to,
-                        const std::string &linkType,
-                        size_t outIdx,
-                        size_t inIdx) {
+                       const node_ptr_t &to,
+                       const std::string &linkType,
+                       size_t outIdx,
+                       size_t inIdx) {
         json e;
         e["id"]              = "e" + std::to_string(edgeId++);
         e["sourceId"]        = ptrToId(from.get());
