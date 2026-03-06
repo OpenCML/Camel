@@ -473,8 +473,9 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 Graph *funcGraph = &tt::as_shared<FuncNode>(n)->func()->graph();
 
                 // 尾调用优化
-                bool isTailCall = n.get() == lastNode ||
-                                  (lastNodeIsJoin && n->withOutputs().front().get() == lastNode);
+                bool isTailCall =
+                    n.get() == lastNode || (lastNodeIsJoin && !n->withOutputs().empty() &&
+                                            n->withOutputs().front().get() == lastNode);
                 if (isTailCall) {
                     EXEC_WHEN_DEBUG(
                         GetDefaultLogger().in("NodeVM").debug(
