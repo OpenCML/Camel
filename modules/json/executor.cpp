@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,7 +33,7 @@ class JsonExecutor : public Executor {
   public:
     JsonExecutor(context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
         : Executor(ctx, std::move(ops)) {}
-    void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) override {
+    void eval(std::string uri, GraphIR::Node *self, Frame &frame) override {
         auto it = opsMap_.find(uri);
         if (it == opsMap_.end())
             throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);

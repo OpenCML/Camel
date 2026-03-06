@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,11 +70,10 @@ using graph_ptr_t     = std::shared_ptr<Graph>;
 using graph_wptr_t    = std::weak_ptr<Graph>;
 using graph_vec_t     = std::vector<graph_ptr_t>;
 using graph_vec_ptr_t = std::shared_ptr<graph_vec_t>;
-using node_ptr_t      = std::shared_ptr<Node>;
-using node_wptr_t     = std::weak_ptr<Node>;
-using node_lst_t      = std::list<node_ptr_t>;
-using node_vec_t      = std::vector<node_ptr_t>;
-using node_set_t      = std::unordered_set<node_ptr_t>;
+using node_uptr_t     = std::unique_ptr<Node>;
+using node_lst_t      = std::list<Node *>;
+using node_vec_t      = std::vector<Node *>;
+using node_set_t      = std::unordered_set<Node *>;
 
 using data_idx_t = int16_t;
 using arr_size_t = uint16_t;

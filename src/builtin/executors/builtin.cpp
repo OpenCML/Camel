@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -264,7 +264,7 @@ executor_ptr_t BasicBuiltinExecutor::create(context_ptr_t ctx) {
     return std::make_shared<BasicBuiltinExecutor>(ctx);
 }
 
-void BasicBuiltinExecutor::eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) {
+void BasicBuiltinExecutor::eval(std::string uri, GraphIR::Node *self, Frame &frame) {
     EXEC_WHEN_DEBUG(
         GetDefaultLogger().in("BasicExec").debug("Evaluating operator of URI: {}", uri));
     auto it = opsMap_.find(uri);

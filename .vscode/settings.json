@@ -7,5 +7,8 @@
     },
     "terminal.integrated.env.linux": {
         "PATH": "${workspaceFolder}/out/latest:${workspaceFolder}/out/latest/bin:${env:PATH}"
-    }
+    },
+    "cSpell.words": [
+        "Topo"
+    ]
 }

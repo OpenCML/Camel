@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,7 +38,6 @@ class Node;
 class Graph;
 using data_idx_t  = int16_t;
 using arr_size_t  = uint16_t;
-using node_ptr_t  = std::shared_ptr<Node>;
 using graph_ptr_t = std::shared_ptr<Graph>;
 } // namespace GraphIR
 

@@ -28,26 +28,26 @@
 using namespace std;
 using namespace GraphIR;
 
-std::shared_ptr<node_vec_t> NodeVMSchedPass::getTopoNodes(Graph *graph) {
+std::shared_ptr<std::vector<Node *>> NodeVMSchedPass::getTopoNodes(Graph *graph) {
     ASSERT(
         !graph->dirty(),
         std::format("Graph {} is dirty, please rearrange before executing.", graph->name()));
 
     if (graphTopoNodesCache_.find(graph) == graphTopoNodesCache_.end()) {
-        node_ptr_t exitNode = graph->exitNode();
-        auto sortedNodes    = findReachable(
+        Node *exitNode   = graph->exitNode();
+        auto sortedNodes = findReachable(
             exitNode,
-            [](const node_ptr_t &n) {
-                node_vec_t ins;
+            [](Node *n) {
+                std::vector<Node *> ins;
                 ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
                 for (const auto &in : n->ctrlInputs()) {
                     if (&in->graph() == &n->graph()) // only consider nodes in the same graph
-                        ins.push_back(in);
+                        ins.emplace_back(in);
                 }
                 // Put value computation nodes at the back for correct tail-call optimization
                 for (const auto &in : n->dataInputs()) {
                     if (&in->graph() == &n->graph()) // only consider nodes in the same graph
-                        ins.push_back(in);
+                        ins.emplace_back(in);
                 }
                 return ins;
             },
@@ -65,7 +65,7 @@ std::shared_ptr<node_vec_t> NodeVMSchedPass::getTopoNodes(Graph *graph) {
                 graph->nodes().size() + graph->ports().size() + graph->closure().size();
             if (sortedNodes.size() != totalNodeCnt) {
                 GraphIR::node_vec_t unreachableNodes;
-                for (const auto &n : graph->nodes()) {
+                for (Node *n : graph->nodes()) {
                     if (n != exitNode &&
                         std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
                         unreachableNodes.push_back(n);
@@ -85,55 +85,11 @@ std::shared_ptr<node_vec_t> NodeVMSchedPass::getTopoNodes(Graph *graph) {
             }
         });
 
-        const auto &sortedNodesPtr  = std::make_shared<node_vec_t>(std::move(sortedNodes));
+        const auto &sortedNodesPtr  = std::make_shared<std::vector<Node *>>(std::move(sortedNodes));
         graphTopoNodesCache_[graph] = sortedNodesPtr;
         return sortedNodesPtr;
     }
     return graphTopoNodesCache_[graph];
-}
-
-slot_t NodeVMSchedPass::doCall(const node_ptr_t &n, Frame *currFrame) {
-    Graph *targetGraph = nullptr;
-    node_vec_t argNodes;
-    node_vec_t closureNodes;
-
-    if (n->type() == NodeType::CALL) {
-        Function *func = currFrame->get<Function *>(n->withInputs().front()->index());
-        targetGraph    = func->graph();
-        argNodes       = n->normInputs();
-        closureNodes   = targetGraph->closure();
-    } else {
-        ASSERT(n->type() == NodeType::FUNC, "doCall expects CALL or FUNC node");
-        auto funcNode = tt::as_shared<FuncNode>(n);
-        targetGraph   = &funcNode->func()->graph();
-        argNodes      = n->normInputs();
-        closureNodes  = targetGraph->closure();
-    }
-
-    Frame *funcFrame      = framePool_.acquire(targetGraph);
-    const auto &portNodes = targetGraph->ports();
-
-    size_t i = 0;
-    for (; i < argNodes.size() && i < portNodes.size(); ++i) {
-        funcFrame->set(portNodes[i]->index(), currFrame->get<slot_t>(argNodes[i]->index()));
-    }
-
-    if (n->type() == NodeType::CALL) {
-        Function *func = currFrame->get<Function *>(n->withInputs().front()->index());
-        Tuple *closure = func->tuple();
-        for (size_t j = 0; j < closure->size() && j < closureNodes.size(); ++j) {
-            funcFrame->set(closureNodes[j]->index(), closure->get<slot_t>(j));
-        }
-    } else {
-        for (size_t j = 0; j < n->withInputs().size() && j < closureNodes.size(); ++j) {
-            funcFrame->set(
-                closureNodes[j]->index(),
-                currFrame->get<slot_t>(n->withInputs()[j]->index()));
-        }
-    }
-
-    slot_t result = call(targetGraph, funcFrame);
-    return result;
 }
 
 // =============================================================================
@@ -147,7 +103,7 @@ slot_t NodeVMSchedPass::doCall(const node_ptr_t &n, Frame *currFrame) {
 //   │  (A)   │  (B)   │  (C)   │
 //   └────────┴────────┴────────┘
 //       ↑                  ↑
-//     root1              root2  （C 的帧在 doCall 内 acquire/release）
+//     root1              root2  （C 的帧在 Call 内 acquire/release）
 //
 // 情形二：A 在中途尾调用 C，此时孪生帧 twin 指向 B；需先释放孪生帧 B，再申请 C 的帧
 //   ┌────────┬────────┐
@@ -172,8 +128,7 @@ slot_t NodeVMSchedPass::doCall(const node_ptr_t &n, Frame *currFrame) {
 // =============================================================================
 
 // 将节点 n（CALL 或 FUNC）的参数从 source 帧复制到 dest 帧（targetGraph 的端口与闭包）
-static inline void
-fillFrameForFunc(Frame *from, Frame *dest, Graph *graph, const GraphIR::node_ptr_t &node) {
+static inline void fillFrameForFunc(Frame *from, Frame *dest, Graph *graph, Node *node) {
     using namespace GraphIR;
 
     const auto &normNodes = node->normInputs();
@@ -231,15 +186,15 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
         const auto &nodes = *currNodes;
         size_t nodesSize  = nodes.size();
 
-        Node *lastNode      = currGraph->outputNode().get();
+        Node *lastNode      = currGraph->outputNode();
         bool lastNodeIsJoin = lastNode->type() == NodeType::JOIN;
 
         size_t i = 0;
         for (; i < nodesSize; ++i) {
-            const node_ptr_t &n = nodes[i];
+            Node *n = nodes[i];
 
             if (tillNode) {
-                if (tillNode == n.get()) {
+                if (tillNode == n) {
                     EXEC_WHEN_DEBUG(
                         GetDefaultLogger().in("NodeVM").debug(
                             "Reached tillNode [{}/{}] graph={}: {}",
@@ -259,7 +214,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                     continue;
                 }
             }
-            if (skipNode && skipNode == n.get()) {
+            if (skipNode && skipNode == n) {
                 EXEC_WHEN_DEBUG(
                     GetDefaultLogger().in("NodeVM").debug(
                         "Reached skipNode [{}/{}] graph={}: {}",
@@ -273,7 +228,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
 
             EXEC_WHEN_DEBUG({
                 if (camel::DebugBreakpoint::IsEnabled("gir_node"))
-                    camel::DebugBreakpoint::Hit("gir_node", n.get());
+                    camel::DebugBreakpoint::Hit("gir_node", n);
                 GetDefaultLogger().in("NodeVM").debug(
                     "Executing node [{}/{}] graph={}: {}",
                     i + 1,
@@ -356,7 +311,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             } break;
 
             case NodeType::ACCS: {
-                auto accsNode     = tt::as_shared<AccsNode>(n);
+                auto accsNode     = tt::as_ptr<AccsNode>(n);
                 data_idx_t srcIdx = n->dataInputs().front()->index();
                 if (accsNode->isNum()) {
                     size_t idx = accsNode->index<size_t>();
@@ -409,12 +364,12 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 currFrame->set(n->index(), fromSlot<Int32>(static_cast<Int32>(jumpIdx)));
 
                 // BRCH 有且仅有 1 个 normOutput，即对应的 JOIN
-                Node *targetJoin = n->normOutputs().front().get();
+                Node *targetJoin = n->normOutputs().front();
 
                 // 分支跳转：跳到选中分支的 head，顺序执行到 tail，再跳到 JOIN
-                tillNode = ctrlOuts[jumpIdx].get(); // 选中分支的头节点
-                skipNode = targetJoin->withInputs()[jumpIdx]
-                               .get(); // 选中分支的尾节点（连到 JOIN 的 with 输入）
+                tillNode = ctrlOuts[jumpIdx]; // 选中分支的头节点
+                skipNode =
+                    targetJoin->withInputs()[jumpIdx]; // 选中分支的尾节点（连到 JOIN 的 with 输入）
                 joinNode = targetJoin;
                 continue;
             } break;
@@ -470,12 +425,11 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             } break;
 
             case NodeType::FUNC: {
-                Graph *funcGraph = &tt::as_shared<FuncNode>(n)->func()->graph();
+                Graph *funcGraph = &tt::as_ptr<FuncNode>(n)->func()->graph();
 
                 // 尾调用优化
-                bool isTailCall =
-                    n.get() == lastNode || (lastNodeIsJoin && !n->withOutputs().empty() &&
-                                            n->withOutputs().front().get() == lastNode);
+                bool isTailCall = n == lastNode || (lastNodeIsJoin && !n->withOutputs().empty() &&
+                                                    n->withOutputs().front() == lastNode);
                 if (isTailCall) {
                     EXEC_WHEN_DEBUG(
                         GetDefaultLogger().in("NodeVM").debug(
@@ -564,7 +518,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             } break;
 
             case NodeType::OPER: {
-                auto opNode     = tt::as_shared<OperNode>(n);
+                auto opNode     = tt::as_ptr<OperNode>(n);
                 std::string uri = opNode->oper()->uri();
 
                 if (uri.starts_with(":mark/")) {
@@ -621,8 +575,8 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
         }
 
         if (!loop) {
-            const node_ptr_t &exitNode = currGraph->exitNode();
-            const auto &input          = exitNode->normInputs();
+            Node *exitNode    = currGraph->exitNode();
+            const auto &input = exitNode->normInputs();
             result = input.empty() ? NullSlot : currFrame->get<slot_t>(input.front()->index());
             break;
         }
@@ -662,8 +616,7 @@ GraphIR::graph_ptr_t NodeVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os
     return Graph::null();
 }
 
-void NodeVMSchedPass::evalMarkedOperator(
-    const std::string &uri, const node_ptr_t &node, Frame &currFrame) {
+void NodeVMSchedPass::evalMarkedOperator(const std::string &uri, Node *node, Frame &currFrame) {
     if (uri == "map_arr") {
         evalMarkedOperator_map_arr(node, currFrame);
     } else if (uri == "apply_arr") {
@@ -679,7 +632,7 @@ void NodeVMSchedPass::evalMarkedOperator(
     }
 }
 
-void NodeVMSchedPass::evalMarkedOperator_map_arr(const node_ptr_t &node, Frame &currFrame) {
+void NodeVMSchedPass::evalMarkedOperator_map_arr(Node *node, Frame &currFrame) {
     Array *arr     = currFrame.get<Array *>(node->normInputs().front()->index());
     Function *func = currFrame.get<Function *>(node->withInputs().front()->index());
     Tuple *closure = func->tuple();
@@ -698,7 +651,7 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(const node_ptr_t &node, Frame &
     currFrame.set(node->index(), res);
 }
 
-void NodeVMSchedPass::evalMarkedOperator_apply_arr(const node_ptr_t &node, Frame &currFrame) {
+void NodeVMSchedPass::evalMarkedOperator_apply_arr(Node *node, Frame &currFrame) {
     Array *arr     = currFrame.get<Array *>(node->normInputs().front()->index());
     Function *func = currFrame.get<Function *>(node->withInputs().front()->index());
     Tuple *closure = func->tuple();
@@ -714,7 +667,7 @@ void NodeVMSchedPass::evalMarkedOperator_apply_arr(const node_ptr_t &node, Frame
     currFrame.set(node->index(), arr);
 }
 
-void NodeVMSchedPass::evalMarkedOperator_filter_arr(const node_ptr_t &node, Frame &currFrame) {
+void NodeVMSchedPass::evalMarkedOperator_filter_arr(Node *node, Frame &currFrame) {
     Array *arr      = currFrame.get<Array *>(node->normInputs().front()->index());
     Function *func  = currFrame.get<Function *>(node->withInputs().front()->index());
     Tuple *closure  = func->tuple();
@@ -734,7 +687,7 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(const node_ptr_t &node, Fram
     currFrame.set(node->index(), filtered);
 }
 
-void NodeVMSchedPass::evalMarkedOperator_reduce_arr(const node_ptr_t &node, Frame &currFrame) {
+void NodeVMSchedPass::evalMarkedOperator_reduce_arr(Node *node, Frame &currFrame) {
     Array *arr     = currFrame.get<Array *>(node->normInputs().front()->index());
     Function *func = currFrame.get<Function *>(node->withInputs()[0]->index());
     slot_t init    = currFrame.get<slot_t>(node->withInputs()[1]->index());
@@ -758,7 +711,7 @@ void NodeVMSchedPass::evalMarkedOperator_reduce_arr(const node_ptr_t &node, Fram
     currFrame.set(node->index(), acc);
 }
 
-void NodeVMSchedPass::evalMarkedOperator_foreach_arr(const node_ptr_t &node, Frame &currFrame) {
+void NodeVMSchedPass::evalMarkedOperator_foreach_arr(Node *node, Frame &currFrame) {
     Array *arr     = currFrame.get<Array *>(node->normInputs().front()->index());
     Function *func = currFrame.get<Function *>(node->withInputs().front()->index());
     Tuple *closure = func->tuple();

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,7 +37,7 @@ FunctionType *FunctionData::funcType() const { return tt::as_ptr<FunctionType>(t
 std::vector<std::string> FunctionData::refs() const {
     std::vector<std::string> refNames;
     for (const auto &node : graph_.closure()) {
-        const auto &portNode = tt::as_shared<GraphIR::PortNode>(node);
+        const auto *portNode = tt::as_ptr<GraphIR::PortNode>(node);
         refNames.push_back(portNode->name());
     }
     return refNames;

@@ -10,7 +10,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 21, 2026
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,7 +33,7 @@ class PythonExecutor : public Executor {
     PythonExecutor(context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
         : Executor(ctx, std::move(ops)) {}
 
-    void eval(std::string uri, GraphIR::node_ptr_t &self, Frame &frame) override {
+    void eval(std::string uri, GraphIR::Node *self, Frame &frame) override {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("PythonExec").debug("Evaluating operator of URI: {}", uri));
         auto it = opsMap_.find(uri);
