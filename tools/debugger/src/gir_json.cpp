@@ -1,6 +1,23 @@
 /**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
+ * You may use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Feb. 22, 2026
+ * Updated: Mar. 06, 2026
+ * Supported by: National Key Research and Development Program of China
+ */
+
+/**
  * GIR 懒加载 JSON 序列化实现。
  */
 
@@ -175,6 +192,40 @@ void nodeLabelShapeStyle(Node *node, std::string &label, std::string &shape, std
     }
 }
 
+/// 按类型写入原始字段，供前端自行拼展示；不输出 label/tooltip
+void nodeRawFields(Node *node, json &j) {
+    switch (node->type()) {
+    case NodeType::DATA: {
+        auto sourceNode = tt::as_ptr<DataNode>(node);
+        j["dataRepr"]   = sourceNode->data() ? sourceNode->data()->toString() : "";
+        break;
+    }
+    case NodeType::PORT: {
+        auto portNode = tt::as_ptr<PortNode>(node);
+        j["portName"] = portNode->name();
+        break;
+    }
+    case NodeType::ACCS: {
+        auto accsNode  = tt::as_ptr<AccsNode>(node);
+        j["indexRepr"] = accsNode->index2String();
+        break;
+    }
+    case NodeType::FUNC: {
+        func_ptr_t func    = tt::as_ptr<FuncNode>(node)->func();
+        j["funcName"]      = func->name();
+        j["funcGraphName"] = func->graph().name();
+        break;
+    }
+    case NodeType::OPER: {
+        auto oper     = tt::as_ptr<OperNode>(node);
+        j["operName"] = oper->oper()->name();
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 json nodeToJson(Node *node, const std::string &graphId) {
     json j;
     j["id"]      = ptrToId(node);
@@ -182,10 +233,11 @@ json nodeToJson(Node *node, const std::string &graphId) {
     j["type"]    = to_string(node->type());
     std::string label, shape, style;
     nodeLabelShapeStyle(node, label, shape, style);
-    j["label"]   = label;
-    j["tooltip"] = node->graph().name() + "::" + node->toString();
-    j["shape"]   = shape;
-    j["style"]   = style;
+    j["shape"]     = shape;
+    j["style"]     = style;
+    j["graphName"] = node->graph().name();
+    j["nodeRepr"]  = node->toString();
+    nodeRawFields(node, j);
     return j;
 }
 
