@@ -2,8 +2,10 @@
 
 [English](cli.md) | 中文简体
 
-    camel [options] <target file>
+    camel [options] [<target file>]
     camel <command> [command-options] <target file>
+
+默认的 run 命令中，输入文件可以写为位置参数或通过 `--input <文件>` 指定，二者至少提供一个。
 
 ## 通用选项（Global Options）
 
@@ -14,8 +16,10 @@
 
 ## 主执行入口（默认行为）
 
-以指定 `.cml` 文件或目录作为入口执行：
+以指定 `.cml` 文件或目录作为入口执行。**输入文件**必须通过位置参数或 `--input <文件>` 指定其一（至少一个）。
 
+- `--input <文件>`：输入文件路径（位置参数的替代；与 `--passes` 一起用时无需再写位置参数）
+- `--passes <列表>`：逗号分隔的 pass 列表（如 `--passes std::gir,other`）。不写时，第一个位置参数为文件，其余为 passes
 - `-P`, `--profile`：记录执行各阶段耗时，并输出分析报告
 - `-S`, `--scheduler <type>`：指定图调度器类型
 - `-t`, `--threads <num>`：最大线程数
@@ -86,8 +90,11 @@
 ## 示例
 
 ```bash
-# 执行主文件
+# 执行主文件（位置参数）
 camel main.cml
+
+# 用选项指定输入和 passes（可不写位置参数）
+camel --input main.cml --passes std::gir,other
 
 # 执行并记录性能
 camel -P main.cml

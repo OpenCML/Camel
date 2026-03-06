@@ -2,8 +2,10 @@
 
 [中文简体](cli.cn.md) | English
 
-    camel [options] <target file>
+    camel [options] [<target file>]
     camel <command> [command-options] <target file>
+
+For the default run command, the input file may be given as a positional argument or via `--input <file>`. At least one is required.
 
 ## Global Options
 
@@ -14,8 +16,10 @@
 
 ## Main Execution (Default Behavior)
 
-Executes the specified `.cml` file or directory as the entry point:
+Executes the specified `.cml` file or directory as the entry point. **Input file** must be provided either as a positional argument or via `--input <file>` (at least one required).
 
+- `--input <file>`: Input file path (alternative to positional; use with `--passes` to avoid ambiguity)  
+- `--passes <list>`: Comma-separated pass list (e.g. `--passes std::gir,other`). If omitted, first positional is file, rest are passes.  
 - `-P`, `--profile`: Record time spent in each stage and output a performance report  
 - `-S`, `--scheduler <type>`: Specify the scheduler type  
 - `-t`, `--threads <num>`: Maximum number of threads  
@@ -86,8 +90,11 @@ Other tools: `camel-codegen`, `camel-profiler`. All are built under `build/tools
 ## Examples
 
 ```bash
-# Run the main file
+# Run the main file (positional)
 camel main.cml
+
+# Run with input and passes via options (no positional required)
+camel --input main.cml --passes std::gir,other
 
 # Run and record performance
 camel -P main.cml

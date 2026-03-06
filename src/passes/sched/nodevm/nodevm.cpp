@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,8 +24,6 @@
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
 #include "camel/utils/log.h"
-
-#include <stack>
 
 using namespace std;
 using namespace GraphIR;
@@ -217,19 +215,61 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
     Frame *currFrame = rootFrame;
     Frame *twinFrame = nullptr;
     Graph *currGraph = rootGraph;
-    std::stack<node_ptr_t> brInfoStack_;
 
     auto currNodes = getTopoNodes(currGraph);
 
+    // 用于实现分支跳转
+    // tillNode 如果不为空，则跳过 tillNode 前所有节点
+    // skipNode 如果不为空，则执行到 skipNode 为止，而后将 joinNode 设置为新的 tillNode
+    // 这样 VM 就会跳过剩余节点，直到目标的 Join 节点
+    Node *tillNode = nullptr, *skipNode = nullptr, *joinNode = nullptr;
+
     // 尾调用优化主循环：loop 为 true 时不退出 C++ 栈帧，用新的 currGraph/currFrame 继续执行
     do {
+    loop_start:
         loop              = false;
         const auto &nodes = *currNodes;
         size_t nodesSize  = nodes.size();
 
+        Node *lastNode      = currGraph->outputNode().get();
+        bool lastNodeIsJoin = lastNode->type() == NodeType::JOIN;
+
         size_t i = 0;
         for (; i < nodesSize; ++i) {
             const node_ptr_t &n = nodes[i];
+
+            if (tillNode) {
+                if (tillNode == n.get()) {
+                    EXEC_WHEN_DEBUG(
+                        GetDefaultLogger().in("NodeVM").debug(
+                            "Reached tillNode [{}/{}] graph={}: {}",
+                            i + 1,
+                            nodes.size(),
+                            currGraph->name(),
+                            n->toString()));
+                    tillNode = nullptr;
+                } else {
+                    EXEC_WHEN_DEBUG(
+                        GetDefaultLogger().in("NodeVM").debug(
+                            "Skipping node [{}/{}] graph={}: {}",
+                            i + 1,
+                            nodes.size(),
+                            currGraph->name(),
+                            n->toString()));
+                    continue;
+                }
+            }
+            if (skipNode && skipNode == n.get()) {
+                EXEC_WHEN_DEBUG(
+                    GetDefaultLogger().in("NodeVM").debug(
+                        "Reached skipNode [{}/{}] graph={}: {}",
+                        i + 1,
+                        nodes.size(),
+                        currGraph->name(),
+                        n->toString()));
+                skipNode = nullptr;
+                tillNode = joinNode;
+            }
 
             EXEC_WHEN_DEBUG({
                 if (camel::DebugBreakpoint::IsEnabled("gir_node"))
@@ -367,28 +407,30 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                         jumpIdx = withIns.size();
                 }
                 currFrame->set(n->index(), fromSlot<Int32>(static_cast<Int32>(jumpIdx)));
-                brInfoStack_.push(ctrlOuts[jumpIdx]);
-                i += ctrlOuts.size();
+
+                // BRCH 有且仅有 1 个 normOutput，即对应的 JOIN
+                Node *targetJoin = n->normOutputs().front().get();
+
+                // 分支跳转：跳到选中分支的 head，顺序执行到 tail，再跳到 JOIN
+                tillNode = ctrlOuts[jumpIdx].get(); // 选中分支的头节点
+                skipNode = targetJoin->withInputs()[jumpIdx]
+                               .get(); // 选中分支的尾节点（连到 JOIN 的 with 输入）
+                joinNode = targetJoin;
                 continue;
             } break;
 
             case NodeType::JOIN: {
-                const auto &nargs                  = n->normInputs();
-                [[maybe_unused]] const auto &wargs = n->withInputs();
+                const auto &nargs = n->normInputs();
+                const auto &wargs = n->withInputs();
                 ASSERT(!nargs.empty(), "JOIN must have norm input (branch index).");
-                [[maybe_unused]] int32_t brIndex = currFrame->get<int32_t>(nargs.front()->index());
+                int32_t brIndex = currFrame->get<int32_t>(nargs.front()->index());
                 ASSERT(
                     brIndex >= 0 && static_cast<size_t>(brIndex) < wargs.size(),
                     "JOIN branch index out of range in NodeVM.");
-                node_ptr_t execNode = brInfoStack_.top();
-                brInfoStack_.pop();
-
-                Graph *funcGraph = &tt::as_shared<FuncNode>(execNode)->func()->graph();
-                Frame *funcFrame = framePool_.acquire(funcGraph);
-                fillFrameForFunc(currFrame, funcFrame, funcGraph, execNode);
-                slot_t callResult = call(funcGraph, funcFrame);
-
-                currFrame->set(n->index(), callResult);
+                // 分支已通过 tillNode/skipNode 顺序执行完毕，结果在对应分支尾节点的槽中
+                slot_t branchResult =
+                    currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]->index());
+                currFrame->set(n->index(), branchResult);
             } break;
 
             case NodeType::CALL: {
@@ -431,9 +473,16 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 Graph *funcGraph = &tt::as_shared<FuncNode>(n)->func()->graph();
 
                 // 尾调用优化
-                bool isTailCall =
-                    (i == nodes.size() - 1) && (currGraph->outputNode().get() == n.get());
+                bool isTailCall = n.get() == lastNode ||
+                                  (lastNodeIsJoin && n->withOutputs().front().get() == lastNode);
                 if (isTailCall) {
+                    EXEC_WHEN_DEBUG(
+                        GetDefaultLogger().in("NodeVM").debug(
+                            "Optimizing tail-call for node [{}/{}] graph={}: {}",
+                            i + 1,
+                            nodes.size(),
+                            currGraph->name(),
+                            n->toString()));
                     // enable tail-call optimization
                     // 设置 loop flag 为 true
                     // 当前拓扑节点序列执行子循环结束后不会退出大循环
@@ -441,6 +490,9 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                     loop = true;
                     // 设置 lastFrame 为当前帧 currFrame 备用
                     Frame *lastFrame = currFrame;
+                    // 清空 tillNode/skipNode/joinNode
+                    tillNode = nullptr;
+                    skipNode = nullptr;
 
                     // 下面准备将 currFrame 重新指向新栈帧
                     if (funcGraph == currGraph) {
@@ -451,8 +503,9 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                                 "Optimizing self-recursion for graph: {}",
                                 currFrame->graph()->name()));
                     } else {
-                        // 否则需要切换到目标图的节点序列，并修改 currFrame 指向
+                        // 否则需要切换到目标图的节点序列，并修改 currGraph 指向
                         currNodes = getTopoNodes(funcGraph);
+                        currGraph = funcGraph;
 
                         // 即便目标图不是当前图，仍可能存在互调用尾递归现象
                         // 即 A 尾调用 B，B 又尾调用 A
@@ -484,12 +537,12 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                             fillFrameForFunc(lastFrame, funcFrame, funcGraph, n);
 
                             // 切换到新栈帧
-                            currGraph = funcGraph;
                             currFrame = funcFrame;
 
                             // 跳过后续字节码，进行下一轮循环
-                            i = currNodes->size();
-                            continue;
+                            goto loop_start;
+                            // i = currNodes->size();
+                            // continue;
                         }
                     }
 
@@ -497,8 +550,9 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                     fillFrameForFunc(lastFrame, currFrame, funcGraph, n);
 
                     // 跳过后续字节码，进行下一轮循环
-                    i = currNodes->size();
-                    continue;
+                    goto loop_start;
+                    // i = currNodes->size();
+                    // continue;
                 }
 
                 Frame *funcFrame = framePool_.acquire(funcGraph);

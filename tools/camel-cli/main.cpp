@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -76,12 +76,12 @@ int main(int argc, char *argv[]) {
 
     std::unique_ptr<istream> input;
 
-    if (Run::targetFiles.empty() || Run::targetFiles[0] == "") {
+    if (Run::resolvedInputPath.empty()) {
         input      = std::make_unique<istream>(std::cin.rdbuf());
         targetFile = "stdin"; // for error reporting
         EXEC_WHEN_DEBUG(GetDefaultLogger().in("Main").info("Reading from standard input."));
     } else {
-        targetFile = Run::targetFiles[0];
+        targetFile = Run::resolvedInputPath;
         auto file  = std::make_unique<std::ifstream>(targetFile);
         if (!file->is_open()) {
             std::cerr << "Error: Cannot open file " << targetFile << endl;
@@ -226,10 +226,7 @@ int main(int argc, char *argv[]) {
 
                 try {
                     try {
-                        std::vector<std::string> passes(
-                            Run::targetFiles.begin() + 1,
-                            Run::targetFiles.end());
-                        int retCode = applyPasses(passes, ctx, os);
+                        int retCode = applyPasses(Run::resolvedPassList, ctx, os);
                         if (retCode != 0) {
                             const auto &diags = ctx->rtmDiags();
                             if (diags->hasErrors()) {

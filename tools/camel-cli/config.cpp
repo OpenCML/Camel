@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,13 +41,18 @@ string logLevel = "off";
 } // namespace Global
 
 namespace Run {
-string outputFile          = "";
-string package             = "";
-string schedular           = "";
-string errorFormat         = "text";
-string stdLibPath          = ""; // "" means use the default path
-vector<string> includeDirs = {}; // Include directories
-vector<string> targetFiles = {};
+string outputFile               = "";
+string package                  = "";
+string schedular                = "";
+string errorFormat              = "text";
+string stdLibPath               = ""; // "" means use the default path
+vector<string> includeDirs      = {}; // Include directories
+vector<string> targetFiles      = {};
+vector<string> passes           = {}; // from --passes comma-separated or positional
+string passesOpt                = ""; // raw --passes "a,b,c"
+string inputFile                = ""; // from --input (alternative to first positional as file)
+string resolvedInputPath        = ""; // computed: inputFile or targetFiles[0]
+vector<string> resolvedPassList = {}; // computed: passes or derived from targetFiles
 
 bool profile        = false;
 bool noCache        = false;
@@ -148,8 +153,13 @@ bool parseArgs(int argc, char *argv[]) {
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
          (option("-E", "--error-format") & value("error format", errorFormat)) %
              "error format: text or json",
+         (option("--passes") & value("pass1,pass2,...", passesOpt)) %
+             "pass list as comma-separated (e.g. --passes std::gir,other)",
+         (option("--input") & value("input file", inputFile)) %
+             "input file (optional if positional given)",
          globalOps,
-         values("input", targetFiles) % "input file");
+         opt_values("input", targetFiles) %
+             "input file (optional if --input given; at least one required)");
 
     auto info =
         (option("-V", "--version").set(showVersion).set(selectedCommand, Command::Info) %
@@ -201,7 +211,7 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (!parse(argc, argv, cli)) {
         cout << "Usage: " << endl;
-        cout << "\tcamel [options] <target file> \n";
+        cout << "\tcamel [options] [<target file>]  (run: need --input or positional)\n";
         cout << usage_lines(cli, "camel") << endl;
         return false;
     }
@@ -268,6 +278,38 @@ bool parseArgs(int argc, char *argv[]) {
     }
 
     if (selectedCommand == Command::Info) {
+        return false;
+    }
+
+    // Resolve input path and pass list so main does not branch on --input/--passes
+    if (selectedCommand == Command::Run || selectedCommand == Command::Inspect ||
+        selectedCommand == Command::Check) {
+        Run::resolvedInputPath = Run::inputFile.empty()
+                                     ? (Run::targetFiles.empty() ? "" : Run::targetFiles[0])
+                                     : Run::inputFile;
+    }
+    if (selectedCommand == Command::Run) {
+        if (!Run::passesOpt.empty()) {
+            for (auto part : strutil::split(Run::passesOpt, ',')) {
+                std::string s(strutil::trim(part));
+                if (!s.empty())
+                    Run::passes.push_back(std::move(s));
+            }
+        }
+        if (!Run::passes.empty()) {
+            Run::resolvedPassList = Run::passes;
+        } else if (!Run::inputFile.empty()) {
+            Run::resolvedPassList = Run::targetFiles;
+        } else {
+            Run::resolvedPassList.assign(Run::targetFiles.begin() + 1, Run::targetFiles.end());
+        }
+    }
+
+    // Run requires at least one input source: --input or positional file
+    if (selectedCommand == Command::Run && Run::resolvedInputPath.empty()) {
+        std::cerr
+            << "Error: Run requires an input file. Use --input <file> or provide a positional file."
+            << std::endl;
         return false;
     }
 
