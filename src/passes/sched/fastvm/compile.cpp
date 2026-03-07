@@ -13,18 +13,24 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "compile.h"
 #include "camel/common/algo/topo.h"
+#include "camel/core/error/diagnostics.h"
+#include "camel/core/error/runtime.h"
+#include "camel/execute/executor.h"
 
 #include <algorithm>
 #include <cstddef>
 
 using namespace std;
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
 
 const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() {
     static const std::unordered_map<std::string, OpCode> supportedInlineOperators = {
@@ -61,7 +67,9 @@ const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() 
     return supportedInlineOperators;
 }
 
-bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStrategy &opt) {
+bytecode_vec_t compile(
+    const context_ptr_t &ctx, Graph *graph, const CompileStrategy &opt,
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins) {
     // 从图的出口节点开始反向拓扑排序（逆序 DFS）
     Node *exitNode = graph->exitNode();
 
@@ -134,7 +142,10 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
     for (size_t i = 0; i < topoSortedNodes.size(); ++i) {
         auto &node = topoSortedNodes[i];
 
-        size_t currIdx = bytecodes.size();
+        size_t currIdx     = bytecodes.size();
+        auto sourceContext = ctx ? ctx->sourceContext() : nullptr;
+        auto nodeOrigin    = sourceContext ? sourceContext->debugMap().nodeOrigin(node->stableId())
+                                           : camel::source::kInvalidOriginId;
 
         // 回填之前记录的 JUMP 跳转地址
         if (brchTargetMap.find(node) != brchTargetMap.end()) {
@@ -204,7 +215,7 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
             }
             case TypeCode::Struct: {
                 ASSERT(!accNode->isNum(), "ACCS index must be string.");
-                const auto &structType = tt::as_ptr<StructType>(srcDataType);
+                const auto *structType = tt::as_ptr<camel::core::type::StructType>(srcDataType);
                 const auto &optIndex   = structType->findField(accNode->index<std::string>());
                 if (!optIndex.has_value()) {
                     ctx->rtmDiags()
@@ -242,6 +253,9 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
                     OpCode::JUMP,
                     0, // 占位，无实际节点对应
                     {0});
+            }
+            if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
+                (*localPcOrigins)[currIdx] = nodeOrigin;
             }
 
             continue;
@@ -403,6 +417,10 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
                     to_string(node->type())));
         }
 
+        if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
+            (*localPcOrigins)[currIdx] = nodeOrigin;
+        }
+
         // 如果该节点的输出连接到 JOIN 节点，则插入一个跳转到 JOIN 的 JUMP
         if (node->withOutputs().size() == 1 &&
             node->withOutputs().front()->type() == NodeType::JOIN) {
@@ -426,16 +444,16 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
 
     // 优化字节码
     BytecodeOptimizer optimizer(opt.optimizationStrategies);
-    optimizer.optimize(bytecodes);
+    optimizer.optimize(bytecodes, 0, localPcOrigins);
 
     return bytecodes;
 }
 
-std::tuple<bytecode_vec_t, std::vector<BytecodeIndex>, std::unordered_map<GraphIR::Graph *, size_t>>
-compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &opt) {
+std::tuple<bytecode_vec_t, std::vector<BytecodeIndex>, std::unordered_map<GIR::Graph *, size_t>>
+compileAndLink(context_ptr_t ctx, GIR::Graph *entry, const CompileStrategy &opt) {
     bytecode_vec_t linked;
     std::vector<BytecodeIndex> graphs;
-    std::unordered_map<GraphIR::Graph *, size_t> offsetMap;
+    std::unordered_map<GIR::Graph *, size_t> offsetMap;
 
     // 收集所有被依赖的子图（包含 entry 自身）
     std::vector<graph_ptr_t> allGraphs;
@@ -449,8 +467,8 @@ compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &
     allGraphs.push_back(entry->shared_from_this());
 
     // 去重
-    std::unordered_set<GraphIR::Graph *> visited;
-    std::vector<GraphIR::Graph *> uniqueGraphs;
+    std::unordered_set<GIR::Graph *> visited;
+    std::vector<GIR::Graph *> uniqueGraphs;
     for (const auto &g : allGraphs) {
         if (visited.insert(g.get()).second) {
             uniqueGraphs.push_back(g.get());
@@ -460,13 +478,19 @@ compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &
 
     // 编译所有图
     for (auto *graph : uniqueGraphs) {
-        size_t start         = linked.size();
-        bytecode_vec_t codes = compile(ctx, graph, opt);
+        size_t start = linked.size();
+        std::unordered_map<size_t, camel::source::origin_id_t> localPcOrigins;
+        bytecode_vec_t codes = compile(ctx, graph, opt, &localPcOrigins);
 
         offsetMap[graph] = start;
         graphs.push_back({start, codes.size(), graph});
 
         linked.insert(linked.end(), codes.begin(), codes.end());
+        if (auto sourceContext = ctx ? ctx->sourceContext() : nullptr) {
+            for (const auto &[localPc, origin] : localPcOrigins) {
+                sourceContext->debugMap().registerPcOrigin(start + localPc, origin);
+            }
+        }
     }
 
     // 统一链接 — 修改字节码中的地址引用

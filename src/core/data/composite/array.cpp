@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,9 @@
 #include "camel/utils/type.h"
 
 using namespace std;
+using namespace camel::core::data;
+using namespace camel::core::type;
+using namespace camel::core::error;
 
 struct ArrayDataFactory::Impl {
     Type *elemType = nullptr;

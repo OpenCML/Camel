@@ -10,17 +10,23 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "operators.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/utils/type.h"
 
 #include <pybind11/embed.h>
+
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -39,8 +45,8 @@ template <typename T> static std::vector<double> __array_to_vector__(Array *arr)
     return vec;
 }
 
-static std::vector<double> __array_to_vector_with_type__(Array *arr, TypeCode code, Context &ctx,
-                                                        std::string_view fname) {
+static std::vector<double> __array_to_vector_with_type__(
+    Array *arr, TypeCode code, camel::core::context::Context &ctx, std::string_view fname) {
     switch (code) {
     case TypeCode::Int32:
         return __array_to_vector__<Int32>(arr);
@@ -51,14 +57,13 @@ static std::vector<double> __array_to_vector_with_type__(Array *arr, TypeCode co
     case TypeCode::Float64:
         return __array_to_vector__<Float64>(arr);
     default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string(fname) + " not supported for type " + typeCodeToString(code));
-        return {};
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string(fname) + " not supported for type " + typeCodeToString(code));
     }
 }
 
-slot_t __plot__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __plot__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     Array *arr               = norm.get<Array *>(0);
     const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
     TypeCode elemCode        = arrType->elemTypeCode();
@@ -92,13 +97,8 @@ slot_t __plot__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
         return NullSlot;
     } catch (const std::exception &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("plot error: ") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("plot error: ") + e.what());
     }
 }
 
-std::unordered_map<std::string, operator_t> getPyplotOpsMap() {
-    return {{"plot", __plot__}};
-}
+std::unordered_map<std::string, operator_t> getPyplotOpsMap() { return {{"plot", __plot__}}; }

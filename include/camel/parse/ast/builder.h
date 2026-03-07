@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,19 +26,28 @@
 #include "antlr4-runtime/antlr4-runtime.h"
 #include "camel/common/scope.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/source/manager.h"
 #include "camel/parse/antlr/OpenCMLVisitor.h"
 #include "camel/parse/ast.h"
 
-namespace AbstractSyntaxTree {
+namespace camel::parse::ast {
 
 class Builder : public OpenCMLVisitor {
   public:
     Builder() {};
     virtual ~Builder() = default;
 
-    node_ptr_t build(antlr4::tree::ParseTree *tree, diagnostics_ptr_t diags) {
-        diags_ = diags;
-        root_  = nullptr;
+    node_ptr_t build(antlr4::tree::ParseTree *tree, camel::core::error::diagnostics_ptr_t diags) {
+        diags_         = diags;
+        sourceContext_ = diags ? diags->sourceContext() : nullptr;
+        sourceFileId_  = camel::source::kInvalidSourceFileId;
+        if (sourceContext_ && diags) {
+            auto fileId = sourceContext_->findFileId(diags->modulePath());
+            if (fileId.has_value()) {
+                sourceFileId_ = *fileId;
+            }
+        }
+        root_ = nullptr;
         visit(tree);
         return root_;
     }
@@ -46,7 +55,9 @@ class Builder : public OpenCMLVisitor {
   private:
     node_ptr_t root_;
 
-    diagnostics_ptr_t diags_;
+    camel::core::error::diagnostics_ptr_t diags_;
+    camel::source::source_context_ptr_t sourceContext_;
+    camel::source::source_file_id_t sourceFileId_ = camel::source::kInvalidSourceFileId;
 
     std::shared_ptr<ModuleLoad> module_ = std::make_shared<ModuleLoad>();
     std::vector<std::shared_ptr<ImportLoad>> imports_;
@@ -214,4 +225,4 @@ class Builder : public OpenCMLVisitor {
 
     // End of auto-generated visitor methods
 };
-} // namespace AbstractSyntaxTree
+} // namespace camel::parse::ast

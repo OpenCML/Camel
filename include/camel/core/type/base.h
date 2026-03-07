@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,10 @@
 #include <optional>
 #include <string>
 #include <vector>
+
+namespace camel::core::type {
+
+namespace type_impl = ::camel::core::type;
 
 /*
  TypeCode (32 bits) 编码结构:
@@ -135,11 +139,11 @@ class Type {
 
     const TypeCode &code() const;
 
-    inline bool isPrimitive() const { return ::isPrimitive(code_); }
-    inline bool isOtherType() const { return ::isOtherType(code_); }
-    inline bool isComposite() const { return ::isComposite(code_); }
-    inline bool isGCTraced() const { return ::isGCTraced(code_); }
-    inline bool isAuxiliary() const { return ::isAuxiliary(code_); }
+    inline bool isPrimitive() const { return type_impl::isPrimitive(code_); }
+    inline bool isOtherType() const { return type_impl::isOtherType(code_); }
+    inline bool isComposite() const { return type_impl::isComposite(code_); }
+    inline bool isGCTraced() const { return type_impl::isGCTraced(code_); }
+    inline bool isAuxiliary() const { return type_impl::isAuxiliary(code_); }
 
     virtual std::string toString() const;
     virtual std::string mangle() const;
@@ -167,3 +171,5 @@ class Type {
     static Type *Ref();
     static Type *Any();
 };
+
+} // namespace camel::core::type

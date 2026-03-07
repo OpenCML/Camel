@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "module.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
@@ -27,12 +28,16 @@
 #include "executor.h"
 #include "operators.h"
 
-
 #include <fstream>
 #include <optional>
 #include <pybind11/embed.h>
 #include <pybind11/pybind11.h>
 #include <string>
+
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::module;
+using namespace camel::core::type;
 
 #ifdef _WIN32
 #include <stdlib.h>
@@ -396,10 +401,9 @@ bool PythonModule::load() {
             ensure_site_packages_in_path();
         }
     } catch (const std::exception &e) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("Failed to load python module: ") + e.what());
-        return false;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("Failed to load python module: ") + e.what());
     }
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("python", [ctx]() { return createPythonExecutor(ctx); });

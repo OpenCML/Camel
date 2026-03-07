@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 08, 2026
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,14 +21,16 @@
 
 #include "camel/execute/pass/trans.h"
 
+namespace ctx = camel::core::context;
+
 /**
  * JitRmirDumpPass (std::rmir): 字节码直接编译得到的、基于虚拟寄存器的 MIR，未做优化。
  */
 class JitRmirDumpPass : public GraphTranslatePass {
   public:
-    JitRmirDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
+    JitRmirDumpPass(const ctx::context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
     virtual ~JitRmirDumpPass() = default;
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 };
 
 /**
@@ -37,7 +39,7 @@ class JitRmirDumpPass : public GraphTranslatePass {
  */
 class JitMirDumpPass : public GraphTranslatePass {
   public:
-    JitMirDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
+    JitMirDumpPass(const ctx::context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
     virtual ~JitMirDumpPass() = default;
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,11 +21,12 @@
 #include "camel/compile/gir.h"
 
 using namespace std;
+using namespace camel::core::data;
+using namespace camel::core::type;
 
-FunctionData::FunctionData(GraphIR::Graph &graph)
-    : CompositeData(graph.funcType()), graph_(graph) {}
+FunctionData::FunctionData(GIR::Graph &graph) : CompositeData(graph.funcType()), graph_(graph) {}
 
-func_ptr_t FunctionData::create(GraphIR::Graph &graph) {
+func_ptr_t FunctionData::create(GIR::Graph &graph) {
     ASSERT(graph.funcType() != nullptr, "Graph must have a function type for FunctionData.");
     return std::make_shared<FunctionData>(graph);
 }
@@ -37,7 +38,7 @@ FunctionType *FunctionData::funcType() const { return tt::as_ptr<FunctionType>(t
 std::vector<std::string> FunctionData::refs() const {
     std::vector<std::string> refNames;
     for (const auto &node : graph_.closure()) {
-        const auto *portNode = tt::as_ptr<GraphIR::PortNode>(node);
+        const auto *portNode = tt::as_ptr<GIR::PortNode>(node);
         refNames.push_back(portNode->name());
     }
     return refNames;

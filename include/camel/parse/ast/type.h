@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 
 #include "base.h"
 
-namespace AbstractSyntaxTree {
+namespace camel::parse::ast {
 
 enum class TypeType { Null, Expr, Array, Tuple, Struct, Func, Spec, Unit, Infer, Data, Ref };
 
@@ -170,4 +170,4 @@ class RefTypeLoad : public TypeLoad {
     Reference ref_;
 };
 
-} // namespace AbstractSyntaxTree
+} // namespace camel::parse::ast

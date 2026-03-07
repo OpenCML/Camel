@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,127 @@
 
 using namespace std;
 using namespace AST;
+using namespace camel::core::error;
+
+namespace {
+thread_local camel::source::source_context_ptr_t g_sourceContext = nullptr;
+thread_local camel::source::source_file_id_t g_sourceFileId = camel::source::kInvalidSourceFileId;
+
+inline camel::source::origin_id_t nodeOrigin(const node_ptr_t &node) {
+    return node ? node->load()->origin() : camel::source::kInvalidOriginId;
+}
+
+inline void setNodeOriginByOffsets(
+    node_ptr_t node, size_t startOffset, size_t endOffset, const std::string &label = "ast") {
+    if (!g_sourceContext || g_sourceFileId == camel::source::kInvalidSourceFileId) {
+        return;
+    }
+    auto span = g_sourceContext->createSpan(g_sourceFileId, startOffset, endOffset);
+    if (span == camel::source::kInvalidSpanId) {
+        return;
+    }
+    auto origin = g_sourceContext->createOrigin(
+        span,
+        camel::source::OriginStage::AST,
+        camel::source::OriginKind::AstNode,
+        label);
+    node->load()->setOrigin(origin);
+}
+
+inline antlr4::Token *tokenFromTree(antlr4::tree::ParseTree *tree) {
+    auto *terminal = dynamic_cast<antlr4::tree::TerminalNode *>(tree);
+    return terminal ? terminal->getSymbol() : nullptr;
+}
+
+inline camel::source::origin_id_t
+deriveAstAnchorOrigin(const node_ptr_t &owner, antlr4::Token *token, const std::string &label) {
+    if (!g_sourceContext || g_sourceFileId == camel::source::kInvalidSourceFileId || !owner ||
+        !token) {
+        return camel::source::kInvalidOriginId;
+    }
+    auto span = g_sourceContext->createSpan(
+        g_sourceFileId,
+        static_cast<size_t>(token->getStartIndex()),
+        static_cast<size_t>(token->getStopIndex() + 1));
+    if (span == camel::source::kInvalidSpanId) {
+        return camel::source::kInvalidOriginId;
+    }
+    auto parent = owner->load()->origin();
+    if (parent != camel::source::kInvalidOriginId) {
+        return g_sourceContext->deriveOrigin(
+            parent,
+            camel::source::OriginStage::AST,
+            camel::source::OriginKind::AstNode,
+            label,
+            span);
+    }
+    return g_sourceContext->createOrigin(
+        span,
+        camel::source::OriginStage::AST,
+        camel::source::OriginKind::AstNode,
+        label);
+}
+
+inline camel::source::origin_id_t deriveAstAnchorOrigin(
+    const node_ptr_t &owner, const antlr4::ParserRuleContext *context, const std::string &label) {
+    if (!g_sourceContext || g_sourceFileId == camel::source::kInvalidSourceFileId || !context ||
+        !context->getStart() || !context->getStop()) {
+        return camel::source::kInvalidOriginId;
+    }
+    auto span = g_sourceContext->createSpan(
+        g_sourceFileId,
+        static_cast<size_t>(context->getStart()->getStartIndex()),
+        static_cast<size_t>(context->getStop()->getStopIndex() + 1));
+    if (span == camel::source::kInvalidSpanId) {
+        return camel::source::kInvalidOriginId;
+    }
+    auto parent = owner ? owner->load()->origin() : camel::source::kInvalidOriginId;
+    if (parent != camel::source::kInvalidOriginId) {
+        return g_sourceContext->deriveOrigin(
+            parent,
+            camel::source::OriginStage::AST,
+            camel::source::OriginKind::AstNode,
+            label,
+            span);
+    }
+    return g_sourceContext->createOrigin(
+        span,
+        camel::source::OriginStage::AST,
+        camel::source::OriginKind::AstNode,
+        label);
+}
+
+inline camel::source::SemanticPart semanticPart(
+    camel::source::SemanticRole role, camel::source::origin_id_t origin, int32_t slot = -1,
+    const std::string &label = "") {
+    return camel::source::SemanticPart{
+        .role   = role,
+        .origin = origin,
+        .slot   = slot,
+        .label  = label};
+}
+
+inline void registerAstSemanticBundle(
+    const node_ptr_t &node, std::vector<camel::source::SemanticPart> parts = {},
+    std::vector<camel::source::origin_id_t> mergedInputs = {}, bool synthetic = false,
+    const std::string &syntheticReason = "") {
+    if (!g_sourceContext || !node) {
+        return;
+    }
+    auto mainOrigin = node->load()->origin();
+    if (mainOrigin == camel::source::kInvalidOriginId) {
+        return;
+    }
+    g_sourceContext->registerAstSemantic(
+        mainOrigin,
+        camel::source::SemanticBundle{
+            .mainOrigin      = mainOrigin,
+            .parts           = std::move(parts),
+            .mergedInputs    = std::move(mergedInputs),
+            .synthetic       = synthetic,
+            .syntheticReason = syntheticReason});
+}
+} // namespace
 
 template <typename LoadType, typename... Args> node_ptr_t createNodeAs(Args &&...args) {
     return std::make_shared<Node>(
@@ -56,6 +177,12 @@ inline void setNodeTokenRange(node_ptr_t node, size_t start, size_t end) {
 
 inline void setNodeTokenRangeByContext(node_ptr_t node, const antlr4::ParserRuleContext *context) {
     node->load()->setTokenRange(extractTokenRangeFromContext(context));
+    if (context && context->getStart() && context->getStop()) {
+        setNodeOriginByOffsets(
+            node,
+            static_cast<size_t>(context->getStart()->getStartIndex()),
+            static_cast<size_t>(context->getStop()->getStopIndex() + 1));
+    }
 }
 
 template <typename Context>
@@ -67,6 +194,10 @@ inline void setNodeTokenRangeByContexts(node_ptr_t node, const vector<Context *>
     size_t start = context.front()->getStart()->getTokenIndex();
     size_t end   = context.back()->getStop()->getTokenIndex() + 1;
     node->load()->setTokenRange(start, end);
+    setNodeOriginByOffsets(
+        node,
+        static_cast<size_t>(context.front()->getStart()->getStartIndex()),
+        static_cast<size_t>(context.back()->getStop()->getStopIndex() + 1));
 }
 
 inline node_ptr_t any2node(const std::any &a) { return std::any_cast<node_ptr_t>(a); }
@@ -76,6 +207,8 @@ program : SEP? (decl SEP?)* EOF;
 */
 any Builder::visitProgram(OpenCMLParser::ProgramContext *context) {
     ENTER("Program");
+    g_sourceContext = sourceContext_;
+    g_sourceFileId  = sourceFileId_;
 
     root_ = std::make_shared<Node>(module_);
 
@@ -346,6 +479,14 @@ any Builder::visitFuncData(OpenCMLParser::FuncDataContext *context) {
         (context->typeExpr() ? context->typeExpr()->getStop()->getTokenIndex()
                              : context->parentParams()->getStart()->getTokenIndex()) +
             1);
+    setNodeOriginByOffsets(
+        typeOptNode,
+        static_cast<size_t>(context->getStart()->getStartIndex()),
+        static_cast<size_t>(
+            (context->typeExpr() ? context->typeExpr()->getStop()
+                                 : context->parentParams()->getStart())
+                ->getStopIndex() +
+            1));
     if (context->typeExpr()) {
         node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
         *typeOptNode << typeNode;
@@ -358,6 +499,31 @@ any Builder::visitFuncData(OpenCMLParser::FuncDataContext *context) {
     setNodeTokenRangeByContext(funcNode, context);
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
+    registerAstSemanticBundle(
+        funcNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::GenericParameter,
+                nodeOrigin(funcTypeNode->at(0)),
+                -1,
+                "withParams"),
+            semanticPart(
+                camel::source::SemanticRole::Parameter,
+                nodeOrigin(funcTypeNode->at(1)),
+                -1,
+                "params"),
+            semanticPart(
+                camel::source::SemanticRole::ReturnType,
+                typeOptNode->empty() ? camel::source::kInvalidOriginId
+                                     : nodeOrigin(typeOptNode->front()),
+                -1,
+                "returnType"),
+            semanticPart(
+                camel::source::SemanticRole::ValueProducer,
+                nodeOrigin(blockNode),
+                -1,
+                "body"),
+        });
 
     LEAVE("FuncData");
     return funcNode;
@@ -377,6 +543,10 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
         context->getStart()->getTokenIndex(),
         context->stmtBlock()->getStart()->getTokenIndex() + 1};
     setNodeTokenRange(funcTypeNode, typeRange);
+    setNodeOriginByOffsets(
+        funcTypeNode,
+        static_cast<size_t>(context->getStart()->getStartIndex()),
+        static_cast<size_t>(context->stmtBlock()->getStart()->getStartIndex()));
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
 
     auto implMark = context->implMark();
@@ -422,6 +592,10 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
 
     node_ptr_t typeOptNode = createNodeAs<OptionalLoad>("Type");
     setNodeTokenRange(typeOptNode, typeRange);
+    setNodeOriginByOffsets(
+        typeOptNode,
+        static_cast<size_t>(context->getStart()->getStartIndex()),
+        static_cast<size_t>(context->stmtBlock()->getStart()->getStartIndex()));
     if (context->typeExpr()) {
         node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
         *typeOptNode << typeNode;
@@ -443,6 +617,36 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     node_ptr_t funcDeclNode = createNodeAs<FuncDeclLoad>(ref);
     *funcDeclNode << funcNode;
     setNodeTokenRangeByContext(funcDeclNode, context);
+    registerAstSemanticBundle(
+        funcDeclNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::FuncName,
+                deriveAstAnchorOrigin(funcDeclNode, context->identDef(), "ast.func.name"),
+                -1,
+                ref.ident()),
+            semanticPart(
+                camel::source::SemanticRole::GenericParameter,
+                nodeOrigin(funcTypeNode->at(0)),
+                -1,
+                "withParams"),
+            semanticPart(
+                camel::source::SemanticRole::Parameter,
+                nodeOrigin(funcTypeNode->at(1)),
+                -1,
+                "params"),
+            semanticPart(
+                camel::source::SemanticRole::ReturnType,
+                typeOptNode->empty() ? camel::source::kInvalidOriginId
+                                     : nodeOrigin(typeOptNode->front()),
+                -1,
+                "returnType"),
+            semanticPart(
+                camel::source::SemanticRole::ValueProducer,
+                nodeOrigin(blockNode),
+                -1,
+                "body"),
+        });
 
     LEAVE("FuncDecl");
     return funcDeclNode;
@@ -531,6 +735,33 @@ any Builder::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
     }
 
     *dataDeclNode << any2node(visitDataList(context->dataList()));
+    std::vector<camel::source::SemanticPart> parts;
+    if (context->LET()) {
+        parts.push_back(semanticPart(
+            camel::source::SemanticRole::Keyword,
+            deriveAstAnchorOrigin(dataDeclNode, context->LET()->getSymbol(), "ast.data.let"),
+            -1,
+            "let"));
+    } else if (context->VAR()) {
+        parts.push_back(semanticPart(
+            camel::source::SemanticRole::Keyword,
+            deriveAstAnchorOrigin(dataDeclNode, context->VAR()->getSymbol(), "ast.data.var"),
+            -1,
+            "var"));
+    }
+    for (size_t i = 0; i < refs.size(); ++i) {
+        parts.push_back(semanticPart(
+            camel::source::SemanticRole::BindingName,
+            nodeOrigin(dataDeclNode),
+            static_cast<int32_t>(i),
+            refs[i].ident()));
+    }
+    parts.push_back(semanticPart(
+        camel::source::SemanticRole::ValueProducer,
+        nodeOrigin(dataDeclNode->atAs<RepeatedLoad>(1)),
+        -1,
+        "initializer"));
+    registerAstSemanticBundle(dataDeclNode, std::move(parts));
     LEAVE("DataDecl");
     return dataDeclNode;
 }
@@ -907,6 +1138,17 @@ any Builder::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {
     node_ptr_t pattern  = any2node(visitPattern(context->pattern(0)));
     node_ptr_t exprNode = any2node(visitBlockExpr(context->blockExpr()));
     *caseNode << pattern << exprNode;
+    registerAstSemanticBundle(
+        caseNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(caseNode, context->CASE()->getSymbol(), "ast.match.case"),
+                -1,
+                "case"),
+            semanticPart(camel::source::SemanticRole::CaseValue, nodeOrigin(pattern), 0, "pattern"),
+            semanticPart(camel::source::SemanticRole::CaseBody, nodeOrigin(exprNode), -1, "body"),
+        });
     LEAVE("MatchCase");
     return caseNode;
 }
@@ -938,8 +1180,10 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
     {
         ctrlNode = createNodeAs<IfExprLoad>();
         setNodeTokenRangeByContext(ctrlNode, context);
-        *ctrlNode << any2node(visitLogicalOrExpr(context->logicalOrExpr()));
-        *ctrlNode << any2node(visitBlockExpr(context->blockExpr(0)));
+        node_ptr_t condNode = any2node(visitLogicalOrExpr(context->logicalOrExpr()));
+        node_ptr_t thenNode = any2node(visitBlockExpr(context->blockExpr(0)));
+        *ctrlNode << condNode;
+        *ctrlNode << thenNode;
         node_ptr_t elseBlockNode = createNodeAs<OptionalLoad>("StmtBlock");
         *ctrlNode << elseBlockNode;
         if (context->blockExpr(1)) {
@@ -950,6 +1194,45 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
             *stmts << createNodeAs<RepeatedLoad>("Stmt");
             *elseBlockNode << stmts;
         }
+        registerAstSemanticBundle(
+            ctrlNode,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Keyword,
+                    deriveAstAnchorOrigin(ctrlNode, context->IF()->getSymbol(), "ast.if.keyword"),
+                    -1,
+                    "if"),
+                semanticPart(
+                    camel::source::SemanticRole::Keyword,
+                    deriveAstAnchorOrigin(ctrlNode, context->THEN()->getSymbol(), "ast.if.then"),
+                    -1,
+                    "then"),
+                semanticPart(
+                    camel::source::SemanticRole::Keyword,
+                    context->ELSE() ? deriveAstAnchorOrigin(
+                                          ctrlNode,
+                                          context->ELSE()->getSymbol(),
+                                          "ast.if.else")
+                                    : camel::source::kInvalidOriginId,
+                    -1,
+                    "else"),
+                semanticPart(
+                    camel::source::SemanticRole::BranchCondition,
+                    nodeOrigin(condNode),
+                    -1,
+                    "condition"),
+                semanticPart(
+                    camel::source::SemanticRole::BranchTarget,
+                    nodeOrigin(thenNode),
+                    0,
+                    "then"),
+                semanticPart(
+                    camel::source::SemanticRole::BranchTarget,
+                    elseBlockNode->empty() ? camel::source::kInvalidOriginId
+                                           : nodeOrigin(elseBlockNode->front()),
+                    1,
+                    "else"),
+            });
     } break;
     case 2: // MATCH identRef '{' matchCase+ '}'
     {
@@ -962,6 +1245,27 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
             *casesNode << any2node(visitMatchCase(matchCase));
         }
         *ctrlNode << casesNode;
+        std::vector<camel::source::SemanticPart> parts = {
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(ctrlNode, context->MATCH()->getSymbol(), "ast.match.keyword"),
+                -1,
+                "match"),
+            semanticPart(
+                camel::source::SemanticRole::BranchCondition,
+                deriveAstAnchorOrigin(ctrlNode, context->identRef(), "ast.match.scrutinee"),
+                -1,
+                ref.ident()),
+        };
+        for (size_t i = 0; i < casesNode->size(); ++i) {
+            auto caseOrigin = nodeOrigin(casesNode->at(i));
+            parts.push_back(semanticPart(
+                camel::source::SemanticRole::BranchTarget,
+                caseOrigin,
+                static_cast<int32_t>(i),
+                "case"));
+        }
+        registerAstSemanticBundle(ctrlNode, std::move(parts));
     } break;
 
     default:
@@ -1044,6 +1348,20 @@ any Builder::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
         setNodeTokenRangeByContext(dataExprNode, context->logicalOrExpr(i));
         *dataExprNode << lhsNode << rhsNode;
+        registerAstSemanticBundle(
+            dataExprNode,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Operator,
+                    deriveAstAnchorOrigin(
+                        dataExprNode,
+                        tokenFromTree(context->children[i * 2 - 1]),
+                        "ast.assign.operator"),
+                    -1,
+                    strOp),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(lhsNode), 0, "lhs"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(rhsNode), 1, "rhs"),
+            });
         lhsNode = dataExprNode;
     }
     LEAVE("AssignExpr");
@@ -1063,6 +1381,20 @@ any Builder::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(BinaryDataOp::Or);
         setNodeTokenRangeByContext(dataExprNode, context->logicalAndExpr(i));
         *dataExprNode << lhsNode << rhsNode;
+        registerAstSemanticBundle(
+            dataExprNode,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Operator,
+                    deriveAstAnchorOrigin(
+                        dataExprNode,
+                        tokenFromTree(context->children[i * 2 - 1]),
+                        "ast.logic.or"),
+                    -1,
+                    "||"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(lhsNode), 0, "lhs"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(rhsNode), 1, "rhs"),
+            });
         lhsNode = dataExprNode;
     }
     LEAVE("LogicalOrExpr");
@@ -1082,6 +1414,20 @@ any Builder::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) 
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(BinaryDataOp::And);
         setNodeTokenRangeByContext(dataExprNode, context->equalityExpr(i));
         *dataExprNode << lhsNode << rhsNode;
+        registerAstSemanticBundle(
+            dataExprNode,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Operator,
+                    deriveAstAnchorOrigin(
+                        dataExprNode,
+                        tokenFromTree(context->children[i * 2 - 1]),
+                        "ast.logic.and"),
+                    -1,
+                    "&&"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(lhsNode), 0, "lhs"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(rhsNode), 1, "rhs"),
+            });
         lhsNode = dataExprNode;
     }
     LEAVE("LogicalAndExpr");
@@ -1115,6 +1461,20 @@ any Builder::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
         setNodeTokenRangeByContext(dataExprNode, context->relationalExpr(i));
         *dataExprNode << lhsNode << rhsNode;
+        registerAstSemanticBundle(
+            dataExprNode,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Operator,
+                    deriveAstAnchorOrigin(
+                        dataExprNode,
+                        tokenFromTree(context->children[i * 2 - 1]),
+                        "ast.equality.operator"),
+                    -1,
+                    strOp),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(lhsNode), 0, "lhs"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(rhsNode), 1, "rhs"),
+            });
         lhsNode = dataExprNode;
     }
     LEAVE("EqualityExpr");
@@ -1147,6 +1507,20 @@ any Builder::visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) 
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
         setNodeTokenRangeByContext(dataExprNode, context->additiveExpr(i));
         *dataExprNode << lhsNode << rhsNode;
+        registerAstSemanticBundle(
+            dataExprNode,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Operator,
+                    deriveAstAnchorOrigin(
+                        dataExprNode,
+                        tokenFromTree(context->children[i * 2 - 1]),
+                        "ast.relational.operator"),
+                    -1,
+                    strOp),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(lhsNode), 0, "lhs"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(rhsNode), 1, "rhs"),
+            });
         lhsNode = dataExprNode;
     }
     LEAVE("RelationalExpr");
@@ -1175,6 +1549,20 @@ any Builder::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
         setNodeTokenRangeByContext(dataExprNode, context->multiplicativeExpr(i));
         *dataExprNode << lhsNode << rhsNode;
+        registerAstSemanticBundle(
+            dataExprNode,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Operator,
+                    deriveAstAnchorOrigin(
+                        dataExprNode,
+                        tokenFromTree(context->children[i * 2 - 1]),
+                        "ast.additive.operator"),
+                    -1,
+                    strOp),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(lhsNode), 0, "lhs"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(rhsNode), 1, "rhs"),
+            });
         lhsNode = dataExprNode;
     }
     LEAVE("AdditiveExpr");
@@ -1209,6 +1597,20 @@ any Builder::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *c
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
         setNodeTokenRangeByContext(dataExprNode, context->nullableExpr(i));
         *dataExprNode << lhsNode << rhsNode;
+        registerAstSemanticBundle(
+            dataExprNode,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Operator,
+                    deriveAstAnchorOrigin(
+                        dataExprNode,
+                        tokenFromTree(context->children[i * 2 - 1]),
+                        "ast.multiplicative.operator"),
+                    -1,
+                    strOp),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(lhsNode), 0, "lhs"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(rhsNode), 1, "rhs"),
+            });
         lhsNode = dataExprNode;
     }
     LEAVE("MultiplicativeExpr");
@@ -1238,7 +1640,26 @@ any Builder::visitNullableExpr(OpenCMLParser::NullableExprContext *context) {
         if (context->dataExpr()) {
             node_ptr_t dataExprNode = createNodeAs<ReservedExprLoad>(op);
             setNodeTokenRangeByContext(dataExprNode, context->dataExpr());
-            *dataExprNode << res << any2node(visitDataExpr(context->dataExpr()));
+            node_ptr_t rhsNode = any2node(visitDataExpr(context->dataExpr()));
+            *dataExprNode << res << rhsNode;
+            registerAstSemanticBundle(
+                dataExprNode,
+                {
+                    semanticPart(
+                        camel::source::SemanticRole::Operator,
+                        deriveAstAnchorOrigin(
+                            dataExprNode,
+                            tokenFromTree(context->children[1]),
+                            "ast.nullable.operator"),
+                        -1,
+                        strOp),
+                    semanticPart(camel::source::SemanticRole::Receiver, nodeOrigin(res), -1, "lhs"),
+                    semanticPart(
+                        camel::source::SemanticRole::Argument,
+                        nodeOrigin(rhsNode),
+                        0,
+                        "rhs"),
+                });
             res = dataExprNode;
         }
     }
@@ -1276,6 +1697,28 @@ any Builder::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
             res                 = createNodeAs<ReservedExprLoad>(op);
             setNodeTokenRangeByContext(res, context);
             *res << dataNode << typeNode;
+            registerAstSemanticBundle(
+                res,
+                {
+                    semanticPart(
+                        camel::source::SemanticRole::Operator,
+                        deriveAstAnchorOrigin(
+                            res,
+                            context->AS() ? context->AS()->getSymbol() : context->IS()->getSymbol(),
+                            "ast.unary.keyword"),
+                        -1,
+                        context->AS() ? "as" : "is"),
+                    semanticPart(
+                        camel::source::SemanticRole::Receiver,
+                        nodeOrigin(dataNode),
+                        -1,
+                        "value"),
+                    semanticPart(
+                        camel::source::SemanticRole::ReturnType,
+                        nodeOrigin(typeNode),
+                        -1,
+                        "type"),
+                });
         }
         break;
     }
@@ -1295,6 +1738,23 @@ any Builder::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
         res                 = createNodeAs<UnaryExprLoad>(op);
         setNodeTokenRangeByContext(res, context);
         *res << dataNode;
+        registerAstSemanticBundle(
+            res,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Operator,
+                    deriveAstAnchorOrigin(
+                        res,
+                        tokenFromTree(context->children[0]),
+                        "ast.unary.operator"),
+                    -1,
+                    strOp),
+                semanticPart(
+                    camel::source::SemanticRole::Argument,
+                    nodeOrigin(dataNode),
+                    0,
+                    "operand"),
+            });
         break;
     }
     default:
@@ -1317,7 +1777,8 @@ any Builder::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
     for (size_t i = 1; i < context->compExpr().size(); i++) {
         string strOp        = context->children[i * 2 - 1]->getText();
         node_ptr_t linkNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
-        node_ptr_t rhsNode  = any2node(visitCompExpr(context->compExpr(i)));
+        setNodeTokenRangeByContext(linkNode, context);
+        node_ptr_t rhsNode = any2node(visitCompExpr(context->compExpr(i)));
         if (strOp == "?->") {
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
             setNodeTokenRangeByContext(notNullNode, context->compExpr(i));
@@ -1330,6 +1791,38 @@ any Builder::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
         setNodeTokenRangeByContext(namedDataList, context->compExpr(i));
         *dataList << lhsNode;
         *linkNode << rhsNode << dataList << namedDataList;
+        registerAstSemanticBundle(
+            linkNode,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Operator,
+                    deriveAstAnchorOrigin(
+                        linkNode,
+                        tokenFromTree(context->children[i * 2 - 1]),
+                        "ast.link.operator"),
+                    -1,
+                    strOp),
+                semanticPart(
+                    camel::source::SemanticRole::Callee,
+                    nodeOrigin(rhsNode),
+                    -1,
+                    "callee"),
+                semanticPart(
+                    camel::source::SemanticRole::Receiver,
+                    nodeOrigin(lhsNode),
+                    -1,
+                    "receiver"),
+                semanticPart(
+                    camel::source::SemanticRole::ArgList,
+                    nodeOrigin(dataList),
+                    -1,
+                    "args"),
+                semanticPart(
+                    camel::source::SemanticRole::Argument,
+                    nodeOrigin(lhsNode),
+                    0,
+                    "receiver"),
+            });
         lhsNode = linkNode;
     }
     LEAVE("LinkExpr");
@@ -1347,7 +1840,7 @@ any Builder::visitCompExpr(OpenCMLParser::CompExprContext *context) {
     for (size_t i = 1; i < context->annoExpr().size(); i++) {
         string strOp        = context->children[i * 2 - 1]->getText();
         node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Comp);
-        setNodeTokenRangeByContext(dataNode, context->annoExpr(i));
+        setNodeTokenRangeByContext(dataNode, context);
         node_ptr_t rhsNode = any2node(visitAnnoExpr(context->annoExpr(i)));
         if (strOp == "?..") {
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
@@ -1356,6 +1849,20 @@ any Builder::visitCompExpr(OpenCMLParser::CompExprContext *context) {
             lhsNode = notNullNode;
         }
         *dataNode << lhsNode << rhsNode;
+        registerAstSemanticBundle(
+            dataNode,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Operator,
+                    deriveAstAnchorOrigin(
+                        dataNode,
+                        tokenFromTree(context->children[i * 2 - 1]),
+                        "ast.comp.operator"),
+                    -1,
+                    strOp),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(lhsNode), 0, "lhs"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(rhsNode), 1, "rhs"),
+            });
         lhsNode = dataNode;
     }
     LEAVE("CompExpr");
@@ -1382,6 +1889,20 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
                 node_ptr_t rhsNode =
                     any2node(visitIndices(tt::as_ptr<OpenCMLParser::IndicesContext>(child)));
                 *exprNode << lhsNode << rhsNode;
+                registerAstSemanticBundle(
+                    exprNode,
+                    {
+                        semanticPart(
+                            camel::source::SemanticRole::IndexExpr,
+                            nodeOrigin(rhsNode),
+                            -1,
+                            "indices"),
+                        semanticPart(
+                            camel::source::SemanticRole::Receiver,
+                            nodeOrigin(lhsNode),
+                            -1,
+                            "target"),
+                    });
             } else if (tt::is_instance_of<OpenCMLParser::ParentArguesContext>(child)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
                 setNodeTokenRangeByContext(
@@ -1390,6 +1911,26 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
                 auto [dataList, namedDataList] = any_cast<std::pair<node_ptr_t, node_ptr_t>>(
                     visitParentArgues(tt::as_ptr<OpenCMLParser::ParentArguesContext>(child)));
                 *exprNode << lhsNode << dataList << namedDataList;
+                std::vector<camel::source::SemanticPart> parts = {
+                    semanticPart(
+                        camel::source::SemanticRole::Callee,
+                        nodeOrigin(lhsNode),
+                        -1,
+                        "callee"),
+                    semanticPart(
+                        camel::source::SemanticRole::ArgList,
+                        nodeOrigin(dataList),
+                        -1,
+                        "args"),
+                };
+                for (size_t argIndex = 0; argIndex < dataList->size(); ++argIndex) {
+                    parts.push_back(semanticPart(
+                        camel::source::SemanticRole::Argument,
+                        nodeOrigin(dataList->at(argIndex)),
+                        static_cast<int32_t>(argIndex),
+                        "arg"));
+                }
+                registerAstSemanticBundle(exprNode, std::move(parts));
             } else if (tt::is_instance_of<OpenCMLParser::AngledValuesContext>(child)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
                 setNodeTokenRangeByContext(
@@ -1398,6 +1939,26 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
                 auto [dataList, namedDataList] = any_cast<std::pair<node_ptr_t, node_ptr_t>>(
                     visitAngledValues(tt::as_ptr<OpenCMLParser::AngledValuesContext>(child)));
                 *exprNode << lhsNode << dataList << namedDataList;
+                std::vector<camel::source::SemanticPart> parts = {
+                    semanticPart(
+                        camel::source::SemanticRole::Callee,
+                        nodeOrigin(lhsNode),
+                        -1,
+                        "callee"),
+                    semanticPart(
+                        camel::source::SemanticRole::GenericArgument,
+                        nodeOrigin(dataList),
+                        -1,
+                        "typeArgs"),
+                };
+                for (size_t argIndex = 0; argIndex < dataList->size(); ++argIndex) {
+                    parts.push_back(semanticPart(
+                        camel::source::SemanticRole::GenericArgument,
+                        nodeOrigin(dataList->at(argIndex)),
+                        static_cast<int32_t>(argIndex),
+                        "typeArg"));
+                }
+                registerAstSemanticBundle(exprNode, std::move(parts));
             }
             lhsNode = exprNode;
         } else {
@@ -1423,7 +1984,40 @@ any Builder::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
             setNodeTokenRangeByContext(dataNode, context);
             Reference ref(context->children[i + 1]->getText());
             node_ptr_t rhsNode = createNodeAs<RefDataLoad>(ref);
+            if (auto *memberToken = tokenFromTree(context->children[i + 1])) {
+                setNodeTokenRange(
+                    rhsNode,
+                    static_cast<size_t>(memberToken->getTokenIndex()),
+                    static_cast<size_t>(memberToken->getTokenIndex() + 1));
+                setNodeOriginByOffsets(
+                    rhsNode,
+                    static_cast<size_t>(memberToken->getStartIndex()),
+                    static_cast<size_t>(memberToken->getStopIndex() + 1),
+                    "ast.access.member");
+            }
             *dataNode << lhsNode << rhsNode;
+            registerAstSemanticBundle(
+                dataNode,
+                {
+                    semanticPart(
+                        camel::source::SemanticRole::Operator,
+                        deriveAstAnchorOrigin(
+                            dataNode,
+                            tokenFromTree(context->children[i]),
+                            "ast.access.dot"),
+                        -1,
+                        "."),
+                    semanticPart(
+                        camel::source::SemanticRole::Receiver,
+                        nodeOrigin(lhsNode),
+                        -1,
+                        "target"),
+                    semanticPart(
+                        camel::source::SemanticRole::MemberName,
+                        nodeOrigin(rhsNode),
+                        -1,
+                        ref.ident()),
+                });
             lhsNode = dataNode;
         } else {
             throw std::runtime_error("Invalid access operator: " + strOp);

@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/parse/ast/other.h"
 #include "camel/utils/str.h"
 
-namespace AbstractSyntaxTree {
+namespace camel::parse::ast {
 
 const std::string ParamDeclLoad::geneCode() const {
     return (isVar_ ? std::string("var ") : "") + ref_.toString();
@@ -28,4 +28,4 @@ const std::string ParamDeclLoad::geneCode() const {
 
 const std::string ParamDataLoad::geneCode() const { return ref_.toString(); }
 
-} // namespace AbstractSyntaxTree
+} // namespace camel::parse::ast

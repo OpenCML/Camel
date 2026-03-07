@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,8 @@
 
 #include "../base.h"
 
+namespace camel::core::error {
+
 enum class SyntaxDiag : uint32_t {
     UnknownSyntaxError = 0x000000,
 };
@@ -31,3 +33,5 @@ enum class SyntaxDiag : uint32_t {
 constexpr DiagType diagTypeOf(SyntaxDiag) { return DiagType::SyntaxDiag; }
 
 const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap();
+
+} // namespace camel::core::error

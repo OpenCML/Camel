@@ -13,15 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composite.h"
+#include "camel/core/type/composite/composite.h"
 
 #include <vector>
+
+namespace camel::core::type {
 
 // 前向声明
 class ArrayType;
@@ -87,3 +89,5 @@ class ArrayType : public CompositeType {
     size_t refCount_;       // 引用索引数量
     size_t refs_[];         // 灵活数组：引用索引列表
 };
+
+} // namespace camel::core::type

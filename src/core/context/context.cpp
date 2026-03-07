@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,11 +25,21 @@
 #include "camel/core/module/builtin.h"
 #include "camel/core/module/dynamic.h"
 #include "camel/core/module/userdef.h"
+#include "camel/execute/executor.h"
 #include "camel/utils/log.h"
 #include "camel/utils/str.h"
 
 namespace fs = std::filesystem;
 using namespace strutil;
+using namespace camel::core::error;
+using namespace camel::core::module;
+
+namespace camel::core::context {
+
+Context::Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
+    : entryConfig_(entryConf), diagConfig_(diagConf) {}
+
+Context::~Context() = default;
 
 std::string EntryConfig::toString() const {
     std::ostringstream os;
@@ -81,10 +91,13 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 }
 
 context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &diagConf) {
-    context_ptr_t ctx = std::shared_ptr<Context>(new Context(entryConf, diagConf));
-    ctx->exeMgr_      = std::make_unique<ExecutorManager>(ctx);
-    ctx->rtmDiags_    = std::make_shared<Diagnostics>("main", entryConf.entryFile);
-    ctx->rtmDiags_->setConfig(diagConf);
+    context_ptr_t ctx     = std::shared_ptr<Context>(new Context(entryConf, diagConf));
+    ctx->exeMgr_          = std::make_unique<ExecutorManager>(ctx);
+    ctx->sourceContext_   = std::make_shared<camel::source::SourceContext>();
+    ctx->runtimeDiagSink_ = std::make_shared<DiagnosticSink>("", "", ctx->sourceContext_);
+    ctx->runtimeDiagSink_->setConfig(diagConf);
+    ctx->runtimeErrorReporter_ =
+        std::make_shared<RuntimeErrorReporter>(ctx->runtimeDiagSink_, ctx->sourceContext_);
     ctx->modules_[""] = ctx->getBuiltinModule("").value();
     EXEC_WHEN_DEBUG(
         GetDefaultLogger().in("Context").info(
@@ -442,14 +455,14 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
     return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
 }
 
-GraphIR::graph_ptr_t Context::rootGraph() const {
+GIR::graph_ptr_t Context::rootGraph() const {
     ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
     auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
     ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
     return gir;
 }
 
-GraphIR::graph_ptr_t Context::mainGraph() const {
+GIR::graph_ptr_t Context::mainGraph() const {
     ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
     auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
     ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
@@ -469,6 +482,8 @@ void Context::registerExecutorFactory(std::string name, executor_factory_t fact)
     exeMgr_->registerExecutorFactory(name, fact);
 }
 
-void Context::eval(std::string uri, GraphIR::Node *self, Frame &frame) {
+void Context::eval(std::string uri, GIR::Node *self, Frame &frame) {
     return exeMgr_->eval(uri, self, frame);
 }
+
+} // namespace camel::core::context

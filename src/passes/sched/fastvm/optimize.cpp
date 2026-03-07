@@ -13,17 +13,69 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 16, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "optimize.h"
 
-void moveup(bytecode_vec_t &codes, size_t from, size_t to) {
+namespace {
+
+void shiftPcOrigins(
+    std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins, size_t start, int step) {
+    if (!pcOrigins || step == 0) {
+        return;
+    }
+    std::unordered_map<size_t, camel::source::origin_id_t> updated;
+    updated.reserve(pcOrigins->size());
+    for (const auto &[pc, origin] : *pcOrigins) {
+        size_t mapped = pc;
+        if (pc > start) {
+            mapped = static_cast<size_t>(static_cast<int64_t>(pc) + step);
+        }
+        updated[mapped] = origin;
+    }
+    *pcOrigins = std::move(updated);
+}
+
+void erasePcOrigins(
+    std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins, size_t start, size_t len) {
+    if (!pcOrigins || len == 0) {
+        return;
+    }
+    std::unordered_map<size_t, camel::source::origin_id_t> kept;
+    kept.reserve(pcOrigins->size());
+    for (const auto &[pc, origin] : *pcOrigins) {
+        if (pc < start || pc >= start + len) {
+            kept[pc] = origin;
+        }
+    }
+    *pcOrigins = std::move(kept);
+}
+
+} // namespace
+
+void moveup(
+    bytecode_vec_t &codes, size_t from, size_t to,
+    std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) {
     ASSERT(from > to, "from should be larger than to");
     Bytecode &bc  = codes[from];
     size_t opsize = bc.opsize;
     std::rotate(codes.begin() + to, codes.begin() + from, codes.begin() + from + opsize);
+    if (pcOrigins) {
+        std::unordered_map<size_t, camel::source::origin_id_t> updated;
+        updated.reserve(pcOrigins->size());
+        for (const auto &[pc, origin] : *pcOrigins) {
+            size_t mapped = pc;
+            if (pc >= to && pc < from) {
+                mapped = pc + opsize;
+            } else if (pc >= from && pc < from + opsize) {
+                mapped = pc - (from - to);
+            }
+            updated[mapped] = origin;
+        }
+        *pcOrigins = std::move(updated);
+    }
     for (size_t i = 0; i < codes.size(); i++) {
         Bytecode &bc = codes[i];
         if (bc.opcode == OpCode::JUMP) {
@@ -37,7 +89,9 @@ void moveup(bytecode_vec_t &codes, size_t from, size_t to) {
     }
 }
 
-void redirect(bytecode_vec_t &codes, size_t start, int step) {
+void redirect(
+    bytecode_vec_t &codes, size_t start, int step,
+    std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) {
     for (size_t i = 0; i < codes.size(); i++) {
         Bytecode &bc = codes[i];
         if (bc.opcode == OpCode::JUMP) {
@@ -46,10 +100,14 @@ void redirect(bytecode_vec_t &codes, size_t start, int step) {
             }
         }
     }
+    shiftPcOrigins(pcOrigins, start, step);
 }
 
-void removeop(bytecode_vec_t &codes, size_t index) {
+void removeop(
+    bytecode_vec_t &codes, size_t index,
+    std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) {
     Bytecode &bc = codes[index];
+    erasePcOrigins(pcOrigins, index, bc.opsize);
     codes.erase(codes.begin() + index, codes.begin() + index + bc.opsize);
 }
 

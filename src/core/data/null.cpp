@@ -13,11 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/data/null.h"
+
+using namespace camel::core::type;
+
+namespace camel::core::data {
 
 NullData::NullData() : Data(Type::Void()) {}
 
@@ -27,9 +31,11 @@ data_ptr_t NullData::clone(bool deep) const { return Data::null(); }
 
 const std::string NullData::toString() const { return "null"; }
 
-data_ptr_t NullData::convertTo(Type *type) {
+data_ptr_t NullData::convertTo(type::Type *type) {
     if (type->equals(type_)) {
         return std::make_shared<NullData>();
     }
     return nullptr;
 }
+
+} // namespace camel::core::data

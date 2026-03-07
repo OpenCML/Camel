@@ -13,41 +13,44 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "camel/core/context/frame.h"
+#include "camel/core/mm.h"
 #include "camel/execute/pass/sched.h"
 
 #include <taskflow/algorithm/for_each.hpp>
 #include <taskflow/taskflow.hpp>
 #include <unordered_map>
 
+namespace ctx = camel::core::context;
+
 class TaskflowExecSchedPass : public GraphSchedulePass {
   public:
-    TaskflowExecSchedPass(const context_ptr_t &ctx, size_t max_concurrent_tasks = 32)
+    TaskflowExecSchedPass(const ctx::context_ptr_t &ctx, size_t max_concurrent_tasks = 32)
         : GraphSchedulePass(ctx), executor_(max_concurrent_tasks) {}
     virtual ~TaskflowExecSchedPass() = default;
 
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 
     tf::Taskflow mainFlow_; // 主任务流
-    FramePool framePool_{1 * MB};
+    ctx::FramePool framePool_{1 * camel::core::mm::MB};
 
     // 元信息（目前存 BRCH->JOIN 的配对关系）
     struct GraphInfos {
-        GraphIR::Graph *graph{nullptr};
-        std::unordered_map<GraphIR::Node *, GraphIR::Node *> joinToBrch;
+        GIR::Graph *graph{nullptr};
+        std::unordered_map<GIR::Node *, GIR::Node *> joinToBrch;
     };
 
     struct GlobalBuildCtx {
-        std::unordered_map<GraphIR::Graph *, std::unique_ptr<GraphInfos>> graphInfoMap;
-        std::unordered_set<GraphIR::Node *> skipNodes;
+        std::unordered_map<GIR::Graph *, std::unique_ptr<GraphInfos>> graphInfoMap;
+        std::unordered_set<GIR::Node *> skipNodes;
 
-        GraphInfos &getOrCreateGraphInfos(GraphIR::Graph *graph) {
+        GraphInfos &getOrCreateGraphInfos(GIR::Graph *graph) {
             auto it = graphInfoMap.find(graph);
             if (it == graphInfoMap.end()) {
                 auto tasks          = std::make_unique<GraphInfos>();
@@ -59,7 +62,7 @@ class TaskflowExecSchedPass : public GraphSchedulePass {
             return *it->second;
         }
 
-        GraphInfos &getGraphInfos(GraphIR::Graph *graph) {
+        GraphInfos &getGraphInfos(GIR::Graph *graph) {
             auto it = graphInfoMap.find(graph);
             ASSERT(it != graphInfoMap.end(), "Graph tasks not found.");
             return *it->second;
@@ -70,70 +73,69 @@ class TaskflowExecSchedPass : public GraphSchedulePass {
     tf::Executor executor_;
 
     // 为一次图实例执行构建并运行任务流，返回 exit 值（slot_t）
-    slot_t evalGraphTF(GraphIR::Graph *graph, Frame *frame);
+    slot_t evalGraphTF(GIR::Graph *graph, ctx::Frame *frame);
 
     // 递归构建所有图的元信息
-    void buildGraphsInfo(GraphIR::Graph *rootGraph);
+    void buildGraphsInfo(GIR::Graph *rootGraph);
 
     // 通用：在任意 flowLike(可为 Taskflow/Subflow) 中展开一次图实例
     template <typename FlowT>
-    void instantiate_graph_instance_generic(FlowT &flowLike, GraphIR::Graph *graph, Frame *frame);
+    void instantiate_graph_instance_generic(FlowT &flowLike, GIR::Graph *graph, ctx::Frame *frame);
 
     // 分离的节点任务构建（每种类型一个函数）
     template <typename FlowT>
-    tf::Task buildExitTask(FlowT &flowLike, GraphIR::Node *n, Frame *frame);
+    tf::Task buildExitTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildDataTask(FlowT &flowLike, GraphIR::Node *n, Frame *frame);
+    tf::Task buildDataTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildPortTask(FlowT &flowLike, GraphIR::Node *n, Frame *frame);
+    tf::Task buildPortTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildCopyTask(FlowT &flowLike, GraphIR::Node *n, Frame *frame);
+    tf::Task buildCopyTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildCastTask(FlowT &flowLike, GraphIR::Node *n, Frame *frame);
+    tf::Task buildCastTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildFillTask(FlowT &flowLike, GraphIR::Node *n, Frame *frame);
+    tf::Task buildFillTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildAccsTask(FlowT &flowLike, GraphIR::Node *n, Frame *frame);
+    tf::Task buildAccsTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildFuncTask(FlowT &flowLike, GraphIR::Node *n, Frame *frame);
+    tf::Task buildFuncTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildCallTask(FlowT &flowLike, GraphIR::Node *n, Frame *frame);
+    tf::Task buildCallTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildOperTask(FlowT &flowLike, GraphIR::Node *n, Frame *frame);
+    tf::Task buildOperTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
 
     // BRCH-JOIN 区域处理（创建 selector/candidate/join 任务）
     template <typename FlowT>
     void buildBranchJoinRegion(
-        FlowT &flowLike, GraphIR::Graph *graph, Frame *frame,
-        std::unordered_map<GraphIR::Node *, tf::Task> &taskMap, GraphIR::Node *brch);
+        FlowT &flowLike, GIR::Graph *graph, ctx::Frame *frame,
+        std::unordered_map<GIR::Node *, tf::Task> &taskMap, GIR::Node *brch);
 
     // 构建非 BRCH-JOIN 的普通节点任务（含 ports）
     template <typename FlowT>
     void buildNormalNodeTasks(
-        FlowT &flowLike, GraphIR::Graph *graph, Frame *frame,
-        std::unordered_map<GraphIR::Node *, tf::Task> &taskMap);
+        FlowT &flowLike, GIR::Graph *graph, ctx::Frame *frame,
+        std::unordered_map<GIR::Node *, tf::Task> &taskMap);
 
     // 连接依赖边
     template <typename FlowT>
     void connectDependencies(
-        FlowT &flowLike, GraphIR::Graph *graph,
-        std::unordered_map<GraphIR::Node *, tf::Task> &taskMap);
+        FlowT &flowLike, GIR::Graph *graph, std::unordered_map<GIR::Node *, tf::Task> &taskMap);
 
     // 标记算子（使用 Subflow 并行元素任务）
-    void mark_map_arr(GraphIR::Node *node, Frame *frame, tf::Subflow &sf);
-    void mark_apply_arr(GraphIR::Node *node, Frame *frame, tf::Subflow &sf);
-    void mark_filter_arr(GraphIR::Node *node, Frame *frame, tf::Subflow &sf);
-    void mark_reduce_arr(GraphIR::Node *node, Frame *frame, tf::Subflow &sf);
-    void mark_foreach_arr(GraphIR::Node *node, Frame *frame, tf::Subflow &sf);
-    void mark_unordered_foreach_arr(GraphIR::Node *node, Frame *frame, tf::Subflow &sf);
-    void mark_unordered_reduce_arr(GraphIR::Node *node, Frame *frame, tf::Subflow &sf);
+    void mark_map_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
+    void mark_apply_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
+    void mark_filter_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
+    void mark_reduce_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
+    void mark_foreach_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
+    void mark_unordered_foreach_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
+    void mark_unordered_reduce_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
 };

@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include "camel/core/source/manager.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/debug.h"
 #include "diagnostics/builder.h"
@@ -28,11 +29,14 @@
 #include <format>
 #include <tuple>
 
+namespace camel::core::error {
+
 // ---- Diagnostic structure ----
 struct Diagnostic {
     DiagType type{};
     uint32_t specific{};
     Severity severity{};
+    bool persisted = false;
 
     std::string moduleName;
     std::string modulePath;
@@ -40,7 +44,9 @@ struct Diagnostic {
     std::string message;
     std::string suggestion;
 
+    // range 现在既可以是传统 CharRange/TokenRange，也可以是延迟解析的 SpanId/OriginId。
     SourceRange range{};
+    camel::source::source_context_ptr_t sourceContext; // 用于把 SpanId/OriginId 解析成最终行列。
 
     Diagnostic &fetchRange(const RangeConverter &conv);
     std::string toText() const;
@@ -103,8 +109,11 @@ struct DiagsConfig {
 // ---- Diagnostics manager ----
 class Diagnostics {
   public:
-    Diagnostics(std::string modName, std::string modPath)
-        : moduleName_(std::move(modName)), modulePath_(std::move(modPath)) {}
+    Diagnostics(
+        std::string modName, std::string modPath,
+        camel::source::source_context_ptr_t sourceContext = nullptr)
+        : moduleName_(std::move(modName)), modulePath_(std::move(modPath)),
+          sourceContext_(std::move(sourceContext)) {}
 
     // Configuration
     void setConfig(const DiagsConfig &config) { config_ = config; }
@@ -118,6 +127,10 @@ class Diagnostics {
 
     const std::string &moduleName() const { return moduleName_; }
     const std::string &modulePath() const { return modulePath_; }
+    camel::source::source_context_ptr_t sourceContext() const { return sourceContext_; }
+    void setSourceContext(camel::source::source_context_ptr_t sourceContext) {
+        sourceContext_ = std::move(sourceContext);
+    }
 
     // Return a builder + Set the diagCode for builder (could infer severity from diagCode)
     template <typename DiagEnum> DiagnosticBuilder of(DiagEnum err);
@@ -158,6 +171,8 @@ class Diagnostics {
   private:
     std::string moduleName_;
     std::string modulePath_;
+    // 所有挂在这个容器上的诊断默认共享同一个 SourceContext。
+    camel::source::source_context_ptr_t sourceContext_;
     mutable std::mutex mtx_;
     std::deque<Diagnostic> storage_;
     DiagsConfig config_;
@@ -209,6 +224,15 @@ template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args)
     }
     d.moduleName = moduleName_;
     d.modulePath = modulePath_;
+    if (diagnostics_ && diagnostics_->sourceContext()) {
+        d.sourceContext = diagnostics_->sourceContext();
+        if (std::holds_alternative<std::monostate>(d.range)) {
+            auto current = d.sourceContext->currentRuntimeOrigin();
+            if (current != camel::source::kInvalidOriginId) {
+                d.range = current;
+            }
+        }
+    }
 
     EXEC_WHEN_DEBUG({
         if (severity_ == Severity::Error) {
@@ -224,3 +248,5 @@ template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args)
 }
 
 using diagnostics_ptr_t = std::shared_ptr<Diagnostics>;
+
+} // namespace camel::core::error

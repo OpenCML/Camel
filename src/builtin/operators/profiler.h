@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 01, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 
 #include "camel/core/operator.h"
 
-slot_t __profiler_begin__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __profiler_end__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __profiler_instant__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __profiler_enable__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __profiler_begin__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __profiler_end__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __profiler_instant__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __profiler_enable__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,8 @@
 
 #include "base.h"
 #include "range.h"
+
+namespace camel::core::error {
 
 struct Diagnostic;
 class Diagnostics;
@@ -37,6 +39,8 @@ class DiagnosticBuilder {
     // Position setting methods
     DiagnosticBuilder &at(const CharRange &range);
     DiagnosticBuilder &at(const TokenRange &range);
+    DiagnosticBuilder &atSpan(camel::source::span_id_t span);
+    DiagnosticBuilder &atOrigin(camel::source::origin_id_t origin);
     DiagnosticBuilder &at(size_t token);
     DiagnosticBuilder &at(antlr4::Token *start, antlr4::Token *end);
     DiagnosticBuilder &at(antlr4::Token *token);
@@ -61,3 +65,5 @@ class DiagnosticBuilder {
     std::string moduleName_;
     std::string modulePath_;
 };
+
+} // namespace camel::core::error

@@ -10,7 +10,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -18,12 +18,16 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/execute/executor.h"
 #include "camel/utils/log.h"
 #include "operators.h"
 
 #include <string>
+
+using namespace camel::core::error;
+using namespace camel::core::context;
 #include <vector>
 
 namespace {
@@ -33,27 +37,27 @@ class PyplotExecutor : public Executor {
     PyplotExecutor(context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
         : Executor(ctx, std::move(ops)) {}
 
-    void eval(std::string uri, GraphIR::Node *self, Frame &frame) override {
+    void eval(std::string uri, GIR::Node *self, Frame &frame) override {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("PyplotExec").debug("Evaluating operator of URI: {}", uri));
         auto it = opsMap_.find(uri);
         if (it == opsMap_.end()) {
             throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
         }
-        std::vector<GraphIR::data_idx_t> normIndices;
+        std::vector<GIR::data_idx_t> normIndices;
         for (const auto &in : self->normInputs())
             normIndices.push_back(in->index());
-        std::vector<GraphIR::data_idx_t> withIndices;
+        std::vector<GIR::data_idx_t> withIndices;
         for (const auto &in : self->withInputs())
             withIndices.push_back(in->index());
 
         data_arr_t nargs = data_arr_t{
             normIndices.data(),
-            static_cast<GraphIR::arr_size_t>(normIndices.size()),
+            static_cast<GIR::arr_size_t>(normIndices.size()),
         };
         data_arr_t wargs = data_arr_t{
             withIndices.data(),
-            static_cast<GraphIR::arr_size_t>(withIndices.size()),
+            static_cast<GIR::arr_size_t>(withIndices.size()),
         };
 
         FrameArgsView withView(frame, wargs);

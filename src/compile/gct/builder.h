@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,24 +31,28 @@
 #include "camel/core/module/module.h"
 #include "camel/parse/ast.h"
 
-namespace GraphConstructTree {
-using void_ptr_t = void *;
+namespace camel::compile::gct {
+
+using FunctionType = camel::core::type::FunctionType;
+using void_ptr_t   = void *;
 
 class Builder {
   public:
-    Builder(const context_ptr_t &context, const module_ptr_t &module)
+    Builder(
+        const camel::core::context::context_ptr_t &context,
+        const camel::core::module::module_ptr_t &module)
         : context_(context), module_(module) {
         typeScope_ = std::make_shared<Scope<Reference, Type *>>();
     };
     virtual ~Builder() = default;
 
-    node_ptr_t build(AST::node_ptr_t node, diagnostics_ptr_t diags) {
+    node_ptr_t build(AST::node_ptr_t node, camel::core::error::diagnostics_ptr_t diags) {
         idIndex_ = 0;
         diags_   = diags;
         initInnerTypes();
         try {
             root_ = visitModule(node);
-        } catch (Diagnostic &d) {
+        } catch (camel::core::error::Diagnostic &d) {
             diags_->add(std::move(d));
             root_ = nullptr;
         }
@@ -61,9 +65,9 @@ class Builder {
     scope_ptr_t<Reference, Type *> typeScope_;
     std::unordered_map<void *, FunctionType *> funcDecls_;
 
-    context_ptr_t context_;
-    module_ptr_t module_;
-    diagnostics_ptr_t diags_;
+    camel::core::context::context_ptr_t context_;
+    camel::core::module::module_ptr_t module_;
+    camel::core::error::diagnostics_ptr_t diags_;
 
     void initInnerTypes();
 
@@ -120,4 +124,4 @@ class Builder {
     Type *visitSpecType(const AST::node_ptr_t &ast);
 };
 
-} // namespace GraphConstructTree
+} // namespace camel::compile::gct

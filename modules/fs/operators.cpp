@@ -13,17 +13,23 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "operators.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/string.h"
 
 #include <filesystem>
+
+namespace mm = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::rtdata;
 #include <fstream>
 #include <sstream>
 
@@ -33,10 +39,9 @@ slot_t __fs_read_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *path = norm.get<String *>(0);
     std::ifstream f(path->c_str());
     if (!f.is_open()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<read_text> failed to open: " + std::string(path->c_str()));
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "<read_text> failed to open: " + std::string(path->c_str()));
     }
     std::ostringstream oss;
     oss << f.rdbuf();
@@ -51,18 +56,16 @@ slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (!parent.empty() && !fs_impl::exists(parent)) {
         std::error_code ec;
         if (!fs_impl::create_directories(parent, ec)) {
-            ctx.rtmDiags()
-                ->of(RuntimeDiag::RuntimeError)
-                .commit("<write_text> failed to create parent dir: " + parent.string());
-            return NullSlot;
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                "<write_text> failed to create parent dir: " + parent.string());
         }
     }
     std::ofstream f(path->c_str());
     if (!f.is_open()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<write_text> failed to open: " + std::string(path->c_str()));
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "<write_text> failed to open: " + std::string(path->c_str()));
     }
     f << content->c_str();
     return NullSlot;
@@ -88,8 +91,7 @@ slot_t __fs_mkdir__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::error_code ec;
     bool ok = fs_impl::create_directory(p->c_str(), ec);
     if (!ok && ec) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<mkdir> failed: " + ec.message());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<mkdir> failed: " + ec.message());
     }
     return toSlot(ok);
 }
@@ -99,8 +101,7 @@ slot_t __fs_mkdirs__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::error_code ec;
     bool ok = fs_impl::create_directories(p->c_str(), ec);
     if (!ok && ec) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<mkdirs> failed: " + ec.message());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<mkdirs> failed: " + ec.message());
     }
     return toSlot(ok);
 }

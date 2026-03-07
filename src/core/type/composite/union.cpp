@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 #include "camel/utils/log.h"
 
 using namespace std;
+using namespace camel::core::type;
 
 void UnionType::insertUnion(const UnionType &other) {
     // Flatten nested UnionType

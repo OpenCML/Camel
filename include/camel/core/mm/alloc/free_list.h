@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,8 @@
 #include <cstdint>
 #include <memory>
 #include <unordered_set>
+
+namespace camel::core::mm {
 
 class FreeListAllocator : public IAllocator {
   public:
@@ -67,7 +69,7 @@ class FreeListAllocator : public IAllocator {
             if (LIKELY(curr->size >= total_size)) {
                 EXEC_WHEN_DEBUG({
                     if (debugRegion_) {
-                        mm::invokePreAllocHook(mm::PreAllocEvent{total_size, debugRegion_});
+                        invokePreAllocHook(PreAllocEvent{total_size, debugRegion_});
                     }
                 });
                 std::byte *blockStart = reinterpret_cast<std::byte *>(curr);
@@ -91,11 +93,8 @@ class FreeListAllocator : public IAllocator {
                     if (debugRegion_) {
                         size_t allocSize =
                             (remaining >= sizeof(FreeBlock)) ? total_size : curr->size;
-                        mm::invokePostAllocHook(
-                            mm::AllocEvent{
-                                blockStart + sizeof(ObjectHeader),
-                                allocSize,
-                                debugRegion_});
+                        invokePostAllocHook(
+                            AllocEvent{blockStart + sizeof(ObjectHeader), allocSize, debugRegion_});
                     }
                 });
                 return blockStart + sizeof(ObjectHeader);
@@ -430,3 +429,5 @@ class FreeListAllocator : public IAllocator {
         *prevPtr            = newBlock;
     }
 };
+
+} // namespace camel::core::mm

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,25 +23,29 @@
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/data/composite/tuple.h"
 
+using namespace camel::core::data;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
+
 slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
     ASSERT(data != nullptr, "Data is null.");
 
     TypeCode typeCode = data->type()->code();
-    ASSERT(isPrimitive(typeCode), "Type is not primitive.");
+    ASSERT(camel::core::type::isPrimitive(typeCode), "Type is not primitive.");
 
     switch (typeCode) {
     case TypeCode::Int32: {
-        auto intData = tt::as_shared<IntData>(data);
+        auto intData = tt::as_shared<camel::core::data::IntData>(data);
         return static_cast<slot_t>(intData->data());
     }
 
     case TypeCode::Int64: {
-        auto longData = tt::as_shared<LongData>(data);
+        auto longData = tt::as_shared<camel::core::data::LongData>(data);
         return static_cast<slot_t>(longData->data());
     }
 
     case TypeCode::Float32: {
-        auto floatData = tt::as_shared<FloatData>(data);
+        auto floatData = tt::as_shared<camel::core::data::FloatData>(data);
         float f        = floatData->data();
         slot_t result;
         std::memcpy(&result, &f, sizeof(float));
@@ -49,7 +53,7 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
     }
 
     case TypeCode::Float64: {
-        auto doubleData = tt::as_shared<DoubleData>(data);
+        auto doubleData = tt::as_shared<camel::core::data::DoubleData>(data);
         double d        = doubleData->data();
         slot_t result;
         std::memcpy(&result, &d, sizeof(double));
@@ -57,12 +61,12 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
     }
 
     case TypeCode::Bool: {
-        auto boolData = tt::as_shared<BoolData>(data);
+        auto boolData = tt::as_shared<camel::core::data::BoolData>(data);
         return static_cast<slot_t>(boolData->data() ? 1 : 0);
     }
 
     case TypeCode::Byte: {
-        auto byteData = tt::as_shared<ByteData>(data);
+        auto byteData = tt::as_shared<camel::core::data::ByteData>(data);
         return static_cast<slot_t>(byteData->data());
     }
 
@@ -76,26 +80,26 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
     }
 }
 
-Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator) {
+Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllocator &allocator) {
     ASSERT(data != nullptr, "Data is null.");
 
     TypeCode typeCode = data->type()->code();
-    ASSERT(isGCTraced(typeCode), "Type is not GC traced.");
+    ASSERT(camel::core::type::isGCTraced(typeCode), "Type is not GC traced.");
 
     switch (typeCode) {
     case TypeCode::String: {
-        auto strData = tt::as_shared<StringData>(data);
+        auto strData = tt::as_shared<camel::core::data::StringData>(data);
         return String::from(strData->data(), allocator);
     }
 
     case TypeCode::Array: {
-        auto arrayData = tt::as_shared<ArrayData>(data);
+        auto arrayData = tt::as_shared<camel::core::data::ArrayData>(data);
         Array *gcArray = Array::create(allocator, 0);
         for (const auto &elem : arrayData->raw()) {
             if (elem->type()->isGCTraced()) {
                 Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);
                 gcArray->append<Object *>(elemRef);
-            } else if (elem->type()->isPrimitive()) {
+            } else if (camel::core::type::isPrimitive(elem->type()->code())) {
                 slot_t slot = makeSlotFromPrimitiveData(elem);
                 gcArray->append<slot_t>(slot);
             } else {
@@ -106,8 +110,8 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
     }
 
     case TypeCode::Tuple: {
-        auto tupleData        = tt::as_shared<TupleData>(data);
-        const auto &tupleType = tt::as_ptr<TupleType>(tupleData->type());
+        auto tupleData        = tt::as_shared<camel::core::data::TupleData>(data);
+        const auto *tupleType = tt::as_ptr<camel::core::type::TupleType>(tupleData->type());
         Tuple *gcTuple        = Tuple::create(tupleType->size(), allocator);
         const auto &elems     = tupleData->raw();
         for (size_t i = 0; i < tupleData->size(); ++i) {
@@ -126,8 +130,8 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
     }
 
     case TypeCode::Struct: {
-        auto structData        = tt::as_shared<StructData>(data);
-        const auto &structType = tt::as_ptr<StructType>(structData->type());
+        auto structData        = tt::as_shared<camel::core::data::StructData>(data);
+        const auto *structType = tt::as_ptr<camel::core::type::StructType>(structData->type());
         Struct *gcStruct       = Struct::create(structType->size(), allocator);
         for (const auto &[name, data] : structData->raw()) {
             if (data->type()->isGCTraced()) {
@@ -144,7 +148,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator)
     }
 
     case TypeCode::Function: {
-        auto funcData    = tt::as_shared<FunctionData>(data);
+        auto funcData    = tt::as_shared<camel::core::data::FunctionData>(data);
         auto &graph      = funcData->graph();
         Function *gcFunc = Function::create(&graph, graph.closureType(), allocator);
         Tuple *gcTuple   = gcFunc->tuple();

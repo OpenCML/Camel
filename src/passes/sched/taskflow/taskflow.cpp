@@ -1,17 +1,23 @@
 #include "taskflow.h"
 #include "camel/common/algo/topo.h"
 #include "camel/compile/gir/nodes.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/execute/executor.h"
 
 #include <queue>
 #include <regex>
 #include <unordered_set>
 
 using namespace std;
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
 
 // 从图的 exit 节点读取返回值（与 NodeVM 一致：slot_t）
 static slot_t get_graph_return(Graph *g, Frame *frame) {
@@ -46,17 +52,22 @@ static void fillFrameForCall(Frame *dest, Graph *targetGraph, Node *n, Frame *so
 
 graph_ptr_t TaskflowExecSchedPass::apply(graph_ptr_t &graph, std::ostream & /*os*/) {
     if (!graph->hasOutput()) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::MissingMainFunction)
-            .commit(context_->mainModule()->name());
-        return Graph::null();
+        throw reportRuntimeFault(
+            *context_,
+            RuntimeFault::make(RuntimeDiag::MissingMainFunction, context_->mainModule()->name()),
+            makeGraphExecutionSite(context_->sourceContext(), graph.get(), 0, "taskflow"));
     }
 
     buildGraphsInfo(graph.get());
 
     Frame *rootFrame = framePool_.acquire(graph.get());
-    evalGraphTF(graph.get(), rootFrame);
-    framePool_.release(rootFrame);
+    try {
+        evalGraphTF(graph.get(), rootFrame);
+        framePool_.release(rootFrame);
+    } catch (...) {
+        framePool_.release(rootFrame);
+        throw;
+    }
 
     return Graph::null();
 }
@@ -249,12 +260,17 @@ tf::Task TaskflowExecSchedPass::buildFuncTask(FlowT &flowLike, Node *n, Frame *f
         .emplace([n, frame, this](tf::Subflow &sf) {
             Graph *tgtGraph  = &tt::as_ptr<FuncNode>(n)->func()->graph();
             Frame *funcFrame = framePool_.acquire(tgtGraph);
-            fillFrameForCall(funcFrame, tgtGraph, n, frame);
-            instantiate_graph_instance_generic(sf, tgtGraph, funcFrame);
-            sf.join();
-            slot_t result = get_graph_return(tgtGraph, funcFrame);
-            frame->set(n->index(), result);
-            framePool_.release(funcFrame);
+            try {
+                fillFrameForCall(funcFrame, tgtGraph, n, frame);
+                instantiate_graph_instance_generic(sf, tgtGraph, funcFrame);
+                sf.join();
+                slot_t result = get_graph_return(tgtGraph, funcFrame);
+                frame->set(n->index(), result);
+                framePool_.release(funcFrame);
+            } catch (...) {
+                framePool_.release(funcFrame);
+                throw;
+            }
         })
         .name("FUNC");
 }
@@ -265,12 +281,17 @@ tf::Task TaskflowExecSchedPass::buildCallTask(FlowT &flowLike, Node *n, Frame *f
         .emplace([n, frame, this](tf::Subflow &sf) {
             Graph *tgtGraph  = frame->get<Function *>(n->withInputs().front()->index())->graph();
             Frame *funcFrame = framePool_.acquire(tgtGraph);
-            fillFrameForCall(funcFrame, tgtGraph, n, frame);
-            instantiate_graph_instance_generic(sf, tgtGraph, funcFrame);
-            sf.join();
-            slot_t result = get_graph_return(tgtGraph, funcFrame);
-            frame->set(n->index(), result);
-            framePool_.release(funcFrame);
+            try {
+                fillFrameForCall(funcFrame, tgtGraph, n, frame);
+                instantiate_graph_instance_generic(sf, tgtGraph, funcFrame);
+                sf.join();
+                slot_t result = get_graph_return(tgtGraph, funcFrame);
+                frame->set(n->index(), result);
+                framePool_.release(funcFrame);
+            } catch (...) {
+                framePool_.release(funcFrame);
+                throw;
+            }
         })
         .name("CALL");
 }
@@ -302,8 +323,16 @@ tf::Task TaskflowExecSchedPass::buildOperTask(FlowT &flowLike, Node *n, Frame *f
             } else {
                 auto opFunc = context_->execMgr().find(uri);
                 if (!opFunc) {
-                    context_->rtmDiags()->of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
-                    return;
+                    throw reportRuntimeFault(
+                        *context_,
+                        RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri),
+                        makeNodeExecutionSite(
+                            context_->sourceContext(),
+                            &n->graph(),
+                            n,
+                            0,
+                            "taskflow",
+                            ExecutionSiteKind::TaskNode));
                 }
                 std::vector<data_idx_t> normIndices, withIndices;
                 for (const auto &in : n->normInputs())
@@ -314,7 +343,21 @@ tf::Task TaskflowExecSchedPass::buildOperTask(FlowT &flowLike, Node *n, Frame *f
                 data_arr_t wargs{withIndices.data(), static_cast<size_t>(withIndices.size())};
                 FrameArgsView withView(*frame, wargs);
                 FrameArgsView normView(*frame, nargs);
-                slot_t result = (*opFunc)(withView, normView, *context_);
+                slot_t result;
+                try {
+                    result = (*opFunc)(withView, normView, *context_);
+                } catch (const RuntimeFault &fault) {
+                    throw reportRuntimeFault(
+                        *context_,
+                        fault,
+                        makeNodeExecutionSite(
+                            context_->sourceContext(),
+                            &n->graph(),
+                            n,
+                            0,
+                            "taskflow",
+                            ExecutionSiteKind::TaskNode));
+                }
                 frame->set(n->index(), result);
             }
         })
@@ -400,30 +443,46 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
                     if (candidate->type() == NodeType::FUNC) {
                         Graph *tgtGraph  = &tt::as_ptr<FuncNode>(candidate)->func()->graph();
                         Frame *funcFrame = framePool_.acquire(tgtGraph);
-                        fillFrameForCall(funcFrame, tgtGraph, candidate, frame);
-                        instantiate_graph_instance_generic(csf, tgtGraph, funcFrame);
-                        csf.join();
-                        out = get_graph_return(tgtGraph, funcFrame);
-                        framePool_.release(funcFrame);
+                        try {
+                            fillFrameForCall(funcFrame, tgtGraph, candidate, frame);
+                            instantiate_graph_instance_generic(csf, tgtGraph, funcFrame);
+                            csf.join();
+                            out = get_graph_return(tgtGraph, funcFrame);
+                            framePool_.release(funcFrame);
+                        } catch (...) {
+                            framePool_.release(funcFrame);
+                            throw;
+                        }
                     } else if (candidate->type() == NodeType::CALL) {
                         Graph *tgtGraph =
                             frame->get<Function *>(candidate->withInputs().front()->index())
                                 ->graph();
                         Frame *funcFrame = framePool_.acquire(tgtGraph);
-                        fillFrameForCall(funcFrame, tgtGraph, candidate, frame);
-                        instantiate_graph_instance_generic(csf, tgtGraph, funcFrame);
-                        csf.join();
-                        out = get_graph_return(tgtGraph, funcFrame);
-                        framePool_.release(funcFrame);
+                        try {
+                            fillFrameForCall(funcFrame, tgtGraph, candidate, frame);
+                            instantiate_graph_instance_generic(csf, tgtGraph, funcFrame);
+                            csf.join();
+                            out = get_graph_return(tgtGraph, funcFrame);
+                            framePool_.release(funcFrame);
+                        } catch (...) {
+                            framePool_.release(funcFrame);
+                            throw;
+                        }
                     } else if (candidate->type() == NodeType::OPER) {
                         auto opNode = tt::as_ptr<OperNode>(candidate);
                         auto uri    = opNode->oper()->uri();
                         auto opFunc = context_->execMgr().find(uri);
                         if (!opFunc) {
-                            context_->rtmDiags()
-                                ->of(RuntimeDiag::UnrecognizedOperatorURI)
-                                .commit(uri);
-                            return;
+                            throw reportRuntimeFault(
+                                *context_,
+                                RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri),
+                                makeNodeExecutionSite(
+                                    context_->sourceContext(),
+                                    &candidate->graph(),
+                                    candidate,
+                                    0,
+                                    "taskflow",
+                                    ExecutionSiteKind::TaskNode));
                         }
                         std::vector<data_idx_t> normIndices, withIndices;
                         for (const auto &in : candidate->normInputs())
@@ -438,7 +497,20 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
                             static_cast<size_t>(withIndices.size())};
                         FrameArgsView withView(*frame, wargs);
                         FrameArgsView normView(*frame, nargs);
-                        out = (*opFunc)(withView, normView, *context_);
+                        try {
+                            out = (*opFunc)(withView, normView, *context_);
+                        } catch (const RuntimeFault &fault) {
+                            throw reportRuntimeFault(
+                                *context_,
+                                fault,
+                                makeNodeExecutionSite(
+                                    context_->sourceContext(),
+                                    &candidate->graph(),
+                                    candidate,
+                                    0,
+                                    "taskflow",
+                                    ExecutionSiteKind::TaskNode));
+                        }
                     } else {
                         ASSERT(false, "Unsupported candidate node type in BRCH-JOIN.");
                     }

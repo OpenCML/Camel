@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,8 +51,13 @@
 #include <queue>
 #include <string>
 
+namespace mm = camel::core::mm;
 using namespace antlr4;
+using namespace camel::core::context;
+using namespace camel::core::module;
 using namespace std;
+using namespace camel::core::error;
+using namespace camel::parse;
 
 namespace fs = std::filesystem;
 
@@ -228,17 +233,19 @@ int main(int argc, char *argv[]) {
                     try {
                         int retCode = applyPasses(Run::resolvedPassList, ctx, os);
                         if (retCode != 0) {
-                            const auto &diags = ctx->rtmDiags();
+                            const auto &diags = ctx->runtimeDiagSink();
                             if (diags->hasErrors()) {
                                 diags->dump(os, useJsonFormat);
                             }
                             return retCode;
                         }
                     } catch (Diagnostic &d) {
-                        ctx->rtmDiags()->add(std::move(d));
+                        if (!d.persisted) {
+                            ctx->runtimeDiagSink()->add(std::move(d));
+                        }
                     }
                 } catch (DiagnosticsLimitExceededBaseException &e) {
-                    const auto &diags = ctx->rtmDiags();
+                    const auto &diags = ctx->runtimeDiagSink();
                     diags->dump(os, useJsonFormat);
                     return selectedCommand == Command::Check ? 0 : 1;
                 }

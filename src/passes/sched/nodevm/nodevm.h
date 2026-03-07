@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  *
  * NodeVM：在图节点上直接执行，无字节码编译。用于展示在 GIR 上直接执行的流程。
@@ -28,37 +28,40 @@
 
 #include "camel/compile/gir/types.h"
 #include "camel/core/context/frame.h"
+#include "camel/core/mm.h"
 #include "camel/execute/pass/sched.h"
+
+namespace ctx = camel::core::context;
 
 class NodeVMSchedPass : public GraphSchedulePass {
     inline static const size_t maxRecursionDepth_ = 256;
 
     size_t currRecursionDepth_ = 0;
-    FramePool framePool_{1 * MB};
+    ctx::FramePool framePool_{1 * camel::core::mm::MB};
     // 热路径走 Graph extra 的 O(1) 缓存；冷路径写入 topoNodesOwned_ 并挂到 extra 上
-    std::unordered_set<GraphIR::Graph *> graphsWithTopoCache_;
-    std::unordered_map<GraphIR::Graph *, std::vector<GraphIR::Node *>> topoNodesOwned_;
+    std::unordered_set<GIR::Graph *> graphsWithTopoCache_;
+    std::unordered_map<GIR::Graph *, std::vector<GIR::Node *>> topoNodesOwned_;
 
     // 复用 buffer，避免 OPER 分支内每次堆分配（先 norm 后 with，用偏移区分）
-    std::vector<GraphIR::data_idx_t> operIndices_;
+    std::vector<GIR::data_idx_t> operIndices_;
 
     static constexpr size_t kTopoNodesExtraIndex = 1;
 
-    slot_t call(GraphIR::Graph *graph, Frame *rootFrame);
-    std::span<GraphIR::Node *> buildTopoNodes(GraphIR::Graph *graph);
+    slot_t call(GIR::Graph *graph, ctx::Frame *rootFrame);
+    std::span<GIR::Node *> buildTopoNodes(GIR::Graph *graph);
 
   public:
-    NodeVMSchedPass(const context_ptr_t &ctx) : GraphSchedulePass(ctx) {}
+    NodeVMSchedPass(const ctx::context_ptr_t &ctx) : GraphSchedulePass(ctx) {}
     ~NodeVMSchedPass() override;
 
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 
   private:
-    void evalMarkedOperator(const std::string &uri, GraphIR::Node *node, Frame &currFrame);
+    void evalMarkedOperator(const std::string &uri, GIR::Node *node, ctx::Frame &currFrame);
 
-    void evalMarkedOperator_map_arr(GraphIR::Node *node, Frame &currFrame);
-    void evalMarkedOperator_apply_arr(GraphIR::Node *node, Frame &currFrame);
-    void evalMarkedOperator_filter_arr(GraphIR::Node *node, Frame &currFrame);
-    void evalMarkedOperator_reduce_arr(GraphIR::Node *node, Frame &currFrame);
-    void evalMarkedOperator_foreach_arr(GraphIR::Node *node, Frame &currFrame);
+    void evalMarkedOperator_map_arr(GIR::Node *node, ctx::Frame &currFrame);
+    void evalMarkedOperator_apply_arr(GIR::Node *node, ctx::Frame &currFrame);
+    void evalMarkedOperator_filter_arr(GIR::Node *node, ctx::Frame &currFrame);
+    void evalMarkedOperator_reduce_arr(GIR::Node *node, ctx::Frame &currFrame);
+    void evalMarkedOperator_foreach_arr(GIR::Node *node, ctx::Frame &currFrame);
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 
 #include "base.h"
 
-namespace AbstractSyntaxTree {
+namespace camel::parse::ast {
 
 enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block };
 
@@ -141,4 +141,4 @@ class StmtBlockLoad : public StmtLoad {
     bool waited_ = false;
 };
 
-} // namespace AbstractSyntaxTree
+} // namespace camel::parse::ast

@@ -10,7 +10,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -18,12 +18,12 @@
 
 #include "camel/core/module/builtin.h"
 
-class PyplotModule : public BuiltinModule {
+class PyplotModule : public camel::core::module::BuiltinModule {
   public:
-    PyplotModule(context_ptr_t ctx);
+    PyplotModule(camel::core::context::context_ptr_t ctx);
     ~PyplotModule() override = default;
 
     bool load() override;
 
-    static module_ptr_t create(context_ptr_t ctx);
+    static camel::core::module::module_ptr_t create(camel::core::context::context_ptr_t ctx);
 };

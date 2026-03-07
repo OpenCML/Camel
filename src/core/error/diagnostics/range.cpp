@@ -13,11 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/error/diagnostics/range.h"
+
+namespace camel::core::error {
 
 CharRange CharRange::fromTokens(antlr4::Token *start, antlr4::Token *end) {
     CharRange r{{0, 0}, {0, 0}};
@@ -55,3 +57,5 @@ CharRange RangeConverter::conv(const TokenRange &tr) const {
 
     return CharRange::fromTokens(tokens_[startIdx], tokens_[endIdx]);
 }
+
+} // namespace camel::core::error

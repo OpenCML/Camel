@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 24, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 
 #include <string>
 
-namespace mm {
+namespace camel::core::mm {
 namespace profiler {
 
 // 采集所有内存区域快照，返回 JSON 字符串
@@ -41,4 +41,4 @@ std::string regionMemoryRawToJson(const char *regionName, size_t offset, size_t 
 std::string regionObjectsToJson(const char *regionName, size_t offset, size_t limit);
 
 } // namespace profiler
-} // namespace mm
+} // namespace camel::core::mm

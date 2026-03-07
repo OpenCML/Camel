@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -66,6 +66,8 @@
 #if defined(_WIN32)
 #include <stdlib.h> // _dupenv_s
 #endif
+
+namespace mm = camel::core::mm;
 
 namespace debugger {
 
@@ -188,7 +190,7 @@ int runWorkerMode(int argc, char *argv[]) {
                 return;
             }
             if (std::strcmp(type, "gir_node") == 0 && ctx != nullptr) {
-                auto *node           = static_cast<const GraphIR::Node *>(ctx);
+                auto *node           = static_cast<const GIR::Node *>(ctx);
                 uintptr_t ptr        = reinterpret_cast<uintptr_t>(node);
                 std::string stableId = getStableNodeId(node);
                 if (getServer().isGirBreakpointNode(ptr) ||

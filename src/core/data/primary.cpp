@@ -13,14 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/data/primary.h"
 #include "camel/utils/escape.h"
 
-StringData::StringData(const std::string &data) : Data(Type::String()), data_(data) {}
+using namespace camel::core::type;
+namespace camel::core::data {
+
+StringData::StringData(const std::string &data) : Data(type::Type::String()), data_(data) {}
 
 const std::string &StringData::data() const { return data_; }
 
@@ -35,9 +38,11 @@ data_ptr_t StringData::clone(bool deep) const { return std::make_shared<StringDa
 
 const std::string StringData::toString() const { return "\"" + encodeEscapes(data_) + "\""; }
 
-data_ptr_t StringData::convertTo(Type *type) {
+data_ptr_t StringData::convertTo(type::Type *type) {
     if (type->equals(type_)) {
         return shared_from_this();
     }
     return nullptr;
 }
+
+} // namespace camel::core::data

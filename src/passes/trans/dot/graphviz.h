@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,7 @@ class GraphVizDumpPass : public GraphTranslatePass {
     bool showRawPtr = false;
     std::unordered_map<std::string, size_t> ptrCnt_;
     std::unordered_map<std::string, std::unordered_map<uintptr_t, size_t>> ptrsMap_;
-    std::unordered_set<GraphIR::graph_ptr_t> visitedGraphs_;
+    std::unordered_set<GIR::graph_ptr_t> visitedGraphs_;
 
     size_t depth_ = 0;
     std::string baseIndent_;
@@ -38,11 +38,11 @@ class GraphVizDumpPass : public GraphTranslatePass {
 
     std::string pointerToIdent(const void *ptr, const char *prefix = "N");
 
-    std::string dumpGraph(const GraphIR::graph_ptr_t &graph);
+    std::string dumpGraph(const GIR::graph_ptr_t &graph);
 
   public:
-    GraphVizDumpPass(const context_ptr_t &context);
+    GraphVizDumpPass(const camel::core::context::context_ptr_t &context);
     virtual ~GraphVizDumpPass() = default;
 
-    GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+    GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 };

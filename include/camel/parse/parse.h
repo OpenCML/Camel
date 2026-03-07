@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 24, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,13 +33,16 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
 
+namespace camel::parse {
+
 class ParserErrorListener : public antlr4::BaseErrorListener {
   protected:
     bool hasErrors_ = false;
-    diagnostics_ptr_t diagnostics_;
+    camel::core::error::diagnostics_ptr_t diagnostics_;
 
   public:
-    ParserErrorListener(diagnostics_ptr_t diagnostics) : diagnostics_(diagnostics) {}
+    ParserErrorListener(camel::core::error::diagnostics_ptr_t diagnostics)
+        : diagnostics_(diagnostics) {}
     virtual ~ParserErrorListener() = default;
 
     bool hasErrors() const { return hasErrors_; }
@@ -49,17 +52,22 @@ class ParserErrorListener : public antlr4::BaseErrorListener {
         size_t charPositionInLine, const std::string &msg, std::exception_ptr e) override {
         hasErrors_ = true;
         if (offendingSymbol) {
-            diagnostics_->of(SyntaxDiag::UnknownSyntaxError).at(offendingSymbol).commit(msg);
+            diagnostics_->of(camel::core::error::SyntaxDiag::UnknownSyntaxError)
+                .at(offendingSymbol)
+                .commit(msg);
         } else {
-            diagnostics_->of(SyntaxDiag::UnknownSyntaxError)
-                .at(CharRange{{line, charPositionInLine}, {line, charPositionInLine}})
+            diagnostics_->of(camel::core::error::SyntaxDiag::UnknownSyntaxError)
+                .at(camel::core::error::CharRange{
+                    {line, charPositionInLine},
+                    {line, charPositionInLine}})
                 .commit(msg);
         }
     }
 };
 
 class CamelParser {
-    diagnostics_ptr_t diagnostics_;
+    camel::core::error::diagnostics_ptr_t diagnostics_;
+    camel::source::source_context_ptr_t sourceContext_; // 解析阶段产出的 span/origin 都写入这里。
     antlr4::ANTLRInputStream input_;
 
     std::unique_ptr<OpenCMLLexer> lexer_;
@@ -68,6 +76,8 @@ class CamelParser {
 
     antlr4::tree::ParseTree *cst_ = nullptr;
     AST::node_ptr_t ast_          = nullptr;
+    // 当前正在解析的源文件在 SourceContext 中的逻辑 ID。
+    camel::source::source_file_id_t sourceFileId_ = camel::source::kInvalidSourceFileId;
 
     bool buildCST() {
         auto interpreter = parser_->getInterpreter<antlr4::atn::ParserATNSimulator>();
@@ -114,8 +124,18 @@ class CamelParser {
     }
 
   public:
-    CamelParser(diagnostics_ptr_t diagnostics) : diagnostics_(diagnostics) {}
+    CamelParser(camel::core::error::diagnostics_ptr_t diagnostics) : diagnostics_(diagnostics) {}
     ~CamelParser() = default;
+
+    /// 解析器本身不拥有 SourceContext，只把解析结果登记进去。
+    void setSourceContext(camel::source::source_context_ptr_t sourceContext) {
+        sourceContext_ = std::move(sourceContext);
+        if (diagnostics_) {
+            diagnostics_->setSourceContext(sourceContext_);
+        }
+    }
+    camel::source::source_context_ptr_t sourceContext() const { return sourceContext_; }
+    camel::source::source_file_id_t sourceFileId() const { return sourceFileId_; }
 
     const std::vector<antlr4::Token *> getTokens() {
         return tokens_ ? tokens_->getTokens() : std::vector<antlr4::Token *>{};
@@ -123,10 +143,16 @@ class CamelParser {
 
     antlr4::tree::ParseTree *cst() const { return cst_; }
     AST::node_ptr_t ast() const { return ast_; }
-    diagnostics_ptr_t diagnostics() const { return diagnostics_; }
+    camel::core::error::diagnostics_ptr_t diagnostics() const { return diagnostics_; }
 
     bool parse(std::istream &is) {
         input_.load(is);
+        if (sourceContext_) {
+            // 在词法/语法分析前先注册完整源文件文本。
+            // 后续 AST builder 会基于 parser context 的 start/stop offset 创建 span。
+            sourceFileId_ =
+                sourceContext_->registerFile(diagnostics_->modulePath(), input_.toString());
+        }
 
         lexer_  = std::make_unique<OpenCMLLexer>(&input_);
         tokens_ = std::make_unique<antlr4::CommonTokenStream>(lexer_.get());
@@ -159,3 +185,5 @@ class CamelParser {
 };
 
 using parser_ptr_t = std::shared_ptr<CamelParser>;
+
+} // namespace camel::parse

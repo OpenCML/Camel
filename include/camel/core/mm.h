@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,10 +23,10 @@
 #include "mm/alloc/free_list.h"
 #include "mm/gen.h"
 
-namespace mm { // Memory Management
+namespace camel::core::mm {
 
 GenerationalAllocatorWithGC &autoSpace();
 FreeListAllocator &metaSpace();
 BumpPointerAllocator &permSpace();
 
-} // namespace mm
+} // namespace camel::core::mm

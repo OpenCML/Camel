@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,26 +21,172 @@
  * GIR 懒加载 JSON 序列化实现。
  */
 
-#include "gir_json.h"
+#include <stdio.h>
+
+#ifndef EOF
+#define EOF (-1)
+#endif
+
 #include "camel/compile/gir/graph.h"
 #include "camel/compile/gir/nodes.h"
 #include "camel/compile/gir/types.h"
+#include "camel/core/error/diagnostics/range.h"
+#include "camel/core/source/manager.h"
 #include "camel/utils/type.h"
+#include "gir_json.h"
+
+#ifndef EOF
+#define EOF (-1)
+#endif
 
 #include <format>
 #include <nlohmann/json.hpp>
 #include <queue>
 #include <unordered_set>
 
+using namespace camel::core::error;
+
 namespace debugger {
 
 namespace {
 
 using json = nlohmann::json;
-using namespace GraphIR;
+using namespace GIR;
 
 std::string ptrToId(const void *ptr) {
     return std::format("0x{:x}", reinterpret_cast<uintptr_t>(ptr));
+}
+
+camel::source::SourceContext *sourceContextForGraph(const graph_ptr_t &graph) {
+    return graph ? graph->getExtra<camel::source::SourceContext, 3>() : nullptr;
+}
+
+json rangeToJson(const CharRange &range) {
+    return {
+        {"start", {{"line", range.start.line}, {"character", range.start.character}}},
+        {"end", {{"line", range.end.line}, {"character", range.end.character}}}};
+}
+
+json originToJson(camel::source::SourceContext *sourceContext, camel::source::origin_id_t origin) {
+    json j;
+    j["id"] = origin;
+    if (!sourceContext || origin == camel::source::kInvalidOriginId) {
+        return j;
+    }
+    if (const auto *record = sourceContext->origin(origin)) {
+        j["stage"]     = camel::source::to_string(record->stage);
+        j["kind"]      = camel::source::to_string(record->kind);
+        j["label"]     = record->label;
+        j["synthetic"] = record->synthetic;
+        j["parentId"] =
+            record->parent == camel::source::kInvalidOriginId ? json() : json(record->parent);
+        j["sourcePath"] = sourceContext->pathForOrigin(origin);
+        j["sourceSpan"] = rangeToJson(sourceContext->resolveOrigin(origin));
+        j["inputs"]     = json::array();
+        for (auto input : record->inputs) {
+            j["inputs"].push_back(input);
+        }
+    }
+    return j;
+}
+
+json semanticBundleToJson(
+    camel::source::SourceContext *sourceContext, const camel::source::SemanticBundle *bundle) {
+    if (!bundle) {
+        return json();
+    }
+    json j;
+    j["mainOrigin"]      = originToJson(sourceContext, bundle->mainOrigin);
+    j["mergedInputs"]    = json::array();
+    j["semanticParts"]   = json::array();
+    j["synthetic"]       = bundle->synthetic;
+    j["syntheticReason"] = bundle->syntheticReason;
+    for (auto input : bundle->mergedInputs) {
+        j["mergedInputs"].push_back(originToJson(sourceContext, input));
+    }
+    for (const auto &part : bundle->parts) {
+        json p;
+        p["role"]   = camel::source::to_string(part.role);
+        p["label"]  = part.label;
+        p["slot"]   = part.slot;
+        p["origin"] = originToJson(sourceContext, part.origin);
+        j["semanticParts"].push_back(p);
+    }
+    return j;
+}
+
+void attachOriginAndSemantic(
+    json &j, camel::source::SourceContext *sourceContext, camel::source::origin_id_t origin,
+    const camel::source::SemanticBundle *bundle, const char *generatedFrom) {
+    if (!sourceContext || origin == camel::source::kInvalidOriginId) {
+        return;
+    }
+    j["originId"]      = origin;
+    j["sourceSpan"]    = rangeToJson(sourceContext->resolveOrigin(origin));
+    j["sourcePath"]    = sourceContext->pathForOrigin(origin);
+    j["generatedFrom"] = generatedFrom;
+    j["origin"]        = originToJson(sourceContext, origin);
+    if (bundle) {
+        j["semantic"] = semanticBundleToJson(sourceContext, bundle);
+    }
+}
+
+std::string inferEdgeSemanticRole(Node *to, const std::string &linkType, size_t inIdx) {
+    if (!to) {
+        return "";
+    }
+    if (linkType == "Norm") {
+        switch (to->type()) {
+        case NodeType::CALL:
+        case NodeType::OPER:
+        case NodeType::FUNC:
+            return "argument";
+        case NodeType::BRCH:
+            return "branchCondition";
+        case NodeType::JOIN:
+            return "branchIndex";
+        case NodeType::FILL:
+            return inIdx == 0 ? "valueProducer" : "fillInput";
+        case NodeType::ACCS:
+            return "receiver";
+        case NodeType::CAST:
+            return "valueProducer";
+        case NodeType::EXIT:
+            return "valueProducer";
+        default:
+            return "normInput";
+        }
+    }
+    if (linkType == "With") {
+        switch (to->type()) {
+        case NodeType::CALL:
+            return inIdx == 0 ? "callee" : "withArgument";
+        case NodeType::BRCH:
+            return "caseValue";
+        case NodeType::JOIN:
+            return "branchResult";
+        case NodeType::FILL:
+            return "capture";
+        case NodeType::FUNC:
+        case NodeType::OPER:
+            return "withArgument";
+        default:
+            return "withInput";
+        }
+    }
+    if (linkType == "Ctrl") {
+        switch (to->type()) {
+        case NodeType::BRCH:
+            return "captureReady";
+        case NodeType::FUNC:
+            return "branchLaunch";
+        case NodeType::EXIT:
+            return "returnBarrier";
+        default:
+            return "control";
+        }
+    }
+    return "";
 }
 
 /// 单个图的摘要：id 使用稳定 API stableId()，name, funcTypeSummary（用于 children/dependencies
@@ -51,6 +197,15 @@ json graphSummary(const graph_ptr_t &g) {
     j["name"] = g->name();
     if (g->funcType())
         j["funcTypeSummary"] = g->funcType()->toString();
+    if (auto *sourceContext = sourceContextForGraph(g)) {
+        auto origin = sourceContext->debugMap().graphOrigin(g->stableId());
+        attachOriginAndSemantic(
+            j,
+            sourceContext,
+            origin,
+            sourceContext->girGraphSemantic(g->stableId()),
+            "graph");
+    }
     return j;
 }
 
@@ -236,10 +391,20 @@ json nodeToJson(Node *node) {
     j["type"]     = to_string(node->type());
     std::string label, shape, style;
     nodeLabelShapeStyle(node, label, shape, style);
+    j["label"]     = label;
     j["shape"]     = shape;
     j["style"]     = style;
     j["graphName"] = node->graph().name();
     j["nodeRepr"]  = node->toString();
+    if (auto *sourceContext = node->graph().getExtra<camel::source::SourceContext, 3>()) {
+        auto origin = sourceContext->debugMap().nodeOrigin(node->stableId());
+        attachOriginAndSemantic(
+            j,
+            sourceContext,
+            origin,
+            sourceContext->girNodeSemantic(node->stableId()),
+            "node");
+    }
     nodeRawFields(node, j);
     return j;
 }
@@ -284,6 +449,7 @@ json expandedGraphToJson(const graph_ptr_t &graph) {
             e["sourceId"]        = ptrToId(from);
             e["targetId"]        = ptrToId(to);
             e["linkType"]        = linkType;
+            e["semanticRole"]    = inferEdgeSemanticRole(to, linkType, inIdx);
             e["sourcePortIndex"] = outIdx;
             e["targetPortIndex"] = inIdx;
             j["edges"].push_back(e);

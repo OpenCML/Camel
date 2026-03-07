@@ -13,28 +13,45 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "camel/core/error/diagnostics.h"
-#include "camel/execute/executor.h"
+#include "camel/core/error/runtime.h"
+#include "camel/core/source/manager.h"
 
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <ostream>
 #include <unordered_map>
 #include <vector>
 
-namespace GraphIR {
+namespace camel::compile::gir {
 class Graph;
 using graph_ptr_t = std::shared_ptr<Graph>;
-} // namespace GraphIR
+} // namespace camel::compile::gir
 
+namespace GIR = camel::compile::gir;
+
+namespace camel::core::module {
 class Module;
-using module_ptr_t = std::shared_ptr<Module>;
+}
+
+// Forward declarations for execute (avoid circular include with executor.h)
+class Executor;
+class ExecutorManager;
+
+namespace camel::core::context {
+
+class Frame;
+class Context;
+
+using context_ptr_t = std::shared_ptr<Context>;
+using module_ptr_t  = std::shared_ptr<module::Module>;
 
 struct EntryConfig {
     std::string entryDir;                 // root path of the context, used for loading modules
@@ -46,14 +63,16 @@ struct EntryConfig {
 
 class Context : public std::enable_shared_from_this<Context> {
     EntryConfig entryConfig_;
-    DiagsConfig diagConfig_;
+    error::DiagsConfig diagConfig_;
 
     module_ptr_t mainModule_;
     std::unordered_map<std::string, module_ptr_t> modules_;
     std::unordered_map<std::string, module_ptr_t> builtinModules_;
 
-    exec_mgr_uptr_t exeMgr_;
-    diagnostics_ptr_t rtmDiags_;
+    std::unique_ptr<ExecutorManager> exeMgr_;
+    error::diagnostic_sink_ptr_t runtimeDiagSink_;
+    error::runtime_error_reporter_ptr_t runtimeErrorReporter_;
+    camel::source::source_context_ptr_t sourceContext_;
     std::unordered_map<std::string, void *> loadedDllHandles_; // .cmo 路径 -> 句柄，保证 DLL 不卸载
     /** 最近一次“找到 .cmo 但加载失败”的原因，供 ModuleNotFound 报错详情使用。 */
     mutable std::string lastCmoLoadError_;
@@ -73,21 +92,26 @@ class Context : public std::enable_shared_from_this<Context> {
     /** 返回实际参与查找的搜索基路径（绝对路径）列表，用于 .cmo 加载失败时仅列出路径。 */
     std::vector<std::string> getSearchPathBases() const;
 
-    Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
-        : entryConfig_(entryConf), diagConfig_(diagConf) {}
+    Context(const EntryConfig &entryConf, const error::DiagsConfig &diagConf);
 
   public:
-    virtual ~Context() = default;
+    ~Context();
 
     static context_ptr_t create(
-        const EntryConfig &entryConf = EntryConfig(), const DiagsConfig &diagConf = DiagsConfig());
+        const EntryConfig &entryConf       = EntryConfig(),
+        const error::DiagsConfig &diagConf = error::DiagsConfig());
 
     const std::string &entryDir() const { return entryConfig_.entryDir; }
-    DiagsConfig diagConfig() const { return diagConfig_; }
+    error::DiagsConfig diagConfig() const { return diagConfig_; }
     module_ptr_t mainModule() const { return mainModule_; }
-    diagnostics_ptr_t rtmDiags() const { return rtmDiags_; }
-    GraphIR::graph_ptr_t rootGraph() const;
-    GraphIR::graph_ptr_t mainGraph() const;
+    error::diagnostics_ptr_t rtmDiags() const { return runtimeDiagSink_; }
+    error::diagnostic_sink_ptr_t runtimeDiagSink() const { return runtimeDiagSink_; }
+    error::runtime_error_reporter_ptr_t runtimeErrorReporter() const {
+        return runtimeErrorReporter_;
+    }
+    camel::source::source_context_ptr_t sourceContext() const { return sourceContext_; }
+    GIR::graph_ptr_t rootGraph() const;
+    GIR::graph_ptr_t mainGraph() const;
     const ExecutorManager &execMgr() const { return *exeMgr_; }
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }
@@ -99,8 +123,8 @@ class Context : public std::enable_shared_from_this<Context> {
     /// format
     void dumpAllModuleDiagnostics(std::ostream &os, bool json) const;
 
-    void registerExecutorFactory(std::string name, executor_factory_t fact);
-    void eval(std::string uri, GraphIR::Node *self, Frame &frame);
+    void registerExecutorFactory(std::string name, std::function<std::shared_ptr<Executor>()> fact);
+    void eval(std::string uri, GIR::Node *self, Frame &frame);
 
     /** 由 loadCmoModule 调用，保存已加载 .cmo 的句柄以防被卸载。 */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }
@@ -109,4 +133,4 @@ class Context : public std::enable_shared_from_this<Context> {
     importModule(const std::string &rawModuleName, const std::string &currentModuleName = "");
 };
 
-using context_ptr_t = std::shared_ptr<Context>;
+} // namespace camel::core::context

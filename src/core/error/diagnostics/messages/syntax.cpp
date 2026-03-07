@@ -13,11 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/error/diagnostics/messages/syntax.h"
+
+namespace camel::core::error {
 
 const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
     static const std::unordered_map<SyntaxDiag, DiagInfo> infoMap = {
@@ -33,3 +35,5 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
 
     return infoMap;
 }
+
+} // namespace camel::core::error

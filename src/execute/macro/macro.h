@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,8 +23,8 @@
 
 class MacroRewritePass : public GraphRewritePass {
   public:
-    MacroRewritePass(const context_ptr_t &ctx) : GraphRewritePass(ctx) {};
+    MacroRewritePass(const camel::core::context::context_ptr_t &ctx) : GraphRewritePass(ctx) {};
     virtual ~MacroRewritePass() = default;
 
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 };

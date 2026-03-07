@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Dec. 23, 2025
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "macro.h"
 
 using namespace std;
-using namespace GraphIR;
+using namespace GIR;
 
 graph_ptr_t MacroRewritePass::apply(graph_ptr_t &graph, ostream &os) { return graph; }

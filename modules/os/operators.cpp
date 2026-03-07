@@ -13,17 +13,23 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "operators.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/string.h"
 
 #include <memory>
+
+namespace mm = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::rtdata;
 #include <thread>
 
 #ifdef _WIN32
@@ -139,16 +145,12 @@ std::unordered_map<std::string, operator_t> getOSOpsMap() {
 slot_t __os_sleep__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 ms = norm.get<Int64>(0);
     if (ms < 0) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<sleep> requires a non-negative integer");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<sleep> requires a non-negative integer");
     }
     try {
         std::this_thread::sleep_for(std::chrono::milliseconds(ms));
     } catch (const std::exception &e) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit(std::string("<sleep> ") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("<sleep> ") + e.what());
     }
     return NullSlot;
 }
@@ -161,23 +163,21 @@ slot_t __os_whoami__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (GetUserNameA(buffer, &len)) {
         username = buffer;
     } else {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<whoami> failed");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<whoami> failed");
     }
 #else
     struct passwd *pw = getpwuid(getuid());
     if (pw) {
         username = pw->pw_name;
     } else {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<whoami> failed");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<whoami> failed");
     }
 #endif
     return toSlot(String::from(username, mm::autoSpace()));
 }
 
 slot_t __os_exit__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<exit> operator invoked");
+    throwRuntimeFault(RuntimeDiag::RuntimeError, "<exit> operator invoked");
     exit(1);
     return NullSlot;
 }
@@ -185,7 +185,7 @@ slot_t __os_exit__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __os_set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Bool enable = norm.get<Bool>(0);
     if (!Terminal::setRawMode(enable)) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<set_terminal_raw_mode> failed");
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<set_terminal_raw_mode> failed");
     }
     return NullSlot;
 }

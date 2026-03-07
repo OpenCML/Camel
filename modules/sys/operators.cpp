@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,10 @@
 
 #include <cstdlib>
 #include <filesystem>
+
+namespace mm = camel::core::mm;
+using namespace camel::core::context;
+using namespace camel::core::rtdata;
 
 slot_t __sys_get_env__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *key     = norm.get<String *>(0);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 #include "camel/parse/ast/data.h"
 #include "camel/utils/str.h"
 
-namespace AbstractSyntaxTree {
+namespace camel::parse::ast {
 
 std::string to_string(DataType type) {
     switch (type) {
@@ -192,4 +192,4 @@ const std::string FuncDataLoad::geneCode() const {
 
 const std::string RefDataLoad::geneCode() const { return ref_.toString(); }
 
-} // namespace AbstractSyntaxTree
+} // namespace camel::parse::ast

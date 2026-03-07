@@ -13,15 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composite.h"
+#include "camel/core/type/composite/composite.h"
 
 #include <unordered_set>
+
+namespace camel::core::type {
 
 class UnionType : public CompositeType {
   private:
@@ -53,3 +55,5 @@ class UnionType : public CompositeType {
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
 };
+
+} // namespace camel::core::type

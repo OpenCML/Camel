@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,9 @@
 #include <vector>
 
 namespace camel::jit::x64 {
+
+using ::camel::jit::kSpilled;
+using ::camel::jit::VRegAllocation;
 
 struct JumpPatch {
     size_t jumpPos;        // 跳转指令起始偏移
@@ -34,13 +37,13 @@ struct JumpPatch {
 
 void encodeMirBuffer(
     const MirBuffer &buf, std::vector<uint8_t> &code, std::ostream *asmOut, size_t baseOffset,
-    const ::camel::jit::VRegAllocation *vregAlloc,
+    const VRegAllocation *vregAlloc,
     std::vector<std::tuple<size_t, size_t, std::string>> *instructionBoundaries,
     void *debugTraceFn) {
     Encoder enc(code, asmOut, baseOffset);
     auto pregFor = [vregAlloc](VRegId v) -> int {
         if (!vregAlloc)
-            return ::camel::jit::kSpilled;
+            return kSpilled;
         return vregAlloc->pregForVReg(v);
     };
     std::vector<size_t> startOffset(buf.size());

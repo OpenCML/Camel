@@ -1,0 +1,10 @@
+module semantic_branch_return_mismatch
+
+func pick(n: int): int {
+    return if n > 0 then 1 else 'oops'
+}
+
+func main(): int sync {
+    println(pick(1))
+    return 0
+}

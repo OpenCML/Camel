@@ -13,15 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "../base.h"
+#include "camel/core/type/base.h"
 
 #include <optional>
+
+namespace camel::core::type {
 
 class CompositeType : public Type {
   public:
@@ -40,3 +42,5 @@ class CompositeType : public Type {
     virtual CastSafety castSafetyFrom(Type *sourceType) const override = 0;
     virtual bool assignableFrom(Type *sourceType) const                = 0;
 };
+
+} // namespace camel::core::type

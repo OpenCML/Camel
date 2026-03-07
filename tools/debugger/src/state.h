@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -39,6 +39,9 @@
 
 namespace debugger {
 
+using context_ptr_t     = camel::core::context::context_ptr_t;
+using UserDefinedModule = camel::core::module::UserDefinedModule;
+
 /// 父进程侧记录的一个子进程（任务）：id 一般为 port 字符串，供 API 的 target 解析。
 struct TaskInfo {
     std::string id;
@@ -63,7 +66,7 @@ struct DebuggerState {
     std::string targetFile;
     context_ptr_t ctx;
     std::shared_ptr<UserDefinedModule> mainModule;
-    std::shared_ptr<CamelParser> parser;
+    std::shared_ptr<camel::parse::CamelParser> parser;
     /// Pass 列表：与 CLI 的 Run::targetFiles[1:] 一致，空时 applyPasses 使用 std::default
     std::vector<std::string> runPasses;
 

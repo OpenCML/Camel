@@ -4,6 +4,10 @@
 #include "camel/core/type/resolver.h"
 #include "executor.h"
 
+using namespace camel::core::context;
+using namespace camel::core::module;
+using namespace camel::core::type;
+
 FsModule::FsModule(context_ptr_t ctx) : BuiltinModule("fs", ctx) {
     exportEntity(
         "read_text",
