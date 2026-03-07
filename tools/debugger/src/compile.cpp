@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,9 +36,6 @@ namespace fs = std::filesystem;
 namespace debugger {
 
 CompilationState createCompilationStateForPath(const std::string &path) {
-    auto diagnostics = std::make_shared<Diagnostics>("main", path);
-    diagnostics->setConfig(
-        DiagsConfig{.total_limit = -1, .per_severity_limits = {{Severity::Error, 0}}});
     fs::path camelPath = fs::current_path();
     fs::path entryPath(path);
     std::string entryDir = fs::absolute(entryPath).parent_path().string();
@@ -55,7 +52,12 @@ CompilationState createCompilationStateForPath(const std::string &path) {
     auto ctx = Context::create(
         EntryConfig{.entryDir = entryDir, .entryFile = path, .searchPaths = std::move(searchPaths)},
         DiagsConfig{.total_limit = -1, .per_severity_limits = {{Severity::Error, 0}}});
-    auto parser     = std::make_shared<CamelParser>(diagnostics);
+    ctx->setRuntimeDiagMode(RuntimeDiagMode::DebuggerAttached);
+    auto diagnostics = std::make_shared<Diagnostics>("main", path, ctx->sourceContext());
+    diagnostics->setConfig(
+        DiagsConfig{.total_limit = -1, .per_severity_limits = {{Severity::Error, 0}}});
+    auto parser = std::make_shared<CamelParser>(diagnostics);
+    parser->setSourceContext(ctx->sourceContext());
     auto mainModule = std::make_shared<UserDefinedModule>("main", path, ctx, parser);
     ctx->setMainModule(mainModule);
     (void)mm::autoSpace();

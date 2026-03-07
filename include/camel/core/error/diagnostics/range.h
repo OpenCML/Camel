@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "antlr4-runtime/antlr4-runtime.h"
+#include "camel/core/source/ids.h"
 
 #include <variant>
 
@@ -41,7 +42,8 @@ struct TokenRange {
     size_t end   = 0;
 };
 
-using SourceRange = std::variant<std::monostate, CharRange, TokenRange>;
+using SourceRange = std::variant<
+    std::monostate, CharRange, TokenRange, camel::source::span_id_t, camel::source::origin_id_t>;
 
 // ---- RangeConverter ----
 class RangeConverter {

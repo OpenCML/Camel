@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,16 @@ DiagnosticBuilder &DiagnosticBuilder::at(const CharRange &range) {
 
 DiagnosticBuilder &DiagnosticBuilder::at(const TokenRange &range) {
     range_ = range;
+    return *this;
+}
+
+DiagnosticBuilder &DiagnosticBuilder::atSpan(camel::source::span_id_t span) {
+    range_ = span;
+    return *this;
+}
+
+DiagnosticBuilder &DiagnosticBuilder::atOrigin(camel::source::origin_id_t origin) {
+    range_ = origin;
     return *this;
 }
 

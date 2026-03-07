@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  *
  * ---
@@ -192,7 +192,13 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc about to call JIT entry"));
         newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame); // 规范：slot[0] 存 Frame*
-        slot_t result           = fn(newFrame->slotBase(), ctx);
+        slot_t result;
+        try {
+            result = fn(newFrame->slotBase(), ctx);
+        } catch (...) {
+            vm->releaseFrameForCall(newFrame);
+            throw;
+        }
         EXEC_WHEN_DEBUG(
             GetDefaultLogger()
                 .in("JIT.Trampoline")
@@ -223,7 +229,13 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
         GetDefaultLogger()
             .in("JIT.Trampoline")
             .info("trampolineFunc before vm->call targetPc={}", targetPc));
-    slot_t result = vm->call(targetPc, newFrame);
+    slot_t result;
+    try {
+        result = vm->call(targetPc, newFrame);
+    } catch (...) {
+        vm->releaseFrameForCall(newFrame);
+        throw;
+    }
     EXEC_WHEN_DEBUG(
         GetDefaultLogger()
             .in("JIT.Trampoline")
@@ -257,7 +269,13 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
                 .in("JIT.Trampoline")
                 .debug("trampolineTail: JIT->JIT target='{}'", g->name()));
         newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
-        slot_t result           = fn(newFrame->slotBase(), ctx);
+        slot_t result;
+        try {
+            result = fn(newFrame->slotBase(), ctx);
+        } catch (...) {
+            vm->releaseFrameForTail(newFrame);
+            throw;
+        }
         vm->releaseFrameForTail(newFrame);
         return result;
     }
@@ -273,7 +291,12 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     for (size_t i = 0; i < argsCnt; ++i)
         newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
     (void)count;
-    return vm->call(targetPc, newFrame);
+    try {
+        return vm->call(targetPc, newFrame);
+    } catch (...) {
+        vm->releaseFrameForTail(newFrame);
+        throw;
+    }
 }
 
 slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc) {
@@ -291,7 +314,21 @@ slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc) {
     FrameArgsView withView(*frame, wargs);
     FrameArgsView normView(*frame, nargs);
 
-    slot_t ret = func(withView, normView, vm->context());
+    slot_t ret;
+    try {
+        ret = func(withView, normView, vm->context());
+    } catch (const RuntimeFault &fault) {
+        throw reportRuntimeFault(
+            vm->context(),
+            fault,
+            makePcExecutionSite(
+                vm->context().sourceContext(),
+                frame->graph(),
+                pc,
+                0,
+                "",
+                ExecutionSiteKind::JitPc));
+    }
     frame->set(result, ret);
     return ret;
 }

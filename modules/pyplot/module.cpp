@@ -10,7 +10,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -109,8 +109,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                                 return std::nullopt;
                             if (norm[0]->code() != TypeCode::Array)
                                 return std::nullopt;
-                            TypeCode elemCode =
-                                tt::as_ptr<ArrayType>(norm[0])->elemType()->code();
+                            TypeCode elemCode = tt::as_ptr<ArrayType>(norm[0])->elemType()->code();
                             if (elemCode != TypeCode::Int32 && elemCode != TypeCode::Int64 &&
                                 elemCode != TypeCode::Float32 && elemCode != TypeCode::Float64)
                                 return std::nullopt;
@@ -131,9 +130,7 @@ PyplotModule::PyplotModule(context_ptr_t ctx) : BuiltinModule("pyplot", ctx) {
         exportEntity(group->name(), group);
 }
 
-module_ptr_t PyplotModule::create(context_ptr_t ctx) {
-    return std::make_shared<PyplotModule>(ctx);
-}
+module_ptr_t PyplotModule::create(context_ptr_t ctx) { return std::make_shared<PyplotModule>(ctx); }
 
 bool PyplotModule::load() {
     if (loaded_)
@@ -144,10 +141,9 @@ bool PyplotModule::load() {
             py::initialize_interpreter();
         }
     } catch (const std::exception &e) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("Failed to load pyplot module: ") + e.what());
-        return false;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("Failed to load pyplot module: ") + e.what());
     }
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("pyplot", [ctx]() { return createPyplotExecutor(ctx); });

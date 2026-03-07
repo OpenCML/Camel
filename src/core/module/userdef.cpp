@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,12 +46,15 @@ UserDefinedModule::UserDefinedModule(
     if (parser) {
         parser_      = parser;
         diagnostics_ = parser->diagnostics();
+        parser_->setSourceContext(ctx->sourceContext());
     } else {
         diagnostics_ = std::make_shared<Diagnostics>(
             name,
-            path.empty() ? "<in-memory>" : fs::absolute(path).string());
+            path.empty() ? "<in-memory>" : fs::absolute(path).string(),
+            ctx->sourceContext());
         diagnostics_->setConfig(ctx->diagConfig());
         parser_ = std::make_shared<CamelParser>(diagnostics_);
+        parser_->setSourceContext(ctx->sourceContext());
     }
     // Automatically import the built-in module
     importAllRefsFromMod(ctx->importModule(""));

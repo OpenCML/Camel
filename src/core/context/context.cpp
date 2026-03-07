@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -81,10 +81,13 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 }
 
 context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &diagConf) {
-    context_ptr_t ctx = std::shared_ptr<Context>(new Context(entryConf, diagConf));
-    ctx->exeMgr_      = std::make_unique<ExecutorManager>(ctx);
-    ctx->rtmDiags_    = std::make_shared<Diagnostics>("main", entryConf.entryFile);
-    ctx->rtmDiags_->setConfig(diagConf);
+    context_ptr_t ctx     = std::shared_ptr<Context>(new Context(entryConf, diagConf));
+    ctx->exeMgr_          = std::make_unique<ExecutorManager>(ctx);
+    ctx->sourceContext_   = std::make_shared<camel::source::SourceContext>();
+    ctx->runtimeDiagSink_ = std::make_shared<DiagnosticSink>("", "", ctx->sourceContext_);
+    ctx->runtimeDiagSink_->setConfig(diagConf);
+    ctx->runtimeErrorReporter_ =
+        std::make_shared<RuntimeErrorReporter>(ctx->runtimeDiagSink_, ctx->sourceContext_);
     ctx->modules_[""] = ctx->getBuiltinModule("").value();
     EXEC_WHEN_DEBUG(
         GetDefaultLogger().in("Context").info(

@@ -12,7 +12,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -62,9 +62,9 @@ slot_t __op_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
             std::string resultStr = fmt::vformat(fmtStr, store);
             std::cout << resultStr << std::endl;
         } catch (const fmt::format_error &e) {
-            ctx.rtmDiags()
-                ->of(RuntimeDiag::RuntimeError)
-                .commit(std::string("<format>") + std::string(e.what()));
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                std::string("<format>") + std::string(e.what()));
         }
 
         if (norm.size() > 0) {
@@ -119,9 +119,9 @@ slot_t __op_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
             std::string resultStr = fmt::vformat(fmtStr, store);
             std::cout << resultStr << std::endl;
         } catch (const fmt::format_error &e) {
-            ctx.rtmDiags()
-                ->of(RuntimeDiag::RuntimeError)
-                .commit(std::string("<format>") + std::string(e.what()));
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                std::string("<format>") + std::string(e.what()));
         }
 
         if (norm.size() > 0) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -77,9 +77,10 @@ class FastVMSchedPass : public GraphSchedulePass {
         pcStack_.push_back(pc);
         frameStack_.push_back(frame);
         if (frameStack_.size() >= maxRecursionDepth_) {
-            context_->rtmDiags()
-                ->of(RuntimeDiag::MaxRecursionDepthExceeded)
-                .commit(frame->graph()->name(), maxRecursionDepth_);
+            throwRuntimeFault(
+                RuntimeDiag::MaxRecursionDepthExceeded,
+                frame->graph()->name(),
+                maxRecursionDepth_);
         }
     }
     inline std::pair<size_t, Frame *> pop() {

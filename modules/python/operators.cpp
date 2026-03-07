@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,8 +57,7 @@ slot_t wrapPyObject(py::object o) {
 
 PythonObjectHolder *unwrapPyObject(slot_t s, Context &ctx) {
     if (s == NullSlot) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("python: expected non-null PyObject");
-        return nullptr;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python: expected non-null PyObject");
     }
     return reinterpret_cast<PythonObjectHolder *>(static_cast<uintptr_t>(s));
 }
@@ -122,8 +121,7 @@ py::object camelToPy(Type *t, slot_t s, Context &ctx) {
             PythonObjectHolder *h = unwrapPyObject(s, ctx);
             return h ? py::reinterpret_borrow<py::object>(h->obj) : py::none();
         }
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("python: unsupported type for wrap");
-        return py::none();
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python: unsupported type for wrap");
     }
 }
 
@@ -134,10 +132,9 @@ py::object camelToPy(ArgsView &norm, size_t index, Context &ctx) {
 // 解析 norm[0] 为可调用对象（PyObject 或字符串路径），失败时返回 nullptr 并报告诊断
 py::object resolveCallable(ArgsView &norm, Context &ctx) {
     if (norm.size() < 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python: at least one argument (callable or path string) required");
-        return py::none();
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python: at least one argument (callable or path string) required");
     }
     if (norm.type(0)->code() == PyObjectType::typeCode()) {
         PythonObjectHolder *h = unwrapPyObject(norm.slot(0), ctx);
@@ -147,8 +144,7 @@ py::object resolveCallable(ArgsView &norm, Context &ctx) {
         String *pathObj  = norm.get<String *>(0);
         std::string path = pathObj ? pathObj->toString() : "";
         if (path.empty()) {
-            ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("python: empty path");
-            return py::none();
+            throwRuntimeFault(RuntimeDiag::RuntimeError, "python: empty path");
         }
         try {
             std::vector<std::string> parts;
@@ -162,8 +158,7 @@ py::object resolveCallable(ArgsView &norm, Context &ctx) {
                 i = j + 1;
             }
             if (parts.empty()) {
-                ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("python: invalid path");
-                return py::none();
+                throwRuntimeFault(RuntimeDiag::RuntimeError, "python: invalid path");
             }
             if (parts.size() == 1) {
                 py::object main = py::module_::import("__main__");
@@ -176,16 +171,12 @@ py::object resolveCallable(ArgsView &norm, Context &ctx) {
                 obj = obj.attr(parts[k].c_str());
             return obj;
         } catch (const py::error_already_set &e) {
-            ctx.rtmDiags()
-                ->of(RuntimeDiag::RuntimeError)
-                .commit(std::string("python: \n") + e.what());
-            return py::none();
+            throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python: \n") + e.what());
         }
     }
-    ctx.rtmDiags()
-        ->of(RuntimeDiag::RuntimeError)
-        .commit("python: first argument must be PyObject or string");
-    return py::none();
+    throwRuntimeFault(
+        RuntimeDiag::RuntimeError,
+        "python: first argument must be PyObject or string");
 }
 
 } // namespace
@@ -220,15 +211,9 @@ slot_t __python_py_call__(ArgsView &with, ArgsView &norm, Context &ctx) {
         py::object result = callable(*argTuple);
         return wrapPyObject(result);
     } catch (const py::error_already_set &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_call: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_call: \n") + e.what());
     } catch (const std::exception &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_call: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_call: \n") + e.what());
     }
 }
 
@@ -284,31 +269,27 @@ slot_t __python_py_call_kw__(ArgsView &with, ArgsView &norm, Context &ctx) {
         py::object result = kwargs.empty() ? callable(*args) : callable(*args, **kwargs);
         return wrapPyObject(result);
     } catch (const py::error_already_set &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_call_kw: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("python.py_call_kw: \n") + e.what());
     } catch (const std::exception &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_call_kw: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("python.py_call_kw: \n") + e.what());
     }
 }
 
 // py_exec: 执行任意 Python 代码（语句），返回 None
 slot_t __python_py_exec__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (norm.size() < 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.py_exec: one argument (code string) required");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python.py_exec: one argument (code string) required");
     }
     if (norm.type(0)->code() != TypeCode::String) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.py_exec: argument must be string (Python code)");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python.py_exec: argument must be string (Python code)");
     }
     String *strObj   = norm.get<String *>(0);
     std::string code = strObj ? strObj->toString() : "";
@@ -316,31 +297,23 @@ slot_t __python_py_exec__(ArgsView &with, ArgsView &norm, Context &ctx) {
         py::exec(code);
         return wrapPyObject(py::none());
     } catch (const py::error_already_set &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_exec: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_exec: \n") + e.what());
     } catch (const std::exception &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_exec: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_exec: \n") + e.what());
     }
 }
 
 // py_eval: 计算表达式并返回结果
 slot_t __python_py_eval__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (norm.size() < 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.py_eval: one argument (expression string) required");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python.py_eval: one argument (expression string) required");
     }
     if (norm.type(0)->code() != TypeCode::String) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.py_eval: argument must be string (Python expression)");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python.py_eval: argument must be string (Python expression)");
     }
     String *strObj   = norm.get<String *>(0);
     std::string expr = strObj ? strObj->toString() : "";
@@ -348,74 +321,56 @@ slot_t __python_py_eval__(ArgsView &with, ArgsView &norm, Context &ctx) {
         py::object result = py::eval(expr);
         return wrapPyObject(result);
     } catch (const py::error_already_set &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_eval: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_eval: \n") + e.what());
     } catch (const std::exception &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_eval: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_eval: \n") + e.what());
     }
 }
 
 // py_run: 执行指定路径的 Python 脚本文件
 slot_t __python_py_run__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (norm.size() < 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.py_run: one argument (file path string) required");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python.py_run: one argument (file path string) required");
     }
     if (norm.type(0)->code() != TypeCode::String) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.py_run: argument must be string (file path)");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python.py_run: argument must be string (file path)");
     }
     String *pathObj  = norm.get<String *>(0);
     std::string path = pathObj ? pathObj->toString() : "";
     if (path.empty()) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("python.py_run: empty file path");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.py_run: empty file path");
     }
     try {
         py::object scope = py::module_::import("__main__").attr("__dict__");
         py::eval_file(path, scope);
         return wrapPyObject(py::none());
     } catch (const py::error_already_set &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_run: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_run: \n") + e.what());
     } catch (const std::exception &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_run: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_run: \n") + e.what());
     }
 }
 
 // py_attr: 获取 PyObject 属性，attr 可含 . 表示链式访问（如 "a.b.c"）
 slot_t __python_py_attr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (norm.size() < 2) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.py_attr: two arguments (obj, attr_name) required");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python.py_attr: two arguments (obj, attr_name) required");
     }
     if (norm.type(0)->code() != PyObjectType::typeCode()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.py_attr: first argument must be PyObject");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python.py_attr: first argument must be PyObject");
     }
     if (norm.type(1)->code() != TypeCode::String) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.py_attr: second argument must be string (attribute name)");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python.py_attr: second argument must be string (attribute name)");
     }
     PythonObjectHolder *h = unwrapPyObject(norm.slot(0), ctx);
     if (!h)
@@ -423,10 +378,7 @@ slot_t __python_py_attr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *attrObj  = norm.get<String *>(1);
     std::string attr = attrObj ? attrObj->toString() : "";
     if (attr.empty()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.py_attr: empty attribute name");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.py_attr: empty attribute name");
     }
     try {
         py::object obj = py::reinterpret_borrow<py::object>(h->obj);
@@ -444,51 +396,40 @@ slot_t __python_py_attr__(ArgsView &with, ArgsView &norm, Context &ctx) {
             obj = obj.attr(p.c_str());
         return wrapPyObject(obj);
     } catch (const py::error_already_set &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_attr: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_attr: \n") + e.what());
     } catch (const std::exception &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_attr: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_attr: \n") + e.what());
     }
 }
 
 // py_import: 导入 Python 模块，返回 PyObject（模块对象）
 slot_t __python_py_import__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (norm.size() < 1) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.py_import: one argument (module name string) required");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python.py_import: one argument (module name string) required");
     }
     if (norm.type(0)->code() != TypeCode::String) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.py_import: argument must be string (module name)");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python.py_import: argument must be string (module name)");
     }
     String *strObj   = norm.get<String *>(0);
     std::string name = strObj ? strObj->toString() : "";
     if (name.empty()) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("python.py_import: empty module name");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.py_import: empty module name");
     }
     try {
         py::object mod = py::module_::import(name.c_str());
         return wrapPyObject(mod);
     } catch (const py::error_already_set &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_import: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("python.py_import: \n") + e.what());
     } catch (const std::exception &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_import: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("python.py_import: \n") + e.what());
     }
 }
 
@@ -507,10 +448,7 @@ slot_t __python_py_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
         print_fn(*args, py::arg("end") = "", py::arg("flush") = true); // 不换行，立即刷新
         return norm.size() == 0 ? NullSlot : norm.slot(0);
     } catch (const py::error_already_set &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_print: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_print: \n") + e.what());
     }
 }
 slot_t __python_py_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -527,17 +465,15 @@ slot_t __python_py_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
         print_fn(*args, py::arg("flush") = true); // 默认换行，立即刷新
         return norm.size() == 0 ? NullSlot : norm.slot(0);
     } catch (const py::error_already_set &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("python.py_println: \n") + e.what());
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("python.py_println: \n") + e.what());
     }
 }
 
 slot_t __python_wrap__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (norm.size() < 1) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("python.wrap: one argument required");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.wrap: one argument required");
     }
     py::object o = camelToPy(norm, 0, ctx);
     return wrapPyObject(o);
@@ -562,10 +498,9 @@ static std::optional<slot_t> pyToCamel(py::object obj, Type *targetType, Context
         case TypeCode::Byte: {
             int v = py::cast<int>(obj);
             if (v < 0 || v > 255) {
-                ctx.rtmDiags()
-                    ->of(RuntimeDiag::RuntimeError)
-                    .commit("python.unwrap: byte value must be 0-255");
-                return std::nullopt;
+                throwRuntimeFault(
+                    RuntimeDiag::RuntimeError,
+                    "python.unwrap: byte value must be 0-255");
             }
             return toSlot(static_cast<Byte>(static_cast<unsigned>(v)));
         }
@@ -575,10 +510,9 @@ static std::optional<slot_t> pyToCamel(py::object obj, Type *targetType, Context
         }
         case TypeCode::Array: {
             if (!py::isinstance<py::list>(obj)) {
-                ctx.rtmDiags()
-                    ->of(RuntimeDiag::RuntimeError)
-                    .commit("python.unwrap: array target requires Python list");
-                return std::nullopt;
+                throwRuntimeFault(
+                    RuntimeDiag::RuntimeError,
+                    "python.unwrap: array target requires Python list");
             }
             py::list lst               = obj.cast<py::list>();
             const ArrayType *arrayType = static_cast<const ArrayType *>(targetType);
@@ -595,18 +529,16 @@ static std::optional<slot_t> pyToCamel(py::object obj, Type *targetType, Context
         }
         case TypeCode::Tuple: {
             if (!py::isinstance<py::tuple>(obj) && !py::isinstance<py::list>(obj)) {
-                ctx.rtmDiags()
-                    ->of(RuntimeDiag::RuntimeError)
-                    .commit("python.unwrap: tuple target requires Python tuple or list");
-                return std::nullopt;
+                throwRuntimeFault(
+                    RuntimeDiag::RuntimeError,
+                    "python.unwrap: tuple target requires Python tuple or list");
             }
             const TupleType *tupleType = static_cast<const TupleType *>(targetType);
             size_t n                   = tupleType->size();
             if (obj.attr("__len__")().cast<py::ssize_t>() != static_cast<py::ssize_t>(n)) {
-                ctx.rtmDiags()
-                    ->of(RuntimeDiag::RuntimeError)
-                    .commit("python.unwrap: tuple length mismatch");
-                return std::nullopt;
+                throwRuntimeFault(
+                    RuntimeDiag::RuntimeError,
+                    "python.unwrap: tuple length mismatch");
             }
             Tuple *tuple = Tuple::create(n, mm::autoSpace());
             for (size_t i = 0; i < n; ++i) {
@@ -619,10 +551,9 @@ static std::optional<slot_t> pyToCamel(py::object obj, Type *targetType, Context
         }
         case TypeCode::Struct: {
             if (!py::isinstance<py::dict>(obj)) {
-                ctx.rtmDiags()
-                    ->of(RuntimeDiag::RuntimeError)
-                    .commit("python.unwrap: struct target requires Python dict");
-                return std::nullopt;
+                throwRuntimeFault(
+                    RuntimeDiag::RuntimeError,
+                    "python.unwrap: struct target requires Python dict");
             }
             py::dict d                   = obj.cast<py::dict>();
             const StructType *structType = static_cast<const StructType *>(targetType);
@@ -632,10 +563,9 @@ static std::optional<slot_t> pyToCamel(py::object obj, Type *targetType, Context
                 std::string key = std::string(structType->fieldName(i));
                 py::str keyObj(key);
                 if (!d.contains(keyObj)) {
-                    ctx.rtmDiags()
-                        ->of(RuntimeDiag::RuntimeError)
-                        .commit("python.unwrap: struct missing field '" + key + "'");
-                    return std::nullopt;
+                    throwRuntimeFault(
+                        RuntimeDiag::RuntimeError,
+                        "python.unwrap: struct missing field '" + key + "'");
                 }
                 auto s = pyToCamel(d[keyObj], structType->typeAt(i), ctx);
                 if (!s)
@@ -647,14 +577,12 @@ static std::optional<slot_t> pyToCamel(py::object obj, Type *targetType, Context
         default:
             if (targetType->code() == getPyObjectType()->code())
                 return wrapPyObject(obj);
-            ctx.rtmDiags()
-                ->of(RuntimeDiag::RuntimeError)
-                .commit("python.unwrap: unsupported target type " + targetType->toString());
-            return std::nullopt;
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                "python.unwrap: unsupported target type " + targetType->toString());
         }
     } catch (...) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("python.unwrap: conversion failed");
-        return std::nullopt;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.unwrap: conversion failed");
     }
 }
 
@@ -664,17 +592,15 @@ slot_t __python_upwrap__(ArgsView &with, ArgsView &norm, Context &ctx) {
         return NullSlot;
     Type *argType = norm.type(0);
     if (!argType->isOtherType() || argType->code() != getPyObjectType()->code()) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.unwrap: argument must be PyObject<T> with type param");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python.unwrap: argument must be PyObject<T> with type param");
     }
     auto *o = static_cast<OtherType *>(argType);
     if (o->paramCount() == 0 || !o->params()[0]) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("python.unwrap: PyObject must have one type parameter");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "python.unwrap: PyObject must have one type parameter");
     }
     Type *targetType = o->params()[0];
     auto result      = pyToCamel(h->obj, targetType, ctx);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,28 @@
 
 using namespace std;
 using namespace AST;
+
+namespace {
+thread_local camel::source::source_context_ptr_t g_sourceContext = nullptr;
+thread_local camel::source::source_file_id_t g_sourceFileId = camel::source::kInvalidSourceFileId;
+
+inline void setNodeOriginByOffsets(
+    node_ptr_t node, size_t startOffset, size_t endOffset, const std::string &label = "ast") {
+    if (!g_sourceContext || g_sourceFileId == camel::source::kInvalidSourceFileId) {
+        return;
+    }
+    auto span = g_sourceContext->createSpan(g_sourceFileId, startOffset, endOffset);
+    if (span == camel::source::kInvalidSpanId) {
+        return;
+    }
+    auto origin = g_sourceContext->createOrigin(
+        span,
+        camel::source::OriginStage::AST,
+        camel::source::OriginKind::AstNode,
+        label);
+    node->load()->setOrigin(origin);
+}
+} // namespace
 
 template <typename LoadType, typename... Args> node_ptr_t createNodeAs(Args &&...args) {
     return std::make_shared<Node>(
@@ -56,6 +78,12 @@ inline void setNodeTokenRange(node_ptr_t node, size_t start, size_t end) {
 
 inline void setNodeTokenRangeByContext(node_ptr_t node, const antlr4::ParserRuleContext *context) {
     node->load()->setTokenRange(extractTokenRangeFromContext(context));
+    if (context && context->getStart() && context->getStop()) {
+        setNodeOriginByOffsets(
+            node,
+            static_cast<size_t>(context->getStart()->getStartIndex()),
+            static_cast<size_t>(context->getStop()->getStopIndex() + 1));
+    }
 }
 
 template <typename Context>
@@ -67,6 +95,10 @@ inline void setNodeTokenRangeByContexts(node_ptr_t node, const vector<Context *>
     size_t start = context.front()->getStart()->getTokenIndex();
     size_t end   = context.back()->getStop()->getTokenIndex() + 1;
     node->load()->setTokenRange(start, end);
+    setNodeOriginByOffsets(
+        node,
+        static_cast<size_t>(context.front()->getStart()->getStartIndex()),
+        static_cast<size_t>(context.back()->getStop()->getStopIndex() + 1));
 }
 
 inline node_ptr_t any2node(const std::any &a) { return std::any_cast<node_ptr_t>(a); }
@@ -76,6 +108,8 @@ program : SEP? (decl SEP?)* EOF;
 */
 any Builder::visitProgram(OpenCMLParser::ProgramContext *context) {
     ENTER("Program");
+    g_sourceContext = sourceContext_;
+    g_sourceFileId  = sourceFileId_;
 
     root_ = std::make_shared<Node>(module_);
 
@@ -346,6 +380,14 @@ any Builder::visitFuncData(OpenCMLParser::FuncDataContext *context) {
         (context->typeExpr() ? context->typeExpr()->getStop()->getTokenIndex()
                              : context->parentParams()->getStart()->getTokenIndex()) +
             1);
+    setNodeOriginByOffsets(
+        typeOptNode,
+        static_cast<size_t>(context->getStart()->getStartIndex()),
+        static_cast<size_t>(
+            (context->typeExpr() ? context->typeExpr()->getStop()
+                                 : context->parentParams()->getStart())
+                ->getStopIndex() +
+            1));
     if (context->typeExpr()) {
         node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
         *typeOptNode << typeNode;
@@ -377,6 +419,10 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
         context->getStart()->getTokenIndex(),
         context->stmtBlock()->getStart()->getTokenIndex() + 1};
     setNodeTokenRange(funcTypeNode, typeRange);
+    setNodeOriginByOffsets(
+        funcTypeNode,
+        static_cast<size_t>(context->getStart()->getStartIndex()),
+        static_cast<size_t>(context->stmtBlock()->getStart()->getStartIndex()));
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
 
     auto implMark = context->implMark();
@@ -422,6 +468,10 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
 
     node_ptr_t typeOptNode = createNodeAs<OptionalLoad>("Type");
     setNodeTokenRange(typeOptNode, typeRange);
+    setNodeOriginByOffsets(
+        typeOptNode,
+        static_cast<size_t>(context->getStart()->getStartIndex()),
+        static_cast<size_t>(context->stmtBlock()->getStart()->getStartIndex()));
     if (context->typeExpr()) {
         node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
         *typeOptNode << typeNode;

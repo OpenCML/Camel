@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -64,8 +64,7 @@ slot_t __time_strftime__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (gmtime_r(&local_tt, &tm) == nullptr)
 #endif
         {
-            ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<strftime> failed");
-            return NullSlot;
+            throwRuntimeFault(RuntimeDiag::RuntimeError, "<strftime> failed");
         }
     } else {
 #if defined(_WIN32)
@@ -74,15 +73,13 @@ slot_t __time_strftime__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (gmtime_r(&tt, &tm) == nullptr)
 #endif
         {
-            ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<strftime> failed");
-            return NullSlot;
+            throwRuntimeFault(RuntimeDiag::RuntimeError, "<strftime> failed");
         }
     }
     const std::string &fmt = fmt_obj->toString();
     char buffer[128]       = {0};
     if (std::strftime(buffer, sizeof(buffer), fmt.c_str(), &tm) == 0) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<strftime> formatting failed");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<strftime> formatting failed");
     }
     return toSlot(String::from(buffer, mm::autoSpace()));
 }
@@ -92,13 +89,11 @@ slot_t __time_strptime__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *fmt_obj = norm.get<String *>(1);
     std::tm tm{};
     if (!myStrptime(str_obj->toString(), fmt_obj->toString(), tm)) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<strptime> failed to parse");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<strptime> failed to parse");
     }
     std::time_t local_tt = std::mktime(&tm);
     if (local_tt == static_cast<std::time_t>(-1)) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<strptime> mktime failed");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<strptime> mktime failed");
     }
     double utc_seconds = static_cast<double>(local_tt) - 8 * 3600.0;
     return toSlot(utc_seconds);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 24, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,6 +60,7 @@ class ParserErrorListener : public antlr4::BaseErrorListener {
 
 class CamelParser {
     diagnostics_ptr_t diagnostics_;
+    camel::source::source_context_ptr_t sourceContext_; // 解析阶段产出的 span/origin 都写入这里。
     antlr4::ANTLRInputStream input_;
 
     std::unique_ptr<OpenCMLLexer> lexer_;
@@ -68,6 +69,8 @@ class CamelParser {
 
     antlr4::tree::ParseTree *cst_ = nullptr;
     AST::node_ptr_t ast_          = nullptr;
+    // 当前正在解析的源文件在 SourceContext 中的逻辑 ID。
+    camel::source::source_file_id_t sourceFileId_ = camel::source::kInvalidSourceFileId;
 
     bool buildCST() {
         auto interpreter = parser_->getInterpreter<antlr4::atn::ParserATNSimulator>();
@@ -117,6 +120,13 @@ class CamelParser {
     CamelParser(diagnostics_ptr_t diagnostics) : diagnostics_(diagnostics) {}
     ~CamelParser() = default;
 
+    /// 解析器本身不拥有 SourceContext，只把解析结果登记进去。
+    void setSourceContext(camel::source::source_context_ptr_t sourceContext) {
+        sourceContext_ = std::move(sourceContext);
+    }
+    camel::source::source_context_ptr_t sourceContext() const { return sourceContext_; }
+    camel::source::source_file_id_t sourceFileId() const { return sourceFileId_; }
+
     const std::vector<antlr4::Token *> getTokens() {
         return tokens_ ? tokens_->getTokens() : std::vector<antlr4::Token *>{};
     }
@@ -127,6 +137,12 @@ class CamelParser {
 
     bool parse(std::istream &is) {
         input_.load(is);
+        if (sourceContext_) {
+            // 在词法/语法分析前先注册完整源文件文本。
+            // 后续 AST builder 会基于 parser context 的 start/stop offset 创建 span。
+            sourceFileId_ =
+                sourceContext_->registerFile(diagnostics_->modulePath(), input_.toString());
+        }
 
         lexer_  = std::make_unique<OpenCMLLexer>(&input_);
         tokens_ = std::make_unique<antlr4::CommonTokenStream>(lexer_.get());

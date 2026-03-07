@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,10 +31,9 @@ slot_t __re_test__(ArgsView &with, ArgsView &norm, Context &ctx) {
         bool match = std::regex_search(text->c_str(), re);
         return toSlot(match);
     } catch (const std::regex_error &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("<re.test> regex error: ") + e.what());
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("<re.test> regex error: ") + e.what());
     }
 }
 

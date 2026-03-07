@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,10 +61,7 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
             Node *syncNode        = g->inlineNode(path, true);
 
             if (!syncNode) {
-                context_->rtmDiags()
-                    ->of(RuntimeDiag::GraphInliningFailed)
-                    .commit(brch->toString(), g->name());
-                return GraphIR::Graph::null();
+                throwRuntimeFault(RuntimeDiag::GraphInliningFailed, brch->toString(), g->name());
             }
 
             if (syncNode->ctrlOutputs().size() > 1) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,11 +21,23 @@
  * GIR 懒加载 JSON 序列化实现。
  */
 
-#include "gir_json.h"
+#include <stdio.h>
+
+#ifndef EOF
+#define EOF (-1)
+#endif
+
 #include "camel/compile/gir/graph.h"
 #include "camel/compile/gir/nodes.h"
 #include "camel/compile/gir/types.h"
+#include "camel/core/error/diagnostics/range.h"
+#include "camel/core/source/manager.h"
 #include "camel/utils/type.h"
+#include "gir_json.h"
+
+#ifndef EOF
+#define EOF (-1)
+#endif
 
 #include <format>
 #include <nlohmann/json.hpp>
@@ -43,6 +55,16 @@ std::string ptrToId(const void *ptr) {
     return std::format("0x{:x}", reinterpret_cast<uintptr_t>(ptr));
 }
 
+camel::source::SourceContext *sourceContextForGraph(const graph_ptr_t &graph) {
+    return graph ? graph->getExtra<camel::source::SourceContext, 3>() : nullptr;
+}
+
+json rangeToJson(const CharRange &range) {
+    return {
+        {"start", {{"line", range.start.line}, {"character", range.start.character}}},
+        {"end", {{"line", range.end.line}, {"character", range.end.character}}}};
+}
+
 /// 单个图的摘要：id 使用稳定 API stableId()，name, funcTypeSummary（用于 children/dependencies
 /// 数组项）
 json graphSummary(const graph_ptr_t &g) {
@@ -51,6 +73,14 @@ json graphSummary(const graph_ptr_t &g) {
     j["name"] = g->name();
     if (g->funcType())
         j["funcTypeSummary"] = g->funcType()->toString();
+    if (auto *sourceContext = sourceContextForGraph(g)) {
+        auto origin = sourceContext->debugMap().graphOrigin(g->stableId());
+        if (origin != camel::source::kInvalidOriginId) {
+            j["originId"]      = origin;
+            j["sourceSpan"]    = rangeToJson(sourceContext->resolveOrigin(origin));
+            j["generatedFrom"] = "graph";
+        }
+    }
     return j;
 }
 
@@ -240,6 +270,14 @@ json nodeToJson(Node *node) {
     j["style"]     = style;
     j["graphName"] = node->graph().name();
     j["nodeRepr"]  = node->toString();
+    if (auto *sourceContext = node->graph().getExtra<camel::source::SourceContext, 3>()) {
+        auto origin = sourceContext->debugMap().nodeOrigin(node->stableId());
+        if (origin != camel::source::kInvalidOriginId) {
+            j["originId"]      = origin;
+            j["sourceSpan"]    = rangeToJson(sourceContext->resolveOrigin(origin));
+            j["generatedFrom"] = "node";
+        }
+    }
     nodeRawFields(node, j);
     return j;
 }

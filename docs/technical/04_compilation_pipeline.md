@@ -50,6 +50,7 @@
 - 典型模式：单子节点（如 ACCS、CAST、VARI、WAIT）访问 `gct->at(0)` 得到值节点，创建目标 GIR 节点后以 `Norm` 边连接 `valueNode → targetNode`。
 - 每个函数体对应一个 **Graph**，内含 **Node**（DATA, PORT, OPER, CALL, FUNC, BRCH, JOIN, EXIT, CAST 等）及 Norm/With/Ctrl 边。
 - 子函数对应子图，通过 `Graph::addSubGraph` 等与根图关联。
+- 源码映射不再停留在 AST tokenRange，而是通过 `SourceContext / OriginTable / DebugMap` 继续传播到 GCT、GIR、bytecode 与 runtime。详见 `10_source_mapping_and_debug_locations.md`。
 
 ### 2.5 图优化与 Pass
 

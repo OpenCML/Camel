@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,6 @@
 #include "camel/core/type/resolver.h"
 #include "executor.h"
 #include "operators.h"
-
 
 #include <fstream>
 #include <optional>
@@ -396,10 +395,9 @@ bool PythonModule::load() {
             ensure_site_packages_in_path();
         }
     } catch (const std::exception &e) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("Failed to load python module: ") + e.what());
-        return false;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("Failed to load python module: ") + e.what());
     }
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("python", [ctx]() { return createPythonExecutor(ctx); });

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,7 @@
 #include "camel/compile/gct/types.h"
 #include "camel/core/data.h"
 #include "camel/core/func.h"
+#include "camel/core/source/ids.h"
 #include "camel/utils/assert.h"
 
 namespace GraphConstructTree {
@@ -37,20 +38,18 @@ namespace GraphConstructTree {
 class Load {
   protected:
     LoadType type_;
-    size_t tokenStart_;
-    size_t tokenEnd_;
+    // GCT 不再保存 token，而是直接持有从 AST 派生来的 origin。
+    // 这样语义诊断和后续 GIR 构建都不需要反查 AST tokenRange。
+    camel::source::origin_id_t origin_ = camel::source::kInvalidOriginId;
 
   public:
     Load(LoadType type) : type_(type) {}
     virtual ~Load() = default;
 
-    void setToken(size_t start, size_t end) {
-        tokenStart_ = start;
-        tokenEnd_   = end;
-    }
+    void setOrigin(camel::source::origin_id_t origin) { origin_ = origin; }
 
     LoadType type() const { return type_; }
-    std::pair<size_t, size_t> range() const { return {tokenStart_, tokenEnd_}; }
+    camel::source::origin_id_t origin() const { return origin_; }
 
     virtual const std::string toString() const { return to_string(type_); }
     virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); }

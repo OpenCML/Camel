@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,10 +58,9 @@ static double meanWithTypeCode(Array *arr, TypeCode code, Context &ctx, std::str
     case TypeCode::Float64:
         return meanSlots<Float64>(arr);
     default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string(fname) + " not supported for type " + typeCodeToString(code));
-        return 0.0;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string(fname) + " not supported for type " + typeCodeToString(code));
     }
 }
 
@@ -76,10 +75,9 @@ static double stdevWithTypeCode(Array *arr, TypeCode code, Context &ctx, std::st
     case TypeCode::Float64:
         return stdevSlots<Float64>(arr);
     default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string(fname) + " not supported for type " + typeCodeToString(code));
-        return 0.0;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string(fname) + " not supported for type " + typeCodeToString(code));
     }
 }
 

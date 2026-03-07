@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 29, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,8 +44,7 @@ slot_t __stoi__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Int32 v = std::stoi(s->toString());
         return toSlot(v);
     } catch (...) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("__stoi__ invalid integer string");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "__stoi__ invalid integer string");
     }
 }
 
@@ -72,8 +71,7 @@ slot_t __stol__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Int64 v = std::stoll(s->toString());
         return toSlot(v);
     } catch (...) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("__stol__ invalid integer string");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "__stol__ invalid integer string");
     }
 }
 
@@ -100,8 +98,7 @@ slot_t __stof__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Float32 v = std::stof(s->toString());
         return toSlot(v);
     } catch (...) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("__stof__ invalid float string");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "__stof__ invalid float string");
     }
 }
 
@@ -128,8 +125,7 @@ slot_t __stod__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Float64 v = std::stod(s->toString());
         return toSlot(v);
     } catch (...) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("__stod__ invalid double string");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "__stod__ invalid double string");
     }
 }
 

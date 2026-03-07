@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/error/runtime.h"
+#include "camel/core/source/manager.h"
 #include "camel/execute/executor.h"
 
 #include <fstream>
@@ -53,7 +55,10 @@ class Context : public std::enable_shared_from_this<Context> {
     std::unordered_map<std::string, module_ptr_t> builtinModules_;
 
     exec_mgr_uptr_t exeMgr_;
-    diagnostics_ptr_t rtmDiags_;
+    diagnostic_sink_ptr_t runtimeDiagSink_;
+    runtime_error_reporter_ptr_t runtimeErrorReporter_;
+    RuntimeDiagMode runtimeDiagMode_ = RuntimeDiagMode::OnErrorOnly;
+    camel::source::source_context_ptr_t sourceContext_;
     std::unordered_map<std::string, void *> loadedDllHandles_; // .cmo 路径 -> 句柄，保证 DLL 不卸载
     /** 最近一次“找到 .cmo 但加载失败”的原因，供 ModuleNotFound 报错详情使用。 */
     mutable std::string lastCmoLoadError_;
@@ -85,12 +90,17 @@ class Context : public std::enable_shared_from_this<Context> {
     const std::string &entryDir() const { return entryConfig_.entryDir; }
     DiagsConfig diagConfig() const { return diagConfig_; }
     module_ptr_t mainModule() const { return mainModule_; }
-    diagnostics_ptr_t rtmDiags() const { return rtmDiags_; }
+    diagnostics_ptr_t rtmDiags() const { return runtimeDiagSink_; }
+    diagnostic_sink_ptr_t runtimeDiagSink() const { return runtimeDiagSink_; }
+    runtime_error_reporter_ptr_t runtimeErrorReporter() const { return runtimeErrorReporter_; }
+    RuntimeDiagMode runtimeDiagMode() const { return runtimeDiagMode_; }
+    camel::source::source_context_ptr_t sourceContext() const { return sourceContext_; }
     GraphIR::graph_ptr_t rootGraph() const;
     GraphIR::graph_ptr_t mainGraph() const;
     const ExecutorManager &execMgr() const { return *exeMgr_; }
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }
+    void setRuntimeDiagMode(RuntimeDiagMode mode) { runtimeDiagMode_ = mode; }
 
     /// Returns main module plus all UserDefinedModules from modules_ (excluding builtin)
     std::vector<module_ptr_t> allUserModules() const;

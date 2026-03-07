@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,7 +61,9 @@ const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() 
     return supportedInlineOperators;
 }
 
-bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStrategy &opt) {
+bytecode_vec_t compile(
+    const context_ptr_t &ctx, Graph *graph, const CompileStrategy &opt,
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins) {
     // 从图的出口节点开始反向拓扑排序（逆序 DFS）
     Node *exitNode = graph->exitNode();
 
@@ -134,7 +136,10 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
     for (size_t i = 0; i < topoSortedNodes.size(); ++i) {
         auto &node = topoSortedNodes[i];
 
-        size_t currIdx = bytecodes.size();
+        size_t currIdx     = bytecodes.size();
+        auto sourceContext = ctx ? ctx->sourceContext() : nullptr;
+        auto nodeOrigin    = sourceContext ? sourceContext->debugMap().nodeOrigin(node->stableId())
+                                           : camel::source::kInvalidOriginId;
 
         // 回填之前记录的 JUMP 跳转地址
         if (brchTargetMap.find(node) != brchTargetMap.end()) {
@@ -242,6 +247,9 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
                     OpCode::JUMP,
                     0, // 占位，无实际节点对应
                     {0});
+            }
+            if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
+                (*localPcOrigins)[currIdx] = nodeOrigin;
             }
 
             continue;
@@ -403,6 +411,10 @@ bytecode_vec_t compile(const context_ptr_t &ctx, Graph *graph, const CompileStra
                     to_string(node->type())));
         }
 
+        if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
+            (*localPcOrigins)[currIdx] = nodeOrigin;
+        }
+
         // 如果该节点的输出连接到 JOIN 节点，则插入一个跳转到 JOIN 的 JUMP
         if (node->withOutputs().size() == 1 &&
             node->withOutputs().front()->type() == NodeType::JOIN) {
@@ -460,13 +472,19 @@ compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &
 
     // 编译所有图
     for (auto *graph : uniqueGraphs) {
-        size_t start         = linked.size();
-        bytecode_vec_t codes = compile(ctx, graph, opt);
+        size_t start = linked.size();
+        std::unordered_map<size_t, camel::source::origin_id_t> localPcOrigins;
+        bytecode_vec_t codes = compile(ctx, graph, opt, &localPcOrigins);
 
         offsetMap[graph] = start;
         graphs.push_back({start, codes.size(), graph});
 
         linked.insert(linked.end(), codes.begin(), codes.end());
+        if (auto sourceContext = ctx ? ctx->sourceContext() : nullptr) {
+            for (const auto &[localPc, origin] : localPcOrigins) {
+                sourceContext->debugMap().registerPcOrigin(start + localPc, origin);
+            }
+        }
     }
 
     // 统一链接 — 修改字节码中的地址引用

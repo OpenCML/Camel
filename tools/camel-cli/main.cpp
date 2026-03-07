@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -228,17 +228,19 @@ int main(int argc, char *argv[]) {
                     try {
                         int retCode = applyPasses(Run::resolvedPassList, ctx, os);
                         if (retCode != 0) {
-                            const auto &diags = ctx->rtmDiags();
+                            const auto &diags = ctx->runtimeDiagSink();
                             if (diags->hasErrors()) {
                                 diags->dump(os, useJsonFormat);
                             }
                             return retCode;
                         }
                     } catch (Diagnostic &d) {
-                        ctx->rtmDiags()->add(std::move(d));
+                        if (!d.persisted) {
+                            ctx->runtimeDiagSink()->add(std::move(d));
+                        }
                     }
                 } catch (DiagnosticsLimitExceededBaseException &e) {
-                    const auto &diags = ctx->rtmDiags();
+                    const auto &diags = ctx->runtimeDiagSink();
                     diags->dump(os, useJsonFormat);
                     return selectedCommand == Command::Check ? 0 : 1;
                 }

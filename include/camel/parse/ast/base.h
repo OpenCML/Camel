@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,7 @@
 #include "camel/core/func.h"
 #include "camel/core/impl.h"
 #include "camel/core/literal.h"
+#include "camel/core/source/ids.h"
 #include "camel/utils/assert.h"
 
 namespace AbstractSyntaxTree {
@@ -65,14 +66,18 @@ class Load {
     Load(LoadType type) : type_(type) {}
     virtual ~Load() = default;
 
+    // tokenRange_ 目前仍保留给前端邻域和旧接口使用，但跨阶段传播以 origin_ 为准。
     void setTokenRange(size_t start, size_t end) {
         tokenRange_.start = start;
         tokenRange_.end   = end;
     }
     void setTokenRange(TokenRange range) { tokenRange_ = range; }
+    // origin_ 指向 SourceContext::OriginTable 中的记录，是 AST 向后续阶段传播位置的主键。
+    void setOrigin(camel::source::origin_id_t origin) { origin_ = origin; }
 
     LoadType type() const { return type_; }
     TokenRange tokenRange() const { return tokenRange_; }
+    camel::source::origin_id_t origin() const { return origin_; }
     const std::string typeStr() const { return to_string(type_); }
 
     virtual const std::string toString() const { return typeStr(); }
@@ -81,7 +86,8 @@ class Load {
 
   protected:
     LoadType type_;
-    TokenRange tokenRange_ = {0, 0};
+    TokenRange tokenRange_             = {0, 0}; // 仅保留前端 token 级信息。
+    camel::source::origin_id_t origin_ = camel::source::kInvalidOriginId; // 跨阶段统一位置标识。
 };
 
 class Node : public AbstractTreeNode<load_ptr_t, Node> {

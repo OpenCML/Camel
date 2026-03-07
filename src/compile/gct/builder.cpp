@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,6 +38,28 @@ namespace GraphConstructTree {
 template <typename LoadType, typename... Args> node_ptr_t createNodeAs(Args &&...args) {
     return std::make_shared<Node>(
         std::dynamic_pointer_cast<Load>(std::make_shared<LoadType>(std::forward<Args>(args)...)));
+}
+
+inline void setOriginFromAst(
+    const context_ptr_t &context, const node_ptr_t &node, const AST::node_ptr_t &ast,
+    camel::source::OriginKind kind = camel::source::OriginKind::GctNode,
+    const std::string &label       = "gct") {
+    // GCT 是 AST 的有损 lowering：
+    // 一个 AST 节点可能被改写成别的语义形态，但这里仍沿主派生链继承 AST 的 primarySpan，
+    // 从而保证语义诊断与后续 GIR/debugger 至少能回到“最主要的源码责任区间”。
+    if (!context || !node || !ast) {
+        return;
+    }
+    auto sourceContext = context->sourceContext();
+    if (!sourceContext) {
+        return;
+    }
+    auto astOrigin = ast->load()->origin();
+    if (astOrigin == camel::source::kInvalidOriginId) {
+        return;
+    }
+    node->load()->setOrigin(
+        sourceContext->deriveOrigin(astOrigin, camel::source::OriginStage::GCT, kind, label));
 }
 
 data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
@@ -151,10 +173,17 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     // Process the optional export declaration if it exists
     if (!exportOptNode->empty()) {
         node_ptr_t exportNode = visitExport(exportOptNode->front());
+        setOriginFromAst(
+            context_,
+            exportNode,
+            exportOptNode->front(),
+            camel::source::OriginKind::GctNode,
+            "gct.export");
         *root_ << exportNode;
     }
 
     LEAVE("Module");
+    setOriginFromAst(context_, root_, ast, camel::source::OriginKind::GctNode, "gct.module");
     return root_;
 }
 
@@ -246,6 +275,7 @@ node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
     }
 
     LEAVE("Stmt");
+    setOriginFromAst(context_, stmtNode, ast, camel::source::OriginKind::GctNode, "gct.stmt");
     return stmtNode;
 }
 
@@ -603,6 +633,7 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     }
 
     LEAVE("Data");
+    setOriginFromAst(context_, dataNode, ast, camel::source::OriginKind::GctNode, "gct.data");
     return dataNode;
 }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,9 +35,10 @@ using namespace GraphIR;
 
 graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     if (!graph->hasOutput()) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::MissingMainFunction)
-            .commit(context_->mainModule()->name());
+        throw reportRuntimeFault(
+            *context_,
+            RuntimeFault::make(RuntimeDiag::MissingMainFunction, context_->mainModule()->name()),
+            makeGraphExecutionSite(context_->sourceContext(), graph.get()));
     }
 
     precompile(graph.get());
@@ -128,7 +129,12 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 entryGraph->name()));
         Frame *frame = framePool_.acquire(entryGraph);
         opperf::start();
-        [[maybe_unused]] slot_t result = jitIt->second(frame->slotBase(), &jitCtx);
+        try {
+            [[maybe_unused]] slot_t result = jitIt->second(frame->slotBase(), &jitCtx);
+        } catch (...) {
+            framePool_.release(frame);
+            throw;
+        }
         opperf::stop();
         opperf::report(std::cout);
         framePool_.release(frame);
@@ -143,10 +149,14 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     opperf::start();
     size_t pc    = offsetMap_.at(graph.get());
     Frame *frame = framePool_.acquire(graph.get());
-    push(pc, frame);
-    call(pc, frame);
-    pop();
-    framePool_.release(frame);
+    try {
+        call(pc, frame);
+        framePool_.release(frame);
+    } catch (...) {
+        pcStack_.clear();
+        frameStack_.clear();
+        throw;
+    }
     opperf::stop();
     opperf::report(std::cout);
     return Graph::null();

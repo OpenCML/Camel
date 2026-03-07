@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,8 +38,9 @@ struct BytecodeIndex {
     GraphIR::Graph *graph;
 };
 
-bytecode_vec_t
-compile(const context_ptr_t &ctx, GraphIR::Graph *graph, const CompileStrategy &opt = {});
+bytecode_vec_t compile(
+    const context_ptr_t &ctx, GraphIR::Graph *graph, const CompileStrategy &opt = {},
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins = nullptr);
 
 std::tuple<bytecode_vec_t, std::vector<BytecodeIndex>, std::unordered_map<GraphIR::Graph *, size_t>>
 compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &opt);

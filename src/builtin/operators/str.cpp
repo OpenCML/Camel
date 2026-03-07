@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -65,18 +65,16 @@ slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
         String *resultObj     = String::from(resultStr, mm::autoSpace());
         return toSlot(resultObj);
     } catch (const fmt::format_error &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("<format>") + std::string(e.what()));
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("<format>") + std::string(e.what()));
     }
 }
 
 slot_t __join__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *sepObj = with.get<String *>(0);
     if (!sepObj) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<join>", "invalid separator");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<join>", "invalid separator");
     }
     std::string separator = sepObj->toString();
 

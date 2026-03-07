@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,10 +38,9 @@ slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     size_t n = lhs->size();
     if (rhs->size() != n) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<zip> requires both sequences to have the same length");
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "<zip> requires both sequences to have the same length");
     }
 
     Array *result = Array::create(mm::autoSpace(), n);
@@ -84,8 +83,7 @@ slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int step  = (norm.size() == 3) ? norm.get<Int>(2) : 1;
 
     if (step == 0) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<range> step cannot be zero");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<range> step cannot be zero");
     }
 
     size_t count = 0;

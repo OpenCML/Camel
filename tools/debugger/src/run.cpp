@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -94,7 +94,7 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
         std::vector<std::string> passes = getState().runPasses;
         int retCode                     = applyPasses(passes, st.ctx, std::cout);
         if (retCode != 0) {
-            const auto &diags = st.ctx->rtmDiags();
+            const auto &diags = st.ctx->runtimeDiagSink();
             if (diags->hasErrors())
                 diags->dump(std::cout, false);
             getTaskState() = "loaded";
@@ -111,6 +111,9 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
     } catch (RestartRequestedException &) {
         return RunOutcome::RestartRequested;
     } catch (::Diagnostic &d) {
+        if (!d.persisted && st.ctx) {
+            st.ctx->runtimeDiagSink()->add(Diagnostic(d));
+        }
         std::cout << "Diagnostic error: " << d.toText() << std::endl;
         getTaskState() = "loaded";
         return RunOutcome::Failed;

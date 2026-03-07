@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -71,6 +71,58 @@ inline bool linkCheek(Node *from, Node *to) {
     return true;
 }
 
+inline camel::source::origin_id_t deriveGirOrigin(
+    const context_ptr_t &context, const GCT::node_ptr_t &gct, camel::source::OriginKind kind,
+    const std::string &label) {
+    // GIR 是比 GCT 更“执行导向”的 lowering。
+    // 当前策略不尝试为每个 GIR 节点重建全新的源码区间，而是沿 GCT 的主 origin 继续派生，
+    // 因而一个 GCT 节点展开出的多个 GIR 节点通常共享同一个 primarySpan。
+    if (!context || !gct) {
+        return camel::source::kInvalidOriginId;
+    }
+    auto sourceContext = context->sourceContext();
+    if (!sourceContext) {
+        return camel::source::kInvalidOriginId;
+    }
+    auto origin = gct->load()->origin();
+    if (origin == camel::source::kInvalidOriginId) {
+        return camel::source::kInvalidOriginId;
+    }
+    return sourceContext->deriveOrigin(origin, camel::source::OriginStage::GIR, kind, label);
+}
+
+inline void registerGraphOrigin(
+    const context_ptr_t &context, const graph_ptr_t &graph, const GCT::node_ptr_t &gct,
+    const std::string &label = "gir.graph") {
+    if (!context || !graph) {
+        return;
+    }
+    auto sourceContext = context->sourceContext();
+    if (!sourceContext) {
+        return;
+    }
+    auto origin = deriveGirOrigin(context, gct, camel::source::OriginKind::Graph, label);
+    if (origin != camel::source::kInvalidOriginId) {
+        sourceContext->debugMap().registerGraphOrigin(graph->stableId(), origin);
+    }
+}
+
+inline void registerNodeOrigin(
+    const context_ptr_t &context, Node *node, const GCT::node_ptr_t &gct,
+    const std::string &label = "gir.node") {
+    if (!context || !node) {
+        return;
+    }
+    auto sourceContext = context->sourceContext();
+    if (!sourceContext) {
+        return;
+    }
+    auto origin = deriveGirOrigin(context, gct, camel::source::OriginKind::GirNode, label);
+    if (origin != camel::source::kInvalidOriginId) {
+        sourceContext->debugMap().registerNodeOrigin(node->stableId(), origin);
+    }
+}
+
 graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     waited_ = false;
     synced_ = false;
@@ -81,7 +133,10 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     nodeScope_  = node_scope_t::create();
     graphScope_ = graph_scope_t::create();
     rootGraph_  = Graph::create(FunctionType::create(), nullptr, "__root__");
-    currGraph_  = rootGraph_;
+    if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
+        rootGraph_->setExtra<camel::source::SourceContext, 3>(sourceContext.get());
+    }
+    currGraph_ = rootGraph_;
 
     try {
         visit(gct);
@@ -116,6 +171,9 @@ graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name)
             currGraph_ = Graph::create(funcType, currGraph_, name);
             insertGraph(name, currGraph_);
         }
+    }
+    if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
+        currGraph_->setExtra<camel::source::SourceContext, 3>(sourceContext.get());
     }
     nodeScope_  = nodeScope_->enter(name);
     graphScope_ = graphScope_->enter(name);
@@ -260,6 +318,7 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     Type *type               = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
     FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
     graph_ptr_t graph        = enterScope(funcType, name);
+    registerGraphOrigin(context_, graph, gct, "gir.func.graph");
     for (const auto &port : graph->withPorts()) {
         const auto &portNode = tt::as_ptr<PortNode>(port);
         insertNode(portNode->name(), port);
@@ -309,6 +368,7 @@ Node *Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             for (const auto &refNode : refNodes) {
                 Node::link(LinkType::With, refNode, node);
             }
+            registerNodeOrigin(context_, node, gct, "gir.data.fill");
 
             LEAVE("DATA");
             return node;
@@ -324,6 +384,8 @@ Node *Builder::visitDataNode(const GCT::node_ptr_t &gct) {
         Node::link(LinkType::Norm, node, copyNode);
         node = copyNode;
     }
+
+    registerNodeOrigin(context_, node, gct, "gir.data");
 
     LEAVE("DATA");
     return node;
@@ -372,6 +434,7 @@ Node *Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         auto graphs = optGraphs.value();
         if (!graphs->empty()) {
             Node *drefNode = DrefNode::create(*graph, graphs);
+            registerNodeOrigin(context_, drefNode, gct, "gir.dref");
             LEAVE("DREF");
             return drefNode;
         }
@@ -393,11 +456,13 @@ Node *Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         } else if (std::holds_alternative<graph_vec_ptr_t>(e)) {
             auto graphs    = std::get<graph_vec_ptr_t>(e);
             Node *drefNode = DrefNode::create(*graph, graphs);
+            registerNodeOrigin(context_, drefNode, gct, "gir.dref");
             LEAVE("DREF");
             return drefNode;
         } else if (std::holds_alternative<oper_group_ptr_t>(e)) {
             auto ops       = std::get<oper_group_ptr_t>(e);
             Node *drefNode = DrefNode::create(*graph, ops);
+            registerNodeOrigin(context_, drefNode, gct, "gir.dref");
             LEAVE("DREF");
             return drefNode;
         }
@@ -422,6 +487,7 @@ Node *Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     }
     Node *castNode = CastNode::create(*currGraph_, targetType);
     Node::link(LinkType::Norm, valueNode, castNode);
+    registerNodeOrigin(context_, castNode, gct, "gir.cast");
     LEAVE("CAST");
     return castNode;
 }
@@ -462,12 +528,18 @@ Node *Builder::createFuncDataNode(
 
     bool graphUsedBefore = usedGraphs_.find(graph.get()) != usedGraphs_.end();
 
-    auto funcData    = FunctionData::create(*graph);
-    Node *resultNode = nullptr;
+    auto funcData      = FunctionData::create(*graph);
+    Node *resultNode   = nullptr;
+    auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+    auto graphOrigin   = sourceContext ? sourceContext->debugMap().graphOrigin(graph->stableId())
+                                       : camel::source::kInvalidOriginId;
 
     if (allowParameterization && !callableAsResult && !graphUsedBefore) {
         if (funcData->resolved()) {
             resultNode = FuncNode::create(*currGraph_, funcData);
+            if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
+                sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
+            }
         } else {
             auto funcNode = FuncNode::create(*currGraph_, funcData);
             for (const auto &ref : funcData->refs()) {
@@ -476,6 +548,9 @@ Node *Builder::createFuncDataNode(
             }
             funcData->graph().parametrizeClosure();
             resultNode = funcNode;
+            if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
+                sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
+            }
         }
 
         usedGraphs_.insert(graph.get());
@@ -495,6 +570,9 @@ Node *Builder::createFuncDataNode(
                 }
             }
             resultNode = funcNode;
+        }
+        if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
+            sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
         }
 
         usedGraphs_.insert(graph.get());
@@ -521,6 +599,9 @@ Node *Builder::createFuncDataNode(
         auto callNode = CallNode::create(*currGraph_, graph->funcType()->exitType());
         Node::link(LinkType::With, fillNode, callNode);
         resultNode = callNode;
+    }
+    if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
+        sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
     }
 
     // 保证在最后再更新 usedGraphs_
@@ -643,6 +724,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             targetOperator = *res;
             Node *operNode = OperNode::create(*currGraph_, targetOperator);
+            registerNodeOrigin(context_, operNode, gct, "gir.link.oper");
             targetNode     = operNode;
             targetFuncType = targetOperator->funcType();
         } else {
@@ -667,6 +749,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
         Node *invokeNode = CallNode::create(*currGraph_, funcType->exitType());
         Node::link(LinkType::With, targetNode, invokeNode);
+        registerNodeOrigin(context_, invokeNode, gct, "gir.link.call");
         targetNode     = invokeNode;
         targetFuncType = funcType;
     }
@@ -811,6 +894,7 @@ Node *Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     graph_ptr_t &graph = currGraph_;
     Node *accsNode     = AccsNode::create(*graph, elemType, accsLoad->index());
     Node::link(LinkType::Norm, tgtNode, accsNode);
+    registerNodeOrigin(context_, accsNode, gct, "gir.accs");
     LEAVE("ACCS");
     return accsNode;
 }
@@ -824,6 +908,8 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     Node *condNode = any_cast<Node *>(res);
     Node *brchNode = BrchNode::create(*currGraph_, Type::Int64());
     Node *joinNode = JoinNode::create(*currGraph_, nullptr);
+    registerNodeOrigin(context_, brchNode, gct, "gir.brch");
+    registerNodeOrigin(context_, joinNode, gct, "gir.join");
 
     Type *joinType = nullptr;
 
