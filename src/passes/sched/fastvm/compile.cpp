@@ -19,12 +19,18 @@
 
 #include "compile.h"
 #include "camel/common/algo/topo.h"
+#include "camel/core/error/diagnostics.h"
+#include "camel/core/error/runtime.h"
+#include "camel/execute/executor.h"
 
 #include <algorithm>
 #include <cstddef>
 
 using namespace std;
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
 
 const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() {
     static const std::unordered_map<std::string, OpCode> supportedInlineOperators = {
@@ -209,7 +215,7 @@ bytecode_vec_t compile(
             }
             case TypeCode::Struct: {
                 ASSERT(!accNode->isNum(), "ACCS index must be string.");
-                const auto &structType = tt::as_ptr<StructType>(srcDataType);
+                const auto *structType = tt::as_ptr<camel::core::type::StructType>(srcDataType);
                 const auto &optIndex   = structType->findField(accNode->index<std::string>());
                 if (!optIndex.has_value()) {
                     ctx->rtmDiags()
@@ -443,11 +449,11 @@ bytecode_vec_t compile(
     return bytecodes;
 }
 
-std::tuple<bytecode_vec_t, std::vector<BytecodeIndex>, std::unordered_map<GraphIR::Graph *, size_t>>
-compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &opt) {
+std::tuple<bytecode_vec_t, std::vector<BytecodeIndex>, std::unordered_map<GIR::Graph *, size_t>>
+compileAndLink(context_ptr_t ctx, GIR::Graph *entry, const CompileStrategy &opt) {
     bytecode_vec_t linked;
     std::vector<BytecodeIndex> graphs;
-    std::unordered_map<GraphIR::Graph *, size_t> offsetMap;
+    std::unordered_map<GIR::Graph *, size_t> offsetMap;
 
     // 收集所有被依赖的子图（包含 entry 自身）
     std::vector<graph_ptr_t> allGraphs;
@@ -461,8 +467,8 @@ compileAndLink(context_ptr_t ctx, GraphIR::Graph *entry, const CompileStrategy &
     allGraphs.push_back(entry->shared_from_this());
 
     // 去重
-    std::unordered_set<GraphIR::Graph *> visited;
-    std::vector<GraphIR::Graph *> uniqueGraphs;
+    std::unordered_set<GIR::Graph *> visited;
+    std::vector<GIR::Graph *> uniqueGraphs;
     for (const auto &g : allGraphs) {
         if (visited.insert(g.get()).second) {
             uniqueGraphs.push_back(g.get());

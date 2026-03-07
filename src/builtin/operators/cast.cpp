@@ -19,7 +19,14 @@
 
 #include "cast.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
+
 #include <sstream>
+
+namespace mm = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::rtdata;
 
 slot_t __itoi__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
 

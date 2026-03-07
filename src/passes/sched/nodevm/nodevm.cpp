@@ -25,10 +25,18 @@
 #include "camel/core/global_config.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
+#include "camel/execute/executor.h"
 #include "camel/utils/log.h"
 
+#include "camel/core/context/frame.h"
+#include "camel/core/error/runtime.h"
+
 using namespace std;
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
+using namespace camel::core::error;
 
 NodeVMSchedPass::~NodeVMSchedPass() {
     for (Graph *g : graphsWithTopoCache_)
@@ -70,7 +78,7 @@ std::span<Node *> NodeVMSchedPass::buildTopoNodes(Graph *graph) {
         size_t totalNodeCnt =
             graph->nodes().size() + graph->ports().size() + graph->closure().size();
         if (sortedNodes.size() != totalNodeCnt) {
-            GraphIR::node_vec_t unreachableNodes;
+            GIR::node_vec_t unreachableNodes;
             for (Node *n : graph->nodes()) {
                 if (n != exitNode &&
                     std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
@@ -135,7 +143,7 @@ std::span<Node *> NodeVMSchedPass::buildTopoNodes(Graph *graph) {
 
 // 将节点 n（CALL 或 FUNC）的参数从 source 帧复制到 dest 帧（targetGraph 的端口与闭包）
 static inline void fillFrameForFunc(Frame *from, Frame *dest, Graph *graph, Node *node) {
-    using namespace GraphIR;
+    using namespace GIR;
 
     const auto &normNodes = node->normInputs();
     const auto &normPorts = graph->normPorts();
@@ -653,7 +661,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
     }
 }
 
-GraphIR::graph_ptr_t NodeVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
+GIR::graph_ptr_t NodeVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     if (!graph->hasOutput()) {
         throw reportRuntimeFault(
             *context_,

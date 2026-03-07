@@ -27,6 +27,8 @@
 #include <filesystem>
 #include <format>
 
+namespace camel::core::error {
+
 namespace {
 
 std::string effectiveModulePath(const Diagnostic &d) {
@@ -346,3 +348,5 @@ size_t Diagnostics::countBySeverityInternal(Severity severity) const {
     }
     return result;
 }
+
+} // namespace camel::core::error

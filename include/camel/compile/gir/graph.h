@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,13 +22,22 @@
 #include <unordered_map>
 
 #include "camel/core/data.h"
+#include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/utils/debug.h"
 #include "camel/utils/exstore.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 #include "types.h"
 
-namespace GraphIR {
+namespace camel::compile::gir {
+
+using Type         = camel::core::type::Type;
+using FunctionType = camel::core::type::FunctionType;
+using TupleType    = camel::core::type::TupleType;
+using data_vec_t   = camel::core::data::data_vec_t;
+using data_ptr_t   = camel::core::data::data_ptr_t;
+using func_ptr_t   = camel::core::data::func_ptr_t;
 
 // =============================================================================
 // Graph：函数/子图，包含节点集合、端口、静态/运行时数据段
@@ -161,4 +170,4 @@ class Graph : public std::enable_shared_from_this<Graph> {
     mutable ExtraStorage<4> extras_;
 };
 
-} // namespace GraphIR
+} // namespace camel::compile::gir

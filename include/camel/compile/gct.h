@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,5 +23,5 @@
 #include "gct/node.h"
 #include "gct/types.h"
 
-namespace GraphConstructTree {}
-namespace GCT = GraphConstructTree;
+namespace camel::compile::gct {}
+namespace GCT = camel::compile::gct;

@@ -29,6 +29,8 @@
 #include <format>
 #include <tuple>
 
+namespace camel::core::error {
+
 // ---- Diagnostic structure ----
 struct Diagnostic {
     DiagType type{};
@@ -246,3 +248,5 @@ template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args)
 }
 
 using diagnostics_ptr_t = std::shared_ptr<Diagnostics>;
+
+} // namespace camel::core::error

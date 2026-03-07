@@ -20,6 +20,7 @@
 #include "str.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/composite/array.h"
 
@@ -27,6 +28,12 @@
 #include "fmt/core.h"
 
 #include <sstream>
+
+namespace mm = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
 
 slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *fmtStrObj = norm.get<String *>(0);
@@ -63,7 +70,7 @@ slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
     try {
         std::string resultStr = fmt::vformat(fmtStr, store);
         String *resultObj     = String::from(resultStr, mm::autoSpace());
-        return toSlot(resultObj);
+        return rtdata::toSlot(resultObj);
     } catch (const fmt::format_error &e) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
@@ -78,9 +85,10 @@ slot_t __join__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
     std::string separator = sepObj->toString();
 
-    Array *arrObj            = norm.get<Array *>(0);
-    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
-    Type *elemType           = arrType->elemType();
+    Array *arrObj = norm.get<Array *>(0);
+    const camel::core::type::ArrayType *arrType =
+        tt::as_ptr<camel::core::type::ArrayType>(norm.type(0));
+    camel::core::type::Type *elemType = arrType->elemType();
 
     std::ostringstream joined;
     size_t len = arrObj->size();
@@ -93,5 +101,5 @@ slot_t __join__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 
     String *resultObj = String::from(joined.str(), mm::autoSpace());
-    return toSlot(resultObj);
+    return rtdata::toSlot(resultObj);
 }

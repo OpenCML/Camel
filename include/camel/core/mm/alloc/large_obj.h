@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,6 +34,8 @@
 #include <new>    // for ::operator new / ::operator delete
 #include <unordered_set>
 
+namespace camel::core::mm {
+
 class LargeObjectAllocator : public IAllocator {
   public:
     explicit LargeObjectAllocator(const char *debugRegion = nullptr) : debugRegion_(debugRegion) {}
@@ -52,7 +54,7 @@ class LargeObjectAllocator : public IAllocator {
         size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
         EXEC_WHEN_DEBUG({
             if (debugRegion_) {
-                mm::invokePreAllocHook(mm::PreAllocEvent{total_size, debugRegion_});
+                invokePreAllocHook(PreAllocEvent{total_size, debugRegion_});
             }
         });
         std::byte *raw = reinterpret_cast<std::byte *>(
@@ -65,7 +67,7 @@ class LargeObjectAllocator : public IAllocator {
         allocated_.insert(reinterpret_cast<ObjectHeader *>(raw));
         EXEC_WHEN_DEBUG({
             if (debugRegion_) {
-                mm::invokePostAllocHook(mm::AllocEvent{result, total_size, debugRegion_});
+                invokePostAllocHook(AllocEvent{result, total_size, debugRegion_});
             }
         });
         return result;
@@ -127,3 +129,5 @@ class LargeObjectAllocator : public IAllocator {
     const char *debugRegion_{nullptr}; // Debug 模式下用于 hook
     std::unordered_set<ObjectHeader *> allocated_;
 };
+
+} // namespace camel::core::mm

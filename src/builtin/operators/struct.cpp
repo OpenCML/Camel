@@ -20,16 +20,23 @@
 #include "struct.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
+
+namespace mm = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::rtdata;
+using namespace camel::core::type;
 
 slot_t __len_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *s = norm.get<String *>(0);
-    return toSlot(static_cast<Int>(s->size()));
+    return rtdata::toSlot(static_cast<Int64>(s->size()));
 }
 
 slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr = norm.get<Array *>(0);
-    return toSlot(static_cast<Int>(arr->size()));
+    return rtdata::toSlot(static_cast<Int64>(arr->size()));
 }
 
 slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -46,11 +53,11 @@ slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *result = Array::create(mm::autoSpace(), n);
     for (size_t i = 0; i < n; ++i) {
         Tuple *t = Tuple::create(2, mm::autoSpace());
-        t->set(0, lhs->get<Int>(i));
-        t->set(1, rhs->get<Int>(i));
+        t->set(0, lhs->get<Int64>(i));
+        t->set(1, rhs->get<Int64>(i));
         result->set(i, t);
     }
-    return toSlot(result);
+    return rtdata::toSlot(result);
 }
 
 slot_t __head_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -67,7 +74,7 @@ slot_t __tail_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     size_t n = arr->size();
     if (n <= 1) {
         Array *empty = Array::create(mm::autoSpace(), 0);
-        return toSlot(empty);
+        return rtdata::toSlot(empty);
     }
 
     Array *res = Array::create(mm::autoSpace(), n - 1);
@@ -78,9 +85,9 @@ slot_t __tail_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Int start = norm.get<Int>(0);
-    Int stop  = norm.get<Int>(1);
-    Int step  = (norm.size() == 3) ? norm.get<Int>(2) : 1;
+    Int64 start = norm.get<Int64>(0);
+    Int64 stop  = norm.get<Int64>(1);
+    Int64 step  = (norm.size() == 3) ? norm.get<Int64>(2) : 1;
 
     if (step == 0) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "<range> step cannot be zero");
@@ -95,25 +102,25 @@ slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     Array *result = Array::create(mm::autoSpace(), count);
 
-    Int value = start;
+    Int64 value = start;
     for (size_t i = 0; i < count; ++i, value += step)
         result->set(i, value);
 
-    return toSlot(result);
+    return rtdata::toSlot(result);
 }
 
 slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
-    Int start  = with.get<Int>(0);
-    Int end    = with.get<Int>(1);
+    Array *arr  = norm.get<Array *>(0);
+    Int64 start = with.get<Int64>(0);
+    Int64 end   = with.get<Int64>(1);
 
-    Int size = static_cast<Int>(arr->size());
+    Int64 size = static_cast<Int64>(arr->size());
     if (start < 0)
         start += size;
     if (end < 0)
         end += size;
-    start = std::max<Int>(0, std::min(start, size));
-    end   = std::max<Int>(0, std::min(end, size));
+    start = std::max<Int64>(0, std::min(start, size));
+    end   = std::max<Int64>(0, std::min(end, size));
     if (end < start)
         end = start;
 
@@ -123,7 +130,7 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     for (size_t i = 0; i < newSize; ++i)
         res->set(i, arr->get<slot_t>(start + i));
 
-    return toSlot(res);
+    return rtdata::toSlot(res);
 }
 
 slot_t __concat_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -138,14 +145,14 @@ slot_t __concat_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     for (size_t i = 0; i < n2; ++i)
         res->set(n1 + i, rhs->get<slot_t>(i));
 
-    return toSlot(res);
+    return rtdata::toSlot(res);
 }
 
 slot_t __append_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr  = norm.get<Array *>(0);
     slot_t elem = with.get<slot_t>(0);
     arr->append(elem);
-    return toSlot(arr);
+    return rtdata::toSlot(arr);
 }
 
 slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -158,7 +165,7 @@ slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     for (size_t i = 0; i < n2; ++i)
         arr->append(more->get<slot_t>(i));
 
-    return toSlot(arr);
+    return rtdata::toSlot(arr);
 }
 
 slot_t __contains_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -173,7 +180,7 @@ slot_t __contains_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (isGCTraced(elemTypeCode)) {
         Type *elemType = arrType->elemType();
         for (size_t i = 0; i < n; ++i) {
-            if (arr->get<Object *>(i)->equals(fromSlot<Object *>(item), elemType, false)) {
+            if (arr->get<Object *>(i)->equals(rtdata::fromSlot<Object *>(item), elemType, false)) {
                 found = true;
                 break;
             }
@@ -187,5 +194,5 @@ slot_t __contains_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
     }
 
-    return toSlot(found);
+    return rtdata::toSlot(found);
 }

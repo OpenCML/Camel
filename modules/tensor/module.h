@@ -13,17 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 #include "camel/core/module/builtin.h"
 
-class TensorModule : public BuiltinModule {
+class TensorModule : public camel::core::module::BuiltinModule {
   public:
-    TensorModule(context_ptr_t ctx);
+    TensorModule(camel::core::context::context_ptr_t ctx);
     ~TensorModule() override = default;
     bool load() override;
-    static module_ptr_t create(context_ptr_t ctx);
+    static camel::core::module::module_ptr_t create(camel::core::context::context_ptr_t ctx);
 };

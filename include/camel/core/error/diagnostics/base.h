@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,8 @@
 
 #include <cstdint>
 #include <string>
+
+namespace camel::core::error {
 
 /*
  * 32-bit full error code layout:
@@ -75,3 +77,5 @@ template <typename ErrorEnum> DiagInfo getDiagInfo(ErrorEnum err) {
     uint32_t specific = extractSpecific(static_cast<uint32_t>(err));
     return getDiagInfo(type, specific);
 }
+
+} // namespace camel::core::error

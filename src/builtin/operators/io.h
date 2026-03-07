@@ -12,7 +12,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,6 @@
 #include "camel/core/operator.h"
 #include "camel/core/type.h"
 
-slot_t __op_print__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __op_println__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __op_input__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __op_print__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __op_println__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __op_input__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

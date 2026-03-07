@@ -19,8 +19,18 @@
 
 #include "fastvm.h"
 
+#include "camel/core/error/runtime.h"
 #include "camel/core/global_config.h"
+#include "camel/execute/executor.h"
 #include <iostream>
+
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
+#if ENABLE_FASTVM_JIT
+using namespace camel::jit;
+#endif
 
 #if ENABLE_FASTVM_COMPUTED_GOTO
 
@@ -122,7 +132,7 @@ static thread_local const Bytecode *s_jit_bc;
     }
 
 using namespace std;
-using namespace GraphIR;
+using namespace GIR;
 
 slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
     Frame *currFrame            = rootFrame;
@@ -498,9 +508,8 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         // fastop[1] == 0 means this is a direct call to a JIT function
         if (bc->fastop[1] == 0) {
             JIT_SAVE_PC_BC(); /* save pc/bc before any call can clobber them (Build opt) */
-            Graph *targetGraph = getFuncExtraGraph(bc);
-            camel::jit::JitEntryFn fn =
-                reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(bc));
+            Graph *targetGraph     = getFuncExtraGraph(bc);
+            JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
             Frame *funcFrame       = framePool_.acquire(targetGraph);
             size_t argsCnt         = bc->normCnt();
             const data_idx_t *args = bc->operands();
@@ -538,9 +547,8 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                 bc = &bytecodes_[pc];
                 if (bc->fastop[1] == 0) {
                     JIT_SAVE_PC_BC(); /* save pc/bc before any call can clobber them (Build opt) */
-                    Graph *g = getFuncExtraGraph(bc);
-                    camel::jit::JitEntryFn fn =
-                        reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(bc));
+                    Graph *g               = getFuncExtraGraph(bc);
+                    JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
                     Frame *funcFrame       = framePool_.acquire(g);
                     size_t argsCnt         = bc->normCnt();
                     const data_idx_t *args = bc->operands();
@@ -602,9 +610,8 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         FrameView lastFrame(currFrame);
         framePool_.release(currFrame);
         if (bc->fastop[1] == 0) {
-            Graph *g = getFuncExtraGraph(bc);
-            camel::jit::JitEntryFn fn =
-                reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(bc));
+            Graph *g               = getFuncExtraGraph(bc);
+            JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
             Frame *newFrame        = framePool_._acquire(g);
             size_t argsCnt         = bc->normCnt();
             const data_idx_t *args = bc->operands();
@@ -638,9 +645,8 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             compileAndCacheGraph(targetGraph, targetPc);
             bc = &bytecodes_[pc];
             if (bc->fastop[1] == 0) {
-                Graph *g = getFuncExtraGraph(bc);
-                camel::jit::JitEntryFn fn =
-                    reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(bc));
+                Graph *g               = getFuncExtraGraph(bc);
+                JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
                 Frame *newFrame        = framePool_._acquire(g);
                 size_t argsCnt         = bc->normCnt();
                 const data_idx_t *args = bc->operands();

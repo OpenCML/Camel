@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,8 @@
 
 #include "antlr4-runtime/antlr4-runtime.h"
 #include "camel/parse/antlr/OpenCMLVisitor.h"
+
+namespace camel::parse {
 
 class CSTDumpVisitor : public OpenCMLVisitor {
     size_t depth     = 0;
@@ -352,3 +354,5 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     // End of auto-generated visitor methods
 };
+
+} // namespace camel::parse

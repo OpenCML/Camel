@@ -13,15 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composite.h"
+#include "camel/core/data/composite/composite.h"
 
 #include <memory>
+
+namespace camel::core::data {
 
 class TupleDataFactory;
 
@@ -33,15 +35,15 @@ class TupleData : public CompositeData {
     std::vector<data_ptr_t> data_;
 
     // 仅由 TupleDataFactory::build() 使用，避免重复计算 Type
-    TupleData(Type *type, data_vec_t &&data, std::vector<size_t> &&refIndices);
+    TupleData(type::Type *type, data_vec_t &&data, std::vector<size_t> &&refIndices);
 
   public:
     TupleData(data_list_t data = {});
-    TupleData(Type *type, data_vec_t &&data);
+    TupleData(type::Type *type, data_vec_t &&data);
     virtual ~TupleData() = default;
 
     static std::shared_ptr<TupleData> create(data_list_t data = {});
-    static std::shared_ptr<TupleData> create(Type *type, data_vec_t &&data);
+    static std::shared_ptr<TupleData> create(type::Type *type, data_vec_t &&data);
 
     data_ptr_t get(size_t index) const;
     const std::vector<data_ptr_t> &raw() const { return data_; }
@@ -54,7 +56,7 @@ class TupleData : public CompositeData {
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-    virtual data_ptr_t convertTo(Type *type) override;
+    virtual data_ptr_t convertTo(type::Type *type) override;
 };
 
 // 工厂：收集元素后一次构建 Type 与 TupleData，避免重复计算
@@ -70,3 +72,5 @@ class TupleDataFactory {
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
+
+} // namespace camel::core::data

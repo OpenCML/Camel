@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,8 @@
 
 #include "../base.h"
 
+namespace camel::core::error {
+
 enum class InternalDiag : uint32_t {
     UnknownInternalError = 0x000000,
 };
@@ -31,3 +33,5 @@ enum class InternalDiag : uint32_t {
 constexpr DiagType diagTypeOf(InternalDiag) { return DiagType::InternalDiag; }
 
 const std::unordered_map<InternalDiag, DiagInfo> &getInternalDiagInfoMap();
+
+} // namespace camel::core::error

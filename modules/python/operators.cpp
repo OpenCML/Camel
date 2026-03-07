@@ -19,6 +19,7 @@
 
 #include "operators.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/string.h"
@@ -39,6 +40,11 @@
 #include <string>
 #include <vector>
 
+namespace mm = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
+
 namespace py = pybind11;
 
 namespace {
@@ -55,7 +61,7 @@ slot_t wrapPyObject(py::object o) {
     return toSlot(raw);
 }
 
-PythonObjectHolder *unwrapPyObject(slot_t s, Context &ctx) {
+PythonObjectHolder *unwrapPyObject(slot_t s, camel::core::context::Context &ctx) {
     if (s == NullSlot) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "python: expected non-null PyObject");
     }
@@ -63,7 +69,7 @@ PythonObjectHolder *unwrapPyObject(slot_t s, Context &ctx) {
 }
 
 // 递归：按类型与 slot 将 Camel 值转为 Python 对象（支持复合类型与嵌套）
-py::object camelToPy(Type *t, slot_t s, Context &ctx) {
+py::object camelToPy(camel::core::type::Type *t, slot_t s, camel::core::context::Context &ctx) {
     switch (t->code()) {
     case TypeCode::Int32:
         return py::cast(static_cast<int64_t>(fromSlot<Int32>(s)));
@@ -125,12 +131,12 @@ py::object camelToPy(Type *t, slot_t s, Context &ctx) {
     }
 }
 
-py::object camelToPy(ArgsView &norm, size_t index, Context &ctx) {
+py::object camelToPy(ArgsView &norm, size_t index, camel::core::context::Context &ctx) {
     return camelToPy(norm.type(index), norm.slot(index), ctx);
 }
 
 // 解析 norm[0] 为可调用对象（PyObject 或字符串路径），失败时返回 nullptr 并报告诊断
-py::object resolveCallable(ArgsView &norm, Context &ctx) {
+py::object resolveCallable(ArgsView &norm, camel::core::context::Context &ctx) {
     if (norm.size() < 1) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
@@ -198,7 +204,7 @@ std::unordered_map<std::string, operator_t> getPythonOpsMap() {
 }
 
 // py_call: 调用 Python 函数 (fn, ...args)，首参为字符串时按 "module.attr" 解析
-slot_t __python_py_call__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __python_py_call__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     py::object callable = resolveCallable(norm, ctx);
     if (callable.is_none())
         return NullSlot;
@@ -219,7 +225,7 @@ slot_t __python_py_call__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 // py_call_kw: 调用 Python 函数 (fn, args?: Tuple|Array<PyObject>, kwargs?: Struct<PyObject>)，1–3
 // 参
-slot_t __python_py_call_kw__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __python_py_call_kw__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     py::object callable = resolveCallable(norm, ctx);
     if (callable.is_none())
         return NullSlot;
@@ -280,7 +286,7 @@ slot_t __python_py_call_kw__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 // py_exec: 执行任意 Python 代码（语句），返回 None
-slot_t __python_py_exec__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __python_py_exec__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     if (norm.size() < 1) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
@@ -304,7 +310,7 @@ slot_t __python_py_exec__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 // py_eval: 计算表达式并返回结果
-slot_t __python_py_eval__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __python_py_eval__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     if (norm.size() < 1) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
@@ -328,7 +334,7 @@ slot_t __python_py_eval__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 // py_run: 执行指定路径的 Python 脚本文件
-slot_t __python_py_run__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __python_py_run__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     if (norm.size() < 1) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
@@ -356,7 +362,7 @@ slot_t __python_py_run__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 // py_attr: 获取 PyObject 属性，attr 可含 . 表示链式访问（如 "a.b.c"）
-slot_t __python_py_attr__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __python_py_attr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     if (norm.size() < 2) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
@@ -403,7 +409,7 @@ slot_t __python_py_attr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 // py_import: 导入 Python 模块，返回 PyObject（模块对象）
-slot_t __python_py_import__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __python_py_import__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     if (norm.size() < 1) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
@@ -434,7 +440,7 @@ slot_t __python_py_import__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 // py_print / py_println: 打印任意数量 PyObject 以便调试
-slot_t __python_py_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __python_py_print__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     py::module_ builtins = py::module_::import("builtins");
     py::object print_fn  = builtins.attr("print");
     try {
@@ -451,7 +457,7 @@ slot_t __python_py_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_print: \n") + e.what());
     }
 }
-slot_t __python_py_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __python_py_println__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     py::module_ builtins = py::module_::import("builtins");
     py::object print_fn  = builtins.attr("print");
     try {
@@ -471,7 +477,7 @@ slot_t __python_py_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 }
 
-slot_t __python_wrap__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __python_wrap__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     if (norm.size() < 1) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "python.wrap: one argument required");
     }
@@ -482,7 +488,8 @@ slot_t __python_wrap__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // 递归：将 Python 对象按目标类型转为 Camel slot（支持复合类型与嵌套）。
 // 成功返回 optional(slot)，失败返回 nullopt。注意不能用 slot==NullSlot 判失败，因整数 0 等的 slot
 // 也为 0。
-static std::optional<slot_t> pyToCamel(py::object obj, Type *targetType, Context &ctx) {
+static std::optional<slot_t>
+pyToCamel(py::object obj, Type *targetType, camel::core::context::Context &ctx) {
     try {
         switch (targetType->code()) {
         case TypeCode::Int32:
@@ -586,7 +593,7 @@ static std::optional<slot_t> pyToCamel(py::object obj, Type *targetType, Context
     }
 }
 
-slot_t __python_upwrap__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __python_upwrap__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     PythonObjectHolder *h = unwrapPyObject(norm.slot(0), ctx);
     if (!h)
         return NullSlot;

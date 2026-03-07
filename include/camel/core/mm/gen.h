@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -184,6 +184,10 @@
 //
 // ============================================================================
 
+namespace camel::core::mm {
+
+namespace rtdata = camel::core::rtdata;
+
 class GenerationalAllocatorWithGC : public IAllocator {
   public:
     struct Config {
@@ -244,7 +248,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         ASSERT(false, "GenerationalAllocatorWithGC does not support manual free");
     }
 
-    void setObjectRootSet(std::vector<Object *> *rootSet) { rootObjectSet_ = rootSet; }
+    void setObjectRootSet(std::vector<rtdata::Object *> *rootSet) { rootObjectSet_ = rootSet; }
 
     void recordOldToYoungRef(void *oldObj, void *youngObj) {
         ObjectHeader *header = headerOf(oldObj);
@@ -263,7 +267,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
             havenSpace_.reset(); // 清空新的 Haven 空间
 
             // 2. 处理根集合中的年轻代对象
-            for (Object *&rootObj : *rootObjectSet_) {
+            for (rtdata::Object *&rootObj : *rootObjectSet_) {
                 if (!rootObj)
                     continue;
 
@@ -280,11 +284,11 @@ class GenerationalAllocatorWithGC : public IAllocator {
                 if (!oldHeader->isValid())
                     continue;
 
-                Object *oldObj = payloadOf<Object>(oldHeader);
+                rtdata::Object *oldObj = payloadOf<rtdata::Object>(oldHeader);
 
                 // 遍历更新老年代对象的引用（type 由各 Object 在创建时与 allocator 约定，此处暂无）
                 oldObj->updateRefs(
-                    [this](Object *ref) -> Object * {
+                    [this](rtdata::Object *ref) -> rtdata::Object * {
                         if (!ref)
                             return nullptr;
 
@@ -396,7 +400,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // GC 状态与根集合
     // ============================================================================
     bool inGC_ = false;                                // GC 重入保护标志
-    std::vector<Object *> *rootObjectSet_;             // 根对象集合：栈、全局变量等直接可达对象
+    std::vector<rtdata::Object *> *rootObjectSet_;     // 根对象集合：栈、全局变量等直接可达对象
     std::unordered_set<ObjectHeader *> rememberedSet_; // 记忆集：记录老年代→年轻代的跨代引用
 
     bool inYoungGenSpace(ObjectHeader *header) const {
@@ -409,13 +413,13 @@ class GenerationalAllocatorWithGC : public IAllocator {
         return header->region_ == AllocRegion::LargeObj;
     }
 
-    Object *forward(Object *obj) {
+    rtdata::Object *forward(rtdata::Object *obj) {
         ObjectHeader *header = headerOf(obj);
         ASSERT(header->isValid(), "Invalid ObjectHeader encountered during forwarding");
 
         // 如果已经转发过，直接返回新地址
         if (header->forwarded()) {
-            return static_cast<Object *>(header->forwardedAddr());
+            return static_cast<rtdata::Object *>(header->forwardedAddr());
         }
 
         size_t objSize = header->objSize();
@@ -483,13 +487,13 @@ class GenerationalAllocatorWithGC : public IAllocator {
         std::memcpy(newObj, (void *)obj, objSize);
 
         // 通知复制后的obj已经被移动
-        Object *gcObj = reinterpret_cast<Object *>(newObj);
+        rtdata::Object *gcObj = reinterpret_cast<rtdata::Object *>(newObj);
         gcObj->onMoved();
 
         // 设置转发地址
         header->forward(newObj);
 
-        return static_cast<Object *>(newObj);
+        return static_cast<rtdata::Object *>(newObj);
     }
 
     // Cheney 算法：使用 BFS 方式扫描和复制对象
@@ -503,12 +507,12 @@ class GenerationalAllocatorWithGC : public IAllocator {
             void *payload        = scan + sizeof(ObjectHeader);
 
             // 获取实际对象
-            Object *ref = reinterpret_cast<Object *>(payload);
+            rtdata::Object *ref = reinterpret_cast<rtdata::Object *>(payload);
 
             // 遍历对象的所有引用字段，并转发它们（type 由各 Object 在创建时与 allocator
             // 约定，此处暂无）
             ref->updateRefs(
-                [this](Object *ref) -> Object * {
+                [this](rtdata::Object *ref) -> rtdata::Object * {
                     if (!ref)
                         return nullptr;
 
@@ -537,7 +541,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         clearMarks();
 
         // 从根集合开始标记
-        for (Object *root : *rootObjectSet_) {
+        for (rtdata::Object *root : *rootObjectSet_) {
             if (root) {
                 markObject(root);
             }
@@ -552,15 +556,15 @@ class GenerationalAllocatorWithGC : public IAllocator {
         largeObjSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
     }
 
-    void markObject(Object *obj) {
+    void markObject(rtdata::Object *obj) {
         if (!obj)
             return;
 
-        std::vector<Object *> markStack;
+        std::vector<rtdata::Object *> markStack;
         markStack.push_back(obj);
 
         while (!markStack.empty()) {
-            Object *current = markStack.back();
+            rtdata::Object *current = markStack.back();
             markStack.pop_back();
 
             if (!current)
@@ -578,7 +582,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
             // 收集所有引用的对象到栈中（type 由各 Object 在创建时与 allocator 约定，此处暂无）
             current->updateRefs(
-                [&markStack](Object *ref) -> Object * {
+                [&markStack](rtdata::Object *ref) -> rtdata::Object * {
                     if (ref) {
                         markStack.push_back(ref);
                     }
@@ -616,3 +620,5 @@ class GenerationalAllocatorWithGC : public IAllocator {
         largeObjSpace_.freeBulk(unreachable);
     }
 };
+
+} // namespace camel::core::mm

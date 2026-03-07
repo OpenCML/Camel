@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,10 +23,11 @@
 
 class BasicBuiltinExecutor : public Executor {
   public:
-    BasicBuiltinExecutor(context_ptr_t ctx);
+    BasicBuiltinExecutor(camel::core::context::context_ptr_t ctx);
     virtual ~BasicBuiltinExecutor() = default;
 
-    static executor_ptr_t create(context_ptr_t ctx);
+    static executor_ptr_t create(camel::core::context::context_ptr_t ctx);
 
-    virtual void eval(std::string uri, GraphIR::Node *self, Frame &frame) override;
+    virtual void
+    eval(std::string uri, GIR::Node *self, camel::core::context::Frame &frame) override;
 };

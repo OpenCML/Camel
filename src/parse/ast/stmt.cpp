@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/parse/ast/stmt.h"
 #include "camel/utils/str.h"
 
-namespace AbstractSyntaxTree {
+namespace camel::parse::ast {
 
 const std::string StmtLoad::geneCode() const { return ""; }
 
@@ -170,4 +170,4 @@ const std::string StmtBlockLoad::geneCode() const {
     return result;
 }
 
-} // namespace AbstractSyntaxTree
+} // namespace camel::parse::ast

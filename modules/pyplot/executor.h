@@ -10,7 +10,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -18,4 +18,4 @@
 
 #include "camel/execute/executor.h"
 
-executor_ptr_t createPyplotExecutor(context_ptr_t ctx);
+executor_ptr_t createPyplotExecutor(camel::core::context::context_ptr_t ctx);

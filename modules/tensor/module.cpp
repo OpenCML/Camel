@@ -13,13 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "module.h"
 #include "camel/core/context/context.h"
 #include "executor.h"
+
+using namespace camel::core::context;
+using namespace camel::core::module;
 
 TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     // 实现留空：暂不导出任何算子，后续补充

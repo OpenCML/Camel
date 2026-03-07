@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,10 @@
 #include <sstream>
 
 using namespace std;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
+
+namespace camel::core::type {
 
 const signed char primitiveTypeConvMatrix[8][8] = {
     // Int, Long, Float, Double, Bool, Byte, Void, String
@@ -86,8 +90,8 @@ const TypeCode &Type::code() const { return code_; }
 std::string Type::toString() const { return typeCodeToString(code_); }
 
 std::string Type::mangle() const {
-    ASSERT(!::isComposite(code_), "Composite type cannot call Type::mangle");
-    ASSERT(!::isOtherType(code_), "Other type cannot call Type::mangle");
+    ASSERT(!camel::core::type::isComposite(code_), "Composite type cannot call Type::mangle");
+    ASSERT(!camel::core::type::isOtherType(code_), "Other type cannot call Type::mangle");
 
     switch (code_) {
     case TypeCode::Int32:
@@ -119,14 +123,14 @@ std::string Type::mangle() const {
 }
 
 Type *Type::clone(bool deep) const {
-    ASSERT(!::isComposite(code_), "Composite type cannot call Type::clone");
-    ASSERT(!::isOtherType(code_), "Other type cannot call Type::clone");
+    ASSERT(!camel::core::type::isComposite(code_), "Composite type cannot call Type::clone");
+    ASSERT(!camel::core::type::isOtherType(code_), "Other type cannot call Type::clone");
     return Type::create(code_);
 }
 
 bool Type::equals(Type *type) const {
-    ASSERT(!::isComposite(code_), "Composite type cannot call Type::equals");
-    ASSERT(!::isOtherType(code_), "Other type cannot call Type::equals");
+    ASSERT(!camel::core::type::isComposite(code_), "Composite type cannot call Type::equals");
+    ASSERT(!camel::core::type::isOtherType(code_), "Other type cannot call Type::equals");
     if (!type)
         return false;
     return code_ == type->code_;
@@ -142,8 +146,10 @@ std::optional<CastSafety> Type::checkCastSafetyWithAny(TypeCode targetCode, Type
 }
 
 CastSafety Type::castSafetyFrom(Type *sourceType) const {
-    ASSERT(!::isComposite(code_), "Composite type cannot call Type::castSafetyFrom");
-    ASSERT(!::isOtherType(code_), "Other type cannot call Type::castSafetyFrom");
+    ASSERT(
+        !camel::core::type::isComposite(code_),
+        "Composite type cannot call Type::castSafetyFrom");
+    ASSERT(!camel::core::type::isOtherType(code_), "Other type cannot call Type::castSafetyFrom");
 
     if (auto r = checkCastSafetyWithAny(code_, sourceType))
         return *r;
@@ -152,12 +158,14 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
         return CastSafety::Forbidden;
 
     // 这里要先排除掉辅助类型（Any 已由 checkCastSafetyWithAny 处理）
-    if (::isAuxiliary(code_) || ::isAuxiliary(sourceType->code())) {
+    if (camel::core::type::isAuxiliary(code_) ||
+        camel::core::type::isAuxiliary(sourceType->code())) {
         return CastSafety::Forbidden;
     }
 
     // 排除掉辅助类型后，原始类型只剩8个。矩阵 [from][to]，即 [sourceIndex][targetIndex]
-    if (::isPrimitive(code_) && ::isPrimitive(sourceType->code())) {
+    if (camel::core::type::isPrimitive(code_) &&
+        camel::core::type::isPrimitive(sourceType->code())) {
         const int sourceIndex = static_cast<int>(sourceType->code()) & 0b1111;
         const int targetIndex = static_cast<int>(code_) & 0b1111;
         return static_cast<CastSafety>(primitiveTypeConvMatrix[sourceIndex][targetIndex]);
@@ -176,18 +184,20 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
     if (code_ == TypeCode::Any || sourceType->code() == TypeCode::Any)
         return value;
 
-    ASSERT(!::isComposite(code_), "castSlotFrom not implemented for composite types");
-    ASSERT(!::isOtherType(code_), "castSlotFrom not implemented for other types");
+    ASSERT(
+        !camel::core::type::isComposite(code_),
+        "castSlotFrom not implemented for composite types");
+    ASSERT(!camel::core::type::isOtherType(code_), "castSlotFrom not implemented for other types");
 
     const TypeCode from = sourceType->code();
     const TypeCode to   = code_;
 
-    using ::Bool;
-    using ::Byte;
-    using ::Float32;
-    using ::Float64;
-    using ::Int32;
-    using ::Int64;
+    using camel::core::rtdata::Bool;
+    using camel::core::rtdata::Byte;
+    using camel::core::rtdata::Float32;
+    using camel::core::rtdata::Float64;
+    using camel::core::rtdata::Int32;
+    using camel::core::rtdata::Int64;
 
 #define DO_CONV(FromT, ToT, expr) return toSlot(static_cast<ToT>(expr))
 
@@ -404,13 +414,13 @@ bool Type::assignableFrom(Type *from) const {
         return false;
 
     // 复合类型需要重载 assignableFrom 方法处理
-    if (::isComposite(to->code_)) {
+    if (camel::core::type::isComposite(to->code_)) {
         const auto &self = static_cast<const CompositeType &>(*this);
         return self.assignableFrom(from);
     }
 
     // 第三方类型交由第三方自己重载的 assignableFrom 方法处理
-    if (::isOtherType(to->code_)) {
+    if (camel::core::type::isOtherType(to->code_)) {
         const auto &self = static_cast<const OtherType &>(*this);
         return self.assignableFrom(from);
     }
@@ -513,3 +523,5 @@ Type *Type::Any() {
     }
     return type;
 }
+
+} // namespace camel::core::type

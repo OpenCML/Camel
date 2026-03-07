@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,13 +25,16 @@
 #include <string>
 #include <unordered_map>
 
-slot_t __os_exit__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __os_sleep__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __os_whoami__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __os_set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __os_has_input__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __os_get_char__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __os_get_chars__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __os_clear_input_buffer__(ArgsView &with, ArgsView &norm, Context &ctx);
+namespace ctx = camel::core::context;
+
+// 算子实现
+slot_t __os_exit__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __os_sleep__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __os_whoami__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __os_set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __os_has_input__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __os_get_char__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __os_get_chars__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __os_clear_input_buffer__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getOSOpsMap();

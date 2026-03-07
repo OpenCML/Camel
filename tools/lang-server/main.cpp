@@ -14,17 +14,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
 
-#include "nlohmann/json.hpp"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/range.h"
 #include "camel/core/mm.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/dll_path.h"
+#include "nlohmann/json.hpp"
 
 #include <filesystem>
 #include <iostream>
@@ -33,7 +33,10 @@
 #include <string>
 
 using namespace std;
-using json = nlohmann::json;
+using json   = nlohmann::json;
+namespace mm = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::parse;
 
 namespace fs = std::filesystem;
 
@@ -135,12 +138,14 @@ static void parseAndPublishDiagnostics(ostream &out, const string &uri, const st
     auto addDiag  = [&](const Diagnostic &d) {
         json diag;
         if (holds_alternative<CharRange>(d.range)) {
-            CharRange r = get<CharRange>(d.range);
+            CharRange r   = get<CharRange>(d.range);
             diag["range"] = {
                 {"start", {{"line", r.start.line}, {"character", r.start.character}}},
                 {"end", {{"line", r.end.line}, {"character", r.end.character}}}};
         } else {
-            diag["range"] = {{"start", {{"line", 0}, {"character", 0}}}, {"end", {{"line", 0}, {"character", 0}}}};
+            diag["range"] = {
+                {"start", {{"line", 0}, {"character", 0}}},
+                {"end", {{"line", 0}, {"character", 0}}}};
         }
         diag["severity"] = severityToLsp(d.severity);
         diag["source"]   = "Camel";
@@ -197,8 +202,10 @@ int main(int argc, char *argv[]) {
         if (method == "initialize") {
             json result;
             result["capabilities"] = {
-                {"textDocumentSync", {{"openClose", true}, {"change", 1}, {"save", json::object()}}},
-                {"diagnosticProvider", {{"interFileDependencies", false}, {"workspaceDiagnostics", false}}}};
+                {"textDocumentSync",
+                 {{"openClose", true}, {"change", 1}, {"save", json::object()}}},
+                {"diagnosticProvider",
+                 {{"interFileDependencies", false}, {"workspaceDiagnostics", false}}}};
             result["serverInfo"] = {{"name", "camel-ls"}, {"version", "0.1.0"}};
             sendResponse(out, id, result, nullptr);
             continue;
@@ -217,14 +224,14 @@ int main(int argc, char *argv[]) {
 
         // ---- 文档同步 ----
         if (method == "textDocument/didOpen") {
-            string uri     = params["textDocument"]["uri"];
-            string content = params["textDocument"]["text"];
+            string uri         = params["textDocument"]["uri"];
+            string content     = params["textDocument"]["text"];
             openDocuments[uri] = content;
             parseAndPublishDiagnostics(out, uri, content);
             continue;
         }
         if (method == "textDocument/didChange") {
-            string uri = params["textDocument"]["uri"];
+            string uri    = params["textDocument"]["uri"];
             auto &changes = params["contentChanges"];
             if (!changes.empty() && changes[0].contains("text")) {
                 openDocuments[uri] = changes[0]["text"];

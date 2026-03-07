@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,9 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
+
+using namespace camel::core::error;
+using namespace camel::core::context;
 
 std::optional<operator_t> Executor::find(const std::string &uri) {
     auto it = opsMap_.find(uri);
@@ -51,7 +54,7 @@ void ExecutorManager::registerExecutorFactory(std::string name, executor_factory
     executorFactories[name] = fact;
 }
 
-void ExecutorManager::eval(std::string uri, GraphIR::Node *self, Frame &frame) const {
+void ExecutorManager::eval(std::string uri, GIR::Node *self, Frame &frame) const {
     EXEC_WHEN_DEBUG(GetDefaultLogger().in("ExecMgr").debug("Evaluating operator of URI: {}", uri));
     const size_t pos = uri.find(":");
     if (pos == std::string::npos) {

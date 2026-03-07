@@ -20,11 +20,17 @@
 #include "operators.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/utils/type.h"
 
 #include <algorithm>
+
+namespace mm = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::rtdata;
 #include <random>
 
 static std::mt19937_64 g_rng;
@@ -110,9 +116,10 @@ slot_t __rand_sample__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __rand_shuffle__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr               = norm.get<Array *>(0);
-    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
-    Array *res               = static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
+    Array *arr = norm.get<Array *>(0);
+    const camel::core::type::ArrayType *arrType =
+        tt::as_ptr<camel::core::type::ArrayType>(norm.type(0));
+    Array *res = static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
     shuffleArray(res);
     return toSlot(res);
 }

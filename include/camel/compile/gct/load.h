@@ -29,7 +29,11 @@
 #include "camel/core/source/ids.h"
 #include "camel/utils/assert.h"
 
-namespace GraphConstructTree {
+namespace camel::compile::gct {
+
+using origin_id_t = camel::source::origin_id_t;
+using data_ptr_t  = camel::core::data::data_ptr_t;
+using Type        = camel::core::type::Type;
 
 // =============================================================================
 // Load：树节点载荷基类
@@ -40,16 +44,16 @@ class Load {
     LoadType type_;
     // GCT 不再保存 token，而是直接持有从 AST 派生来的 origin。
     // 这样语义诊断和后续 GIR 构建都不需要反查 AST tokenRange。
-    camel::source::origin_id_t origin_ = camel::source::kInvalidOriginId;
+    origin_id_t origin_ = camel::source::kInvalidOriginId;
 
   public:
     Load(LoadType type) : type_(type) {}
     virtual ~Load() = default;
 
-    void setOrigin(camel::source::origin_id_t origin) { origin_ = origin; }
+    void setOrigin(origin_id_t origin) { origin_ = origin; }
 
     LoadType type() const { return type_; }
-    camel::source::origin_id_t origin() const { return origin_; }
+    origin_id_t origin() const { return origin_; }
 
     virtual const std::string toString() const { return to_string(type_); }
     virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); }
@@ -312,4 +316,4 @@ class CastLoad : public Load {
     const std::string toString() const override { return "CAST: " + targetType_->toString(); }
 };
 
-} // namespace GraphConstructTree
+} // namespace camel::compile::gct

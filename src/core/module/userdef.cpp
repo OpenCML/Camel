@@ -37,8 +37,12 @@ namespace fs = std::filesystem;
 
 using namespace std;
 using namespace antlr4;
+using namespace camel::core::context;
+using namespace camel::core::module;
+using namespace camel::core::error;
+using namespace camel::parse;
 
-namespace GIR = GraphIR;
+namespace GIR = camel::compile::gir;
 
 UserDefinedModule::UserDefinedModule(
     const std::string &name, const std::string &path, context_ptr_t ctx, parser_ptr_t parser)

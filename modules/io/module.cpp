@@ -12,7 +12,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,9 @@
 #include "operators.h"
 
 #include <optional>
+
+using namespace camel::core::context;
+using namespace camel::core::module;
 
 namespace {
 

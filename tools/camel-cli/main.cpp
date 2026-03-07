@@ -51,8 +51,13 @@
 #include <queue>
 #include <string>
 
+namespace mm = camel::core::mm;
 using namespace antlr4;
+using namespace camel::core::context;
+using namespace camel::core::module;
 using namespace std;
+using namespace camel::core::error;
+using namespace camel::parse;
 
 namespace fs = std::filesystem;
 

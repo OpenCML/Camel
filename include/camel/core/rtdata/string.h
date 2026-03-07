@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,12 +21,15 @@
 
 #include "base.h"
 
-class String : public Object {
+namespace rtdata = camel::core::rtdata;
+namespace type   = camel::core::type;
+
+class String : public rtdata::Object {
   public:
     String(const String &)            = delete;
     String &operator=(const String &) = delete;
 
-    static String *create(size_t length, IAllocator &allocator) {
+    static String *create(size_t length, camel::core::mm::IAllocator &allocator) {
         size_t totalSize = sizeof(String) + (length + 1);
         void *memory     = allocator.alloc(totalSize, alignof(String));
         if (!memory)
@@ -37,14 +40,14 @@ class String : public Object {
         return str;
     }
 
-    static String *from(const char *src, IAllocator &allocator) {
+    static String *from(const char *src, camel::core::mm::IAllocator &allocator) {
         size_t len = std::strlen(src);
         auto *str  = create(len, allocator);
         std::memcpy(str->data_, src, len + 1);
         return str;
     }
 
-    static String *from(const std::string &s, IAllocator &allocator) {
+    static String *from(const std::string &s, camel::core::mm::IAllocator &allocator) {
         auto *str = create(s.size(), allocator);
         std::memcpy(str->data_, s.data(), s.size());
         str->data_[s.size()] = '\0';
@@ -53,7 +56,8 @@ class String : public Object {
 
     std::string toString() const { return std::string(data_, size_); }
 
-    static String *concat(const String *a, const String *b, IAllocator &allocator) {
+    static String *
+    concat(const String *a, const String *b, camel::core::mm::IAllocator &allocator) {
         size_t lenA    = a->size();
         size_t lenB    = b->size();
         size_t newLen  = lenA + lenB;
@@ -120,7 +124,7 @@ class String : public Object {
 
     bool contains(const String *substr) const { return find(substr) != npos; }
 
-    String *substr(IAllocator &allocator, size_t pos, size_t len = npos) const {
+    String *substr(camel::core::mm::IAllocator &allocator, size_t pos, size_t len = npos) const {
         if (pos >= size_)
             return from("", allocator);
         if (len > size_ - pos)
@@ -137,8 +141,9 @@ class String : public Object {
         return cachedHash_;
     }
 
-    virtual bool
-    equals(const Object *other, const Type * /*type*/, bool /*deep*/ = false) const override {
+    virtual bool equals(
+        const rtdata::Object *other, const type::Type * /*type*/,
+        bool /*deep*/ = false) const override {
         if (this == other)
             return true;
 
@@ -155,19 +160,23 @@ class String : public Object {
         return std::memcmp(data_, rhs->data_, size_) == 0;
     }
 
-    virtual Object *
-    clone(IAllocator &allocator, const Type * /*type*/, bool /*deep*/ = false) const override {
+    virtual rtdata::Object *clone(
+        camel::core::mm::IAllocator &allocator, const type::Type * /*type*/,
+        bool /*deep*/ = false) const override {
         String *copy = String::create(size_, allocator);
         std::memcpy(copy->data_, data_, size_ + 1);
         copy->cachedHash_ = cachedHash_;
         return copy;
     }
 
-    virtual void print(std::ostream &os, const Type * /*type*/) const override { os << data_; }
+    virtual void print(std::ostream &os, const type::Type * /*type*/) const override {
+        os << data_;
+    }
 
     virtual void onMoved() override {}
-    virtual void
-    updateRefs(const std::function<Object *(Object *)> &, const Type * /*type*/) override {}
+    virtual void updateRefs(
+        const std::function<rtdata::Object *(rtdata::Object *)> &,
+        const type::Type * /*type*/) override {}
 
     static constexpr size_t npos = static_cast<size_t>(-1);
 

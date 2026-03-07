@@ -19,7 +19,13 @@
 
 #include "fastvm.h"
 
+#include "camel/core/error/runtime.h"
 #include "camel/core/global_config.h"
+
+using namespace camel::core::error;
+#if ENABLE_FASTVM_JIT
+using namespace camel::jit;
+#endif
 #if !ENABLE_FASTVM_COMPUTED_GOTO
 
 #include "camel/utils/opperf.h"
@@ -76,9 +82,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                 if (bc.fastop[1] != 0)
                     tag = getFuncExtraGraph(&bc)->name();
                 else
-                    tag =
-                        jitFnToGraph_[reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc))]
-                            ->name();
+                    tag = jitFnToGraph_[reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc))]->name();
 #else
                 tag = bc.extra()->graph->name();
 #endif
@@ -324,9 +328,8 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             case OpCode::FUNC: {
 #if ENABLE_FASTVM_JIT
                 if (bc.fastop[1] == 0) {
-                    GraphIR::Graph *g = getFuncExtraGraph(&bc);
-                    camel::jit::JitEntryFn fn =
-                        reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc));
+                    GIR::Graph *g          = getFuncExtraGraph(&bc);
+                    JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc));
                     Frame *funcFrame       = framePool_.acquire(g);
                     size_t argsCnt         = bc.normCnt();
                     const data_idx_t *args = bc.operands();
@@ -338,18 +341,17 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                     framePool_.release(funcFrame);
                     currFrame->set(bc.result, result);
                 } else {
-                    GraphIR::Graph *targetGraph = getFuncExtraGraph(&bc);
-                    size_t targetPc             = static_cast<size_t>(bc.fastop[1]);
-                    uint32_t count              = incFuncExtraCount(const_cast<Bytecode *>(&bc));
+                    GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
+                    size_t targetPc         = static_cast<size_t>(bc.fastop[1]);
+                    uint32_t count          = incFuncExtraCount(const_cast<Bytecode *>(&bc));
                     if (tierPolicy_.shouldJit(count)) {
                         compileAndCacheGraph(targetGraph, targetPc);
                         const Bytecode &bc2 = bytecodes_[pc];
                         if (bc2.fastop[1] == 0) {
-                            GraphIR::Graph *g = getFuncExtraGraph(&bc2);
-                            camel::jit::JitEntryFn fn =
-                                reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc2));
-                            Frame *funcFrame       = framePool_.acquire(g);
-                            size_t argsCnt         = bc2.normCnt();
+                            GIR::Graph *g    = getFuncExtraGraph(&bc2);
+                            JitEntryFn fn    = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc2));
+                            Frame *funcFrame = framePool_.acquire(g);
+                            size_t argsCnt   = bc2.normCnt();
                             const data_idx_t *args = bc2.operands();
                             for (size_t i = 0; i < argsCnt; ++i) {
                                 funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
@@ -392,9 +394,8 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                 FrameView lastFrame(currFrame);
                 framePool_.release(currFrame);
                 if (bc.fastop[1] == 0) {
-                    GraphIR::Graph *g = getFuncExtraGraph(&bc);
-                    camel::jit::JitEntryFn fn =
-                        reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc));
+                    GIR::Graph *g          = getFuncExtraGraph(&bc);
+                    JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc));
                     Frame *newFrame        = framePool_._acquire(g);
                     size_t argsCnt         = bc.normCnt();
                     const data_idx_t *args = bc.operands();
@@ -405,16 +406,15 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                     newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
                     return fn(newFrame->slotBase(), currentJitCtx_);
                 }
-                GraphIR::Graph *targetGraph = getFuncExtraGraph(&bc);
-                size_t targetPc             = static_cast<size_t>(bc.fastop[1]);
-                uint32_t count              = incFuncExtraCount(const_cast<Bytecode *>(&bc));
+                GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
+                size_t targetPc         = static_cast<size_t>(bc.fastop[1]);
+                uint32_t count          = incFuncExtraCount(const_cast<Bytecode *>(&bc));
                 if (tierPolicy_.shouldJit(count)) {
                     compileAndCacheGraph(targetGraph, targetPc);
                     const Bytecode &bc2 = bytecodes_[pc];
                     if (bc2.fastop[1] == 0) {
-                        GraphIR::Graph *g = getFuncExtraGraph(&bc2);
-                        camel::jit::JitEntryFn fn =
-                            reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc2));
+                        GIR::Graph *g          = getFuncExtraGraph(&bc2);
+                        JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc2));
                         Frame *newFrame        = framePool_._acquire(g);
                         size_t argsCnt         = bc2.normCnt();
                         const data_idx_t *args = bc2.operands();

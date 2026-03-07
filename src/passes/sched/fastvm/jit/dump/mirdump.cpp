@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 08, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,11 +29,15 @@
 #include <unordered_map>
 #endif
 
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::context;
+#if ENABLE_FASTVM_JIT
+using namespace camel::jit;
+#endif
 
 #if ENABLE_FASTVM_JIT
 static graph_ptr_t applyMirDump(
-    const context_ptr_t &context, GraphIR::graph_ptr_t &graph, std::ostream &os, bool slotOnly) {
+    const context_ptr_t &context, GIR::graph_ptr_t &graph, std::ostream &os, bool slotOnly) {
     const auto &[bytecodes, _, offsetMap] = compileAndLink(
         context,
         graph.get(),
@@ -43,7 +47,7 @@ static graph_ptr_t applyMirDump(
             .optimizationStrategies  = OptimizationStrategyCode::All,
         });
 
-    auto backend = camel::jit::createBackend();
+    auto backend = createBackend();
     if (!backend) {
         os << "[JIT] Backend not available, cannot dump MIR.\n";
         return Graph::null();
@@ -66,7 +70,7 @@ static graph_ptr_t applyMirDump(
         mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineOper)] = "trampolineOper";
         mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineCast)] = "trampolineCast";
 
-        camel::jit::CompilationUnit unit{
+        CompilationUnit unit{
             .graph          = g,
             .frameMeta      = meta,
             .bytecodes      = bcSpan,

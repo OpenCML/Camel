@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,11 +21,15 @@
 #include "builtin/executors/builtin.h"
 #include "builtin/types/tensor.h"
 #include "camel/core/context/context.h"
+#include "camel/core/type/resolver.h"
 
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 
 using namespace std;
+using namespace camel::core::context;
+using namespace camel::core::module;
+using namespace camel::core::type;
 
 module_ptr_t GlobalsBuiltinModule::create(context_ptr_t ctx) {
     return std::make_shared<GlobalsBuiltinModule>(ctx);

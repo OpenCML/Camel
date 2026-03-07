@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 01, 2024
- * Updated: Oct. 08, 2025
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,8 @@
 #include <string>
 
 #include "antlr4-runtime/antlr4-runtime.h"
+
+namespace camel::core::error {
 
 class CamelErrorListener : public antlr4::BaseErrorListener {
   protected:
@@ -87,3 +89,5 @@ class JSONErrorListener : public CamelErrorListener {
            << "}" << std::endl;
     }
 };
+
+} // namespace camel::core::error

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@
 #include <unordered_map>
 #include <variant>
 
-namespace GraphIR {
+namespace camel::compile::gir {
 
 // =============================================================================
 // Node：图节点基类，持有类型、数据槽索引、入边/出边
@@ -532,4 +532,4 @@ class NRefNode : public Node {
     virtual Node *clone(Graph &graph) const override { return NRefNode::create(graph); }
 };
 
-} // namespace GraphIR
+} // namespace camel::compile::gir

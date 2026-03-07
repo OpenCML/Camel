@@ -32,7 +32,7 @@
 #include "camel/core/source/ids.h"
 #include "camel/utils/assert.h"
 
-namespace AbstractSyntaxTree {
+namespace camel::parse::ast {
 
 enum class LoadType {
     Module,
@@ -71,12 +71,12 @@ class Load {
         tokenRange_.start = start;
         tokenRange_.end   = end;
     }
-    void setTokenRange(TokenRange range) { tokenRange_ = range; }
+    void setTokenRange(camel::core::error::TokenRange range) { tokenRange_ = range; }
     // origin_ 指向 SourceContext::OriginTable 中的记录，是 AST 向后续阶段传播位置的主键。
     void setOrigin(camel::source::origin_id_t origin) { origin_ = origin; }
 
     LoadType type() const { return type_; }
-    TokenRange tokenRange() const { return tokenRange_; }
+    camel::core::error::TokenRange tokenRange() const { return tokenRange_; }
     camel::source::origin_id_t origin() const { return origin_; }
     const std::string typeStr() const { return to_string(type_); }
 
@@ -86,7 +86,7 @@ class Load {
 
   protected:
     LoadType type_;
-    TokenRange tokenRange_             = {0, 0}; // 仅保留前端 token 级信息。
+    camel::core::error::TokenRange tokenRange_ = {0, 0}; // 仅保留前端 token 级信息。
     camel::source::origin_id_t origin_ = camel::source::kInvalidOriginId; // 跨阶段统一位置标识。
 };
 
@@ -276,4 +276,4 @@ class OptionalLoad : public Load {
     std::string nodeName_;
 };
 
-} // namespace AbstractSyntaxTree
+} // namespace camel::parse::ast

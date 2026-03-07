@@ -1,17 +1,23 @@
 #include "taskflow.h"
 #include "camel/common/algo/topo.h"
 #include "camel/compile/gir/nodes.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/execute/executor.h"
 
 #include <queue>
 #include <regex>
 #include <unordered_set>
 
 using namespace std;
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
 
 // 从图的 exit 节点读取返回值（与 NodeVM 一致：slot_t）
 static slot_t get_graph_return(Graph *g, Frame *frame) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 #include "camel/utils/log.h"
 #include <functional>
 
-namespace GraphIR {
+namespace camel::compile::gir {
 
 // =============================================================================
 // Node 索引与连通性
@@ -279,4 +279,4 @@ bool Node::detach() {
     return true;
 }
 
-} // namespace GraphIR
+} // namespace camel::compile::gir

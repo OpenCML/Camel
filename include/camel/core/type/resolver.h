@@ -13,17 +13,19 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "base.h"
-#include "composite/func.h"
+#include "camel/core/type/base.h"
+#include "camel/core/type/composite/func.h"
 
 #include <functional>
 #include <optional>
+
+namespace camel::core::type {
 
 using ResolverFunc = std::function<std::optional<Type *>(
     const type_vec_t &, const type_vec_t &, const ModifierSet &)>;
@@ -103,3 +105,5 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
     var_declare_t withVars_, normVars_;
     ResolverFunc resolver_;
 };
+
+} // namespace camel::core::type

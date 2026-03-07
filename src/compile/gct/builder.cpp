@@ -32,8 +32,13 @@
 #define DEBUG_LEVEL -1
 
 using namespace std;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::module;
+using namespace camel::core::data;
+using namespace camel::core::type;
 
-namespace GraphConstructTree {
+namespace camel::compile::gct {
 
 template <typename LoadType, typename... Args> node_ptr_t createNodeAs(Args &&...args) {
     return std::make_shared<Node>(
@@ -2204,4 +2209,4 @@ Type *Builder::visitRefType(const AST::node_ptr_t &ast) {
     LEAVE("RefType");
     return importedType.value();
 }
-} // namespace GraphConstructTree
+} // namespace camel::compile::gct

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,6 +36,8 @@
 #include <cstring> // for std::memset
 #include <memory>
 
+namespace camel::core::mm {
+
 class BumpPointerAllocator : public IAllocator {
   public:
     BumpPointerAllocator(size_t capacity, const char *debugRegion = nullptr)
@@ -57,8 +59,7 @@ class BumpPointerAllocator : public IAllocator {
         // 这保证了 top_ 始终对齐，无需每次都 alignPointer
         size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
         EXEC_WHEN_DEBUG({
-            mm::invokePreAllocHook(
-                mm::PreAllocEvent{total_size, debugRegion_ ? debugRegion_ : "bump"});
+            invokePreAllocHook(PreAllocEvent{total_size, debugRegion_ ? debugRegion_ : "bump"});
         });
         std::byte *newTop = top_ + total_size;
 
@@ -100,8 +101,8 @@ class BumpPointerAllocator : public IAllocator {
         top_ = newTop;
         EXEC_WHEN_DEBUG({
             // 所有 Bump 分配均触发调试断点（含 perm/meta 等），便于 alloc-step 在任意区域生效
-            mm::invokePostAllocHook(
-                mm::AllocEvent{result, total_size, debugRegion_ ? debugRegion_ : "bump"});
+            invokePostAllocHook(
+                AllocEvent{result, total_size, debugRegion_ ? debugRegion_ : "bump"});
         });
         return result;
     }
@@ -174,8 +175,10 @@ class BumpPointerAllocator : public IAllocator {
   private:
     size_t capacity_;
     const char *debugRegion_{nullptr}; // Debug 模式下用于 hook，nullptr 表示不 hook
-    std::unique_ptr<uint64_t[]> buffer_;
+    std::unique_ptr<slot_t[]> buffer_;
     std::byte *start_;
     std::byte *top_;
     std::byte *end_;
 };
+
+} // namespace camel::core::mm

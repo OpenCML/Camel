@@ -6,7 +6,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 24, 2026
+ * Updated: Mar. 07, 2026
  */
 
 #include "camel/core/mm.h"
@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace mm {
+namespace camel::core::mm {
 namespace profiler {
 
 using json = nlohmann::json;
@@ -251,4 +251,4 @@ std::string regionObjectsToJson(const char *regionName, size_t offset, size_t li
 }
 
 } // namespace profiler
-} // namespace mm
+} // namespace camel::core::mm

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 
 using namespace std;
 
-namespace AbstractSyntaxTree {
+namespace camel::parse::ast {
 
 std::string to_string(LoadType type) {
     switch (type) {
@@ -106,4 +106,4 @@ const string NamedPairLoad::geneCode() const {
     return (isVar_ ? string("var ") : "") + ref_.toString();
 }
 
-} // namespace AbstractSyntaxTree
+} // namespace camel::parse::ast

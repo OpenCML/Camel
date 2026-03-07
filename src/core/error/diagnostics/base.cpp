@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,8 @@
 #include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/error/diagnostics/messages/syntax.h"
 #include "camel/utils/assert.h"
+
+namespace camel::core::error {
 
 std::string to_string(DiagType type) {
     switch (type) {
@@ -125,3 +127,5 @@ DiagInfo getDiagInfo(uint32_t diagCode) {
     uint32_t specific = extractSpecific(diagCode);
     return getDiagInfo(type, specific);
 }
+
+} // namespace camel::core::error

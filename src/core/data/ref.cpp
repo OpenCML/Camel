@@ -13,13 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/data/ref.h"
 
-RefData::RefData(const std::string &ref) : Data(Type::Ref()), ref_(ref) {}
+using namespace camel::core::type;
+namespace camel::core::data {
+
+RefData::RefData(const std::string &ref) : Data(type::Type::Ref()), ref_(ref) {}
 
 const std::string &RefData::ref() const { return ref_; }
 
@@ -29,9 +32,11 @@ data_ptr_t RefData::clone(bool deep) const { return std::make_shared<RefData>(re
 
 const std::string RefData::toString() const { return "DREF<" + ref_ + ">"; }
 
-data_ptr_t RefData::convertTo(Type *type) {
+data_ptr_t RefData::convertTo(type::Type *type) {
     if (type->equals(type_)) {
         return std::make_shared<RefData>(ref_);
     }
     return nullptr;
 }
+
+} // namespace camel::core::data

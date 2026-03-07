@@ -24,6 +24,8 @@
 
 #include <variant>
 
+namespace camel::core::error {
+
 // ---- Basic structures ----
 struct CharPos {
     size_t line      = 0;
@@ -54,3 +56,5 @@ class RangeConverter {
   private:
     const std::vector<antlr4::Token *> &tokens_;
 };
+
+} // namespace camel::core::error

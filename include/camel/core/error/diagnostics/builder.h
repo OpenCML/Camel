@@ -22,6 +22,8 @@
 #include "base.h"
 #include "range.h"
 
+namespace camel::core::error {
+
 struct Diagnostic;
 class Diagnostics;
 
@@ -63,3 +65,5 @@ class DiagnosticBuilder {
     std::string moduleName_;
     std::string modulePath_;
 };
+
+} // namespace camel::core::error

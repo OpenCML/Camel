@@ -13,19 +13,19 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 17, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/rtdata/func.h"
 #include "camel/compile/gir.h"
 
-const TupleType *Function::tupleType() const { return graph_->closureType(); }
+const type::TupleType *Function::tupleType() const { return graph_->closureType(); }
 
-void Function::print(std::ostream &os, const Type *type) const {
+void Function::print(std::ostream &os, const type::Type *type) const {
     os << "Function(graph=" << graph_->name() << ", tuple=";
     if (closure_) {
-        const TupleType *tupleTypePtr = tupleType();
+        const type::TupleType *tupleTypePtr = tupleType();
         closure_->print(os, tupleTypePtr);
     } else {
         os << "null";

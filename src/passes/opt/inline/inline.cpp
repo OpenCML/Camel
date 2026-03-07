@@ -20,10 +20,12 @@
 #include "inline.h"
 
 #include "camel/common/algo/topo.h"
+#include "camel/core/error/runtime.h"
 #include "camel/utils/log.h"
 
 using namespace std;
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::error;
 
 graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
     std::vector<graph_ptr_t> allGraphs;

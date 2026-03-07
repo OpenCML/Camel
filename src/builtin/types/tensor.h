@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,45 +22,48 @@
 #include "camel/core/data/other.h"
 #include "camel/core/type/other.h"
 
-class TensorType : public OtherType {
+namespace type = camel::core::type;
+
+class TensorType : public type::OtherType {
   private:
     std::vector<size_t> shape_;
-    Type *element_type_;
+    type::Type *element_type_;
     static std::unordered_map<std::string, std::string> staticMethods_;
 
   public:
     TensorType(const std::vector<size_t> &shape);
-    TensorType(Type *elementType, const std::vector<size_t> &shape);
+    TensorType(type::Type *elementType, const std::vector<size_t> &shape);
     virtual ~TensorType() noexcept = default;
 
   protected:
     /** 供 cloneWithParams 使用：仅带 code 与 params，无 shape/element_type。 */
-    TensorType(TypeCode code, size_t paramCount, Type **params);
+    TensorType(type::TypeCode code, size_t paramCount, type::Type **params);
 
   public:
-    static TypeCode typeCode() {
-        static TypeCode code =
-            OtherTypeRegistry::registerType("Tensor", TypeFlag::Composite | TypeFlag::GC_Traced);
+    static type::TypeCode typeCode() {
+        static type::TypeCode code = type::OtherTypeRegistry::registerType(
+            "Tensor",
+            type::TypeFlag::Composite | type::TypeFlag::GC_Traced);
         return code;
     }
 
-    static TensorType *create(Type *elementType, const std::vector<size_t> &shape);
+    static TensorType *create(type::Type *elementType, const std::vector<size_t> &shape);
     static TensorType *create(const std::vector<size_t> &shape);
 
     std::vector<size_t> shape() const;
-    Type *dType() const;
+    type::Type *dType() const;
     static void registerStaticMethod(const std::string &methodName, const std::string &operatorUri);
     static std::string getStaticMethodUri(const std::string &methodName);
     static bool hasStaticMethod(const std::string &methodName);
 
-    static Type *Tensor(const std::vector<size_t> &shape);
-    static Type *Default();
+    static type::Type *Tensor(const std::vector<size_t> &shape);
+    static type::Type *Default();
 
     virtual std::string toString() const override;
     virtual std::string mangle() const override;
-    virtual Type *clone(bool deep = false) const override;
-    virtual bool equals(Type *type) const override;
-    virtual CastSafety castSafetyFrom(Type *sourceType) const override;
-    virtual bool assignableFrom(Type *sourceType) const override;
-    OtherType *cloneWithParams(std::span<Type *const> params) const override;
+    virtual type::Type *clone(bool deep = false) const override;
+    virtual bool equals(type::Type *type) const override;
+    virtual type::CastSafety castSafetyFrom(type::Type *sourceType) const override;
+    virtual bool assignableFrom(type::Type *sourceType) const override;
+    type::OtherType *cloneWithParams(std::span<type::Type *const> params) const override;
 };

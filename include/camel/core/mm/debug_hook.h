@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 24, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 
 #include <cstddef>
 
-namespace mm {
+namespace camel::core::mm {
 
 /// 分配前事件（尚未分配，无 ptr）
 struct PreAllocEvent {
@@ -48,4 +48,4 @@ void clearPostAllocDebugHook();
 /// Invoke the hook if set (called from allocator, Debug build only)
 void invokePostAllocHook(const AllocEvent &evt);
 
-} // namespace mm
+} // namespace camel::core::mm

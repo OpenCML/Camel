@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 10, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/mm.h"
 
-namespace mm { // Memory Management
+namespace camel::core::mm {
 
 // 由 GC 系统自动管理，需要从根对象可达
 GenerationalAllocatorWithGC &autoSpace() {
@@ -48,4 +48,4 @@ BumpPointerAllocator &permSpace() {
     return allocator;
 }
 
-} // namespace mm
+} // namespace camel::core::mm

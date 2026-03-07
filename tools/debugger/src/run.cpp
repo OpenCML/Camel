@@ -27,6 +27,8 @@
 #include "server.h"
 #include "state.h"
 
+using namespace camel::core::error;
+
 #ifndef NDEBUG
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/mm/debug_hook.h"

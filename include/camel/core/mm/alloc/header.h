@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 24, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include "camel/core/slot.h"
 #include "camel/utils/assert.h"
 
 #include <algorithm>
@@ -29,7 +30,9 @@
 #include <array>
 #endif
 
-using slot_t                                    = uint64_t;
+namespace camel::core::mm {
+
+using slot_t                                    = ::slot_t;
 static constexpr slot_t kDebugUninitializedSlot = 0xDEADBEEFDEADBEEFULL;
 
 struct ObjectHeader {
@@ -172,3 +175,5 @@ template <typename T = void> inline ObjectHeader *headerOf(T *payload) {
     return reinterpret_cast<ObjectHeader *>(
         reinterpret_cast<std::byte *>(payload) - sizeof(ObjectHeader));
 }
+
+} // namespace camel::core::mm

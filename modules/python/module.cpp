@@ -20,6 +20,7 @@
 #include "module.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
@@ -32,6 +33,11 @@
 #include <pybind11/embed.h>
 #include <pybind11/pybind11.h>
 #include <string>
+
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::module;
+using namespace camel::core::type;
 
 #ifdef _WIN32
 #include <stdlib.h>

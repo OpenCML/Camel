@@ -20,10 +20,18 @@
 #include "operators.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/string.h"
 
+namespace mm = camel::core::mm;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
+
 #include <bitset>
+
+using namespace camel::core::error;
 #include <cmath>
 #include <sstream>
 

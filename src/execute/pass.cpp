@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
-
+#include "macro/macro.h"
 #include "passes/opt/inline/inline.h"
 #include "passes/sched/fastvm/bcdump.h"
 #include "passes/sched/fastvm/fastvm.h"
@@ -34,11 +34,11 @@
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/tns/topo_node_seq.h"
 
-#include "macro/macro.h"
-
 #include <format>
 
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::error;
+using namespace camel::core::context;
 
 graph_ptr_t NullGraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
     // Do nothing
@@ -242,7 +242,7 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
 
 int applyPasses(
     const std::vector<std::string> &passes, const context_ptr_t &ctx, std::ostream &os) {
-    GraphIR::graph_ptr_t graph = ctx->rootGraph();
+    GIR::graph_ptr_t graph = ctx->rootGraph();
 
     for (const auto &p : passes) {
         ASSERT(graph != nullptr, "Graph is null.");

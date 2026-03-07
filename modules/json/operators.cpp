@@ -21,6 +21,7 @@
 #include <optional>
 
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
@@ -33,6 +34,12 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "operators.h"
+
+namespace mm = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
 
 namespace {
 

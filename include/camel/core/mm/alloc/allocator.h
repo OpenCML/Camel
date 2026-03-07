@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,8 @@
 #include <functional>
 #include <type_traits>
 #include <utility> // for std::forward
+
+namespace camel::core::mm {
 
 constexpr size_t KB = 1024;
 constexpr size_t MB = 1024 * KB;
@@ -111,3 +113,5 @@ template <typename T> inline std::string formatAddress(T *ptr, bool half = false
 
     return "0x" + formatted;
 }
+
+} // namespace camel::core::mm

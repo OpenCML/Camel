@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,8 @@
 #include <unordered_map>
 
 #include "../base.h"
+
+namespace camel::core::error {
 
 enum class RuntimeDiag : uint32_t {
     RuntimeError              = 0x000000,
@@ -41,3 +43,5 @@ enum class RuntimeDiag : uint32_t {
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }
 
 const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap();
+
+} // namespace camel::core::error

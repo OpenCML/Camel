@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,13 +24,16 @@
 
 #include <algorithm>
 
-class Tuple : public Object {
+namespace rtdata = camel::core::rtdata;
+namespace type   = camel::core::type;
+
+class Tuple : public rtdata::Object {
   public:
     Tuple(const Tuple &)            = delete;
     Tuple &operator=(const Tuple &) = delete;
 
     /// 创建 Tuple 实例
-    static Tuple *create(size_t slotCount, IAllocator &allocator) {
+    static Tuple *create(size_t slotCount, camel::core::mm::IAllocator &allocator) {
         size_t headerSize = sizeof(Tuple);
         size_t dataSize   = sizeof(slot_t) * slotCount;
         size_t totalSize  = headerSize + dataSize;
@@ -48,27 +51,28 @@ class Tuple : public Object {
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
-        return fromSlot<T>(data_[index]);
+        return rtdata::fromSlot<T>(data_[index]);
     }
 
     template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, "Index out of range");
-        if constexpr (std::is_same_v<T, Object *>) {
+        if constexpr (std::is_same_v<T, rtdata::Object *>) {
             // writeBarrier(arr[index], value);
         }
-        data_[index] = toSlot(value);
+        data_[index] = rtdata::toSlot(value);
     }
 
     slot_t *data() { return data_; }
     const slot_t *data() const { return data_; }
 
-    virtual bool equals(const Object *other, const Type *type, bool deep = false) const override {
-        ASSERT(type && type->code() == TypeCode::Tuple, "Type must be TupleType");
+    virtual bool
+    equals(const rtdata::Object *other, const type::Type *type, bool deep = false) const override {
+        ASSERT(type && type->code() == type::TypeCode::Tuple, "Type must be TupleType");
         if (!isOfSameCls(this, other))
             return false;
 
-        const TupleType *tupleType = static_cast<const TupleType *>(type);
-        const Tuple *otherTuple    = reinterpret_cast<const Tuple *>(other);
+        const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
+        const Tuple *otherTuple          = reinterpret_cast<const Tuple *>(other);
         if (size_ != otherTuple->size_ || size_ != tupleType->size())
             return false;
 
@@ -79,9 +83,11 @@ class Tuple : public Object {
         if (deep) {
             // 深比较：引用类型递归比较，普通类型直接值比较
             for (size_t i = 0; i < size_; ++i) {
-                if (isGCTraced(codes[i])) {
-                    const Object *refA = reinterpret_cast<const Object *const *>(dataA)[i];
-                    const Object *refB = reinterpret_cast<const Object *const *>(dataB)[i];
+                if (type::isGCTraced(codes[i])) {
+                    const rtdata::Object *refA =
+                        reinterpret_cast<const rtdata::Object *const *>(dataA)[i];
+                    const rtdata::Object *refB =
+                        reinterpret_cast<const rtdata::Object *const *>(dataB)[i];
                     if (refA == refB)
                         continue;
                     if (!refA->equals(refB, tupleType->typeAt(i), true))
@@ -98,20 +104,22 @@ class Tuple : public Object {
         }
     }
 
-    virtual Object *
-    clone(IAllocator &allocator, const Type *type, bool deep = false) const override {
-        ASSERT(type && type->code() == TypeCode::Tuple, "Type must be TupleType");
-        const TupleType *tupleType = static_cast<const TupleType *>(type);
-        auto codes                 = tupleType->codes();
+    virtual rtdata::Object *clone(
+        camel::core::mm::IAllocator &allocator, const type::Type *type,
+        bool deep = false) const override {
+        ASSERT(type && type->code() == type::TypeCode::Tuple, "Type must be TupleType");
+        const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
+        auto codes                       = tupleType->codes();
 
         Tuple *newTuple   = Tuple::create(size_, allocator);
         const slot_t *src = data_;
         slot_t *dst       = newTuple->data_;
 
         for (size_t i = 0; i < size_; ++i) {
-            if (isGCTraced(codes[i])) {
-                const Object *oriRef = reinterpret_cast<const Object *const *>(src)[i];
-                Object *newRef       = NullRef;
+            if (type::isGCTraced(codes[i])) {
+                const rtdata::Object *oriRef =
+                    reinterpret_cast<const rtdata::Object *const *>(src)[i];
+                rtdata::Object *newRef = rtdata::NullRef;
 
                 if (oriRef) {
                     if (deep) {
@@ -119,22 +127,22 @@ class Tuple : public Object {
                         newRef = oriRef->clone(allocator, tupleType->typeAt(i), true);
                     } else {
                         // 浅拷贝：仅复制引用指针
-                        newRef = const_cast<Object *>(oriRef);
+                        newRef = const_cast<rtdata::Object *>(oriRef);
                     }
                 }
-                reinterpret_cast<Object **>(dst)[i] = newRef;
+                reinterpret_cast<rtdata::Object **>(dst)[i] = newRef;
             } else {
                 // 非引用类型，直接复制 slot 数据
                 dst[i] = src[i];
             }
         }
 
-        return reinterpret_cast<Object *>(newTuple);
+        return reinterpret_cast<rtdata::Object *>(newTuple);
     }
 
-    virtual void print(std::ostream &os, const Type *type) const override {
-        ASSERT(type && type->code() == TypeCode::Tuple, "Type must be TupleType");
-        const TupleType *tupleType = static_cast<const TupleType *>(type);
+    virtual void print(std::ostream &os, const type::Type *type) const override {
+        ASSERT(type && type->code() == type::TypeCode::Tuple, "Type must be TupleType");
+        const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
 
         os << "(";
 
@@ -143,7 +151,7 @@ class Tuple : public Object {
         for (size_t i = 0; i < size_; ++i) {
             if (i > 0)
                 os << ", ";
-            printSlot(os, dataPtr[i], tupleType->typeAt(i));
+            rtdata::printSlot(os, dataPtr[i], tupleType->typeAt(i));
         }
 
         os << ")";
@@ -151,17 +159,18 @@ class Tuple : public Object {
 
     virtual void onMoved() override {}
 
-    virtual void
-    updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
-        if (!type || type->code() != TypeCode::Tuple)
+    virtual void updateRefs(
+        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
+        const type::Type *type) override {
+        if (!type || type->code() != type::TypeCode::Tuple)
             return;
-        const TupleType *tupleType = static_cast<const TupleType *>(type);
-        auto codes                 = tupleType->codes();
-        Object **refArr            = reinterpret_cast<Object **>(data_);
+        const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
+        auto codes                       = tupleType->codes();
+        rtdata::Object **refArr          = reinterpret_cast<rtdata::Object **>(data_);
 
         for (size_t i = 0; i < size_; ++i) {
-            if (isGCTraced(codes[i])) {
-                if (Object *&ref = refArr[i]) {
+            if (type::isGCTraced(codes[i])) {
+                if (rtdata::Object *&ref = refArr[i]) {
                     ref = relocate(ref);
                 }
             }

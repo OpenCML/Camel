@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/compile/gct/types.h"
 #include "camel/utils/assert.h"
 
-namespace GraphConstructTree {
+namespace camel::compile::gct {
 
 std::string to_string(LoadType type) {
     switch (type) {
@@ -66,4 +66,4 @@ std::string to_string(LoadType type) {
     return "UNKNOWN";
 }
 
-} // namespace GraphConstructTree
+} // namespace camel::compile::gct

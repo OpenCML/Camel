@@ -21,6 +21,10 @@
 
 #include <algorithm>
 
+using camel::core::error::CharPos;
+using camel::core::error::CharRange;
+using camel::core::error::TokenRange;
+
 namespace camel::source {
 
 namespace {

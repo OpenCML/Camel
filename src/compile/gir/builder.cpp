@@ -27,8 +27,13 @@
 #define DEBUG_LEVEL -1
 
 using namespace std;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::module;
+using namespace camel::core::data;
+using namespace camel::core::type;
 
-namespace GraphIR {
+namespace camel::compile::gir {
 
 inline void tryRemoveCtrlLink(Node *from, Node *to) {
     // if from has already linked to to by a ctrl link, remove it first
@@ -1006,20 +1011,20 @@ Node *Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         break;
     }
     case TypeCode::Array: {
-        const auto &arrayType = tt::as_ptr<ArrayType>(tgtType);
-        elemType              = arrayType->elemType();
+        const auto *arrTy = tt::as_ptr<camel::core::type::ArrayType>(tgtType);
+        elemType          = arrTy->elemType();
         break;
     }
     case TypeCode::Struct: {
-        const auto &structType = tt::as_ptr<StructType>(tgtType);
-        const auto &optIndex   = structType->findField(accsLoad->index<std::string>());
+        const auto *strTy    = tt::as_ptr<camel::core::type::StructType>(tgtType);
+        const auto &optIndex = strTy->findField(accsLoad->index<std::string>());
         if (!optIndex.has_value()) {
             diags_->of(SemanticDiag::InvalidAccessIndex)
                 .atOrigin(gct->load()->origin())
                 .commit(accsLoad->index<std::string>());
             throw BuildAbortException();
         }
-        elemType = structType->typeAt(optIndex.value());
+        elemType = strTy->typeAt(optIndex.value());
         break;
     }
     default:
@@ -1233,4 +1238,4 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
     return nullptr;
 }
 
-} // namespace GraphIR
+} // namespace camel::compile::gir

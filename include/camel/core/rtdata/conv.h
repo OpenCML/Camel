@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,5 +23,8 @@
 #include "camel/compile/gir.h"
 #include "camel/core/data/base.h"
 
-slot_t makeSlotFromPrimitiveData(const data_ptr_t &data);
-Object *makeGCRefFromGCTracedData(const data_ptr_t &data, IAllocator &allocator);
+namespace data = camel::core::data;
+
+slot_t makeSlotFromPrimitiveData(const data::data_ptr_t &data);
+camel::core::rtdata::Object *
+makeGCRefFromGCTracedData(const data::data_ptr_t &data, camel::core::mm::IAllocator &allocator);

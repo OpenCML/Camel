@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 #include "base.h"
 #include "camel/core/error/diagnostics.h"
 
-namespace AbstractSyntaxTree {
+namespace camel::parse::ast {
 
 enum class DataType {
     UnaryExpr,
@@ -190,7 +190,8 @@ class MatchCaseLoad : public DataLoad {
 
     const std::string toString() const override { return "MatchCase" + this->status(); }
     const std::string geneCode() const override {
-        throw DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
+        throw camel::core::error::DiagnosticBuilder::of(
+            camel::core::error::InternalDiag::UnknownInternalError)
             .commit("MatchCaseLoad::geneCode() not implemented");
     }
 };
@@ -271,4 +272,4 @@ class RefDataLoad : public DataLoad {
     Reference ref_;
 };
 
-} // namespace AbstractSyntaxTree
+} // namespace camel::parse::ast

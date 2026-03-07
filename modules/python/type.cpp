@@ -13,15 +13,19 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "type.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/other.h"
 #include "camel/utils/assert.h"
 
 #include <span>
+
+namespace mm = camel::core::mm;
+using namespace camel::core::type;
 
 TypeCode PyObjectType::typeCode() {
     static TypeCode code = registerOtherType("PyObject", TypeFlag::GC_Traced);

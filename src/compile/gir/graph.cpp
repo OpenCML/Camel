@@ -13,14 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/compile/gir.h"
 #include "camel/core/error/diagnostics.h"
 
-namespace GraphIR {
+using namespace camel::core::error;
+using namespace camel::core::data;
+using namespace camel::core::type;
+
+namespace camel::compile::gir {
 
 // =============================================================================
 // Graph 创建与节点管理
@@ -529,4 +533,4 @@ void Graph::rearrange() {
     dirty_ = false;
 }
 
-} // namespace GraphIR
+} // namespace camel::compile::gir

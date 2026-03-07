@@ -19,11 +19,18 @@
 
 #include "operators.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/utils/type.h"
 
 #include <cmath>
+
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
+using namespace camel::core::context;
 
 template <typename T> static double meanSlots(Array *arr) {
     size_t n = arr->size();

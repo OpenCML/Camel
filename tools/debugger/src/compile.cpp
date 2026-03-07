@@ -33,6 +33,12 @@
 #include <string>
 
 namespace fs = std::filesystem;
+namespace mm = camel::core::mm;
+
+using namespace camel::core::error;
+using namespace camel::parse;
+using namespace camel::core::context;
+using namespace camel::core::module;
 
 namespace debugger {
 

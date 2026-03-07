@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 24, 2025
- * Updated: Oct. 08, 2025
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,11 @@
 
 #include <exception>
 
+namespace camel::core::error {
+
 class BuildAbortException : public std::exception {
   public:
     BuildAbortException() {}
 };
+
+} // namespace camel::core::error

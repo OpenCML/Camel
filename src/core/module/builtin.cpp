@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,10 @@
 #include "builtin/modules/globals.h"
 #include "builtin/modules/profiler.h"
 
+using namespace camel::core::context;
+
+namespace camel::core::module {
+
 std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_ptr_t ctx)>>
     builtinModuleFactories = {
         {"", [](context_ptr_t ctx) { return GlobalsBuiltinModule::create(ctx); }},
@@ -32,3 +36,5 @@ std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_pt
         {"profiler", [](context_ptr_t ctx) { return ProfilerBuiltinModule::create(ctx); }},
 #endif
 };
+
+} // namespace camel::core::module

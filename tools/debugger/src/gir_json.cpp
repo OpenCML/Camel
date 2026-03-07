@@ -44,12 +44,14 @@
 #include <queue>
 #include <unordered_set>
 
+using namespace camel::core::error;
+
 namespace debugger {
 
 namespace {
 
 using json = nlohmann::json;
-using namespace GraphIR;
+using namespace GIR;
 
 std::string ptrToId(const void *ptr) {
     return std::format("0x{:x}", reinterpret_cast<uintptr_t>(ptr));

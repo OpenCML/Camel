@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,18 +21,20 @@
 
 #include "camel/execute/pass/trans.h"
 
+namespace ctx = camel::core::context;
+
 class BytecodeDumpPass : public GraphTranslatePass {
   public:
-    BytecodeDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {};
+    BytecodeDumpPass(const ctx::context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
     virtual ~BytecodeDumpPass() = default;
 
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 };
 
 class LinkedBytecodeDumpPass : public GraphTranslatePass {
   public:
-    LinkedBytecodeDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {};
+    LinkedBytecodeDumpPass(const ctx::context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
     virtual ~LinkedBytecodeDumpPass() = default;
 
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 };

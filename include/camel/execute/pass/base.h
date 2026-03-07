@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,24 +24,26 @@
 
 class GraphIRPass {
   protected:
-    context_ptr_t context_;
+    camel::core::context::context_ptr_t context_;
 
   public:
-    GraphIRPass(const context_ptr_t &ctx) : context_(ctx) {};
+    GraphIRPass(const camel::core::context::context_ptr_t &ctx) : context_(ctx) {};
     virtual ~GraphIRPass() = default;
 
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) = 0;
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) = 0;
 };
 
 class NullGraphIRPass : public GraphIRPass {
   protected:
-    context_ptr_t context_;
+    camel::core::context::context_ptr_t context_;
 
   public:
-    NullGraphIRPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
+    NullGraphIRPass(const camel::core::context::context_ptr_t &ctx) : GraphIRPass(ctx) {};
     virtual ~NullGraphIRPass() = default;
 
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 };
 
-int applyPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx, std::ostream &os);
+int applyPasses(
+    const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx,
+    std::ostream &os);

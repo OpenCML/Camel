@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,9 +37,12 @@
 
 namespace camel::jit {
 
+namespace ctx = camel::core::context;
+
 struct CompilationUnit {
-    GraphIR::Graph *graph;
-    FrameMeta *frameMeta = nullptr; // 编译期使用的 Frame 布局，来自 graph->getExtra<FrameMeta,0>()
+    GIR::Graph *graph;
+    ctx::FrameMeta *frameMeta =
+        nullptr; // 编译期使用的 Frame 布局，来自 graph->getExtra<FrameMeta,0>()
     std::span<const Bytecode> bytecodes;
     size_t entryPc;
     void *trampolineFunc = nullptr; // FUNC trampoline

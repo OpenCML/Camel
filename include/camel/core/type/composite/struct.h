@@ -13,20 +13,22 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include "camel/core/type/composite/composite.h"
 #include "camel/utils/assert.h"
-#include "composite.h"
 
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <span>
 #include <vector>
+
+namespace camel::core::type {
 
 // 前向声明
 class StructType;
@@ -186,3 +188,5 @@ class StructType : public CompositeType {
         }
     }
 };
+
+} // namespace camel::core::type

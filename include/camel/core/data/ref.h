@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "base.h"
+#include "camel/core/data/base.h"
+
+namespace camel::core::data {
 
 class RefData : public Data {
   private:
@@ -34,5 +36,7 @@ class RefData : public Data {
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-    virtual data_ptr_t convertTo(Type *type) override;
+    virtual data_ptr_t convertTo(type::Type *type) override;
 };
+
+} // namespace camel::core::data

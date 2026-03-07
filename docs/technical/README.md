@@ -18,6 +18,7 @@
 | [09_operator_registration.md](09_operator_registration.md) | 算子注册：OperatorGroup、DynamicFuncTypeResolver、Executor、URI 格式及注意事项 |
 | [10_source_mapping_and_debug_locations.md](10_source_mapping_and_debug_locations.md) | 源码映射、Origin 派生链，以及 GCT/GIR/Runtime 如何回到源码区间 |
 | [11_semantic_models_and_reverse_mapping_foundation.md](11_semantic_models_and_reverse_mapping_foundation.md) | AST/GCT/GIR 节点语义、层间 lowering、基础缺口审计与相对精确逆映射底座 |
+| [12_namespace_convention.md](12_namespace_convention.md) | **命名空间规范**：路径与命名空间映射、别名约定、新代码规则及迁移状态 |
 
 ## 相关文档（docs 目录）
 

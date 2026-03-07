@@ -16,6 +16,9 @@
  * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  *
+ */
+
+/**
  * ---
  * JIT 调用约定与 slot[0] 规范：
  * 1. 动态区 slot[0] 保留，始终存放当前 Frame*（reinterpret_cast<slot_t>）。解释器/gotovm/casevm
@@ -27,21 +30,28 @@
 
 #include "trampoline.h"
 
+#include "camel/core/context/frame.h"
 #include "camel/core/rtdata.h"
 
 #include <cstdint>
 #include <cstring>
 
+using namespace camel::core::context;
+
 #if ENABLE_FASTVM_JIT
 #include "../../bytecode.h"
 #include "../../fastvm.h"
 #include "camel/core/context/frame.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/utils/log.h"
 #include "jit_debug_trace.h"
 
 #include <iomanip>
 #include <sstream>
+
+using namespace camel::core::error;
+using namespace camel::jit;
 #endif
 
 extern "C" {
@@ -52,7 +62,7 @@ extern "C" {
 extern "C" void jitDebugTraceBody(const void *ctx) {
     if (!ctx)
         return;
-    const auto *c = static_cast<const camel::jit::JitDebugContext *>(ctx);
+    const auto *c = static_cast<const JitDebugContext *>(ctx);
     std::ostringstream os;
     os << "trace pc=" << static_cast<uint32_t>(c->pc) << "\n";
     os << std::hex;
@@ -107,8 +117,8 @@ extern "C" void jitDebugTraceBody(const void *ctx) {
 void jitDebugTraceWrapper(const void *ctx) {
     if (!ctx)
         return;
-    static thread_local camel::jit::JitDebugContext buf;
-    std::memcpy(&buf, ctx, sizeof(camel::jit::JitDebugContext));
+    static thread_local JitDebugContext buf;
+    std::memcpy(&buf, ctx, sizeof(JitDebugContext));
     jitDebugTrace(&buf);
 }
 
@@ -149,7 +159,7 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
                 static_cast<void *>(callerSlots),
                 ctx,
                 pc));
-    auto *jc     = static_cast<camel::jit::JitContext *>(ctx);
+    auto *jc     = static_cast<JitContext *>(ctx);
     auto *vm     = jc->vm;
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
     Bytecode &bc = base[pc];
@@ -167,8 +177,8 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
     if (targetPc == 0) {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc path: JIT->JIT"));
-        GraphIR::Graph *g         = getFuncExtraGraph(&bc);
-        camel::jit::JitEntryFn fn = reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc));
+        GIR::Graph *g = getFuncExtraGraph(&bc);
+        JitEntryFn fn = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc));
         EXEC_WHEN_DEBUG(
             GetDefaultLogger()
                 .in("JIT.Trampoline")
@@ -209,7 +219,7 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
 
     EXEC_WHEN_DEBUG(
         GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc path: JIT->interpreter"));
-    GraphIR::Graph *targetGraph = getFuncExtraGraph(&bc);
+    GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
     EXEC_WHEN_DEBUG(
         GetDefaultLogger()
             .in("JIT.Trampoline")
@@ -246,7 +256,7 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
 }
 
 slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
-    auto *jc     = static_cast<camel::jit::JitContext *>(ctx);
+    auto *jc     = static_cast<JitContext *>(ctx);
     auto *vm     = jc->vm;
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
     Bytecode &bc = base[pc];
@@ -258,10 +268,10 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
         count = incFuncExtraCount(&bc);
 
     if (targetPc == 0) {
-        GraphIR::Graph *g         = getFuncExtraGraph(&bc);
-        camel::jit::JitEntryFn fn = reinterpret_cast<camel::jit::JitEntryFn>(getFuncExtraFn(&bc));
-        Frame *callerFrame        = reinterpret_cast<Frame *>(callerSlots[0]);
-        Frame *newFrame           = vm->acquireFrameForTail(g);
+        GIR::Graph *g      = getFuncExtraGraph(&bc);
+        JitEntryFn fn      = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc));
+        Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
+        Frame *newFrame    = vm->acquireFrameForTail(g);
         for (size_t i = 0; i < argsCnt; ++i)
             newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
         EXEC_WHEN_DEBUG(
@@ -280,7 +290,7 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
         return result;
     }
 
-    GraphIR::Graph *targetGraph = getFuncExtraGraph(&bc);
+    GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
     EXEC_WHEN_DEBUG(
         GetDefaultLogger()
             .in("JIT.Trampoline")
@@ -300,7 +310,7 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
 }
 
 slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc) {
-    auto *jc     = static_cast<camel::jit::JitContext *>(ctx);
+    auto *jc     = static_cast<JitContext *>(ctx);
     auto *vm     = jc->vm;
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
     Bytecode &bc = base[pc];
@@ -334,18 +344,18 @@ slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc) {
 }
 
 slot_t trampolineCast(slot_t *slots, void *ctx, size_t pc) {
-    auto *jc     = static_cast<camel::jit::JitContext *>(ctx);
+    auto *jc     = static_cast<JitContext *>(ctx);
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
     Bytecode &bc = base[pc];
 
-    Frame *frame          = reinterpret_cast<Frame *>(slots[0]); // 规范：slot[0] = Frame*
-    data_idx_t srcIdx     = bc.fastop[0];
-    Type *targetType      = bc.extra()->pType;
-    data_idx_t resultSlot = bc.result;
+    Frame *frame           = reinterpret_cast<Frame *>(slots[0]); // 规范：slot[0] = Frame*
+    data_idx_t srcIdx      = bc.fastop[0];
+    type::Type *targetType = bc.extra()->pType;
+    data_idx_t resultSlot  = bc.result;
 
-    Type *srcType = frame->typeAt<Type>(srcIdx);
-    slot_t value  = frame->get<slot_t>(srcIdx);
-    slot_t result = targetType->castSlotFrom(value, srcType);
+    type::Type *srcType = frame->typeAt<type::Type>(srcIdx);
+    slot_t value        = frame->get<slot_t>(srcIdx);
+    slot_t result       = targetType->castSlotFrom(value, srcType);
     frame->set(resultSlot, result);
     return result;
 }

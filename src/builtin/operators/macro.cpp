@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 29, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,7 @@
 #include "camel/core/operator.h"
 #include "camel/utils/assert.h"
 
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::context;
 
 slot_t __cmp__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }

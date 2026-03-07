@@ -13,20 +13,21 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composite.h"
-
 #include "camel/core/func.h"
 #include "camel/core/impl.h"
+#include "camel/core/type/composite/composite.h"
 
 #include <span>
 #include <string_view>
 #include <vector>
+
+namespace camel::core::type {
 
 using param_t           = std::pair<Type *, bool>; // bool表示是否为可变参数
 using param_init_list_t = std::initializer_list<param_t>;
@@ -268,3 +269,5 @@ class FunctionType : public CompositeType {
     //          [normTypes_[count]][normTypeCodes_[count]][normIsVar_[count]]
     uint8_t data_[];
 };
+
+} // namespace camel::core::type

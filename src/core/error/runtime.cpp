@@ -26,6 +26,8 @@
 #include <filesystem>
 #include <format>
 
+namespace camel::core::error {
+
 namespace {
 
 std::string formatIndexedMessage(const std::string &fmt, const std::vector<std::string> &args) {
@@ -183,7 +185,7 @@ RuntimeErrorReporter::report(const RuntimeFault &fault, const ExecutionSite &sit
 }
 
 ExecutionSite makeGraphExecutionSite(
-    camel::source::source_context_ptr_t sourceContext, GraphIR::Graph *graph, size_t frameDepth,
+    camel::source::source_context_ptr_t sourceContext, GIR::Graph *graph, size_t frameDepth,
     std::string taskLabel) {
     ExecutionSite site;
     site.kind       = ExecutionSiteKind::Unknown;
@@ -200,7 +202,7 @@ ExecutionSite makeGraphExecutionSite(
 }
 
 ExecutionSite makeNodeExecutionSite(
-    camel::source::source_context_ptr_t sourceContext, GraphIR::Graph *graph, GraphIR::Node *node,
+    camel::source::source_context_ptr_t sourceContext, GIR::Graph *graph, GIR::Node *node,
     size_t frameDepth, std::string taskLabel, ExecutionSiteKind kind) {
     ExecutionSite site =
         makeGraphExecutionSite(sourceContext, graph, frameDepth, std::move(taskLabel));
@@ -216,7 +218,7 @@ ExecutionSite makeNodeExecutionSite(
 }
 
 ExecutionSite makePcExecutionSite(
-    camel::source::source_context_ptr_t sourceContext, GraphIR::Graph *graph, size_t pc,
+    camel::source::source_context_ptr_t sourceContext, GIR::Graph *graph, size_t pc,
     size_t frameDepth, std::string taskLabel, ExecutionSiteKind kind) {
     ExecutionSite site =
         makeGraphExecutionSite(sourceContext, graph, frameDepth, std::move(taskLabel));
@@ -228,10 +230,13 @@ ExecutionSite makePcExecutionSite(
     return site;
 }
 
-Diagnostic reportRuntimeFault(Context &ctx, const RuntimeFault &fault, const ExecutionSite &site) {
+Diagnostic reportRuntimeFault(
+    camel::core::context::Context &ctx, const RuntimeFault &fault, const ExecutionSite &site) {
     auto reporter = ctx.runtimeErrorReporter();
     if (!reporter) {
         return DiagnosticBuilder::of(fault.diag()).commit(fault.what());
     }
     return reporter->report(fault, site);
 }
+
+} // namespace camel::core::error

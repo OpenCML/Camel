@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,5 +23,5 @@
 #include "gir/nodes.h"
 #include "gir/types.h"
 
-namespace GraphIR {}
-namespace GIR = GraphIR;
+namespace camel::compile::gir {}
+namespace GIR = camel::compile::gir;

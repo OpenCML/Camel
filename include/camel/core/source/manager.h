@@ -145,7 +145,7 @@ class SourceManager {
     source_file_id_t registerFile(const std::string &path, const std::string &content);
     std::optional<source_file_id_t> findFileId(const std::string &path) const;
     const SourceFile *file(source_file_id_t id) const;
-    CharPos offsetToPos(source_file_id_t fileId, size_t offset) const;
+    camel::core::error::CharPos offsetToPos(source_file_id_t fileId, size_t offset) const;
 
   private:
     std::vector<SourceFile> files_ = {SourceFile{}};
@@ -158,7 +158,7 @@ class SpanArena {
     span_id_t create(source_file_id_t fileId, size_t startOffset, size_t endOffset);
     span_id_t fromTokenRange(
         source_file_id_t fileId, const std::vector<antlr4::Token *> &tokens,
-        const TokenRange &range);
+        const camel::core::error::TokenRange &range);
     span_id_t fromToken(
         source_file_id_t fileId, const std::vector<antlr4::Token *> &tokens, antlr4::Token *token);
     const SourceSpan *span(span_id_t id) const;
@@ -231,7 +231,7 @@ class SourceContext {
     span_id_t createSpan(source_file_id_t fileId, size_t startOffset, size_t endOffset);
     span_id_t spanFromTokenRange(
         source_file_id_t fileId, const std::vector<antlr4::Token *> &tokens,
-        const TokenRange &range);
+        const camel::core::error::TokenRange &range);
     span_id_t spanFromToken(
         source_file_id_t fileId, const std::vector<antlr4::Token *> &tokens, antlr4::Token *token);
 
@@ -243,8 +243,8 @@ class SourceContext {
         span_id_t primarySpan = kInvalidSpanId, bool synthetic = false,
         std::vector<origin_id_t> inputs = {});
 
-    CharRange resolveSpan(span_id_t spanId) const;
-    CharRange resolveOrigin(origin_id_t originId) const;
+    camel::core::error::CharRange resolveSpan(span_id_t spanId) const;
+    camel::core::error::CharRange resolveOrigin(origin_id_t originId) const;
 
     const SourceSpan *span(span_id_t spanId) const { return spans_.span(spanId); }
     const OriginRecord *origin(origin_id_t originId) const { return origins_.origin(originId); }

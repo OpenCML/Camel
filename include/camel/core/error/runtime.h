@@ -31,12 +31,17 @@
 #include <utility>
 #include <vector>
 
+namespace camel::core::context {
 class Context;
-
-namespace GraphIR {
+}
+namespace camel::compile::gir {
 class Graph;
 class Node;
-} // namespace GraphIR
+} // namespace camel::compile::gir
+
+namespace GIR = camel::compile::gir;
+
+namespace camel::core::error {
 
 enum class RuntimeFaultPolicy : uint8_t {
     AbortCurrentExecution,
@@ -54,8 +59,8 @@ enum class ExecutionSiteKind : uint8_t {
 
 struct ExecutionSiteHint {
     ExecutionSiteKind kind                  = ExecutionSiteKind::Unknown;
-    GraphIR::Graph *graph                   = nullptr;
-    GraphIR::Node *node                     = nullptr;
+    GIR::Graph *graph                       = nullptr;
+    GIR::Node *node                         = nullptr;
     size_t pc                               = 0;
     camel::source::origin_id_t cachedOrigin = camel::source::kInvalidOriginId;
     std::string stableId;
@@ -63,8 +68,8 @@ struct ExecutionSiteHint {
 
 struct ExecutionSite {
     ExecutionSiteKind kind                  = ExecutionSiteKind::Unknown;
-    GraphIR::Graph *graph                   = nullptr;
-    GraphIR::Node *node                     = nullptr;
+    GIR::Graph *graph                       = nullptr;
+    GIR::Node *node                         = nullptr;
     size_t pc                               = 0;
     camel::source::origin_id_t cachedOrigin = camel::source::kInvalidOriginId;
     std::string stableId;
@@ -165,20 +170,23 @@ class RuntimeErrorReporter {
 };
 
 ExecutionSite makeGraphExecutionSite(
-    camel::source::source_context_ptr_t sourceContext, GraphIR::Graph *graph, size_t frameDepth = 0,
+    camel::source::source_context_ptr_t sourceContext, GIR::Graph *graph, size_t frameDepth = 0,
     std::string taskLabel = "");
 ExecutionSite makeNodeExecutionSite(
-    camel::source::source_context_ptr_t sourceContext, GraphIR::Graph *graph, GraphIR::Node *node,
+    camel::source::source_context_ptr_t sourceContext, GIR::Graph *graph, GIR::Node *node,
     size_t frameDepth = 0, std::string taskLabel = "",
     ExecutionSiteKind kind = ExecutionSiteKind::Node);
 ExecutionSite makePcExecutionSite(
-    camel::source::source_context_ptr_t sourceContext, GraphIR::Graph *graph, size_t pc,
+    camel::source::source_context_ptr_t sourceContext, GIR::Graph *graph, size_t pc,
     size_t frameDepth = 0, std::string taskLabel = "",
     ExecutionSiteKind kind = ExecutionSiteKind::BytecodePc);
 
-Diagnostic reportRuntimeFault(Context &ctx, const RuntimeFault &fault, const ExecutionSite &site);
+Diagnostic reportRuntimeFault(
+    camel::core::context::Context &ctx, const RuntimeFault &fault, const ExecutionSite &site);
 
 template <typename... Args>
 [[noreturn]] inline void throwRuntimeFault(RuntimeDiag diag, Args &&...args) {
     throw RuntimeFault::make(diag, std::forward<Args>(args)...);
 }
+
+} // namespace camel::core::error

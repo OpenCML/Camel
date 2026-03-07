@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,9 @@
 
 #include <cstring>
 
+namespace mm = camel::core::mm;
 using namespace std;
+using namespace camel::core::type;
 
 namespace {
 
@@ -37,13 +39,13 @@ FunctionTypeLayout computeLayout(size_t withCount, size_t normCount) {
     size_t normTypeCodesSize = normCount * sizeof(TypeCode);
     size_t normIsVarSize     = normCount * sizeof(uint8_t);
 
-    size_t aWTypes  = ::alignUp(withTypesSize, alignof(TypeCode));
-    size_t aWCodes  = ::alignUp(withTypeCodesSize, alignof(uint8_t));
-    size_t aWVar    = ::alignUp(withIsVarSize, alignof(Type *));
+    size_t aWTypes  = mm::alignUp(withTypesSize, alignof(TypeCode));
+    size_t aWCodes  = mm::alignUp(withTypeCodesSize, alignof(uint8_t));
+    size_t aWVar    = mm::alignUp(withIsVarSize, alignof(Type *));
     size_t normBase = aWTypes + aWCodes + aWVar;
-    size_t aNTypes  = ::alignUp(normTypesSize, alignof(TypeCode));
-    size_t aNCodes  = ::alignUp(normTypeCodesSize, alignof(uint8_t));
-    size_t aNVar    = ::alignUp(normIsVarSize, alignof(uint8_t));
+    size_t aNTypes  = mm::alignUp(normTypesSize, alignof(TypeCode));
+    size_t aNCodes  = mm::alignUp(normTypeCodesSize, alignof(uint8_t));
+    size_t aNVar    = mm::alignUp(normIsVarSize, alignof(uint8_t));
 
     size_t dataSize  = normBase + aNTypes + aNCodes + aNVar;
     size_t totalSize = sizeof(FunctionType) + dataSize;

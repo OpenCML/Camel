@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/parse/ast/type.h"
 #include "camel/utils/str.h"
 
-namespace AbstractSyntaxTree {
+namespace camel::parse::ast {
 
 std::string to_string(TypeType type) {
     switch (type) {
@@ -135,4 +135,4 @@ const std::string RefTypeLoad::geneCode() const {
     return s;
 }
 
-} // namespace AbstractSyntaxTree
+} // namespace camel::parse::ast

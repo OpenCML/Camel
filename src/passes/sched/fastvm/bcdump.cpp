@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 #include "camel/common/algo/topo.h"
 #include "compile.h"
 
-using namespace GraphIR;
+using namespace GIR;
 
 graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     // 收集所有被依赖的子图
@@ -65,7 +65,7 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         os << std::format("  [used: {}, allocated: {}]\n", bytecodes.size(), bytecodes.capacity());
     }
 
-    return GraphIR::Graph::null();
+    return GIR::Graph::null();
 }
 
 graph_ptr_t LinkedBytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
@@ -91,5 +91,5 @@ graph_ptr_t LinkedBytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) 
         }
     }
 
-    return GraphIR::Graph::null();
+    return GIR::Graph::null();
 }

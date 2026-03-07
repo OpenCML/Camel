@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,8 @@
 #include <sstream>
 
 using namespace std;
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::context;
 
 TopoNodeSeqDumpPass::TopoNodeSeqDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
 
@@ -100,7 +101,7 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 GetDefaultLogger().in("Topo").debug("  {}", n->toString());
             }
             if (sortedNodes.size() != graph->nodes().size() - 1) {
-                GraphIR::node_vec_t unreachableNodes;
+                GIR::node_vec_t unreachableNodes;
                 for (Node *n : graph->nodes()) {
                     if (n != exitNode &&
                         std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
@@ -178,5 +179,5 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
 
     os << oss.str();
 
-    return GraphIR::Graph::null();
+    return GIR::Graph::null();
 }

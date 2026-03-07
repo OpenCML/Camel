@@ -13,14 +13,20 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/context/frame.h"
 #include "camel/core/rtdata/conv.h"
 
-FrameMeta *installFrameMetaInfoForGraph(GraphIR::Graph *graph) {
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
+
+namespace camel::core::context {
+
+FrameMeta *installFrameMetaInfoForGraph(GIR::Graph *graph) {
     const TupleType *runtimeDataType = graph->runtimeDataType();
     const TupleType *staticDataType  = graph->staticDataType();
     Tuple *staticArea                = Tuple::create(staticDataType->size(), mm::permSpace());
@@ -39,7 +45,7 @@ FrameMeta *installFrameMetaInfoForGraph(GraphIR::Graph *graph) {
         }
     }
 
-    FrameMeta *meta       = constructAt<FrameMeta>(mm::metaSpace());
+    FrameMeta *meta       = mm::constructAt<FrameMeta>(mm::metaSpace());
     meta->frameSize       = sizeof(Frame) + sizeof(slot_t) * runtimeDataType->size();
     meta->runtimeDataType = runtimeDataType;
     meta->staticArea      = staticArea;
@@ -48,3 +54,5 @@ FrameMeta *installFrameMetaInfoForGraph(GraphIR::Graph *graph) {
 
     return meta;
 }
+
+} // namespace camel::core::context

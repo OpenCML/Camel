@@ -19,6 +19,8 @@
 
 #include "camel/core/error/diagnostics/builder.h"
 
+namespace camel::core::error {
+
 // ---- DiagnosticBuilder implementation ----
 DiagnosticBuilder &DiagnosticBuilder::at(const CharRange &range) {
     range_ = range;
@@ -54,3 +56,5 @@ DiagnosticBuilder &DiagnosticBuilder::at(antlr4::Token *token) {
     range_ = CharRange::fromTokens(token, token);
     return *this;
 }
+
+} // namespace camel::core::error

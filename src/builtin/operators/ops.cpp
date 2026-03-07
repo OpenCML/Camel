@@ -25,7 +25,14 @@
 
 #include <cmath>
 
-namespace GIR = GraphIR;
+#include "camel/core/error/runtime.h"
+
+namespace GIR = camel::compile::gir;
+namespace mm  = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
 
 slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // const data_ptr_t &rhs = frame.get(nargs[1]);

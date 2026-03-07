@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 07, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,11 @@
 #include "camel/core/context/frame.h"
 #endif
 
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::context;
+#if ENABLE_FASTVM_JIT
+using namespace camel::jit;
+#endif
 
 graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
@@ -41,7 +45,7 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .optimizationStrategies  = OptimizationStrategyCode::All,
         });
 
-    auto backend = camel::jit::createBackend();
+    auto backend = createBackend();
     if (!backend) {
         os << "[JIT] Backend not available, cannot dump assembly.\n";
         return Graph::null();
@@ -57,7 +61,7 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         if (!meta)
             meta = installFrameMetaInfoForGraph(g);
 
-        camel::jit::CompilationUnit unit{
+        CompilationUnit unit{
             .graph          = g,
             .frameMeta      = meta,
             .bytecodes      = bcSpan,

@@ -25,11 +25,21 @@
 #include "camel/core/module/builtin.h"
 #include "camel/core/module/dynamic.h"
 #include "camel/core/module/userdef.h"
+#include "camel/execute/executor.h"
 #include "camel/utils/log.h"
 #include "camel/utils/str.h"
 
 namespace fs = std::filesystem;
 using namespace strutil;
+using namespace camel::core::error;
+using namespace camel::core::module;
+
+namespace camel::core::context {
+
+Context::Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
+    : entryConfig_(entryConf), diagConfig_(diagConf) {}
+
+Context::~Context() = default;
 
 std::string EntryConfig::toString() const {
     std::ostringstream os;
@@ -445,14 +455,14 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
     return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
 }
 
-GraphIR::graph_ptr_t Context::rootGraph() const {
+GIR::graph_ptr_t Context::rootGraph() const {
     ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
     auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
     ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
     return gir;
 }
 
-GraphIR::graph_ptr_t Context::mainGraph() const {
+GIR::graph_ptr_t Context::mainGraph() const {
     ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
     auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
     ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
@@ -472,6 +482,8 @@ void Context::registerExecutorFactory(std::string name, executor_factory_t fact)
     exeMgr_->registerExecutorFactory(name, fact);
 }
 
-void Context::eval(std::string uri, GraphIR::Node *self, Frame &frame) {
+void Context::eval(std::string uri, GIR::Node *self, Frame &frame) {
     return exeMgr_->eval(uri, self, frame);
 }
+
+} // namespace camel::core::context

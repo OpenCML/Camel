@@ -30,14 +30,14 @@
 #include "camel/parse/antlr/OpenCMLVisitor.h"
 #include "camel/parse/ast.h"
 
-namespace AbstractSyntaxTree {
+namespace camel::parse::ast {
 
 class Builder : public OpenCMLVisitor {
   public:
     Builder() {};
     virtual ~Builder() = default;
 
-    node_ptr_t build(antlr4::tree::ParseTree *tree, diagnostics_ptr_t diags) {
+    node_ptr_t build(antlr4::tree::ParseTree *tree, camel::core::error::diagnostics_ptr_t diags) {
         diags_         = diags;
         sourceContext_ = diags ? diags->sourceContext() : nullptr;
         sourceFileId_  = camel::source::kInvalidSourceFileId;
@@ -55,7 +55,7 @@ class Builder : public OpenCMLVisitor {
   private:
     node_ptr_t root_;
 
-    diagnostics_ptr_t diags_;
+    camel::core::error::diagnostics_ptr_t diags_;
     camel::source::source_context_ptr_t sourceContext_;
     camel::source::source_file_id_t sourceFileId_ = camel::source::kInvalidSourceFileId;
 
@@ -225,4 +225,4 @@ class Builder : public OpenCMLVisitor {
 
     // End of auto-generated visitor methods
 };
-} // namespace AbstractSyntaxTree
+} // namespace camel::parse::ast

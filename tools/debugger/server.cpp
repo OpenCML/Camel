@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,6 +40,8 @@
 #include "camel/utils/log.h"
 #include "command/dispatcher.h"
 #include "server.h"
+
+namespace mm = camel::core::mm;
 
 #include <chrono>
 #include <cstdlib>

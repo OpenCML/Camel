@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 09, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,8 +23,8 @@
 
 class GraphRewritePass : public GraphIRPass {
   public:
-    GraphRewritePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {};
+    GraphRewritePass(const camel::core::context::context_ptr_t &ctx) : GraphIRPass(ctx) {};
     virtual ~GraphRewritePass() = default;
 
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override = 0;
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override = 0;
 };

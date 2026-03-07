@@ -13,7 +13,7 @@
 #include <string>
 #include <utility>
 
-namespace GraphIR {
+namespace camel::compile::gir {
 class Node;
 }
 
@@ -23,9 +23,9 @@ namespace debugger {
 /// root: 根图；graphId: 空 = 仅根图摘要，非空 = 展开该图（nodes/edges + 直接子图摘要）。
 /// 返回 (json 字符串, 错误信息)，错误为空表示成功。
 std::pair<std::string, std::string>
-getGirJson(const GraphIR::graph_ptr_t &root, const std::string &graphId);
+getGirJson(const GIR::graph_ptr_t &root, const std::string &graphId);
 
 /// 返回节点的稳定 ID（graphId_nIndex），与 JSON 中 stableId 一致，用于跨 Run 断点匹配。
-std::string getStableNodeId(const GraphIR::Node *node);
+std::string getStableNodeId(const GIR::Node *node);
 
 } // namespace debugger

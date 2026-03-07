@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 #include <memory>
 #include <string>
 
-namespace GraphConstructTree {
+namespace camel::compile::gct {
 
 class Load;
 class Node;
@@ -55,4 +55,4 @@ enum class LoadType {
 
 std::string to_string(LoadType type);
 
-} // namespace GraphConstructTree
+} // namespace camel::compile::gct

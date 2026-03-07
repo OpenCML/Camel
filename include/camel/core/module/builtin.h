@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 29, 2025
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,13 +21,19 @@
 
 #include "module.h"
 
-extern std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_ptr_t ctx)>>
+namespace camel::core::module {
+
+extern std::unordered_map<
+    std::string, std::function<std::shared_ptr<Module>(camel::core::context::context_ptr_t ctx)>>
     builtinModuleFactories;
 
 class BuiltinModule : public Module {
   public:
-    BuiltinModule(const std::string &name, context_ptr_t ctx) : Module(name, "", ctx) {}
+    BuiltinModule(const std::string &name, camel::core::context::context_ptr_t ctx)
+        : Module(name, "", ctx) {}
     virtual ~BuiltinModule() = default;
 
     virtual bool load() = 0;
 };
+
+} // namespace camel::core::module

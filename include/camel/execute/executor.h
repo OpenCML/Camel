@@ -13,12 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include "camel/core/context/context.h"
+#include "camel/core/context/frame.h"
 #include "camel/core/operator.h"
 #include "camel/core/type.h"
 
@@ -28,22 +30,19 @@
 #include <unordered_map>
 #include <vector>
 
-class Frame;
-class Context;
-using context_ptr_t = std::shared_ptr<Context>;
-
 class Executor : public std::enable_shared_from_this<Executor> {
   protected:
-    context_ptr_t context_;
+    camel::core::context::context_ptr_t context_;
 
     std::unordered_map<std::string, operator_t> opsMap_;
 
   public:
-    Executor(context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
+    Executor(
+        camel::core::context::context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
         : context_(ctx), opsMap_(ops) {};
     virtual ~Executor() = default;
 
-    virtual void eval(std::string uri, GraphIR::Node *self, Frame &frame) = 0;
+    virtual void eval(std::string uri, GIR::Node *self, camel::core::context::Frame &frame) = 0;
     std::optional<operator_t> find(const std::string &uri);
     std::string getNameOfAnOperator(const operator_t &op);
 };
@@ -53,16 +52,16 @@ using executor_factory_t = std::function<executor_ptr_t()>;
 
 class ExecutorManager {
   private:
-    context_ptr_t context_;
+    camel::core::context::context_ptr_t context_;
     std::unordered_map<std::string, executor_factory_t> executorFactories;
     mutable std::unordered_map<std::string, executor_ptr_t> loadedExecutors;
 
   public:
-    ExecutorManager(context_ptr_t ctx) : context_(ctx) {};
+    ExecutorManager(camel::core::context::context_ptr_t ctx) : context_(ctx) {};
     ~ExecutorManager() = default;
     void registerExecutorFactory(std::string name, executor_factory_t fact);
 
-    void eval(std::string uri, GraphIR::Node *self, Frame &frame) const;
+    void eval(std::string uri, GIR::Node *self, camel::core::context::Frame &frame) const;
     std::optional<operator_t> find(const std::string &uri) const;
     std::string getNameOfAnOperator(const operator_t &op) const;
 };

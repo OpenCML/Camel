@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,10 @@
 #include "camel/core/operator.h"
 #include "camel/core/type/resolver.h"
 #include "executor.h"
+
+using namespace camel::core::context;
+using namespace camel::core::module;
+using namespace camel::core::type;
 
 JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
     exportEntity(

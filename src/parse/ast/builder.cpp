@@ -29,6 +29,7 @@
 
 using namespace std;
 using namespace AST;
+using namespace camel::core::error;
 
 namespace {
 thread_local camel::source::source_context_ptr_t g_sourceContext = nullptr;

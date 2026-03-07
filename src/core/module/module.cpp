@@ -13,15 +13,20 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/module/module.h"
 #include "camel/compile/gir.h"
 #include "camel/core/operator.h"
+#include "camel/core/type/resolver.h"
 
 #include <algorithm>
+
+namespace camel::core::module {
+
+using resolver_ptr_t = camel::core::type::resolver_ptr_t;
 
 namespace {
 
@@ -34,10 +39,10 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
         return std::nullopt;
     }
     const entity &first = entities.front();
-    if (std::holds_alternative<GraphIR::graph_vec_ptr_t>(first)) {
-        auto merged = std::make_shared<GraphIR::graph_vec_t>();
+    if (std::holds_alternative<GIR::graph_vec_ptr_t>(first)) {
+        auto merged = std::make_shared<GIR::graph_vec_t>();
         for (const auto &ent : entities) {
-            if (auto *pv = std::get_if<GraphIR::graph_vec_ptr_t>(&ent)) {
+            if (auto *pv = std::get_if<GIR::graph_vec_ptr_t>(&ent)) {
                 if (*pv) {
                     for (const auto &g : **pv) {
                         merged->push_back(g);
@@ -185,3 +190,5 @@ entity_ns_ptr_t Module::exportedEntityNS() const {
     ASSERT(loaded_, "Module not built: " + name_);
     return exportedEntityNS_;
 }
+
+} // namespace camel::core::module

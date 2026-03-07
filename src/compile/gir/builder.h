@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,8 +27,9 @@
 
 #include "camel/compile/gct.h"
 #include "camel/compile/gir.h"
+#include "camel/core/error/diagnostics.h"
 
-namespace GraphIR {
+namespace camel::compile::gir {
 
 using void_ptr_t = void *;
 
@@ -39,10 +40,12 @@ using graph_scope_ptr_t = std::shared_ptr<graph_scope_t>;
 
 class Builder {
   public:
-    Builder(const context_ptr_t &context, const module_ptr_t &module)
+    Builder(
+        const camel::core::context::context_ptr_t &context,
+        const camel::core::module::module_ptr_t &module)
         : context_(context), module_(module) {}
 
-    graph_ptr_t build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags);
+    graph_ptr_t build(GCT::node_ptr_t &gct, camel::core::error::diagnostics_ptr_t diags);
 
     graph_ptr_t rootGraph() const { return rootGraph_; }
 
@@ -53,9 +56,9 @@ class Builder {
     node_scope_ptr_t nodeScope_;
     graph_scope_ptr_t graphScope_;
 
-    context_ptr_t context_;
-    module_ptr_t module_;
-    diagnostics_ptr_t diags_;
+    camel::core::context::context_ptr_t context_;
+    camel::core::module::module_ptr_t module_;
+    camel::core::error::diagnostics_ptr_t diags_;
 
     bool waited_;
     bool synced_;
@@ -129,4 +132,4 @@ class Builder {
     void_ptr_t visitExptNode(const GCT::node_ptr_t &gct);
 };
 
-} // namespace GraphIR
+} // namespace camel::compile::gir
