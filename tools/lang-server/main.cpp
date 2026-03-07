@@ -19,12 +19,16 @@
  *
  */
 
+// nlohmann/json 使用标准 C 的 EOF 宏；ANTLR 在 antlr4-common.h 里会 #undef EOF，
+// 故须先包含 nlohmann/json.hpp（并保证 EOF 可见），再包含会拉入 ANTLR 的头文件。
+#include "nlohmann/json.hpp"
+#include <cstdio>
+
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/range.h"
 #include "camel/core/mm.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/dll_path.h"
-#include "nlohmann/json.hpp"
 
 #include <filesystem>
 #include <iostream>
