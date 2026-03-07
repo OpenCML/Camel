@@ -13,13 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 16, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "bytecode.h"
+#include "camel/core/source/ids.h"
+
+#include <unordered_map>
 
 enum class OptimizationStrategyCode : uint32_t {
     None                    = 0x00000000,
@@ -42,13 +45,21 @@ struct OptimizationStrategyConfig {
 struct IOptimizeStrategy {
     virtual ~IOptimizeStrategy() = default;
     // 返回下一次扫描的起始位置；若没有修改则返回 std::nullopt
-    virtual std::optional<size_t> apply(bytecode_vec_t &codes, size_t curr) = 0;
-    virtual OpCode triggerOp() const                                        = 0;
+    virtual std::optional<size_t> apply(
+        bytecode_vec_t &codes, size_t curr,
+        std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) = 0;
+    virtual OpCode triggerOp() const                                       = 0;
 };
 
-void moveup(bytecode_vec_t &codes, size_t from, size_t to);
-void redirect(bytecode_vec_t &codes, size_t start, int step = -1);
-void removeop(bytecode_vec_t &codes, size_t index);
+void moveup(
+    bytecode_vec_t &codes, size_t from, size_t to,
+    std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins = nullptr);
+void redirect(
+    bytecode_vec_t &codes, size_t start, int step = -1,
+    std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins = nullptr);
+void removeop(
+    bytecode_vec_t &codes, size_t index,
+    std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins = nullptr);
 size_t findPrev(bytecode_vec_t &codes, size_t index);
 size_t findNext(bytecode_vec_t &codes, size_t index);
 
@@ -63,7 +74,9 @@ class JumpToJumpStrategy : public IOptimizeStrategy {
   public:
     OpCode triggerOp() const override { return OpCode::JUMP; }
 
-    std::optional<size_t> apply(bytecode_vec_t &codes, size_t curr) override {
+    std::optional<size_t> apply(
+        bytecode_vec_t &codes, size_t curr,
+        std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) override {
         Bytecode &bc  = codes[curr];
         size_t next   = bc.fastop[0];
         Bytecode &tbc = codes[next];
@@ -74,8 +87,8 @@ class JumpToJumpStrategy : public IOptimizeStrategy {
             bc.fastop[0] = tbc.fastop[0];
 
             // 删除被中间跳过的那个 JUMP
-            removeop(codes, next);
-            redirect(codes, curr, -1);
+            removeop(codes, next, pcOrigins);
+            redirect(codes, curr, -1, pcOrigins);
 
             return curr;
         }
@@ -91,14 +104,16 @@ class JumpToNextStrategy : public IOptimizeStrategy {
   public:
     OpCode triggerOp() const override { return OpCode::JUMP; }
 
-    std::optional<size_t> apply(bytecode_vec_t &codes, size_t curr) override {
+    std::optional<size_t> apply(
+        bytecode_vec_t &codes, size_t curr,
+        std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) override {
         Bytecode &bc = codes[curr];
         size_t next  = bc.fastop[0];
 
         // 若跳转目标刚好是下一条指令，说明此 JUMP 没有意义
         if (next == curr + 1) {
-            removeop(codes, curr);
-            redirect(codes, curr, -1);
+            removeop(codes, curr, pcOrigins);
+            redirect(codes, curr, -1, pcOrigins);
 
             return curr;
         }
@@ -115,7 +130,9 @@ class JumpToRetnStrategy : public IOptimizeStrategy {
   public:
     OpCode triggerOp() const override { return OpCode::JUMP; }
 
-    std::optional<size_t> apply(bytecode_vec_t &codes, size_t curr) override {
+    std::optional<size_t> apply(
+        bytecode_vec_t &codes, size_t curr,
+        std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) override {
         Bytecode &bc = codes[curr];
         size_t next  = bc.fastop[0];
         if (next >= codes.size())
@@ -141,7 +158,9 @@ class JoinCleanupStrategy : public IOptimizeStrategy {
   public:
     OpCode triggerOp() const override { return OpCode::JOIN; }
 
-    std::optional<size_t> apply(bytecode_vec_t &codes, size_t curr) override {
+    std::optional<size_t> apply(
+        bytecode_vec_t &codes, size_t curr,
+        std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) override {
         Bytecode &bc = codes[curr];
         if (bc.opcode != OpCode::JOIN)
             return std::nullopt;
@@ -162,8 +181,8 @@ class JoinCleanupStrategy : public IOptimizeStrategy {
 
                 // 如果前一条是 TAIL 或 RETN，则该 JUMP 无效，删除它
                 if (pbc.opcode == OpCode::TAIL || pbc.opcode == OpCode::RETN) {
-                    removeop(codes, j);
-                    redirect(codes, j, -1);
+                    removeop(codes, j, pcOrigins);
+                    redirect(codes, j, -1, pcOrigins);
 
                     // 改动后需要重新从 JOIN 前一个位置开始扫描，
                     return curr - 1;
@@ -176,8 +195,8 @@ class JoinCleanupStrategy : public IOptimizeStrategy {
 
         // 如果没有跳向 JOIN 的 JUMP，可以安全删除此 JOIN
         if (!hasJumpToSelf) {
-            removeop(codes, curr);
-            redirect(codes, curr, -1);
+            removeop(codes, curr, pcOrigins);
+            redirect(codes, curr, -1, pcOrigins);
 
             // 若删除后当前位置是 RETN，也一并删除它
             // 因为如果前面还有直接跳转到 RETN 指令的地方，已经被优化掉了
@@ -185,8 +204,8 @@ class JoinCleanupStrategy : public IOptimizeStrategy {
             if (curr < codes.size()) {
                 Bytecode &tbc = codes[curr];
                 if (tbc.opcode == OpCode::RETN) {
-                    removeop(codes, curr);
-                    redirect(codes, curr, -1);
+                    removeop(codes, curr, pcOrigins);
+                    redirect(codes, curr, -1, pcOrigins);
                 }
             }
 
@@ -214,7 +233,9 @@ class BytecodeOptimizer {
         }
     }
 
-    void optimize(bytecode_vec_t &codes, size_t start = 0) {
+    void optimize(
+        bytecode_vec_t &codes, size_t start = 0,
+        std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins = nullptr) {
         for (size_t curr = start; curr < codes.size();) {
             std::optional<size_t> restartPos;
 
@@ -222,7 +243,7 @@ class BytecodeOptimizer {
                 auto trigOp = s->triggerOp();
                 if (codes[curr].opcode != trigOp)
                     continue;
-                if (auto res = s->apply(codes, curr)) {
+                if (auto res = s->apply(codes, curr, pcOrigins)) {
                     restartPos = res;
                     break;
                 }

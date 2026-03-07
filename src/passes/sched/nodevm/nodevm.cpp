@@ -22,6 +22,7 @@
 #include "camel/compile/gir/graph.h"
 #include "camel/compile/gir/nodes.h"
 #include "camel/core/debug_breakpoint.h"
+#include "camel/core/global_config.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
 #include "camel/utils/log.h"
@@ -192,7 +193,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
         for (; i < nodesSize; ++i) {
             Node *n     = currNodes[i];
             currentNode = n;
-            if (context_ && context_->runtimeDiagMode() == RuntimeDiagMode::DebuggerAttached) {
+            if (InternalGlobalConfig::IsInspectionMode() && context_) {
                 if (auto sourceContext = context_->sourceContext()) {
                     sourceContext->setCurrentRuntimeOrigin(
                         sourceContext->debugMap().nodeOrigin(n->stableId()));

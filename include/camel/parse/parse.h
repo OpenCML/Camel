@@ -123,6 +123,9 @@ class CamelParser {
     /// 解析器本身不拥有 SourceContext，只把解析结果登记进去。
     void setSourceContext(camel::source::source_context_ptr_t sourceContext) {
         sourceContext_ = std::move(sourceContext);
+        if (diagnostics_) {
+            diagnostics_->setSourceContext(sourceContext_);
+        }
     }
     camel::source::source_context_ptr_t sourceContext() const { return sourceContext_; }
     camel::source::source_file_id_t sourceFileId() const { return sourceFileId_; }

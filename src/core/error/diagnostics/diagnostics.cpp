@@ -69,8 +69,9 @@ Diagnostic &Diagnostic::fetchRange(const RangeConverter &conv) {
 
 std::string Diagnostic::toText() const {
     int ln = -1, ch = -1;
-    std::string path = effectiveModulePath(*this);
-    std::string name = effectiveModuleName(*this, path);
+    std::string path       = effectiveModulePath(*this);
+    std::string moduleName = effectiveModuleName(*this, path);
+    std::string diagName   = name;
 
     if (std::holds_alternative<TokenRange>(range)) {
         GetDefaultLogger().in("Diag").warn(
@@ -92,13 +93,13 @@ std::string Diagnostic::toText() const {
     std::string result = std::format(
         "{}({}):{}:{}: [{}]: {} {} (name={}, code=0x{})",
         ascii::underline(path),
-        name,
+        moduleName,
         (ln >= 0 ? std::to_string(ln) : "?"),
         (ch >= 0 ? std::to_string(ch) : "?"),
         to_colorful_string(severity),
         message,
         suggestion,
-        name,
+        diagName,
         hex8(diagCode()));
 
     return result;
@@ -107,8 +108,9 @@ std::string Diagnostic::toText() const {
 std::string Diagnostic::toJson() const {
     std::ostringstream oss;
     CharRange r{{0, 0}, {0, 0}};
-    std::string path = effectiveModulePath(*this);
-    std::string name = effectiveModuleName(*this, path);
+    std::string path       = effectiveModulePath(*this);
+    std::string moduleName = effectiveModuleName(*this, path);
+    std::string diagName   = name;
     if (std::holds_alternative<CharRange>(range)) {
         r = std::get<CharRange>(range);
     } else if (std::holds_alternative<camel::source::span_id_t>(range) && sourceContext) {
@@ -129,8 +131,8 @@ std::string Diagnostic::toJson() const {
         << "\"source\":\"Camel\","
         << "\"message\":\"" << escapeJson(message) << "\","
         << "\"data\":{"
-        << "\"name\":\"" << escapeJson(name) << "\","
-        << "\"moduleName\":\"" << escapeJson(name) << "\","
+        << "\"name\":\"" << escapeJson(diagName) << "\","
+        << "\"moduleName\":\"" << escapeJson(moduleName) << "\","
         << "\"modulePath\":\"" << escapeJson(path) << "\"";
     if (!suggestion.empty())
         oss << ",\"suggestion\":\"" << escapeJson(suggestion) << "\"";

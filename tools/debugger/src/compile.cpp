@@ -21,6 +21,7 @@
 
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/global_config.h"
 #include "camel/core/module/userdef.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/env.h"
@@ -52,7 +53,7 @@ CompilationState createCompilationStateForPath(const std::string &path) {
     auto ctx = Context::create(
         EntryConfig{.entryDir = entryDir, .entryFile = path, .searchPaths = std::move(searchPaths)},
         DiagsConfig{.total_limit = -1, .per_severity_limits = {{Severity::Error, 0}}});
-    ctx->setRuntimeDiagMode(RuntimeDiagMode::DebuggerAttached);
+    GlobalConfig::SetInspectionMode(true);
     auto diagnostics = std::make_shared<Diagnostics>("main", path, ctx->sourceContext());
     diagnostics->setConfig(
         DiagsConfig{.total_limit = -1, .per_severity_limits = {{Severity::Error, 0}}});

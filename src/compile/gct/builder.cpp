@@ -40,10 +40,84 @@ template <typename LoadType, typename... Args> node_ptr_t createNodeAs(Args &&..
         std::dynamic_pointer_cast<Load>(std::make_shared<LoadType>(std::forward<Args>(args)...)));
 }
 
+inline camel::source::origin_id_t nodeOrigin(const node_ptr_t &node) {
+    return node ? node->load()->origin() : camel::source::kInvalidOriginId;
+}
+
+inline camel::source::SemanticPart semanticPart(
+    camel::source::SemanticRole role, camel::source::origin_id_t origin, int32_t slot = -1,
+    const std::string &label = "") {
+    return camel::source::SemanticPart{
+        .role   = role,
+        .origin = origin,
+        .slot   = slot,
+        .label  = label};
+}
+
+inline std::vector<camel::source::origin_id_t> collectChildOrigins(const node_ptr_t &node) {
+    std::vector<camel::source::origin_id_t> origins;
+    if (!node) {
+        return origins;
+    }
+    for (const auto &child : *node) {
+        auto origin = nodeOrigin(child);
+        if (origin != camel::source::kInvalidOriginId) {
+            origins.push_back(origin);
+        }
+    }
+    return origins;
+}
+
+inline const camel::source::SemanticBundle *
+astSemantic(const context_ptr_t &context, const AST::node_ptr_t &ast) {
+    if (!context || !ast) {
+        return nullptr;
+    }
+    auto sourceContext = context->sourceContext();
+    return sourceContext ? sourceContext->astSemantic(ast->load()->origin()) : nullptr;
+}
+
+inline camel::source::origin_id_t findSemanticOrigin(
+    const camel::source::SemanticBundle *bundle, camel::source::SemanticRole role,
+    int32_t slot = -1) {
+    if (!bundle) {
+        return camel::source::kInvalidOriginId;
+    }
+    for (const auto &part : bundle->parts) {
+        if (part.role == role && (slot < 0 || part.slot == slot)) {
+            return part.origin;
+        }
+    }
+    return camel::source::kInvalidOriginId;
+}
+
+inline void setOriginFromOrigin(
+    const context_ptr_t &context, const node_ptr_t &node, camel::source::origin_id_t parent,
+    camel::source::OriginKind kind = camel::source::OriginKind::GctNode,
+    const std::string &label = "gct", bool synthetic = false,
+    std::vector<camel::source::origin_id_t> inputs = {}) {
+    if (!context || !node || parent == camel::source::kInvalidOriginId) {
+        return;
+    }
+    auto sourceContext = context->sourceContext();
+    if (!sourceContext) {
+        return;
+    }
+    node->load()->setOrigin(sourceContext->deriveOrigin(
+        parent,
+        camel::source::OriginStage::GCT,
+        kind,
+        label,
+        camel::source::kInvalidSpanId,
+        synthetic,
+        std::move(inputs)));
+}
+
 inline void setOriginFromAst(
     const context_ptr_t &context, const node_ptr_t &node, const AST::node_ptr_t &ast,
     camel::source::OriginKind kind = camel::source::OriginKind::GctNode,
-    const std::string &label       = "gct") {
+    const std::string &label = "gct", bool synthetic = false,
+    std::vector<camel::source::origin_id_t> inputs = {}) {
     // GCT 是 AST 的有损 lowering：
     // 一个 AST 节点可能被改写成别的语义形态，但这里仍沿主派生链继承 AST 的 primarySpan，
     // 从而保证语义诊断与后续 GIR/debugger 至少能回到“最主要的源码责任区间”。
@@ -58,8 +132,48 @@ inline void setOriginFromAst(
     if (astOrigin == camel::source::kInvalidOriginId) {
         return;
     }
-    node->load()->setOrigin(
-        sourceContext->deriveOrigin(astOrigin, camel::source::OriginStage::GCT, kind, label));
+    node->load()->setOrigin(sourceContext->deriveOrigin(
+        astOrigin,
+        camel::source::OriginStage::GCT,
+        kind,
+        label,
+        camel::source::kInvalidSpanId,
+        synthetic,
+        std::move(inputs)));
+}
+
+inline void registerGctSemantic(
+    const context_ptr_t &context, const node_ptr_t &node, const AST::node_ptr_t &ast,
+    std::vector<camel::source::SemanticPart> extraParts  = {},
+    std::vector<camel::source::origin_id_t> mergedInputs = {}, bool synthetic = false,
+    const std::string &syntheticReason = "") {
+    if (!context || !node) {
+        return;
+    }
+    auto sourceContext = context->sourceContext();
+    auto mainOrigin    = nodeOrigin(node);
+    if (!sourceContext || mainOrigin == camel::source::kInvalidOriginId) {
+        return;
+    }
+    std::vector<camel::source::SemanticPart> parts;
+    if (const auto *bundle = astSemantic(context, ast)) {
+        parts = bundle->parts;
+        if (mergedInputs.empty()) {
+            mergedInputs = bundle->mergedInputs;
+        }
+    }
+    parts.insert(parts.end(), extraParts.begin(), extraParts.end());
+    if (mergedInputs.empty()) {
+        mergedInputs = collectChildOrigins(node);
+    }
+    sourceContext->registerGctSemantic(
+        mainOrigin,
+        camel::source::SemanticBundle{
+            .mainOrigin      = mainOrigin,
+            .parts           = std::move(parts),
+            .mergedInputs    = std::move(mergedInputs),
+            .synthetic       = synthetic,
+            .syntheticReason = syntheticReason});
 }
 
 data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
@@ -148,6 +262,35 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 node_ptr_t declNode  = createNodeAs<DeclLoad>(funcLoad->name(), true);
                 node_ptr_t typeNode  = node->atAs<TypeLoad>(0);
                 *declNode << typeNode->clone();
+                setOriginFromAst(
+                    context_,
+                    declNode,
+                    stmt,
+                    camel::source::OriginKind::GctNode,
+                    "gct.func.decl",
+                    true,
+                    {nodeOrigin(node)});
+                registerGctSemantic(
+                    context_,
+                    declNode,
+                    stmt,
+                    {
+                        semanticPart(
+                            camel::source::SemanticRole::FuncName,
+                            findSemanticOrigin(
+                                astSemantic(context_, stmt),
+                                camel::source::SemanticRole::FuncName),
+                            -1,
+                            funcLoad->name()),
+                        semanticPart(
+                            camel::source::SemanticRole::ReturnType,
+                            nodeOrigin(typeNode),
+                            -1,
+                            "type"),
+                    },
+                    {nodeOrigin(node)},
+                    true,
+                    "synthetic function declaration");
                 decls.push_back(declNode);
                 stmts.push_back(node);
             } else {
@@ -184,6 +327,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
 
     LEAVE("Module");
     setOriginFromAst(context_, root_, ast, camel::source::OriginKind::GctNode, "gct.module");
+    registerGctSemantic(context_, root_, ast);
     return root_;
 }
 
@@ -276,6 +420,7 @@ node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
 
     LEAVE("Stmt");
     setOriginFromAst(context_, stmtNode, ast, camel::source::OriginKind::GctNode, "gct.stmt");
+    registerGctSemantic(context_, stmtNode, ast);
     return stmtNode;
 }
 
@@ -442,6 +587,26 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     if (isVar) {
         node_ptr_t variNode = createNodeAs<VariLoad>();
         *variNode << res;
+        setOriginFromAst(context_, variNode, ast, camel::source::OriginKind::GctNode, "gct.var");
+        registerGctSemantic(
+            context_,
+            variNode,
+            ast,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::BindingName,
+                    findSemanticOrigin(
+                        astSemantic(context_, ast),
+                        camel::source::SemanticRole::BindingName),
+                    -1,
+                    "binding"),
+                semanticPart(
+                    camel::source::SemanticRole::ValueProducer,
+                    nodeOrigin(res),
+                    -1,
+                    "initializer"),
+            },
+            {nodeOrigin(res)});
         res = variNode;
     }
 
@@ -581,6 +746,8 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
     popScope();
 
     LEAVE("StmtBlock");
+    setOriginFromAst(context_, execNode, ast, camel::source::OriginKind::GctNode, "gct.block");
+    registerGctSemantic(context_, execNode, ast);
     // Return the ExecLoad node representing the processed statement block
     return execNode;
 }
@@ -634,6 +801,7 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
 
     LEAVE("Data");
     setOriginFromAst(context_, dataNode, ast, camel::source::OriginKind::GctNode, "gct.data");
+    registerGctSemantic(context_, dataNode, ast);
     return dataNode;
 }
 
@@ -672,10 +840,32 @@ node_ptr_t Builder::visitUnaryExpr(const AST::node_ptr_t &ast) {
         ASSERT(false, "Unknown unary operation");
         return nullptr;
     }
+    auto unaryAstBundle = astSemantic(context_, ast);
+    setOriginFromOrigin(
+        context_,
+        opNode,
+        findSemanticOrigin(unaryAstBundle, camel::source::SemanticRole::Operator),
+        camel::source::OriginKind::GctNode,
+        "gct.unary.operator");
 
     // Create a LinkLoad node to link the operator and the operand
-    node_ptr_t linkNode = createNodeAs<LinkLoad>(1);
-    *linkNode << opNode << visitData(dataASTNode);
+    node_ptr_t operandNode = visitData(dataASTNode);
+    node_ptr_t linkNode    = createNodeAs<LinkLoad>(1);
+    *linkNode << opNode << operandNode;
+    setOriginFromAst(context_, linkNode, ast, camel::source::OriginKind::GctNode, "gct.unary.link");
+    registerGctSemantic(
+        context_,
+        linkNode,
+        ast,
+        {
+            semanticPart(camel::source::SemanticRole::Operator, nodeOrigin(opNode), -1, "operator"),
+            semanticPart(
+                camel::source::SemanticRole::Argument,
+                nodeOrigin(operandNode),
+                0,
+                "operand"),
+        },
+        {nodeOrigin(opNode), nodeOrigin(operandNode)});
 
     LEAVE("UnaryExpr");
     // Return the constructed LinkLoad node
@@ -820,26 +1010,73 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         ASSERT(false, "Unknown binary operation");
         return nullptr;
     }
+    auto binaryAstBundle = astSemantic(context_, ast);
+    setOriginFromOrigin(
+        context_,
+        opNode,
+        findSemanticOrigin(binaryAstBundle, camel::source::SemanticRole::Operator),
+        camel::source::OriginKind::GctNode,
+        "gct.binary.operator");
 
     // Create a LinkLoad node to link the operator and the operands
-    node_ptr_t res = createNodeAs<LinkLoad>(2);
-    *res << opNode << visitData(lhsASTNode);
+    node_ptr_t res     = createNodeAs<LinkLoad>(2);
+    node_ptr_t lhsNode = visitData(lhsASTNode);
+    *res << opNode << lhsNode;
+    std::vector<camel::source::SemanticPart> parts = {
+        semanticPart(camel::source::SemanticRole::Operator, nodeOrigin(opNode), -1, "operator"),
+        semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(lhsNode), 0, "lhs"),
+    };
+    std::vector<camel::source::origin_id_t> mergedInputs = {
+        nodeOrigin(opNode),
+        nodeOrigin(lhsNode)};
 
     // Handle the right-hand side (RHS) or indices for specific operators
     if (binaryExpr->op() == AST::BinaryDataOp::Index) {
-        auto indices = ast->atAs<AST::RepeatedLoad>(1);
+        auto indices      = ast->atAs<AST::RepeatedLoad>(1);
+        int32_t indexSlot = 0;
         for (const auto &index : *indices) {
-            *res << visitData(index);
+            node_ptr_t indexNode = visitData(index);
+            *res << indexNode;
+            mergedInputs.push_back(nodeOrigin(indexNode));
+            parts.push_back(semanticPart(
+                camel::source::SemanticRole::IndexExpr,
+                nodeOrigin(indexNode),
+                indexSlot++,
+                "index"));
         }
     } else {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
-        *res << visitData(rhsASTNode);
+        node_ptr_t rhsNode     = visitData(rhsASTNode);
+        *res << rhsNode;
+        mergedInputs.push_back(nodeOrigin(rhsNode));
+        parts.push_back(
+            semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(rhsNode), 1, "rhs"));
     }
+    setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.binary.link");
+    registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
 
     // If the expression is marked as "waited", wrap it in a WaitLoad node
     if (waited) {
         node_ptr_t waitNode = createNodeAs<WaitLoad>();
         *waitNode << res;
+        setOriginFromAst(context_, waitNode, ast, camel::source::OriginKind::GctNode, "gct.wait");
+        registerGctSemantic(
+            context_,
+            waitNode,
+            ast,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Keyword,
+                    nodeOrigin(waitNode),
+                    -1,
+                    "wait"),
+                semanticPart(
+                    camel::source::SemanticRole::ValueProducer,
+                    nodeOrigin(res),
+                    -1,
+                    "inner"),
+            },
+            {nodeOrigin(res)});
         res = waitNode;
     }
     LEAVE("BinaryExpr");
@@ -898,9 +1135,22 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
         res                    = createNodeAs<LinkLoad>(argsNode->size());
         const auto &linkLoad   = res->loadAs<LinkLoad>();
-        *res << visitData(lhsASTNode);
+        node_ptr_t calleeNode  = visitData(lhsASTNode);
+        *res << calleeNode;
+        std::vector<camel::source::SemanticPart> parts = {
+            semanticPart(camel::source::SemanticRole::Callee, nodeOrigin(calleeNode), -1, "callee"),
+        };
+        std::vector<camel::source::origin_id_t> mergedInputs = {nodeOrigin(calleeNode)};
+        int32_t argSlot                                      = 0;
         for (auto &argNode : *argsNode) {
-            *res << visitData(argNode);
+            node_ptr_t gctArg = visitData(argNode);
+            *res << gctArg;
+            mergedInputs.push_back(nodeOrigin(gctArg));
+            parts.push_back(semanticPart(
+                camel::source::SemanticRole::Argument,
+                nodeOrigin(gctArg),
+                argSlot++,
+                "arg"));
         }
         if (kwargsNode->size() > 0) {
             // Keyword arguments are not supported
@@ -916,6 +1166,8 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         //     linkLoad->addKwarg(kwargName);
         //     *res << visitData(dataNode);
         // }
+        setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.call");
+        registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
     } break;
 
     case AST::ReservedDataOp::Bind: {
@@ -923,9 +1175,22 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
         res                    = createNodeAs<WithLoad>(argsNode->size());
         const auto &linkLoad   = res->loadAs<WithLoad>();
-        *res << visitData(lhsASTNode);
+        node_ptr_t calleeNode  = visitData(lhsASTNode);
+        *res << calleeNode;
+        std::vector<camel::source::SemanticPart> parts = {
+            semanticPart(camel::source::SemanticRole::Callee, nodeOrigin(calleeNode), -1, "callee"),
+        };
+        std::vector<camel::source::origin_id_t> mergedInputs = {nodeOrigin(calleeNode)};
+        int32_t argSlot                                      = 0;
         for (auto &argNode : *argsNode) {
-            *res << visitData(argNode);
+            node_ptr_t gctArg = visitData(argNode);
+            *res << gctArg;
+            mergedInputs.push_back(nodeOrigin(gctArg));
+            parts.push_back(semanticPart(
+                camel::source::SemanticRole::GenericArgument,
+                nodeOrigin(gctArg),
+                argSlot++,
+                "withArg"));
         }
         if (kwargsNode->size() > 0) {
             diags_->of(SemanticDiag::FeatureNotSupported)
@@ -940,13 +1205,39 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         //     linkLoad->addKwarg(kwargName);
         //     *res << visitData(dataNode);
         // }
+        setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.bind");
+        registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
     } break;
 
     case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
         node_ptr_t opNode      = createNodeAs<DRefLoad>("__cmp__");
         res                    = createNodeAs<LinkLoad>(2);
-        *res << opNode << visitData(lhsASTNode) << visitData(rhsASTNode);
+        auto compAstBundle     = astSemantic(context_, ast);
+        setOriginFromOrigin(
+            context_,
+            opNode,
+            findSemanticOrigin(compAstBundle, camel::source::SemanticRole::Operator),
+            camel::source::OriginKind::GctNode,
+            "gct.comp.operator");
+        node_ptr_t lhsNode = visitData(lhsASTNode);
+        node_ptr_t rhsNode = visitData(rhsASTNode);
+        *res << opNode << lhsNode << rhsNode;
+        setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.comp");
+        registerGctSemantic(
+            context_,
+            res,
+            ast,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Operator,
+                    nodeOrigin(opNode),
+                    -1,
+                    "operator"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(lhsNode), 0, "lhs"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(rhsNode), 1, "rhs"),
+            },
+            {nodeOrigin(opNode), nodeOrigin(lhsNode), nodeOrigin(rhsNode)});
     } break;
 
     case AST::ReservedDataOp::As: {
@@ -974,6 +1265,26 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         } else {
             res = createNodeAs<CastLoad>(dstType);
             *res << dataNode;
+            setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.cast");
+            registerGctSemantic(
+                context_,
+                res,
+                ast,
+                {
+                    semanticPart(
+                        camel::source::SemanticRole::Receiver,
+                        nodeOrigin(dataNode),
+                        -1,
+                        "value"),
+                    semanticPart(
+                        camel::source::SemanticRole::ReturnType,
+                        findSemanticOrigin(
+                            astSemantic(context_, ast),
+                            camel::source::SemanticRole::ReturnType),
+                        -1,
+                        "type"),
+                },
+                {nodeOrigin(dataNode)});
         }
     } break;
 
@@ -995,7 +1306,28 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             // Not an index, treat as named access
             res = createNodeAs<AccsLoad>(ref);
         }
-        *res << visitData(lhsASTNode);
+        node_ptr_t targetNode = visitData(lhsASTNode);
+        *res << targetNode;
+        setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.access");
+        registerGctSemantic(
+            context_,
+            res,
+            ast,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Receiver,
+                    nodeOrigin(targetNode),
+                    -1,
+                    "target"),
+                semanticPart(
+                    camel::source::SemanticRole::MemberName,
+                    findSemanticOrigin(
+                        astSemantic(context_, ast),
+                        camel::source::SemanticRole::MemberName),
+                    -1,
+                    ref.ident()),
+            },
+            {nodeOrigin(targetNode)});
     } break;
 
     default:
@@ -1007,6 +1339,19 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     if (waited) {
         node_ptr_t waitNode = createNodeAs<WaitLoad>();
         *waitNode << res; // Wait for the result of the reserved expression
+        setOriginFromAst(context_, waitNode, ast, camel::source::OriginKind::GctNode, "gct.wait");
+        registerGctSemantic(
+            context_,
+            waitNode,
+            ast,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::ValueProducer,
+                    nodeOrigin(res),
+                    -1,
+                    "inner"),
+            },
+            {nodeOrigin(res)});
         res = waitNode;
     }
     LEAVE("ReservedExpr");
@@ -1022,21 +1367,41 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
 
     // Create a branch node to represent the conditional expression
     node_ptr_t brchNode = createNodeAs<BrchLoad>();
+    setOriginFromAst(context_, brchNode, ast, camel::source::OriginKind::GctNode, "gct.if");
 
     // condition
     // Process the condition expression and attach it to the branch node
-    *brchNode << visitData(ast->atAs<AST::DataLoad>(0));
+    node_ptr_t condNode = visitData(ast->atAs<AST::DataLoad>(0));
+    *brchNode << condNode;
 
     // Process the "then" block and attach it as the "True" case
     const auto &thenBlock = ast->atAs<AST::StmtBlockLoad>(1);
     node_ptr_t thenNode   = visitStmtBlock(thenBlock);
     node_ptr_t trueCase   = createNodeAs<CaseLoad>(CaseLoad::CaseType::True);
+    setOriginFromOrigin(
+        context_,
+        trueCase,
+        findSemanticOrigin(
+            astSemantic(context_, ast),
+            camel::source::SemanticRole::BranchTarget,
+            0),
+        camel::source::OriginKind::GctNode,
+        "gct.if.then");
     *trueCase << thenNode;
     *brchNode << trueCase;
 
     // Process the optional "else" block and attach it as the "Else" case
     const auto &elseNode = ast->optAtAs<AST::StmtBlockLoad>(2);
     node_ptr_t elseCase  = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
+    setOriginFromOrigin(
+        context_,
+        elseCase,
+        findSemanticOrigin(
+            astSemantic(context_, ast),
+            camel::source::SemanticRole::BranchTarget,
+            1),
+        camel::source::OriginKind::GctNode,
+        "gct.if.else");
     *brchNode << elseCase;
     if (elseNode) {
         // If an "else" block exists, process and attach it
@@ -1047,6 +1412,28 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
         // If no "else" block exists, attach an empty execution block
         *elseCase << createNodeAs<ExecLoad>();
     }
+    registerGctSemantic(
+        context_,
+        brchNode,
+        ast,
+        {
+            semanticPart(
+                camel::source::SemanticRole::BranchCondition,
+                nodeOrigin(condNode),
+                -1,
+                "condition"),
+            semanticPart(
+                camel::source::SemanticRole::BranchTarget,
+                nodeOrigin(trueCase),
+                0,
+                "then"),
+            semanticPart(
+                camel::source::SemanticRole::BranchTarget,
+                nodeOrigin(elseCase),
+                1,
+                "else"),
+        },
+        {nodeOrigin(condNode), nodeOrigin(trueCase), nodeOrigin(elseCase)});
     LEAVE("IfExpr");
     return brchNode;
 }
@@ -1066,7 +1453,25 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
     // Create a reference node for the condition and a branch node for the match expression
     node_ptr_t dRefNode = createNodeAs<DRefLoad>(matchRef); // condition node
     node_ptr_t brchNode = createNodeAs<BrchLoad>();
+    setOriginFromOrigin(
+        context_,
+        dRefNode,
+        findSemanticOrigin(
+            astSemantic(context_, ast),
+            camel::source::SemanticRole::BranchCondition),
+        camel::source::OriginKind::GctNode,
+        "gct.match.scrutinee");
+    setOriginFromAst(context_, brchNode, ast, camel::source::OriginKind::GctNode, "gct.match");
     *brchNode << dRefNode;
+
+    std::vector<camel::source::SemanticPart> parts = {
+        semanticPart(
+            camel::source::SemanticRole::BranchCondition,
+            nodeOrigin(dRefNode),
+            -1,
+            "scrutinee"),
+    };
+    std::vector<camel::source::origin_id_t> mergedInputs = {nodeOrigin(dRefNode)};
 
     for (const auto &aCaseNode : *ast->atAs<AST::RepeatedLoad>(0)) {
         // Handle a value case
@@ -1078,6 +1483,12 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
             node_ptr_t caseDataNode = visitData(aCaseNode->atAs<AST::DataLoad>(0));
             node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
             *gCaseNode << caseDataNode << caseExprNode;
+            mergedInputs.push_back(nodeOrigin(caseDataNode));
+            parts.push_back(semanticPart(
+                camel::source::SemanticRole::CaseValue,
+                nodeOrigin(caseDataNode),
+                static_cast<int32_t>(parts.size()),
+                "caseValue"));
         } else {
             // Handle the "else" case
             gCaseNode               = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
@@ -1085,9 +1496,23 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
             *gCaseNode << caseExprNode;
         }
 
+        setOriginFromOrigin(
+            context_,
+            gCaseNode,
+            aCaseNode->load()->origin(),
+            camel::source::OriginKind::GctNode,
+            "gct.match.case");
+        mergedInputs.push_back(nodeOrigin(gCaseNode));
+        parts.push_back(semanticPart(
+            camel::source::SemanticRole::BranchTarget,
+            nodeOrigin(gCaseNode),
+            static_cast<int32_t>(parts.size()),
+            "case"));
+
         // Attach the case node to the branch node
         *brchNode << gCaseNode;
     }
+    registerGctSemantic(context_, brchNode, ast, std::move(parts), std::move(mergedInputs));
     LEAVE("MatchExpr");
     return brchNode;
 }
@@ -1287,6 +1712,28 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
     node_ptr_t funcNode  = createNodeAs<FuncLoad>(funcData->ref().ident());
     *funcNode << typeNode << stmtsNode;
+    setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.func.type");
+    setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.func");
+    registerGctSemantic(
+        context_,
+        funcNode,
+        ast,
+        {
+            semanticPart(
+                camel::source::SemanticRole::FuncName,
+                findSemanticOrigin(
+                    astSemantic(context_, ast),
+                    camel::source::SemanticRole::FuncName),
+                -1,
+                funcData->ref().ident()),
+            semanticPart(camel::source::SemanticRole::ReturnType, nodeOrigin(typeNode), -1, "type"),
+            semanticPart(
+                camel::source::SemanticRole::ValueProducer,
+                nodeOrigin(stmtsNode),
+                -1,
+                "body"),
+        },
+        {nodeOrigin(typeNode), nodeOrigin(stmtsNode)});
     LEAVE("FuncData");
     return funcNode;
 }

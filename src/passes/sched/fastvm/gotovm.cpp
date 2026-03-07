@@ -19,6 +19,7 @@
 
 #include "fastvm.h"
 
+#include "camel/core/global_config.h"
 #include <iostream>
 
 #if ENABLE_FASTVM_COMPUTED_GOTO
@@ -77,7 +78,7 @@ static thread_local const Bytecode *s_jit_bc;
 
 #define SYNC_RUNTIME_ORIGIN()                                                                      \
     do {                                                                                           \
-        if (context_ && context_->runtimeDiagMode() == RuntimeDiagMode::DebuggerAttached) {        \
+        if (InternalGlobalConfig::IsInspectionMode() && context_) {                                \
             if (auto _sourceContext = context_->sourceContext()) {                                 \
                 _sourceContext->setCurrentRuntimeOrigin(_sourceContext->debugMap().pcOrigin(pc));  \
             }                                                                                      \

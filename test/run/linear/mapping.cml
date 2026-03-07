@@ -1,0 +1,27 @@
+module semantic_mapping
+
+type Point = {
+    x: int,
+    y: int
+}
+
+func pick_label(n: int): string {
+    return match n {
+        case 0 => 'zero'
+        case 1 => 'one'
+        case _ => if n > 1 then 'many' else 'negative'
+    }
+}
+
+func shift(p: Point): Point {
+    return { x: p.x + 1, y: p.y - 1 }
+}
+
+func main(): int sync {
+    let points: Point[] = [{ x: 1, y: 2 }, { x: 3, y: 4 }]
+    let moved = points[0]->shift
+    let label = pick_label(moved.x)
+
+    '{} {}'->format<label, moved.y>->println
+    return 0
+}

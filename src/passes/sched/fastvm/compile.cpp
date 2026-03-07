@@ -438,7 +438,7 @@ bytecode_vec_t compile(
 
     // 优化字节码
     BytecodeOptimizer optimizer(opt.optimizationStrategies);
-    optimizer.optimize(bytecodes);
+    optimizer.optimize(bytecodes, 0, localPcOrigins);
 
     return bytecodes;
 }

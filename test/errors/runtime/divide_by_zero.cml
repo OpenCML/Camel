@@ -1,0 +1,7 @@
+module runtime_divide_by_zero
+
+func main(): int sync {
+    let z = 0
+    println(10 / z)
+    return 0
+}

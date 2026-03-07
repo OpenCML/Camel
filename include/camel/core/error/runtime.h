@@ -38,11 +38,6 @@ class Graph;
 class Node;
 } // namespace GraphIR
 
-enum class RuntimeDiagMode : uint8_t {
-    OnErrorOnly,
-    DebuggerAttached,
-};
-
 enum class RuntimeFaultPolicy : uint8_t {
     AbortCurrentExecution,
     AbortCurrentTask,

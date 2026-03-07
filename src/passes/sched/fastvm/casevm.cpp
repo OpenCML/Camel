@@ -19,6 +19,7 @@
 
 #include "fastvm.h"
 
+#include "camel/core/global_config.h"
 #if !ENABLE_FASTVM_COMPUTED_GOTO
 
 #include "camel/utils/opperf.h"
@@ -55,7 +56,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
 
     try {
         while (true) {
-            if (context_ && context_->runtimeDiagMode() == RuntimeDiagMode::DebuggerAttached) {
+            if (InternalGlobalConfig::IsInspectionMode() && context_) {
                 if (auto sourceContext = context_->sourceContext()) {
                     sourceContext->setCurrentRuntimeOrigin(sourceContext->debugMap().pcOrigin(pc));
                 }

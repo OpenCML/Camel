@@ -65,6 +65,28 @@
 
 这样 debugger 和 runtime 可以先定位到执行实体，再反查 `OriginId -> primarySpan -> line/column`。
 
+### 2.5 Semantic Side Tables
+
+在 `primarySpan` 之外，`SourceContext` 现在还维护三层语义 side table：
+
+- AST 语义锚点表
+- GCT 语义来源表
+- GIR graph/node 语义来源表
+
+它们统一使用：
+
+- `SemanticRole`
+- `SemanticPart`
+- `SemanticBundle`
+
+来表达：
+
+- `mainOrigin`：稳定 fallback
+- `semanticParts`：`operator / callee / argument / branchCondition / branchTarget / valueProducer ...`
+- `mergedInputs`：多源聚合来源
+
+也就是说，当前系统已经不再只有“单个 origin -> 单个主区间”，而是开始具备“主区间 + 命名语义部件 + 多源输入”的扩展层。
+
 ## 3. 各阶段如何建立映射
 
 ## 3.1 Parse / AST
@@ -217,11 +239,16 @@
 - GCT/GIR 有稳定 `OriginId`
 - debugger 可从 GIR graph/node 回到源码区间
 - runtime diagnostics 可从当前执行点回到源码区间
+- debugger JSON 可进一步读取 `origin + semantic + edge semanticRole`
 
 但也要明确：
 
 - GCT/GIR 的源码区间目前是“继承来的主区间”
 - 不是对每个 lowering 结果做完全精确的逆映射
-- 多源映射能力已经有数据结构基础，但展示和单步语义还可以继续加强
+- 多源映射能力已经从底层结构推进到 AST/GCT/GIR 语义 side table，但展示和单步语义还可以继续加强
 
 这正是“彻底重构”与“稳定可用”之间目前选择的平衡点：先统一整条来源链，再逐步把多源与细粒度定位做得更精确。
+
+更细的节点语义、层间 lowering、基础缺口审计与后续路线，见：
+
+- `docs/technical/11_semantic_models_and_reverse_mapping_foundation.md`

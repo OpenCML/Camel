@@ -58,6 +58,37 @@ enum class OriginKind : uint8_t {
     Synthetic,
 };
 
+std::string to_string(OriginStage stage);
+std::string to_string(OriginKind kind);
+
+/// 语义部件角色。
+/// 这些角色不替代 primarySpan，而是为“主区间 + 语义部件”逆映射提供统一命名。
+enum class SemanticRole : uint8_t {
+    Whole,
+    Operator,
+    Keyword,
+    Callee,
+    Receiver,
+    Argument,
+    ArgList,
+    BranchCondition,
+    BranchTarget,
+    ValueProducer,
+    BindingName,
+    MemberName,
+    IndexExpr,
+    FuncName,
+    ReturnType,
+    Parameter,
+    GenericParameter,
+    GenericArgument,
+    CaseValue,
+    CaseBody,
+    Capture,
+};
+
+std::string to_string(SemanticRole role);
+
 /// 单个源文件的规范化缓存。这里保存完整文本和行起始偏移，供 offset -> line/column 查询。
 struct SourceFile {
     source_file_id_t id = kInvalidSourceFileId;
@@ -87,6 +118,25 @@ struct OriginRecord {
     bool synthetic        = false;   // true 表示该实体不是源码中直接出现的结构。
     std::string label;               // 便于调试的阶段标签，如 gct.data / gir.cast。
     std::vector<origin_id_t> inputs; // 多源降糖或合并场景下的附加来源。
+};
+
+/// 某个语义部件的命名来源。
+/// origin 可以指向 token 级锚点、子表达式来源，或更低层的 lowering 产物来源。
+struct SemanticPart {
+    SemanticRole role  = SemanticRole::Whole;
+    origin_id_t origin = kInvalidOriginId;
+    int32_t slot       = -1; // 参数位、分支位等按序编号；无编号时为 -1。
+    std::string label;       // 例如 "lhs"、"rhs"、"else"、"kwargs"。
+};
+
+/// 一个执行实体的语义来源包。
+/// mainOrigin 继续提供稳定 fallback，parts / mergedInputs 则用于更细的调试与逆映射。
+struct SemanticBundle {
+    origin_id_t mainOrigin = kInvalidOriginId;
+    std::vector<SemanticPart> parts;
+    std::vector<origin_id_t> mergedInputs;
+    bool synthetic = false;
+    std::string syntheticReason;
 };
 
 /// 源文件注册表与行列查询器。
@@ -151,6 +201,26 @@ class DebugMap {
     std::unordered_map<size_t, origin_id_t> pcOrigins_;         // bytecode pc -> origin
 };
 
+/// 以 OriginId 为键的语义 side table，主要服务 AST/GCT 这类树阶段。
+class OriginSemanticMap {
+  public:
+    void registerBundle(origin_id_t origin, SemanticBundle bundle);
+    const SemanticBundle *bundle(origin_id_t origin) const;
+
+  private:
+    std::unordered_map<origin_id_t, SemanticBundle> bundles_;
+};
+
+/// 以稳定执行实体 id 为键的语义 side table，主要服务 GIR graph/node 与 debugger。
+class EntitySemanticMap {
+  public:
+    void registerBundle(const std::string &entityId, SemanticBundle bundle);
+    const SemanticBundle *bundle(const std::string &entityId) const;
+
+  private:
+    std::unordered_map<std::string, SemanticBundle> bundles_;
+};
+
 /// 编译期和运行时共享的源码映射上下文。
 /// 这是整套系统的统一入口：文件、span、origin、debug map 和当前执行点都挂在这里。
 class SourceContext {
@@ -187,14 +257,28 @@ class SourceContext {
     DebugMap &debugMap() { return debugMap_; }
     const DebugMap &debugMap() const { return debugMap_; }
 
+    void registerAstSemantic(origin_id_t origin, SemanticBundle bundle);
+    void registerGctSemantic(origin_id_t origin, SemanticBundle bundle);
+    void registerGirGraphSemantic(const std::string &graphId, SemanticBundle bundle);
+    void registerGirNodeSemantic(const std::string &nodeId, SemanticBundle bundle);
+
+    const SemanticBundle *astSemantic(origin_id_t origin) const;
+    const SemanticBundle *gctSemantic(origin_id_t origin) const;
+    const SemanticBundle *girGraphSemantic(const std::string &graphId) const;
+    const SemanticBundle *girNodeSemantic(const std::string &nodeId) const;
+
     void setCurrentRuntimeOrigin(origin_id_t origin);
     origin_id_t currentRuntimeOrigin() const;
 
   private:
-    SourceManager manager_; // 负责源文件与行列换算。
-    SpanArena spans_;       // 负责源码区间存储。
-    OriginTable origins_;   // 负责跨阶段派生关系。
-    DebugMap debugMap_;     // 负责运行时/调试器快速反查。
+    SourceManager manager_;         // 负责源文件与行列换算。
+    SpanArena spans_;               // 负责源码区间存储。
+    OriginTable origins_;           // 负责跨阶段派生关系。
+    DebugMap debugMap_;             // 负责运行时/调试器快速反查。
+    OriginSemanticMap astSemantic_; // AST 语义锚点 side table。
+    OriginSemanticMap gctSemantic_; // GCT lowering 语义来源 side table。
+    EntitySemanticMap girGraphs_;   // GIR graph 级语义来源 side table。
+    EntitySemanticMap girNodes_;    // GIR node 级语义来源 side table。
 
     mutable std::mutex runtimeOriginMutex_;
     origin_id_t currentRuntimeOrigin_ = kInvalidOriginId; // 当前线程最近一次执行到的源码来源。

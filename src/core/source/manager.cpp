@@ -58,6 +58,98 @@ tokenOffsets(const std::vector<antlr4::Token *> &tokens, const TokenRange &range
 
 } // namespace
 
+std::string to_string(OriginStage stage) {
+    switch (stage) {
+    case OriginStage::Parser:
+        return "Parser";
+    case OriginStage::AST:
+        return "AST";
+    case OriginStage::GCT:
+        return "GCT";
+    case OriginStage::GIR:
+        return "GIR";
+    case OriginStage::Bytecode:
+        return "Bytecode";
+    case OriginStage::Runtime:
+        return "Runtime";
+    case OriginStage::Synthetic:
+        return "Synthetic";
+    }
+    return "Unknown";
+}
+
+std::string to_string(OriginKind kind) {
+    switch (kind) {
+    case OriginKind::Source:
+        return "Source";
+    case OriginKind::AstNode:
+        return "AstNode";
+    case OriginKind::GctNode:
+        return "GctNode";
+    case OriginKind::GirNode:
+        return "GirNode";
+    case OriginKind::Graph:
+        return "Graph";
+    case OriginKind::BytecodePc:
+        return "BytecodePc";
+    case OriginKind::RuntimeSite:
+        return "RuntimeSite";
+    case OriginKind::Combined:
+        return "Combined";
+    case OriginKind::Synthetic:
+        return "Synthetic";
+    }
+    return "Unknown";
+}
+
+std::string to_string(SemanticRole role) {
+    switch (role) {
+    case SemanticRole::Whole:
+        return "whole";
+    case SemanticRole::Operator:
+        return "operator";
+    case SemanticRole::Keyword:
+        return "keyword";
+    case SemanticRole::Callee:
+        return "callee";
+    case SemanticRole::Receiver:
+        return "receiver";
+    case SemanticRole::Argument:
+        return "argument";
+    case SemanticRole::ArgList:
+        return "argList";
+    case SemanticRole::BranchCondition:
+        return "branchCondition";
+    case SemanticRole::BranchTarget:
+        return "branchTarget";
+    case SemanticRole::ValueProducer:
+        return "valueProducer";
+    case SemanticRole::BindingName:
+        return "bindingName";
+    case SemanticRole::MemberName:
+        return "memberName";
+    case SemanticRole::IndexExpr:
+        return "indexExpr";
+    case SemanticRole::FuncName:
+        return "funcName";
+    case SemanticRole::ReturnType:
+        return "returnType";
+    case SemanticRole::Parameter:
+        return "parameter";
+    case SemanticRole::GenericParameter:
+        return "genericParameter";
+    case SemanticRole::GenericArgument:
+        return "genericArgument";
+    case SemanticRole::CaseValue:
+        return "caseValue";
+    case SemanticRole::CaseBody:
+        return "caseBody";
+    case SemanticRole::Capture:
+        return "capture";
+    }
+    return "unknown";
+}
+
 source_file_id_t SourceManager::registerFile(const std::string &path, const std::string &content) {
     auto it = pathToId_.find(path);
     if (it != pathToId_.end()) {
@@ -217,6 +309,33 @@ origin_id_t DebugMap::pcOrigin(size_t pc) const {
     return it == pcOrigins_.end() ? kInvalidOriginId : it->second;
 }
 
+void OriginSemanticMap::registerBundle(origin_id_t origin, SemanticBundle bundle) {
+    if (origin == kInvalidOriginId) {
+        return;
+    }
+    if (bundle.mainOrigin == kInvalidOriginId) {
+        bundle.mainOrigin = origin;
+    }
+    bundles_[origin] = std::move(bundle);
+}
+
+const SemanticBundle *OriginSemanticMap::bundle(origin_id_t origin) const {
+    auto it = bundles_.find(origin);
+    return it == bundles_.end() ? nullptr : &it->second;
+}
+
+void EntitySemanticMap::registerBundle(const std::string &entityId, SemanticBundle bundle) {
+    if (entityId.empty()) {
+        return;
+    }
+    bundles_[entityId] = std::move(bundle);
+}
+
+const SemanticBundle *EntitySemanticMap::bundle(const std::string &entityId) const {
+    auto it = bundles_.find(entityId);
+    return it == bundles_.end() ? nullptr : &it->second;
+}
+
 source_file_id_t SourceContext::registerFile(const std::string &path, const std::string &content) {
     return manager_.registerFile(path, content);
 }
@@ -297,6 +416,38 @@ std::string SourceContext::pathForSpan(span_id_t spanId) const {
 std::string SourceContext::pathForOrigin(origin_id_t originId) const {
     const SourceFile *file = fileForOrigin(originId);
     return file ? file->path : "";
+}
+
+void SourceContext::registerAstSemantic(origin_id_t origin, SemanticBundle bundle) {
+    astSemantic_.registerBundle(origin, std::move(bundle));
+}
+
+void SourceContext::registerGctSemantic(origin_id_t origin, SemanticBundle bundle) {
+    gctSemantic_.registerBundle(origin, std::move(bundle));
+}
+
+void SourceContext::registerGirGraphSemantic(const std::string &graphId, SemanticBundle bundle) {
+    girGraphs_.registerBundle(graphId, std::move(bundle));
+}
+
+void SourceContext::registerGirNodeSemantic(const std::string &nodeId, SemanticBundle bundle) {
+    girNodes_.registerBundle(nodeId, std::move(bundle));
+}
+
+const SemanticBundle *SourceContext::astSemantic(origin_id_t origin) const {
+    return astSemantic_.bundle(origin);
+}
+
+const SemanticBundle *SourceContext::gctSemantic(origin_id_t origin) const {
+    return gctSemantic_.bundle(origin);
+}
+
+const SemanticBundle *SourceContext::girGraphSemantic(const std::string &graphId) const {
+    return girGraphs_.bundle(graphId);
+}
+
+const SemanticBundle *SourceContext::girNodeSemantic(const std::string &nodeId) const {
+    return girNodes_.bundle(nodeId);
 }
 
 void SourceContext::setCurrentRuntimeOrigin(origin_id_t origin) {

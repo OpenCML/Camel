@@ -108,7 +108,7 @@ camel::source::origin_id_t resolveOriginFromSite(
         }
     }
 
-    return camel::source::kInvalidOriginId;
+    return sourceContext->currentRuntimeOrigin();
 }
 
 std::string defaultModuleName(const ExecutionSite &site, const std::string &sourcePath) {

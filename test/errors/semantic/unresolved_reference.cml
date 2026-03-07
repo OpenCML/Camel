@@ -1,0 +1,7 @@
+module semantic_unresolved_reference
+
+func main(): int sync {
+    let value = missing_name + 1
+    println(value)
+    return 0
+}
