@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,12 +22,14 @@
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
+#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/listener.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
+#include "camel/execute/pass/base.h"
 #include "camel/parse/antlr/OpenCMLLexer.h"
 #include "camel/parse/antlr/OpenCMLParser.h"
 #include "camel/parse/ast/builder.h"
@@ -232,6 +234,9 @@ int main(int argc, char *argv[]) {
                 try {
                     try {
                         int retCode = applyPasses(Run::resolvedPassList, ctx, os);
+                        if (retCode == 0 && ctx->rootGraph() != GIR::Graph::null()) {
+                            retCode = applyPasses(Run::fallbackPasses, ctx, os);
+                        }
                         if (retCode != 0) {
                             const auto &diags = ctx->runtimeDiagSink();
                             if (diags->hasErrors()) {

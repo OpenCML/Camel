@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -264,20 +264,6 @@ int applyPasses(
             }
         } else {
             throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(p);
-        }
-    }
-
-    if (graph != Graph::null()) {
-        auto factory = findPassFactory("std::default", os);
-        if (factory) {
-            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("std::default", graph.get()); });
-            auto pass = factory(ctx);
-            graph     = pass->apply(graph, os);
-            if (ctx->rtmDiags()->hasErrors()) {
-                return 1;
-            }
-        } else {
-            throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit("std::default");
         }
     }
 

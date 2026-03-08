@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "windows_parser_guard.h"
 
+#include "camel/compile/gir.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/execute/pass/base.h"
 #include "camel/utils/log.h"
@@ -95,6 +96,10 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
 
         std::vector<std::string> passes = getState().runPasses;
         int retCode                     = applyPasses(passes, st.ctx, std::cout);
+        if (retCode == 0 && st.ctx->rootGraph() != GIR::Graph::null()) {
+            static const std::vector<std::string> defaultPassList{"std::default"};
+            retCode = applyPasses(defaultPassList, st.ctx, std::cout);
+        }
         if (retCode != 0) {
             const auto &diags = st.ctx->runtimeDiagSink();
             if (diags->hasErrors())
