@@ -73,6 +73,12 @@ void TaskflowFramePool::allocateChunk(GraphArena &arena, size_t minFrameCount) {
         std::byte *slot = chunk + i * arena.frameSize;
         auto *frame =
             new (slot) Frame(arena.graph, arena.meta->staticArea, arena.meta->runtimeDataType);
+#ifndef NDEBUG
+        std::fill_n(
+            frame->slotBase(),
+            arena.meta->runtimeDataType->size(),
+            camel::core::mm::kDebugUninitializedSlot);
+#endif
         arena.freeFrames.push_back(frame);
     }
 }
@@ -84,6 +90,12 @@ Frame *TaskflowFramePool::acquire(Graph *graph) {
         allocateChunk(arena, 1);
     Frame *frame = arena.freeFrames.back();
     arena.freeFrames.pop_back();
+#ifndef NDEBUG
+    std::fill_n(
+        frame->slotBase(),
+        arena.meta->runtimeDataType->size(),
+        camel::core::mm::kDebugUninitializedSlot);
+#endif
     return frame;
 }
 

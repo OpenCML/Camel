@@ -101,23 +101,36 @@ Frame *TaskflowExecSchedPass::acquirePreparedNodeCallFrame(
     const auto &targetInfo = globalBuildCtx_.getGraphInfos(targetGraph);
     const auto &callMeta =
         globalBuildCtx_.getGraphInfos(&callNode->graph()).getNodeExecMeta(callNode);
-    const auto &portIndices    = targetInfo.portIndices;
-    const auto &closureIndices = targetInfo.closureIndices;
-    const auto &normIndices    = callMeta.normIndices;
-    const auto &withIndices    = callMeta.withIndices;
+    const auto &normPortIndices = targetInfo.normPortIndices;
+    const auto &withPortIndices = targetInfo.withPortIndices;
+    const auto &closureIndices  = targetInfo.closureIndices;
+    const auto &normIndices     = callMeta.normIndices;
+    const auto &withIndices     = callMeta.withIndices;
 
-    for (size_t i = 0; i < normIndices.size() && i < portIndices.size(); ++i)
-        dest->set(portIndices[i], sourceFrame->get<slot_t>(normIndices[i]));
+    ASSERT(
+        normIndices.size() == normPortIndices.size(),
+        "Norm nodes and ports count mismatch in Taskflow call frame fill.");
+    for (size_t i = 0; i < normIndices.size(); ++i)
+        dest->set(normPortIndices[i], sourceFrame->get<slot_t>(normIndices[i]));
 
     if (callNode->type() == NodeType::CALL) {
         ASSERT(!withIndices.empty(), "CALL node must have function input.");
+        ASSERT(
+            withPortIndices.empty(),
+            "CALL target graph should not require with ports in Taskflow.");
         Function *func = sourceFrame->get<Function *>(withIndices.front());
         Tuple *closure = func->tuple();
-        for (size_t j = 0; j < closure->size() && j < closureIndices.size(); ++j)
+        ASSERT(
+            closure->size() == closureIndices.size(),
+            "Closure nodes and tuple size mismatch in Taskflow call frame fill.");
+        for (size_t j = 0; j < closure->size(); ++j)
             dest->set(closureIndices[j], closure->get<slot_t>(j));
     } else {
-        for (size_t j = 0; j < withIndices.size() && j < closureIndices.size(); ++j)
-            dest->set(closureIndices[j], sourceFrame->get<slot_t>(withIndices[j]));
+        ASSERT(
+            withIndices.size() == withPortIndices.size(),
+            "With nodes and ports count mismatch in Taskflow func frame fill.");
+        for (size_t j = 0; j < withIndices.size(); ++j)
+            dest->set(withPortIndices[j], sourceFrame->get<slot_t>(withIndices[j]));
     }
 
     return dest;
@@ -125,14 +138,24 @@ Frame *TaskflowExecSchedPass::acquirePreparedNodeCallFrame(
 
 Frame *TaskflowExecSchedPass::acquirePreparedClosureCallFrame(
     Graph *targetGraph, Tuple *closure, std::span<const slot_t> args) {
-    Frame *dest                = framePool_.acquire(targetGraph);
-    const auto &targetInfo     = globalBuildCtx_.getGraphInfos(targetGraph);
-    const auto &portIndices    = targetInfo.portIndices;
-    const auto &closureIndices = targetInfo.closureIndices;
+    Frame *dest                 = framePool_.acquire(targetGraph);
+    const auto &targetInfo      = globalBuildCtx_.getGraphInfos(targetGraph);
+    const auto &normPortIndices = targetInfo.normPortIndices;
+    const auto &closureIndices  = targetInfo.closureIndices;
 
-    for (size_t i = 0; i < args.size() && i < portIndices.size(); ++i)
-        dest->set(portIndices[i], args[i]);
-    for (size_t j = 0; j < closure->size() && j < closureIndices.size(); ++j)
+    ASSERT(
+        args.size() == normPortIndices.size(),
+        "Norm args and ports count mismatch in Taskflow closure call frame fill.");
+    ASSERT(
+        targetInfo.withPortIndices.empty(),
+        "Closure call target graph should not require with ports in Taskflow.");
+    ASSERT(
+        closure->size() == closureIndices.size(),
+        "Closure nodes and tuple size mismatch in Taskflow closure call frame fill.");
+
+    for (size_t i = 0; i < args.size(); ++i)
+        dest->set(normPortIndices[i], args[i]);
+    for (size_t j = 0; j < closure->size(); ++j)
         dest->set(closureIndices[j], closure->get<slot_t>(j));
 
     return dest;
@@ -194,12 +217,17 @@ void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
         gt.graph = g;
         gt.joinToBrch.clear();
         gt.nodeExecMeta.clear();
-        gt.portIndices.clear();
+        gt.normPortIndices.clear();
+        gt.withPortIndices.clear();
         gt.closureIndices.clear();
 
-        gt.portIndices.reserve(g->ports().size());
-        for (Node *port : g->ports())
-            gt.portIndices.push_back(port->index());
+        gt.normPortIndices.reserve(g->normPorts().size());
+        for (Node *port : g->normPorts())
+            gt.normPortIndices.push_back(port->index());
+
+        gt.withPortIndices.reserve(g->withPorts().size());
+        for (Node *port : g->withPorts())
+            gt.withPortIndices.push_back(port->index());
 
         gt.closureIndices.reserve(g->closure().size());
         for (Node *closure : g->closure())
@@ -223,7 +251,7 @@ void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
                     q.push(sub);
             } else if (n->type() == NodeType::BRCH) {
                 const node_vec_t &candidates = n->ctrlOutputs();
-                Node *join                   = n->dataOutputs().front();
+                Node *join                   = n->normOutputs().front();
                 for (const auto &c : candidates)
                     globalBuildCtx_.skipNodes.insert(c);
                 globalBuildCtx_.skipNodes.insert(n);
@@ -503,7 +531,7 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
     FlowT &flowLike, Graph *graph, Frame *frame, std::unordered_map<Node *, tf::Task> &taskMap,
     Node *brch) {
     node_vec_t candidates = brch->ctrlOutputs();
-    Node *join            = brch->dataOutputs().front();
+    Node *join            = brch->normOutputs().front();
 
     auto selector =
         flowLike

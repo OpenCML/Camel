@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,6 @@
 #include "allocator.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/brpred.h"
-#include "camel/utils/log.h"
 #include "header.h"
 
 #ifndef NDEBUG
@@ -31,7 +30,8 @@
 
 #include <cstddef>
 #include <limits> // for std::numeric_limits
-#include <new>    // for ::operator new / ::operator delete
+#include <mutex>
+#include <new> // for ::operator new / ::operator delete
 #include <unordered_set>
 
 namespace camel::core::mm {
@@ -41,6 +41,7 @@ class LargeObjectAllocator : public IAllocator {
     explicit LargeObjectAllocator(const char *debugRegion = nullptr) : debugRegion_(debugRegion) {}
 
     ~LargeObjectAllocator() override {
+        std::lock_guard<std::mutex> lock(mutex_);
         for (auto *hdr : allocated_) {
             ::operator delete(hdr, std::align_val_t(alignof(slot_t)));
         }
@@ -48,6 +49,7 @@ class LargeObjectAllocator : public IAllocator {
     }
 
     void *alloc(size_t size, size_t align = alignof(slot_t)) override {
+        std::lock_guard<std::mutex> lock(mutex_);
         ASSERT(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
 
         // total_size 向上对齐到 slot_t
@@ -74,6 +76,7 @@ class LargeObjectAllocator : public IAllocator {
     }
 
     void free(void *ptr) override {
+        std::lock_guard<std::mutex> lock(mutex_);
         if (UNLIKELY(!ptr)) {
             return;
         }
@@ -88,6 +91,7 @@ class LargeObjectAllocator : public IAllocator {
     }
 
     void reset() override {
+        std::lock_guard<std::mutex> lock(mutex_);
         for (auto *hdr : allocated_) {
             ::operator delete(hdr, std::align_val_t(alignof(slot_t)));
         }
@@ -97,6 +101,7 @@ class LargeObjectAllocator : public IAllocator {
     size_t available() const override { return std::numeric_limits<size_t>::max(); }
 
     bool contains(void *ptr) const override {
+        std::lock_guard<std::mutex> lock(mutex_);
         if (UNLIKELY(!ptr)) {
             return false;
         }
@@ -106,6 +111,7 @@ class LargeObjectAllocator : public IAllocator {
     }
 
     void freeBulk(const std::vector<ObjectHeader *> &objects) override {
+        std::lock_guard<std::mutex> lock(mutex_);
         for (auto *hdr : objects) {
             auto it = allocated_.find(hdr);
             if (it != allocated_.end()) {
@@ -116,6 +122,7 @@ class LargeObjectAllocator : public IAllocator {
     }
 
     void iterateAllocated(const std::function<void(ObjectHeader *)> &visitor) const override {
+        std::lock_guard<std::mutex> lock(mutex_);
         for (auto *hdr : allocated_) {
             // 验证 header 的合法性
             ASSERT(hdr->size() >= sizeof(ObjectHeader), "Invalid object size");
@@ -128,6 +135,7 @@ class LargeObjectAllocator : public IAllocator {
   private:
     const char *debugRegion_{nullptr}; // Debug 模式下用于 hook
     std::unordered_set<ObjectHeader *> allocated_;
+    mutable std::mutex mutex_;
 };
 
 } // namespace camel::core::mm

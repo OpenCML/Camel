@@ -97,7 +97,8 @@ class TaskflowExecSchedPass : public GraphSchedulePass {
         GIR::Graph *graph{nullptr};
         std::unordered_map<GIR::Node *, GIR::Node *> joinToBrch;
         std::unordered_map<GIR::Node *, NodeExecMeta> nodeExecMeta;
-        std::vector<GIR::data_idx_t> portIndices;
+        std::vector<GIR::data_idx_t> normPortIndices;
+        std::vector<GIR::data_idx_t> withPortIndices;
         std::vector<GIR::data_idx_t> closureIndices;
 
         NodeExecMeta &getOrCreateNodeExecMeta(GIR::Node *node) { return nodeExecMeta[node]; }

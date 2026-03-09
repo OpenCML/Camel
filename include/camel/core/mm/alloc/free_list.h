@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,6 @@
 #include "allocator.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/brpred.h"
-#include "camel/utils/log.h"
 #include "header.h"
 
 #ifndef NDEBUG
@@ -32,8 +31,8 @@
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
-#include <cstdint>
 #include <memory>
+#include <mutex>
 #include <unordered_set>
 
 namespace camel::core::mm {
@@ -55,6 +54,7 @@ class FreeListAllocator : public IAllocator {
     }
 
     void *alloc(size_t size, size_t align = alignof(slot_t)) override {
+        std::lock_guard<std::mutex> lock(mutex_);
         ASSERT(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
 
         size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
@@ -108,6 +108,7 @@ class FreeListAllocator : public IAllocator {
     }
 
     void free(void *ptr) override {
+        std::lock_guard<std::mutex> lock(mutex_);
         if (UNLIKELY(!ptr))
             return;
 
@@ -138,6 +139,7 @@ class FreeListAllocator : public IAllocator {
     }
 
     void freeBulk(const std::vector<ObjectHeader *> &objects) override {
+        std::lock_guard<std::mutex> lock(mutex_);
         if (UNLIKELY(objects.empty()))
             return;
 
@@ -188,6 +190,7 @@ class FreeListAllocator : public IAllocator {
     }
 
     void reset() override {
+        std::lock_guard<std::mutex> lock(mutex_);
         size_t total_capacity = end_ - start_;
         freeList_             = reinterpret_cast<FreeBlock *>(start_);
         freeList_->size       = total_capacity;
@@ -195,6 +198,7 @@ class FreeListAllocator : public IAllocator {
     }
 
     size_t available() const override {
+        std::lock_guard<std::mutex> lock(mutex_);
         size_t total    = 0;
         FreeBlock *curr = freeList_;
         std::unordered_set<const void *> visited;
@@ -212,9 +216,13 @@ class FreeListAllocator : public IAllocator {
         return total;
     }
 
-    bool contains(void *ptr) const override { return ptr >= start_ && ptr < end_; }
+    bool contains(void *ptr) const override {
+        auto *raw = reinterpret_cast<std::byte *>(ptr);
+        return raw >= start_ && raw < end_;
+    }
 
     void iterateAllocated(const std::function<void(ObjectHeader *)> &visitor) const override {
+        std::lock_guard<std::mutex> lock(mutex_);
         std::byte *current = start_;
         FreeBlock *fb      = freeList_;
 
@@ -230,7 +238,9 @@ class FreeListAllocator : public IAllocator {
                 fb = fb->next;
             } else {
                 // 必须是已分配对象
-                ASSERT(reinterpret_cast<std::byte *>(fb) > current, "Free list ordering error");
+                ASSERT(
+                    !fb || reinterpret_cast<std::byte *>(fb) > current,
+                    "Free list ordering error");
 
                 ObjectHeader *header = reinterpret_cast<ObjectHeader *>(current);
                 size_t obj_size      = header->size();
@@ -240,9 +250,11 @@ class FreeListAllocator : public IAllocator {
                 ASSERT(current + obj_size <= end_, "Object out of bounds");
 
                 // 确保不与下一个空闲块重叠
-                ASSERT(
-                    current + obj_size <= reinterpret_cast<std::byte *>(fb),
-                    "Object overlaps with free block");
+                if (fb) {
+                    ASSERT(
+                        current + obj_size <= reinterpret_cast<std::byte *>(fb),
+                        "Object overlaps with free block");
+                }
 
                 visitor(header);
                 current += obj_size;
@@ -254,6 +266,7 @@ class FreeListAllocator : public IAllocator {
     }
 
     bool validate() const {
+        std::lock_guard<std::mutex> lock(mutex_);
         try {
             // 步骤1：验证空闲链表自身
             std::unordered_set<const void *> freeBlockSet;
@@ -381,6 +394,7 @@ class FreeListAllocator : public IAllocator {
     std::byte *start_;
     std::byte *end_;
     FreeBlock *freeList_;
+    mutable std::mutex mutex_;
 
     // 辅助函数：从用户指针获取对象头
     ObjectHeader *headerOf(void *ptr) const {
