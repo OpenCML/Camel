@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 08, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -233,16 +233,22 @@ int main(int argc, char *argv[]) {
 
                 try {
                     try {
-                        int retCode = applyPasses(Run::resolvedPassList, ctx, os);
-                        if (retCode == 0 && ctx->rootGraph() != GIR::Graph::null()) {
-                            retCode = applyPasses(Run::fallbackPasses, ctx, os);
-                        }
-                        if (retCode != 0) {
+                        auto graph = ctx->rootGraph();
+                        graph      = applyPasses(graph, Run::resolvedPassList, ctx, os);
+                        if (graph == nullptr) {
                             const auto &diags = ctx->runtimeDiagSink();
-                            if (diags->hasErrors()) {
+                            if (diags->hasErrors())
                                 diags->dump(os, useJsonFormat);
+                            return 1;
+                        }
+                        if (graph != GIR::Graph::null()) {
+                            graph = applyPasses(graph, Run::fallbackPasses, ctx, os);
+                            if (graph == nullptr) {
+                                const auto &diags = ctx->runtimeDiagSink();
+                                if (diags->hasErrors())
+                                    diags->dump(os, useJsonFormat);
+                                return 1;
                             }
-                            return retCode;
                         }
                     } catch (Diagnostic &d) {
                         if (!d.persisted) {

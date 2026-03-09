@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 08, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -95,17 +95,25 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
         }
 
         std::vector<std::string> passes = getState().runPasses;
-        int retCode                     = applyPasses(passes, st.ctx, std::cout);
-        if (retCode == 0 && st.ctx->rootGraph() != GIR::Graph::null()) {
-            static const std::vector<std::string> defaultPassList{"std::default"};
-            retCode = applyPasses(defaultPassList, st.ctx, std::cout);
-        }
-        if (retCode != 0) {
+        static const std::vector<std::string> defaultFallback{"std::default"};
+        auto graph = st.ctx->rootGraph();
+        graph      = applyPasses(graph, passes, st.ctx, std::cout);
+        if (graph == nullptr) {
             const auto &diags = st.ctx->runtimeDiagSink();
             if (diags->hasErrors())
                 diags->dump(std::cout, false);
             getTaskState() = "loaded";
             return RunOutcome::Failed;
+        }
+        if (graph != GIR::Graph::null()) {
+            graph = applyPasses(graph, defaultFallback, st.ctx, std::cout);
+            if (graph == nullptr) {
+                const auto &diags = st.ctx->runtimeDiagSink();
+                if (diags->hasErrors())
+                    diags->dump(std::cout, false);
+                getTaskState() = "loaded";
+                return RunOutcome::Failed;
+            }
         }
         std::cout << "Run completed." << std::endl;
         getTaskState() = "completed";
