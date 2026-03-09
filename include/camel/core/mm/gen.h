@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,8 @@
 
 #include "camel/utils/assert.h"
 #include "camel/utils/brpred.h"
+
+#include <mutex>
 
 // ============================================================================
 // 分代GC内存布局总览
@@ -209,14 +211,56 @@ class GenerationalAllocatorWithGC : public IAllocator {
           minorGCTriggerRatio_(config.minorGCTriggerRatio),
           majorGCTriggerRatio_(config.majorGCTriggerRatio) {}
 
-    void *alloc(size_t payloadSize, size_t align = alignof(slot_t)) {
+    void *alloc(size_t payloadSize, size_t align = alignof(slot_t)) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return allocUnlocked(payloadSize, align);
+    }
+
+    void free(void *ptr) override {
+        (void)ptr;
+        ASSERT(false, "GenerationalAllocatorWithGC does not support manual free");
+    }
+
+    void setObjectRootSet(std::vector<rtdata::Object *> *rootSet) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        rootObjectSet_ = rootSet;
+    }
+
+    void recordOldToYoungRef(void *oldObj, void *youngObj) {
+        (void)youngObj;
+        std::lock_guard<std::mutex> lock(mutex_);
+        ObjectHeader *header = headerOf(oldObj);
+        rememberedSet_.insert(header);
+    }
+
+    // Minor GC：清理年轻代（Birth + From）
+    void minorGC() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        minorGCUnlocked();
+    }
+
+    // 调试器/Profiler：获取各子区域（用于内存可视化）
+    const BumpPointerAllocator &birthSpace() const { return birthSpace_; }
+    const BumpPointerAllocator &havenSpace() const { return havenSpace_; }
+    const BumpPointerAllocator &cacheSpace() const { return cacheSpace_; }
+    const FreeListAllocator &elderGenSpace() const { return elderGenSpace_; }
+    const LargeObjectAllocator &largeObjSpace() const { return largeObjSpace_; }
+
+    // Major GC：清理整个堆
+    void majorGC() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        majorGCUnlocked();
+    }
+
+  private:
+    void *allocUnlocked(size_t payloadSize, size_t align = alignof(slot_t)) {
         ASSERT(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
 
         // 大对象直接走大对象分配器
         if (UNLIKELY(payloadSize > largeObjThreshold_)) {
             void *ptr = largeObjSpace_.alloc(payloadSize, align);
             if (UNLIKELY(!ptr)) {
-                majorGC();
+                majorGCUnlocked();
                 ptr = largeObjSpace_.alloc(payloadSize, align);
                 if (!ptr)
                     throw std::bad_alloc();
@@ -229,10 +273,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
         // 尝试在 birth 分配
         void *ptr = birthSpace_.alloc(payloadSize, align);
         if (UNLIKELY(!ptr)) {
-            minorGC();
+            minorGCUnlocked();
             ptr = birthSpace_.alloc(payloadSize, align);
             if (UNLIKELY(!ptr)) {
-                majorGC();
+                majorGCUnlocked();
                 ptr = birthSpace_.alloc(payloadSize, align);
                 if (!ptr)
                     throw std::bad_alloc();
@@ -244,26 +288,14 @@ class GenerationalAllocatorWithGC : public IAllocator {
         return ptr;
     }
 
-    void free(void *ptr) {
-        ASSERT(false, "GenerationalAllocatorWithGC does not support manual free");
-    }
-
-    void setObjectRootSet(std::vector<rtdata::Object *> *rootSet) { rootObjectSet_ = rootSet; }
-
-    void recordOldToYoungRef(void *oldObj, void *youngObj) {
-        ObjectHeader *header = headerOf(oldObj);
-        rememberedSet_.insert(header);
-    }
-
-    // Minor GC：清理年轻代（Birth + From）
-    void minorGC() {
+    void minorGCUnlocked() {
         if (inGC_)
             return; // 防止重入
         inGC_ = true;
 
         try {
             // 1. 交换 Cache 和 Haven 空间
-            std::swap(cacheSpace_, havenSpace_);
+            cacheSpace_.swap(havenSpace_);
             havenSpace_.reset(); // 清空新的 Haven 空间
 
             // 2. 处理根集合中的年轻代对象
@@ -321,20 +353,12 @@ class GenerationalAllocatorWithGC : public IAllocator {
         }
     }
 
-    // 调试器/Profiler：获取各子区域（用于内存可视化）
-    const BumpPointerAllocator &birthSpace() const { return birthSpace_; }
-    const BumpPointerAllocator &havenSpace() const { return havenSpace_; }
-    const BumpPointerAllocator &cacheSpace() const { return cacheSpace_; }
-    const FreeListAllocator &elderGenSpace() const { return elderGenSpace_; }
-    const LargeObjectAllocator &largeObjSpace() const { return largeObjSpace_; }
-
-    // Major GC：清理整个堆
-    void majorGC() {
+    void majorGCUnlocked() {
         // 1. 标记阶段：标记所有可达对象
         markPhase();
 
         // 2. 清理年轻代
-        minorGC();
+        minorGCUnlocked();
 
         // 3. 压缩老年代（可选，这里使用标记-清除）
         sweepOldGen();
@@ -343,7 +367,6 @@ class GenerationalAllocatorWithGC : public IAllocator {
         sweepLargeObjects();
     }
 
-  private:
     // ============================================================================
     // 区域标识枚举
     // ============================================================================
@@ -400,8 +423,9 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // GC 状态与根集合
     // ============================================================================
     bool inGC_ = false;                                // GC 重入保护标志
-    std::vector<rtdata::Object *> *rootObjectSet_;     // 根对象集合：栈、全局变量等直接可达对象
+    std::vector<rtdata::Object *> *rootObjectSet_{};   // 根对象集合：栈、全局变量等直接可达对象
     std::unordered_set<ObjectHeader *> rememberedSet_; // 记忆集：记录老年代→年轻代的跨代引用
+    mutable std::mutex mutex_;
 
     bool inYoungGenSpace(ObjectHeader *header) const {
         return header->region_ == AllocRegion::YoungGen;
@@ -437,7 +461,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
             newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
             if (!newObj) {
                 // 老年代空间不足，触发 Full GC
-                majorGC();
+                majorGCUnlocked();
                 newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
                 if (!newObj)
                     throw std::bad_alloc();
@@ -461,7 +485,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
                     // 标记 GC 状态
                     inGC_ = true;
                     try {
-                        majorGC();
+                        majorGCUnlocked();
                         newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
                         inGC_  = false;
                     } catch (...) {

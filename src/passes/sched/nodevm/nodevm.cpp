@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -195,7 +195,17 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
     loop_start: {
         const size_t nodesSize = currNodes.size();
         Node *lastNode         = currGraph->outputNode();
-        bool lastNodeIsJoin    = lastNode->type() == NodeType::JOIN;
+        if (!lastNode->ctrlOutputs().empty()) {
+            // 如果最后一个值节点有控制输出
+            // 说明在最后一个值节点和退出节点之间存在有副作用但不产生返回值的分支
+            // 那这也意味着推出节点必然会有控制边输入
+            // 需要从退出节点回溯找到最后一个控制边输入的节点
+            ASSERT(
+                !currGraph->exitNode()->ctrlInputs().empty(),
+                "Exit node has no control inputs.");
+            lastNode = currGraph->exitNode()->ctrlInputs().back();
+        }
+        bool lastNodeIsJoin = lastNode->type() == NodeType::JOIN;
 
         size_t i = 0;
         for (; i < nodesSize; ++i) {

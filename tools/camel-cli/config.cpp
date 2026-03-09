@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,9 @@
 #include "camel/utils/str.h"
 #include "clipp/clipp.h"
 #include "config.h"
+#include "opencmlrc.h"
+
+#include <filesystem>
 
 #ifndef BUILD_FOOTPRINT
 #define BUILD_FOOTPRINT "%y%m%d_%H%M%S"
@@ -31,6 +34,7 @@
 
 using namespace clipp;
 using namespace std;
+namespace fs = std::filesystem;
 
 namespace CmdLineArgs {
 Command selectedCommand = Command::Run;
@@ -53,6 +57,7 @@ string passesOpt                = ""; // raw --passes "a,b,c"
 string inputFile                = ""; // from --input (alternative to first positional as file)
 string resolvedInputPath        = ""; // computed: inputFile or targetFiles[0]
 vector<string> resolvedPassList = {}; // computed: passes or derived from targetFiles
+vector<string> fallbackPasses   = {"std::default"};
 
 bool profile        = false;
 bool noCache        = false;
@@ -303,6 +308,19 @@ bool parseArgs(int argc, char *argv[]) {
         } else {
             Run::resolvedPassList.assign(Run::targetFiles.begin() + 1, Run::targetFiles.end());
         }
+
+        // Apply .opencmlrc: list = prefix + CLI passes + suffix; fallback used only when graph !=
+        // null after list.
+        string cwd = fs::current_path().string();
+        string scriptDir =
+            Run::resolvedInputPath.empty()
+                ? ""
+                : fs::absolute(fs::path(Run::resolvedInputPath)).parent_path().string();
+        Run::resolvedPassList = opencmlrc::resolvePassListWithRc(
+            cwd,
+            scriptDir,
+            Run::resolvedPassList,
+            &Run::fallbackPasses);
     }
 
     // Run requires at least one input source: --input or positional file

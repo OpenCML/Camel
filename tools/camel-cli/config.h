@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,6 +49,8 @@ extern std::string inputFile;           // input from --input (alternative to fi
 // Resolved after parse (used by main): no need to branch on --input/--passes vs positional
 extern std::string resolvedInputPath;             // effective input file path (or "" for stdin)
 extern std::vector<std::string> resolvedPassList; // effective pass list for run
+extern std::vector<std::string> fallbackPasses;   // run when graph != null after list; from rc
+                                                  // passes.fallback or ["std::default"]
 
 extern bool profile;
 extern bool noCache;

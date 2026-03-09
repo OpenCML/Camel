@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "windows_parser_guard.h"
 
+#include "camel/compile/gir.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/execute/pass/base.h"
 #include "camel/utils/log.h"
@@ -94,13 +95,25 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
         }
 
         std::vector<std::string> passes = getState().runPasses;
-        int retCode                     = applyPasses(passes, st.ctx, std::cout);
-        if (retCode != 0) {
+        static const std::vector<std::string> defaultFallback{"std::default"};
+        auto graph = st.ctx->rootGraph();
+        graph      = applyPasses(graph, passes, st.ctx, std::cout);
+        if (graph == nullptr) {
             const auto &diags = st.ctx->runtimeDiagSink();
             if (diags->hasErrors())
                 diags->dump(std::cout, false);
             getTaskState() = "loaded";
             return RunOutcome::Failed;
+        }
+        if (graph != GIR::Graph::null()) {
+            graph = applyPasses(graph, defaultFallback, st.ctx, std::cout);
+            if (graph == nullptr) {
+                const auto &diags = st.ctx->runtimeDiagSink();
+                if (diags->hasErrors())
+                    diags->dump(std::cout, false);
+                getTaskState() = "loaded";
+                return RunOutcome::Failed;
+            }
         }
         std::cout << "Run completed." << std::endl;
         getTaskState() = "completed";

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -156,6 +156,7 @@ PassScopePtr initPassScope() {
                          })},
                     {"inline", def(PASS(InlineRewritePass))},
                     {"taskflow", def(PASS(TaskflowExecSchedPass))},
+                    {"tfdump", def(PASS(TfDumpPass))},
                 }),
             },
         }));
@@ -192,6 +193,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::asm", "std::fastvm::jit::dump::asm"},
     {"std::rmir", "std::fastvm::jit::dump::rmir"},
     {"std::mir", "std::fastvm::jit::dump::mir"},
+    {"std::tfg", "std::tfdump"},
 };
 
 } // namespace
@@ -240,19 +242,16 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     return nullptr;
 }
 
-int applyPasses(
-    const std::vector<std::string> &passes, const context_ptr_t &ctx, std::ostream &os) {
-    GIR::graph_ptr_t graph = ctx->rootGraph();
-
+GIR::graph_ptr_t applyPasses(
+    GIR::graph_ptr_t graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
+    std::ostream &os) {
     for (const auto &p : passes) {
-        ASSERT(graph != nullptr, "Graph is null.");
+        if (graph == nullptr || graph == Graph::null()) {
+            return graph;
+        }
         ASSERT(
             !graph->dirty(),
             std::format("Graph {} is dirty, please rearrange it first.", graph->name()));
-
-        if (graph == Graph::null()) {
-            return 0;
-        }
 
         auto factory = findPassFactory(p, os);
         if (factory) {
@@ -260,27 +259,13 @@ int applyPasses(
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
-                return 1;
+                return nullptr;
             }
         } else {
             throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(p);
         }
     }
 
-    if (graph != Graph::null()) {
-        auto factory = findPassFactory("std::default", os);
-        if (factory) {
-            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("std::default", graph.get()); });
-            auto pass = factory(ctx);
-            graph     = pass->apply(graph, os);
-            if (ctx->rtmDiags()->hasErrors()) {
-                return 1;
-            }
-        } else {
-            throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit("std::default");
-        }
-    }
-
     EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GIR-Z", graph ? graph.get() : nullptr); });
-    return 0;
+    return graph;
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,6 +44,8 @@ class NullGraphIRPass : public GraphIRPass {
     virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 };
 
-int applyPasses(
-    const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx,
-    std::ostream &os);
+/** Applies passes to the given graph. Returns result graph, or nullptr on error (check ctx
+ * rtmDiags). */
+GIR::graph_ptr_t applyPasses(
+    GIR::graph_ptr_t graph, const std::vector<std::string> &passes,
+    const camel::core::context::context_ptr_t &ctx, std::ostream &os);
