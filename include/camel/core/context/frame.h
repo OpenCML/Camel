@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,6 +38,7 @@ struct FrameMeta {
 FrameMeta *installFrameMetaInfoForGraph(GIR::Graph *graph);
 
 class FramePool;
+class TaskflowFramePool;
 class FrameView;
 
 class Frame : public rtdata::Object {
@@ -235,6 +236,7 @@ class Frame : public rtdata::Object {
 
   private:
     friend class FramePool;
+    friend class TaskflowFramePool;
     friend class FrameView;
 
     // 这个构造函数由栈帧池调用

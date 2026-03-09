@@ -156,6 +156,7 @@ PassScopePtr initPassScope() {
                          })},
                     {"inline", def(PASS(InlineRewritePass))},
                     {"taskflow", def(PASS(TaskflowExecSchedPass))},
+                    {"tfdump", def(PASS(TfDumpPass))},
                 }),
             },
         }));
@@ -192,6 +193,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::asm", "std::fastvm::jit::dump::asm"},
     {"std::rmir", "std::fastvm::jit::dump::rmir"},
     {"std::mir", "std::fastvm::jit::dump::mir"},
+    {"std::tfg", "std::tfdump"},
 };
 
 } // namespace

@@ -1,13 +1,36 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * You can use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Oct. 05, 2025
+ * Updated: Mar. 09, 2026
+ * Supported by: National Key Research and Development Program of China
+ */
+
 #include "taskflow.h"
 #include "camel/common/algo/topo.h"
 #include "camel/compile/gir/nodes.h"
+#include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/execute/executor.h"
+#include "camel/utils/debug.h"
+#include "camel/utils/log.h"
 
+#include <array>
 #include <queue>
 #include <regex>
 #include <unordered_set>
@@ -25,29 +48,6 @@ static slot_t get_graph_return(Graph *g, Frame *frame) {
     if (retNode->normInputs().empty())
         return NullSlot;
     return frame->get<slot_t>(retNode->normInputs().front()->index());
-}
-
-// 将 CALL/FUNC 节点 n 的参数从 source 帧复制到 dest 帧（与 NodeVM fillFrameForCall 一致）
-static void fillFrameForCall(Frame *dest, Graph *targetGraph, Node *n, Frame *source) {
-    node_vec_t argNodes;
-    const auto &closureNodes = targetGraph->closure();
-    const auto &portNodes    = targetGraph->ports();
-
-    if (n->type() == NodeType::CALL) {
-        argNodes = n->normInputs();
-        for (size_t i = 0; i < argNodes.size() && i < portNodes.size(); ++i)
-            dest->set(portNodes[i]->index(), source->get<slot_t>(argNodes[i]->index()));
-        Function *func = source->get<Function *>(n->withInputs().front()->index());
-        Tuple *closure = func->tuple();
-        for (size_t j = 0; j < closure->size() && j < closureNodes.size(); ++j)
-            dest->set(closureNodes[j]->index(), closure->get<slot_t>(j));
-    } else {
-        argNodes = n->normInputs();
-        for (size_t i = 0; i < argNodes.size() && i < portNodes.size(); ++i)
-            dest->set(portNodes[i]->index(), source->get<slot_t>(argNodes[i]->index()));
-        for (size_t j = 0; j < n->withInputs().size() && j < closureNodes.size(); ++j)
-            dest->set(closureNodes[j]->index(), source->get<slot_t>(n->withInputs()[j]->index()));
-    }
 }
 
 graph_ptr_t TaskflowExecSchedPass::apply(graph_ptr_t &graph, std::ostream & /*os*/) {
@@ -73,13 +73,112 @@ graph_ptr_t TaskflowExecSchedPass::apply(graph_ptr_t &graph, std::ostream & /*os
 }
 
 slot_t TaskflowExecSchedPass::evalGraphTF(Graph *graph, Frame *frame) {
+    EXEC_WHEN_DEBUG(GetDefaultLogger().in("Taskflow").debug("Evaluating graph: {}", graph->name()));
     mainFlow_.clear();
     instantiate_graph_instance_generic(mainFlow_, graph, frame);
     executor_.run(mainFlow_).wait();
-    return get_graph_return(graph, frame);
+    slot_t ret = get_graph_return(graph, frame);
+    EXEC_WHEN_DEBUG(GetDefaultLogger().in("Taskflow").debug("Graph {} finished.", graph->name()));
+    return ret;
+}
+
+slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, Graph *graph, Frame *frame) {
+    try {
+        instantiate_graph_instance_generic(sf, graph, frame);
+        sf.join();
+        slot_t result = get_graph_return(graph, frame);
+        framePool_.release(frame);
+        return result;
+    } catch (...) {
+        framePool_.release(frame);
+        throw;
+    }
+}
+
+Frame *TaskflowExecSchedPass::acquirePreparedNodeCallFrame(
+    Graph *targetGraph, Node *callNode, Frame *sourceFrame) {
+    Frame *dest            = framePool_.acquire(targetGraph);
+    const auto &targetInfo = globalBuildCtx_.getGraphInfos(targetGraph);
+    const auto &callMeta =
+        globalBuildCtx_.getGraphInfos(&callNode->graph()).getNodeExecMeta(callNode);
+    const auto &portIndices    = targetInfo.portIndices;
+    const auto &closureIndices = targetInfo.closureIndices;
+    const auto &normIndices    = callMeta.normIndices;
+    const auto &withIndices    = callMeta.withIndices;
+
+    for (size_t i = 0; i < normIndices.size() && i < portIndices.size(); ++i)
+        dest->set(portIndices[i], sourceFrame->get<slot_t>(normIndices[i]));
+
+    if (callNode->type() == NodeType::CALL) {
+        ASSERT(!withIndices.empty(), "CALL node must have function input.");
+        Function *func = sourceFrame->get<Function *>(withIndices.front());
+        Tuple *closure = func->tuple();
+        for (size_t j = 0; j < closure->size() && j < closureIndices.size(); ++j)
+            dest->set(closureIndices[j], closure->get<slot_t>(j));
+    } else {
+        for (size_t j = 0; j < withIndices.size() && j < closureIndices.size(); ++j)
+            dest->set(closureIndices[j], sourceFrame->get<slot_t>(withIndices[j]));
+    }
+
+    return dest;
+}
+
+Frame *TaskflowExecSchedPass::acquirePreparedClosureCallFrame(
+    Graph *targetGraph, Tuple *closure, std::span<const slot_t> args) {
+    Frame *dest                = framePool_.acquire(targetGraph);
+    const auto &targetInfo     = globalBuildCtx_.getGraphInfos(targetGraph);
+    const auto &portIndices    = targetInfo.portIndices;
+    const auto &closureIndices = targetInfo.closureIndices;
+
+    for (size_t i = 0; i < args.size() && i < portIndices.size(); ++i)
+        dest->set(portIndices[i], args[i]);
+    for (size_t j = 0; j < closure->size() && j < closureIndices.size(); ++j)
+        dest->set(closureIndices[j], closure->get<slot_t>(j));
+
+    return dest;
+}
+
+slot_t TaskflowExecSchedPass::executePreparedOperator(Node *n, Frame *frame) {
+    auto opNode     = tt::as_ptr<OperNode>(n);
+    const auto &uri = opNode->oper()->uri();
+    auto opFunc     = context_->execMgr().find(uri);
+    if (!opFunc) {
+        throw reportRuntimeFault(
+            *context_,
+            RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri),
+            makeNodeExecutionSite(
+                context_->sourceContext(),
+                &n->graph(),
+                n,
+                0,
+                "taskflow",
+                ExecutionSiteKind::TaskNode));
+    }
+
+    auto &meta = globalBuildCtx_.getGraphInfos(&n->graph()).getOrCreateNodeExecMeta(n);
+    data_arr_t nargs{meta.normIndices.data(), static_cast<size_t>(meta.normIndices.size())};
+    data_arr_t wargs{meta.withIndices.data(), static_cast<size_t>(meta.withIndices.size())};
+    FrameArgsView withView(*frame, wargs);
+    FrameArgsView normView(*frame, nargs);
+
+    try {
+        return (*opFunc)(withView, normView, *context_);
+    } catch (const RuntimeFault &fault) {
+        throw reportRuntimeFault(
+            *context_,
+            fault,
+            makeNodeExecutionSite(
+                context_->sourceContext(),
+                &n->graph(),
+                n,
+                0,
+                "taskflow",
+                ExecutionSiteKind::TaskNode));
+    }
 }
 
 void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
+    globalBuildCtx_.skipNodes.clear();
     std::unordered_set<Graph *> visited;
     std::queue<Graph *> q;
     q.push(rootGraph);
@@ -94,8 +193,29 @@ void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
         auto &gt = globalBuildCtx_.getOrCreateGraphInfos(g);
         gt.graph = g;
         gt.joinToBrch.clear();
+        gt.nodeExecMeta.clear();
+        gt.portIndices.clear();
+        gt.closureIndices.clear();
+
+        gt.portIndices.reserve(g->ports().size());
+        for (Node *port : g->ports())
+            gt.portIndices.push_back(port->index());
+
+        gt.closureIndices.reserve(g->closure().size());
+        for (Node *closure : g->closure())
+            gt.closureIndices.push_back(closure->index());
 
         for (Node *n : g->nodes()) {
+            auto &nodeMeta = gt.getOrCreateNodeExecMeta(n);
+            nodeMeta.normIndices.clear();
+            nodeMeta.withIndices.clear();
+            nodeMeta.normIndices.reserve(n->normInputs().size());
+            nodeMeta.withIndices.reserve(n->withInputs().size());
+            for (Node *in : n->normInputs())
+                nodeMeta.normIndices.push_back(in->index());
+            for (Node *in : n->withInputs())
+                nodeMeta.withIndices.push_back(in->index());
+
             if (n->type() == NodeType::FUNC) {
                 auto fn    = tt::as_ptr<FuncNode>(n);
                 Graph *sub = &fn->func()->graph();
@@ -119,12 +239,22 @@ void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
                     q.push(sg.get());
             }
         }
+
+        // 提前安装 FrameMeta 并预热一个 frame，避免首次进入子图时在 worker 线程里做冷启动。
+        framePool_.warmup(g, 1);
     }
 }
 
 template <typename FlowT>
 void TaskflowExecSchedPass::instantiate_graph_instance_generic(
     FlowT &flowLike, Graph *graph, Frame *frame) {
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger()
+            .in("Taskflow")
+            .debug(
+                "Instantiating graph instance: {} (nodes={})",
+                graph->name(),
+                graph->nodes().size()));
     std::unordered_map<Node *, tf::Task> taskMap;
     buildNormalNodeTasks(flowLike, graph, frame, taskMap);
     connectDependencies(flowLike, graph, taskMap);
@@ -155,6 +285,13 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildCopyTask(FlowT &flowLike, Node *n, Frame *frame) {
     return flowLike
         .emplace([n, frame]() {
+            EXEC_WHEN_DEBUG({
+                GetDefaultLogger()
+                    .in("Taskflow")
+                    .debug("Executing COPY graph={}: {}", n->graph().name(), n->toString());
+                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
+                    camel::DebugBreakpoint::Hit("gir_node", n);
+            });
             auto inputNode    = n->normInputs().front();
             data_idx_t srcIdx = inputNode->index();
             TypeCode srcCode  = frame->codeAt(srcIdx);
@@ -173,6 +310,13 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildCastTask(FlowT &flowLike, Node *n, Frame *frame) {
     return flowLike
         .emplace([n, frame]() {
+            EXEC_WHEN_DEBUG({
+                GetDefaultLogger()
+                    .in("Taskflow")
+                    .debug("Executing CAST graph={}: {}", n->graph().name(), n->toString());
+                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
+                    camel::DebugBreakpoint::Hit("gir_node", n);
+            });
             auto inputNode = n->normInputs().front();
             Type *srcType  = frame->typeAt<Type>(inputNode->index());
             Type *tgtType  = n->dataType();
@@ -187,6 +331,13 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildFillTask(FlowT &flowLike, Node *n, Frame *frame) {
     return flowLike
         .emplace([n, frame]() {
+            EXEC_WHEN_DEBUG({
+                GetDefaultLogger()
+                    .in("Taskflow")
+                    .debug("Executing FILL graph={}: {}", n->graph().name(), n->toString());
+                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
+                    camel::DebugBreakpoint::Hit("gir_node", n);
+            });
             auto srcNode           = n->normInputs().front();
             const auto &dataInputs = n->withInputs();
             TypeCode srcCode       = frame->codeAt(srcNode->index());
@@ -237,6 +388,13 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildAccsTask(FlowT &flowLike, Node *n, Frame *frame) {
     return flowLike
         .emplace([n, frame]() {
+            EXEC_WHEN_DEBUG({
+                GetDefaultLogger()
+                    .in("Taskflow")
+                    .debug("Executing ACCS graph={}: {}", n->graph().name(), n->toString());
+                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
+                    camel::DebugBreakpoint::Hit("gir_node", n);
+            });
             auto accsNode     = tt::as_ptr<AccsNode>(n);
             data_idx_t srcIdx = n->dataInputs().front()->index();
             if (accsNode->isNum()) {
@@ -258,19 +416,20 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildFuncTask(FlowT &flowLike, Node *n, Frame *frame) {
     return flowLike
         .emplace([n, frame, this](tf::Subflow &sf) {
+            EXEC_WHEN_DEBUG({
+                GetDefaultLogger()
+                    .in("Taskflow")
+                    .debug(
+                        "Executing FUNC (entering subgraph) graph={} node={} -> subgraph={}",
+                        n->graph().name(),
+                        n->toString(),
+                        tt::as_ptr<FuncNode>(n)->func()->graph().name());
+                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
+                    camel::DebugBreakpoint::Hit("gir_node", n);
+            });
             Graph *tgtGraph  = &tt::as_ptr<FuncNode>(n)->func()->graph();
-            Frame *funcFrame = framePool_.acquire(tgtGraph);
-            try {
-                fillFrameForCall(funcFrame, tgtGraph, n, frame);
-                instantiate_graph_instance_generic(sf, tgtGraph, funcFrame);
-                sf.join();
-                slot_t result = get_graph_return(tgtGraph, funcFrame);
-                frame->set(n->index(), result);
-                framePool_.release(funcFrame);
-            } catch (...) {
-                framePool_.release(funcFrame);
-                throw;
-            }
+            Frame *funcFrame = acquirePreparedNodeCallFrame(tgtGraph, n, frame);
+            frame->set(n->index(), runPreparedSubgraph(sf, tgtGraph, funcFrame));
         })
         .name("FUNC");
 }
@@ -279,19 +438,20 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildCallTask(FlowT &flowLike, Node *n, Frame *frame) {
     return flowLike
         .emplace([n, frame, this](tf::Subflow &sf) {
-            Graph *tgtGraph  = frame->get<Function *>(n->withInputs().front()->index())->graph();
-            Frame *funcFrame = framePool_.acquire(tgtGraph);
-            try {
-                fillFrameForCall(funcFrame, tgtGraph, n, frame);
-                instantiate_graph_instance_generic(sf, tgtGraph, funcFrame);
-                sf.join();
-                slot_t result = get_graph_return(tgtGraph, funcFrame);
-                frame->set(n->index(), result);
-                framePool_.release(funcFrame);
-            } catch (...) {
-                framePool_.release(funcFrame);
-                throw;
-            }
+            Graph *tgtGraph = frame->get<Function *>(n->withInputs().front()->index())->graph();
+            EXEC_WHEN_DEBUG({
+                GetDefaultLogger()
+                    .in("Taskflow")
+                    .debug(
+                        "Executing CALL graph={} node={} -> subgraph={}",
+                        n->graph().name(),
+                        n->toString(),
+                        tgtGraph->name());
+                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
+                    camel::DebugBreakpoint::Hit("gir_node", n);
+            });
+            Frame *funcFrame = acquirePreparedNodeCallFrame(tgtGraph, n, frame);
+            frame->set(n->index(), runPreparedSubgraph(sf, tgtGraph, funcFrame));
         })
         .name("CALL");
 }
@@ -300,6 +460,17 @@ template <typename FlowT>
 tf::Task TaskflowExecSchedPass::buildOperTask(FlowT &flowLike, Node *n, Frame *frame) {
     return flowLike
         .emplace([n, frame, this](tf::Subflow &sf) {
+            EXEC_WHEN_DEBUG({
+                GetDefaultLogger()
+                    .in("Taskflow")
+                    .debug(
+                        "Executing OPER graph={}: {} uri={}",
+                        n->graph().name(),
+                        n->toString(),
+                        tt::as_ptr<OperNode>(n)->oper()->uri());
+                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
+                    camel::DebugBreakpoint::Hit("gir_node", n);
+            });
             auto opNode     = tt::as_ptr<OperNode>(n);
             const auto &uri = opNode->oper()->uri();
             if (uri.starts_with(":mark/")) {
@@ -321,44 +492,7 @@ tf::Task TaskflowExecSchedPass::buildOperTask(FlowT &flowLike, Node *n, Frame *f
                     ASSERT(false, std::format("Mark Operator {} not implemented.", uri.substr(6)));
                 }
             } else {
-                auto opFunc = context_->execMgr().find(uri);
-                if (!opFunc) {
-                    throw reportRuntimeFault(
-                        *context_,
-                        RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri),
-                        makeNodeExecutionSite(
-                            context_->sourceContext(),
-                            &n->graph(),
-                            n,
-                            0,
-                            "taskflow",
-                            ExecutionSiteKind::TaskNode));
-                }
-                std::vector<data_idx_t> normIndices, withIndices;
-                for (const auto &in : n->normInputs())
-                    normIndices.push_back(in->index());
-                for (const auto &in : n->withInputs())
-                    withIndices.push_back(in->index());
-                data_arr_t nargs{normIndices.data(), static_cast<size_t>(normIndices.size())};
-                data_arr_t wargs{withIndices.data(), static_cast<size_t>(withIndices.size())};
-                FrameArgsView withView(*frame, wargs);
-                FrameArgsView normView(*frame, nargs);
-                slot_t result;
-                try {
-                    result = (*opFunc)(withView, normView, *context_);
-                } catch (const RuntimeFault &fault) {
-                    throw reportRuntimeFault(
-                        *context_,
-                        fault,
-                        makeNodeExecutionSite(
-                            context_->sourceContext(),
-                            &n->graph(),
-                            n,
-                            0,
-                            "taskflow",
-                            ExecutionSiteKind::TaskNode));
-                }
-                frame->set(n->index(), result);
+                frame->set(n->index(), executePreparedOperator(n, frame));
             }
         })
         .name("OPER");
@@ -407,11 +541,27 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
                         jumpIdx = withIns.size();
                 }
                 frame->set(brch->index(), static_cast<Int32>(jumpIdx));
+                EXEC_WHEN_DEBUG(
+                    GetDefaultLogger()
+                        .in("Taskflow")
+                        .debug(
+                            "BRCH_SEL graph={} brch={} selected branch index {}",
+                            brch->graph().name(),
+                            brch->toString(),
+                            jumpIdx));
             })
             .name("BRCH_SEL");
 
     auto joiner =
-        flowLike.emplace([join, frame]() { (void)frame->get<slot_t>(join->index()); }).name("JOIN");
+        flowLike
+            .emplace([join, frame]() {
+                (void)frame->get<slot_t>(join->index());
+                EXEC_WHEN_DEBUG(
+                    GetDefaultLogger()
+                        .in("Taskflow")
+                        .debug("JOIN graph={}: {}", join->graph().name(), join->toString()));
+            })
+            .name("JOIN");
 
     auto precede_from_inputs = [&](const node_vec_t &inputs, tf::Task tsk) {
         for (const auto &in : inputs) {
@@ -436,81 +586,39 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
             flowLike
                 .emplace([i, candidate, brch, join, frame, this](tf::Subflow &csf) {
                     int32_t tarIdx = frame->get<int32_t>(brch->index());
-                    if (static_cast<size_t>(tarIdx) != i)
+                    if (static_cast<size_t>(tarIdx) != i) {
+                        EXEC_WHEN_DEBUG(
+                            GetDefaultLogger()
+                                .in("Taskflow")
+                                .debug(
+                                    "BRCH_CAND_EXEC graph={} branch [{}] skipped (selected={})",
+                                    candidate->graph().name(),
+                                    i,
+                                    tarIdx));
                         return;
+                    }
+                    EXEC_WHEN_DEBUG(
+                        GetDefaultLogger()
+                            .in("Taskflow")
+                            .debug(
+                                "BRCH_CAND_EXEC graph={} executing branch [{}] candidate={}",
+                                candidate->graph().name(),
+                                i,
+                                candidate->toString()));
 
                     slot_t out = NullSlot;
                     if (candidate->type() == NodeType::FUNC) {
                         Graph *tgtGraph  = &tt::as_ptr<FuncNode>(candidate)->func()->graph();
-                        Frame *funcFrame = framePool_.acquire(tgtGraph);
-                        try {
-                            fillFrameForCall(funcFrame, tgtGraph, candidate, frame);
-                            instantiate_graph_instance_generic(csf, tgtGraph, funcFrame);
-                            csf.join();
-                            out = get_graph_return(tgtGraph, funcFrame);
-                            framePool_.release(funcFrame);
-                        } catch (...) {
-                            framePool_.release(funcFrame);
-                            throw;
-                        }
+                        Frame *funcFrame = acquirePreparedNodeCallFrame(tgtGraph, candidate, frame);
+                        out              = runPreparedSubgraph(csf, tgtGraph, funcFrame);
                     } else if (candidate->type() == NodeType::CALL) {
                         Graph *tgtGraph =
                             frame->get<Function *>(candidate->withInputs().front()->index())
                                 ->graph();
-                        Frame *funcFrame = framePool_.acquire(tgtGraph);
-                        try {
-                            fillFrameForCall(funcFrame, tgtGraph, candidate, frame);
-                            instantiate_graph_instance_generic(csf, tgtGraph, funcFrame);
-                            csf.join();
-                            out = get_graph_return(tgtGraph, funcFrame);
-                            framePool_.release(funcFrame);
-                        } catch (...) {
-                            framePool_.release(funcFrame);
-                            throw;
-                        }
+                        Frame *funcFrame = acquirePreparedNodeCallFrame(tgtGraph, candidate, frame);
+                        out              = runPreparedSubgraph(csf, tgtGraph, funcFrame);
                     } else if (candidate->type() == NodeType::OPER) {
-                        auto opNode = tt::as_ptr<OperNode>(candidate);
-                        auto uri    = opNode->oper()->uri();
-                        auto opFunc = context_->execMgr().find(uri);
-                        if (!opFunc) {
-                            throw reportRuntimeFault(
-                                *context_,
-                                RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri),
-                                makeNodeExecutionSite(
-                                    context_->sourceContext(),
-                                    &candidate->graph(),
-                                    candidate,
-                                    0,
-                                    "taskflow",
-                                    ExecutionSiteKind::TaskNode));
-                        }
-                        std::vector<data_idx_t> normIndices, withIndices;
-                        for (const auto &in : candidate->normInputs())
-                            normIndices.push_back(in->index());
-                        for (const auto &in : candidate->withInputs())
-                            withIndices.push_back(in->index());
-                        data_arr_t nargs{
-                            normIndices.data(),
-                            static_cast<size_t>(normIndices.size())};
-                        data_arr_t wargs{
-                            withIndices.data(),
-                            static_cast<size_t>(withIndices.size())};
-                        FrameArgsView withView(*frame, wargs);
-                        FrameArgsView normView(*frame, nargs);
-                        try {
-                            out = (*opFunc)(withView, normView, *context_);
-                        } catch (const RuntimeFault &fault) {
-                            throw reportRuntimeFault(
-                                *context_,
-                                fault,
-                                makeNodeExecutionSite(
-                                    context_->sourceContext(),
-                                    &candidate->graph(),
-                                    candidate,
-                                    0,
-                                    "taskflow",
-                                    ExecutionSiteKind::TaskNode));
-                        }
+                        out = executePreparedOperator(candidate, frame);
                     } else {
                         ASSERT(false, "Unsupported candidate node type in BRCH-JOIN.");
                     }
@@ -534,8 +642,16 @@ void TaskflowExecSchedPass::buildNormalNodeTasks(
     FlowT &flowLike, Graph *graph, Frame *frame, std::unordered_map<Node *, tf::Task> &taskMap) {
     std::unordered_set<Node *> &skipNodes = globalBuildCtx_.skipNodes;
     for (Node *n : graph->nodes()) {
-        if (skipNodes.count(n) && n->type() != NodeType::BRCH)
+        if (skipNodes.count(n) && n->type() != NodeType::BRCH) {
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger()
+                    .in("Taskflow")
+                    .debug(
+                        "Skipping node (BRCH region) graph={}: {}",
+                        graph->name(),
+                        n->toString()));
             continue;
+        }
         tf::Task t;
         switch (n->type()) {
         case NodeType::DATA:
@@ -624,27 +740,18 @@ void TaskflowExecSchedPass::connectDependencies(
 }
 
 void TaskflowExecSchedPass::mark_map_arr(Node *node, Frame *frame, tf::Subflow &sf) {
-    Array *arr               = frame->get<Array *>(node->normInputs().front()->index());
-    Function *func           = frame->get<Function *>(node->withInputs().front()->index());
-    Graph *g                 = func->graph();
-    Tuple *closure           = func->tuple();
-    const auto &portNodes    = g->ports();
-    const auto &closureNodes = g->closure();
-    const size_t n           = arr->size();
+    Array *arr     = frame->get<Array *>(node->normInputs().front()->index());
+    Function *func = frame->get<Function *>(node->withInputs().front()->index());
+    Graph *g       = func->graph();
+    Tuple *closure = func->tuple();
+    const size_t n = arr->size();
 
     std::vector<slot_t> results(n);
     for (size_t i = 0; i < n; ++i) {
-        sf.emplace([this, i, arr, g, closure, &portNodes, &closureNodes, &results](
-                       tf::Subflow &isf) {
-              Frame *f = framePool_.acquire(g);
-              if (!portNodes.empty())
-                  f->set(portNodes[0]->index(), arr->get<slot_t>(i));
-              for (size_t j = 0; j < closure->size() && j < closureNodes.size(); ++j)
-                  f->set(closureNodes[j]->index(), closure->get<slot_t>(j));
-              instantiate_graph_instance_generic(isf, g, f);
-              isf.join();
-              results[i] = get_graph_return(g, f);
-              framePool_.release(f);
+        sf.emplace([this, i, arr, g, closure, &results](tf::Subflow &isf) {
+              std::array<slot_t, 1> args{arr->get<slot_t>(i)};
+              Frame *f   = acquirePreparedClosureCallFrame(g, closure, args);
+              results[i] = runPreparedSubgraph(isf, g, f);
           }).name("MAP_ELEM");
     }
     sf.join();
@@ -655,27 +762,18 @@ void TaskflowExecSchedPass::mark_map_arr(Node *node, Frame *frame, tf::Subflow &
 }
 
 void TaskflowExecSchedPass::mark_apply_arr(Node *node, Frame *frame, tf::Subflow &sf) {
-    Array *arr               = frame->get<Array *>(node->normInputs().front()->index());
-    Function *func           = frame->get<Function *>(node->withInputs().front()->index());
-    Graph *g                 = func->graph();
-    Tuple *closure           = func->tuple();
-    const auto &portNodes    = g->ports();
-    const auto &closureNodes = g->closure();
-    const size_t n           = arr->size();
+    Array *arr     = frame->get<Array *>(node->normInputs().front()->index());
+    Function *func = frame->get<Function *>(node->withInputs().front()->index());
+    Graph *g       = func->graph();
+    Tuple *closure = func->tuple();
+    const size_t n = arr->size();
 
     std::vector<slot_t> results(n);
     for (size_t i = 0; i < n; ++i) {
-        sf.emplace([this, i, arr, g, closure, &portNodes, &closureNodes, &results](
-                       tf::Subflow &isf) {
-              Frame *f = framePool_.acquire(g);
-              if (!portNodes.empty())
-                  f->set(portNodes[0]->index(), arr->get<slot_t>(i));
-              for (size_t j = 0; j < closure->size() && j < closureNodes.size(); ++j)
-                  f->set(closureNodes[j]->index(), closure->get<slot_t>(j));
-              instantiate_graph_instance_generic(isf, g, f);
-              isf.join();
-              results[i] = get_graph_return(g, f);
-              framePool_.release(f);
+        sf.emplace([this, i, arr, g, closure, &results](tf::Subflow &isf) {
+              std::array<slot_t, 1> args{arr->get<slot_t>(i)};
+              Frame *f   = acquirePreparedClosureCallFrame(g, closure, args);
+              results[i] = runPreparedSubgraph(isf, g, f);
           }).name("APPLY_ELEM");
     }
     sf.join();
@@ -685,27 +783,18 @@ void TaskflowExecSchedPass::mark_apply_arr(Node *node, Frame *frame, tf::Subflow
 }
 
 void TaskflowExecSchedPass::mark_filter_arr(Node *node, Frame *frame, tf::Subflow &sf) {
-    Array *arr               = frame->get<Array *>(node->normInputs().front()->index());
-    Function *func           = frame->get<Function *>(node->withInputs().front()->index());
-    Graph *g                 = func->graph();
-    Tuple *closure           = func->tuple();
-    const auto &portNodes    = g->ports();
-    const auto &closureNodes = g->closure();
-    const size_t n           = arr->size();
+    Array *arr     = frame->get<Array *>(node->normInputs().front()->index());
+    Function *func = frame->get<Function *>(node->withInputs().front()->index());
+    Graph *g       = func->graph();
+    Tuple *closure = func->tuple();
+    const size_t n = arr->size();
 
     std::vector<bool> keep(n, false);
     for (size_t i = 0; i < n; ++i) {
-        sf.emplace([this, i, arr, g, closure, &portNodes, &closureNodes, &keep](tf::Subflow &isf) {
-              Frame *f = framePool_.acquire(g);
-              if (!portNodes.empty())
-                  f->set(portNodes[0]->index(), arr->get<slot_t>(i));
-              for (size_t j = 0; j < closure->size() && j < closureNodes.size(); ++j)
-                  f->set(closureNodes[j]->index(), closure->get<slot_t>(j));
-              instantiate_graph_instance_generic(isf, g, f);
-              isf.join();
-              slot_t result = get_graph_return(g, f);
-              keep[i]       = fromSlot<bool>(result);
-              framePool_.release(f);
+        sf.emplace([this, i, arr, g, closure, &keep](tf::Subflow &isf) {
+              std::array<slot_t, 1> args{arr->get<slot_t>(i)};
+              Frame *f = acquirePreparedClosureCallFrame(g, closure, args);
+              keep[i]  = fromSlot<bool>(runPreparedSubgraph(isf, g, f));
           }).name("FILTER_PRED");
     }
     sf.join();
@@ -718,13 +807,11 @@ void TaskflowExecSchedPass::mark_filter_arr(Node *node, Frame *frame, tf::Subflo
 }
 
 void TaskflowExecSchedPass::mark_reduce_arr(Node *node, Frame *frame, tf::Subflow &sf) {
-    Array *arr               = frame->get<Array *>(node->normInputs().front()->index());
-    Function *func           = frame->get<Function *>(node->withInputs()[0]->index());
-    slot_t init              = frame->get<slot_t>(node->withInputs()[1]->index());
-    Graph *g                 = func->graph();
-    Tuple *closure           = func->tuple();
-    const auto &portNodes    = g->ports();
-    const auto &closureNodes = g->closure();
+    Array *arr     = frame->get<Array *>(node->normInputs().front()->index());
+    Function *func = frame->get<Function *>(node->withInputs()[0]->index());
+    slot_t init    = frame->get<slot_t>(node->withInputs()[1]->index());
+    Graph *g       = func->graph();
+    Tuple *closure = func->tuple();
 
     if (arr->size() == 0) {
         frame->set(node->index(), init);
@@ -735,21 +822,12 @@ void TaskflowExecSchedPass::mark_reduce_arr(Node *node, Frame *frame, tf::Subflo
     tf::Task prev;
     bool has_prev = false;
     for (size_t i = 0; i < arr->size(); ++i) {
-        slot_t elem = arr->get<slot_t>(i);
-        tf::Task step =
-            sf.emplace([this, accPtr, elem, g, closure, &portNodes, &closureNodes](
-                           tf::Subflow &isf) {
-                  Frame *f = framePool_.acquire(g);
-                  ASSERT(portNodes.size() >= 2, "reduce expects binary function (two ports).");
-                  f->set(portNodes[0]->index(), *accPtr);
-                  f->set(portNodes[1]->index(), elem);
-                  for (size_t j = 0; j < closure->size() && j < closureNodes.size(); ++j)
-                      f->set(closureNodes[j]->index(), closure->get<slot_t>(j));
-                  instantiate_graph_instance_generic(isf, g, f);
-                  isf.join();
-                  *accPtr = get_graph_return(g, f);
-                  framePool_.release(f);
-              }).name("REDUCE_STEP");
+        slot_t elem   = arr->get<slot_t>(i);
+        tf::Task step = sf.emplace([this, accPtr, elem, g, closure](tf::Subflow &isf) {
+                              std::array<slot_t, 2> args{*accPtr, elem};
+                              Frame *f = acquirePreparedClosureCallFrame(g, closure, args);
+                              *accPtr  = runPreparedSubgraph(isf, g, f);
+                          }).name("REDUCE_STEP");
         if (has_prev)
             step.succeed(prev);
         prev     = step;
@@ -765,29 +843,20 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(Node *node, Frame *frame, 
 }
 
 void TaskflowExecSchedPass::mark_foreach_arr(Node *node, Frame *frame, tf::Subflow &sf) {
-    Array *arr               = frame->get<Array *>(node->normInputs().front()->index());
-    Function *func           = frame->get<Function *>(node->withInputs().front()->index());
-    Graph *g                 = func->graph();
-    Tuple *closure           = func->tuple();
-    const auto &portNodes    = g->ports();
-    const auto &closureNodes = g->closure();
+    Array *arr     = frame->get<Array *>(node->normInputs().front()->index());
+    Function *func = frame->get<Function *>(node->withInputs().front()->index());
+    Graph *g       = func->graph();
+    Tuple *closure = func->tuple();
 
     tf::Task prev;
     bool has_prev = false;
     for (size_t i = 0; i < arr->size(); ++i) {
-        slot_t elem = arr->get<slot_t>(i);
-        tf::Task step =
-            sf.emplace([this, elem, g, closure, &portNodes, &closureNodes](tf::Subflow &isf) {
-                  Frame *f = framePool_.acquire(g);
-                  if (!portNodes.empty())
-                      f->set(portNodes[0]->index(), elem);
-                  for (size_t j = 0; j < closure->size() && j < closureNodes.size(); ++j)
-                      f->set(closureNodes[j]->index(), closure->get<slot_t>(j));
-                  instantiate_graph_instance_generic(isf, g, f);
-                  isf.join();
-                  (void)get_graph_return(g, f);
-                  framePool_.release(f);
-              }).name("FOREACH_ELEM");
+        slot_t elem   = arr->get<slot_t>(i);
+        tf::Task step = sf.emplace([this, elem, g, closure](tf::Subflow &isf) {
+                              std::array<slot_t, 1> args{elem};
+                              Frame *f = acquirePreparedClosureCallFrame(g, closure, args);
+                              (void)runPreparedSubgraph(isf, g, f);
+                          }).name("FOREACH_ELEM");
         if (has_prev)
             step.succeed(prev);
         prev     = step;
@@ -798,24 +867,17 @@ void TaskflowExecSchedPass::mark_foreach_arr(Node *node, Frame *frame, tf::Subfl
 }
 
 void TaskflowExecSchedPass::mark_unordered_foreach_arr(Node *node, Frame *frame, tf::Subflow &sf) {
-    Array *arr               = frame->get<Array *>(node->normInputs().front()->index());
-    Function *func           = frame->get<Function *>(node->withInputs().front()->index());
-    Graph *g                 = func->graph();
-    Tuple *closure           = func->tuple();
-    const auto &portNodes    = g->ports();
-    const auto &closureNodes = g->closure();
+    Array *arr     = frame->get<Array *>(node->normInputs().front()->index());
+    Function *func = frame->get<Function *>(node->withInputs().front()->index());
+    Graph *g       = func->graph();
+    Tuple *closure = func->tuple();
+    const size_t n = arr->size();
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        sf.emplace([this, i, arr, g, closure, &portNodes, &closureNodes](tf::Subflow &isf) {
-              Frame *f = framePool_.acquire(g);
-              if (!portNodes.empty())
-                  f->set(portNodes[0]->index(), arr->get<slot_t>(i));
-              for (size_t j = 0; j < closure->size() && j < closureNodes.size(); ++j)
-                  f->set(closureNodes[j]->index(), closure->get<slot_t>(j));
-              instantiate_graph_instance_generic(isf, g, f);
-              isf.join();
-              (void)get_graph_return(g, f);
-              framePool_.release(f);
+    for (size_t i = 0; i < n; ++i) {
+        sf.emplace([this, i, arr, g, closure](tf::Subflow &isf) {
+              std::array<slot_t, 1> args{arr->get<slot_t>(i)};
+              Frame *f = acquirePreparedClosureCallFrame(g, closure, args);
+              (void)runPreparedSubgraph(isf, g, f);
           }).name("FOREACH_ELEM");
     }
     sf.join();
