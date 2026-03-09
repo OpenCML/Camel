@@ -1,0 +1,24 @@
+module main
+
+import { pi_hits, asian_call_price } from sim
+
+func main(): int sync {
+    println("=== Sim Module Basic Tests ===")
+
+    println("\n[1] pi_hits(10000, 42)")
+    let hits1 = pi_hits(10000, 42)
+    println("  hits =", hits1)
+
+    println("\n[2] deterministic seed check")
+    let hits2 = pi_hits(10000, 42)
+    println("  same seed same result =", hits1 == hits2)
+
+    println("\n[3] asian_call_price(2000, 128, 42)")
+    let price1 = asian_call_price(2000, 128, 42)
+    let price2 = asian_call_price(2000, 128, 42)
+    println("  price =", price1)
+    println("  same seed same result =", price1 == price2)
+
+    println("\n=== Sim tests completed ===")
+    return 0
+}

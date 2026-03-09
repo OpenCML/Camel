@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,8 @@ slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __fs_exists__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __fs_is_file__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __fs_is_dir__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __fs_file_size__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __fs_read_chunk__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __fs_mkdir__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __fs_mkdirs__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 

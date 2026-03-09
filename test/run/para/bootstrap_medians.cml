@@ -1,0 +1,45 @@
+module bootstrap_medians
+
+import { now } from time
+import { seed, shuffle, sample } from random
+import { sort } from algo
+import { mean, stdev } from statistics
+
+func main(): int sync {
+    let source_size = 2e6
+    let sample_size = 4e5
+    let replicas = 8
+    let s = 20260309
+
+    seed(s)
+    'Generating {} source values...'->format<source_size>->println
+    let source = range(0, source_size)->shuffle
+
+    println('Preparing bootstrap samples sequentially...')
+    let prep_start = now()
+    let b0 = sample(source, sample_size)
+    let b1 = sample(source, sample_size)
+    let b2 = sample(source, sample_size)
+    let b3 = sample(source, sample_size)
+    let b4 = sample(source, sample_size)
+    let b5 = sample(source, sample_size)
+    let b6 = sample(source, sample_size)
+    let b7 = sample(source, sample_size)
+    let prep_duration = now() - prep_start
+
+    'Sorting {} sampled arrays in parallel...'->format<replicas>->println
+    let sort_start = now()
+    let medians = [b0, b1, b2, b3, b4, b5, b6, b7]->map<(arr: int[]): int => {
+        var sarr = arr
+        wait sort(sarr)
+        return sarr[len(sarr) / 2]
+    }>
+    let sort_duration = now() - sort_start
+
+    'medians = {}'->format<medians>->println
+    'mean = {:.2f}'->format<mean(medians)>->println
+    'stdev = {:.2f}'->format<stdev(medians)>->println
+    'sample preparation took {:.2f} seconds'->format<prep_duration>->println
+    'parallel sorting stage took {:.2f} seconds'->format<sort_duration>->println
+    return 0
+}

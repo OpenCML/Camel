@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,9 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
         OperatorGroup::create(
             "whoami",
             {{"os:whoami", StaticFuncTypeResolver::create({}, {}, Type::String())}}),
+        OperatorGroup::create(
+            "cpu_count",
+            {{"os:cpu_count", StaticFuncTypeResolver::create({}, {}, Type::Int64())}}),
         OperatorGroup::create(
             "set_terminal_raw_mode",
             {{"os:set_terminal_raw_mode",

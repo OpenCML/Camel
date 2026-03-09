@@ -167,10 +167,12 @@ add_subdirectory(modules/algo)
 add_subdirectory(modules/statistics)
 add_subdirectory(modules/this)
 add_subdirectory(modules/fs)
+add_subdirectory(modules/crypto)
 add_subdirectory(modules/re)
 add_subdirectory(modules/sys)
 add_subdirectory(modules/json)
 add_subdirectory(modules/para)
+add_subdirectory(modules/sim)
 add_subdirectory(modules/tensor)
 
 # CLI 与工具：链接 libcamel 的 shell（camel-cli 在 tools 下）

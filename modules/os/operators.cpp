@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -134,6 +134,7 @@ std::unordered_map<std::string, operator_t> getOSOpsMap() {
         {"exit", __os_exit__},
         {"sleep", __os_sleep__},
         {"whoami", __os_whoami__},
+        {"cpu_count", __os_cpu_count__},
         {"set_terminal_raw_mode", __os_set_terminal_raw_mode__},
         {"has_input", __os_has_input__},
         {"get_char", __os_get_char__},
@@ -174,6 +175,14 @@ slot_t __os_whoami__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 #endif
     return toSlot(String::from(username, mm::autoSpace()));
+}
+
+slot_t __os_cpu_count__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    unsigned int count = std::thread::hardware_concurrency();
+    if (count == 0) {
+        count = 1;
+    }
+    return toSlot(static_cast<Int64>(count));
 }
 
 slot_t __os_exit__(ArgsView &with, ArgsView &norm, Context &ctx) {
