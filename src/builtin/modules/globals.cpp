@@ -613,19 +613,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
-                {
-                    ":op/eq",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(self: typeas T, other: T) => bool",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1])) {
-                                return nullopt;
-                            }
-                            return Type::Bool();
-                        }),
-                },
             }),
         OperatorGroup::create(
             "__neq__",

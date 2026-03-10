@@ -1,0 +1,110 @@
+// mnist_py.cml - Softmax classifier with MNIST loaded via Python (no JSON file)
+//
+// Uses python module: Python downloads/loads MNIST, returns data directly to Camel.
+// Run from project root: camel test/run/nn/mnist_py.cml
+
+module mnist_py
+
+import {
+    Tensor, argmax, concat, exp, log, max, ones, range, reshape, shape, sum, transpose, zeros
+} from tensor
+import { py_import, py_call, py_wrap, py_unwrap, py_exec, py_attr, PyObject } from python
+
+let num_classes = 10
+
+func softmax(logits: Tensor): Tensor {
+    let n = shape(logits)[0]
+    let k = shape(logits)[1]
+    let row_max = max(logits, 1)
+    let row_max_2d = reshape(row_max, [n, 1])
+    let row_max_broadcast = row_max_2d @ ones([1, k])
+    let stable = logits - row_max_broadcast
+    let exp_logits = exp(stable)
+    let row_sums = sum(exp_logits, 1)
+    let row_sums_2d = reshape(row_sums, [n, 1])
+    let row_sums_broadcast = row_sums_2d @ ones([1, k])
+    return exp_logits / row_sums_broadcast
+}
+
+func cross_entropy_loss(probs: Tensor, y_onehot: Tensor): float {
+    let eps = 0.0000001
+    let log_probs = log(probs + eps)
+    let masked = y_onehot * log_probs
+    return -sum(masked) / float(shape(probs)[0])
+}
+
+with <X: Tensor, y_onehot: Tensor, lr: float>
+sync func update(W: Tensor): Tensor {
+    let logits = X @ W
+    let probs = softmax(logits)
+    let m = shape(X)[0]
+    let grad = transpose(X) @ (probs - y_onehot)
+    return W - lr * (1.0 / float(m)) * grad
+}
+
+with <X: Tensor, y_onehot: Tensor, lr: float, its: int>
+sync func train(W: Tensor): Tensor {
+    sync func train_step(i: int, w: Tensor): Tensor {
+        return if i >= its then w else sync {
+            let nw = update<X, y_onehot, lr>(w)
+            if i % 100 == 0 then {
+                let probs = softmax(X @ nw)
+                let loss = cross_entropy_loss(probs, y_onehot)
+                'Iteration {}: Cross-Entropy Loss = {}'->format<i, loss>->println
+            } else {
+                ''
+            }
+            return train_step(i + 1, nw)
+        }
+    }
+    return train_step(0, W)
+}
+
+func main(): int sync {
+    println('Loading MNIST via Python...')
+    py_exec("import sys, os; sys.path.insert(0, os.path.join(os.getcwd(), 'test', 'run', 'nn'))")
+    let mnist_mod = py_import("mnist_loader")
+    let load_fn = py_attr(mnist_mod, "load_mnist")
+    let data_py = py_call(load_fn, py_wrap(1000), py_wrap(true), py_wrap("tmp"))
+    let data = py_unwrap(data_py as PyObject<{ images: float[], labels: int[], shape: int[] }>)
+
+    let labels_arr = data.labels
+    let n = data.shape[0]
+    let d_in = data.shape[1]
+
+    let X = reshape(data.images, [n, d_in])
+    let ones_col = ones([n, 1])
+    let X_bias = concat(X, ones_col, 1)
+    let d = shape(X_bias)[1]
+
+    sync func build_one_hot(i: int, acc: Tensor): Tensor {
+        return if i >= n then acc else sync {
+            let label_idx = labels_arr[i]
+            let row = (range(0, num_classes) == label_idx) * 1.0
+            let row_2d = reshape(row, [1, num_classes])
+            let new_acc = if i == 0 then row_2d else concat(acc, row_2d, 0)
+            return build_one_hot(i + 1, new_acc)
+        }
+    }
+
+    let y_onehot = build_one_hot(0, zeros([1, num_classes]))
+    var W = zeros([d, num_classes])
+
+    let lr = 0.1
+    let its = 300
+
+    println('Training softmax classifier on MNIST...')
+    println('Samples:', n, 'Features:', d_in, 'Classes:', num_classes)
+    wait W = train<X_bias, y_onehot, lr, its>(W)
+
+    let probs = softmax(X_bias @ W)
+    let loss = cross_entropy_loss(probs, y_onehot)
+    'Final Cross-Entropy Loss: {}'->format<loss>->println
+
+    let pred = argmax(X_bias @ W, 1)
+    let labels_t = argmax(y_onehot, 1)
+    let correct = sum((pred == labels_t))
+    let acc = correct / float(n)
+    'Accuracy: {} / {} = {}'->format<correct, n, acc>->println
+    return 0
+}

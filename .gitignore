@@ -24,6 +24,7 @@ legacy/
 build/
 dist/
 out/
+tmp/
 
 *.cmo
 ./camel

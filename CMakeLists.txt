@@ -34,34 +34,6 @@ file(GLOB_RECURSE _ALL_SRC
     "${PROJECT_SOURCE_DIR}/src/*.cpp"
     "${PROJECT_SOURCE_DIR}/third_party/*.cpp"
 )
-list(REMOVE_ITEM _ALL_SRC
-    "${PROJECT_SOURCE_DIR}/src/main.cpp"
-    "${PROJECT_SOURCE_DIR}/src/config.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/operators/plot.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/plot.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/io.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/os.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/operators/os.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/math.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/operators/math.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/time.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/operators/time.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/random.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/operators/rand.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/algo.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/operators/algo.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/statistics.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/operators/statistics.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/this.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/operators/this.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/fs.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/re.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/sys.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/json.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/para.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/modules/tensor.cpp"
-    "${PROJECT_SOURCE_DIR}/src/builtin/operators/tensor.cpp"
-)
 set(LIBCAMEL_SRC ${_ALL_SRC})
 
 find_package(fmt REQUIRED)

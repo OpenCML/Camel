@@ -129,8 +129,11 @@ std::optional<Type *> resolveTensorCompare(const type_vec_t &norm) {
     }
     bool lhsTensor = isTensorType(norm[0]);
     bool rhsTensor = isTensorType(norm[1]);
+    bool lhsArray  = norm[0]->code() == TypeCode::Array;
+    bool rhsArray  = norm[1]->code() == TypeCode::Array;
     if ((lhsTensor && rhsTensor) || (lhsTensor && isNumericScalar(norm[1])) ||
-        (rhsTensor && isNumericScalar(norm[0]))) {
+        (rhsTensor && isNumericScalar(norm[0])) || (lhsArray && isNumericScalar(norm[1])) ||
+        (isNumericScalar(norm[0]) && rhsArray)) {
         return tensorType(Type::Bool());
     }
     return std::nullopt;
@@ -168,6 +171,7 @@ std::unordered_map<std::string, operator_t> getTensorOpsMap() {
         {"le", __tensor_le__},
         {"gt", __tensor_gt__},
         {"ge", __tensor_ge__},
+        {"eq", __tensor_eq__},
         {"empty", __tensor_empty__},
         {"zeros", __tensor_zeros__},
         {"ones", __tensor_ones__},
@@ -177,6 +181,11 @@ std::unordered_map<std::string, operator_t> getTensorOpsMap() {
         {"eye", __tensor_eye__},
         {"shape", __tensor_shape__},
         {"sum", __tensor_sum__},
+        {"sum_axis", __tensor_sum_axis__},
+        {"max_axis", __tensor_max_axis__},
+        {"argmax_axis", __tensor_argmax_axis__},
+        {"exp", __tensor_exp__},
+        {"log", __tensor_log__},
         {"transpose", __tensor_transpose__},
         {"concat", __tensor_concat__},
         {"reshape", __tensor_reshape__},
@@ -298,6 +307,14 @@ const std::vector<oper_group_ptr_t> &getTensorOperatorGroups() {
                   [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                       -> std::optional<Type *> { return resolveTensorCompare(norm); })}}),
         OperatorGroup::create(
+            "__eq__",
+            {{"tensor:eq",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {2, {false, false}}},
+                  "(lhs: Tensor | number, rhs: Tensor | number) => Tensor<bool>",
+                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> { return resolveTensorCompare(norm); })}}),
+        OperatorGroup::create(
             "empty",
             {{"tensor:empty",
               DynamicFuncTypeResolver::create(
@@ -390,13 +407,77 @@ const std::vector<oper_group_ptr_t> &getTensorOperatorGroups() {
                   })}}),
         OperatorGroup::create(
             "sum",
-            {{"tensor:sum",
+            {
+                {"tensor:sum",
+                 DynamicFuncTypeResolver::create(
+                     {{0, {}}, {1, {false}}},
+                     "(t: Tensor) => float",
+                     [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                         -> std::optional<Type *> {
+                         return isTensorType(norm[0]) ? std::optional<Type *>{Type::Float64()}
+                                                      : std::nullopt;
+                     })},
+                {"tensor:sum_axis",
+                 DynamicFuncTypeResolver::create(
+                     {{0, {}}, {2, {false, false}}},
+                     "(t: Tensor, axis: int) => Tensor",
+                     [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                         -> std::optional<Type *> {
+                         return (norm.size() == 2 && isTensorType(norm[0]) &&
+                                 (norm[1]->code() == TypeCode::Int32 ||
+                                  norm[1]->code() == TypeCode::Int64))
+                                    ? std::optional<Type *>{tensorType()}
+                                    : std::nullopt;
+                     })},
+            }),
+        OperatorGroup::create(
+            "max",
+            {{"tensor:max_axis",
               DynamicFuncTypeResolver::create(
-                  {{0, {}}, {1, {false}}},
-                  "(t: Tensor) => float",
+                  {{0, {}}, {2, {false, false}}},
+                  "(t: Tensor, axis: int) => Tensor",
                   [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                       -> std::optional<Type *> {
-                      return isTensorType(norm[0]) ? std::optional<Type *>{Type::Float64()}
+                      return (norm.size() == 2 && isTensorType(norm[0]) &&
+                              (norm[1]->code() == TypeCode::Int32 ||
+                               norm[1]->code() == TypeCode::Int64))
+                                 ? std::optional<Type *>{tensorType()}
+                                 : std::nullopt;
+                  })}}),
+        OperatorGroup::create(
+            "argmax",
+            {{"tensor:argmax_axis",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {2, {false, false}}},
+                  "(t: Tensor, axis: int) => Tensor",
+                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      return (norm.size() == 2 && isTensorType(norm[0]) &&
+                              (norm[1]->code() == TypeCode::Int32 ||
+                               norm[1]->code() == TypeCode::Int64))
+                                 ? std::optional<Type *>{tensorType(Type::Int64())}
+                                 : std::nullopt;
+                  })}}),
+        OperatorGroup::create(
+            "exp",
+            {{"tensor:exp",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {1, {false}}},
+                  "(t: Tensor) => Tensor",
+                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      return isTensorType(norm[0]) ? std::optional<Type *>{tensorType()}
+                                                   : std::nullopt;
+                  })}}),
+        OperatorGroup::create(
+            "log",
+            {{"tensor:log",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {1, {false}}},
+                  "(t: Tensor) => Tensor",
+                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      return isTensorType(norm[0]) ? std::optional<Type *>{tensorType()}
                                                    : std::nullopt;
                   })}}),
         OperatorGroup::create(
@@ -423,10 +504,11 @@ const std::vector<oper_group_ptr_t> &getTensorOperatorGroups() {
             {{"tensor:reshape",
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {2, {false, false}}},
-                  "(t: Tensor, shape: int[]) => Tensor",
+                  "(t: Tensor | number[], shape: int[]) => Tensor",
                   [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                       -> std::optional<Type *> {
-                      return isTensorType(norm[0]) && norm[1]->code() == TypeCode::Array
+                      return (isTensorType(norm[0]) || norm[0]->code() == TypeCode::Array) &&
+                                     norm[1]->code() == TypeCode::Array
                                  ? std::optional<Type *>{tensorType()}
                                  : std::nullopt;
                   })}}),
@@ -838,6 +920,41 @@ slot_t __tensor_ge__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
     });
 }
 
+slot_t __tensor_eq__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return withTensorErrors([&]() -> slot_t {
+        bool lhsTensorOrArray =
+            isTensorType(norm.type(0)) || norm.type(0)->code() == TypeCode::Array;
+        bool rhsTensorOrArray =
+            isTensorType(norm.type(1)) || norm.type(1)->code() == TypeCode::Array;
+        if (lhsTensorOrArray && rhsTensorOrArray) {
+            return wrapTensor(
+                camel::tensor::tensorCompare(
+                    requireTensorOrConvertArray(norm, 0),
+                    requireTensorOrConvertArray(norm, 1),
+                    camel::tensor::CompareOp::Equal,
+                    mm::autoSpace()));
+        }
+        if (lhsTensorOrArray) {
+            return wrapTensor(
+                camel::tensor::tensorCompareScalarRight(
+                    requireTensorOrConvertArray(norm, 0),
+                    norm.type(1)->code(),
+                    norm.slot(1),
+                    camel::tensor::CompareOp::Equal,
+                    mm::autoSpace()));
+        }
+        return wrapTensor(
+            camel::tensor::tensorCompareScalarLeft(
+                norm.type(0)->code(),
+                norm.slot(0),
+                requireTensorOrConvertArray(norm, 1),
+                camel::tensor::CompareOp::Equal,
+                mm::autoSpace()));
+    });
+}
+
 slot_t __tensor_empty__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
     (void)with;
     (void)ctx;
@@ -950,6 +1067,58 @@ slot_t __tensor_sum__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
         [&]() -> slot_t { return toSlot(camel::tensor::tensorSum(requireTensor(norm, 0))); });
 }
 
+slot_t __tensor_sum_axis__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return withTensorErrors([&]() -> slot_t {
+        int64_t axis = norm.type(1)->code() == TypeCode::Int32
+                           ? static_cast<int64_t>(norm.get<Int32>(1))
+                           : norm.get<Int64>(1);
+        return wrapTensor(
+            camel::tensor::tensorSumAxis(requireTensor(norm, 0), axis, mm::autoSpace()));
+    });
+}
+
+slot_t __tensor_max_axis__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return withTensorErrors([&]() -> slot_t {
+        int64_t axis = norm.type(1)->code() == TypeCode::Int32
+                           ? static_cast<int64_t>(norm.get<Int32>(1))
+                           : norm.get<Int64>(1);
+        return wrapTensor(
+            camel::tensor::tensorMaxAxis(requireTensor(norm, 0), axis, mm::autoSpace()));
+    });
+}
+
+slot_t __tensor_argmax_axis__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return withTensorErrors([&]() -> slot_t {
+        int64_t axis = norm.type(1)->code() == TypeCode::Int32
+                           ? static_cast<int64_t>(norm.get<Int32>(1))
+                           : norm.get<Int64>(1);
+        return wrapTensor(
+            camel::tensor::tensorArgmaxAxis(requireTensor(norm, 0), axis, mm::autoSpace()));
+    });
+}
+
+slot_t __tensor_exp__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return withTensorErrors([&]() -> slot_t {
+        return wrapTensor(camel::tensor::tensorExp(requireTensor(norm, 0), mm::autoSpace()));
+    });
+}
+
+slot_t __tensor_log__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return withTensorErrors([&]() -> slot_t {
+        return wrapTensor(camel::tensor::tensorLog(requireTensor(norm, 0), mm::autoSpace()));
+    });
+}
+
 slot_t __tensor_transpose__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
     (void)with;
     (void)ctx;
@@ -976,7 +1145,10 @@ slot_t __tensor_reshape__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
     return withTensorErrors([&]() -> slot_t {
         auto shape = camel::tensor::parseShapeArray(norm.get<Array *>(1), norm.type(1));
         return wrapTensor(
-            camel::tensor::tensorReshape(requireTensor(norm, 0), shape, mm::autoSpace()));
+            camel::tensor::tensorReshape(
+                requireTensorOrConvertArray(norm, 0),
+                shape,
+                mm::autoSpace()));
     });
 }
 

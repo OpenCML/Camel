@@ -1,3 +1,22 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * You may use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Mar. 10, 2026
+ * Updated: Mar. 10, 2026
+ * Supported by: National Key Research and Development Program of China
+ */
+
 #include "runtime.h"
 
 #include "camel/core/error/runtime.h"
@@ -120,6 +139,8 @@ bool applyCompare(CompareOp op, double lhs, double rhs) {
         return lhs > rhs;
     case CompareOp::GreaterEqual:
         return lhs >= rhs;
+    case CompareOp::Equal:
+        return lhs == rhs;
     }
     return false;
 }
@@ -395,16 +416,38 @@ TensorObject::clone(mm::IAllocator &allocator, const type::Type *typeInfo, bool 
     return copy;
 }
 
+void TensorObject::formatElement(std::ostream &os, uint64_t flatIndex) const {
+    char buf[32];
+    switch (dtype_) {
+    case type::TypeCode::Float32: {
+        double v = getAsDouble(flatIndex);
+        // PyTorch-style: compact for int-like, 4 sigfigs for decimals
+        if (v == std::floor(v) && std::abs(v) < 1e10) {
+            (void)std::snprintf(buf, sizeof(buf), "% 7.0f.", v);
+        } else {
+            (void)std::snprintf(buf, sizeof(buf), "% 7.4g", v);
+        }
+        os << buf;
+        break;
+    }
+    case type::TypeCode::Int64:
+        os << std::setw(7) << getAsInt64(flatIndex);
+        break;
+    case type::TypeCode::Bool:
+        os << (getAsBool(flatIndex) ? "  True" : " False");
+        break;
+    default:
+        os << "?";
+        break;
+    }
+}
+
 void TensorObject::print(std::ostream &os, const type::Type *typeInfo) const {
     (void)typeInfo;
-    os << "Tensor(shape=[";
-    for (size_t i = 0; i < rank_; ++i) {
-        if (i > 0) {
-            os << ", ";
-        }
-        os << shape_[i];
-    }
-    os << "], dtype=";
+    os << "tensor(";
+    uint64_t flatIndex = 0;
+    printRecursive(os, 0, flatIndex, "");
+    os << ", dtype=";
     switch (dtype_) {
     case type::TypeCode::Float32:
         os << "float32";
@@ -419,9 +462,6 @@ void TensorObject::print(std::ostream &os, const type::Type *typeInfo) const {
         os << "unknown";
         break;
     }
-    os << ", data=";
-    uint64_t flatIndex = 0;
-    printRecursive(os, 0, flatIndex);
     os << ")";
 }
 
@@ -438,43 +478,33 @@ void TensorObject::refreshPointers() {
     data_  = storage_ + rank_ * sizeof(int64_t);
 }
 
-void TensorObject::printRecursive(std::ostream &os, size_t dimIndex, uint64_t &flatIndex) const {
+void TensorObject::printRecursive(
+    std::ostream &os, size_t dimIndex, uint64_t &flatIndex, const std::string &indent) const {
+    constexpr int indentStep      = 8;
+    const std::string innerIndent = indent + std::string(indentStep, ' ');
+
     if (rank_ == 0) {
-        os << getAsDouble(0);
+        formatElement(os, 0);
         return;
     }
     if (dimIndex + 1 == rank_) {
+        // Innermost dimension: elements on one line
         os << "[";
         for (int64_t i = 0; i < shape_[dimIndex]; ++i) {
-            if (i > 0) {
+            if (i > 0)
                 os << ", ";
-            }
-            switch (dtype_) {
-            case type::TypeCode::Float32:
-                os << getAsDouble(flatIndex++);
-                break;
-            case type::TypeCode::Int64:
-                os << getAsInt64(flatIndex++);
-                break;
-            case type::TypeCode::Bool:
-                os << (getAsBool(flatIndex++) ? "true" : "false");
-                break;
-            default:
-                os << "?";
-                ++flatIndex;
-                break;
-            }
+            formatElement(os, flatIndex++);
         }
         os << "]";
         return;
     }
 
+    // Outer dimensions: each slice on new line (PyTorch-style)
     os << "[";
     for (int64_t i = 0; i < shape_[dimIndex]; ++i) {
-        if (i > 0) {
-            os << ", ";
-        }
-        printRecursive(os, dimIndex + 1, flatIndex);
+        if (i > 0)
+            os << ",\n" << innerIndent;
+        printRecursive(os, dimIndex + 1, flatIndex, innerIndent);
     }
     os << "]";
 }
@@ -834,6 +864,166 @@ double tensorSum(const TensorObject *tensor) {
         value += tensor->getAsDouble(i);
     }
     return value;
+}
+
+TensorObject *tensorSumAxis(const TensorObject *tensor, int64_t axis, mm::IAllocator &allocator) {
+    if (tensor->rank() != 2) {
+        throw std::invalid_argument("sum(axis) currently only supports rank-2 tensors");
+    }
+    if (axis < 0) {
+        axis += 2;
+    }
+    if (axis != 0 && axis != 1) {
+        throw std::invalid_argument("sum(axis): axis must be 0 or 1 for rank-2 tensors");
+    }
+    int64_t rows = tensor->dim(0);
+    int64_t cols = tensor->dim(1);
+    TensorObject *out;
+    if (axis == 0) {
+        int64_t shape[] = {cols};
+        out             = TensorObject::create(type::TypeCode::Float32, shape, allocator, true);
+        for (int64_t j = 0; j < cols; ++j) {
+            double acc = 0.0;
+            for (int64_t i = 0; i < rows; ++i) {
+                acc += tensor->getAsDouble(static_cast<uint64_t>(i * cols + j));
+            }
+            out->setFromDouble(static_cast<uint64_t>(j), acc);
+        }
+    } else {
+        int64_t shape[] = {rows};
+        out             = TensorObject::create(type::TypeCode::Float32, shape, allocator, true);
+        for (int64_t i = 0; i < rows; ++i) {
+            double acc = 0.0;
+            for (int64_t j = 0; j < cols; ++j) {
+                acc += tensor->getAsDouble(static_cast<uint64_t>(i * cols + j));
+            }
+            out->setFromDouble(static_cast<uint64_t>(i), acc);
+        }
+    }
+    return out;
+}
+
+TensorObject *tensorMaxAxis(const TensorObject *tensor, int64_t axis, mm::IAllocator &allocator) {
+    if (tensor->rank() != 2) {
+        throw std::invalid_argument("max(axis) currently only supports rank-2 tensors");
+    }
+    if (axis < 0) {
+        axis += 2;
+    }
+    if (axis != 0 && axis != 1) {
+        throw std::invalid_argument("max(axis): axis must be 0 or 1 for rank-2 tensors");
+    }
+    int64_t rows = tensor->dim(0);
+    int64_t cols = tensor->dim(1);
+    TensorObject *out;
+    if (axis == 0) {
+        int64_t shape[] = {cols};
+        out             = TensorObject::create(type::TypeCode::Float32, shape, allocator, true);
+        for (int64_t j = 0; j < cols; ++j) {
+            double best = tensor->getAsDouble(static_cast<uint64_t>(j));
+            for (int64_t i = 1; i < rows; ++i) {
+                double v = tensor->getAsDouble(static_cast<uint64_t>(i * cols + j));
+                if (v > best)
+                    best = v;
+            }
+            out->setFromDouble(static_cast<uint64_t>(j), best);
+        }
+    } else {
+        int64_t shape[] = {rows};
+        out             = TensorObject::create(type::TypeCode::Float32, shape, allocator, true);
+        for (int64_t i = 0; i < rows; ++i) {
+            double best = tensor->getAsDouble(static_cast<uint64_t>(i * cols));
+            for (int64_t j = 1; j < cols; ++j) {
+                double v = tensor->getAsDouble(static_cast<uint64_t>(i * cols + j));
+                if (v > best)
+                    best = v;
+            }
+            out->setFromDouble(static_cast<uint64_t>(i), best);
+        }
+    }
+    return out;
+}
+
+TensorObject *
+tensorArgmaxAxis(const TensorObject *tensor, int64_t axis, mm::IAllocator &allocator) {
+    if (tensor->rank() != 2) {
+        throw std::invalid_argument("argmax(axis) currently only supports rank-2 tensors");
+    }
+    if (axis < 0) {
+        axis += 2;
+    }
+    if (axis != 0 && axis != 1) {
+        throw std::invalid_argument("argmax(axis): axis must be 0 or 1 for rank-2 tensors");
+    }
+    int64_t rows = tensor->dim(0);
+    int64_t cols = tensor->dim(1);
+    TensorObject *out;
+    if (axis == 0) {
+        int64_t shape[] = {cols};
+        out             = TensorObject::create(type::TypeCode::Int64, shape, allocator, true);
+        for (int64_t j = 0; j < cols; ++j) {
+            int64_t bestIdx = 0;
+            double best     = tensor->getAsDouble(static_cast<uint64_t>(j));
+            for (int64_t i = 1; i < rows; ++i) {
+                double v = tensor->getAsDouble(static_cast<uint64_t>(i * cols + j));
+                if (v > best) {
+                    best    = v;
+                    bestIdx = i;
+                }
+            }
+            out->setFromInt64(static_cast<uint64_t>(j), bestIdx);
+        }
+    } else {
+        int64_t shape[] = {rows};
+        out             = TensorObject::create(type::TypeCode::Int64, shape, allocator, true);
+        for (int64_t i = 0; i < rows; ++i) {
+            int64_t bestIdx = 0;
+            double best     = tensor->getAsDouble(static_cast<uint64_t>(i * cols));
+            for (int64_t j = 1; j < cols; ++j) {
+                double v = tensor->getAsDouble(static_cast<uint64_t>(i * cols + j));
+                if (v > best) {
+                    best    = v;
+                    bestIdx = j;
+                }
+            }
+            out->setFromInt64(static_cast<uint64_t>(i), bestIdx);
+        }
+    }
+    return out;
+}
+
+TensorObject *tensorExp(const TensorObject *tensor, mm::IAllocator &allocator) {
+    if (!isFloatingTensorType(tensor->dtype())) {
+        throw std::invalid_argument("exp requires floating-point tensor");
+    }
+    TensorObject *out = TensorObject::create(
+        type::TypeCode::Float32,
+        std::span<const int64_t>(tensor->shape(), tensor->rank()),
+        allocator,
+        false);
+    for (uint64_t i = 0; i < tensor->numel(); ++i) {
+        out->setFromDouble(i, std::exp(tensor->getAsDouble(i)));
+    }
+    return out;
+}
+
+TensorObject *tensorLog(const TensorObject *tensor, mm::IAllocator &allocator) {
+    if (!isFloatingTensorType(tensor->dtype())) {
+        throw std::invalid_argument("log requires floating-point tensor");
+    }
+    TensorObject *out = TensorObject::create(
+        type::TypeCode::Float32,
+        std::span<const int64_t>(tensor->shape(), tensor->rank()),
+        allocator,
+        false);
+    for (uint64_t i = 0; i < tensor->numel(); ++i) {
+        double v = tensor->getAsDouble(i);
+        if (v <= 0.0) {
+            throw std::invalid_argument("log: input must be positive");
+        }
+        out->setFromDouble(i, std::log(v));
+    }
+    return out;
 }
 
 double tensorIndex1D(const TensorObject *tensor, int64_t index) {

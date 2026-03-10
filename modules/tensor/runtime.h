@@ -1,3 +1,22 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * You may use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Mar. 10, 2026
+ * Updated: Mar. 10, 2026
+ * Supported by: National Key Research and Development Program of China
+ */
+
 #pragma once
 
 #include "camel/core/mm/alloc/allocator.h"
@@ -30,6 +49,7 @@ enum class CompareOp {
     LessEqual,
     Greater,
     GreaterEqual,
+    Equal,
 };
 
 class TensorObject : public rtdata::Object {
@@ -74,7 +94,9 @@ class TensorObject : public rtdata::Object {
   private:
     TensorObject(type::TypeCode dtype, uint32_t rank, uint64_t numel, uint64_t byteSize);
     void refreshPointers();
-    void printRecursive(std::ostream &os, size_t dimIndex, uint64_t &flatIndex) const;
+    void printRecursive(
+        std::ostream &os, size_t dimIndex, uint64_t &flatIndex, const std::string &indent) const;
+    void formatElement(std::ostream &os, uint64_t flatIndex) const;
 
     type::TypeCode dtype_;
     uint32_t rank_;
@@ -130,6 +152,11 @@ TensorObject *tensorCompare(
     const TensorObject *lhs, const TensorObject *rhs, CompareOp op, mm::IAllocator &allocator);
 
 double tensorSum(const TensorObject *tensor);
+TensorObject *tensorSumAxis(const TensorObject *tensor, int64_t axis, mm::IAllocator &allocator);
+TensorObject *tensorMaxAxis(const TensorObject *tensor, int64_t axis, mm::IAllocator &allocator);
+TensorObject *tensorArgmaxAxis(const TensorObject *tensor, int64_t axis, mm::IAllocator &allocator);
+TensorObject *tensorExp(const TensorObject *tensor, mm::IAllocator &allocator);
+TensorObject *tensorLog(const TensorObject *tensor, mm::IAllocator &allocator);
 double tensorIndex1D(const TensorObject *tensor, int64_t index);
 double tensorIndex2D(const TensorObject *tensor, int64_t row, int64_t col);
 

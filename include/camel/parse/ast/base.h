@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -141,6 +141,8 @@ class ModuleLoad : public Load {
         }
         return ref_;
     }
+    /// Returns the declared module name, or empty string if no module decl.
+    std::string getModuleNameOrEmpty() const { return ref_.empty() ? "" : ref_.toString(); }
     const std::string geneCode() const override;
 
   private:
