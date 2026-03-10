@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1096,7 +1096,8 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         }
 
         graph_ptr_t subGraph = enterScope(FunctionType::create());
-        Node *resNode        = visitExecNode(caseExecNode);
+        registerGraphOrigin(context_, subGraph, caseExecNode, "gir.brch.case.graph");
+        Node *resNode = visitExecNode(caseExecNode);
         if (!subGraph->hasOutput()) {
             if (resNode) {
                 subGraph->setOutput(resNode);

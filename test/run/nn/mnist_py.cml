@@ -1,7 +1,4 @@
 // mnist_py.cml - Softmax classifier with MNIST loaded via Python (no JSON file)
-//
-// Uses python module: Python downloads/loads MNIST, returns data directly to Camel.
-// Run from project root: camel test/run/nn/mnist_py.cml
 
 module mnist_py
 
@@ -12,17 +9,24 @@ import { py_import, py_call, py_wrap, py_unwrap, py_exec, py_attr, PyObject } fr
 
 let num_classes = 10
 
+func broadcast_col_to(col: Tensor, k: int): Tensor {
+    sync func repeat(c: Tensor, left: int): Tensor {
+        return if left <= 0 then c else repeat(concat(c, col, 1), left - 1)
+    }
+    return repeat(col, k - 1)
+}
+
 func softmax(logits: Tensor): Tensor {
     let n = shape(logits)[0]
     let k = shape(logits)[1]
     let row_max = max(logits, 1)
     let row_max_2d = reshape(row_max, [n, 1])
-    let row_max_broadcast = row_max_2d @ ones([1, k])
+    let row_max_broadcast = broadcast_col_to(row_max_2d, k)
     let stable = logits - row_max_broadcast
     let exp_logits = exp(stable)
     let row_sums = sum(exp_logits, 1)
     let row_sums_2d = reshape(row_sums, [n, 1])
-    let row_sums_broadcast = row_sums_2d @ ones([1, k])
+    let row_sums_broadcast = broadcast_col_to(row_sums_2d, k)
     return exp_logits / row_sums_broadcast
 }
 
@@ -80,8 +84,8 @@ func main(): int sync {
     sync func build_one_hot(i: int, acc: Tensor): Tensor {
         return if i >= n then acc else sync {
             let label_idx = labels_arr[i]
-            let row = (range(0, num_classes) == label_idx) * 1.0
-            let row_2d = reshape(row, [1, num_classes])
+            let row = (range(0, 10) == label_idx) * 1.0
+            let row_2d = reshape(row, [1, 10])
             let new_acc = if i == 0 then row_2d else concat(acc, row_2d, 0)
             return build_one_hot(i + 1, new_acc)
         }

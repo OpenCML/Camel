@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,8 +33,11 @@ namespace camel::compile::gir {
 
 class Node {
   public:
+    static std::string makeStableId(Graph &graph, NodeType nodeType);
+
     Node(Graph &graph, NodeType nodeType, Type *dataType, data_idx_t index)
-        : graph_(graph), nodeType_(nodeType), dataType_(dataType), dataIndex_(index) {}
+        : graph_(graph), nodeType_(nodeType), dataType_(dataType), dataIndex_(index),
+          stableId_(makeStableId(graph, nodeType)) {}
     virtual ~Node() = default;
 
     NodeType type() const { return nodeType_; }
@@ -53,7 +56,7 @@ class Node {
     Graph &graph() const { return graph_; }
     data_idx_t index() const;
     void setIndex(data_idx_t index) { dataIndex_ = index; }
-    std::string stableId() const;
+    const std::string &stableId() const { return stableId_; }
     bool macro() const { return macro_; }
     bool constant() const { return const_; }
     void setMacro(bool m) { macro_ = m; }
@@ -98,6 +101,7 @@ class Node {
     NodeType nodeType_;
     Type *dataType_;
     data_idx_t dataIndex_;
+    std::string stableId_;
 
     node_vec_t normInputs_;
     node_vec_t withInputs_;

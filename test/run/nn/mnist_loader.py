@@ -76,6 +76,8 @@ def load_mnist(limit: int = 1000, train: bool = True, data_dir: str = "tmp") -> 
     labels = _read_labels(lbl_file, limit)
     assert len(images) == len(labels)
 
-    flat_images = [v for row in images for v in row]
+    flat_images = [float(v) for row in images for v in row]
     n, d = len(images), len(images[0]) if images else 0
-    return {"images": flat_images, "labels": labels, "shape": [n, d]}
+    assert len(flat_images) == n * d, f"Size mismatch: {len(flat_images)} != {n}*{d}"
+    print(f"Loaded {len(flat_images)} images, shape: {n}x{d}")
+    return {"images": flat_images, "labels": [int(l) for l in labels], "shape": [int(n), int(d)]}

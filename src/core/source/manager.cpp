@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 07, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -452,6 +452,32 @@ const SemanticBundle *SourceContext::girGraphSemantic(const std::string &graphId
 
 const SemanticBundle *SourceContext::girNodeSemantic(const std::string &nodeId) const {
     return girNodes_.bundle(nodeId);
+}
+
+void SourceContext::cloneGirGraphDebugInfo(
+    const std::string &fromGraphId, const std::string &toGraphId) {
+    if (fromGraphId.empty() || toGraphId.empty() || fromGraphId == toGraphId) {
+        return;
+    }
+    if (auto origin = debugMap_.graphOrigin(fromGraphId); origin != kInvalidOriginId) {
+        debugMap_.registerGraphOrigin(toGraphId, origin);
+    }
+    if (const auto *bundle = girGraphs_.bundle(fromGraphId)) {
+        girGraphs_.registerBundle(toGraphId, *bundle);
+    }
+}
+
+void SourceContext::cloneGirNodeDebugInfo(
+    const std::string &fromNodeId, const std::string &toNodeId) {
+    if (fromNodeId.empty() || toNodeId.empty() || fromNodeId == toNodeId) {
+        return;
+    }
+    if (auto origin = debugMap_.nodeOrigin(fromNodeId); origin != kInvalidOriginId) {
+        debugMap_.registerNodeOrigin(toNodeId, origin);
+    }
+    if (const auto *bundle = girNodes_.bundle(fromNodeId)) {
+        girNodes_.registerBundle(toNodeId, *bundle);
+    }
 }
 
 void SourceContext::setCurrentRuntimeOrigin(origin_id_t origin) {

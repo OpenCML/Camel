@@ -13,12 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/compile/gir.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/source/manager.h"
+
+#include <atomic>
 
 using namespace camel::core::error;
 using namespace camel::core::data;
@@ -26,13 +29,29 @@ using namespace camel::core::type;
 
 namespace camel::compile::gir {
 
+namespace {
+
+std::string makeGraphStableId(const std::string &name) {
+    // DebugMap / debugger / runtime diagnostics all key graph origins by stableId.
+    // So this id must remain invariant across rearrange(), bytecode lowering, and
+    // other passes that may change graph contents or function type details.
+    static std::atomic<uint64_t> nextId = 1;
+    const uint64_t id                   = nextId++;
+    return std::format("graph:{}#{}", name.empty() ? "<anonymous>" : name, id);
+}
+
+} // namespace
+
 // =============================================================================
 // Graph 创建与节点管理
 // =============================================================================
 
+std::string Graph::makeStableId(const std::string &name) { return makeGraphStableId(name); }
+
 Graph::Graph(FunctionType *funcType, const graph_ptr_t &graph, const std::string &name)
-    : name_(name), outer_(graph), funcType_(funcType), staticDataType_(TupleType::create()),
-      runtimeDataType_(TupleType::create()), closureType_(TupleType::create()) {
+    : name_(name), stableId_(makeStableId(name)), outer_(graph), funcType_(funcType),
+      staticDataType_(TupleType::create()), runtimeDataType_(TupleType::create()),
+      closureType_(TupleType::create()) {
     EXEC_WHEN_DEBUG(
         GetDefaultLogger().in("GIR").debug(
             "Created Graph: {}",
@@ -300,6 +319,10 @@ void Graph::delDependency(const graph_ptr_t &graph) {
 graph_ptr_t Graph::clone() const {
     graph_ptr_t newGraph =
         Graph::create(tt::as_ptr<FunctionType>(funcType_->clone()), outer_.lock(), name_);
+    if (auto *sourceContext = getExtra<camel::source::SourceContext, 3>()) {
+        newGraph->setExtra<camel::source::SourceContext, 3>(sourceContext);
+        sourceContext->cloneGirGraphDebugInfo(stableId(), newGraph->stableId());
+    }
     newGraph->looped_          = looped_;
     newGraph->parameterized_   = parameterized_;
     newGraph->funcType_        = funcType_;
@@ -324,20 +347,34 @@ graph_ptr_t Graph::clone() const {
         Node *newPort = port->clone(*newGraph);
         nodeMap[port] = newPort;
         newGraph->withPorts_.push_back(newPort);
+        if (auto *sourceContext = getExtra<camel::source::SourceContext, 3>()) {
+            sourceContext->cloneGirNodeDebugInfo(port->stableId(), newPort->stableId());
+        }
     }
     for (Node *port : normPorts_) {
         Node *newPort = port->clone(*newGraph);
         nodeMap[port] = newPort;
         newGraph->normPorts_.push_back(newPort);
+        if (auto *sourceContext = getExtra<camel::source::SourceContext, 3>()) {
+            sourceContext->cloneGirNodeDebugInfo(port->stableId(), newPort->stableId());
+        }
     }
     for (Node *closureNode : closure_) {
         Node *newClosureNode = closureNode->clone(*newGraph);
         nodeMap[closureNode] = newClosureNode;
         newGraph->closure_.push_back(newClosureNode);
+        if (auto *sourceContext = getExtra<camel::source::SourceContext, 3>()) {
+            sourceContext->cloneGirNodeDebugInfo(
+                closureNode->stableId(),
+                newClosureNode->stableId());
+        }
     }
     for (Node *node : nodes_) {
         Node *newNode = node->clone(*newGraph);
         nodeMap[node] = newNode;
+        if (auto *sourceContext = getExtra<camel::source::SourceContext, 3>()) {
+            sourceContext->cloneGirNodeDebugInfo(node->stableId(), newNode->stableId());
+        }
     }
 
     for (const auto &[oldNode, newNode] : nodeMap) {
@@ -388,8 +425,9 @@ Node *Graph::inlineNode(Node *node, bool forceSync) {
             node->toString(),
             name_));
 
-    auto *funcNode    = tt::as_ptr<FuncNode>(node);
-    auto &targetGraph = funcNode->func()->graph();
+    auto *funcNode      = tt::as_ptr<FuncNode>(node);
+    auto &targetGraph   = funcNode->func()->graph();
+    auto *sourceContext = getExtra<camel::source::SourceContext, 3>();
 
     Node *syncNode = SyncNode::create(*this);
     std::unordered_map<Node *, Node *> nodeMap;
@@ -431,6 +469,9 @@ Node *Graph::inlineNode(Node *node, bool forceSync) {
     for (Node *n : targetGraph.nodes()) {
         Node *clonedNode = n->clone(*this);
         nodeMap[n]       = clonedNode;
+        if (sourceContext) {
+            sourceContext->cloneGirNodeDebugInfo(n->stableId(), clonedNode->stableId());
+        }
     }
 
     for (const auto &[oldNode, newNode] : nodeMap) {

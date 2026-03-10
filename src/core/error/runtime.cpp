@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 07, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -114,11 +114,11 @@ camel::source::origin_id_t resolveOriginFromSite(
 }
 
 std::string defaultModuleName(const ExecutionSite &site, const std::string &sourcePath) {
-    if (site.graph) {
-        return site.graph->name();
-    }
     if (!sourcePath.empty()) {
         return std::filesystem::path(sourcePath).stem().string();
+    }
+    if (site.graph) {
+        return site.graph->name();
     }
     return "runtime";
 }

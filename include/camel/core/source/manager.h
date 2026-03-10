@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 07, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -266,6 +266,9 @@ class SourceContext {
     const SemanticBundle *gctSemantic(origin_id_t origin) const;
     const SemanticBundle *girGraphSemantic(const std::string &graphId) const;
     const SemanticBundle *girNodeSemantic(const std::string &nodeId) const;
+
+    void cloneGirGraphDebugInfo(const std::string &fromGraphId, const std::string &toGraphId);
+    void cloneGirNodeDebugInfo(const std::string &fromNodeId, const std::string &toNodeId);
 
     void setCurrentRuntimeOrigin(origin_id_t origin);
     origin_id_t currentRuntimeOrigin() const;
