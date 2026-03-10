@@ -68,7 +68,6 @@ find_package(fmt REQUIRED)
 find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(Taskflow REQUIRED)
-find_package(Eigen3 REQUIRED)
 
 add_definitions(-DNOMINMAX)
 
@@ -152,7 +151,6 @@ target_link_libraries(libcamel PRIVATE
     gtest::gtest
     nlohmann_json::nlohmann_json
     Taskflow::Taskflow
-    Eigen3::Eigen
 )
 
 # 外源模块：python / pyplot / io 等编译为 .cmo

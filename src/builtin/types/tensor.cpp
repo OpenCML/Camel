@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,26 +29,24 @@ using namespace camel::core::type;
 
 unordered_map<string, string> TensorType::staticMethods_;
 
-TensorType::TensorType(const vector<size_t> &shape)
-    : OtherType(typeCode()), shape_(shape), element_type_(Type::Float32()) {
-    if (shape_.size() == 0) {
-        throw invalid_argument("Tensor shape must at least have 1 dim");
-    }
+TypeCode TensorType::typeCode() {
+    static TypeCode code = registerOtherType("Tensor", TypeFlag::Composite | TypeFlag::GC_Traced);
+    return code;
 }
 
-TensorType::TensorType(Type *elementType, const std::vector<size_t> &shape)
-    : OtherType(typeCode()), shape_(shape), element_type_(elementType) {
-    if (shape_.size() == 0) {
-        throw invalid_argument("Tensor shape must at least have 1 dim");
-    }
-}
+TensorType::TensorType(const vector<size_t> &shape)
+    : OtherType(typeCode()), shape_(shape), element_type_(Type::Float32()) {}
+
+TensorType::TensorType(Type *elementType, const vector<size_t> &shape)
+    : OtherType(typeCode()), shape_(shape),
+      element_type_(elementType ? elementType : Type::Float32()) {}
 
 TensorType::TensorType(TypeCode code, size_t paramCount, Type **params)
-    : OtherType(code, paramCount, params), shape_(), element_type_(nullptr) {}
+    : OtherType(code, paramCount, params), shape_(), element_type_(Type::Float32()) {}
 
 vector<size_t> TensorType::shape() const { return shape_; }
 
-Type *TensorType::dType() const { return element_type_; }
+Type *TensorType::dType() const { return element_type_ ? element_type_ : Type::Float32(); }
 
 void TensorType::registerStaticMethod(
     const std::string &methodName, const std::string &operatorUri) {
@@ -57,134 +55,126 @@ void TensorType::registerStaticMethod(
 
 std::string TensorType::getStaticMethodUri(const std::string &methodName) {
     auto it = staticMethods_.find(methodName);
-    if (it != staticMethods_.end()) {
-        return it->second;
-    }
-    return "";
+    return it == staticMethods_.end() ? "" : it->second;
 }
 
 bool TensorType::hasStaticMethod(const std::string &methodName) {
     return staticMethods_.find(methodName) != staticMethods_.end();
 }
 
-TensorType *TensorType::create(Type *elementType, const std::vector<size_t> &shape) {
+TensorType *TensorType::create(Type *elementType, const vector<size_t> &shape) {
     void *mem = mm::permSpace().alloc(sizeof(TensorType), alignof(TensorType));
     ASSERT(mem != nullptr, "Failed to allocate TensorType from permSpace");
     return new (mem) TensorType(elementType, shape);
 }
 
-TensorType *TensorType::create(const std::vector<size_t> &shape) {
+TensorType *TensorType::create(const vector<size_t> &shape) {
     return TensorType::create(Type::Float32(), shape);
 }
 
-Type *TensorType::Tensor(const std::vector<size_t> &shape) { return TensorType::create(shape); }
+TensorType *TensorType::Dynamic(Type *elementType) {
+    static TensorType *floatDynamic = TensorType::create(Type::Float32(), {});
+    if (!elementType || elementType->equals(Type::Float32())) {
+        return floatDynamic;
+    }
+    return TensorType::create(elementType, {});
+}
 
-Type *TensorType::Default() { return TensorType::create(Type::Float32(), std::vector<size_t>{0}); }
+Type *TensorType::Tensor(const vector<size_t> &shape) { return TensorType::create(shape); }
+
+Type *TensorType::Default() { return TensorType::Dynamic(Type::Float32()); }
 
 string TensorType::toString() const {
-    if (paramCount_ > 0 && params_) {
-        string result = "Tensor<";
-        for (size_t i = 0; i < paramCount_; ++i) {
-            if (i > 0)
-                result += ", ";
-            result += params_[i] ? params_[i]->toString() : "?";
+    const Type *dtype = dType();
+    if (shape_.empty()) {
+        if (!dtype || dtype->equals(Type::Float32())) {
+            return "Tensor";
         }
-        result += ">";
-        return result;
+        return "Tensor<" + dtype->toString() + ">";
     }
+
     string result = "Tensor<[";
-    for (const auto &dim : shape_) {
-        result += to_string(dim) + ", ";
-    }
-    if (!shape_.empty()) {
-        result.pop_back();
-        result.pop_back();
+    for (size_t i = 0; i < shape_.size(); ++i) {
+        if (i > 0) {
+            result += ", ";
+        }
+        result += to_string(shape_[i]);
     }
     result += "]";
-
-    if (element_type_ && !element_type_->equals(Type::Float64())) {
-        result += ", " + element_type_->toString();
+    if (dtype && !dtype->equals(Type::Float32())) {
+        result += ", " + dtype->toString();
     }
-
     result += ">";
     return result;
 }
 
 std::string TensorType::mangle() const {
-    if (paramCount_ > 0 && params_) {
-        std::string result = "T";
-        for (size_t i = 0; i < paramCount_; ++i) {
-            if (i > 0)
-                result += "_";
-            result += params_[i] ? params_[i]->mangle() : "X";
-        }
-        return result;
-    }
     std::string result = "T";
-    for (size_t dim : shape_) {
-        result += std::to_string(dim) + ",";
-    }
-    if (!shape_.empty()) {
-        result.pop_back();
+    if (shape_.empty()) {
+        result += "_";
+    } else {
+        for (size_t i = 0; i < shape_.size(); ++i) {
+            if (i > 0) {
+                result += ",";
+            }
+            result += std::to_string(shape_[i]);
+        }
     }
     result += ";";
-
-    if (element_type_) {
-        result += element_type_->mangle();
-    } else {
-        result += "D";
-    }
-
+    result += dType()->mangle();
     return result;
 }
 
 Type *TensorType::clone(bool deep) const {
-    ASSERT(false, "clone() not implemented");
-    return nullptr;
+    Type *dtype = deep ? dType()->clone(true) : dType();
+    return TensorType::create(dtype, shape_);
 }
 
 bool TensorType::equals(Type *other) const {
-    if (this == other)
-        return true;
-    if (!other || !other->isOtherType() || other->code() != typeCode())
-        return false;
-    const auto *o = static_cast<const OtherType *>(other);
-    if (paramCount_ > 0 && params_) {
-        if (o->paramCount() != paramCount_)
-            return false;
-        std::span<Type *const> op = o->paramsSpan();
-        for (size_t i = 0; i < paramCount_; ++i) {
-            if ((params_[i] != nullptr) != (op[i] != nullptr))
-                return false;
-            if (params_[i] && !params_[i]->equals(op[i]))
-                return false;
-        }
+    if (this == other) {
         return true;
     }
-    const TensorType &otherMatrix = dynamic_cast<const TensorType &>(*other);
-    return shape_ == otherMatrix.shape_ && (element_type_ == otherMatrix.element_type_ ||
-                                            (element_type_ && otherMatrix.element_type_ &&
-                                             element_type_->equals(otherMatrix.element_type_)));
+    if (!other || !other->isOtherType() || other->code() != typeCode()) {
+        return false;
+    }
+    const auto *rhs = dynamic_cast<const TensorType *>(other);
+    if (!rhs) {
+        return false;
+    }
+    return shape_ == rhs->shape() &&
+           (dType() == rhs->dType() || (dType() && rhs->dType() && dType()->equals(rhs->dType())));
 }
 
 CastSafety TensorType::castSafetyFrom(Type *sourceType) const {
-    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
+    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType)) {
         return *r;
-    if (this == sourceType)
-        return CastSafety::Safe;
-    return CastSafety::Forbidden;
+    }
+    if (!sourceType || sourceType->code() != typeCode()) {
+        return CastSafety::Forbidden;
+    }
+    return assignableFrom(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
 }
 
 bool TensorType::assignableFrom(Type *sourceType) const {
-    // 目标必须是 Tensor 类型
     if (!sourceType || sourceType->code() != typeCode()) {
         return false;
     }
-    // 暂时先不考虑元素类型和形状的兼容性问题
-    return true;
+    auto *rhs = dynamic_cast<TensorType *>(sourceType);
+    if (!rhs) {
+        return false;
+    }
+    bool dtypeCompat = dType()->equals(Type::Float32()) || dType()->equals(rhs->dType());
+    bool shapeCompat = shape_.empty() || rhs->shape().empty() || shape_ == rhs->shape();
+    return dtypeCompat && shapeCompat;
 }
 
 OtherType *TensorType::cloneWithParams(std::span<Type *const> params) const {
+    if (params.empty()) {
+        return TensorType::Dynamic();
+    }
+    if (params.size() == 1) {
+        return TensorType::Dynamic(params[0]);
+    }
     Type **p  = OtherType::copyParams(params);
     void *mem = mm::permSpace().alloc(sizeof(TensorType), alignof(TensorType));
     ASSERT(mem != nullptr, "Failed to allocate TensorType from permSpace");

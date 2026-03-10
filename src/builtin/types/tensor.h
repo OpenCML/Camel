@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,15 +40,11 @@ class TensorType : public type::OtherType {
     TensorType(type::TypeCode code, size_t paramCount, type::Type **params);
 
   public:
-    static type::TypeCode typeCode() {
-        static type::TypeCode code = type::OtherTypeRegistry::registerType(
-            "Tensor",
-            type::TypeFlag::Composite | type::TypeFlag::GC_Traced);
-        return code;
-    }
+    static type::TypeCode typeCode();
 
     static TensorType *create(type::Type *elementType, const std::vector<size_t> &shape);
     static TensorType *create(const std::vector<size_t> &shape);
+    static TensorType *Dynamic(type::Type *elementType = nullptr);
 
     std::vector<size_t> shape() const;
     type::Type *dType() const;

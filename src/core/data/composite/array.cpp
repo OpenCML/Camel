@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,6 +40,12 @@ ArrayDataFactory::~ArrayDataFactory() = default;
 ArrayDataFactory &ArrayDataFactory::add(const data_ptr_t &e) {
     if (!impl_->elemType) {
         impl_->elemType = e->type();
+    } else if (impl_->elemType->code() == TypeCode::Ref && e->type()->code() != TypeCode::Ref) {
+        // 当数组字面量混合了动态表达式(ref)和静态值时，优先收敛到具体元素类型，
+        // refs_ 仅记录哪些位置需要后续回填。
+        impl_->elemType = e->type();
+    } else if (impl_->elemType->code() != TypeCode::Ref && e->type()->code() == TypeCode::Ref) {
+        // 保留已知的具体元素类型，仅把当前位置标记为待解析引用。
     } else if (!impl_->elemType->assignableFrom(e->type())) {
         throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
             .commit("Array", e->type()->toString(), impl_->elemType->toString());

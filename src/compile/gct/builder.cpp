@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -358,10 +358,13 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
 
-    // Import all references if none are specified
+    // Import all references if none are specified; otherwise still import the module's
+    // default-import refs so operator groups and other ambient symbols can participate
+    // in name/operator resolution after a normal import.
     if (refs.empty()) {
         module_->importAllRefsFromMod(mod);
     } else {
+        module_->importDefaultRefsFromMod(mod);
         // Import specific references
         for (const Reference &ref : refs) {
             module_->markImportedRefFromMod(ref, mod);

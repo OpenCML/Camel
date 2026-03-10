@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -181,10 +181,8 @@ inline void printSlot(std::ostream &os, const slot_t data, camel::core::type::Ty
     ASSERT(
         data != DeadSlot,
         std::format("Accessing uninitialized slot in printSlot: {}", t->toString()));
-    if (t->isOtherType()) {
-        os << "<" << t->toString() << ">";
-        return;
-    }
+    // GCTraced types (including OtherTypes like Tensor) hold Object*: use object->print.
+    // Check isGCTraced before isOtherType so Tensor/other Object-backed types print properly.
     if (t->isGCTraced()) {
         if (data == NullSlot) {
             os << "null";

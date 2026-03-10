@@ -13,13 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "globals.h"
 #include "builtin/executors/builtin.h"
-#include "builtin/types/tensor.h"
 #include "camel/core/context/context.h"
 #include "camel/core/type/resolver.h"
 
@@ -748,13 +747,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
-                {
-                    ":op/lt",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Any(), false}, {Type::Any(), false}},
-                        Type::Bool()),
-                },
             }),
         OperatorGroup::create(
             "__le__",
@@ -792,13 +784,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::String(), false}, {Type::String(), false}},
-                        Type::Bool()),
-                },
-                {
-                    ":op/le",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Any(), false}, {Type::Any(), false}},
                         Type::Bool()),
                 },
             }),
@@ -840,13 +825,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
-                {
-                    ":op/gt",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Any(), false}, {Type::Any(), false}},
-                        Type::Bool()),
-                },
             }),
         OperatorGroup::create(
             "__ge__",
@@ -884,13 +862,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::String(), false}, {Type::String(), false}},
-                        Type::Bool()),
-                },
-                {
-                    ":op/ge",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Any(), false}, {Type::Any(), false}},
                         Type::Bool()),
                 },
             }),
@@ -933,25 +904,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::String()),
                 },
-                {
-                    ":tensor/add",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{TensorType::Default(), false}, {TensorType::Default(), false}},
-                        TensorType::Default()),
-                },
-                {
-                    ":op/add",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (!norm[1]->assignableFrom(norm[0]))
-                                return nullopt;
-                            return norm[0];
-                        }),
-                },
             }),
         OperatorGroup::create(
             "__sub__",
@@ -983,25 +935,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {},
                         {{Type::Float64(), false}, {Type::Float64(), false}},
                         Type::Float64()),
-                },
-                {
-                    ":tensor/subtract",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{TensorType::Default(), false}, {TensorType::Default(), false}},
-                        TensorType::Default()),
-                },
-                {
-                    ":op/sub",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1]))
-                                return nullopt;
-                            return norm[0];
-                        }),
                 },
             }),
         OperatorGroup::create(
@@ -1035,43 +968,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Float64(), false}, {Type::Float64(), false}},
                         Type::Float64()),
                 },
-                {
-                    ":tensor/multiply",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(a: Tensor | number, b: Tensor | number) => Tensor",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            TypeCode lhs = norm[0]->code();
-                            TypeCode rhs = norm[1]->code();
-                            if (lhs == TensorType::typeCode() && rhs == TensorType::typeCode()) {
-                                return norm[0];
-                            }
-                            if (lhs == TensorType::typeCode() &&
-                                (rhs == TypeCode::Int32 || rhs == TypeCode::Int64 ||
-                                 rhs == TypeCode::Float32 || rhs == TypeCode::Float64)) {
-                                return norm[0];
-                            }
-                            if ((lhs == TypeCode::Int32 || lhs == TypeCode::Int64 ||
-                                 lhs == TypeCode::Float32 || lhs == TypeCode::Float64) &&
-                                rhs == TensorType::typeCode()) {
-                                return norm[1];
-                            }
-                            return nullopt;
-                        }),
-                },
-                {
-                    ":op/mul",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1]))
-                                return nullopt;
-                            return norm[0];
-                        }),
-                },
             }),
         OperatorGroup::create(
             "__div__",
@@ -1104,25 +1000,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Float64(), false}, {Type::Float64(), false}},
                         Type::Float64()),
                 },
-                {
-                    ":tensor/divide",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{TensorType::Default(), false}, {TensorType::Default(), false}},
-                        TensorType::Default()),
-                },
-                {
-                    ":op/div",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1]))
-                                return nullopt;
-                            return norm[0];
-                        }),
-                },
             }),
         OperatorGroup::create(
             "__mod__",
@@ -1140,18 +1017,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {},
                         {{Type::Int64(), false}, {Type::Int64(), false}},
                         Type::Int64()),
-                },
-                {
-                    ":op/mod",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1]))
-                                return nullopt;
-                            return norm[0];
-                        }),
                 },
             }),
         OperatorGroup::create(
@@ -1185,48 +1050,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Float64(), false}, {Type::Float64(), false}},
                         Type::Float64()),
                 },
-                {
-                    ":tensor/pow",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(base: Tensor, exponent: Tensor | number) => Tensor",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (norm[0]->code() == TensorType::typeCode() &&
-                                (norm[1]->code() == TypeCode::Int32 ||
-                                 norm[1]->code() == TypeCode::Int64 ||
-                                 norm[1]->code() == TypeCode::Float32 ||
-                                 norm[1]->code() == TypeCode::Float64 ||
-                                 norm[1]->code() == TensorType::typeCode())) {
-                                return norm[0];
-                            }
-                            return nullopt;
-                        }),
-                },
-                {
-                    ":op/pow",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1]))
-                                return nullopt;
-                            return norm[0];
-                        }),
-                },
             }),
-        OperatorGroup::create(
-            "__mat__",
-            {
-                {
-                    ":tensor/matmul",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{TensorType::Default(), false}, {TensorType::Default(), false}},
-                        TensorType::Default()),
-                },
-            }),
+        OperatorGroup::create("__mat__", {}),
         OperatorGroup::create(
             "__idx__",
             {
@@ -1254,34 +1079,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 norm[1]->code() != TypeCode::Int64)
                                 return nullopt;
                             return Type::String();
-                        }),
-                },
-                {
-                    ":tensor/idx",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(t: Tensor, i: int) => double",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (norm[0]->code() == TensorType::typeCode() &&
-                                norm[1]->equals(Type::Int64())) {
-                                return Type::Float64();
-                            }
-                            return nullopt;
-                        }),
-                },
-                {
-                    ":tensor/idx2d",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {3, {false, false, false}}},
-                        "(t: Tensor, i: int, j: int) => double",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (norm[0]->code() == TensorType::typeCode() &&
-                                norm[1]->equals(Type::Int64()) && norm[2]->equals(Type::Int64())) {
-                                return Type::Float64();
-                            }
-                            return nullopt;
                         }),
                 },
             }),

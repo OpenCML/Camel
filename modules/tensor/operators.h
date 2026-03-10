@@ -13,14 +13,45 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "camel/core/operator.h"
+
 #include <string>
 #include <unordered_map>
+#include <vector>
+
+namespace ctx = camel::core::context;
+
+slot_t __tensor_add__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_subtract__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_multiply__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_divide__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_pow__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_matmul__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_idx__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_idx2d__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_lt__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_le__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_gt__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_ge__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_empty__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_zeros__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_ones__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_full__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_random__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_range__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_eye__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_shape__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_sum__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_transpose__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_concat__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_reshape__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_show__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getTensorOpsMap();
+const std::vector<oper_group_ptr_t> &getTensorOperatorGroups();
