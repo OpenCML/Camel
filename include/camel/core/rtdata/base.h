@@ -189,6 +189,8 @@ inline void printSlot(std::ostream &os, const slot_t data, camel::core::type::Ty
             return;
         }
         reinterpret_cast<const Object *>(data)->print(os, t);
+    } else if (t->isOtherType()) {
+        os << "<" << t->toString() << ">";
     } else {
         // 非引用类型，根据 type code 输出
         switch (t->code()) {
