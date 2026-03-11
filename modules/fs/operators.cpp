@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -86,6 +86,51 @@ slot_t __fs_is_dir__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot(fs_impl::is_directory(p->c_str()));
 }
 
+slot_t __fs_file_size__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    String *p = norm.get<String *>(0);
+    std::error_code ec;
+    auto size = fs_impl::file_size(p->c_str(), ec);
+    if (ec) {
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<file_size> failed: " + ec.message());
+    }
+    return toSlot(static_cast<int64_t>(size));
+}
+
+slot_t __fs_read_chunk__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    String *path   = norm.get<String *>(0);
+    int64_t offset = norm.get<int64_t>(1);
+    int64_t size   = norm.get<int64_t>(2);
+    if (offset < 0 || size < 0) {
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<read_chunk> offset and size must be >= 0");
+    }
+
+    std::ifstream f(path->c_str(), std::ios::binary);
+    if (!f.is_open()) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "<read_chunk> failed to open: " + std::string(path->c_str()));
+    }
+
+    f.seekg(0, std::ios::end);
+    std::streamoff fileSize = f.tellg();
+    if (fileSize < 0) {
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<read_chunk> failed to determine file size");
+    }
+    if (offset >= fileSize || size == 0) {
+        return toSlot(String::from("", mm::autoSpace()));
+    }
+
+    std::streamoff remaining = fileSize - static_cast<std::streamoff>(offset);
+    std::streamsize toRead =
+        static_cast<std::streamsize>(std::min<int64_t>(size, static_cast<int64_t>(remaining)));
+    std::string buffer(static_cast<size_t>(toRead), '\0');
+
+    f.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
+    f.read(buffer.data(), toRead);
+    buffer.resize(static_cast<size_t>(f.gcount()));
+    return toSlot(String::from(buffer, mm::autoSpace()));
+}
+
 slot_t __fs_mkdir__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *p = norm.get<String *>(0);
     std::error_code ec;
@@ -113,6 +158,8 @@ std::unordered_map<std::string, operator_t> getFsOpsMap() {
         {"exists", __fs_exists__},
         {"is_file", __fs_is_file__},
         {"is_dir", __fs_is_dir__},
+        {"file_size", __fs_file_size__},
+        {"read_chunk", __fs_read_chunk__},
         {"mkdir", __fs_mkdir__},
         {"mkdirs", __fs_mkdirs__}};
 }

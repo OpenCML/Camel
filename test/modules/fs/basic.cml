@@ -1,6 +1,6 @@
 module main
 
-import { exists, is_file, is_dir, mkdir, mkdirs, read_text, write_text } from fs
+import { exists, is_file, is_dir, mkdir, mkdirs, read_text, write_text, file_size, read_chunk } from fs
 
 func main(): int sync {
     println("=== FS Module Basic Tests ===")
@@ -24,6 +24,12 @@ func main(): int sync {
     println("[8] read_text(path)")
     let read = read_text(path)
     println("  content =", read)
+
+    println("\n[9] file_size(path)")
+    println("  size =", file_size(path))
+
+    println("[10] read_chunk(path, 0, 5)")
+    println("  chunk =", read_chunk(path, 0, 5))
 
     println("\n=== FS tests completed ===")
     return 0

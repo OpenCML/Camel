@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,31 +35,11 @@ using namespace camel::core::type;
 using namespace camel::core::rtdata;
 
 slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    // const data_ptr_t &rhs = frame.get(nargs[1]);
-
-    // if (rhs->type()->code() == TensorType::typeCode()) {
-    //     auto rhs_tensor = std::dynamic_pointer_cast<TensorData>(rhs);
-    //     if (rhs_tensor) {
-    //         const data_ptr_t &lhs = frame.get(nargs[0]);
-    //         auto lhs_tensor       = std::dynamic_pointer_cast<TensorData>(lhs);
-
-    //         if (lhs_tensor) {
-    //             lhs_tensor->assign(rhs_tensor);
-    //             frame.set(self, lhs_tensor);
-    //             return;
-    //         } else {
-    //             auto new_tensor = std::dynamic_pointer_cast<TensorData>(rhs_tensor->clone(true));
-    //             frame.set(nargs[0], new_tensor);
-    //             frame.set(self, new_tensor);
-    //             return;
-    //         }
-    //     }
-    // }
-
-    // frame.set(nargs[0], rhs);
-    // frame.set(self, rhs);
-    ASSERT(false, "__builtin__assn__ not implemented yet");
-    return NullSlot;
+    // Generic assignment: store rhs into lhs (Ref slot), return rhs.
+    // lhs (norm[0]) is the target slot (var/reference), rhs (norm[1]) is the value.
+    slot_t rhs = norm.slot(1);
+    norm.set(0, rhs);
+    return rhs;
 }
 
 slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, Context &ctx) {

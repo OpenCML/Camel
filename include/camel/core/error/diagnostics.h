@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -126,6 +126,7 @@ class Diagnostics {
     void clear();
 
     const std::string &moduleName() const { return moduleName_; }
+    void setModuleName(std::string name) { moduleName_ = std::move(name); }
     const std::string &modulePath() const { return modulePath_; }
     camel::source::source_context_ptr_t sourceContext() const { return sourceContext_; }
     void setSourceContext(camel::source::source_context_ptr_t sourceContext) {

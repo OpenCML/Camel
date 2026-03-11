@@ -1,0 +1,39 @@
+module file_chunk_hash
+
+import { now } from time
+import { exists, file_size, read_chunk } from fs
+import { sha256, sha256_rounds } from crypto
+
+func digest_chunk(path: string, offset: int, size: int): string sync {
+    let block = read_chunk(path, offset, size)
+    return sha256_rounds(block, 2048)
+}
+
+func main(): int sync {
+    let dbg_path = "./out/latest/bin/camel-db.exe"
+    let exe_path = "./out/latest/bin/camel.exe"
+    let fallback_path = "./README.md"
+    let path = if exists(dbg_path) then dbg_path else if exists(exe_path) then exe_path else fallback_path
+    let total_size = file_size(path)
+    let chunks = 32
+    let chunk_size = (total_size + chunks - 1) / chunks
+
+    'Hashing file: {}'->format<path>->println
+    'File size: {} bytes, chunks: {}, chunk size: {} bytes'->format<total_size, chunks, chunk_size>->println
+
+    let start = now()
+    let chunk_hashes = range(0, chunks)->map<(i: int): string => {
+        let offset = i * chunk_size
+        let remain = total_size - offset
+        let size = if remain <= 0 then 0 else if remain < chunk_size then remain else chunk_size
+        return digest_chunk(path, offset, size)
+    }>
+    let final_digest = sha256_rounds(chunk_hashes->join<"">, 512)
+    let duration = now() - start
+
+    'First 4 chunk hashes:'->println
+    chunk_hashes->slice<0, 4>->println
+    'Final digest = {}'->format<final_digest>->println
+    'Chunk hashing completed in {:.2f} seconds'->format<duration>->println
+    return 0
+}

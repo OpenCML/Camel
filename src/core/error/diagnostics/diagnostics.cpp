@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,9 +93,9 @@ std::string Diagnostic::toText() const {
     }
 
     std::string result = std::format(
-        "{}({}):{}:{}: [{}]: {} {} (name={}, code=0x{})",
+        "({}){}:{}:{}: [{}]: {} {} (name={}, code=0x{})",
+        ascii::bold(moduleName),
         ascii::underline(path),
-        moduleName,
         (ln >= 0 ? std::to_string(ln) : "?"),
         (ch >= 0 ? std::to_string(ch) : "?"),
         to_colorful_string(severity),

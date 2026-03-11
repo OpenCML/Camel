@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 24, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -145,6 +145,17 @@ class CamelParser {
     AST::node_ptr_t ast() const { return ast_; }
     camel::core::error::diagnostics_ptr_t diagnostics() const { return diagnostics_; }
 
+    /// Returns the declared module name from AST (e.g. from "module mnist_json"), or empty if none.
+    std::string getDeclaredModuleName() const {
+        if (!ast_)
+            return "";
+        auto load    = ast_->load();
+        auto modLoad = std::dynamic_pointer_cast<AST::ModuleLoad>(load);
+        if (!modLoad)
+            return "";
+        return modLoad->getModuleNameOrEmpty();
+    }
+
     bool parse(std::istream &is) {
         input_.load(is);
         if (sourceContext_) {
@@ -158,7 +169,13 @@ class CamelParser {
         tokens_ = std::make_unique<antlr4::CommonTokenStream>(lexer_.get());
         parser_ = std::make_unique<OpenCMLParser>(tokens_.get());
         EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("CTS", this); });
-        return buildCST() && buildAST();
+        if (!buildCST() || !buildAST())
+            return false;
+        // Use declared module name from source (e.g. "module mnist_json") for diagnostics
+        std::string declaredName = getDeclaredModuleName();
+        if (!declaredName.empty() && diagnostics_)
+            diagnostics_->setModuleName(declaredName);
+        return true;
     }
 
     void dumpTokens(std::ostream &os) {

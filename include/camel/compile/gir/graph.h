@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,6 +45,8 @@ using func_ptr_t   = camel::core::data::func_ptr_t;
 
 class Graph : public std::enable_shared_from_this<Graph> {
   public:
+    static std::string makeStableId(const std::string &name);
+
     Graph(const Graph &other)            = delete;
     Graph &operator=(const Graph &other) = delete;
     Graph(Graph &&other)                 = delete;
@@ -65,7 +67,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
     std::string mangledName() const { return name_ + std::format("<{}>", funcType()->mangle()); }
-    std::string stableId() const { return mangledName(); }
+    const std::string &stableId() const { return stableId_; }
     std::string location() const;
     bool looped() const { return looped_; }
     bool empty() const { return nodes_.empty(); }
@@ -146,6 +148,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
   private:
     std::string name_;
+    std::string stableId_;
     graph_wptr_t outer_;
 
     std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> subGraphs_;

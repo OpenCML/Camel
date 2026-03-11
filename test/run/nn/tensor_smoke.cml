@@ -1,0 +1,32 @@
+module tensor_smoke
+
+import {
+    Tensor,
+    add, concat, eye, matmul, ones, reshape, shape, sum, transpose
+} from tensor
+
+func main(): int sync {
+    let a = ones([2, 2])
+    let b = eye(2)
+    let c = matmul(a, b)
+    let d = add(c, 2.0)
+    let e = concat([[1.0, 2.0]], [[3.0, 4.0]], 0)
+    let f = transpose(e)
+    let g = reshape(concat([[1.0, 2.0]], [[3.0, 4.0]], 0), [4])
+
+    if shape(d)[0] != 2 then {
+        return 1
+    } else if shape(d)[1] != 2 then {
+        return 2
+    } else if sum(d) <= 0.0 then {
+        return 3
+    } else if shape(f)[0] != 2 then {
+        return 4
+    } else if shape(f)[1] != 2 then {
+        return 5
+    } else if shape(g)[0] != 4 then {
+        return 6
+    } else {
+        return 0
+    }
+}

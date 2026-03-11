@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -94,6 +94,14 @@ inline camel::source::origin_id_t findSemanticOrigin(
         }
     }
     return camel::source::kInvalidOriginId;
+}
+
+inline camel::source::origin_id_t
+findBindingOrigin(const context_ptr_t &context, const AST::node_ptr_t &ast, size_t slot) {
+    return findSemanticOrigin(
+        astSemantic(context, ast),
+        camel::source::SemanticRole::BindingName,
+        static_cast<int32_t>(slot));
 }
 
 inline void setOriginFromOrigin(
@@ -358,10 +366,13 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
 
-    // Import all references if none are specified
+    // Import all references if none are specified; otherwise still import the module's
+    // default-import refs so operator groups and other ambient symbols can participate
+    // in name/operator resolution after a normal import.
     if (refs.empty()) {
         module_->importAllRefsFromMod(mod);
     } else {
+        module_->importDefaultRefsFromMod(mod);
         // Import specific references
         for (const Reference &ref : refs) {
             module_->markImportedRefFromMod(ref, mod);
@@ -522,6 +533,12 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 // Create a reference node and link the data node to it
                 node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
                 *nRefNode << dataNode;
+                setOriginFromOrigin(
+                    context_,
+                    nRefNode,
+                    findBindingOrigin(context_, ast, i),
+                    camel::source::OriginKind::GctNode,
+                    "gct.nref");
                 res = nRefNode;
             }
         } else {
@@ -571,6 +588,12 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     node_ptr_t accsNode = createNodeAs<AccsLoad>(i);
                     *accsNode << dRefNode->clone();
                     *nRefNode << accsNode;
+                    setOriginFromOrigin(
+                        context_,
+                        nRefNode,
+                        findBindingOrigin(context_, ast, i),
+                        camel::source::OriginKind::GctNode,
+                        "gct.nref");
                     *res << nRefNode;
                 }
             } else {

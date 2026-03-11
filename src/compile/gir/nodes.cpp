@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,9 +25,26 @@
 
 namespace camel::compile::gir {
 
+namespace {
+
+std::string makeNodeStableId(Graph &graph, NodeType nodeType) {
+    // Node index is reassigned by Graph::rearrange(), and graph rewrites such as
+    // inlining can also move/clone nodes across graphs. If stableId depended on
+    // index(), any previously registered node->origin mapping would become stale.
+    // Generate an immutable id once at construction time instead.
+    static std::atomic<uint64_t> nextId = 1;
+    return std::format("{}::{}#{}", graph.stableId(), to_string(nodeType), nextId++);
+}
+
+} // namespace
+
 // =============================================================================
 // Node 索引与连通性
 // =============================================================================
+
+std::string Node::makeStableId(Graph &graph, NodeType nodeType) {
+    return makeNodeStableId(graph, nodeType);
+}
 
 data_idx_t Node::index() const {
     ASSERT(nodeType_ != NodeType::SYNC, "SYNC node has no data index.");
@@ -43,18 +60,6 @@ std::string Node::toString() const {
 }
 
 Node::operator std::string() const { return toString(); }
-
-std::string Node::stableId() const {
-    static std::atomic<int> cnt_ = 0;
-    std::string id               = graph().stableId();
-    id += "_" + to_string(nodeType_) + "_";
-    if (nodeType_ == NodeType::DREF || nodeType_ == NodeType::SYNC) {
-        id += std::to_string(cnt_++);
-    } else {
-        id += std::to_string(static_cast<int>(index()));
-    }
-    return id;
-}
 
 node_vec_t Node::dataInputs() const {
     node_vec_t inputs;
