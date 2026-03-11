@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,12 +30,12 @@
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
 #include "camel/execute/pass/base.h"
+#include "camel/init.h"
 #include "camel/parse/antlr/OpenCMLLexer.h"
 #include "camel/parse/antlr/OpenCMLParser.h"
 #include "camel/parse/ast/builder.h"
 #include "camel/parse/cst_dumper.h"
 #include "camel/parse/parse.h"
-#include "camel/utils/dll_path.h"
 #include "camel/utils/env.h"
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
@@ -70,7 +70,7 @@ using namespace CLI;
 string targetFile = "";
 
 int main(int argc, char *argv[]) {
-    camel::utils::setupLibrarySearchPath();
+    camel::initialize();
     if (!parseArgs(argc, argv))
         return 0;
 

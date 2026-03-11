@@ -3,6 +3,7 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/libcamel_tool.cmake)
 
 add_subdirectory(camel-cli)
+add_subdirectory(camel-cpp)
 add_subdirectory(lang-server)
 add_subdirectory(debugger)
 add_subdirectory(format)

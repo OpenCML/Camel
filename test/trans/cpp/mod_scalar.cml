@@ -1,0 +1,5 @@
+module mod_scalar
+
+func fib(n: int): int {
+    return if n <= 1 then n else n % 2
+}

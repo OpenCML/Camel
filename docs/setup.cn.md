@@ -206,6 +206,7 @@ tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
 - **libcamel**：Camel 核心共享库
 - **tools/**：链接 libcamel 的独立工具
   - `camel-cli`：主入口，生成 `camel` 可执行文件
+  - `camel-cpp`：`.cml` → C++ 转译并自动编译，产物到 `tmp/`
   - `format`：代码格式化工具 `camel-format`
   - `codegen`：从 AST 生成代码 `camel-codegen`
   - `profiler`：性能分析工具 `camel-profiler`

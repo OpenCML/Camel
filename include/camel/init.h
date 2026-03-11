@@ -12,32 +12,24 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 01, 2025
+ * Created: Mar. 11, 2026
  * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include <cstdlib>
-#include <string>
+#include "camel/utils/dll_path.h"
 
-#ifdef _WIN32
-#include <Windows.h>
-#endif
+#include <mutex>
 
-inline std::string getEnv(const std::string &key, const std::string &defaultVal = "") {
-#ifdef _WIN32
-    char *buffer = nullptr;
-    size_t size  = 0;
-    if (_dupenv_s(&buffer, &size, key.c_str()) == 0 && buffer != nullptr) {
-        std::string value(buffer);
-        free(buffer);
-        return value;
-    }
-    return defaultVal;
-#else
-    const char *val = std::getenv(key.c_str());
-    return val ? std::string(val) : defaultVal;
-#endif
+namespace camel {
+
+/// 主机端初始化（SDK 工具如 camel、camel-cpp 等）：设置库搜索路径等，在使用 libcamel 前调用；幂等。
+/// 适用于运行在 SDK 内的可执行文件，以 exe 所在目录为 base（exe/、exe/libs、exe/../libs）。
+inline void initialize() {
+    static std::once_flag once;
+    std::call_once(once, []() { camel::utils::setupLibrarySearchPathForHost(); });
 }
+
+} // namespace camel

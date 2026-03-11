@@ -10,10 +10,10 @@
 #include "service/profiler/advanced/advanced_tracer.h"
 #include "service/profiler/core/trace.h"
 #endif
-#include "camel/utils/dll_path.h"
+#include "camel/init.h"
 
 int main(int argc, char *argv[]) {
-    camel::utils::setupLibrarySearchPath();
+    camel::initialize();
     std::string mode = (argc > 1) ? argv[1] : "help";
     if (mode == "-h" || mode == "--help" || mode == "help") {
         std::cerr << "Usage: camel-profiler <start|stop|report>\n"
@@ -27,8 +27,8 @@ int main(int argc, char *argv[]) {
     if (mode == "start") {
         profiler::AdvancedTracer::Config config;
         config.enablePerfettoIntegration = true;
-        config.perfettoOutput = "profile_reports/camel_trace.perfetto-trace";
-        config.outputFile     = "profile_reports/camel_trace.json";
+        config.perfettoOutput            = "profile_reports/camel_trace.perfetto-trace";
+        config.outputFile                = "profile_reports/camel_trace.json";
         profiler::start_advanced_tracing(config);
         std::cout << "Profiling started. Run 'camel-profiler stop' when done.\n";
         return 0;

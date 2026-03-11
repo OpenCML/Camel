@@ -12,32 +12,17 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Sep. 01, 2025
+ * Created: Mar. 11, 2026
  * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+#include "cpp_export.h"
 
-#include <cstdlib>
-#include <string>
+#include "emitter.h"
 
-#ifdef _WIN32
-#include <Windows.h>
-#endif
-
-inline std::string getEnv(const std::string &key, const std::string &defaultVal = "") {
-#ifdef _WIN32
-    char *buffer = nullptr;
-    size_t size  = 0;
-    if (_dupenv_s(&buffer, &size, key.c_str()) == 0 && buffer != nullptr) {
-        std::string value(buffer);
-        free(buffer);
-        return value;
-    }
-    return defaultVal;
-#else
-    const char *val = std::getenv(key.c_str());
-    return val ? std::string(val) : defaultVal;
-#endif
+GIR::graph_ptr_t CppDumpPass::apply(GIR::graph_ptr_t &graph, std::ostream &os) {
+    CppEmitter emitter(context_, mode_);
+    os << emitter.emit(graph);
+    return GIR::Graph::null();
 }

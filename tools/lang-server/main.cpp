@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
@@ -27,8 +27,8 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/range.h"
 #include "camel/core/mm.h"
+#include "camel/init.h"
 #include "camel/parse/parse.h"
-#include "camel/utils/dll_path.h"
 
 #include <filesystem>
 #include <iostream>
@@ -174,7 +174,7 @@ static void parseAndPublishDiagnostics(ostream &out, const string &uri, const st
 }
 
 int main(int argc, char *argv[]) {
-    camel::utils::setupLibrarySearchPath();
+    camel::initialize();
 
     (void)mm::autoSpace();
     (void)mm::metaSpace();
