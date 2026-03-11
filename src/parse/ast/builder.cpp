@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -726,6 +726,19 @@ any Builder::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
         any_cast<std::tuple<UnpackType, vector<Reference>>>(visitCarrier(context->carrier()));
     node_ptr_t dataDeclNode = createNodeAs<DataDeclLoad>(isVar, type, refs);
     setNodeTokenRangeByContext(dataDeclNode, context);
+    std::vector<OpenCMLParser::IdentDefContext *> bindingIdents;
+    if (context->carrier()->identList()) {
+        bindingIdents = context->carrier()->identList()->identDef();
+    } else if (
+        context->carrier()->parentIdents() && context->carrier()->parentIdents()->identList()) {
+        bindingIdents = context->carrier()->parentIdents()->identList()->identDef();
+    } else if (
+        context->carrier()->bracedIdents() && context->carrier()->bracedIdents()->identList()) {
+        bindingIdents = context->carrier()->bracedIdents()->identList()->identDef();
+    } else if (
+        context->carrier()->bracketIdents() && context->carrier()->bracketIdents()->identList()) {
+        bindingIdents = context->carrier()->bracketIdents()->identList()->identDef();
+    }
 
     if (context->typeList()) {
         *dataDeclNode << any2node(visitTypeList(context->typeList()));
@@ -752,7 +765,9 @@ any Builder::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
     for (size_t i = 0; i < refs.size(); ++i) {
         parts.push_back(semanticPart(
             camel::source::SemanticRole::BindingName,
-            nodeOrigin(dataDeclNode),
+            (i < bindingIdents.size()
+                 ? deriveAstAnchorOrigin(dataDeclNode, bindingIdents[i], "ast.data.binding")
+                 : nodeOrigin(dataDeclNode)),
             static_cast<int32_t>(i),
             refs[i].ident()));
     }

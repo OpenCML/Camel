@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Mar. 10, 2026
+ * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -94,6 +94,14 @@ inline camel::source::origin_id_t findSemanticOrigin(
         }
     }
     return camel::source::kInvalidOriginId;
+}
+
+inline camel::source::origin_id_t
+findBindingOrigin(const context_ptr_t &context, const AST::node_ptr_t &ast, size_t slot) {
+    return findSemanticOrigin(
+        astSemantic(context, ast),
+        camel::source::SemanticRole::BindingName,
+        static_cast<int32_t>(slot));
 }
 
 inline void setOriginFromOrigin(
@@ -525,6 +533,12 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 // Create a reference node and link the data node to it
                 node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
                 *nRefNode << dataNode;
+                setOriginFromOrigin(
+                    context_,
+                    nRefNode,
+                    findBindingOrigin(context_, ast, i),
+                    camel::source::OriginKind::GctNode,
+                    "gct.nref");
                 res = nRefNode;
             }
         } else {
@@ -574,6 +588,12 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     node_ptr_t accsNode = createNodeAs<AccsLoad>(i);
                     *accsNode << dRefNode->clone();
                     *nRefNode << accsNode;
+                    setOriginFromOrigin(
+                        context_,
+                        nRefNode,
+                        findBindingOrigin(context_, ast, i),
+                        camel::source::OriginKind::GctNode,
+                        "gct.nref");
                     *res << nRefNode;
                 }
             } else {

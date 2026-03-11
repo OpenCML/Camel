@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 10, 2026
- * Updated: Mar. 10, 2026
+ * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -97,6 +97,7 @@ class TensorObject : public rtdata::Object {
     void printRecursive(
         std::ostream &os, size_t dimIndex, uint64_t &flatIndex, const std::string &indent) const;
     void formatElement(std::ostream &os, uint64_t flatIndex) const;
+    std::string formatElementToString(uint64_t flatIndex) const;
 
     type::TypeCode dtype_;
     uint32_t rank_;

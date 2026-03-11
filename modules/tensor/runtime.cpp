@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 10, 2026
- * Updated: Mar. 10, 2026
+ * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -417,7 +417,12 @@ TensorObject::clone(mm::IAllocator &allocator, const type::Type *typeInfo, bool 
 }
 
 void TensorObject::formatElement(std::ostream &os, uint64_t flatIndex) const {
+    os << formatElementToString(flatIndex);
+}
+
+std::string TensorObject::formatElementToString(uint64_t flatIndex) const {
     char buf[32];
+    std::ostringstream oss;
     switch (dtype_) {
     case type::TypeCode::Float32: {
         double v = getAsDouble(flatIndex);
@@ -427,19 +432,20 @@ void TensorObject::formatElement(std::ostream &os, uint64_t flatIndex) const {
         } else {
             (void)std::snprintf(buf, sizeof(buf), "% 7.4g", v);
         }
-        os << buf;
+        oss << buf;
         break;
     }
     case type::TypeCode::Int64:
-        os << std::setw(7) << getAsInt64(flatIndex);
+        oss << std::setw(7) << getAsInt64(flatIndex);
         break;
     case type::TypeCode::Bool:
-        os << (getAsBool(flatIndex) ? "  True" : " False");
+        oss << (getAsBool(flatIndex) ? "  true" : " false");
         break;
     default:
-        os << "?";
+        oss << "?";
         break;
     }
+    return oss.str();
 }
 
 void TensorObject::print(std::ostream &os, const type::Type *typeInfo) const {
@@ -481,6 +487,7 @@ void TensorObject::refreshPointers() {
 void TensorObject::printRecursive(
     std::ostream &os, size_t dimIndex, uint64_t &flatIndex, const std::string &indent) const {
     constexpr int indentStep      = 8;
+    constexpr size_t maxLineWidth = 100;
     const std::string innerIndent = indent + std::string(indentStep, ' ');
 
     if (rank_ == 0) {
@@ -488,12 +495,23 @@ void TensorObject::printRecursive(
         return;
     }
     if (dimIndex + 1 == rank_) {
-        // Innermost dimension: elements on one line
+        // Innermost dimension: wrap long rows to avoid unreadable single-line output.
         os << "[";
+        size_t currentLineWidth = indent.size() + indentStep;
         for (int64_t i = 0; i < shape_[dimIndex]; ++i) {
-            if (i > 0)
-                os << ", ";
-            formatElement(os, flatIndex++);
+            std::string element = formatElementToString(flatIndex++);
+            if (i > 0) {
+                size_t nextWidth = currentLineWidth + 2 + element.size();
+                if (nextWidth > maxLineWidth) {
+                    os << ",\n" << innerIndent;
+                    currentLineWidth = innerIndent.size();
+                } else {
+                    os << ", ";
+                    currentLineWidth += 2;
+                }
+            }
+            os << element;
+            currentLineWidth += element.size();
         }
         os << "]";
         return;

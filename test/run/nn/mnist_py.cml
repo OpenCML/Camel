@@ -6,6 +6,7 @@ import {
     Tensor, argmax, concat, exp, log, max, ones, range, reshape, shape, sum, transpose, zeros
 } from tensor
 import { py_import, py_call, py_wrap, py_unwrap, py_exec, py_attr, PyObject } from python
+import { round } from math
 
 let num_classes = 10
 
@@ -47,26 +48,27 @@ sync func update(W: Tensor): Tensor {
 }
 
 with <X: Tensor, y_onehot: Tensor, lr: float, its: int>
-sync func train(W: Tensor): Tensor {
-    sync func train_step(i: int, w: Tensor): Tensor {
-        return if i >= its then w else sync {
+sync func train(W: Tensor): (Tensor, float[]) {
+    sync func train_step(i: int, w: Tensor, loss_acc: float[]): (Tensor, float[]) {
+        return if i >= its then (w, loss_acc) else sync {
             let nw = update<X, y_onehot, lr>(w)
-            if i % 100 == 0 then {
-                let probs = softmax(X @ nw)
-                let loss = cross_entropy_loss(probs, y_onehot)
-                'Iteration {}: Cross-Entropy Loss = {}'->format<i, loss>->println
+            let new_acc = if i % 100 == 0 then {
+                let probs_local = softmax(X @ nw)
+                let loss_local = cross_entropy_loss(probs_local, y_onehot)
+                'Iteration {}: Cross-Entropy Loss = {}'->format<i, loss_local>->println
+                concat(loss_acc, [loss_local])
             } else {
-                ''
+                loss_acc
             }
-            return train_step(i + 1, nw)
+            return train_step(i + 1, nw, new_acc)
         }
     }
-    return train_step(0, W)
+    let empty_loss: float[] = []
+    return train_step(0, W, empty_loss)
 }
 
 func main(): int sync {
     println('Loading MNIST via Python...')
-    py_exec("import sys, os; sys.path.insert(0, os.path.join(os.getcwd(), 'test', 'run', 'nn'))")
     let mnist_mod = py_import("mnist_loader")
     let load_fn = py_attr(mnist_mod, "load_mnist")
     let data_py = py_call(load_fn, py_wrap(1000), py_wrap(true), py_wrap("tmp"))
@@ -93,22 +95,42 @@ func main(): int sync {
 
     let y_onehot = build_one_hot(0, zeros([1, num_classes]))
     var W = zeros([d, num_classes])
+    let empty_loss: float[] = []
+    var train_result = (W, empty_loss)
 
     let lr = 0.1
     let its = 300
 
     println('Training softmax classifier on MNIST...')
     println('Samples:', n, 'Features:', d_in, 'Classes:', num_classes)
-    wait W = train<X_bias, y_onehot, lr, its>(W)
+    wait train_result = train<X_bias, y_onehot, lr, its>(W)
+    let W_trained = train_result.0
+    let loss_history = train_result.1
 
-    let probs = softmax(X_bias @ W)
+    let probs = softmax(X_bias @ W_trained)
     let loss = cross_entropy_loss(probs, y_onehot)
     'Final Cross-Entropy Loss: {}'->format<loss>->println
 
-    let pred = argmax(X_bias @ W, 1)
+    let pred = argmax(X_bias @ W_trained, 1)
     let labels_t = argmax(y_onehot, 1)
     let correct = sum((pred == labels_t))
     let acc = correct / float(n)
+    println(pred)
+    println(labels_t)
     'Accuracy: {} / {} = {}'->format<correct, n, acc>->println
+
+    var pred_list: int[] = []
+    sync func collect_pred(i: int): void {
+        return if i >= n then null else sync {
+            pred_list->append<int(pred[i])>
+            return collect_pred(i + 1)
+        }
+    }
+    wait collect_pred(0)
+
+    let viz_mod = py_import("mnist_viz")
+    let viz_fn = py_attr(viz_mod, "visualize")
+    py_call(viz_fn, py_wrap(loss_history), py_wrap(data.images), py_wrap(n), py_wrap(d_in),
+            py_wrap(labels_arr), py_wrap(pred_list), py_wrap(true))
     return 0
 }
