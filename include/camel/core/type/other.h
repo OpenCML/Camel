@@ -13,19 +13,21 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "base.h"
+#include "camel/core/type/base.h"
 
 #include <atomic>
 #include <mutex>
 #include <span>
 #include <string>
 #include <unordered_map>
+
+namespace camel::core::type {
 
 class OtherTypeRegistry {
   public:
@@ -102,3 +104,5 @@ class OtherType : public Type {
     size_t paramCount_;
     Type **params_;
 };
+
+} // namespace camel::core::type

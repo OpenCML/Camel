@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "camel/core/context/frame.h"
+#include "camel/core/error/runtime.h"
+#include "camel/core/mm.h"
 #include "camel/execute/pass/sched.h"
 #include "compile.h"
 
@@ -30,7 +32,10 @@
 #include "jit/runtime/trampoline.h"
 #include "jit/tier/tier_policy.h"
 #include <mutex>
+namespace jit = camel::jit;
 #endif
+
+namespace ctx = camel::core::context;
 
 struct FastVMConfig {
     bool enableJit = false;
@@ -40,79 +45,54 @@ class FastVMSchedPass : public GraphSchedulePass {
     inline static const size_t maxRecursionDepth_ = 256; // default max recursion depth
 
     // 栈帧池
-    FramePool framePool_{1 * MB};
+    ctx::FramePool framePool_{1 * camel::core::mm::MB};
 
     bytecode_vec_t bytecodes_;
-    std::unordered_map<GraphIR::Graph *, size_t> offsetMap_;
+    std::unordered_map<GIR::Graph *, size_t> offsetMap_;
 
 #if ENABLE_FASTVM_JIT
-    std::unique_ptr<camel::jit::IJitBackend> jitBackend_;
-    std::unordered_map<GraphIR::Graph *, camel::jit::JitEntryFn> jitCache_;
-    std::unordered_map<camel::jit::JitEntryFn, GraphIR::Graph *> jitFnToGraph_;
+    std::unique_ptr<jit::IJitBackend> jitBackend_;
+    std::unordered_map<GIR::Graph *, jit::JitEntryFn> jitCache_;
+    std::unordered_map<jit::JitEntryFn, GIR::Graph *> jitFnToGraph_;
     std::mutex jitCacheMutex_;
-    camel::jit::JitConfig jitConfig_{};
-    camel::jit::TierPolicy tierPolicy_{jitConfig_};
+    jit::JitConfig jitConfig_{};
+    jit::TierPolicy tierPolicy_{jitConfig_};
     void *currentJitCtx_{}; // 供解释器 FUNC/TAIL 调用 invokeCallOrJit 时使用
-    void compileAndCacheGraph(GraphIR::Graph *graph, size_t entryPc);
+    void compileAndCacheGraph(GIR::Graph *graph, size_t entryPc);
 #endif
 
     // 程序计数器栈和栈帧栈
     std::vector<size_t> pcStack_{maxRecursionDepth_};
-    std::vector<Frame *> frameStack_{maxRecursionDepth_};
+    std::vector<ctx::Frame *> frameStack_{maxRecursionDepth_};
 
-    void precompile(GraphIR::Graph *graph) {
-        auto [bytecodes, _, offsetMap] = compileAndLink(
-            context_,
-            graph,
-            {
-                .enableTailCallDetection = true,
-                .enableInlineOperators   = true,
-                .optimizationStrategies  = OptimizationStrategyCode::All,
-            });
-        bytecodes_ = std::move(bytecodes);
-        offsetMap_ = std::move(offsetMap);
-    }
+    void precompile(GIR::Graph *graph);
 
-    inline void push(size_t pc, Frame *frame) {
-        pcStack_.push_back(pc);
-        frameStack_.push_back(frame);
-        if (frameStack_.size() >= maxRecursionDepth_) {
-            context_->rtmDiags()
-                ->of(RuntimeDiag::MaxRecursionDepthExceeded)
-                .commit(frame->graph()->name(), maxRecursionDepth_);
-        }
-    }
-    inline std::pair<size_t, Frame *> pop() {
-        size_t pc = pcStack_.back();
-        pcStack_.pop_back();
-        Frame *frame = frameStack_.back();
-        frameStack_.pop_back();
-        return {pc, frame};
-    }
+    void push(size_t pc, ctx::Frame *frame);
+    std::pair<size_t, ctx::Frame *> pop();
 
     void evalMarkedOperator(
-        const MarkOpCode op, data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame);
+        const MarkOpCode op, data_idx_t self, data_arr_t nargs, data_arr_t wargs,
+        ctx::Frame &currFrame);
 
     void evalMarkedOperator_map_arr(
-        data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame);
+        data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
     void evalMarkedOperator_apply_arr(
-        data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame);
+        data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
     void evalMarkedOperator_filter_arr(
-        data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame);
+        data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
     void evalMarkedOperator_reduce_arr(
-        data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame);
+        data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
     void evalMarkedOperator_foreach_arr(
-        data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame);
+        data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
 
   public:
-    FastVMSchedPass(const context_ptr_t &ctx, const FastVMConfig &config = {})
+    FastVMSchedPass(const ctx::context_ptr_t &ctx, const FastVMConfig &config = {})
         : GraphSchedulePass(ctx)
 #if ENABLE_FASTVM_JIT
           ,
           jitConfig_([&config]() {
-              camel::jit::JitConfig c{};
-              c.policy = config.enableJit ? camel::jit::JitPolicy::OnDemand
-                                          : camel::jit::JitPolicy::Disabled;
+              jit::JitConfig c{};
+              c.policy = config.enableJit ? jit::JitPolicy::OnDemand : jit::JitPolicy::Disabled;
               return c;
           }())
 #endif
@@ -120,25 +100,18 @@ class FastVMSchedPass : public GraphSchedulePass {
     }
     virtual ~FastVMSchedPass() = default;
 
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 
-    slot_t call(size_t pc, Frame *rootFrame);
+    slot_t call(size_t pc, ctx::Frame *rootFrame);
 
 #if ENABLE_FASTVM_JIT
-    Frame *acquireFrameForCall(GraphIR::Graph *graph) { return framePool_.acquire(graph); }
-    void releaseFrameForCall(Frame *frame) { framePool_.release(frame); }
-    Frame *acquireFrameForTail(GraphIR::Graph *graph) {
-        Frame *f = framePool_._acquire(graph);
-        framePool_._resetTop();
-        return f;
-    }
-    void releaseFrameForTail(Frame *frame) { framePool_.release(frame); }
-    Context &context() { return *context_; }
-    GraphIR::Graph *jitFnToGraph(camel::jit::JitEntryFn fn) const {
-        auto it = jitFnToGraph_.find(fn);
-        return it != jitFnToGraph_.end() ? it->second : nullptr;
-    }
+    ctx::Frame *acquireFrameForCall(GIR::Graph *graph);
+    void releaseFrameForCall(ctx::Frame *frame);
+    ctx::Frame *acquireFrameForTail(GIR::Graph *graph);
+    void releaseFrameForTail(ctx::Frame *frame);
+    ctx::Context &context();
+    GIR::Graph *jitFnToGraph(jit::JitEntryFn fn) const;
     slot_t invokeCallOrJit(
-        size_t pc, GraphIR::Graph *graph, Frame *frame, void *jitCtx, uint32_t callCount = 0);
+        size_t pc, GIR::Graph *graph, ctx::Frame *frame, void *jitCtx, uint32_t callCount = 0);
 #endif
 };

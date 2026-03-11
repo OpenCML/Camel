@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #include <nlohmann/json.hpp>
@@ -21,6 +21,7 @@
 #include <optional>
 
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
@@ -34,6 +35,12 @@
 #include "camel/core/type/composite/tuple.h"
 #include "operators.h"
 
+namespace mm = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
+
 namespace {
 
 using json = nlohmann::json;
@@ -41,14 +48,12 @@ using json = nlohmann::json;
 // 递归：将 Camel 值转为 JSON。失败时返回 nullopt 并报告诊断。
 static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
     if (!t) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<json.encode> null type");
-        return std::nullopt;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<json.encode> null type");
     }
     if (t->code() == TypeCode::Any) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<json.encode> cannot encode value of type Any");
-        return std::nullopt;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "<json.encode> cannot encode value of type Any");
     }
     switch (t->code()) {
     case TypeCode::Int32:
@@ -121,10 +126,9 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
         return jobj;
     }
     default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<json.encode> unsupported type: " + t->toString());
-        return std::nullopt;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "<json.encode> unsupported type: " + t->toString());
     }
 }
 
@@ -169,8 +173,7 @@ static slot_t jsonToCamel(const json &j, Context &ctx) {
             st->set(i, slots[i]);
         return toSlot(st);
     }
-    ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<json.decode> unexpected JSON type");
-    return NullSlot;
+    throwRuntimeFault(RuntimeDiag::RuntimeError, "<json.decode> unexpected JSON type");
 }
 
 } // namespace
@@ -196,10 +199,7 @@ slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &ctx) {
         json j = json::parse(str->c_str());
         return jsonToCamel(j, ctx);
     } catch (const json::exception &e) {
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("<json.decode> ") + e.what());
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("<json.decode> ") + e.what());
     }
 }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,7 +33,11 @@
 #include <tuple>
 #include <vector>
 
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::context;
+#if ENABLE_FASTVM_JIT
+using namespace camel::jit;
+#endif
 
 #if ENABLE_FASTVM_JIT
 static void dumpMachineCode(
@@ -87,7 +91,7 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .optimizationStrategies  = OptimizationStrategyCode::All,
         });
 
-    auto backend = camel::jit::createBackend();
+    auto backend = createBackend();
     if (!backend) {
         os << "[JIT] Backend not available, cannot dump machine code.\n";
         return Graph::null();
@@ -104,7 +108,7 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             meta = installFrameMetaInfoForGraph(g);
 
         std::vector<std::tuple<size_t, size_t, std::string>> instructionBoundaries;
-        camel::jit::CompilationUnit unit{
+        CompilationUnit unit{
             .graph                 = g,
             .frameMeta             = meta,
             .bytecodes             = bcSpan,

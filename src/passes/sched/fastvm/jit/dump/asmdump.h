@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 07, 2026
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,13 +21,15 @@
 
 #include "camel/execute/pass/trans.h"
 
+namespace ctx = camel::core::context;
+
 /**
  * JitAsmDumpPass: 对所有图尝试 JIT 编译，并输出汇编指令（由 Encoder 在编码时生成）。
  */
 class JitAsmDumpPass : public GraphTranslatePass {
   public:
-    JitAsmDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
+    JitAsmDumpPass(const ctx::context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
     virtual ~JitAsmDumpPass() = default;
 
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 };

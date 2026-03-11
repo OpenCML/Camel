@@ -1,7 +1,7 @@
 # CLI shell：链接 libcamel，提供 camel 命令
 include(${CMAKE_CURRENT_SOURCE_DIR}/../libcamel_tool.cmake)
 
-set(CLI_SRC main.cpp config.cpp)
+set(CLI_SRC main.cpp config.cpp opencmlrc.cpp)
 add_executable(camel ${CLI_SRC})
 
 configure_file(

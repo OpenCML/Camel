@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,8 +27,13 @@
 #define DEBUG_LEVEL -1
 
 using namespace std;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::module;
+using namespace camel::core::data;
+using namespace camel::core::type;
 
-namespace GraphIR {
+namespace camel::compile::gir {
 
 inline void tryRemoveCtrlLink(Node *from, Node *to) {
     // if from has already linked to to by a ctrl link, remove it first
@@ -71,6 +76,131 @@ inline bool linkCheek(Node *from, Node *to) {
     return true;
 }
 
+inline camel::source::SemanticPart semanticPart(
+    camel::source::SemanticRole role, camel::source::origin_id_t origin, int32_t slot = -1,
+    const std::string &label = "") {
+    return camel::source::SemanticPart{
+        .role   = role,
+        .origin = origin,
+        .slot   = slot,
+        .label  = label};
+}
+
+inline const camel::source::SemanticBundle *
+gctSemantic(const context_ptr_t &context, const GCT::node_ptr_t &gct) {
+    if (!context || !gct) {
+        return nullptr;
+    }
+    auto sourceContext = context->sourceContext();
+    return sourceContext ? sourceContext->gctSemantic(gct->load()->origin()) : nullptr;
+}
+
+inline camel::source::origin_id_t deriveGirOrigin(
+    const context_ptr_t &context, const GCT::node_ptr_t &gct, camel::source::OriginKind kind,
+    const std::string &label, std::vector<camel::source::origin_id_t> inputs = {}) {
+    // GIR 是比 GCT 更“执行导向”的 lowering。
+    // 当前策略不尝试为每个 GIR 节点重建全新的源码区间，而是沿 GCT 的主 origin 继续派生，
+    // 因而一个 GCT 节点展开出的多个 GIR 节点通常共享同一个 primarySpan。
+    if (!context || !gct) {
+        return camel::source::kInvalidOriginId;
+    }
+    auto sourceContext = context->sourceContext();
+    if (!sourceContext) {
+        return camel::source::kInvalidOriginId;
+    }
+    auto origin = gct->load()->origin();
+    if (origin == camel::source::kInvalidOriginId) {
+        return camel::source::kInvalidOriginId;
+    }
+    return sourceContext->deriveOrigin(
+        origin,
+        camel::source::OriginStage::GIR,
+        kind,
+        label,
+        camel::source::kInvalidSpanId,
+        false,
+        std::move(inputs));
+}
+
+inline camel::source::SemanticBundle makeGirSemanticBundle(
+    camel::source::origin_id_t mainOrigin, const context_ptr_t &context, const GCT::node_ptr_t &gct,
+    std::vector<camel::source::SemanticPart> extraParts  = {},
+    std::vector<camel::source::origin_id_t> mergedInputs = {}, bool synthetic = false,
+    const std::string &syntheticReason = "") {
+    camel::source::SemanticBundle bundle;
+    bundle.mainOrigin      = mainOrigin;
+    bundle.synthetic       = synthetic;
+    bundle.syntheticReason = syntheticReason;
+    if (const auto *parentBundle = gctSemantic(context, gct)) {
+        bundle.parts = parentBundle->parts;
+        if (mergedInputs.empty()) {
+            mergedInputs = parentBundle->mergedInputs;
+        }
+    }
+    bundle.parts.insert(bundle.parts.end(), extraParts.begin(), extraParts.end());
+    bundle.mergedInputs = std::move(mergedInputs);
+    return bundle;
+}
+
+inline void registerGraphOrigin(
+    const context_ptr_t &context, const graph_ptr_t &graph, const GCT::node_ptr_t &gct,
+    const std::string &label                             = "gir.graph",
+    std::vector<camel::source::SemanticPart> extraParts  = {},
+    std::vector<camel::source::origin_id_t> mergedInputs = {}, bool synthetic = false,
+    const std::string &syntheticReason = "") {
+    if (!context || !graph) {
+        return;
+    }
+    auto sourceContext = context->sourceContext();
+    if (!sourceContext) {
+        return;
+    }
+    auto origin =
+        deriveGirOrigin(context, gct, camel::source::OriginKind::Graph, label, mergedInputs);
+    if (origin != camel::source::kInvalidOriginId) {
+        sourceContext->debugMap().registerGraphOrigin(graph->stableId(), origin);
+        sourceContext->registerGirGraphSemantic(
+            graph->stableId(),
+            makeGirSemanticBundle(
+                origin,
+                context,
+                gct,
+                std::move(extraParts),
+                std::move(mergedInputs),
+                synthetic,
+                syntheticReason));
+    }
+}
+
+inline void registerNodeOrigin(
+    const context_ptr_t &context, Node *node, const GCT::node_ptr_t &gct,
+    const std::string &label = "gir.node", std::vector<camel::source::SemanticPart> extraParts = {},
+    std::vector<camel::source::origin_id_t> mergedInputs = {}, bool synthetic = false,
+    const std::string &syntheticReason = "") {
+    if (!context || !node) {
+        return;
+    }
+    auto sourceContext = context->sourceContext();
+    if (!sourceContext) {
+        return;
+    }
+    auto origin =
+        deriveGirOrigin(context, gct, camel::source::OriginKind::GirNode, label, mergedInputs);
+    if (origin != camel::source::kInvalidOriginId) {
+        sourceContext->debugMap().registerNodeOrigin(node->stableId(), origin);
+        sourceContext->registerGirNodeSemantic(
+            node->stableId(),
+            makeGirSemanticBundle(
+                origin,
+                context,
+                gct,
+                std::move(extraParts),
+                std::move(mergedInputs),
+                synthetic,
+                syntheticReason));
+    }
+}
+
 graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     waited_ = false;
     synced_ = false;
@@ -81,7 +211,10 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     nodeScope_  = node_scope_t::create();
     graphScope_ = graph_scope_t::create();
     rootGraph_  = Graph::create(FunctionType::create(), nullptr, "__root__");
-    currGraph_  = rootGraph_;
+    if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
+        rootGraph_->setExtra<camel::source::SourceContext, 3>(sourceContext.get());
+    }
+    currGraph_ = rootGraph_;
 
     try {
         visit(gct);
@@ -116,6 +249,9 @@ graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name)
             currGraph_ = Graph::create(funcType, currGraph_, name);
             insertGraph(name, currGraph_);
         }
+    }
+    if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
+        currGraph_->setExtra<camel::source::SourceContext, 3>(sourceContext.get());
     }
     nodeScope_  = nodeScope_->enter(name);
     graphScope_ = graphScope_->enter(name);
@@ -177,7 +313,11 @@ Node *Builder::resolveNodeByRef(const std::string &name) {
     auto optSrcNode = nodeAt(name);
     if (!optSrcNode.has_value()) {
         EXEC_WHEN_DEBUG({ nodeScope_->dump(std::cerr, 0); });
-        diags_->of(SemanticDiag::UnresolvedReference).commit(name);
+        auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+        auto origin        = (sourceContext && currGraph_)
+                                 ? sourceContext->debugMap().graphOrigin(currGraph_->stableId())
+                                 : camel::source::kInvalidOriginId;
+        diags_->of(SemanticDiag::UnresolvedReference).atOrigin(origin).commit(name);
         throw BuildAbortException();
     }
     Node *node = optSrcNode.value();
@@ -260,6 +400,7 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     Type *type               = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
     FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
     graph_ptr_t graph        = enterScope(funcType, name);
+    registerGraphOrigin(context_, graph, gct, "gir.func.graph");
     for (const auto &port : graph->withPorts()) {
         const auto &portNode = tt::as_ptr<PortNode>(port);
         insertNode(portNode->name(), port);
@@ -306,9 +447,31 @@ Node *Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             auto filledType = fillType->resolve(refTypes);
             node            = FillNode::create(*currGraph_, filledType);
             Node::link(LinkType::Norm, srcNode, node);
+            std::vector<camel::source::origin_id_t> mergedInputs;
             for (const auto &refNode : refNodes) {
                 Node::link(LinkType::With, refNode, node);
+                if (auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr) {
+                    auto origin = sourceContext->debugMap().nodeOrigin(refNode->stableId());
+                    if (origin != camel::source::kInvalidOriginId) {
+                        mergedInputs.push_back(origin);
+                    }
+                }
             }
+            registerNodeOrigin(
+                context_,
+                node,
+                gct,
+                "gir.data.fill",
+                {
+                    semanticPart(
+                        camel::source::SemanticRole::ValueProducer,
+                        node->stableId().empty()
+                            ? camel::source::kInvalidOriginId
+                            : context_->sourceContext()->debugMap().nodeOrigin(srcNode->stableId()),
+                        -1,
+                        "base"),
+                },
+                std::move(mergedInputs));
 
             LEAVE("DATA");
             return node;
@@ -324,6 +487,8 @@ Node *Builder::visitDataNode(const GCT::node_ptr_t &gct) {
         Node::link(LinkType::Norm, node, copyNode);
         node = copyNode;
     }
+
+    registerNodeOrigin(context_, node, gct, "gir.data");
 
     LEAVE("DATA");
     return node;
@@ -346,7 +511,7 @@ Node *Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     Node *node   = any_cast<Node *>(res);
     bool success = insertNode(ident, node);
     if (!success) {
-        diags_->of(SemanticDiag::Redeclaration).commit(ident);
+        diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->load()->origin()).commit(ident);
         throw BuildAbortException();
     }
     LEAVE("NREF");
@@ -372,6 +537,7 @@ Node *Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         auto graphs = optGraphs.value();
         if (!graphs->empty()) {
             Node *drefNode = DrefNode::create(*graph, graphs);
+            registerNodeOrigin(context_, drefNode, gct, "gir.dref");
             LEAVE("DREF");
             return drefNode;
         }
@@ -382,7 +548,9 @@ Node *Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         // 所以这里仍然要做一次检测
         const auto &opt = module_->getImportedEntity(name);
         if (!opt.has_value()) {
-            diags_->of(SemanticDiag::ImportNameNotExported).commit(name);
+            diags_->of(SemanticDiag::ImportNameNotExported)
+                .atOrigin(gct->load()->origin())
+                .commit(name);
         }
         const auto &e = opt.value();
         if (std::holds_alternative<Node *>(e)) {
@@ -393,16 +561,18 @@ Node *Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         } else if (std::holds_alternative<graph_vec_ptr_t>(e)) {
             auto graphs    = std::get<graph_vec_ptr_t>(e);
             Node *drefNode = DrefNode::create(*graph, graphs);
+            registerNodeOrigin(context_, drefNode, gct, "gir.dref");
             LEAVE("DREF");
             return drefNode;
         } else if (std::holds_alternative<oper_group_ptr_t>(e)) {
             auto ops       = std::get<oper_group_ptr_t>(e);
             Node *drefNode = DrefNode::create(*graph, ops);
+            registerNodeOrigin(context_, drefNode, gct, "gir.dref");
             LEAVE("DREF");
             return drefNode;
         }
     }
-    diags_->of(SemanticDiag::UnresolvedReference).commit(name);
+    diags_->of(SemanticDiag::UnresolvedReference).atOrigin(gct->load()->origin()).commit(name);
     throw BuildAbortException();
 }
 
@@ -417,11 +587,13 @@ Node *Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     Type *sourceType     = valueNode->dataType();
     if (targetType->castSafetyFrom(sourceType) != CastSafety::Safe) {
         diags_->of(SemanticDiag::DynamicCastForbidden)
+            .atOrigin(gct->load()->origin())
             .commit(sourceType->toString(), targetType->toString());
         throw BuildAbortException();
     }
     Node *castNode = CastNode::create(*currGraph_, targetType);
     Node::link(LinkType::Norm, valueNode, castNode);
+    registerNodeOrigin(context_, castNode, gct, "gir.cast");
     LEAVE("CAST");
     return castNode;
 }
@@ -462,12 +634,22 @@ Node *Builder::createFuncDataNode(
 
     bool graphUsedBefore = usedGraphs_.find(graph.get()) != usedGraphs_.end();
 
-    auto funcData    = FunctionData::create(*graph);
-    Node *resultNode = nullptr;
+    auto funcData      = FunctionData::create(*graph);
+    Node *resultNode   = nullptr;
+    auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+    auto graphOrigin   = sourceContext ? sourceContext->debugMap().graphOrigin(graph->stableId())
+                                       : camel::source::kInvalidOriginId;
 
     if (allowParameterization && !callableAsResult && !graphUsedBefore) {
         if (funcData->resolved()) {
             resultNode = FuncNode::create(*currGraph_, funcData);
+            if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
+                sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
+                if (const auto *graphSemantic =
+                        sourceContext->girGraphSemantic(graph->stableId())) {
+                    sourceContext->registerGirNodeSemantic(resultNode->stableId(), *graphSemantic);
+                }
+            }
         } else {
             auto funcNode = FuncNode::create(*currGraph_, funcData);
             for (const auto &ref : funcData->refs()) {
@@ -476,6 +658,13 @@ Node *Builder::createFuncDataNode(
             }
             funcData->graph().parametrizeClosure();
             resultNode = funcNode;
+            if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
+                sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
+                if (const auto *graphSemantic =
+                        sourceContext->girGraphSemantic(graph->stableId())) {
+                    sourceContext->registerGirNodeSemantic(resultNode->stableId(), *graphSemantic);
+                }
+            }
         }
 
         usedGraphs_.insert(graph.get());
@@ -495,6 +684,12 @@ Node *Builder::createFuncDataNode(
                 }
             }
             resultNode = funcNode;
+        }
+        if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
+            sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
+            if (const auto *graphSemantic = sourceContext->girGraphSemantic(graph->stableId())) {
+                sourceContext->registerGirNodeSemantic(resultNode->stableId(), *graphSemantic);
+            }
         }
 
         usedGraphs_.insert(graph.get());
@@ -521,6 +716,12 @@ Node *Builder::createFuncDataNode(
         auto callNode = CallNode::create(*currGraph_, graph->funcType()->exitType());
         Node::link(LinkType::With, fillNode, callNode);
         resultNode = callNode;
+    }
+    if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
+        sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
+        if (const auto *graphSemantic = sourceContext->girGraphSemantic(graph->stableId())) {
+            sourceContext->registerGirNodeSemantic(resultNode->stableId(), *graphSemantic);
+        }
     }
 
     // 保证在最后再更新 usedGraphs_
@@ -587,6 +788,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 const auto &funcType = g->funcType();
                 if (!funcType->hasExitType()) {
                     diags_->of(SemanticDiag::CallingIncompleteFunction)
+                        .atOrigin(gct->load()->origin())
                         .commit(g->name(), funcType->toString());
                     throw BuildAbortException();
                 }
@@ -611,7 +813,9 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             return g->name() + ": " + g->funcType()->toString();
                         }) +
                     "\n";
-                diags_->of(SemanticDiag::NoMatchingFunction).commit(argTypesStr, overloadsStr);
+                diags_->of(SemanticDiag::NoMatchingFunction)
+                    .atOrigin(gct->load()->origin())
+                    .commit(argTypesStr, overloadsStr);
                 throw BuildAbortException();
             }
             currGraph_->addDependency(targetGraph);
@@ -638,11 +842,14 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             return "<" + p.first + ">: " + p.second->signature();
                         }) +
                     "\n";
-                diags_->of(SemanticDiag::NoMatchingFunction).commit(argTypesStr, overloadsStr);
+                diags_->of(SemanticDiag::NoMatchingFunction)
+                    .atOrigin(gct->load()->origin())
+                    .commit(argTypesStr, overloadsStr);
                 throw BuildAbortException();
             }
             targetOperator = *res;
             Node *operNode = OperNode::create(*currGraph_, targetOperator);
+            registerNodeOrigin(context_, operNode, gct->at(0), "gir.link.oper");
             targetNode     = operNode;
             targetFuncType = targetOperator->funcType();
         } else {
@@ -662,11 +869,21 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 "<{}> ({})",
                 strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
                 strutil::join(normInputTypes, ", ", [](Type *t) { return t->toString(); }));
-            diags_->of(SemanticDiag::ArgumentsMismatch).commit(funcType->toString(), argTypesStr);
+            diags_->of(SemanticDiag::ArgumentsMismatch)
+                .atOrigin(gct->load()->origin())
+                .commit(funcType->toString(), argTypesStr);
             throw BuildAbortException();
         }
         Node *invokeNode = CallNode::create(*currGraph_, funcType->exitType());
         Node::link(LinkType::With, targetNode, invokeNode);
+        std::vector<camel::source::origin_id_t> callInputs;
+        if (auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr) {
+            auto calleeOrigin = sourceContext->debugMap().nodeOrigin(targetNode->stableId());
+            if (calleeOrigin != camel::source::kInvalidOriginId) {
+                callInputs.push_back(calleeOrigin);
+            }
+        }
+        registerNodeOrigin(context_, invokeNode, gct, "gir.link.call", {}, std::move(callInputs));
         targetNode     = invokeNode;
         targetFuncType = funcType;
     }
@@ -692,6 +909,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         if (isVar) {
             if (!waited_ && !synced_) {
                 diags_->of(SemanticDiag::IgnoredSideEffect)
+                    .atOrigin(gct->load()->origin())
                     .commit(targetName + ": " + targetFuncType->toString());
             }
             nodeModifierMap_[inputNode] = targetNode;
@@ -715,6 +933,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         if (isVar) {
             if (!waited_ && !synced_) {
                 diags_->of(SemanticDiag::IgnoredSideEffect)
+                    .atOrigin(gct->load()->origin())
                     .commit(targetName + ": " + targetFuncType->toString());
             }
             nodeModifierMap_[inputNode] = targetNode;
@@ -775,7 +994,9 @@ Node *Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     Node *tgtNode = any_cast<Node *>(res);
     ASSERT(tgtNode != nullptr, "Access node target is null.");
     if (!tgtNode->dataType()->isComposite()) {
-        diags_->of(SemanticDiag::TypeNotIndexable).commit(tgtNode->dataType()->toString());
+        diags_->of(SemanticDiag::TypeNotIndexable)
+            .atOrigin(gct->load()->origin())
+            .commit(tgtNode->dataType()->toString());
         throw BuildAbortException();
     }
 
@@ -790,18 +1011,20 @@ Node *Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         break;
     }
     case TypeCode::Array: {
-        const auto &arrayType = tt::as_ptr<ArrayType>(tgtType);
-        elemType              = arrayType->elemType();
+        const auto *arrTy = tt::as_ptr<camel::core::type::ArrayType>(tgtType);
+        elemType          = arrTy->elemType();
         break;
     }
     case TypeCode::Struct: {
-        const auto &structType = tt::as_ptr<StructType>(tgtType);
-        const auto &optIndex   = structType->findField(accsLoad->index<std::string>());
+        const auto *strTy    = tt::as_ptr<camel::core::type::StructType>(tgtType);
+        const auto &optIndex = strTy->findField(accsLoad->index<std::string>());
         if (!optIndex.has_value()) {
-            diags_->of(SemanticDiag::InvalidAccessIndex).commit(accsLoad->index<std::string>());
+            diags_->of(SemanticDiag::InvalidAccessIndex)
+                .atOrigin(gct->load()->origin())
+                .commit(accsLoad->index<std::string>());
             throw BuildAbortException();
         }
-        elemType = structType->typeAt(optIndex.value());
+        elemType = strTy->typeAt(optIndex.value());
         break;
     }
     default:
@@ -811,6 +1034,7 @@ Node *Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     graph_ptr_t &graph = currGraph_;
     Node *accsNode     = AccsNode::create(*graph, elemType, accsLoad->index());
     Node::link(LinkType::Norm, tgtNode, accsNode);
+    registerNodeOrigin(context_, accsNode, gct, "gir.accs");
     LEAVE("ACCS");
     return accsNode;
 }
@@ -824,6 +1048,18 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     Node *condNode = any_cast<Node *>(res);
     Node *brchNode = BrchNode::create(*currGraph_, Type::Int64());
     Node *joinNode = JoinNode::create(*currGraph_, nullptr);
+    registerNodeOrigin(context_, brchNode, gct, "gir.brch");
+    registerNodeOrigin(
+        context_,
+        joinNode,
+        gct,
+        "gir.join",
+        {semanticPart(
+            camel::source::SemanticRole::ValueProducer,
+            camel::source::kInvalidOriginId,
+            -1,
+            "join")},
+        {});
 
     Type *joinType = nullptr;
 
@@ -860,7 +1096,8 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         }
 
         graph_ptr_t subGraph = enterScope(FunctionType::create());
-        Node *resNode        = visitExecNode(caseExecNode);
+        registerGraphOrigin(context_, subGraph, caseExecNode, "gir.brch.case.graph");
+        Node *resNode = visitExecNode(caseExecNode);
         if (!subGraph->hasOutput()) {
             if (resNode) {
                 subGraph->setOutput(resNode);
@@ -897,6 +1134,7 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         } else {
             if (!exitType->equals(joinType)) {
                 diags_->of(SemanticDiag::BranchReturnTypeMismatch)
+                    .atOrigin(gct->load()->origin())
                     .commit(
                         currGraph_->location() + ": " + currGraph_->funcType()->toString(),
                         joinType->toString(),
@@ -992,11 +1230,13 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
             module_->exportEntity(ref, optGraph.value());
             continue;
         }
-        diags_->of(SemanticDiag::UnresolvedReference).commit(ref.toString());
+        diags_->of(SemanticDiag::UnresolvedReference)
+            .atOrigin(gct->load()->origin())
+            .commit(ref.toString());
         throw BuildAbortException();
     }
     LEAVE("EXPT");
     return nullptr;
 }
 
-} // namespace GraphIR
+} // namespace camel::compile::gir

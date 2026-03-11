@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,21 +26,27 @@
 #include <functional>
 #include <unordered_map>
 
-class Frame;
+namespace camel::core::context {
 class Context;
+}
 class Operator;
 class OperatorIndex;
 class OperatorGroup;
 
-namespace GraphIR {
+namespace camel::compile::gir {
 class Node;
 class Graph;
 using data_idx_t  = int16_t;
 using arr_size_t  = uint16_t;
 using graph_ptr_t = std::shared_ptr<Graph>;
-} // namespace GraphIR
+} // namespace camel::compile::gir
 
-using data_arr_t = std::span<const GraphIR::data_idx_t>;
+namespace GIR    = camel::compile::gir;
+using data_arr_t = std::span<const GIR::data_idx_t>;
+
+namespace type    = camel::core::type;
+namespace rtdata  = camel::core::rtdata;
+namespace context = camel::core::context;
 
 class ArgsView {
   public:
@@ -48,14 +54,14 @@ class ArgsView {
     virtual size_t size() const                      = 0;
     virtual slot_t slot(size_t index) const          = 0;
     virtual void setSlot(size_t index, slot_t value) = 0;
-    virtual TypeCode code(size_t index) const        = 0;
-    virtual Type *type(size_t index) const           = 0;
+    virtual type::TypeCode code(size_t index) const  = 0;
+    virtual type::Type *type(size_t index) const     = 0;
 
-    template <typename T> T get(size_t index) const { return fromSlot<T>(slot(index)); }
-    template <typename T> void set(size_t index, T value) { setSlot(index, toSlot(value)); }
+    template <typename T> T get(size_t index) const { return rtdata::fromSlot<T>(slot(index)); }
+    template <typename T> void set(size_t index, T value) { setSlot(index, rtdata::toSlot(value)); }
 };
 
-using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, Context &ctx);
+using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &ctx);
 
 using oper_idx_ptr_t     = std::shared_ptr<OperatorIndex>;
 using oper_idx_vec_t     = std::vector<oper_idx_ptr_t>;
@@ -64,16 +70,16 @@ using oper_idx_vec_ptr_t = std::shared_ptr<oper_idx_vec_t>;
 class OperatorIndex {
   private:
     std::string name_;
-    FunctionType *type_;
+    type::FunctionType *type_;
     std::string uri_;
 
   public:
-    OperatorIndex(const std::string &name, FunctionType *type, const std::string &uri)
+    OperatorIndex(const std::string &name, type::FunctionType *type, const std::string &uri)
         : name_(name), type_(std::move(type)), uri_(uri) {}
 
     const std::string &name() const { return name_; }
     const std::string &uri() const { return uri_; }
-    FunctionType *funcType() const { return type_; }
+    type::FunctionType *funcType() const { return type_; }
 };
 
 using oper_group_ptr_t = std::shared_ptr<OperatorGroup>;
@@ -81,26 +87,26 @@ using oper_group_ptr_t = std::shared_ptr<OperatorGroup>;
 class OperatorGroup {
   private:
     std::string name_;
-    std::vector<std::pair<std::string, resolver_ptr_t>> resolvers_;
+    std::vector<std::pair<std::string, type::resolver_ptr_t>> resolvers_;
 
   public:
     OperatorGroup(
         const std::string &name,
-        const std::vector<std::pair<std::string, resolver_ptr_t>> &resolvers)
+        const std::vector<std::pair<std::string, type::resolver_ptr_t>> &resolvers)
         : name_(name), resolvers_(resolvers) {}
     OperatorGroup(
         const std::string &name,
-        const std::vector<std::pair<std::string, resolver_ptr_t>> &&resolvers)
+        const std::vector<std::pair<std::string, type::resolver_ptr_t>> &&resolvers)
         : name_(name), resolvers_(std::move(resolvers)) {}
 
     static oper_group_ptr_t create(
         const std::string &name,
-        const std::vector<std::pair<std::string, resolver_ptr_t>> &resolvers) {
+        const std::vector<std::pair<std::string, type::resolver_ptr_t>> &resolvers) {
         return std::make_shared<OperatorGroup>(name, resolvers);
     }
     static oper_group_ptr_t create(
         const std::string &name,
-        const std::vector<std::pair<std::string, resolver_ptr_t>> &&resolvers) {
+        const std::vector<std::pair<std::string, type::resolver_ptr_t>> &&resolvers) {
         return std::make_shared<OperatorGroup>(name, std::move(resolvers));
     }
 
@@ -108,8 +114,9 @@ class OperatorGroup {
 
     const auto &resolvers() const { return resolvers_; }
 
-    std::optional<oper_idx_ptr_t>
-    resolve(const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const {
+    std::optional<oper_idx_ptr_t> resolve(
+        const type::type_vec_t &with, const type::type_vec_t &norm,
+        const ModifierSet &modifiers) const {
         for (const auto &[uri, resolver] : resolvers_) {
             auto optType = resolver->resolve(with, norm, modifiers);
             if (optType) {

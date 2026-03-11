@@ -13,11 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 28, 2025
- * Updated: Oct. 19, 2025
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "profiler.h"
+
+using namespace camel::core::context;
+using namespace camel::core::module;
+using namespace camel::core::type;
+
 #ifndef NDEBUG
 #include "../../service/profiler/advanced/advanced_tracer.h"
 #include "../../service/profiler/analysis/statistics.h"

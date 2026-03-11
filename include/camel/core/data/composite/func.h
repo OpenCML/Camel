@@ -13,19 +13,24 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composite.h"
+#include "camel/core/data/composite/composite.h"
+#include "camel/core/type/composite/func.h"
 #include <list>
 
-namespace GraphIR {
+namespace camel::compile::gir {
 class Graph;
 using graph_ptr_t = std::shared_ptr<Graph>;
-} // namespace GraphIR
+} // namespace camel::compile::gir
+
+namespace GIR = camel::compile::gir;
+
+namespace camel::core::data {
 
 class FunctionData;
 
@@ -36,18 +41,18 @@ using func_vec_t  = std::vector<func_ptr_t>;
 using func_list_t = std::initializer_list<func_ptr_t>;
 
 class FunctionData : public CompositeData {
-    GraphIR::Graph &graph_;
+    GIR::Graph &graph_;
     data_vec_t closure_;
 
   public:
-    FunctionData(GraphIR::Graph &graph);
+    FunctionData(GIR::Graph &graph);
     virtual ~FunctionData() = default;
 
-    static func_ptr_t create(GraphIR::Graph &graph);
+    static func_ptr_t create(GIR::Graph &graph);
 
     std::string name() const;
-    GraphIR::Graph &graph() const { return graph_; }
-    FunctionType *funcType() const;
+    GIR::Graph &graph() const { return graph_; }
+    type::FunctionType *funcType() const;
     const data_vec_t &closure() const { return closure_; }
 
     virtual std::vector<std::string> refs() const override;
@@ -57,5 +62,7 @@ class FunctionData : public CompositeData {
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-    virtual data_ptr_t convertTo(Type *type) override;
+    virtual data_ptr_t convertTo(type::Type *type) override;
 };
+
+} // namespace camel::core::data

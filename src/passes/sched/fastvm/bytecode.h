@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,9 @@
 #include <limits>
 
 #include "camel/compile/gir.h"
+#include "camel/core/type/base.h"
+
+namespace type = camel::core::type;
 
 // 分布密集的字节码指令集
 // 用于加速 switch 分派，降低 CPU 分支预测失败率
@@ -260,19 +263,19 @@ struct BytecodeHeader {                  // 8 bytes
 
 using Bytecode = BytecodeHeader;
 
-union BytecodeExtra {      // 8 bytes
-    Type *pType;           // for CAST
-    GraphIR::Graph *graph; // for FUNC/TAIL word0: Graph* only
-    operator_t func;       // for OPER
-    MarkOpCode mark;       // for SCHD
-    uint64_t raw;          // generic
+union BytecodeExtra {  // 8 bytes
+    type::Type *pType; // for CAST
+    GIR::Graph *graph; // for FUNC/TAIL word0: Graph* only
+    operator_t func;   // for OPER
+    MarkOpCode mark;   // for SCHD
+    uint64_t raw;      // generic
 
     std::string toString(OpCode opcode) const;
 };
 
 // FUNC/TAIL：第一块 extra 为 Graph*；启用了 JIT 时第二块 extra 为 count（未 JIT）或 JitEntryFn（已
 // JIT）
-inline GraphIR::Graph *getFuncExtraGraph(const BytecodeHeader *bc) { return bc->extra()->graph; }
+inline GIR::Graph *getFuncExtraGraph(const BytecodeHeader *bc) { return bc->extra()->graph; }
 
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
 inline uint32_t getFuncExtraCount(BytecodeHeader *bc) {

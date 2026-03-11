@@ -2,7 +2,7 @@ module linear_regression
 
 import {
     Tensor,
-    ones, zeros, sum, transpose, shape, concat, random
+    concat, ones, random, shape, sum, transpose, zeros
 } from tensor
 
 func mean_squared_error(y_pred: Tensor, y_true: Tensor): float {
@@ -28,7 +28,8 @@ sync func update(var w: Tensor): Tensor {
     let dw = transpose(X) @ errors
     let m = shape(X)[0]
     wait dw = 2.0 / float(m) * dw
-    return w = w - lr * dw
+    wait w = w - lr * dw
+    return w
 }
 
 with <X: Tensor, y: Tensor, lr: float, its: int>
@@ -45,6 +46,8 @@ sync func train(var weights: Tensor): void {
             let pred = X_bias @ nw
             let loss = mean_squared_error(pred, y)
             'Iteration {}: MSE Loss = {}'->format<i, loss>->println
+        } else {
+            ''
         }
     }>
 }

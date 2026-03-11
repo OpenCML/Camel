@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 25, 2026
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,6 +34,8 @@
 #ifndef NDEBUG
 #include "camel/core/mm/debug_hook.h"
 #endif
+
+namespace mm = camel::core::mm;
 
 #include <algorithm>
 #include <chrono>

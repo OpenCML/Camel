@@ -13,16 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composite.h"
+#include "camel/core/data/composite/composite.h"
 
 #include <map>
 #include <memory>
+
+namespace camel::core::data {
 
 class StructDataFactory;
 
@@ -36,7 +38,7 @@ class StructData : public CompositeData {
 
     // 仅由 StructDataFactory::build() 使用，避免重复计算 Type
     StructData(
-        Type *type, std::map<std::string, data_ptr_t> &&data,
+        type::Type *type, std::map<std::string, data_ptr_t> &&data,
         std::vector<std::string> &&refIndices);
 
   public:
@@ -60,7 +62,7 @@ class StructData : public CompositeData {
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-    virtual data_ptr_t convertTo(Type *type) override;
+    virtual data_ptr_t convertTo(type::Type *type) override;
 };
 
 // 工厂：收集字段后一次构建 Type 与 StructData，避免重复计算
@@ -76,3 +78,5 @@ class StructDataFactory {
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
+
+} // namespace camel::core::data

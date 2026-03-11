@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,9 @@
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 
+namespace mm = camel::core::mm;
 using namespace std;
+using namespace camel::core::type;
 
 namespace {
 
@@ -33,8 +35,8 @@ TupleTypeLayout computeLayout(size_t size, size_t refCount) {
     size_t typesSize     = size * sizeof(Type *);
     size_t typeCodesSize = size * sizeof(TypeCode);
     size_t refsSize      = refCount * sizeof(size_t);
-    size_t aTypes        = ::alignUp(typesSize, alignof(TypeCode));
-    size_t aTypeCodes    = ::alignUp(typeCodesSize, alignof(size_t));
+    size_t aTypes        = mm::alignUp(typesSize, alignof(TypeCode));
+    size_t aTypeCodes    = mm::alignUp(typeCodesSize, alignof(size_t));
     size_t totalSize     = sizeof(TupleType) + aTypes + aTypeCodes + refsSize;
     return TupleTypeLayout{
         .totalSize            = totalSize,

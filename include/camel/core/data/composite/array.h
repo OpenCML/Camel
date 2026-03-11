@@ -13,15 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "composite.h"
+#include "camel/core/data/composite/composite.h"
 
 #include <memory>
+
+namespace camel::core::data {
 
 class ArrayDataFactory;
 
@@ -33,15 +35,15 @@ class ArrayData : public CompositeData {
     std::vector<data_ptr_t> data_;
 
     // 仅由 ArrayDataFactory::build() 使用，避免重复计算 Type
-    ArrayData(Type *arrayType, data_vec_t &&data);
+    ArrayData(type::Type *arrayType, data_vec_t &&data);
 
   public:
-    ArrayData(Type *elemType, data_list_t data = {});
-    ArrayData(Type *elemType, const data_vec_t &data);
+    ArrayData(type::Type *elemType, data_list_t data = {});
+    ArrayData(type::Type *elemType, const data_vec_t &data);
     virtual ~ArrayData() = default;
 
-    static std::shared_ptr<ArrayData> create(Type *elemType, data_list_t data = {});
-    static std::shared_ptr<ArrayData> from(Type *elemType, const data_vec_t &data);
+    static std::shared_ptr<ArrayData> create(type::Type *elemType, data_list_t data = {});
+    static std::shared_ptr<ArrayData> from(type::Type *elemType, const data_vec_t &data);
 
     const std::vector<data_ptr_t> &raw() const { return data_; }
 
@@ -52,7 +54,7 @@ class ArrayData : public CompositeData {
     virtual bool equals(const data_ptr_t &other) const override;
     virtual data_ptr_t clone(bool deep = false) const override;
     virtual const std::string toString() const override;
-    virtual data_ptr_t convertTo(Type *type) override;
+    virtual data_ptr_t convertTo(type::Type *type) override;
 };
 
 // 工厂：收集元素后一次构建 Type 与 ArrayData，避免重复计算
@@ -68,3 +70,5 @@ class ArrayDataFactory {
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
+
+} // namespace camel::core::data

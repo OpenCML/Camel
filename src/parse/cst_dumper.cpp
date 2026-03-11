@@ -13,15 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 18, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/parse/cst_dumper.h"
 
 using namespace std;
+using namespace camel::parse;
 
-any CSTDumpVisitor::dumpNode(antlr4::tree::ParseTree *context, string nodeName) {
+std::any CSTDumpVisitor::dumpNode(antlr4::tree::ParseTree *context, string nodeName) {
     bool isLast   = false;
     auto children = context->children;
 

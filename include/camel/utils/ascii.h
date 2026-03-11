@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 17, 2025
- * Updated: Oct. 08, 2025
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,8 @@ namespace ascii {
 inline std::string underline(const std::string &from) {
     return std::format("\033[4m{}\033[0m", from);
 }
+
+inline std::string bold(const std::string &from) { return std::format("\033[1m{}\033[0m", from); }
 
 inline std::string red(const std::string &from) { return std::format("\033[1;31m{}\033[0m", from); }
 

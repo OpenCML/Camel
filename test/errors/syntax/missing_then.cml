@@ -1,0 +1,10 @@
+module syntax_missing_then
+
+func main(): int sync {
+    let x = 1
+    return if x > 0 {
+        1
+    } else {
+        0
+    }
+}

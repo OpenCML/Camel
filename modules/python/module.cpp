@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "module.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
@@ -27,18 +28,24 @@
 #include "executor.h"
 #include "operators.h"
 
-
+#include <filesystem>
 #include <fstream>
 #include <optional>
 #include <pybind11/embed.h>
 #include <pybind11/pybind11.h>
 #include <string>
 
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::module;
+using namespace camel::core::type;
+
 #ifdef _WIN32
 #include <stdlib.h>
 #endif
 
 namespace py = pybind11;
+namespace fs = std::filesystem;
 
 // 在 Py_Initialize 之前设置 Python Home 为 venv 的 base Python（来自 pyvenv.cfg）。
 // 指向 venv 本身会触发 codec 错误，指向 base Python 可消除 "Could not find platform independent
@@ -146,6 +153,43 @@ static void ensure_site_packages_in_path() {
                 return;
         }
         path.attr("insert")(0, site_packages_path);
+    } catch (...) {
+        // 失败时继续，不阻塞加载
+    }
+}
+
+// 将候选目录安全地插到 sys.path 前面，避免重复插入同一路径。
+static void prepend_path_if_missing(py::list &path, py::object &normalize, const std::string &dir) {
+    if (dir.empty())
+        return;
+    std::error_code ec;
+    fs::path absPath = fs::absolute(fs::path(dir), ec);
+    if (ec || !fs::exists(absPath))
+        return;
+    std::string dirStr  = absPath.lexically_normal().string();
+    std::string normDir = normalize(dirStr).cast<std::string>();
+    for (size_t i = 0; i < path.size(); ++i) {
+        std::string existing = py::str(path[i]).cast<std::string>();
+        if (normalize(existing).cast<std::string>() == normDir)
+            return;
+    }
+    path.attr("insert")(0, dirStr);
+}
+
+// 让 Python 侧能直接 import 入口脚本同目录下的辅助模块，例如 test/run/nn/mnist_loader.py。
+// 这里只同步 Camel 上下文的入口目录；site-packages 仍由上面的 venv 逻辑负责。
+static void ensure_context_paths_in_path(const context_ptr_t &ctx) {
+    if (!Py_IsInitialized() || !ctx)
+        return;
+    try {
+        py::module_ sys      = py::module_::import("sys");
+        py::module_ os       = py::module_::import("os");
+        py::object normalize = py::cpp_function([&os](const std::string &value) {
+            py::object pathMod = os.attr("path");
+            return pathMod.attr("normcase")(pathMod.attr("normpath")(value));
+        });
+        py::list path        = sys.attr("path");
+        prepend_path_if_missing(path, normalize, ctx->entryDir());
     } catch (...) {
         // 失败时继续，不阻塞加载
     }
@@ -395,11 +439,12 @@ bool PythonModule::load() {
             py::initialize_interpreter();
             ensure_site_packages_in_path();
         }
+        // Python 解释器可能早于当前脚本上下文初始化，因此每次加载模块时都重新同步入口目录。
+        ensure_context_paths_in_path(context_);
     } catch (const std::exception &e) {
-        context_->rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(std::string("Failed to load python module: ") + e.what());
-        return false;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("Failed to load python module: ") + e.what());
     }
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("python", [ctx]() { return createPythonExecutor(ctx); });

@@ -1,17 +1,23 @@
 /**
  * camel-codegen: 从源文件生成代码（AST -> 源码），链接 libcamel。
  */
-#include "service/codegen/source/generator.h"
-#include "camel/parse/parse.h"
-#include "camel/core/error/diagnostics.h"
-#include "camel/core/module/userdef.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
-#include "camel/utils/env.h"
+#include "camel/core/module/userdef.h"
+#include "camel/parse/parse.h"
 #include "camel/utils/dll_path.h"
-#include <iostream>
-#include <fstream>
+#include "camel/utils/env.h"
+#include "service/codegen/source/generator.h"
 #include <filesystem>
+#include <fstream>
+#include <iostream>
+
+namespace mm = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::parse;
+using namespace camel::core::context;
+using namespace camel::core::module;
 
 namespace fs = std::filesystem;
 
@@ -24,7 +30,10 @@ int main(int argc, char *argv[]) {
             std::cerr << "Usage: camel-codegen [options] <file>\n";
             return 0;
         }
-        if (arg[0] != '-') { inputPath = arg; break; }
+        if (arg[0] != '-') {
+            inputPath = arg;
+            break;
+        }
     }
     if (inputPath.empty()) {
         std::cerr << "camel-codegen: missing input file\n";
@@ -36,22 +45,23 @@ int main(int argc, char *argv[]) {
     }
 
     std::string entryDir = fs::absolute(fs::path(inputPath)).parent_path().string();
-    auto ctx = Context::create(
+    auto ctx             = Context::create(
         EntryConfig{
-            .entryDir = entryDir,
+            .entryDir  = entryDir,
             .entryFile = inputPath,
-            .searchPaths = {
-                entryDir,
-                fs::absolute(fs::path(getEnv("CAMEL_STD_LIB", "./stdlib"))).string(),
-                getEnv("CAMEL_PACKAGES"),
-                getEnv("CAMEL_HOME", fs::current_path().string()),
-            },
+            .searchPaths =
+                {
+                    entryDir,
+                    fs::absolute(fs::path(getEnv("CAMEL_STD_LIB", "./stdlib"))).string(),
+                    getEnv("CAMEL_PACKAGES"),
+                    getEnv("CAMEL_HOME", fs::current_path().string()),
+                },
         },
         DiagsConfig{.total_limit = -1, .per_severity_limits = {{Severity::Error, 0}}});
 
     auto diagnostics = std::make_shared<Diagnostics>("camel-codegen", inputPath);
-    auto parser = std::make_shared<CamelParser>(diagnostics);
-    auto mainModule = std::make_shared<UserDefinedModule>("main", inputPath, ctx, parser);
+    auto parser      = std::make_shared<CamelParser>(diagnostics);
+    auto mainModule  = std::make_shared<UserDefinedModule>("main", inputPath, ctx, parser);
     ctx->setMainModule(mainModule);
 
     (void)mm::autoSpace();

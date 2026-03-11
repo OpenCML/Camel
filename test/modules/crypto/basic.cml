@@ -1,0 +1,20 @@
+module main
+
+import { sha256, sha256_rounds } from crypto
+
+func main(): int sync {
+    println("=== Crypto Module Basic Tests ===")
+
+    println("\n[1] sha256('abc')")
+    let digest = sha256("abc")
+    println("  digest =", digest)
+    println("  deterministic =", digest == sha256("abc"))
+
+    println("\n[2] sha256_rounds('abc', 1000)")
+    let rounds_digest = sha256_rounds("abc", 1000)
+    println("  deterministic =", rounds_digest == sha256_rounds("abc", 1000))
+    println("  differs from sha256 =", rounds_digest != digest)
+
+    println("\n=== Crypto tests completed ===")
+    return 0
+}

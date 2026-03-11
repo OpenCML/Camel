@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,9 +60,13 @@ template <typename F> F getSymbol(void *handle, const char *name) {
 
 } // namespace
 
+using namespace camel::core::context;
+
+namespace camel::core::module {
+
 module_ptr_t loadCmoModule(
-    const std::string &moduleName, const std::string &path, const context_ptr_t &ctx,
-    std::string *outError) {
+    const std::string &moduleName, const std::string &path,
+    const camel::core::context::context_ptr_t &ctx, std::string *outError) {
     auto setErr = [&](const std::string &s) {
         if (outError)
             *outError = s;
@@ -121,3 +125,5 @@ module_ptr_t loadCmoModule(
     ctx->addLoadedDll(path, handle);
     return std::shared_ptr<Module>(raw);
 }
+
+} // namespace camel::core::module

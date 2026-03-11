@@ -1,7 +1,7 @@
 module main
 
 // os 模块基础测试（不含 exit、set_terminal_raw_mode 等会终止或需交互的）
-import { whoami, sleep } from os
+import { whoami, sleep, cpu_count } from os
 
 func main(): int sync {
     println("=== OS Module Basic Tests ===")
@@ -13,6 +13,9 @@ func main(): int sync {
     println("\n[2] sleep(0)")
     sleep(0)
     println("  sleep(0) OK")
+
+    println("\n[3] cpu_count()")
+    println("  logical cpu count =", cpu_count())
 
     println("\n=== OS tests completed ===")
     return 0

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 28, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 #include "camel/core/module/builtin.h"
 #include <string>
 #ifndef NDEBUG
-class ProfilerBuiltinModule : public BuiltinModule {
+class ProfilerBuiltinModule : public camel::core::module::BuiltinModule {
   private:
     bool enabled_                            = false;
     bool tracing_                            = false;
@@ -33,7 +33,7 @@ class ProfilerBuiltinModule : public BuiltinModule {
     std::string detailed_report_output_file_ = "profiler_reports/detailed_report.md";
 
   public:
-    ProfilerBuiltinModule(context_ptr_t ctx);
+    ProfilerBuiltinModule(camel::core::context::context_ptr_t ctx);
     virtual ~ProfilerBuiltinModule() = default;
 
     virtual bool load() override;
@@ -43,20 +43,22 @@ class ProfilerBuiltinModule : public BuiltinModule {
     void instant(const std::string &name);
     void enable(bool enabled);
 
-    static module_ptr_t create(context_ptr_t ctx);
+    static camel::core::module::module_ptr_t create(camel::core::context::context_ptr_t ctx);
 };
 #else
-class ProfilerBuiltinModule : public BuiltinModule {
+class ProfilerBuiltinModule : public camel::core::module::BuiltinModule {
   public:
-    ProfilerBuiltinModule(context_ptr_t ctx) : BuiltinModule("profiler", ctx) {}
+    ProfilerBuiltinModule(camel::core::context::context_ptr_t ctx)
+        : camel::core::module::BuiltinModule("profiler", ctx) {}
     virtual ~ProfilerBuiltinModule() = default;
     virtual bool load() override { return true; }
     void begin(const std::string &name) {}
     void end(const std::string &name) {}
     void instant(const std::string &name) {}
     void enable(bool enabled) {}
-    static module_ptr_t create(context_ptr_t ctx) {
-        return std::make_shared<ProfilerBuiltinModule>(ctx);
+    static camel::core::module::module_ptr_t create(camel::core::context::context_ptr_t ctx) {
+        return std::static_pointer_cast<camel::core::module::Module>(
+            std::make_shared<ProfilerBuiltinModule>(ctx));
     }
 };
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,10 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
+
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::rtdata;
 
 #include "../operators/cast.h"
 #include "../operators/io.h"
@@ -264,29 +268,30 @@ executor_ptr_t BasicBuiltinExecutor::create(context_ptr_t ctx) {
     return std::make_shared<BasicBuiltinExecutor>(ctx);
 }
 
-void BasicBuiltinExecutor::eval(std::string uri, GraphIR::Node *self, Frame &frame) {
+void BasicBuiltinExecutor::eval(
+    std::string uri, GIR::Node *self, camel::core::context::Frame &frame) {
     EXEC_WHEN_DEBUG(
         GetDefaultLogger().in("BasicExec").debug("Evaluating operator of URI: {}", uri));
     auto it = opsMap_.find(uri);
     if (it == opsMap_.end()) {
         throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
     }
-    std::vector<GraphIR::data_idx_t> normIndices;
+    std::vector<GIR::data_idx_t> normIndices;
     for (const auto &in : self->normInputs()) {
         normIndices.push_back(in->index());
     }
-    std::vector<GraphIR::data_idx_t> withIndices;
+    std::vector<GIR::data_idx_t> withIndices;
     for (const auto &in : self->withInputs()) {
         withIndices.push_back(in->index());
     }
 
     data_arr_t nargs = data_arr_t{
         normIndices.data(),
-        static_cast<GraphIR::arr_size_t>(normIndices.size()),
+        static_cast<GIR::arr_size_t>(normIndices.size()),
     };
     data_arr_t wargs = data_arr_t{
         withIndices.data(),
-        static_cast<GraphIR::arr_size_t>(withIndices.size()),
+        static_cast<GIR::arr_size_t>(withIndices.size()),
     };
 
     FrameArgsView withView(frame, wargs);

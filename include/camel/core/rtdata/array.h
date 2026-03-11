@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,15 +24,18 @@
 
 #include <algorithm>
 
+namespace rtdata = camel::core::rtdata;
+namespace type   = camel::core::type;
+
 // FixedArray: 固定大小的数组，对象体和数据区在一块连续内存中
-class FixedArray : public Object {
+class FixedArray : public rtdata::Object {
   public:
     // 禁止直接构造
     FixedArray(const FixedArray &)            = delete;
     FixedArray &operator=(const FixedArray &) = delete;
 
     // 静态创建方法
-    static FixedArray *create(size_t size, IAllocator &allocator) {
+    static FixedArray *create(size_t size, camel::core::mm::IAllocator &allocator) {
         size_t headerSize = sizeof(FixedArray);
         size_t dataSize   = size * sizeof(slot_t);
         size_t totalSize  = headerSize + dataSize;
@@ -57,36 +60,38 @@ class FixedArray : public Object {
 
     template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, "Index out of range");
-        if constexpr (std::is_same_v<T, Object *>) {
+        if constexpr (std::is_same_v<T, rtdata::Object *>) {
             // writeBarrier(arr[index], value);
         }
         data_[index] = toSlot(value);
     }
 
-    virtual bool equals(const Object *other, const Type *type, bool deep = false) const override {
+    virtual bool
+    equals(const rtdata::Object *other, const type::Type *type, bool deep = false) const override {
         if (this == other)
             return true;
         if (!isOfSameCls(this, other))
             return false;
 
-        ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
-        const ArrayType *arrayType = static_cast<const ArrayType *>(type);
-        TypeCode elemTypeCode      = arrayType->elemTypeCode();
+        ASSERT(type && type->code() == type::TypeCode::Array, "Type must be ArrayType");
+        const type::ArrayType *arrayType = static_cast<const type::ArrayType *>(type);
+        type::TypeCode elemTypeCode      = arrayType->elemTypeCode();
 
         const FixedArray *otherArray = reinterpret_cast<const FixedArray *>(other);
         if (size_ != otherArray->size_)
             return false;
 
-        const Object *const *arrA = reinterpret_cast<const Object *const *>(data_);
-        const Object *const *arrB = reinterpret_cast<const Object *const *>(otherArray->data_);
+        const rtdata::Object *const *arrA = reinterpret_cast<const rtdata::Object *const *>(data_);
+        const rtdata::Object *const *arrB =
+            reinterpret_cast<const rtdata::Object *const *>(otherArray->data_);
 
-        if (isGCTraced(elemTypeCode)) {
+        if (type::isGCTraced(elemTypeCode)) {
             if (deep) {
                 // 深比较引用对象
-                const Type *elemType = arrayType->elemType();
+                const type::Type *elemType = arrayType->elemType();
                 for (size_t i = 0; i < size_; ++i) {
-                    const Object *refA = arrA[i];
-                    const Object *refB = arrB[i];
+                    const rtdata::Object *refA = arrA[i];
+                    const rtdata::Object *refB = arrB[i];
                     if (refA == refB)
                         continue;
                     if (!refA->equals(refB, elemType, true))
@@ -95,37 +100,40 @@ class FixedArray : public Object {
                 return true;
             } else {
                 // 浅比较引用指针地址
-                return std::memcmp(arrA, arrB, size_ * sizeof(Object *)) == 0;
+                return std::memcmp(arrA, arrB, size_ * sizeof(rtdata::Object *)) == 0;
             }
         } else {
             return std::memcmp(arrA, arrB, size_ * sizeof(slot_t)) == 0;
         }
     }
 
-    virtual Object *
-    clone(IAllocator &allocator, const Type *type, bool deep = false) const override {
-        ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
-        const ArrayType *arrayType = static_cast<const ArrayType *>(type);
-        TypeCode elemTypeCode      = arrayType->elemTypeCode();
+    virtual rtdata::Object *clone(
+        camel::core::mm::IAllocator &allocator, const type::Type *type,
+        bool deep = false) const override {
+        ASSERT(type && type->code() == type::TypeCode::Array, "Type must be ArrayType");
+        const type::ArrayType *arrayType = static_cast<const type::ArrayType *>(type);
+        type::TypeCode elemTypeCode      = arrayType->elemTypeCode();
 
-        FixedArray *newArray        = FixedArray::create(size_, allocator);
-        const Object *const *srcArr = reinterpret_cast<const Object *const *>(data_);
-        Object **dstArr             = reinterpret_cast<Object **>(newArray->data_);
+        FixedArray *newArray = FixedArray::create(size_, allocator);
+        const rtdata::Object *const *srcArr =
+            reinterpret_cast<const rtdata::Object *const *>(data_);
+        rtdata::Object **dstArr = reinterpret_cast<rtdata::Object **>(newArray->data_);
 
-        if (isGCTraced(elemTypeCode)) {
+        if (type::isGCTraced(elemTypeCode)) {
             for (size_t i = 0; i < size_; ++i) {
-                const Object *oriRef = srcArr[i];
+                const rtdata::Object *oriRef = srcArr[i];
                 if (oriRef) {
                     if (deep) {
                         // 深拷贝：递归克隆引用对象
-                        Object *clonedRef = oriRef->clone(allocator, arrayType->elemType(), true);
-                        dstArr[i]         = clonedRef;
+                        rtdata::Object *clonedRef =
+                            oriRef->clone(allocator, arrayType->elemType(), true);
+                        dstArr[i] = clonedRef;
                     } else {
                         // 浅拷贝：直接复制引用
-                        dstArr[i] = const_cast<Object *>(oriRef);
+                        dstArr[i] = const_cast<rtdata::Object *>(oriRef);
                     }
                 } else {
-                    dstArr[i] = NullRef;
+                    dstArr[i] = rtdata::NullRef;
                 }
             }
         } else {
@@ -133,13 +141,13 @@ class FixedArray : public Object {
             std::memcpy(dstArr, srcArr, size_ * sizeof(slot_t));
         }
 
-        return reinterpret_cast<Object *>(newArray);
+        return reinterpret_cast<rtdata::Object *>(newArray);
     }
 
-    virtual void print(std::ostream &os, const Type *type) const override {
-        ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
-        const ArrayType *arrayType = static_cast<const ArrayType *>(type);
-        Type *elemType             = arrayType->elemType();
+    virtual void print(std::ostream &os, const type::Type *type) const override {
+        ASSERT(type && type->code() == type::TypeCode::Array, "Type must be ArrayType");
+        const type::ArrayType *arrayType = static_cast<const type::ArrayType *>(type);
+        type::Type *elemType             = arrayType->elemType();
 
         os << "[";
 
@@ -148,7 +156,7 @@ class FixedArray : public Object {
         for (size_t i = 0; i < size_; ++i) {
             if (i > 0)
                 os << ", ";
-            printSlot(os, dataPtr[i], elemType);
+            rtdata::printSlot(os, dataPtr[i], elemType);
         }
 
         os << "]";
@@ -159,20 +167,21 @@ class FixedArray : public Object {
         // 灵活数组不是指针，不占用内存空间，在访问时通过偏移量动态计算得到
     }
 
-    virtual void
-    updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
-        if (!type || type->code() != TypeCode::Array)
+    virtual void updateRefs(
+        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
+        const type::Type *type) override {
+        if (!type || type->code() != type::TypeCode::Array)
             return;
-        const ArrayType *arrayType = static_cast<const ArrayType *>(type);
-        TypeCode elemTypeCode      = arrayType->elemTypeCode();
+        const type::ArrayType *arrayType = static_cast<const type::ArrayType *>(type);
+        type::TypeCode elemTypeCode      = arrayType->elemTypeCode();
 
-        if (!isGCTraced(elemTypeCode))
+        if (!type::isGCTraced(elemTypeCode))
             return;
 
-        Object **refArr = reinterpret_cast<Object **>(data_);
+        rtdata::Object **refArr = reinterpret_cast<rtdata::Object **>(data_);
 
         for (size_t i = 0; i < size_; ++i) {
-            if (Object *&ref = refArr[i]) {
+            if (rtdata::Object *&ref = refArr[i]) {
                 ref = relocate(ref);
             }
         }
@@ -190,13 +199,13 @@ class FixedArray : public Object {
 };
 
 // Array: 动态数组，支持小数组内联优化
-class Array : public Object {
+class Array : public rtdata::Object {
   public:
     // 禁止直接构造
     Array(const Array &)            = delete;
     Array &operator=(const Array &) = delete;
 
-    static Array *create(IAllocator &allocator, size_t initSize = 0) {
+    static Array *create(camel::core::mm::IAllocator &allocator, size_t initSize = 0) {
         void *memory = allocator.alloc(sizeof(Array), alignof(Array));
         if (!memory)
             throw std::bad_alloc();
@@ -217,15 +226,15 @@ class Array : public Object {
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
-        return fromSlot<T>(dataPtr_[index]);
+        return rtdata::fromSlot<T>(dataPtr_[index]);
     }
 
     template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, "Index out of range");
-        if constexpr (std::is_same_v<T, Object *>) {
+        if constexpr (std::is_same_v<T, rtdata::Object *>) {
             // writeBarrier(arr[index], value);
         }
-        dataPtr_[index] = toSlot(value);
+        dataPtr_[index] = rtdata::toSlot(value);
     }
 
     void reserve(size_t newCapacity) {
@@ -239,10 +248,10 @@ class Array : public Object {
             reserve(capacity_ * 3 / 2);
         }
 
-        if constexpr (std::is_same_v<T, Object *>) {
+        if constexpr (std::is_same_v<T, rtdata::Object *>) {
             // writeBarrier(arr[size_], value);
         }
-        dataPtr_[size_++] = toSlot(value);
+        dataPtr_[size_++] = rtdata::toSlot(value);
     }
 
     void pop() {
@@ -262,27 +271,30 @@ class Array : public Object {
         reallocate(size_ > 0 ? size_ : SMALL_ARRAY_SIZE);
     }
 
-    virtual bool equals(const Object *other, const Type *type, bool deep = false) const override {
-        ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
+    virtual bool
+    equals(const rtdata::Object *other, const type::Type *type, bool deep = false) const override {
+        ASSERT(type && type->code() == type::TypeCode::Array, "Type must be ArrayType");
         if (!isOfSameCls(this, other))
             return false;
 
-        const ArrayType *arrayType = static_cast<const ArrayType *>(type);
-        TypeCode elemTypeCode      = arrayType->elemTypeCode();
+        const type::ArrayType *arrayType = static_cast<const type::ArrayType *>(type);
+        type::TypeCode elemTypeCode      = arrayType->elemTypeCode();
 
         const Array *otherArray = reinterpret_cast<const Array *>(other);
         if (size_ != otherArray->size_)
             return false;
 
-        const Object *const *arrA = reinterpret_cast<const Object *const *>(dataPtr_);
-        const Object *const *arrB = reinterpret_cast<const Object *const *>(otherArray->dataPtr_);
+        const rtdata::Object *const *arrA =
+            reinterpret_cast<const rtdata::Object *const *>(dataPtr_);
+        const rtdata::Object *const *arrB =
+            reinterpret_cast<const rtdata::Object *const *>(otherArray->dataPtr_);
 
-        if (isGCTraced(elemTypeCode)) {
+        if (type::isGCTraced(elemTypeCode)) {
             if (deep) {
                 // 深比较引用对象
                 for (size_t i = 0; i < size_; ++i) {
-                    const Object *refA = arrA[i];
-                    const Object *refB = arrB[i];
+                    const rtdata::Object *refA = arrA[i];
+                    const rtdata::Object *refB = arrB[i];
                     if (refA == refB)
                         continue;
                     if (!refA->equals(refB, arrayType->elemType(), true))
@@ -291,7 +303,7 @@ class Array : public Object {
                 return true;
             } else {
                 // 浅比较引用地址
-                return std::memcmp(arrA, arrB, size_ * sizeof(Object *)) == 0;
+                return std::memcmp(arrA, arrB, size_ * sizeof(rtdata::Object *)) == 0;
             }
         } else {
             // 基本类型比较
@@ -299,11 +311,12 @@ class Array : public Object {
         }
     }
 
-    virtual Object *
-    clone(IAllocator &allocator, const Type *type, bool deep = false) const override {
-        ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
-        const ArrayType *arrayType = static_cast<const ArrayType *>(type);
-        TypeCode elemTypeCode      = arrayType->elemTypeCode();
+    virtual rtdata::Object *clone(
+        camel::core::mm::IAllocator &allocator, const type::Type *type,
+        bool deep = false) const override {
+        ASSERT(type && type->code() == type::TypeCode::Array, "Type must be ArrayType");
+        const type::ArrayType *arrayType = static_cast<const type::ArrayType *>(type);
+        type::TypeCode elemTypeCode      = arrayType->elemTypeCode();
 
         Array *newArray     = Array::create(allocator, 0);
         newArray->size_     = size_;
@@ -319,17 +332,18 @@ class Array : public Object {
             newArray->fixedArray_ = nullptr;
             newArray->dataPtr_    = newArray->inlineData_;
 
-            const Object *const *srcArr = reinterpret_cast<const Object *const *>(dataPtr_);
-            Object **dstArr             = reinterpret_cast<Object **>(newArray->dataPtr_);
+            const rtdata::Object *const *srcArr =
+                reinterpret_cast<const rtdata::Object *const *>(dataPtr_);
+            rtdata::Object **dstArr = reinterpret_cast<rtdata::Object **>(newArray->dataPtr_);
 
-            if (isGCTraced(elemTypeCode)) {
+            if (type::isGCTraced(elemTypeCode)) {
                 for (size_t i = 0; i < size_; ++i) {
-                    const Object *oriRef = srcArr[i];
+                    const rtdata::Object *oriRef = srcArr[i];
                     if (oriRef) {
                         dstArr[i] = deep ? oriRef->clone(allocator, arrayType->elemType(), true)
-                                         : const_cast<Object *>(oriRef);
+                                         : const_cast<rtdata::Object *>(oriRef);
                     } else {
-                        dstArr[i] = NullRef;
+                        dstArr[i] = rtdata::NullRef;
                     }
                 }
             } else {
@@ -337,13 +351,13 @@ class Array : public Object {
             }
         }
 
-        return reinterpret_cast<Object *>(newArray);
+        return reinterpret_cast<rtdata::Object *>(newArray);
     }
 
-    virtual void print(std::ostream &os, const Type *type) const override {
-        ASSERT(type && type->code() == TypeCode::Array, "Type must be ArrayType");
-        const ArrayType *arrayType = static_cast<const ArrayType *>(type);
-        Type *elemType             = arrayType->elemType();
+    virtual void print(std::ostream &os, const type::Type *type) const override {
+        ASSERT(type && type->code() == type::TypeCode::Array, "Type must be ArrayType");
+        const type::ArrayType *arrayType = static_cast<const type::ArrayType *>(type);
+        type::Type *elemType             = arrayType->elemType();
 
         os << "[";
 
@@ -352,7 +366,7 @@ class Array : public Object {
         for (size_t i = 0; i < size_; ++i) {
             if (i > 0)
                 os << ", ";
-            printSlot(os, dataPtr[i], elemType);
+            rtdata::printSlot(os, dataPtr[i], elemType);
         }
 
         os << "]";
@@ -366,22 +380,23 @@ class Array : public Object {
         }
     }
 
-    virtual void
-    updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
-        if (!type || type->code() != TypeCode::Array)
+    virtual void updateRefs(
+        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
+        const type::Type *type) override {
+        if (!type || type->code() != type::TypeCode::Array)
             return;
         // 更新对FixedArray的引用
         if (fixedArray_) {
-            Object *newPtr = relocate(fixedArray_);
-            fixedArray_    = static_cast<FixedArray *>(newPtr);
-            dataPtr_       = fixedArray_->data();
+            rtdata::Object *newPtr = relocate(fixedArray_);
+            fixedArray_            = static_cast<FixedArray *>(newPtr);
+            dataPtr_               = fixedArray_->data();
         }
     }
 
   private:
     static constexpr size_t SMALL_ARRAY_SIZE = 10;
 
-    Array(IAllocator &allocator, size_t initSize)
+    Array(camel::core::mm::IAllocator &allocator, size_t initSize)
         : allocator_(&allocator), fixedArray_(nullptr), size_(initSize) {
         if (initSize > SMALL_ARRAY_SIZE) {
             capacity_   = initSize;
@@ -413,7 +428,7 @@ class Array : public Object {
         }
     }
 
-    IAllocator *allocator_;
+    camel::core::mm::IAllocator *allocator_;
     FixedArray *fixedArray_; // 底层固定数组，nullptr表示使用内联存储（8字节）
 
     uint32_t size_;     // 逻辑元素个数（4字节）

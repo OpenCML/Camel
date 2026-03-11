@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,15 +22,15 @@
 #include "camel/core/operator.h"
 #include "camel/core/type.h"
 
-slot_t __len_str__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __len_str__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __len_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
-slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __head_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __tail_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __concat_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __append_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
-slot_t __contains_arr__(ArgsView &with, ArgsView &norm, Context &ctx);
+slot_t __zip__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __head_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __tail_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __range__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __slice_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __concat_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __append_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __extend_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __contains_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

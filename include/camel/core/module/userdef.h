@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,35 +26,34 @@
 
 #include "camel/parse/parse.h"
 
-class Context;
-using context_ptr_t = std::shared_ptr<Context>;
+namespace camel::core::module {
 
 enum class CompileStage { None, AST, GCT, GIR, Done };
 
 class UserDefinedModule : public Module {
     GCT::node_ptr_t gct_;
-    GraphIR::graph_ptr_t gir_;
-    diagnostics_ptr_t diagnostics_;
-    parser_ptr_t parser_;
+    GIR::graph_ptr_t gir_;
+    camel::core::error::diagnostics_ptr_t diagnostics_;
+    camel::parse::parser_ptr_t parser_;
     CompileStage stage_ = CompileStage::None;
 
   public:
     UserDefinedModule(
-        const std::string &name, const std::string &path, context_ptr_t ctx,
-        parser_ptr_t parser = nullptr);
+        const std::string &name, const std::string &path, camel::core::context::context_ptr_t ctx,
+        camel::parse::parser_ptr_t parser = nullptr);
     virtual ~UserDefinedModule() = default;
 
     GCT::node_ptr_t gct() const { return gct_; }
-    GraphIR::graph_ptr_t gir() const { return gir_; }
-    diagnostics_ptr_t diagnostics() const { return diagnostics_; }
-    parser_ptr_t parser() const { return parser_; }
+    GIR::graph_ptr_t gir() const { return gir_; }
+    camel::core::error::diagnostics_ptr_t diagnostics() const { return diagnostics_; }
+    camel::parse::parser_ptr_t parser() const { return parser_; }
     virtual bool loaded() const override { return stage_ == CompileStage::Done; }
     CompileStage stage() const { return stage_; }
 
     bool compile(CompileStage till = CompileStage::Done);
 
-    static module_ptr_t
-    fromFile(const std::string &name, const std::string &path, context_ptr_t ctx);
+    static module_ptr_t fromFile(
+        const std::string &name, const std::string &path, camel::core::context::context_ptr_t ctx);
 
     bool load() override {
         bool success = compile();
@@ -62,3 +61,5 @@ class UserDefinedModule : public Module {
         return success;
     }
 };
+
+} // namespace camel::core::module

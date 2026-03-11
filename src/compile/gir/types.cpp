@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/compile/gir/types.h"
 #include "camel/utils/assert.h"
 
-namespace GraphIR {
+namespace camel::compile::gir {
 
 std::string to_string(NodeType type) {
     switch (type) {
@@ -74,4 +74,4 @@ std::string to_string(LinkType type) {
     return "Unknown";
 }
 
-} // namespace GraphIR
+} // namespace camel::compile::gir

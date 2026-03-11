@@ -4,6 +4,10 @@
 #include "camel/core/type/resolver.h"
 #include "executor.h"
 
+using namespace camel::core::context;
+using namespace camel::core::module;
+using namespace camel::core::type;
+
 FsModule::FsModule(context_ptr_t ctx) : BuiltinModule("fs", ctx) {
     exportEntity(
         "read_text",
@@ -38,6 +42,21 @@ FsModule::FsModule(context_ptr_t ctx) : BuiltinModule("fs", ctx) {
             "is_dir",
             {{"fs:is_dir",
               StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Bool())}}));
+    exportEntity(
+        "file_size",
+        OperatorGroup::create(
+            "file_size",
+            {{"fs:file_size",
+              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Int64())}}));
+    exportEntity(
+        "read_chunk",
+        OperatorGroup::create(
+            "read_chunk",
+            {{"fs:read_chunk",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{Type::String(), false}, {Type::Int64(), false}, {Type::Int64(), false}},
+                  Type::String())}}));
     exportEntity(
         "mkdir",
         OperatorGroup::create(

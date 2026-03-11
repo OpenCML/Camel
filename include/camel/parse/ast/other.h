@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@
 #include "base.h"
 #include "camel/common/ref.h"
 
-namespace AbstractSyntaxTree {
+namespace camel::parse::ast {
 
 class ParamDeclLoad : public Load {
   public:
@@ -52,4 +52,4 @@ class ParamDataLoad : public Load {
     Reference ref_;
 };
 
-} // namespace AbstractSyntaxTree
+} // namespace camel::parse::ast

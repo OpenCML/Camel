@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 01, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,8 @@
 
 #include <iostream>
 #include <string>
+
+using namespace camel::core::context;
 
 slot_t __profiler_begin__(ArgsView &with, ArgsView &norm, Context &ctx) {
     EXEC_WHEN_DEBUG({

@@ -13,18 +13,24 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "operators.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/utils/type.h"
 
 #include <algorithm>
+
+namespace mm = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::rtdata;
 #include <random>
 
 static std::mt19937_64 g_rng;
@@ -94,8 +100,7 @@ static Array *sampleArray(const Array *arr, int32_t n) {
 slot_t __rand_choice__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr = norm.get<Array *>(0);
     if (arr->size() == 0) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<choice> array is empty");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<choice> array is empty");
     }
     size_t idx = std::uniform_int_distribution<size_t>(0, arr->size() - 1)(g_rng);
     return arr->get<slot_t>(idx);
@@ -105,16 +110,16 @@ slot_t __rand_sample__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr = norm.get<Array *>(0);
     Int64 n    = norm.get<Int64>(1);
     if (n < 0 || (size_t)n > arr->size()) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<sample> size out of range");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<sample> size out of range");
     }
     return toSlot(sampleArray(arr, static_cast<int32_t>(n)));
 }
 
 slot_t __rand_shuffle__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr               = norm.get<Array *>(0);
-    const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
-    Array *res               = static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
+    Array *arr = norm.get<Array *>(0);
+    const camel::core::type::ArrayType *arrType =
+        tt::as_ptr<camel::core::type::ArrayType>(norm.type(0));
+    Array *res = static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
     shuffleArray(res);
     return toSlot(res);
 }

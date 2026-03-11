@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,10 @@
 #include "camel/utils/assert.h"
 
 #include <span>
+
+using namespace camel::core::type;
+
+namespace camel::core::type {
 
 std::mutex OtherTypeRegistry::mtx;
 std::unordered_map<std::string, TypeCode> OtherTypeRegistry::registry;
@@ -33,7 +37,7 @@ TypeCode registerOtherType(const std::string &typeName, TypeFlag flags) {
 }
 
 std::string OtherType::typeName() const {
-    ASSERT(::isOtherType(code_), "Not an OtherType");
+    ASSERT(camel::core::type::isOtherType(code_), "Not an OtherType");
     return OtherTypeRegistry::getTypeName(code_);
 }
 
@@ -48,3 +52,5 @@ Type **OtherType::copyParams(std::span<Type *const> params) {
         p[i] = params[i];
     return p;
 }
+
+} // namespace camel::core::type

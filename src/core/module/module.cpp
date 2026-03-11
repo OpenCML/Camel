@@ -13,15 +13,19 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/module/module.h"
-#include "camel/compile/gir.h"
 #include "camel/core/operator.h"
+#include "camel/core/type/resolver.h"
 
 #include <algorithm>
+
+namespace camel::core::module {
+
+using resolver_ptr_t = camel::core::type::resolver_ptr_t;
 
 namespace {
 
@@ -34,10 +38,10 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
         return std::nullopt;
     }
     const entity &first = entities.front();
-    if (std::holds_alternative<GraphIR::graph_vec_ptr_t>(first)) {
-        auto merged = std::make_shared<GraphIR::graph_vec_t>();
+    if (std::holds_alternative<GIR::graph_vec_ptr_t>(first)) {
+        auto merged = std::make_shared<GIR::graph_vec_t>();
         for (const auto &ent : entities) {
-            if (auto *pv = std::get_if<GraphIR::graph_vec_ptr_t>(&ent)) {
+            if (auto *pv = std::get_if<GIR::graph_vec_ptr_t>(&ent)) {
                 if (*pv) {
                     for (const auto &g : **pv) {
                         merged->push_back(g);
@@ -76,8 +80,17 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
 Module::Module(const std::string &name, const std::string &path, context_ptr_t ctx)
     : loaded_(false), name_(name), path_(path), context_(ctx),
       exportedTypeNS_(std::make_shared<Namespace<std::string, Type *>>()),
-      exportedEntityNS_(std::make_shared<Namespace<std::string, entity>>()), importedRefModMap_(),
-      importedEntityCache_() {}
+      exportedEntityNS_(std::make_shared<Namespace<std::string, entity>>()), defaultImportedRefs_(),
+      importedRefModMap_(), importedEntityCache_() {}
+
+void Module::importDefaultRefsFromMod(const module_ptr_t &mod) {
+    if (!mod->loaded()) {
+        mod->load();
+    }
+    for (const auto &ref : mod->defaultImportedRefs()) {
+        markImportedRefFromMod(ref, mod);
+    }
+}
 
 void Module::importAllRefsFromMod(const module_ptr_t &mod) {
     if (!mod->loaded()) {
@@ -116,6 +129,15 @@ void Module::markImportedRefFromMod(const Reference &ref, const module_ptr_t &mo
 bool Module::hasImportedRef(const Reference &ref) const {
     auto it = importedRefModMap_.find(ref);
     return it != importedRefModMap_.end() && !it->second.empty();
+}
+
+bool Module::exportDefaultImportRef(const Reference &ref) {
+    if (std::find(defaultImportedRefs_.begin(), defaultImportedRefs_.end(), ref) !=
+        defaultImportedRefs_.end()) {
+        return false;
+    }
+    defaultImportedRefs_.push_back(ref);
+    return true;
 }
 
 bool Module::exportType(const Reference &ref, Type *type) {
@@ -176,6 +198,8 @@ std::optional<entity> Module::getExportedEntity(const Reference &ref) const {
     return exportedEntityNS_->get(ref);
 };
 
+const std::vector<Reference> &Module::defaultImportedRefs() const { return defaultImportedRefs_; }
+
 type_ns_ptr_t Module::exportedTypeNS() const {
     ASSERT(loaded_, "Module not built: " + name_);
     return exportedTypeNS_;
@@ -185,3 +209,5 @@ entity_ns_ptr_t Module::exportedEntityNS() const {
     ASSERT(loaded_, "Module not built: " + name_);
     return exportedEntityNS_;
 }
+
+} // namespace camel::core::module

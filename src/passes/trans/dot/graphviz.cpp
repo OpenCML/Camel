@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,8 @@
 #include "camel/utils/type.h"
 
 using namespace std;
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::context;
 
 std::string escape(const std::string &input) {
     std::string result;
@@ -163,7 +164,7 @@ void GraphVizDumpPass::popIndent() {
     depth_--;
 }
 
-std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
+std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
     if (visitedGraphs_.find(graph) != visitedGraphs_.end()) {
         // Skip if the graph has already been visited to avoid duplication
         return string("");
@@ -456,7 +457,7 @@ std::string GraphVizDumpPass::dumpGraph(const GraphIR::graph_ptr_t &graph) {
 
 GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context) : GraphTranslatePass(context) {}
 
-graph_ptr_t GraphVizDumpPass::apply(GraphIR::graph_ptr_t &graph, std::ostream &os) {
+graph_ptr_t GraphVizDumpPass::apply(GIR::graph_ptr_t &graph, std::ostream &os) {
     os << dumpGraph(graph);
-    return GraphIR::Graph::null();
+    return GIR::Graph::null();
 }

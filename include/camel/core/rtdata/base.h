@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,21 +27,25 @@
 #include <cstring> // for std::memcpy
 #include <functional>
 
-// 前向声明
-class Type;
+namespace camel::core::rtdata {
 
 class Object {
   public:
-    virtual ~Object()                                                                   = default;
-    virtual bool equals(const Object *other, const Type *type, bool deep = false) const = 0;
-    virtual Object *clone(IAllocator &allocator, const Type *type, bool deep = false) const = 0;
-    virtual void print(std::ostream &os, const Type *type) const                            = 0;
-    virtual void onMoved()                                                                  = 0;
-    virtual void
-    updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) = 0;
+    virtual ~Object() = default;
+    virtual bool
+    equals(const Object *other, const camel::core::type::Type *type, bool deep = false) const = 0;
+    virtual Object *clone(
+        camel::core::mm::IAllocator &allocator, const camel::core::type::Type *type,
+        bool deep = false) const                                                    = 0;
+    virtual void print(std::ostream &os, const camel::core::type::Type *type) const = 0;
+    virtual void onMoved()                                                          = 0;
+    virtual void updateRefs(
+        const std::function<Object *(Object *)> &relocate, const camel::core::type::Type *type) = 0;
 
     template <typename T>
-    static T *clone(const T *obj, IAllocator &allocator, const Type *type, bool deep = false) {
+    static T *clone(
+        const T *obj, camel::core::mm::IAllocator &allocator, const camel::core::type::Type *type,
+        bool deep = false) {
         if (!obj) {
             return nullptr;
         }
@@ -75,6 +79,10 @@ template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b
 }
 
 constexpr Object *NullRef = nullptr;
+
+} // namespace camel::core::rtdata
+
+namespace camel::core::rtdata {
 
 template <typename T> constexpr slot_t toSlot(const T &value) noexcept {
     static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
@@ -128,7 +136,7 @@ using Bool    = bool;
 using Byte    = std::byte;
 
 /** 安全打印 slot，不访问 Object* 指针，用于 debug_trace 等可能读到未初始化值的场景 */
-inline void printSlotSafe(std::ostream &os, const slot_t data, Type *t) {
+inline void printSlotSafe(std::ostream &os, const slot_t data, camel::core::type::Type *t) {
     if (t->isGCTraced()) {
         if (data == NullSlot) {
             os << "null";
@@ -139,28 +147,28 @@ inline void printSlotSafe(std::ostream &os, const slot_t data, Type *t) {
     }
     // 非引用类型与 printSlot 一致
     switch (t->code()) {
-    case TypeCode::Int32:
+    case camel::core::type::TypeCode::Int32:
         os << fromSlot<Int32>(data);
         break;
-    case TypeCode::Int64:
+    case camel::core::type::TypeCode::Int64:
         os << fromSlot<Int64>(data);
         break;
-    case TypeCode::Float32:
+    case camel::core::type::TypeCode::Float32:
         os << fromSlot<Float32>(data);
         break;
-    case TypeCode::Float64:
+    case camel::core::type::TypeCode::Float64:
         os << fromSlot<Float64>(data);
         break;
-    case TypeCode::Bool:
+    case camel::core::type::TypeCode::Bool:
         os << (fromSlot<Bool>(data) ? "true" : "false");
         break;
-    case TypeCode::Byte:
+    case camel::core::type::TypeCode::Byte:
         os << "0x" << std::hex << static_cast<uint64_t>(data) << std::dec;
         break;
-    case TypeCode::Void:
+    case camel::core::type::TypeCode::Void:
         os << "null";
         break;
-    case TypeCode::Ref:
+    case camel::core::type::TypeCode::Ref:
         os << "ref";
         break;
     default:
@@ -169,45 +177,45 @@ inline void printSlotSafe(std::ostream &os, const slot_t data, Type *t) {
     }
 }
 
-inline void printSlot(std::ostream &os, const slot_t data, Type *t) {
+inline void printSlot(std::ostream &os, const slot_t data, camel::core::type::Type *t) {
     ASSERT(
         data != DeadSlot,
         std::format("Accessing uninitialized slot in printSlot: {}", t->toString()));
-    if (t->isOtherType()) {
-        os << "<" << t->toString() << ">";
-        return;
-    }
+    // GCTraced types (including OtherTypes like Tensor) hold Object*: use object->print.
+    // Check isGCTraced before isOtherType so Tensor/other Object-backed types print properly.
     if (t->isGCTraced()) {
         if (data == NullSlot) {
             os << "null";
             return;
         }
         reinterpret_cast<const Object *>(data)->print(os, t);
+    } else if (t->isOtherType()) {
+        os << "<" << t->toString() << ">";
     } else {
         // 非引用类型，根据 type code 输出
         switch (t->code()) {
-        case TypeCode::Int32:
+        case camel::core::type::TypeCode::Int32:
             os << fromSlot<Int32>(data);
             break;
-        case TypeCode::Int64:
+        case camel::core::type::TypeCode::Int64:
             os << fromSlot<Int64>(data);
             break;
-        case TypeCode::Float32:
+        case camel::core::type::TypeCode::Float32:
             os << fromSlot<Float32>(data);
             break;
-        case TypeCode::Float64:
+        case camel::core::type::TypeCode::Float64:
             os << fromSlot<Float64>(data);
             break;
-        case TypeCode::Bool:
+        case camel::core::type::TypeCode::Bool:
             os << (fromSlot<Bool>(data) ? "true" : "false");
             break;
-        case TypeCode::Byte:
+        case camel::core::type::TypeCode::Byte:
             os << "0x" << std::hex << static_cast<uint64_t>(data) << std::dec;
             break;
-        case TypeCode::Void:
+        case camel::core::type::TypeCode::Void:
             os << "null";
             break;
-        case TypeCode::Ref:
+        case camel::core::type::TypeCode::Ref:
             os << "ref";
             break;
         default:
@@ -216,3 +224,5 @@ inline void printSlot(std::ostream &os, const slot_t data, Type *t) {
         }
     }
 }
+
+} // namespace camel::core::rtdata

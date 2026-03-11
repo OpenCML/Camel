@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace GraphIR {
+namespace camel::compile::gir {
 
 // =============================================================================
 // 枚举与字符串转换声明
@@ -94,4 +94,4 @@ struct WeakPtrEqual {
     }
 };
 
-} // namespace GraphIR
+} // namespace camel::compile::gir

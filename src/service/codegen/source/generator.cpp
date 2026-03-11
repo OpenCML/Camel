@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 13, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "generator.h"
 #include <string>
 
-using namespace AbstractSyntaxTree;
+using namespace AST;
 using namespace std;
 using namespace ASTCodeGen;
 
@@ -53,13 +53,13 @@ const char *typeName(int t) {
     }
 }
 
-string Generator::generate(const AbstractSyntaxTree::node_ptr_t &ast) {
+string Generator::generate(const AST::node_ptr_t &ast) {
     if (!ast)
         return "";
     return generateNode(ast);
 }
 
-string Generator::generateNode(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateNode(const AST::node_ptr_t &node) {
     if (!node)
         return "";
 
@@ -111,7 +111,7 @@ string Generator::generateNode(const AbstractSyntaxTree::node_ptr_t &node) {
     }
 }
 
-string Generator::generateChildren(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateChildren(const AST::node_ptr_t &node) {
     if (!node)
         return "";
 
@@ -121,7 +121,7 @@ string Generator::generateChildren(const AbstractSyntaxTree::node_ptr_t &node) {
     for (size_t i = 0; i < node->size(); ++i) {
         auto child = node->at(i);
         if (child) {
-            auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+            auto childNode = static_pointer_cast<AST::Node>(child);
             // cout << "DEBUG: generateChildren processing child " << i << " with LoadType: " <<
             // static_cast<int>(childNode->load()->type()) << endl;
             string childCode = generateNode(childNode);
@@ -133,10 +133,10 @@ string Generator::generateChildren(const AbstractSyntaxTree::node_ptr_t &node) {
     return code;
 }
 
-string Generator::generateModuleLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateModuleLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto moduleLoad = dynamic_pointer_cast<AbstractSyntaxTree::ModuleLoad>(node->load());
+    auto moduleLoad = dynamic_pointer_cast<AST::ModuleLoad>(node->load());
     if (!moduleLoad)
         return "";
 
@@ -147,26 +147,26 @@ string Generator::generateModuleLoad(const AbstractSyntaxTree::node_ptr_t &node)
     return geneCode + ";\n" + generateChildren(node);
 }
 
-string Generator::generateImportLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateImportLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto importLoad = dynamic_pointer_cast<AbstractSyntaxTree::ImportLoad>(node->load());
+    auto importLoad = dynamic_pointer_cast<AST::ImportLoad>(node->load());
     if (!importLoad)
         return "";
     return importLoad->geneCode() + ";\n" + generateChildren(node);
 }
 
-string Generator::generateExportLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateExportLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto exportLoad = dynamic_pointer_cast<AbstractSyntaxTree::ExportLoad>(node->load());
+    auto exportLoad = dynamic_pointer_cast<AST::ExportLoad>(node->load());
     if (!exportLoad)
         return "";
     return exportLoad->geneCode() + ";\n" + generateChildren(node);
 }
 
-string Generator::generateDataDeclLoad(const AbstractSyntaxTree::node_ptr_t &node) {
-    auto dataDeclLoad = dynamic_pointer_cast<AbstractSyntaxTree::DataDeclLoad>(node->load());
+string Generator::generateDataDeclLoad(const AST::node_ptr_t &node) {
+    auto dataDeclLoad = dynamic_pointer_cast<AST::DataDeclLoad>(node->load());
     if (!dataDeclLoad)
         return "";
 
@@ -181,7 +181,7 @@ string Generator::generateDataDeclLoad(const AbstractSyntaxTree::node_ptr_t &nod
     if (node->size() > 0) {
         auto typeNode = node->at(0);
         if (typeNode) {
-            typeCode = generateNode(static_pointer_cast<AbstractSyntaxTree::Node>(typeNode));
+            typeCode = generateNode(static_pointer_cast<AST::Node>(typeNode));
             if (!typeCode.empty()) {
                 code += ": " + typeCode;
             }
@@ -192,7 +192,7 @@ string Generator::generateDataDeclLoad(const AbstractSyntaxTree::node_ptr_t &nod
     if (node->size() > 1) {
         auto valueNode = node->at(1);
         if (valueNode) {
-            valueCode = generateNode(static_pointer_cast<AbstractSyntaxTree::Node>(valueNode));
+            valueCode = generateNode(static_pointer_cast<AST::Node>(valueNode));
             if (!valueCode.empty()) {
                 code += " = " + valueCode;
             }
@@ -202,23 +202,23 @@ string Generator::generateDataDeclLoad(const AbstractSyntaxTree::node_ptr_t &nod
     return code;
 }
 
-string Generator::extractReturnType(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::extractReturnType(const AST::node_ptr_t &node) {
     if (!node)
         return "";
 
-    if (node->load()->type() == AbstractSyntaxTree::LoadType::Type) {
-        auto typeLoad = dynamic_pointer_cast<AbstractSyntaxTree::TypeLoad>(node->load());
+    if (node->load()->type() == AST::LoadType::Type) {
+        auto typeLoad = dynamic_pointer_cast<AST::TypeLoad>(node->load());
         if (typeLoad) {
             auto ttype = typeLoad->typeType();
 
-            if (ttype == AbstractSyntaxTree::TypeType::Func) {
+            if (ttype == AST::TypeType::Func) {
                 // cout << "[extractReturnType] FuncType has " << node->size() << " children" <<
                 // endl;
 
                 for (size_t i = 0; i < node->size(); ++i) {
                     auto child = node->at(i);
                     if (child) {
-                        auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+                        auto childNode = static_pointer_cast<AST::Node>(child);
                         // cout << "[extractReturnType] FuncType child " << i
                         //     << " type: " << int(childNode->load()->type()) << endl;
 
@@ -232,10 +232,8 @@ string Generator::extractReturnType(const AbstractSyntaxTree::node_ptr_t &node) 
                 return "";
             }
 
-            if (ttype == AbstractSyntaxTree::TypeType::Ref ||
-                ttype == AbstractSyntaxTree::TypeType::Data ||
-                ttype == AbstractSyntaxTree::TypeType::Unit ||
-                ttype == AbstractSyntaxTree::TypeType::Infer) {
+            if (ttype == AST::TypeType::Ref || ttype == AST::TypeType::Data ||
+                ttype == AST::TypeType::Unit || ttype == AST::TypeType::Infer) {
                 return generateNode(node);
             }
         }
@@ -244,7 +242,7 @@ string Generator::extractReturnType(const AbstractSyntaxTree::node_ptr_t &node) 
     for (size_t i = 0; i < node->size(); ++i) {
         auto child = node->at(i);
         if (child) {
-            auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+            auto childNode = static_pointer_cast<AST::Node>(child);
             string result  = extractReturnType(childNode);
             if (!result.empty())
                 return result;
@@ -254,29 +252,29 @@ string Generator::extractReturnType(const AbstractSyntaxTree::node_ptr_t &node) 
 }
 
 void Generator::collectParamsFromNode(
-    const AbstractSyntaxTree::node_ptr_t &node, vector<string> &params, Generator *gen) {
+    const AST::node_ptr_t &node, vector<string> &params, Generator *gen) {
     if (!node)
         return;
 
     // cout << "[collectParamsFromNode] node type: " << int(node->load()->type()) << " ("
     //     << typeName(int(node->load()->type())) << ")" << endl;
 
-    if (node->load()->type() == AbstractSyntaxTree::LoadType::Repeated ||
-        node->load()->type() == AbstractSyntaxTree::LoadType::Optional) {
+    if (node->load()->type() == AST::LoadType::Repeated ||
+        node->load()->type() == AST::LoadType::Optional) {
         // cout << "[collectParamsFromNode] found container node, checking " << node->size() << "
         // children..." << endl;
         for (size_t i = 0; i < node->size(); ++i) {
             auto child = node->at(i);
             if (child) {
-                auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+                auto childNode = static_pointer_cast<AST::Node>(child);
                 collectParamsFromNode(childNode, params, gen);
             }
         }
         return;
     }
 
-    if (node->load()->type() == AbstractSyntaxTree::LoadType::NamedPair) {
-        auto namedPairLoad = dynamic_pointer_cast<AbstractSyntaxTree::NamedPairLoad>(node->load());
+    if (node->load()->type() == AST::LoadType::NamedPair) {
+        auto namedPairLoad = dynamic_pointer_cast<AST::NamedPairLoad>(node->load());
         if (namedPairLoad) {
             string paramName = namedPairLoad->geneCode();
             string paramType = "";
@@ -284,7 +282,7 @@ void Generator::collectParamsFromNode(
             if (node->size() > 0) {
                 auto child = node->at(0);
                 if (child) {
-                    auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+                    auto childNode = static_pointer_cast<AST::Node>(child);
                     paramType      = gen->generateNode(childNode);
                 }
             }
@@ -300,14 +298,14 @@ void Generator::collectParamsFromNode(
         return;
     }
 
-    if (node->load()->type() == AbstractSyntaxTree::LoadType::NamedType) {
+    if (node->load()->type() == AST::LoadType::NamedType) {
         // cout << "[collectParamsFromNode] found NamedType node, checking " << node->size()   << "
         // children..." << endl;
 
         for (size_t i = 0; i < node->size(); ++i) {
             auto child = node->at(i);
             if (child) {
-                auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+                auto childNode = static_pointer_cast<AST::Node>(child);
                 collectParamsFromNode(childNode, params, gen);
             }
         }
@@ -319,28 +317,27 @@ void Generator::collectParamsFromNode(
     for (size_t i = 0; i < node->size(); ++i) {
         auto child = node->at(i);
         if (child) {
-            auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+            auto childNode = static_pointer_cast<AST::Node>(child);
             collectParamsFromNode(childNode, params, gen);
         }
     }
 }
 
-void Generator::collectParams(
-    const AbstractSyntaxTree::node_ptr_t &node, vector<string> &params, Generator *gen) {
+void Generator::collectParams(const AST::node_ptr_t &node, vector<string> &params, Generator *gen) {
     if (!node)
         return;
 
     // cout << "[collectParams] node type: " << int(node->load()->type()) << " ("   <<
     // typeName(int(node->load()->type())) << ")" << endl;
 
-    if (node->load()->type() == AbstractSyntaxTree::LoadType::Repeated ||
-        node->load()->type() == AbstractSyntaxTree::LoadType::Optional) {
+    if (node->load()->type() == AST::LoadType::Repeated ||
+        node->load()->type() == AST::LoadType::Optional) {
         // cout << "[collectParams] found container node, checking " << node->size() << "
         // children..." << endl;
         for (size_t i = 0; i < node->size(); ++i) {
             auto child = node->at(i);
             if (child) {
-                auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+                auto childNode = static_pointer_cast<AST::Node>(child);
                 //        cout << "[collectParams] container child " << i << " type: " <<
                 //        int(childNode->load()->type()) << " (" <<
                 //        typeName(int(childNode->load()->type())) << ")" << endl;
@@ -350,7 +347,7 @@ void Generator::collectParams(
         return;
     }
 
-    if (node->load()->type() == AbstractSyntaxTree::LoadType::NamedType) {
+    if (node->load()->type() == AST::LoadType::NamedType) {
         // cout << "[collectParams] found NamedType node, checking " << node->size() << "
         // children..."  << endl;
 
@@ -362,24 +359,23 @@ void Generator::collectParams(
             if (!child)
                 continue;
 
-            auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+            auto childNode = static_pointer_cast<AST::Node>(child);
             // cout << "[collectParams] NamedType child " << i
             //      << " type: " << int(childNode->load()->type()) << " ("
             //     << typeName(int(childNode->load()->type())) << ")" << endl;
 
-            if (childNode->load()->type() == AbstractSyntaxTree::LoadType::Type) {
+            if (childNode->load()->type() == AST::LoadType::Type) {
                 paramType = gen->generateNode(childNode);
                 //    cout << "[collectParams] Got paramType from Type child: " << paramType <<
                 //    endl;
-            } else if (childNode->load()->type() == AbstractSyntaxTree::LoadType::NamedPair) {
-                auto namedPairLoad =
-                    dynamic_pointer_cast<AbstractSyntaxTree::NamedPairLoad>(childNode->load());
+            } else if (childNode->load()->type() == AST::LoadType::NamedPair) {
+                auto namedPairLoad = dynamic_pointer_cast<AST::NamedPairLoad>(childNode->load());
                 if (namedPairLoad) {
                     paramName = namedPairLoad->geneCode();
                     //   cout << "[collectParams] Got paramName from NamedPair: " << paramName <<
                     //   endl;
                 }
-            } else if (childNode->load()->type() == AbstractSyntaxTree::LoadType::Repeated) {
+            } else if (childNode->load()->type() == AST::LoadType::Repeated) {
                 // cout << "[collectParams] Found Repeated node in NamedType, checking "
                 //      << childNode->size() << " children..." << endl;
                 // cout << "[collectParams] Repeated has " << childNode->size() << " children" <<
@@ -389,17 +385,14 @@ void Generator::collectParams(
                     if (!repeatedChild)
                         continue;
 
-                    auto repeatedChildNode =
-                        static_pointer_cast<AbstractSyntaxTree::Node>(repeatedChild);
+                    auto repeatedChildNode = static_pointer_cast<AST::Node>(repeatedChild);
                     //  cout << "[collectParams] Repeated child " << j
                     //       << " type: " << int(repeatedChildNode->load()->type()) << " ("
                     //       << typeName(int(repeatedChildNode->load()->type())) << ")" << endl;
 
-                    if (repeatedChildNode->load()->type() ==
-                        AbstractSyntaxTree::LoadType::NamedPair) {
+                    if (repeatedChildNode->load()->type() == AST::LoadType::NamedPair) {
                         auto namedPairLoad =
-                            dynamic_pointer_cast<AbstractSyntaxTree::NamedPairLoad>(
-                                repeatedChildNode->load());
+                            dynamic_pointer_cast<AST::NamedPairLoad>(repeatedChildNode->load());
                         if (namedPairLoad) {
                             paramName = namedPairLoad->geneCode();
                             //    cout << "[collectParams] Got paramName from NamedPair in Repeated:
@@ -409,7 +402,7 @@ void Generator::collectParams(
                     }
                 }
             } else if (node->size() == 1) {
-                auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+                auto childNode = static_pointer_cast<AST::Node>(child);
                 collectParams(childNode, params, gen);
             }
             return;
@@ -424,20 +417,20 @@ void Generator::collectParams(
             // cout << "[collectParams] Added parameter: " << paramStr << endl;
         }
 
-        if (node->load()->type() == AbstractSyntaxTree::LoadType::Type) {
-            auto typeLoad = dynamic_pointer_cast<AbstractSyntaxTree::TypeLoad>(node->load());
+        if (node->load()->type() == AST::LoadType::Type) {
+            auto typeLoad = dynamic_pointer_cast<AST::TypeLoad>(node->load());
             if (typeLoad) {
                 // cout << "[collectParams] found Type node, typeType: " <<
                 // int(typeLoad->typeType())
                 //      << endl;
 
-                if (typeLoad->typeType() == AbstractSyntaxTree::TypeType::Func) {
+                if (typeLoad->typeType() == AST::TypeType::Func) {
                     //   cout << "[collectParams] found FuncType, checking " << node->size()
                     //       << " children for parameters..." << endl;
                     for (size_t i = 0; i < node->size(); ++i) {
                         auto child = node->at(i);
                         if (child) {
-                            auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+                            auto childNode = static_pointer_cast<AST::Node>(child);
                             //   cout << "[collectParams] FuncType child " << i
                             //        << " type: " << int(childNode->load()->type()) << " ("
                             //        << typeName(int(childNode->load()->type())) << ")" << endl;
@@ -450,7 +443,7 @@ void Generator::collectParams(
                 for (size_t i = 0; i < node->size(); ++i) {
                     auto child = node->at(i);
                     if (child) {
-                        auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+                        auto childNode = static_pointer_cast<AST::Node>(child);
                         collectParams(childNode, params, gen);
                     }
                 }
@@ -464,17 +457,17 @@ void Generator::collectParams(
         for (size_t i = 0; i < node->size(); ++i) {
             auto child = node->at(i);
             if (child) {
-                auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+                auto childNode = static_pointer_cast<AST::Node>(child);
                 collectParams(childNode, params, gen);
             }
         }
     }
 }
 
-string Generator::generateFuncDeclLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateFuncDeclLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto funcDeclLoad = dynamic_pointer_cast<AbstractSyntaxTree::FuncDeclLoad>(node->load());
+    auto funcDeclLoad = dynamic_pointer_cast<AST::FuncDeclLoad>(node->load());
     if (!funcDeclLoad)
         return "";
 
@@ -489,24 +482,22 @@ string Generator::generateFuncDeclLoad(const AbstractSyntaxTree::node_ptr_t &nod
         auto child = node->at(i);
         if (!child)
             continue;
-        auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+        auto childNode = static_pointer_cast<AST::Node>(child);
 
-        if (childNode->load()->type() == AbstractSyntaxTree::LoadType::Data &&
-            dynamic_pointer_cast<AbstractSyntaxTree::FuncDataLoad>(childNode->load())) {
+        if (childNode->load()->type() == AST::LoadType::Data &&
+            dynamic_pointer_cast<AST::FuncDataLoad>(childNode->load())) {
 
             for (size_t j = 0; j < childNode->size(); ++j) {
                 auto funcDataChild = childNode->at(j);
                 if (!funcDataChild)
                     continue;
-                auto funcDataChildNode =
-                    static_pointer_cast<AbstractSyntaxTree::Node>(funcDataChild);
+                auto funcDataChildNode = static_pointer_cast<AST::Node>(funcDataChild);
 
-                if (funcDataChildNode->load()->type() == AbstractSyntaxTree::LoadType::Type &&
-                    dynamic_pointer_cast<AbstractSyntaxTree::FuncTypeLoad>(
-                        funcDataChildNode->load())) {
+                if (funcDataChildNode->load()->type() == AST::LoadType::Type &&
+                    dynamic_pointer_cast<AST::FuncTypeLoad>(funcDataChildNode->load())) {
 
-                    auto funcTypeLoad = dynamic_pointer_cast<AbstractSyntaxTree::FuncTypeLoad>(
-                        funcDataChildNode->load());
+                    auto funcTypeLoad =
+                        dynamic_pointer_cast<AST::FuncTypeLoad>(funcDataChildNode->load());
                     if (funcTypeLoad) {
                         const auto &modifiers = funcTypeLoad->modifiers();
                         isMacro               = modifiers.has(Modifier::Macro);
@@ -534,8 +525,7 @@ string Generator::generateFuncDeclLoad(const AbstractSyntaxTree::node_ptr_t &nod
                         auto funcTypeChild = funcDataChildNode->at(k);
                         if (!funcTypeChild)
                             continue;
-                        auto funcTypeChildNode =
-                            static_pointer_cast<AbstractSyntaxTree::Node>(funcTypeChild);
+                        auto funcTypeChildNode = static_pointer_cast<AST::Node>(funcTypeChild);
 
                         // cout << "[generateFuncDeclLoad] FuncType child " << k
                         //      << " type: " << int(funcTypeChildNode->load()->type()) << " ("
@@ -569,9 +559,8 @@ string Generator::generateFuncDeclLoad(const AbstractSyntaxTree::node_ptr_t &nod
                     }
 
                 } else if (
-                    funcDataChildNode->load()->type() == AbstractSyntaxTree::LoadType::Stmt &&
-                    dynamic_pointer_cast<AbstractSyntaxTree::StmtBlockLoad>(
-                        funcDataChildNode->load())) {
+                    funcDataChildNode->load()->type() == AST::LoadType::Stmt &&
+                    dynamic_pointer_cast<AST::StmtBlockLoad>(funcDataChildNode->load())) {
                     bodyCode = generateNode(funcDataChildNode);
                 }
             }
@@ -610,10 +599,10 @@ string Generator::generateFuncDeclLoad(const AbstractSyntaxTree::node_ptr_t &nod
     return code + "\n";
 }
 
-string Generator::generateFuncTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateFuncTypeLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto funcTypeLoad = dynamic_pointer_cast<AbstractSyntaxTree::FuncTypeLoad>(node->load());
+    auto funcTypeLoad = dynamic_pointer_cast<AST::FuncTypeLoad>(node->load());
     if (!funcTypeLoad)
         return "";
 
@@ -625,13 +614,13 @@ string Generator::generateFuncTypeLoad(const AbstractSyntaxTree::node_ptr_t &nod
 
         string paramsCode = "";
         if (paramsNode) {
-            auto paramsAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(paramsNode);
+            auto paramsAstNode = static_pointer_cast<AST::Node>(paramsNode);
             paramsCode         = generateNode(paramsAstNode);
         }
 
         string returnTypeCode = "";
         if (returnTypeNode) {
-            auto returnTypeAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(returnTypeNode);
+            auto returnTypeAstNode = static_pointer_cast<AST::Node>(returnTypeNode);
             returnTypeCode         = generateNode(returnTypeAstNode);
         }
 
@@ -647,7 +636,7 @@ string Generator::generateFuncTypeLoad(const AbstractSyntaxTree::node_ptr_t &nod
     } else if (node->size() == 1) {
         auto childNode = node->at(0);
         if (childNode) {
-            auto childAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(childNode);
+            auto childAstNode = static_pointer_cast<AST::Node>(childNode);
             string childCode  = generateNode(childAstNode);
             if (!childCode.empty()) {
                 if (childCode.find(',') != string::npos || childCode.find(':') != string::npos) {
@@ -664,10 +653,10 @@ string Generator::generateFuncTypeLoad(const AbstractSyntaxTree::node_ptr_t &nod
     return code;
 }
 
-string Generator::generateTypeDeclLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateTypeDeclLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto typeDeclLoad = dynamic_pointer_cast<AbstractSyntaxTree::TypeDeclLoad>(node->load());
+    auto typeDeclLoad = dynamic_pointer_cast<AST::TypeDeclLoad>(node->load());
     if (!typeDeclLoad)
         return "";
 
@@ -676,7 +665,7 @@ string Generator::generateTypeDeclLoad(const AbstractSyntaxTree::node_ptr_t &nod
     if (node->size() > 0) {
         auto firstChild = node->at(0);
         if (firstChild) {
-            auto firstChildNode = static_pointer_cast<AbstractSyntaxTree::Node>(firstChild);
+            auto firstChildNode = static_pointer_cast<AST::Node>(firstChild);
 
             if (code.find("inner") != string::npos) {
                 string typeExpr = generateNode(firstChildNode);
@@ -698,10 +687,10 @@ string Generator::generateTypeDeclLoad(const AbstractSyntaxTree::node_ptr_t &nod
     return code + ";\n";
 }
 
-string Generator::generateNameDeclLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateNameDeclLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto nameDeclLoad = dynamic_pointer_cast<AbstractSyntaxTree::NameDeclLoad>(node->load());
+    auto nameDeclLoad = dynamic_pointer_cast<AST::NameDeclLoad>(node->load());
     if (!nameDeclLoad)
         return "";
 
@@ -710,38 +699,38 @@ string Generator::generateNameDeclLoad(const AbstractSyntaxTree::node_ptr_t &nod
     return code + ";\n";
 }
 
-string Generator::generateStmtLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateStmtLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
 
-    auto stmtLoad = dynamic_pointer_cast<AbstractSyntaxTree::StmtLoad>(node->load());
+    auto stmtLoad = dynamic_pointer_cast<AST::StmtLoad>(node->load());
     if (!stmtLoad)
         return "";
 
     switch (stmtLoad->stmtType()) {
-    case AbstractSyntaxTree::StmtType::Data:
+    case AST::StmtType::Data:
         return generateDataDeclLoad(node);
-    case AbstractSyntaxTree::StmtType::Func:
+    case AST::StmtType::Func:
         return generateFuncDeclLoad(node);
-    case AbstractSyntaxTree::StmtType::Type:
+    case AST::StmtType::Type:
         return generateTypeDeclLoad(node);
-    case AbstractSyntaxTree::StmtType::Name:
+    case AST::StmtType::Name:
         return generateNameDeclLoad(node);
-    case AbstractSyntaxTree::StmtType::Expr:
+    case AST::StmtType::Expr:
         return generateExprStmtLoad(node);
-    case AbstractSyntaxTree::StmtType::Exit:
+    case AST::StmtType::Exit:
         return generateExitStmtLoad(node);
-    case AbstractSyntaxTree::StmtType::Block:
+    case AST::StmtType::Block:
         return generateStmtBlockLoad(node);
     default:
         return generateChildren(node);
     }
 }
 
-string Generator::generateExitStmtLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateExitStmtLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto exitStmtLoad = dynamic_pointer_cast<AbstractSyntaxTree::ExitStmtLoad>(node->load());
+    auto exitStmtLoad = dynamic_pointer_cast<AST::ExitStmtLoad>(node->load());
     if (!exitStmtLoad)
         return "";
 
@@ -753,10 +742,10 @@ string Generator::generateExitStmtLoad(const AbstractSyntaxTree::node_ptr_t &nod
     return code + ";\n";
 }
 
-string Generator::generateExprStmtLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateExprStmtLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto exprStmtLoad = dynamic_pointer_cast<AbstractSyntaxTree::ExprStmtLoad>(node->load());
+    auto exprStmtLoad = dynamic_pointer_cast<AST::ExprStmtLoad>(node->load());
     if (!exprStmtLoad)
         return "";
 
@@ -770,10 +759,10 @@ string Generator::generateExprStmtLoad(const AbstractSyntaxTree::node_ptr_t &nod
     return code;
 }
 
-string Generator::generateStmtBlockLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateStmtBlockLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto stmtBlockLoad = dynamic_pointer_cast<AbstractSyntaxTree::StmtBlockLoad>(node->load());
+    auto stmtBlockLoad = dynamic_pointer_cast<AST::StmtBlockLoad>(node->load());
     if (!stmtBlockLoad)
         return "";
 
@@ -800,10 +789,10 @@ string Generator::generateStmtBlockLoad(const AbstractSyntaxTree::node_ptr_t &no
     return code;
 }
 
-string Generator::generateDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateDataLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto dataLoad = dynamic_pointer_cast<AbstractSyntaxTree::DataLoad>(node->load());
+    auto dataLoad = dynamic_pointer_cast<AST::DataLoad>(node->load());
     if (!dataLoad)
         return "";
 
@@ -812,41 +801,41 @@ string Generator::generateDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
 
     string result;
     switch (dataLoad->dataType()) {
-    case AbstractSyntaxTree::DataType::UnaryExpr:
+    case AST::DataType::UnaryExpr:
         result = generateUnaryExprLoad(node);
         break;
-    case AbstractSyntaxTree::DataType::BinaryExpr:
+    case AST::DataType::BinaryExpr:
         result = generateBinaryExprLoad(node);
         break;
-    case AbstractSyntaxTree::DataType::ReservedExpr:
+    case AST::DataType::ReservedExpr:
         result = generateReservedExprLoad(node);
         break;
-    case AbstractSyntaxTree::DataType::IfExpr:
+    case AST::DataType::IfExpr:
         result = generateIfExprLoad(node);
         break;
-    case AbstractSyntaxTree::DataType::MatchExpr:
+    case AST::DataType::MatchExpr:
         result = generateMatchExprLoad(node);
         break;
-    case AbstractSyntaxTree::DataType::TryExpr:
+    case AST::DataType::TryExpr:
         result = generateTryExprLoad(node);
         break;
-    case AbstractSyntaxTree::DataType::Literal:
+    case AST::DataType::Literal:
         result = generateLiteralLoad(node);
         break;
-    case AbstractSyntaxTree::DataType::Array:
+    case AST::DataType::Array:
         // cout << "[generateDataLoad] calling generateListDataLoad for Array data type" << endl;
         result = generateListDataLoad(node);
         break;
-    case AbstractSyntaxTree::DataType::Struct:
+    case AST::DataType::Struct:
         result = generateDictDataLoad(node);
         break;
-    case AbstractSyntaxTree::DataType::Tuple:
+    case AST::DataType::Tuple:
         result = generateTupleDataLoad(node);
         break;
-    case AbstractSyntaxTree::DataType::Func:
+    case AST::DataType::Func:
         result = generateFuncDataLoad(node);
         break;
-    case AbstractSyntaxTree::DataType::Ref:
+    case AST::DataType::Ref:
         result = generateRefDataLoad(node);
         break;
     default:
@@ -861,10 +850,10 @@ string Generator::generateDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     return result;
 }
 
-string Generator::generateUnaryExprLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateUnaryExprLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto unaryExprLoad = dynamic_pointer_cast<AbstractSyntaxTree::UnaryExprLoad>(node->load());
+    auto unaryExprLoad = dynamic_pointer_cast<AST::UnaryExprLoad>(node->load());
     if (!unaryExprLoad)
         return "";
 
@@ -873,10 +862,10 @@ string Generator::generateUnaryExprLoad(const AbstractSyntaxTree::node_ptr_t &no
     return code;
 }
 
-string Generator::generateBinaryExprLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateBinaryExprLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto binaryExprLoad = dynamic_pointer_cast<AbstractSyntaxTree::BinaryExprLoad>(node->load());
+    auto binaryExprLoad = dynamic_pointer_cast<AST::BinaryExprLoad>(node->load());
     if (!binaryExprLoad)
         return "";
 
@@ -886,13 +875,13 @@ string Generator::generateBinaryExprLoad(const AbstractSyntaxTree::node_ptr_t &n
         auto rightChild = node->at(1);
 
         if (leftChild && rightChild) {
-            auto leftNode  = static_pointer_cast<AbstractSyntaxTree::Node>(leftChild);
-            auto rightNode = static_pointer_cast<AbstractSyntaxTree::Node>(rightChild);
+            auto leftNode  = static_pointer_cast<AST::Node>(leftChild);
+            auto rightNode = static_pointer_cast<AST::Node>(rightChild);
 
             string leftCode  = generateNode(leftNode);
             string rightCode = generateNode(rightNode);
 
-            if (binaryExprLoad->op() == AbstractSyntaxTree::BinaryDataOp::Index) {
+            if (binaryExprLoad->op() == AST::BinaryDataOp::Index) {
                 return "(" + leftCode + ")[" + rightCode + "]";
             }
 
@@ -904,23 +893,22 @@ string Generator::generateBinaryExprLoad(const AbstractSyntaxTree::node_ptr_t &n
     return code;
 }
 
-string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateReservedExprLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto reservedExprLoad =
-        dynamic_pointer_cast<AbstractSyntaxTree::ReservedExprLoad>(node->load());
+    auto reservedExprLoad = dynamic_pointer_cast<AST::ReservedExprLoad>(node->load());
     if (!reservedExprLoad)
         return "";
 
     switch (reservedExprLoad->op()) {
-    case AbstractSyntaxTree::ReservedDataOp::Access: {
+    case AST::ReservedDataOp::Access: {
         if (node->size() >= 2) {
             auto targetNode = node->at(0);
             auto indexNode  = node->at(1);
 
             if (targetNode && indexNode) {
-                auto targetAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(targetNode);
-                auto indexAstNode  = static_pointer_cast<AbstractSyntaxTree::Node>(indexNode);
+                auto targetAstNode = static_pointer_cast<AST::Node>(targetNode);
+                auto indexAstNode  = static_pointer_cast<AST::Node>(indexNode);
 
                 string targetCode = generateNode(targetAstNode);
                 string indexCode  = generateNode(indexAstNode);
@@ -930,15 +918,15 @@ string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t 
         }
         return "";
     }
-    case AbstractSyntaxTree::ReservedDataOp::Call: {
+    case AST::ReservedDataOp::Call: {
         string code = "";
         if (node->size() >= 2) {
             auto targetNode = node->at(0);
             auto argsNode   = node->at(1);
 
             if (targetNode && argsNode) {
-                auto targetAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(targetNode);
-                auto argsAstNode   = static_pointer_cast<AbstractSyntaxTree::Node>(argsNode);
+                auto targetAstNode = static_pointer_cast<AST::Node>(targetNode);
+                auto argsAstNode   = static_pointer_cast<AST::Node>(argsNode);
 
                 string targetCode = generateNode(targetAstNode);
                 string normalArgs = "";
@@ -946,7 +934,7 @@ string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t 
                 for (size_t i = 0; i < argsAstNode->size(); ++i) {
                     auto argNode = argsAstNode->at(i);
                     if (argNode) {
-                        auto argAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(argNode);
+                        auto argAstNode = static_pointer_cast<AST::Node>(argNode);
                         if (!normalArgs.empty()) {
                             normalArgs += ", ";
                         }
@@ -959,9 +947,8 @@ string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t 
                 if (argsAstNode->size() > 0) {
                     auto firstArgNode = argsAstNode->at(0);
                     if (firstArgNode) {
-                        auto firstArgAstNode =
-                            static_pointer_cast<AbstractSyntaxTree::Node>(firstArgNode);
-                        string firstArgCode = generateNode(firstArgAstNode);
+                        auto firstArgAstNode = static_pointer_cast<AST::Node>(firstArgNode);
+                        string firstArgCode  = generateNode(firstArgAstNode);
                         // std::cout << "[ReservedDataOp::Call] first arg: '" << firstArgCode << "'"
                         //          << std::endl;
                     }
@@ -971,9 +958,8 @@ string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t 
                     targetCode.find(">") != string::npos) {
                     auto firstArgNode = argsAstNode->at(0);
                     if (firstArgNode) {
-                        auto firstArgAstNode =
-                            static_pointer_cast<AbstractSyntaxTree::Node>(firstArgNode);
-                        string firstArgCode = generateNode(firstArgAstNode);
+                        auto firstArgAstNode = static_pointer_cast<AST::Node>(firstArgNode);
+                        string firstArgCode  = generateNode(firstArgAstNode);
 
                         // std::cout << "[ReservedDataOp::Call] Detected pipeline operation: "
                         //           << firstArgCode << "->" << targetCode << std::endl;
@@ -986,8 +972,8 @@ string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t 
                     auto funcNode = argsAstNode->at(1);
 
                     if (arrNode && funcNode) {
-                        auto arrAstNode  = static_pointer_cast<AbstractSyntaxTree::Node>(arrNode);
-                        auto funcAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(funcNode);
+                        auto arrAstNode  = static_pointer_cast<AST::Node>(arrNode);
+                        auto funcAstNode = static_pointer_cast<AST::Node>(funcNode);
 
                         string arrCode  = generateNode(arrAstNode);
                         string funcCode = generateNode(funcAstNode);
@@ -999,7 +985,7 @@ string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t 
                 if (targetCode.find(".map") != string::npos && argsAstNode->size() >= 1) {
                     auto funcNode = argsAstNode->at(0);
                     if (funcNode) {
-                        auto funcAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(funcNode);
+                        auto funcAstNode = static_pointer_cast<AST::Node>(funcNode);
                         string funcCode  = generateNode(funcAstNode);
 
                         return targetCode + "(" + funcCode + ")";
@@ -1011,14 +997,14 @@ string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t 
         }
         return "";
     }
-    case AbstractSyntaxTree::ReservedDataOp::Bind: {
+    case AST::ReservedDataOp::Bind: {
         if (node->size() >= 2) {
             auto targetNode = node->at(0);
             auto argsNode   = node->at(1);
 
             if (targetNode && argsNode) {
-                auto targetAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(targetNode);
-                auto argsAstNode   = static_pointer_cast<AbstractSyntaxTree::Node>(argsNode);
+                auto targetAstNode = static_pointer_cast<AST::Node>(targetNode);
+                auto argsAstNode   = static_pointer_cast<AST::Node>(argsNode);
 
                 string targetCode = generateNode(targetAstNode);
                 string withParams = "";
@@ -1026,7 +1012,7 @@ string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t 
                 for (size_t i = 0; i < argsAstNode->size(); ++i) {
                     auto argNode = argsAstNode->at(i);
                     if (argNode) {
-                        auto argAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(argNode);
+                        auto argAstNode = static_pointer_cast<AST::Node>(argNode);
                         if (!withParams.empty()) {
                             withParams += ", ";
                         }
@@ -1040,7 +1026,7 @@ string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t 
                 if (targetCode == "map" && argsAstNode->size() == 1) {
 
                     auto arrNode    = argsAstNode->at(0);
-                    auto arrAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(arrNode);
+                    auto arrAstNode = static_pointer_cast<AST::Node>(arrNode);
                     string arrCode  = generateNode(arrAstNode);
 
                     // std::cout << "[ReservedDataOp::With] Generating base method call: " <<
@@ -1056,14 +1042,14 @@ string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t 
         }
         return "";
     }
-    case AbstractSyntaxTree::ReservedDataOp::Comp: {
+    case AST::ReservedDataOp::Comp: {
         if (node->size() >= 2) {
             auto leftNode  = node->at(0);
             auto rightNode = node->at(1);
 
             if (leftNode && rightNode) {
-                auto leftAstNode  = static_pointer_cast<AbstractSyntaxTree::Node>(leftNode);
-                auto rightAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(rightNode);
+                auto leftAstNode  = static_pointer_cast<AST::Node>(leftNode);
+                auto rightAstNode = static_pointer_cast<AST::Node>(rightNode);
 
                 string leftCode  = generateNode(leftAstNode);
                 string rightCode = generateNode(rightAstNode);
@@ -1073,14 +1059,14 @@ string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t 
         }
         return "";
     }
-    case AbstractSyntaxTree::ReservedDataOp::NullThen: {
+    case AST::ReservedDataOp::NullThen: {
         if (node->size() >= 2) {
             auto leftNode  = node->at(0);
             auto rightNode = node->at(1);
 
             if (leftNode && rightNode) {
-                auto leftAstNode  = static_pointer_cast<AbstractSyntaxTree::Node>(leftNode);
-                auto rightAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(rightNode);
+                auto leftAstNode  = static_pointer_cast<AST::Node>(leftNode);
+                auto rightAstNode = static_pointer_cast<AST::Node>(rightNode);
 
                 string leftCode  = generateNode(leftAstNode);
                 string rightCode = generateNode(rightAstNode);
@@ -1095,10 +1081,10 @@ string Generator::generateReservedExprLoad(const AbstractSyntaxTree::node_ptr_t 
     }
 }
 
-string Generator::generateIfExprLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateIfExprLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto ifExprLoad = dynamic_pointer_cast<AbstractSyntaxTree::IfExprLoad>(node->load());
+    auto ifExprLoad = dynamic_pointer_cast<AST::IfExprLoad>(node->load());
     if (!ifExprLoad)
         return "";
 
@@ -1107,14 +1093,14 @@ string Generator::generateIfExprLoad(const AbstractSyntaxTree::node_ptr_t &node)
     if (node->size() >= 2) {
         auto conditionNode = node->at(0);
         if (conditionNode) {
-            auto conditionAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(conditionNode);
+            auto conditionAstNode = static_pointer_cast<AST::Node>(conditionNode);
             code += " " + generateNode(conditionAstNode);
         }
 
         code += " then";
         auto thenNode = node->at(1);
         if (thenNode) {
-            auto thenAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(thenNode);
+            auto thenAstNode = static_pointer_cast<AST::Node>(thenNode);
             string thenCode  = generateNode(thenAstNode);
             if (!thenCode.empty() && thenCode[0] != ' ' && thenCode[0] != '\n') {
                 code += " " + thenCode;
@@ -1126,7 +1112,7 @@ string Generator::generateIfExprLoad(const AbstractSyntaxTree::node_ptr_t &node)
         if (node->size() >= 3) {
             auto elseNode = node->at(2);
             if (elseNode) {
-                auto elseAstNode = static_pointer_cast<AbstractSyntaxTree::Node>(elseNode);
+                auto elseAstNode = static_pointer_cast<AST::Node>(elseNode);
                 code += " else";
                 string elseCode = generateNode(elseAstNode);
                 if (!elseCode.empty() && elseCode[0] != ' ' && elseCode[0] != '\n') {
@@ -1143,10 +1129,10 @@ string Generator::generateIfExprLoad(const AbstractSyntaxTree::node_ptr_t &node)
     return code;
 }
 
-string Generator::generateMatchExprLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateMatchExprLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto matchExprLoad = dynamic_pointer_cast<AbstractSyntaxTree::MatchExprLoad>(node->load());
+    auto matchExprLoad = dynamic_pointer_cast<AST::MatchExprLoad>(node->load());
     if (!matchExprLoad)
         return "";
 
@@ -1156,10 +1142,10 @@ string Generator::generateMatchExprLoad(const AbstractSyntaxTree::node_ptr_t &no
     return code;
 }
 
-string Generator::generateTryExprLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateTryExprLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto tryExprLoad = dynamic_pointer_cast<AbstractSyntaxTree::TryExprLoad>(node->load());
+    auto tryExprLoad = dynamic_pointer_cast<AST::TryExprLoad>(node->load());
     if (!tryExprLoad)
         return "";
 
@@ -1169,10 +1155,10 @@ string Generator::generateTryExprLoad(const AbstractSyntaxTree::node_ptr_t &node
     return code;
 }
 
-string Generator::generateLiteralLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateLiteralLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto literalLoad = dynamic_pointer_cast<AbstractSyntaxTree::LiteralLoad>(node->load());
+    auto literalLoad = dynamic_pointer_cast<AST::LiteralLoad>(node->load());
     if (!literalLoad)
         return "";
 
@@ -1184,10 +1170,10 @@ string Generator::generateLiteralLoad(const AbstractSyntaxTree::node_ptr_t &node
     return literalLoad->geneCode();
 }
 
-string Generator::generateListDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateListDataLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto listDataLoad = dynamic_pointer_cast<AbstractSyntaxTree::ArrayDataLoad>(node->load());
+    auto listDataLoad = dynamic_pointer_cast<AST::ArrayDataLoad>(node->load());
     if (!listDataLoad)
         return "";
 
@@ -1198,7 +1184,7 @@ string Generator::generateListDataLoad(const AbstractSyntaxTree::node_ptr_t &nod
     if (node->size() == 1) {
         auto child = node->at(0);
         if (child) {
-            auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+            auto childNode = static_pointer_cast<AST::Node>(child);
             // cout << "[generateListDataLoad] single child type: " <<
             // int(childNode->load()->type())
             //      << endl;
@@ -1210,8 +1196,7 @@ string Generator::generateListDataLoad(const AbstractSyntaxTree::node_ptr_t &nod
                 for (size_t i = 0; i < childNode->size(); ++i) {
                     auto grandchild = childNode->at(i);
                     if (grandchild) {
-                        auto grandchildNode =
-                            static_pointer_cast<AbstractSyntaxTree::Node>(grandchild);
+                        auto grandchildNode   = static_pointer_cast<AST::Node>(grandchild);
                         string grandchildCode = generateNode(grandchildNode);
                         // cout << "[generateListDataLoad] grandchild " << i << ": " <<
                         // grandchildCode
@@ -1234,7 +1219,7 @@ string Generator::generateListDataLoad(const AbstractSyntaxTree::node_ptr_t &nod
         for (size_t i = 0; i < node->size(); ++i) {
             auto child = node->at(i);
             if (child) {
-                auto childNode   = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+                auto childNode   = static_pointer_cast<AST::Node>(child);
                 string childCode = generateNode(childNode);
                 // cout << "[generateListDataLoad] child " << i << ": " << childCode << endl;
                 if (!childCode.empty()) {
@@ -1252,10 +1237,10 @@ string Generator::generateListDataLoad(const AbstractSyntaxTree::node_ptr_t &nod
     return code;
 }
 
-string Generator::generateDictDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateDictDataLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto dictDataLoad = dynamic_pointer_cast<AbstractSyntaxTree::StructDataLoad>(node->load());
+    auto dictDataLoad = dynamic_pointer_cast<AST::StructDataLoad>(node->load());
     if (!dictDataLoad)
         return "";
 
@@ -1264,7 +1249,7 @@ string Generator::generateDictDataLoad(const AbstractSyntaxTree::node_ptr_t &nod
     for (size_t i = 0; i < node->size(); ++i) {
         auto child = node->at(i);
         if (child) {
-            auto childNode   = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+            auto childNode   = static_pointer_cast<AST::Node>(child);
             string childCode = generateNode(childNode);
             if (!childCode.empty()) {
                 if (i > 0) {
@@ -1279,10 +1264,10 @@ string Generator::generateDictDataLoad(const AbstractSyntaxTree::node_ptr_t &nod
     return code;
 }
 
-string Generator::generateTupleDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateTupleDataLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto tupleDataLoad = dynamic_pointer_cast<AbstractSyntaxTree::TupleDataLoad>(node->load());
+    auto tupleDataLoad = dynamic_pointer_cast<AST::TupleDataLoad>(node->load());
     if (!tupleDataLoad)
         return "";
 
@@ -1291,7 +1276,7 @@ string Generator::generateTupleDataLoad(const AbstractSyntaxTree::node_ptr_t &no
     for (size_t i = 0; i < node->size(); ++i) {
         auto child = node->at(i);
         if (child) {
-            auto childNode   = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+            auto childNode   = static_pointer_cast<AST::Node>(child);
             string childCode = generateNode(childNode);
             if (!childCode.empty()) {
                 if (i > 0) {
@@ -1306,51 +1291,50 @@ string Generator::generateTupleDataLoad(const AbstractSyntaxTree::node_ptr_t &no
     return code;
 }
 
-string Generator::generateUnitTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateUnitTypeLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto unitTypeLoad = dynamic_pointer_cast<AbstractSyntaxTree::UnitTypeLoad>(node->load());
+    auto unitTypeLoad = dynamic_pointer_cast<AST::UnitTypeLoad>(node->load());
     if (!unitTypeLoad)
         return "";
 
     return unitTypeLoad->geneCode();
 }
 
-string Generator::generateInferTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateInferTypeLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto inferTypeLoad = dynamic_pointer_cast<AbstractSyntaxTree::InferTypeLoad>(node->load());
+    auto inferTypeLoad = dynamic_pointer_cast<AST::InferTypeLoad>(node->load());
     if (!inferTypeLoad)
         return "";
 
     return inferTypeLoad->geneCode();
 }
 
-string Generator::generateDataTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateDataTypeLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto dataTypeLoad = dynamic_pointer_cast<AbstractSyntaxTree::DataTypeLoad>(node->load());
+    auto dataTypeLoad = dynamic_pointer_cast<AST::DataTypeLoad>(node->load());
     if (!dataTypeLoad)
         return "";
 
     return dataTypeLoad->geneCode();
 }
 
-string Generator::generateRefTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateRefTypeLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto refTypeLoad = dynamic_pointer_cast<AbstractSyntaxTree::RefTypeLoad>(node->load());
+    auto refTypeLoad = dynamic_pointer_cast<AST::RefTypeLoad>(node->load());
     if (!refTypeLoad)
         return "";
 
     return refTypeLoad->geneCode();
 }
 
-string Generator::generateNullableTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateNullableTypeLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto nullableTypeLoad =
-        dynamic_pointer_cast<AbstractSyntaxTree::NullableTypeLoad>(node->load());
+    auto nullableTypeLoad = dynamic_pointer_cast<AST::NullableTypeLoad>(node->load());
     if (!nullableTypeLoad)
         return "";
 
@@ -1358,7 +1342,7 @@ string Generator::generateNullableTypeLoad(const AbstractSyntaxTree::node_ptr_t 
     if (node->size() > 0) {
         auto child = node->at(0);
         if (child) {
-            auto childNode = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+            auto childNode = static_pointer_cast<AST::Node>(child);
             baseType       = generateNode(childNode);
         }
     }
@@ -1370,10 +1354,10 @@ string Generator::generateNullableTypeLoad(const AbstractSyntaxTree::node_ptr_t 
     return "?";
 }
 
-string Generator::generateNamedDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateNamedDataLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto namedDataLoad = dynamic_pointer_cast<AbstractSyntaxTree::NamedDataLoad>(node->load());
+    auto namedDataLoad = dynamic_pointer_cast<AST::NamedDataLoad>(node->load());
     if (!namedDataLoad)
         return "";
 
@@ -1382,10 +1366,10 @@ string Generator::generateNamedDataLoad(const AbstractSyntaxTree::node_ptr_t &no
     return code;
 }
 
-string Generator::generateNamedTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateNamedTypeLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto namedTypeLoad = dynamic_pointer_cast<AbstractSyntaxTree::NamedTypeLoad>(node->load());
+    auto namedTypeLoad = dynamic_pointer_cast<AST::NamedTypeLoad>(node->load());
     if (!namedTypeLoad)
         return "";
 
@@ -1394,10 +1378,10 @@ string Generator::generateNamedTypeLoad(const AbstractSyntaxTree::node_ptr_t &no
     return code;
 }
 
-string Generator::generateNamedPairLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateNamedPairLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto namedPairLoad = dynamic_pointer_cast<AbstractSyntaxTree::NamedPairLoad>(node->load());
+    auto namedPairLoad = dynamic_pointer_cast<AST::NamedPairLoad>(node->load());
     if (!namedPairLoad)
         return "";
 
@@ -1417,10 +1401,10 @@ string Generator::generateNamedPairLoad(const AbstractSyntaxTree::node_ptr_t &no
     return code;
 }
 
-string Generator::generateParamDeclLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateParamDeclLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto paramDeclLoad = dynamic_pointer_cast<AbstractSyntaxTree::ParamDeclLoad>(node->load());
+    auto paramDeclLoad = dynamic_pointer_cast<AST::ParamDeclLoad>(node->load());
     if (!paramDeclLoad)
         return "";
 
@@ -1429,10 +1413,10 @@ string Generator::generateParamDeclLoad(const AbstractSyntaxTree::node_ptr_t &no
     return code;
 }
 
-string Generator::generateParamDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateParamDataLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto paramDataLoad = dynamic_pointer_cast<AbstractSyntaxTree::ParamDataLoad>(node->load());
+    auto paramDataLoad = dynamic_pointer_cast<AST::ParamDataLoad>(node->load());
     if (!paramDataLoad)
         return "";
 
@@ -1441,10 +1425,10 @@ string Generator::generateParamDataLoad(const AbstractSyntaxTree::node_ptr_t &no
     return code;
 }
 
-string Generator::generateTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateTypeLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto typeLoad = dynamic_pointer_cast<AbstractSyntaxTree::TypeLoad>(node->load());
+    auto typeLoad = dynamic_pointer_cast<AST::TypeLoad>(node->load());
     if (!typeLoad)
         return "";
 
@@ -1456,8 +1440,8 @@ string Generator::generateTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     string baseType = typeLoad->geneCode();
 
     if (node->size() > 0) {
-        if (typeLoad->typeType() == AbstractSyntaxTree::TypeType::Array) {
-            auto arrayTypeLoad = dynamic_pointer_cast<AbstractSyntaxTree::ArrayTypeLoad>(typeLoad);
+        if (typeLoad->typeType() == AST::TypeType::Array) {
+            auto arrayTypeLoad = dynamic_pointer_cast<AST::ArrayTypeLoad>(typeLoad);
             if (arrayTypeLoad) {
                 size_t dims        = arrayTypeLoad->dims();
                 string arraySuffix = "";
@@ -1468,14 +1452,14 @@ string Generator::generateTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
                 if (node->size() > 0) {
                     auto child = node->at(0);
                     if (child) {
-                        auto childNode     = static_pointer_cast<AbstractSyntaxTree::Node>(child);
+                        auto childNode     = static_pointer_cast<AST::Node>(child);
                         string elementType = generateNode(childNode);
                         return elementType + arraySuffix;
                     }
                 }
                 return "int" + arraySuffix;
             }
-        } else if (typeLoad->typeType() == AbstractSyntaxTree::TypeType::Func) {
+        } else if (typeLoad->typeType() == AST::TypeType::Func) {
             // cout << "[generateTypeLoad] FuncType processing, node has " << node->size()
             //      << " children" << endl;
 
@@ -1485,8 +1469,7 @@ string Generator::generateTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
             if (node->size() >= 2) {
                 auto normParamsNode = node->at(1);
                 if (normParamsNode) {
-                    auto normParamsAstNode =
-                        static_pointer_cast<AbstractSyntaxTree::Node>(normParamsNode);
+                    auto normParamsAstNode = static_pointer_cast<AST::Node>(normParamsNode);
                     if (normParamsAstNode->size() > 0) {
                         paramsCode = generateChildren(normParamsAstNode);
                         // cout << "[generateTypeLoad] normParamsCode: " << paramsCode << endl;
@@ -1497,9 +1480,8 @@ string Generator::generateTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
             if (node->size() >= 3) {
                 auto returnTypeNode = node->at(2);
                 if (returnTypeNode) {
-                    auto returnTypeAstNode =
-                        static_pointer_cast<AbstractSyntaxTree::Node>(returnTypeNode);
-                    returnTypeCode = generateNode(returnTypeAstNode);
+                    auto returnTypeAstNode = static_pointer_cast<AST::Node>(returnTypeNode);
+                    returnTypeCode         = generateNode(returnTypeAstNode);
                     // cout << "[generateTypeLoad] returnTypeCode: " << returnTypeCode << endl;
                 }
             }
@@ -1531,10 +1513,10 @@ string Generator::generateTypeLoad(const AbstractSyntaxTree::node_ptr_t &node) {
     return baseType;
 }
 
-string Generator::generateFuncDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateFuncDataLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto funcDataLoad = dynamic_pointer_cast<AbstractSyntaxTree::FuncDataLoad>(node->load());
+    auto funcDataLoad = dynamic_pointer_cast<AST::FuncDataLoad>(node->load());
     if (!funcDataLoad)
         return "";
 
@@ -1543,10 +1525,10 @@ string Generator::generateFuncDataLoad(const AbstractSyntaxTree::node_ptr_t &nod
     return code;
 }
 
-string Generator::generateRefDataLoad(const AbstractSyntaxTree::node_ptr_t &node) {
+string Generator::generateRefDataLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
-    auto refDataLoad = dynamic_pointer_cast<AbstractSyntaxTree::RefDataLoad>(node->load());
+    auto refDataLoad = dynamic_pointer_cast<AST::RefDataLoad>(node->load());
     if (!refDataLoad)
         return "";
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,12 +21,15 @@
 #include "camel/core/data/null.h"
 
 using namespace std;
+using namespace camel::core::type;
+
+namespace camel::core::data {
 
 Data::Data() {};
 
-Data::Data(Type *type) : type_(type) {}
+Data::Data(type::Type *type) : type_(type) {}
 
-Type *Data::type() const { return type_; }
+type::Type *Data::type() const { return type_; }
 
 data_ptr_t Data::null() {
     static data_ptr_t nullData = nullptr;
@@ -35,3 +38,5 @@ data_ptr_t Data::null() {
     }
     return nullData;
 }
+
+} // namespace camel::core::data

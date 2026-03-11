@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 04, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "windows_parser_guard.h"
 
+#include "camel/compile/gir.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/execute/pass/base.h"
 #include "camel/utils/log.h"
@@ -26,6 +27,8 @@
 #include "run.h"
 #include "server.h"
 #include "state.h"
+
+using namespace camel::core::error;
 
 #ifndef NDEBUG
 #include "camel/core/debug_breakpoint.h"
@@ -92,13 +95,25 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
         }
 
         std::vector<std::string> passes = getState().runPasses;
-        int retCode                     = applyPasses(passes, st.ctx, std::cout);
-        if (retCode != 0) {
-            const auto &diags = st.ctx->rtmDiags();
+        static const std::vector<std::string> defaultFallback{"std::default"};
+        auto graph = st.ctx->rootGraph();
+        graph      = applyPasses(graph, passes, st.ctx, std::cout);
+        if (graph == nullptr) {
+            const auto &diags = st.ctx->runtimeDiagSink();
             if (diags->hasErrors())
                 diags->dump(std::cout, false);
             getTaskState() = "loaded";
             return RunOutcome::Failed;
+        }
+        if (graph != GIR::Graph::null()) {
+            graph = applyPasses(graph, defaultFallback, st.ctx, std::cout);
+            if (graph == nullptr) {
+                const auto &diags = st.ctx->runtimeDiagSink();
+                if (diags->hasErrors())
+                    diags->dump(std::cout, false);
+                getTaskState() = "loaded";
+                return RunOutcome::Failed;
+            }
         }
         std::cout << "Run completed." << std::endl;
         getTaskState() = "completed";
@@ -111,6 +126,9 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
     } catch (RestartRequestedException &) {
         return RunOutcome::RestartRequested;
     } catch (::Diagnostic &d) {
+        if (!d.persisted && st.ctx) {
+            st.ctx->runtimeDiagSink()->add(Diagnostic(d));
+        }
         std::cout << "Diagnostic error: " << d.toText() << std::endl;
         getTaskState() = "loaded";
         return RunOutcome::Failed;

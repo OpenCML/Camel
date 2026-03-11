@@ -13,15 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "type/base.h"
-#include "type/composite/array.h"
-#include "type/composite/func.h"
-#include "type/composite/struct.h"
-#include "type/composite/tuple.h"
-#include "type/composite/union.h"
+#include "camel/core/type/base.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/struct.h"
+#include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/composite/union.h"

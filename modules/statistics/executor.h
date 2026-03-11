@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include "camel/core/context/context.h"
 #include "camel/execute/executor.h"
-executor_ptr_t createStatisticsExecutor(context_ptr_t ctx);
+executor_ptr_t createStatisticsExecutor(camel::core::context::context_ptr_t ctx);

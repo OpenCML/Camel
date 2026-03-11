@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,23 +24,68 @@
 #include "camel/utils/log.h"
 #include "camel/utils/str.h"
 
+#include <filesystem>
 #include <format>
+
+namespace camel::core::error {
+
+namespace {
+
+std::string effectiveModulePath(const Diagnostic &d) {
+    if (!d.modulePath.empty()) {
+        return d.modulePath;
+    }
+    if (std::holds_alternative<camel::source::span_id_t>(d.range) && d.sourceContext) {
+        return d.sourceContext->pathForSpan(std::get<camel::source::span_id_t>(d.range));
+    }
+    if (std::holds_alternative<camel::source::origin_id_t>(d.range) && d.sourceContext) {
+        return d.sourceContext->pathForOrigin(std::get<camel::source::origin_id_t>(d.range));
+    }
+    return "";
+}
+
+std::string effectiveModuleName(const Diagnostic &d, const std::string &path) {
+    if (!d.moduleName.empty()) {
+        return d.moduleName;
+    }
+    if (path.empty()) {
+        return "";
+    }
+    return std::filesystem::path(path).stem().string();
+}
+
+} // namespace
 
 // ---- Diagnostic implementation ----
 Diagnostic &Diagnostic::fetchRange(const RangeConverter &conv) {
     if (std::holds_alternative<TokenRange>(range)) {
         TokenRange tr = std::get<TokenRange>(range);
         range         = conv.conv(tr);
+    } else if (std::holds_alternative<camel::source::span_id_t>(range) && sourceContext) {
+        range = sourceContext->resolveSpan(std::get<camel::source::span_id_t>(range));
+    } else if (std::holds_alternative<camel::source::origin_id_t>(range) && sourceContext) {
+        range = sourceContext->resolveOrigin(std::get<camel::source::origin_id_t>(range));
     }
     return *this;
 }
 
 std::string Diagnostic::toText() const {
     int ln = -1, ch = -1;
+    std::string path       = effectiveModulePath(*this);
+    std::string moduleName = effectiveModuleName(*this, path);
+    std::string diagName   = name;
 
     if (std::holds_alternative<TokenRange>(range)) {
         GetDefaultLogger().in("Diag").warn(
             "TokenRange should be converted to CharRange before toText()");
+    } else if (std::holds_alternative<camel::source::span_id_t>(range) && sourceContext) {
+        CharRange r = sourceContext->resolveSpan(std::get<camel::source::span_id_t>(range));
+        ln          = static_cast<int>(r.start.line + 1);
+        ch          = static_cast<int>(r.start.character + 1);
+    } else if (std::holds_alternative<camel::source::origin_id_t>(range) && sourceContext) {
+        CharRange r = sourceContext->resolveOrigin(std::get<camel::source::origin_id_t>(range));
+        ln          = static_cast<int>(r.start.line + 1);
+        ch          = static_cast<int>(r.start.character + 1);
     } else if (std::holds_alternative<CharRange>(range)) {
         CharRange r = std::get<CharRange>(range);
         ln          = static_cast<int>(r.start.line + 1);
@@ -48,15 +93,15 @@ std::string Diagnostic::toText() const {
     }
 
     std::string result = std::format(
-        "{}({}):{}:{}: [{}]: {} {} (name={}, code=0x{})",
-        ascii::underline(modulePath),
-        moduleName,
+        "({}){}:{}:{}: [{}]: {} {} (name={}, code=0x{})",
+        ascii::bold(moduleName),
+        ascii::underline(path),
         (ln >= 0 ? std::to_string(ln) : "?"),
         (ch >= 0 ? std::to_string(ch) : "?"),
         to_colorful_string(severity),
         message,
         suggestion,
-        name,
+        diagName,
         hex8(diagCode()));
 
     return result;
@@ -65,8 +110,15 @@ std::string Diagnostic::toText() const {
 std::string Diagnostic::toJson() const {
     std::ostringstream oss;
     CharRange r{{0, 0}, {0, 0}};
+    std::string path       = effectiveModulePath(*this);
+    std::string moduleName = effectiveModuleName(*this, path);
+    std::string diagName   = name;
     if (std::holds_alternative<CharRange>(range)) {
         r = std::get<CharRange>(range);
+    } else if (std::holds_alternative<camel::source::span_id_t>(range) && sourceContext) {
+        r = sourceContext->resolveSpan(std::get<camel::source::span_id_t>(range));
+    } else if (std::holds_alternative<camel::source::origin_id_t>(range) && sourceContext) {
+        r = sourceContext->resolveOrigin(std::get<camel::source::origin_id_t>(range));
     } else if (std::holds_alternative<TokenRange>(range)) {
         GetDefaultLogger().in("Diag").warn(
             "TokenRange should be converted to CharRange before toJson()");
@@ -81,9 +133,9 @@ std::string Diagnostic::toJson() const {
         << "\"source\":\"Camel\","
         << "\"message\":\"" << escapeJson(message) << "\","
         << "\"data\":{"
-        << "\"name\":\"" << escapeJson(name) << "\","
+        << "\"name\":\"" << escapeJson(diagName) << "\","
         << "\"moduleName\":\"" << escapeJson(moduleName) << "\","
-        << "\"modulePath\":\"" << escapeJson(modulePath) << "\"";
+        << "\"modulePath\":\"" << escapeJson(path) << "\"";
     if (!suggestion.empty())
         oss << ",\"suggestion\":\"" << escapeJson(suggestion) << "\"";
     oss << "}"
@@ -138,8 +190,16 @@ char Diagnostic::hexNib(int v) {
 }
 
 Diagnostic &Diagnostics::add(Diagnostic &&d) {
-    d.moduleName = moduleName_;
-    d.modulePath = modulePath_;
+    if (d.moduleName.empty()) {
+        d.moduleName = moduleName_;
+    }
+    if (d.modulePath.empty()) {
+        d.modulePath = modulePath_;
+    }
+    if (!d.sourceContext) {
+        d.sourceContext = sourceContext_;
+    }
+    d.persisted = true;
     std::lock_guard<std::mutex> lk(mtx_);
     // Check limits before adding
     storage_.push_back(std::move(d));
@@ -288,3 +348,5 @@ size_t Diagnostics::countBySeverityInternal(Severity severity) const {
     }
     return result;
 }
+
+} // namespace camel::core::error

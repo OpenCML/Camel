@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
-
+#include "macro/macro.h"
 #include "passes/opt/inline/inline.h"
 #include "passes/sched/fastvm/bcdump.h"
 #include "passes/sched/fastvm/fastvm.h"
@@ -34,11 +34,11 @@
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/tns/topo_node_seq.h"
 
-#include "macro/macro.h"
-
 #include <format>
 
-using namespace GraphIR;
+using namespace GIR;
+using namespace camel::core::error;
+using namespace camel::core::context;
 
 graph_ptr_t NullGraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
     // Do nothing
@@ -156,6 +156,7 @@ PassScopePtr initPassScope() {
                          })},
                     {"inline", def(PASS(InlineRewritePass))},
                     {"taskflow", def(PASS(TaskflowExecSchedPass))},
+                    {"tfdump", def(PASS(TfDumpPass))},
                 }),
             },
         }));
@@ -192,6 +193,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::asm", "std::fastvm::jit::dump::asm"},
     {"std::rmir", "std::fastvm::jit::dump::rmir"},
     {"std::mir", "std::fastvm::jit::dump::mir"},
+    {"std::tfg", "std::tfdump"},
 };
 
 } // namespace
@@ -240,19 +242,16 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     return nullptr;
 }
 
-int applyPasses(
-    const std::vector<std::string> &passes, const context_ptr_t &ctx, std::ostream &os) {
-    GraphIR::graph_ptr_t graph = ctx->rootGraph();
-
+GIR::graph_ptr_t applyPasses(
+    GIR::graph_ptr_t graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
+    std::ostream &os) {
     for (const auto &p : passes) {
-        ASSERT(graph != nullptr, "Graph is null.");
+        if (graph == nullptr || graph == Graph::null()) {
+            return graph;
+        }
         ASSERT(
             !graph->dirty(),
             std::format("Graph {} is dirty, please rearrange it first.", graph->name()));
-
-        if (graph == Graph::null()) {
-            return 0;
-        }
 
         auto factory = findPassFactory(p, os);
         if (factory) {
@@ -260,27 +259,13 @@ int applyPasses(
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
-                return 1;
+                return nullptr;
             }
         } else {
             throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(p);
         }
     }
 
-    if (graph != Graph::null()) {
-        auto factory = findPassFactory("std::default", os);
-        if (factory) {
-            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("std::default", graph.get()); });
-            auto pass = factory(ctx);
-            graph     = pass->apply(graph, os);
-            if (ctx->rtmDiags()->hasErrors()) {
-                return 1;
-            }
-        } else {
-            throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit("std::default");
-        }
-    }
-
     EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GIR-Z", graph ? graph.get() : nullptr); });
-    return 0;
+    return graph;
 }

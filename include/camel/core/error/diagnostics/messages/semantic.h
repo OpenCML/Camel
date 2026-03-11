@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,8 @@
 #include <unordered_map>
 
 #include "../base.h"
+
+namespace camel::core::error {
 
 enum class SemanticDiag : uint32_t {
     // Errors
@@ -63,3 +65,5 @@ enum class SemanticDiag : uint32_t {
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }
 
 const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap();
+
+} // namespace camel::core::error

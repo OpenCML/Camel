@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,8 +33,8 @@ class TopoNodeSeqDumpPass : public GraphTranslatePass {
     std::string getPtrRepr(const std::string &prefix, uintptr_t ptrVal, bool showRawPtr);
 
   public:
-    TopoNodeSeqDumpPass(const context_ptr_t &ctx);
+    TopoNodeSeqDumpPass(const camel::core::context::context_ptr_t &ctx);
     virtual ~TopoNodeSeqDumpPass() = default;
 
-    virtual GraphIR::graph_ptr_t apply(GraphIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 };

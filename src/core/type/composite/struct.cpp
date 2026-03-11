@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,9 @@
 #include <cstring>
 #include <sstream>
 
+namespace mm = camel::core::mm;
 using namespace std;
+using namespace camel::core::type;
 
 namespace {
 
@@ -37,10 +39,10 @@ StructTypeLayout computeLayout(size_t size, size_t refCount, size_t fieldNamesDa
     size_t typeCodesSize   = size * sizeof(TypeCode);
     size_t nameOffsetsSize = size * sizeof(size_t);
     size_t refsSize        = refCount * sizeof(size_t);
-    size_t aTypes          = ::alignUp(typesSize, alignof(TypeCode));
-    size_t aTypeCodes      = ::alignUp(typeCodesSize, alignof(size_t));
-    size_t aNameOffsets    = ::alignUp(nameOffsetsSize, alignof(size_t));
-    size_t aRefs           = ::alignUp(refsSize, alignof(char));
+    size_t aTypes          = mm::alignUp(typesSize, alignof(TypeCode));
+    size_t aTypeCodes      = mm::alignUp(typeCodesSize, alignof(size_t));
+    size_t aNameOffsets    = mm::alignUp(nameOffsetsSize, alignof(size_t));
+    size_t aRefs           = mm::alignUp(refsSize, alignof(char));
     size_t totalSize =
         sizeof(StructType) + aTypes + aTypeCodes + aNameOffsets + aRefs + fieldNamesDataSize;
     return StructTypeLayout{

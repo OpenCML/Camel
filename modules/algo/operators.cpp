@@ -13,17 +13,24 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "operators.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/utils/type.h"
 
 #include <algorithm>
+
+namespace mm = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
 #include <vector>
 
 enum class SortAlgo { Insertion, Quick, Merge };
@@ -107,8 +114,7 @@ __doSortSlots__(bool inplace, Array *arr, SortAlgo algo, const ArrayType *arrTyp
         break;
     }
     default:
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Unknown sort algorithm");
-        return nullptr;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "Unknown sort algorithm");
     }
     return target;
 }
@@ -132,11 +138,9 @@ static Array *__doSortWithTypeCode__(
         result = __doSortSlots__<Float64>(inplace, arr, Algo, arrType, ctx);
         break;
     default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(
-                std::string(fname) + " not supported for element type " + typeCodeToString(code));
-        return nullptr;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string(fname) + " not supported for element type " + typeCodeToString(code));
     }
     return result;
 }
@@ -162,7 +166,7 @@ template <typename T> static Array *__merge_sorted_arrays_slots__(Array *lhs, Ar
 #define ALGO_SORT_IMPL(name, inplace, algo)                                                        \
     slot_t __algo_##name##__(ArgsView &with, ArgsView &norm, Context &ctx) {                       \
         Array *arr               = norm.get<Array *>(0);                                           \
-        const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));                            \
+        const ArrayType *arrType = tt::as_ptr<camel::core::type::ArrayType>(norm.type(0));         \
         Array *result = __doSortWithTypeCode__<algo>(inplace, arr, arrType, ctx, "<" #name ">");   \
         return result ? toSlot(result) : NullSlot;                                                 \
     }
@@ -196,11 +200,9 @@ slot_t __algo_merge_sorted_arrays__(ArgsView &with, ArgsView &norm, Context &ctx
         merged = __merge_sorted_arrays_slots__<Float64>(lhs, rhs);
         break;
     default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(
-                "<merge_sorted_arrays> not supported for element type " + typeCodeToString(code));
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "<merge_sorted_arrays> not supported for element type " + typeCodeToString(code));
     }
     return toSlot(merged);
 }

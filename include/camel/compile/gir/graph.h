@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 06, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,13 +22,22 @@
 #include <unordered_map>
 
 #include "camel/core/data.h"
+#include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/utils/debug.h"
 #include "camel/utils/exstore.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 #include "types.h"
 
-namespace GraphIR {
+namespace camel::compile::gir {
+
+using Type         = camel::core::type::Type;
+using FunctionType = camel::core::type::FunctionType;
+using TupleType    = camel::core::type::TupleType;
+using data_vec_t   = camel::core::data::data_vec_t;
+using data_ptr_t   = camel::core::data::data_ptr_t;
+using func_ptr_t   = camel::core::data::func_ptr_t;
 
 // =============================================================================
 // Graph：函数/子图，包含节点集合、端口、静态/运行时数据段
@@ -36,6 +45,8 @@ namespace GraphIR {
 
 class Graph : public std::enable_shared_from_this<Graph> {
   public:
+    static std::string makeStableId(const std::string &name);
+
     Graph(const Graph &other)            = delete;
     Graph &operator=(const Graph &other) = delete;
     Graph(Graph &&other)                 = delete;
@@ -56,7 +67,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     bool isRoot() const { return !outer_.lock(); }
     const std::string &name() const { return name_; }
     std::string mangledName() const { return name_ + std::format("<{}>", funcType()->mangle()); }
-    std::string stableId() const { return mangledName(); }
+    const std::string &stableId() const { return stableId_; }
     std::string location() const;
     bool looped() const { return looped_; }
     bool empty() const { return nodes_.empty(); }
@@ -137,6 +148,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
   private:
     std::string name_;
+    std::string stableId_;
     graph_wptr_t outer_;
 
     std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> subGraphs_;
@@ -161,4 +173,4 @@ class Graph : public std::enable_shared_from_this<Graph> {
     mutable ExtraStorage<4> extras_;
 };
 
-} // namespace GraphIR
+} // namespace camel::compile::gir

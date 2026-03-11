@@ -13,17 +13,25 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "operators.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/string.h"
 
+namespace mm = camel::core::mm;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
+
 #include <bitset>
+
+using namespace camel::core::error;
 #include <cmath>
 #include <sstream>
 
@@ -38,8 +46,7 @@ slot_t __math_abs__(ArgsView &with, ArgsView &norm, Context &ctx) {
     case TypeCode::Float64:
         return toSlot(std::fabs(norm.get<Float64>(0)));
     default:
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<abs> not supported");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<abs> not supported");
     }
 }
 
@@ -50,8 +57,7 @@ slot_t __math_exp__(ArgsView &with, ArgsView &norm, Context &ctx) {
     case TypeCode::Float64:
         return toSlot(std::exp(norm.get<Float64>(0)));
     default:
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<exp> only Float/Double");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<exp> only Float/Double");
     }
 }
 
@@ -62,8 +68,7 @@ slot_t __math_round__(ArgsView &with, ArgsView &norm, Context &ctx) {
     case TypeCode::Float64:
         return toSlot(std::round(norm.get<Float64>(0)));
     default:
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<round> only Float/Double");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<round> only Float/Double");
     }
 }
 
@@ -74,8 +79,7 @@ slot_t __math_ceil__(ArgsView &with, ArgsView &norm, Context &ctx) {
     case TypeCode::Float64:
         return toSlot(std::ceil(norm.get<Float64>(0)));
     default:
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<ceil> only Float/Double");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<ceil> only Float/Double");
     }
 }
 
@@ -86,8 +90,7 @@ slot_t __math_floor__(ArgsView &with, ArgsView &norm, Context &ctx) {
     case TypeCode::Float64:
         return toSlot(std::floor(norm.get<Float64>(0)));
     default:
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<floor> only Float/Double");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<floor> only Float/Double");
     }
 }
 
@@ -101,8 +104,7 @@ slot_t __math_bin__(ArgsView &with, ArgsView &norm, Context &ctx) {
         number = static_cast<int64_t>(norm.get<Int64>(0));
         break;
     default:
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<bin> requires integer");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<bin> requires integer");
     }
     std::string bits = std::bitset<64>(number).to_string();
     auto first_one   = bits.find('1');
@@ -112,8 +114,7 @@ slot_t __math_bin__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __math_oct__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (norm.code(0) != TypeCode::Int32 && norm.code(0) != TypeCode::Int64) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<oct> requires integer");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<oct> requires integer");
     }
     std::ostringstream oss;
     oss << "0o" << std::oct;
@@ -126,8 +127,7 @@ slot_t __math_oct__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __math_hex__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (norm.code(0) != TypeCode::Int32 && norm.code(0) != TypeCode::Int64) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<hex> requires integer");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<hex> requires integer");
     }
     std::ostringstream oss;
     oss << "0x" << std::hex << std::uppercase;
@@ -149,8 +149,7 @@ slot_t __math_sqrt__(ArgsView &with, ArgsView &norm, Context &ctx) {
     case TypeCode::Float64:
         return toSlot(std::sqrt(norm.get<Float64>(0)));
     default:
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<sqrt> only Float/Double");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<sqrt> only Float/Double");
     }
 }
 

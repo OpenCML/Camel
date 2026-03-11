@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
 #include <iomanip>
 #include <sstream>
 
-namespace GraphConstructTree {
+namespace camel::compile::gct {
 
 static std::string pointerToHex(const void *ptr) {
     std::stringstream ss;
@@ -69,4 +69,4 @@ const std::string NRefLoad::toString() const { return "NREF: " + ref_.toString()
 
 const std::string DRefLoad::toString() const { return "DREF: " + ref_.toString(); }
 
-} // namespace GraphConstructTree
+} // namespace camel::compile::gct

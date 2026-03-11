@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 24, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
 #include "camel/core/debug_breakpoint.h"
 #include <atomic>
 
-namespace mm {
+namespace camel::core::mm {
 
 namespace {
 
@@ -51,17 +51,17 @@ void invokePostAllocHook(const AllocEvent &evt) {
         h(&evt);
 }
 
-} // namespace mm
+} // namespace camel::core::mm
 
 #else
 
-namespace mm {
+namespace camel::core::mm {
 
 void invokePreAllocHook(const PreAllocEvent &) {}
 void setPostAllocDebugHook(void (*)(const AllocEvent *)) {}
 void clearPostAllocDebugHook() {}
 void invokePostAllocHook(const AllocEvent &) {}
 
-} // namespace mm
+} // namespace camel::core::mm
 
 #endif

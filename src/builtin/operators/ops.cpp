@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,34 +25,21 @@
 
 #include <cmath>
 
-namespace GIR = GraphIR;
+#include "camel/core/error/runtime.h"
+
+namespace GIR = camel::compile::gir;
+namespace mm  = camel::core::mm;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
 
 slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    // const data_ptr_t &rhs = frame.get(nargs[1]);
-
-    // if (rhs->type()->code() == TensorType::typeCode()) {
-    //     auto rhs_tensor = std::dynamic_pointer_cast<TensorData>(rhs);
-    //     if (rhs_tensor) {
-    //         const data_ptr_t &lhs = frame.get(nargs[0]);
-    //         auto lhs_tensor       = std::dynamic_pointer_cast<TensorData>(lhs);
-
-    //         if (lhs_tensor) {
-    //             lhs_tensor->assign(rhs_tensor);
-    //             frame.set(self, lhs_tensor);
-    //             return;
-    //         } else {
-    //             auto new_tensor = std::dynamic_pointer_cast<TensorData>(rhs_tensor->clone(true));
-    //             frame.set(nargs[0], new_tensor);
-    //             frame.set(self, new_tensor);
-    //             return;
-    //         }
-    //     }
-    // }
-
-    // frame.set(nargs[0], rhs);
-    // frame.set(self, rhs);
-    ASSERT(false, "__builtin__assn__ not implemented yet");
-    return NullSlot;
+    // Generic assignment: store rhs into lhs (Ref slot), return rhs.
+    // lhs (norm[0]) is the target slot (var/reference), rhs (norm[1]) is the value.
+    slot_t rhs = norm.slot(1);
+    norm.set(0, rhs);
+    return rhs;
 }
 
 slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -156,8 +143,7 @@ slot_t __builtin__assn_div_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int32 rhs = norm.get<Int32>(1);
 
     if (rhs == 0) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "Division by zero");
     }
 
     lhs /= rhs;
@@ -170,8 +156,7 @@ slot_t __builtin__assn_div_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 rhs = norm.get<Int64>(1);
 
     if (rhs == 0) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "Division by zero");
     }
 
     lhs /= rhs;
@@ -184,8 +169,7 @@ slot_t __builtin__assn_div_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float32 rhs = norm.get<Float32>(1);
 
     if (rhs == 0.0f) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "Division by zero");
     }
 
     lhs /= rhs;
@@ -198,8 +182,7 @@ slot_t __builtin__assn_div_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float64 rhs = norm.get<Float64>(1);
 
     if (rhs == 0.0) {
-        ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Division by zero");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "Division by zero");
     }
 
     lhs /= rhs;
@@ -208,36 +191,23 @@ slot_t __builtin__assn_div_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __builtin__assn_mod__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    ctx.rtmDiags()
-        ->of(RuntimeDiag::RuntimeError)
-        .commit("assignment operator not fully implemented");
-    return NullSlot;
+    throwRuntimeFault(RuntimeDiag::RuntimeError, "assignment operator not fully implemented");
 }
 
 slot_t __builtin__assn_pow__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    ctx.rtmDiags()
-        ->of(RuntimeDiag::RuntimeError)
-        .commit("assignment operator not fully implemented");
-    return NullSlot;
+    throwRuntimeFault(RuntimeDiag::RuntimeError, "assignment operator not fully implemented");
 }
 
 slot_t __builtin__assn_and__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    ctx.rtmDiags()
-        ->of(RuntimeDiag::RuntimeError)
-        .commit("assignment operator not fully implemented");
-    return NullSlot;
+    throwRuntimeFault(RuntimeDiag::RuntimeError, "assignment operator not fully implemented");
 }
 
 slot_t __builtin__assn_or__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    ctx.rtmDiags()
-        ->of(RuntimeDiag::RuntimeError)
-        .commit("assignment operator not fully implemented");
-    return NullSlot;
+    throwRuntimeFault(RuntimeDiag::RuntimeError, "assignment operator not fully implemented");
 }
 
 slot_t __builtin__assn_mat__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Invalid tensor assignment operation");
-    return NullSlot;
+    throwRuntimeFault(RuntimeDiag::RuntimeError, "Invalid tensor assignment operation");
 }
 
 slot_t __builtin__or__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -395,10 +365,9 @@ slot_t __builtin__mul__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 
     default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<mul> operator not supported for type " + typeCodeToString(lhsType));
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "<mul> operator not supported for type " + typeCodeToString(lhsType));
     }
 }
 
@@ -409,8 +378,7 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Int32 lhs = norm.get<Int32>(0);
         Int32 rhs = norm.get<Int32>(1);
         if (rhs == 0) {
-            ctx.rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
-            return NullSlot;
+            throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
         return toSlot(lhs / rhs);
     }
@@ -419,8 +387,7 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Int64 lhs = norm.get<Int64>(0);
         Int64 rhs = norm.get<Int64>(1);
         if (rhs == 0) {
-            ctx.rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
-            return NullSlot;
+            throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
         return toSlot(lhs / rhs);
     }
@@ -429,8 +396,7 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Float32 lhs = norm.get<Float32>(0);
         Float32 rhs = norm.get<Float32>(1);
         if (rhs == 0.0f) {
-            ctx.rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
-            return NullSlot;
+            throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
         return toSlot(lhs / rhs);
     }
@@ -439,17 +405,15 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Float64 lhs = norm.get<Float64>(0);
         Float64 rhs = norm.get<Float64>(1);
         if (rhs == 0.0) {
-            ctx.rtmDiags()->of(RuntimeDiag::DivisionByZero).commit();
-            return NullSlot;
+            throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
         return toSlot(lhs / rhs);
     }
 
     default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<div> operator not supported for type " + typeCodeToString(lhsType));
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "<div> operator not supported for type " + typeCodeToString(lhsType));
     }
 }
 
@@ -460,8 +424,7 @@ slot_t __builtin__mod__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Int32 lhs = norm.get<Int32>(0);
         Int32 rhs = norm.get<Int32>(1);
         if (rhs == 0) {
-            ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<mod> division by zero");
-            return NullSlot;
+            throwRuntimeFault(RuntimeDiag::RuntimeError, "<mod> division by zero");
         }
         return toSlot(lhs % rhs);
     }
@@ -470,17 +433,13 @@ slot_t __builtin__mod__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Int64 lhs = norm.get<Int64>(0);
         Int64 rhs = norm.get<Int64>(1);
         if (rhs == 0) {
-            ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("<mod> division by zero");
-            return NullSlot;
+            throwRuntimeFault(RuntimeDiag::RuntimeError, "<mod> division by zero");
         }
         return toSlot(lhs % rhs);
     }
 
     default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<mod> operator only supports integer types");
-        return NullSlot;
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "<mod> operator only supports integer types");
     }
 }
 
@@ -518,10 +477,9 @@ slot_t __builtin__pow__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 
     default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<pow> operator not supported for type " + typeCodeToString(lhsType));
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "<pow> operator not supported for type " + typeCodeToString(lhsType));
     }
 }
 
@@ -538,8 +496,7 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
             Tuple *tpl = norm.get<Tuple *>(0);
             size_t idx = static_cast<size_t>(norm.get<Int64>(1));
             if (idx >= tpl->size()) {
-                ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Tuple index out of bounds.");
-                return NullSlot;
+                throwRuntimeFault(RuntimeDiag::RuntimeError, "Tuple index out of bounds.");
             }
             return tpl->get<slot_t>(idx);
         }
@@ -547,8 +504,7 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
             Array *arr = norm.get<Array *>(0);
             size_t idx = static_cast<size_t>(norm.get<Int64>(1));
             if (idx >= arr->size()) {
-                ctx.rtmDiags()->of(RuntimeDiag::RuntimeError).commit("Array index out of bounds.");
-                return NullSlot;
+                throwRuntimeFault(RuntimeDiag::RuntimeError, "Array index out of bounds.");
             }
             return arr->get<slot_t>(idx);
         }
@@ -558,10 +514,9 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
             return st->get<slot_t>(idx);
         }
         default: {
-            ctx.rtmDiags()
-                ->of(RuntimeDiag::RuntimeError)
-                .commit("<idx> operator not supported for type " + typeCodeToString(containerType));
-            return NullSlot;
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                "<idx> operator not supported for type " + typeCodeToString(containerType));
         }
         }
     }
@@ -573,10 +528,9 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
         const std::string_view &key = keyObj->view();
         const Type *structType      = norm.type(0);
         if (!st->has(key, structType)) {
-            ctx.rtmDiags()
-                ->of(RuntimeDiag::RuntimeError)
-                .commit("Struct does not have field: " + std::string(key));
-            return NullSlot;
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                "Struct does not have field: " + std::string(key));
         }
         return st->get<slot_t>(key, structType);
     }
@@ -614,10 +568,9 @@ slot_t __builtin__neg__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 
     default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit("<neg> operator not supported for type " + typeCodeToString(t));
-        return NullSlot;
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "<neg> operator not supported for type " + typeCodeToString(t));
     }
 }
 
@@ -635,11 +588,9 @@ slot_t __builtin__inv__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 
     default:
-        ctx.rtmDiags()
-            ->of(RuntimeDiag::RuntimeError)
-            .commit(
-                "<inv> operator only supported for integer types (Int / Long), got " +
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "<inv> operator only supported for integer types (Int / Long), got " +
                 typeCodeToString(t));
-        return NullSlot;
     }
 }

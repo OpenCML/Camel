@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,4 +25,5 @@
 #include "ast/stmt.h"
 #include "ast/type.h"
 
-namespace AST = AbstractSyntaxTree;
+namespace camel::parse::ast {}
+namespace AST = camel::parse::ast;

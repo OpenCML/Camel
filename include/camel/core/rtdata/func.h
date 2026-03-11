@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,18 +23,24 @@
 #include "tuple.h"
 
 // 前向声明
-namespace GraphIR {
+namespace camel::compile::gir {
 class Graph;
-} // namespace GraphIR
+} // namespace camel::compile::gir
 
-class Function : public Object {
+namespace GIR = camel::compile::gir;
+
+namespace rtdata = camel::core::rtdata;
+namespace type   = camel::core::type;
+
+class Function : public rtdata::Object {
   public:
     Function(const Function &)            = delete;
     Function &operator=(const Function &) = delete;
 
-    static Function *create(GraphIR::Graph *graph, const Type *tupleType, IAllocator &allocator) {
-        ASSERT(tupleType && tupleType->code() == TypeCode::Tuple, "Type must be TupleType");
-        const TupleType *tt = static_cast<const TupleType *>(tupleType);
+    static Function *
+    create(GIR::Graph *graph, const type::Type *tupleType, camel::core::mm::IAllocator &allocator) {
+        ASSERT(tupleType && tupleType->code() == type::TypeCode::Tuple, "Type must be TupleType");
+        const type::TupleType *tt = static_cast<const type::TupleType *>(tupleType);
 
         void *mem = allocator.alloc(sizeof(Function), alignof(Function));
         if (!mem)
@@ -45,14 +51,15 @@ class Function : public Object {
         return fn;
     }
 
-    GraphIR::Graph *graph() const { return graph_; }
+    GIR::Graph *graph() const { return graph_; }
     Tuple *tuple() { return closure_; }
     const Tuple *tuple() const { return closure_; }
 
     // 获取 tuple 的类型（从 graph 获取，实现在 .cpp 中）
-    const TupleType *tupleType() const;
+    const type::TupleType *tupleType() const;
 
-    virtual bool equals(const Object *other, const Type *type, bool deep = false) const override {
+    virtual bool
+    equals(const rtdata::Object *other, const type::Type *type, bool deep = false) const override {
         if (this == other)
             return true;
         if (!isOfSameCls(this, other))
@@ -63,7 +70,7 @@ class Function : public Object {
         if (graph_ != fnOther->graph_)
             return false;
 
-        const TupleType *tupleTypePtr = tupleType();
+        const type::TupleType *tupleTypePtr = tupleType();
         if (!closure_ && !fnOther->closure_)
             return true;
         if (!closure_ || !fnOther->closure_)
@@ -72,8 +79,9 @@ class Function : public Object {
         return closure_->equals(fnOther->closure_, tupleTypePtr, deep);
     }
 
-    virtual Object *
-    clone(IAllocator &allocator, const Type *type, bool deep = false) const override {
+    virtual rtdata::Object *clone(
+        camel::core::mm::IAllocator &allocator, const type::Type *type,
+        bool deep = false) const override {
         void *mem = allocator.alloc(sizeof(Function), alignof(Function));
         if (!mem)
             throw std::bad_alloc();
@@ -81,7 +89,7 @@ class Function : public Object {
         Function *fnNew = new (mem) Function(graph_);
 
         if (closure_) {
-            const TupleType *tupleTypePtr = tupleType();
+            const type::TupleType *tupleTypePtr = tupleType();
             fnNew->closure_ =
                 deep ? static_cast<Tuple *>(closure_->clone(allocator, tupleTypePtr, true))
                      : closure_;
@@ -89,27 +97,28 @@ class Function : public Object {
             fnNew->closure_ = nullptr;
         }
 
-        return reinterpret_cast<Object *>(fnNew);
+        return reinterpret_cast<rtdata::Object *>(fnNew);
     }
 
-    virtual void print(std::ostream &os, const Type *type) const override;
+    virtual void print(std::ostream &os, const type::Type *type) const override;
 
     virtual void onMoved() override {
         // graph_ 是外部引用，不需要改动
         // tuple_ 指向的对象可能被 GC 移动，需要由 GC 更新
     }
 
-    virtual void
-    updateRefs(const std::function<Object *(Object *)> &relocate, const Type *type) override {
+    virtual void updateRefs(
+        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
+        const type::Type *type) override {
         if (closure_) {
-            const TupleType *tupleTypePtr = tupleType();
+            const type::TupleType *tupleTypePtr = tupleType();
             closure_->updateRefs(relocate, tupleTypePtr);
         }
     }
 
   private:
-    explicit Function(GraphIR::Graph *g) : graph_(g), closure_(nullptr) {}
+    explicit Function(GIR::Graph *g) : graph_(g), closure_(nullptr) {}
 
-    GraphIR::Graph *graph_;
+    GIR::Graph *graph_;
     Tuple *closure_;
 };

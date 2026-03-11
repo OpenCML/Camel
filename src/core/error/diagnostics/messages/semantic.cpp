@@ -13,11 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 07, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/error/diagnostics/messages/semantic.h"
+
+namespace camel::core::error {
 
 const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
     static const std::unordered_map<SemanticDiag, DiagInfo> infoMap = {
@@ -283,4 +285,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
     };
 
     return infoMap;
-};
+}
+
+} // namespace camel::core::error

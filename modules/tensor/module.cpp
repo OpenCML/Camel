@@ -13,16 +13,28 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "module.h"
 #include "camel/core/context/context.h"
+#include "camel/core/module/module.h"
 #include "executor.h"
+#include "operators.h"
+#include "type.h"
+
+using namespace camel::core::context;
+using namespace camel::core::module;
 
 TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
-    // 实现留空：暂不导出任何算子，后续补充
+    exportType(Reference("Tensor"), camel::tensor::TensorType::Default());
+    for (const auto &group : getTensorOperatorGroups()) {
+        exportEntity(group->name(), group);
+        if (group->name().starts_with("__")) {
+            exportDefaultImportRef(group->name());
+        }
+    }
 }
 
 module_ptr_t TensorModule::create(context_ptr_t ctx) { return std::make_shared<TensorModule>(ctx); }
