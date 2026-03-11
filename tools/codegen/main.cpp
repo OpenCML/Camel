@@ -5,8 +5,8 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
+#include "camel/init.h"
 #include "camel/parse/parse.h"
-#include "camel/utils/dll_path.h"
 #include "camel/utils/env.h"
 #include "service/codegen/source/generator.h"
 #include <filesystem>
@@ -22,7 +22,7 @@ using namespace camel::core::module;
 namespace fs = std::filesystem;
 
 int main(int argc, char *argv[]) {
-    camel::utils::setupLibrarySearchPath();
+    camel::initialize();
     std::string inputPath;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];

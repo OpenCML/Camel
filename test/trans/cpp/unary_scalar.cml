@@ -1,0 +1,5 @@
+module unary_scalar
+
+func fib(n: int): int {
+    return -n
+}

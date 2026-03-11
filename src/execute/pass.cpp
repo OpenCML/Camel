@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,6 @@
 #include "camel/common/scope.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
-#include "camel/utils/log.h"
 #include "macro/macro.h"
 #include "passes/opt/inline/inline.h"
 #include "passes/sched/fastvm/bcdump.h"
@@ -31,6 +30,7 @@
 #include "passes/sched/fastvm/jit/dump/mirdump.h"
 #include "passes/sched/nodevm/nodevm.h"
 #include "passes/sched/taskflow/taskflow.h"
+#include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/tns/topo_node_seq.h"
 
@@ -135,6 +135,13 @@ PassScopePtr initPassScope() {
                     {"null", def(PASS(NullGraphIRPass))},
                     {"macro", def(PASS(MacroRewritePass))},
                     {"graphviz", def(PASS(GraphVizDumpPass))},
+                    {"cpp",
+                     def(PASS(CppDumpPass),
+                         {
+                             {"module", def(PASS(CppModuleDumpPass))},
+                             {"inspect", def(PASS(CppInspectDumpPass))},
+                             {"bench", def(PASS(CppBenchDumpPass))},
+                         })},
                     {"topo_node_seq", def(PASS(TopoNodeSeqDumpPass))},
                     {"nodevm", def(PASS(NodeVMSchedPass))},
                     {"fastvm",
@@ -186,6 +193,10 @@ std::unordered_map<std::string, std::string> passAliases = {
     // 常用转译遍缩写
     {"std::dot", "std::graphviz"},
     {"std::gir", "std::graphviz"},
+    {"std::cxx", "std::cpp"},
+    {"std::cppmod", "std::cpp::module"},
+    {"std::cppinspect", "std::cpp::inspect"},
+    {"std::cppbench", "std::cpp::bench"},
     {"std::tns", "std::topo_node_seq"},
     {"std::bc", "std::fastvm::bytecode"},
     {"std::lbc", "std::fastvm::linked_bytecode"},

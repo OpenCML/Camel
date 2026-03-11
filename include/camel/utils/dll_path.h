@@ -13,11 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 23, 2026
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
+
+#include "camel/utils/env.h"
 
 #include <filesystem>
 #include <string>
@@ -70,9 +72,15 @@ inline std::filesystem::path getExecutableDirectory() {
 #endif
 }
 
-// 设置库搜索路径，以 exe 所在目录为 base：
-// 1) base (./)  2) base/libs (./libs)  3) base/../libs (../libs)  4) 系统默认
-inline void setupLibrarySearchPath() {
+/// SDK 工具专用：以 exe 所在目录为 base 设置库搜索路径，并 fallback 到 CAMEL_HOME。
+/// 适用于 camel、camel-cpp、format 等运行在 SDK 内的可执行文件，旁边通常有 libs。
+/// 搜索顺序：exe 所在目录、exe/libs、exe/../libs；若设置 CAMEL_HOME 则追加
+/// CAMEL_HOME/libs、CAMEL_HOME/bin、CAMEL_HOME。
+inline void setupLibrarySearchPathForHost() {
+    namespace fs        = std::filesystem;
+    std::string sdkRoot = getEnv("CAMEL_HOME", fs::current_path().string());
+    fs::path camelHome(sdkRoot);
+
 #ifdef _WIN32
     wchar_t path[MAX_PATH];
     if (!GetModuleFileNameW(nullptr, path, MAX_PATH))
@@ -90,15 +98,21 @@ inline void setupLibrarySearchPath() {
     if (sep != std::wstring::npos)
         parentLibs = base.substr(0, sep + 1) + L"libs";
 
-    // 使用 AddDllDirectory 添加 base, base/libs, base/../libs
     if (SetDefaultDllDirectories(
             LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS)) {
         AddDllDirectory(base.c_str());
         AddDllDirectory(libsDir.c_str());
         if (!parentLibs.empty())
             AddDllDirectory(parentLibs.c_str());
+        if (!sdkRoot.empty()) {
+            std::wstring ch = camelHome.wstring();
+            if (!ch.empty() && ch.back() != L'/' && ch.back() != L'\\')
+                ch += L'\\';
+            AddDllDirectory(ch.c_str());
+            AddDllDirectory((ch + L"libs").c_str());
+            AddDllDirectory((ch + L"bin").c_str());
+        }
     } else {
-        // 降级：SetDllDirectory 只能设一个，优先 base/libs
         SetDllDirectoryW(libsDir.c_str());
     }
 
@@ -121,10 +135,16 @@ inline void setupLibrarySearchPath() {
     if (sep != std::string::npos)
         parentLibs = base.substr(0, sep + 1) + "libs";
 
-    const char *existing = std::getenv("LD_LIBRARY_PATH");
-    std::string newPath  = base + ":" + localLibs;
+    std::string newPath = base + ":" + localLibs;
     if (!parentLibs.empty())
         newPath += ":" + parentLibs;
+    if (!sdkRoot.empty()) {
+        std::string ch = camelHome.string();
+        if (!ch.empty() && ch.back() != '/')
+            ch += '/';
+        newPath += ":" + ch + ":" + ch + "libs:" + ch + "bin";
+    }
+    const char *existing = std::getenv("LD_LIBRARY_PATH");
     if (existing && existing[0])
         newPath += ":";
     if (existing)
@@ -154,10 +174,16 @@ inline void setupLibrarySearchPath() {
     if (sep != std::string::npos)
         parentLibs = base.substr(0, sep + 1) + "libs";
 
-    const char *existing = std::getenv("DYLD_LIBRARY_PATH");
-    std::string newPath  = base + ":" + localLibs;
+    std::string newPath = base + ":" + localLibs;
     if (!parentLibs.empty())
         newPath += ":" + parentLibs;
+    if (!sdkRoot.empty()) {
+        std::string ch = camelHome.string();
+        if (!ch.empty() && ch.back() != '/')
+            ch += '/';
+        newPath += ":" + ch + ":" + ch + "libs:" + ch + "bin";
+    }
+    const char *existing = std::getenv("DYLD_LIBRARY_PATH");
     if (existing && existing[0])
         newPath += ":";
     if (existing)
@@ -166,7 +192,82 @@ inline void setupLibrarySearchPath() {
     setenv("DYLD_LIBRARY_PATH", newPath.c_str(), 1);
 
 #else
-    (void)0; // 依赖 RPATH 或默认行为
+    (void)camelHome;
+#endif
+}
+
+/// 导出应用专用：以 CAMEL_HOME 为 base 设置库搜索路径。
+/// 适用于 camel-cpp 编译出的 exe，可能部署在任意位置，通过环境变量 CAMEL_HOME 定位 SDK 目录。
+/// CAMEL_HOME 指向 SDK 根目录（如 out/latest），其下应有 bin/、libs/ 等子目录。
+/// 若未设置 CAMEL_HOME，则 fallback 为 current_path()。
+/// 搜索顺序：exe 所在目录（优先）、CAMEL_HOME/libs、CAMEL_HOME/bin、CAMEL_HOME。
+inline void setupLibrarySearchPathForApp() {
+    namespace fs        = std::filesystem;
+    auto exeDir         = getExecutableDirectory();
+    std::string sdkRoot = getEnv("CAMEL_HOME", fs::current_path().string());
+    if (sdkRoot.empty())
+        return;
+    fs::path root(sdkRoot);
+#ifdef _WIN32
+    std::wstring exeBase;
+    if (!exeDir.empty()) {
+        exeBase = exeDir.wstring();
+        if (!exeBase.empty() && exeBase.back() != L'/' && exeBase.back() != L'\\')
+            exeBase += L'\\';
+    }
+    std::wstring base(root.wstring());
+    if (base.empty() || (base.back() != L'/' && base.back() != L'\\'))
+        base += L'\\';
+    std::wstring libs = base + L"libs";
+    std::wstring bin  = base + L"bin";
+    if (SetDefaultDllDirectories(
+            LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS)) {
+        if (!exeBase.empty())
+            AddDllDirectory(exeBase.c_str());
+        AddDllDirectory(base.c_str());
+        AddDllDirectory(libs.c_str());
+        AddDllDirectory(bin.c_str());
+    } else {
+        SetDllDirectoryW(libs.c_str());
+    }
+#elif defined(__linux__)
+    std::string exeBase =
+        exeDir.empty() ? ""
+                       : (exeDir.string() +
+                          (exeDir.string().empty() || exeDir.string().back() == '/' ? "" : "/"));
+    std::string base = root.string();
+    if (!base.empty() && base.back() != '/')
+        base += '/';
+    std::string libs     = base + "libs";
+    std::string bin      = base + "bin";
+    const char *existing = std::getenv("LD_LIBRARY_PATH");
+    std::string newPath  = exeBase.empty() ? "" : (exeBase + ":");
+    newPath += base + ":" + libs + ":" + bin;
+    if (existing && existing[0])
+        newPath += ":";
+    if (existing)
+        newPath += existing;
+    setenv("LD_LIBRARY_PATH", newPath.c_str(), 1);
+#elif defined(__APPLE__)
+    std::string exeBase =
+        exeDir.empty() ? ""
+                       : (exeDir.string() +
+                          (exeDir.string().empty() || exeDir.string().back() == '/' ? "" : "/"));
+    std::string base = root.string();
+    if (!base.empty() && base.back() != '/')
+        base += '/';
+    std::string libs     = base + "libs";
+    std::string bin      = base + "bin";
+    const char *existing = std::getenv("DYLD_LIBRARY_PATH");
+    std::string newPath  = exeBase.empty() ? "" : (exeBase + ":");
+    newPath += base + ":" + libs + ":" + bin;
+    if (existing && existing[0])
+        newPath += ":";
+    if (existing)
+        newPath += existing;
+    setenv("DYLD_LIBRARY_PATH", newPath.c_str(), 1);
+#else
+    (void)root;
 #endif
 }
 
