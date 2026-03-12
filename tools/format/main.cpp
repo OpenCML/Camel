@@ -19,12 +19,13 @@
  *
  */
 
+#include "camel/utils/windows_parser_guard.h"
+
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/listener.h"
 #include "camel/init.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/log.h"
-#include "camel/utils/windows_parser_guard.h"
 #include "fmt.h"
 #include <filesystem>
 #include <fstream>

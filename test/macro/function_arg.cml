@@ -1,0 +1,15 @@
+module macro_function_arg
+
+macro func id_func(): (x: int) => int {
+    return (x: int): int => { return x }
+}
+
+macro func apply_once(f: (x: int) => int, x: int): int {
+    return f(x)
+}
+
+func main(): int sync {
+    // id_func() 展开为 DATA；apply_once 会因“调用函数参数”被跳过，由运行时执行
+    println(apply_once(id_func(), 20))
+    return 0
+}

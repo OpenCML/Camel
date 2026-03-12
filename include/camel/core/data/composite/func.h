@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -53,6 +53,7 @@ class FunctionData : public CompositeData {
     std::string name() const;
     GIR::Graph &graph() const { return graph_; }
     type::FunctionType *funcType() const;
+    bool isMacro() const { return funcType() && funcType()->modifiers().macro(); }
     const data_vec_t &closure() const { return closure_; }
 
     virtual std::vector<std::string> refs() const override;
