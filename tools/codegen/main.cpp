@@ -1,6 +1,22 @@
 /**
- * camel-codegen: 从源文件生成代码（AST -> 源码），链接 libcamel。
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * You may use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Feb. 22, 2026
+ * Updated: Mar. 12, 2026
+ * Supported by: National Key Research and Development Program of China
  */
+
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
@@ -8,6 +24,7 @@
 #include "camel/init.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/env.h"
+#include "camel/utils/windows_parser_guard.h"
 #include "service/codegen/source/generator.h"
 #include <filesystem>
 #include <fstream>

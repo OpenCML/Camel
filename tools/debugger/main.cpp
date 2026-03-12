@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,10 +29,9 @@
  * - atexit + Job Object（spawn 内）确保主进程退出时子进程被系统回收，避免孤儿进程。
  */
 
-#include "windows_parser_guard.h"
-
 #include "camel/init.h"
 #include "camel/utils/log.h"
+#include "camel/utils/windows_parser_guard.h"
 #include "command/commands.h"
 #include "command/dispatcher.h"
 #include "compile.h"

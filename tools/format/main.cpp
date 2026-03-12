@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
@@ -24,6 +24,7 @@
 #include "camel/init.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/log.h"
+#include "camel/utils/windows_parser_guard.h"
 #include "fmt.h"
 #include <filesystem>
 #include <fstream>

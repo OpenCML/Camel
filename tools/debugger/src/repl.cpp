@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,7 +29,7 @@
  * startServer/loadSource/configure/launch，使初始化也走命令模式并回显，状态可追溯。
  */
 
-#include "windows_parser_guard.h"
+#include "camel/utils/windows_parser_guard.h"
 
 // nlohmann MUST be before any header that pulls in ANTLR (EOF conflict)
 #include "nlohmann/json.hpp"

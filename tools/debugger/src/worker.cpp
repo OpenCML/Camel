@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,7 +30,7 @@
  * 等请求在子进程内执行并回显到子进程 LogSink，供 Task 日志 tab 展示。
  */
 
-#include "windows_parser_guard.h"
+#include "camel/utils/windows_parser_guard.h"
 
 #include "nlohmann/json.hpp"
 

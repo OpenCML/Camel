@@ -14,11 +14,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
 
+#include "camel/utils/windows_parser_guard.h"
 // nlohmann/json 使用标准 C 的 EOF 宏；ANTLR 在 antlr4-common.h 里会 #undef EOF，
 // 故须先包含 nlohmann/json.hpp（并保证 EOF 可见），再包含会拉入 ANTLR 的头文件。
 #include "nlohmann/json.hpp"

@@ -14,10 +14,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
+#include "camel/utils/windows_parser_guard.h"
 #include "nlohmann/json.hpp"
 
 #include "antlr4-runtime/antlr4-runtime.h"

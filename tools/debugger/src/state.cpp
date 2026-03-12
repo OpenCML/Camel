@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 28, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,7 @@
  * GET /api/settings?target= 获取。
  */
 
-#include "windows_parser_guard.h"
+#include "camel/utils/windows_parser_guard.h"
 
 #include "camel/utils/log.h"
 #include "state.h"
