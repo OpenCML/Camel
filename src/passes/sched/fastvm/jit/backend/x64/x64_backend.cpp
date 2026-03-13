@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 23, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,7 @@
 #include "../../mir/mir_optimize.h"
 #include "../../regalloc/regalloc.h"
 #include "../../runtime/jit_debug_trace.h"
+#include "../../runtime/trampoline.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/rtdata.h"
 #include "camel/core/rtdata/tuple.h"
@@ -122,6 +123,7 @@ X64Backend::compile(const CompilationUnit &unit, std::string *failureReason) {
 bool X64Backend::compileBytecode(
     const CompilationUnit &unit, std::vector<uint8_t> &code, std::string *failureReason) {
     using namespace x64;
+    const CompilationDebugOptions *debug = unit.debug;
 
     auto fail = [&](const std::string &msg) {
         if (failureReason)
@@ -136,35 +138,14 @@ bool X64Backend::compileBytecode(
     size_t pcEnd         = unit.bytecodes.size();
     size_t entryPc       = unit.entryPc;
 
-    // 寄存器分配：若 mirSlotOnly 则全部溢出，便于可读 MIR dump；否则线性扫描
-    AllocationResult alloc = unit.mirSlotOnly ? makeAllSpilledAlloc(unit.bytecodes, entryPc, pcEnd)
-                                              : linearScanAllocate(unit.bytecodes, entryPc, pcEnd);
-
-    EXEC_WHEN_DEBUG(([&]() {
-        int inReg = 0, spilled = 0;
-        for (size_t i = 1; i < alloc.slotToReg.size(); ++i) {
-            if (alloc.slotToReg[i] >= 0)
-                ++inReg;
-            else
-                ++spilled;
-        }
-        GetDefaultLogger()
-            .in("JIT.Backend")
-            .debug(
-                "RegAlloc for graph '{}': {} slots in reg, {} spilled (rax/rcx/rdx/rbx/r8-r11)",
-                unit.graph->name(),
-                inReg,
-                spilled);
-    }()));
-
     const slot_t *staticBase = unit.frameMeta->staticArea->data();
     auto staticSlotAddr      = [&](data_idx_t idx) -> uint64_t {
         return reinterpret_cast<uint64_t>(staticBase + static_cast<size_t>(-idx));
     };
     auto staticSlotAddrWithComment = [&](data_idx_t idx) -> uint64_t {
         uint64_t a = staticSlotAddr(idx);
-        if (unit.mirOut && unit.mirSymbolNames)
-            (*unit.mirSymbolNames)[a] = "static slot[" + std::to_string(idx) + "]";
+        if (debug && debug->mirOut && debug->mirSymbolNames)
+            (*debug->mirSymbolNames)[a] = "static slot[" + std::to_string(idx) + "]";
         return a;
     };
 
@@ -173,15 +154,53 @@ bool X64Backend::compileBytecode(
     x64::MirBuilder build(mirBuf);
     x64::VRegId nextVReg = 0; // 虚拟寄存器计数器，供 JOIN 等使用
 #if defined(_WIN32) || defined(_WIN64)
+    auto emitPrepareDirectCallWin64 = [&](const Bytecode &bc, uint64_t helperAddr) {
+        build.emitPushRdi();
+        build.emitMovRegReg(kRegRcx, kRegRdi);
+        build.emitMovRegReg(kRegRdx, kRegRsi);
+        build.emitMovRegImm64(kRegR8, reinterpret_cast<uint64_t>(&bc));
+        build.emitMovRegImm64(kRegRax, helperAddr);
+        build.emitCallRax();
+        build.emitMovRegReg(kRegRdi, kRegRax);
+    };
+    auto emitFinishDirectCallWin64 = [&](uint64_t helperAddr, uint64_t ownerGraphAddr) {
+        build.emitMovRegReg(kRegRcx, kRegRax);
+        build.emitMovRegReg(kRegRdx, kRegRdi);
+        build.emitMovRegReg(kRegR8, kRegRsi);
+        build.emitMovRegImm64(kRegR9, ownerGraphAddr);
+        build.emitMovRegImm64(kRegRax, helperAddr);
+        build.emitCallRax();
+        build.emitPopRdi();
+    };
+    auto emitDirectCallCurrentWin64 = [&]() {
+        build.emitMovRegReg(kRegRcx, kRegRdi);
+        build.emitMovRegReg(kRegRdx, kRegRsi);
+        build.emitCallRel32(static_cast<uint32_t>(entryPc));
+    };
+    auto emitDirectCallFnWin64 = [&](uint64_t fnAddr) {
+        build.emitMovRegReg(kRegRcx, kRegRdi);
+        build.emitMovRegReg(kRegRdx, kRegRsi);
+        build.emitMovRegImm64(kRegRax, fnAddr);
+        build.emitCallRax();
+    };
+    auto emitPrepareDirectTailCallWin64 = [&](const Bytecode &bc, uint64_t helperAddr) {
+        build.emitMovRegReg(kRegRcx, kRegRdi);
+        build.emitMovRegReg(kRegRdx, kRegRsi);
+        build.emitMovRegImm64(kRegR8, reinterpret_cast<uint64_t>(&bc));
+        build.emitMovRegImm64(kRegRax, helperAddr);
+        build.emitCallRax();
+    };
+#endif
+#if defined(_WIN32) || defined(_WIN64)
     build.emitPrologueWin64();
 #endif
 
     for (size_t pc = entryPc; pc < pcEnd;) {
         const Bytecode &bc = base[pc];
         build.setNextPc(static_cast<uint32_t>(pc));
-        build.emitDebugTrace(
-            static_cast<uint32_t>(pc)); // 始终插入，使 Debug/Release MIR 一致；编码时 Debug 调
-                                        // wrapper、Release 调 no-op
+        if (debug && debug->enableDebugTrace) {
+            build.emitDebugTrace(static_cast<uint32_t>(pc));
+        }
         switch (bc.opcode) {
         case OpCode::LADD: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
@@ -635,6 +654,34 @@ bool X64Backend::compileBytecode(
             break;
         }
         case OpCode::FUNC: {
+#if defined(_WIN32) || defined(_WIN64)
+            if (getFuncExtraGraph(&bc) == unit.graph) {
+                emitPrepareDirectCallWin64(bc, reinterpret_cast<uint64_t>(&prepareDirectJitCall));
+                emitDirectCallCurrentWin64();
+                emitFinishDirectCallWin64(
+                    reinterpret_cast<uint64_t>(&finishDirectJitCall),
+                    reinterpret_cast<uint64_t>(unit.graph));
+                int dr           = slotDisp(bc.result);
+                x64::VRegId vRet = nextVReg++;
+                build.emitVMovFromRax(vRet);
+                build.emitVStoreToFrame(dr, vRet);
+                break;
+            }
+            if (bc.fastop[1] == 0) {
+                uint64_t fnAddr =
+                    reinterpret_cast<uint64_t>(getFuncExtraFn(const_cast<Bytecode *>(&bc)));
+                emitPrepareDirectCallWin64(bc, reinterpret_cast<uint64_t>(&prepareDirectJitCall));
+                emitDirectCallFnWin64(fnAddr);
+                emitFinishDirectCallWin64(
+                    reinterpret_cast<uint64_t>(&finishDirectJitCall),
+                    reinterpret_cast<uint64_t>(getFuncExtraGraph(&bc)));
+                int dr           = slotDisp(bc.result);
+                x64::VRegId vRet = nextVReg++;
+                build.emitVMovFromRax(vRet);
+                build.emitVStoreToFrame(dr, vRet);
+                break;
+            }
+#endif
             if (!unit.trampolineFunc)
                 return fail("pc=" + std::to_string(pc) + " no FUNC trampoline");
             uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineFunc);
@@ -650,6 +697,42 @@ bool X64Backend::compileBytecode(
             break;
         }
         case OpCode::TAIL: {
+#if defined(_WIN32) || defined(_WIN64)
+            if (getFuncExtraGraph(&bc) == unit.graph) {
+                size_t argsCnt         = bc.normCnt();
+                const data_idx_t *args = bc.operands();
+                std::vector<x64::VRegId> argRegs;
+                argRegs.reserve(argsCnt);
+                for (size_t i = 0; i < argsCnt; ++i) {
+                    x64::VRegId v = nextVReg++;
+                    argRegs.push_back(v);
+                    if (args[i] > 0)
+                        build.emitVLoadFromFrame(v, slotDisp(args[i]));
+                    else
+                        build.emitVLoadFromMemAt(v, staticSlotAddrWithComment(args[i]));
+                }
+                for (size_t i = 0; i < argsCnt; ++i)
+                    build.emitVStoreToFrame(slotDisp(static_cast<int>(i + 1)), argRegs[i]);
+                build.emitJmpRel32(static_cast<uint32_t>(entryPc));
+                break;
+            }
+            if (bc.fastop[1] == 0) {
+                uint64_t fnAddr =
+                    reinterpret_cast<uint64_t>(getFuncExtraFn(const_cast<Bytecode *>(&bc)));
+                emitPrepareDirectTailCallWin64(
+                    bc,
+                    reinterpret_cast<uint64_t>(&prepareDirectJitTailCall));
+                build.emitMovRegReg(kRegRcx, kRegRax);
+                build.emitMovRegReg(kRegRdx, kRegRsi);
+                build.emitMovRegImm64(kRegRax, fnAddr);
+                build.emitAddRsp8();
+                build.emitPopRbx();
+                build.emitPopRsi();
+                build.emitPopRdi();
+                build.emitJmpRax();
+                break;
+            }
+#endif
             if (!unit.trampolineTail)
                 return fail("pc=" + std::to_string(pc) + " no TAIL trampoline");
             uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineTail);
@@ -738,7 +821,7 @@ bool X64Backend::compileBytecode(
     }
 
     // rmir：字节码直接得到的 vreg MIR，未做优化，直接打印并返回
-    if (unit.mirOut && unit.mirSlotOnly) {
+    if (debug && debug->mirOut && debug->mirSlotOnly) {
         std::unordered_map<size_t, size_t> pcToOffset;
         size_t offset = 0;
         for (const auto &mi : mirBuf) {
@@ -748,10 +831,10 @@ bool X64Backend::compileBytecode(
         }
         x64::MirPrintOptions opts;
         opts.pcToOffset  = &pcToOffset;
-        opts.symbolNames = unit.mirSymbolNames;
-        opts.slotNames   = unit.mirSlotNames;
+        opts.symbolNames = debug->mirSymbolNames;
+        opts.slotNames   = debug->mirSlotNames;
         opts.vregAlloc   = nullptr;
-        x64::mirPrint(mirBuf, *unit.mirOut, opts);
+        x64::mirPrint(mirBuf, *debug->mirOut, opts);
         return true;
     }
 
@@ -759,7 +842,7 @@ bool X64Backend::compileBytecode(
     x64::runMirOptimizationPasses(mirBuf);
 
     // mir：优化后的 vreg MIR，打印并返回（不分配、不编码）
-    if (unit.mirOut) {
+    if (debug && debug->mirOut) {
         std::unordered_map<size_t, size_t> pcToOffset;
         size_t offset = 0;
         for (const auto &mi : mirBuf) {
@@ -769,10 +852,10 @@ bool X64Backend::compileBytecode(
         }
         x64::MirPrintOptions opts;
         opts.pcToOffset  = &pcToOffset;
-        opts.symbolNames = unit.mirSymbolNames;
-        opts.slotNames   = unit.mirSlotNames;
+        opts.symbolNames = debug->mirSymbolNames;
+        opts.slotNames   = debug->mirSlotNames;
         opts.vregAlloc   = nullptr;
-        x64::mirPrint(mirBuf, *unit.mirOut, opts);
+        x64::mirPrint(mirBuf, *debug->mirOut, opts);
         return true;
     }
 
@@ -783,17 +866,18 @@ bool X64Backend::compileBytecode(
     // Build：不 call wrapper，避免 JIT 内 call 导致 callee 写 [rsp] 覆盖返回地址（fn 内部 DEP）
     void *debugTraceFn =
 #ifndef NDEBUG
-        reinterpret_cast<void *>(&jitDebugTraceWrapper);
+        ((debug && debug->enableDebugTrace) ? reinterpret_cast<void *>(&jitDebugTraceWrapper)
+                                            : nullptr);
 #else
         nullptr;
 #endif
     x64::encodeMirBuffer(
         mirBuf,
         code,
-        unit.asmOut,
+        debug ? debug->asmOut : nullptr,
         0,
         &vregAlloc,
-        unit.instructionBoundaries,
+        debug ? debug->instructionBoundaries : nullptr,
         debugTraceFn);
     return true;
 }

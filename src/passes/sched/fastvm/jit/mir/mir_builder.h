@@ -85,9 +85,22 @@ class MirBuilder {
         push(m);
     }
     void emitCallRax() { push(MirOp::CallRax, 0, 0); }
+    void emitCallRel32(uint32_t targetPc) {
+        Mir m;
+        m.op    = MirOp::CallRel32;
+        m.imm32 = targetPc;
+        push(m);
+    }
     void emitPushRdi() { push(MirOp::PushRdi, 0, 0); }
     void emitPopRdi() { push(MirOp::PopRdi, 0, 0); }
+    void emitPushRsi() { push(MirOp::PushRsi, 0, 0); }
+    void emitPopRsi() { push(MirOp::PopRsi, 0, 0); }
+    void emitPushRbx() { push(MirOp::PushRbx, 0, 0); }
+    void emitPopRbx() { push(MirOp::PopRbx, 0, 0); }
+    void emitSubRsp8() { push(MirOp::SubRsp8, 0, 0); }
+    void emitAddRsp8() { push(MirOp::AddRsp8, 0, 0); }
     void emitRet() { push(MirOp::Ret, 0, 0); }
+    void emitJmpRax() { push(MirOp::JmpRax, 0, 0); }
     /** Debug 构建下在每两条指令间插入；pc 为当前字节码 pc，供 jitDebugTrace 打印 */
     void emitDebugTrace(uint32_t pc) {
         Mir m;

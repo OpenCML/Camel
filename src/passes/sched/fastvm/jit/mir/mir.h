@@ -70,12 +70,14 @@ enum class MirOp : uint8_t {
     SubRsp8,
     AddRsp8,
     CallRax,
+    CallRel32,
     JzRel32,
     JmpRel32,
     JleRel32,
     JmpRel8,
     JleRel8,
     Ret, // 无操作数，用于 TAIL 等
+    JmpRax,
     // --- V*：r0/r1=VRegId，三操作数时右操作数在 imm32（vreg id）---
     VLoadFromFrame,
     VStoreToFrame,

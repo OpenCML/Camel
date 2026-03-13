@@ -277,6 +277,9 @@ std::string mirToString(const Mir &m) {
     case MirOp::CallRax:
         os << "call rax";
         break;
+    case MirOp::CallRel32:
+        os << "call pc=" << m.imm32;
+        break;
     case MirOp::PushRdi:
         os << "push rdi";
         break;
@@ -303,6 +306,9 @@ std::string mirToString(const Mir &m) {
         break;
     case MirOp::Ret:
         os << "ret";
+        break;
+    case MirOp::JmpRax:
+        os << "jmp rax";
         break;
     case MirOp::DebugTrace:
         os << "debug_trace pc=" << m.pc;
@@ -468,6 +474,8 @@ size_t mirSizeBytes(const Mir &m) {
         return 10;
     case MirOp::CallRax:
         return 2;
+    case MirOp::CallRel32:
+        return 5;
     case MirOp::PushRdi:
     case MirOp::PopRdi:
     case MirOp::PushRsi:
@@ -480,6 +488,8 @@ size_t mirSizeBytes(const Mir &m) {
         return 4;
     case MirOp::Ret:
         return 1;
+    case MirOp::JmpRax:
+        return 2;
     case MirOp::JzRel32:
         return 6;
     case MirOp::JmpRel32:

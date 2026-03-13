@@ -55,8 +55,9 @@ using namespace camel::jit;
         currFrame->set(bc.result, res);                                                            \
     } break;
 
-slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
+FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
     Frame *currFrame            = rootFrame;
+    Frame *rootActiveFrame      = rootFrame;
     const size_t pcStackBase    = pcStack_.size();
     const size_t frameStackBase = frameStack_.size();
 
@@ -96,8 +97,8 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             case OpCode::RETN: {
                 slot_t result = currFrame->get<slot_t>(bc.fastop[0]);
 
-                if (currFrame == rootFrame) {
-                    return result;
+                if (currFrame == rootActiveFrame) {
+                    return CallResult{result, currFrame};
                 }
 
                 framePool_.release(currFrame);
@@ -320,53 +321,33 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                 const auto &result = call(offsetMap_.at(targetGraph), funcFrame);
                 _timer.resume();
 
-                framePool_.release(funcFrame);
-
                 currFrame->set(bc.result, result);
             } break;
 
             case OpCode::FUNC: {
 #if ENABLE_FASTVM_JIT
-                if (bc.fastop[1] == 0) {
-                    GIR::Graph *g          = getFuncExtraGraph(&bc);
-                    JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc));
-                    Frame *funcFrame       = framePool_.acquire(g);
-                    size_t argsCnt         = bc.normCnt();
-                    const data_idx_t *args = bc.operands();
-                    for (size_t i = 0; i < argsCnt; ++i) {
-                        funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
-                    }
+                const Bytecode *callBc = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
+                if (callBc->fastop[1] == 0) {
+                    GIR::Graph *g          = getFuncExtraGraph(callBc);
+                    JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(callBc));
+                    size_t argsCnt         = callBc->normCnt();
+                    const data_idx_t *args = callBc->operands();
+                    Frame *funcFrame =
+                        acquireCallFrameWithArgs(g, args, argsCnt, [&](data_idx_t idx) {
+                            return currFrame->get<slot_t>(idx);
+                        });
                     slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
                     currFrame->set(bc.result, result);
                 } else {
-                    GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
-                    size_t targetPc         = static_cast<size_t>(bc.fastop[1]);
-                    uint32_t count          = incFuncExtraCount(const_cast<Bytecode *>(&bc));
-                    if (tierPolicy_.shouldJit(count)) {
-                        compileAndCacheGraph(targetGraph, targetPc);
-                        const Bytecode &bc2 = bytecodes_[pc];
-                        if (bc2.fastop[1] == 0) {
-                            GIR::Graph *g    = getFuncExtraGraph(&bc2);
-                            JitEntryFn fn    = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc2));
-                            Frame *funcFrame = framePool_.acquire(g);
-                            size_t argsCnt   = bc2.normCnt();
-                            const data_idx_t *args = bc2.operands();
-                            for (size_t i = 0; i < argsCnt; ++i) {
-                                funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
-                            }
-                            slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
-                            currFrame->set(bc.result, result);
-                            pc += bc.opsize;
-                            continue;
-                        }
-                    }
+                    GIR::Graph *targetGraph = getFuncExtraGraph(callBc);
+                    size_t targetPc         = static_cast<size_t>(callBc->fastop[1]);
                     push(pc, currFrame);
-                    Frame *funcFrame       = framePool_.acquire(targetGraph);
-                    size_t argsCnt         = bc.normCnt();
-                    const data_idx_t *args = bc.operands();
-                    for (size_t i = 0; i < argsCnt; ++i) {
-                        funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
-                    }
+                    size_t argsCnt         = callBc->normCnt();
+                    const data_idx_t *args = callBc->operands();
+                    Frame *funcFrame =
+                        acquireCallFrameWithArgs(targetGraph, args, argsCnt, [&](data_idx_t idx) {
+                            return currFrame->get<slot_t>(idx);
+                        });
                     pc        = targetPc;
                     currFrame = funcFrame;
                     continue;
@@ -387,69 +368,33 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
 
             case OpCode::TAIL: {
 #if ENABLE_FASTVM_JIT
-                bool wasRoot = (currFrame == rootFrame);
                 FrameView lastFrame(currFrame);
+                const Bytecode *tailBc = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
+                GIR::Graph *tailTargetGraph = getFuncExtraGraph(tailBc);
                 framePool_.release(currFrame);
-                if (bc.fastop[1] == 0) {
-                    GIR::Graph *g          = getFuncExtraGraph(&bc);
-                    JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc));
-                    Frame *newFrame        = framePool_._acquire(g);
-                    size_t argsCnt         = bc.normCnt();
-                    const data_idx_t *args = bc.operands();
-                    for (size_t i = 0; i < argsCnt; ++i) {
-                        newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
+                if (tailBc->fastop[1] == 0) {
+                    size_t argsCnt         = tailBc->normCnt();
+                    const data_idx_t *args = tailBc->operands();
+                    Frame *newFrame        = acquireTailFrameWithArgs(
+                        tailTargetGraph,
+                        args,
+                        argsCnt,
+                        [&](data_idx_t idx) { return lastFrame.get<slot_t>(idx); });
+                    if (currFrame == rootActiveFrame) {
+                        rootActiveFrame = newFrame;
                     }
-                    framePool_._resetTop();
-                    newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
-                    slot_t result           = fn(newFrame->slotBase(), currentJitCtx_);
-                    if (wasRoot) {
-                        return result;
-                    }
-                    framePool_.release(newFrame);
-                    auto [lastPC, lastCallerFrame] = pop();
-                    pc                             = lastPC;
-                    currFrame                      = lastCallerFrame;
-                    const Bytecode &lbc            = bytecodes_[pc];
-                    currFrame->set(lbc.result, result);
+                    pc        = getFuncExtraTargetPc(tailBc);
+                    currFrame = newFrame;
                     continue;
                 }
-                GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
-                size_t targetPc         = static_cast<size_t>(bc.fastop[1]);
-                uint32_t count          = incFuncExtraCount(const_cast<Bytecode *>(&bc));
-                if (tierPolicy_.shouldJit(count)) {
-                    compileAndCacheGraph(targetGraph, targetPc);
-                    const Bytecode &bc2 = bytecodes_[pc];
-                    if (bc2.fastop[1] == 0) {
-                        GIR::Graph *g          = getFuncExtraGraph(&bc2);
-                        JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc2));
-                        Frame *newFrame        = framePool_._acquire(g);
-                        size_t argsCnt         = bc2.normCnt();
-                        const data_idx_t *args = bc2.operands();
-                        for (size_t i = 0; i < argsCnt; ++i) {
-                            newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
-                        }
-                        framePool_._resetTop();
-                        newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
-                        slot_t result           = fn(newFrame->slotBase(), currentJitCtx_);
-                        if (wasRoot) {
-                            return result;
-                        }
-                        framePool_.release(newFrame);
-                        auto [lastPC, lastCallerFrame] = pop();
-                        pc                             = lastPC;
-                        currFrame                      = lastCallerFrame;
-                        const Bytecode &lbc            = bytecodes_[pc];
-                        currFrame->set(lbc.result, result);
-                        continue;
-                    }
-                }
-                currFrame              = framePool_._acquire(targetGraph);
-                size_t argsCnt         = bc.normCnt();
-                const data_idx_t *args = bc.operands();
-                for (size_t i = 0; i < argsCnt; ++i) {
-                    currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
-                }
-                framePool_._resetTop();
+                GIR::Graph *targetGraph = tailTargetGraph;
+                size_t targetPc         = static_cast<size_t>(tailBc->fastop[1]);
+                size_t argsCnt          = tailBc->normCnt();
+                const data_idx_t *args  = tailBc->operands();
+                currFrame =
+                    acquireTailFrameWithArgs(targetGraph, args, argsCnt, [&](data_idx_t idx) {
+                        return lastFrame.get<slot_t>(idx);
+                    });
                 pc = targetPc;
                 continue;
 #else
@@ -560,14 +505,19 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             if (!frame || released.count(frame) != 0) {
                 return;
             }
+            if (!framePool_.isActive(frame)) {
+                return;
+            }
             framePool_.release(frame);
             released.insert(frame);
         };
 
         Graph *siteGraph =
-            currFrame ? currFrame->graph() : (rootFrame ? rootFrame->graph() : nullptr);
+            currFrame ? currFrame->graph() : (rootActiveFrame ? rootActiveFrame->graph() : nullptr);
         releaseFrame(currFrame);
-        releaseFrame(rootFrame);
+        if (currFrame != rootActiveFrame) {
+            releaseFrame(rootActiveFrame);
+        }
         while (frameStack_.size() > frameStackBase) {
             releaseFrame(frameStack_.back());
             frameStack_.pop_back();
@@ -586,12 +536,17 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             if (!frame || released.count(frame) != 0) {
                 return;
             }
+            if (!framePool_.isActive(frame)) {
+                return;
+            }
             framePool_.release(frame);
             released.insert(frame);
         };
 
         releaseFrame(currFrame);
-        releaseFrame(rootFrame);
+        if (currFrame != rootActiveFrame) {
+            releaseFrame(rootActiveFrame);
+        }
         while (frameStack_.size() > frameStackBase) {
             releaseFrame(frameStack_.back());
             frameStack_.pop_back();

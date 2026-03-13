@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 07, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,6 +61,10 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         if (!meta)
             meta = installFrameMetaInfoForGraph(g);
 
+        CompilationDebugOptions debugOptions{
+            .asmOut           = &os,
+            .enableDebugTrace = true,
+        };
         CompilationUnit unit{
             .graph          = g,
             .frameMeta      = meta,
@@ -70,7 +74,7 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
             .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
             .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
-            .asmOut         = &os,
+            .debug          = &debugOptions,
         };
 
         os << g->mangledName() << ":\n";

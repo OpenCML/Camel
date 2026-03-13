@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -273,20 +273,34 @@ union BytecodeExtra {  // 8 bytes
     std::string toString(OpCode opcode) const;
 };
 
-// FUNC/TAIL：第一块 extra 为 Graph*；启用了 JIT 时第二块 extra 为 count（未 JIT）或 JitEntryFn（已
-// JIT）
+// FUNC/TAIL：第一块 extra 为 Graph*；启用了 JIT 时第二块 extra 为 count（未 JIT）或
+// [targetPc:16 | jitFn:48]（已 JIT）
 inline GIR::Graph *getFuncExtraGraph(const BytecodeHeader *bc) { return bc->extra()->graph; }
 
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+constexpr uint64_t kFuncExtraJitFnMask     = (1ull << 48) - 1;
+constexpr uint64_t kFuncExtraTargetPcShift = 48;
+constexpr uint64_t kFuncExtraTargetPcMask  = 0xFFFFull;
+
 inline uint32_t getFuncExtraCount(BytecodeHeader *bc) {
     return static_cast<uint32_t>(*bc->extra2());
 }
-inline void *getFuncExtraFn(BytecodeHeader *bc) { return reinterpret_cast<void *>(*bc->extra2()); }
+inline size_t getFuncExtraTargetPc(const BytecodeHeader *bc) {
+    return static_cast<size_t>((*bc->extra2() >> kFuncExtraTargetPcShift) & kFuncExtraTargetPcMask);
+}
+inline void *getFuncExtraFn(BytecodeHeader *bc) {
+    return reinterpret_cast<void *>(*bc->extra2() & kFuncExtraJitFnMask);
+}
 inline void *getFuncExtraFn(const BytecodeHeader *bc) {
-    return reinterpret_cast<void *>(*bc->extra2());
+    return reinterpret_cast<void *>(*bc->extra2() & kFuncExtraJitFnMask);
 }
 inline void setFuncExtraFn(BytecodeHeader *bc, void *fn) {
-    *bc->extra2() = reinterpret_cast<uint64_t>(fn);
+    const uint64_t targetPc = static_cast<uint16_t>(bc->fastop[1]);
+    const uint64_t fnBits   = reinterpret_cast<uint64_t>(fn);
+    ASSERT(
+        (fnBits & ~kFuncExtraJitFnMask) == 0,
+        "JIT entry pointer exceeds packed FuncExtra range.");
+    *bc->extra2() = (targetPc << kFuncExtraTargetPcShift) | (fnBits & kFuncExtraJitFnMask);
     bc->fastop[1] = 0;
 }
 inline uint32_t incFuncExtraCount(BytecodeHeader *bc) {

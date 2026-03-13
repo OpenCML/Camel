@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -444,6 +444,15 @@ class FramePool {
                     mm::formatAddress(this, true),
                     mm::formatAddress(top_, true));
         });
+    }
+
+    inline bool isActive(Frame *frame, GIR::Graph *graph = nullptr) const {
+        if (!frame)
+            return false;
+        if (reinterpret_cast<const std::byte *>(frame) >= top_)
+            return false;
+        (void)graph;
+        return true;
     }
 
     void foreach (const std::function<void(Frame *)> &fn) const {

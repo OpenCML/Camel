@@ -31,17 +31,25 @@ namespace camel::jit::x64 {
 
 class Encoder {
   public:
-    explicit Encoder(std::vector<uint8_t> &out, std::ostream *asmOut = nullptr, size_t baseAddr = 0)
-        : out_(out), asmOut_(asmOut), baseAddr_(baseAddr) {}
+    explicit Encoder(
+        std::vector<uint8_t> &out, std::ostream *asmOut = nullptr, size_t baseAddr = 0,
+        bool recordAsm = false)
+        : out_(out), asmOut_(asmOut), baseAddr_(baseAddr), recordAsm_(recordAsm) {}
 
     size_t size() const { return out_.size(); }
     size_t here() const { return out_.size(); }
 
     void emitByte(uint8_t b) { out_.push_back(b); }
     // 缓冲 asm 行 (地址, 指令文本)，flush 时按实际最大地址宽度右对齐；始终记录以便取指令边界
-    void asmLine(const std::string &s) { asmLines_.emplace_back(baseAddr_ + here(), s); }
+    void asmLine(const std::string &s) {
+        if (!recordAsm_)
+            return;
+        asmLines_.emplace_back(baseAddr_ + here(), s);
+    }
     // 用指令起始偏移记录 asm 行（用于跳转等，保证 [addr] 与下一指令间隔 = 本条指令长度）
     void asmLineAt(size_t instrStart, const std::string &s) {
+        if (!recordAsm_)
+            return;
         asmLines_.emplace_back(baseAddr_ + instrStart, s);
     }
     size_t getAsmLineCount() const { return asmLines_.size(); }
@@ -1550,6 +1558,30 @@ class Encoder {
         asmLineAt(at, "ret");
     }
 
+    void jmpRax() {
+        size_t at = here();
+        emitBytes({0xff, 0xe0});
+        asmLineAt(at, "jmp rax");
+    }
+
+    void tailJmpRaxWin64() {
+#if defined(_WIN32) || defined(_WIN64)
+        size_t at = here();
+        emitBytes({0x48, 0x83, 0xc4, 0x08}); // add rsp, 8
+        asmLineAt(at, "add rsp, 8  ; win64 align pad");
+        at = here();
+        emitByte(0x5b); // pop rbx
+        asmLineAt(at, "pop rbx");
+        at = here();
+        emitByte(0x5e); // pop rsi
+        asmLineAt(at, "pop rsi");
+        at = here();
+        emitByte(0x5f); // pop rdi
+        asmLineAt(at, "pop rdi");
+#endif
+        jmpRax();
+    }
+
     // push rdi / pop rdi：trampoline 会覆盖 rdi，caller 需在调用前后保存/恢复 slot base
     void pushRdi() {
         size_t at = here();
@@ -2007,6 +2039,7 @@ class Encoder {
     std::vector<uint8_t> &out_;
     std::ostream *asmOut_ = nullptr;
     size_t baseAddr_      = 0;
+    bool recordAsm_       = false;
     std::vector<std::pair<size_t, std::string>> asmLines_;
 };
 

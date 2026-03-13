@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 22, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,6 +45,10 @@ extern "C" slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc);
 extern "C" slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc);
 extern "C" slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc);
 extern "C" slot_t trampolineCast(slot_t *slots, void *ctx, size_t pc);
+extern "C" slot_t *prepareDirectJitCall(slot_t *callerSlots, void *ctx, const Bytecode *bc);
+extern "C" slot_t *prepareDirectJitTailCall(slot_t *callerSlots, void *ctx, const Bytecode *bc);
+extern "C" slot_t
+finishDirectJitCall(slot_t result, slot_t *calleeSlots, void *ctx, GIR::Graph *owner);
 
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
 /** Win64 asm trampoline: call fn(slots,ctx), store result, jmp to return_addr (avoids Release
