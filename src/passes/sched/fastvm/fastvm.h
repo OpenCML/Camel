@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,10 +38,25 @@ namespace jit = camel::jit;
 namespace ctx = camel::core::context;
 
 struct FastVMConfig {
-    bool enableJit = false;
+    enum class JitMode {
+        Disabled,
+        OnDemand,
+        Always,
+    };
+
+    JitMode jitMode        = JitMode::Disabled;
+    size_t jitHotThreshold = 1;
+    bool enableJitTraceMir = false;
 };
 
 class FastVMSchedPass : public GraphSchedulePass {
+  public:
+    struct CallResult {
+        slot_t result;
+        ctx::Frame *rootFrame;
+    };
+
+  private:
     inline static const size_t maxRecursionDepth_ = 256; // default max recursion depth
 
     // 栈帧池
@@ -57,8 +72,36 @@ class FastVMSchedPass : public GraphSchedulePass {
     std::mutex jitCacheMutex_;
     jit::JitConfig jitConfig_{};
     jit::TierPolicy tierPolicy_{jitConfig_};
+    bool enableJitTraceMir_ = false;
     void *currentJitCtx_{}; // 供解释器 FUNC/TAIL 调用 invokeCallOrJit 时使用
     void compileAndCacheGraph(GIR::Graph *graph, size_t entryPc);
+
+    template <typename ReadSlotFn>
+    void populateCallFrame(
+        ctx::Frame *frame, const data_idx_t *args, size_t argsCnt, ReadSlotFn &&readSlot) {
+        for (size_t i = 0; i < argsCnt; ++i) {
+            frame->set(i + 1, readSlot(args[i]));
+        }
+    }
+
+    template <typename ReadSlotFn>
+    ctx::Frame *acquireCallFrameWithArgs(
+        GIR::Graph *graph, const data_idx_t *args, size_t argsCnt, ReadSlotFn &&readSlot) {
+        ctx::Frame *frame = framePool_.acquire(graph);
+        populateCallFrame(frame, args, argsCnt, std::forward<ReadSlotFn>(readSlot));
+        return frame;
+    }
+
+    template <typename ReadSlotFn>
+    ctx::Frame *acquireTailFrameWithArgs(
+        GIR::Graph *graph, const data_idx_t *args, size_t argsCnt, ReadSlotFn &&readSlot) {
+        ctx::Frame *frame = framePool_._acquire(graph);
+        populateCallFrame(frame, args, argsCnt, std::forward<ReadSlotFn>(readSlot));
+        framePool_._resetTop();
+        return frame;
+    }
+
+    Bytecode *materializeCallTarget(size_t pc, Bytecode *bc);
 #endif
 
     // 程序计数器栈和栈帧栈
@@ -92,9 +135,21 @@ class FastVMSchedPass : public GraphSchedulePass {
           ,
           jitConfig_([&config]() {
               jit::JitConfig c{};
-              c.policy = config.enableJit ? jit::JitPolicy::OnDemand : jit::JitPolicy::Disabled;
+              switch (config.jitMode) {
+              case FastVMConfig::JitMode::Disabled:
+                  c.policy = jit::JitPolicy::Disabled;
+                  break;
+              case FastVMConfig::JitMode::OnDemand:
+                  c.policy = jit::JitPolicy::OnDemand;
+                  break;
+              case FastVMConfig::JitMode::Always:
+                  c.policy = jit::JitPolicy::Always;
+                  break;
+              }
+              c.hotThreshold = config.jitHotThreshold;
               return c;
-          }())
+          }()),
+          enableJitTraceMir_(config.enableJitTraceMir)
 #endif
     {
     }
@@ -102,13 +157,17 @@ class FastVMSchedPass : public GraphSchedulePass {
 
     virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 
+    CallResult callBorrowed(size_t pc, ctx::Frame *rootFrame);
     slot_t call(size_t pc, ctx::Frame *rootFrame);
+    size_t graphEntryPc(GIR::Graph *graph) const;
 
 #if ENABLE_FASTVM_JIT
     ctx::Frame *acquireFrameForCall(GIR::Graph *graph);
     void releaseFrameForCall(ctx::Frame *frame);
+    void releaseFrameForCall(ctx::Frame *frame, GIR::Graph *owner);
     ctx::Frame *acquireFrameForTail(GIR::Graph *graph);
     void releaseFrameForTail(ctx::Frame *frame);
+    slot_t invokeOwnedJitFrame(jit::JitEntryFn fn, ctx::Frame *frame, void *jitCtx);
     ctx::Context &context();
     GIR::Graph *jitFnToGraph(jit::JitEntryFn fn) const;
     slot_t invokeCallOrJit(

@@ -1,14 +1,14 @@
 {
     "terminal.integrated.env.windows": {
-        "PATH": "${workspaceFolder}\\build\\Release;${workspaceFolder}\\out\\latest;${workspaceFolder}\\out\\latest\\bin;${env:PATH}",
+        "PATH": "${workspaceFolder}\\out\\latest;${workspaceFolder}\\out\\latest\\bin;${env:PATH}",
         "CAMEL_HOME": "${workspaceFolder}/out/latest"
     },
     "terminal.integrated.env.osx": {
-        "PATH": "${workspaceFolder}/build/Release:${workspaceFolder}/out/latest:${workspaceFolder}/out/latest/bin:${env:PATH}",
+        "PATH": "${workspaceFolder}/out/latest:${workspaceFolder}/out/latest/bin:${env:PATH}",
         "CAMEL_HOME": "${workspaceFolder}/out/latest"
     },
     "terminal.integrated.env.linux": {
-        "PATH": "${workspaceFolder}/build/Release:${workspaceFolder}/out/latest:${workspaceFolder}/out/latest/bin:${env:PATH}",
+        "PATH": "${workspaceFolder}/out/latest:${workspaceFolder}/out/latest/bin:${env:PATH}",
         "CAMEL_HOME": "${workspaceFolder}/out/latest"
     },
     "cSpell.words": [

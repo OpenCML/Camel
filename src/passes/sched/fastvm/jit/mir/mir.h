@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -63,13 +63,21 @@ enum class MirOp : uint8_t {
     MovRegImm64,
     PushRdi, // 保存 rdi（slot base）跨越 trampoline 调用；trampoline 会覆盖 rdi
     PopRdi,  // 恢复 rdi
+    PushRsi,
+    PopRsi,
+    PushRbx,
+    PopRbx,
+    SubRsp8,
+    AddRsp8,
     CallRax,
+    CallRel32,
     JzRel32,
     JmpRel32,
     JleRel32,
     JmpRel8,
     JleRel8,
     Ret, // 无操作数，用于 TAIL 等
+    JmpRax,
     // --- V*：r0/r1=VRegId，三操作数时右操作数在 imm32（vreg id）---
     VLoadFromFrame,
     VStoreToFrame,

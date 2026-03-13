@@ -1,0 +1,18 @@
+module macro_branch_chain
+
+macro func add_one(x: int): int {
+    return x + 1
+}
+
+macro func add_two(x: int): int {
+    return add_one(add_one(x))
+}
+
+macro func choose(flag: bool, x: int): int {
+    return if flag then add_two(x) else add_one(x)
+}
+
+func main(): int sync {
+    println(choose(true, 40) + choose(false, 40))
+    return 0
+}

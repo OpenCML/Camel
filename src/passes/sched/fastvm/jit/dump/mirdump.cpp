@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 08, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,6 +70,13 @@ static graph_ptr_t applyMirDump(
         mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineOper)] = "trampolineOper";
         mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineCast)] = "trampolineCast";
 
+        CompilationDebugOptions debugOptions{
+            .mirOut           = &os,
+            .mirSlotOnly      = slotOnly,
+            .enableDebugTrace = true,
+            .mirSymbolNames   = &mirSymbolNames,
+            .mirSlotNames     = nullptr,
+        };
         CompilationUnit unit{
             .graph          = g,
             .frameMeta      = meta,
@@ -79,11 +86,7 @@ static graph_ptr_t applyMirDump(
             .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
             .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
             .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
-            .asmOut         = nullptr,
-            .mirOut         = &os,
-            .mirSlotOnly    = slotOnly,
-            .mirSymbolNames = &mirSymbolNames,
-            .mirSlotNames   = nullptr,
+            .debug          = &debugOptions,
         };
 
         os << "\n" << g->mangledName() << ":\n";

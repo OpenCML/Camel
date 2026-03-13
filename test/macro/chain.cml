@@ -1,0 +1,14 @@
+module macro_chain
+
+macro func add_one(x: int): int {
+    return x + 1
+}
+
+macro func add_two(x: int): int {
+    return add_one(x) + 1
+}
+
+func main(): int sync {
+    println(add_two(40))
+    return 0
+}

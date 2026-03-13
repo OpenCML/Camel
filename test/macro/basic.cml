@@ -1,0 +1,11 @@
+module macro_basic
+
+macro func add_one(x: int): int {
+    return x + 1
+}
+
+func main(): int sync {
+    let value = add_one(41)
+    println(value)
+    return 0
+}

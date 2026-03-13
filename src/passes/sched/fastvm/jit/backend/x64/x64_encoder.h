@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,17 +31,25 @@ namespace camel::jit::x64 {
 
 class Encoder {
   public:
-    explicit Encoder(std::vector<uint8_t> &out, std::ostream *asmOut = nullptr, size_t baseAddr = 0)
-        : out_(out), asmOut_(asmOut), baseAddr_(baseAddr) {}
+    explicit Encoder(
+        std::vector<uint8_t> &out, std::ostream *asmOut = nullptr, size_t baseAddr = 0,
+        bool recordAsm = false)
+        : out_(out), asmOut_(asmOut), baseAddr_(baseAddr), recordAsm_(recordAsm) {}
 
     size_t size() const { return out_.size(); }
     size_t here() const { return out_.size(); }
 
     void emitByte(uint8_t b) { out_.push_back(b); }
     // 缓冲 asm 行 (地址, 指令文本)，flush 时按实际最大地址宽度右对齐；始终记录以便取指令边界
-    void asmLine(const std::string &s) { asmLines_.emplace_back(baseAddr_ + here(), s); }
+    void asmLine(const std::string &s) {
+        if (!recordAsm_)
+            return;
+        asmLines_.emplace_back(baseAddr_ + here(), s);
+    }
     // 用指令起始偏移记录 asm 行（用于跳转等，保证 [addr] 与下一指令间隔 = 本条指令长度）
     void asmLineAt(size_t instrStart, const std::string &s) {
+        if (!recordAsm_)
+            return;
         asmLines_.emplace_back(baseAddr_ + instrStart, s);
     }
     size_t getAsmLineCount() const { return asmLines_.size(); }
@@ -1530,8 +1538,48 @@ class Encoder {
     // ret
     void ret() {
         size_t at = here();
+#if defined(_WIN32) || defined(_WIN64)
+        // Win64: JIT 作为普通函数被 C++ 调用，必须在函数返回前恢复非易失寄存器。
+        // prologueWin64 额外 sub 了 8 字节以维持函数体内 RSP=8(mod16)，这里对应恢复。
+        emitBytes({0x48, 0x83, 0xc4, 0x08}); // add rsp, 8
+        asmLineAt(at, "add rsp, 8  ; win64 align pad");
+        at = here();
+        emitByte(0x5b); // pop rbx
+        asmLineAt(at, "pop rbx");
+        at = here();
+        emitByte(0x5e); // pop rsi
+        asmLineAt(at, "pop rsi");
+        at = here();
+        emitByte(0x5f); // pop rdi
+        asmLineAt(at, "pop rdi");
+        at = here();
+#endif
         emitByte(0xc3);
         asmLineAt(at, "ret");
+    }
+
+    void jmpRax() {
+        size_t at = here();
+        emitBytes({0xff, 0xe0});
+        asmLineAt(at, "jmp rax");
+    }
+
+    void tailJmpRaxWin64() {
+#if defined(_WIN32) || defined(_WIN64)
+        size_t at = here();
+        emitBytes({0x48, 0x83, 0xc4, 0x08}); // add rsp, 8
+        asmLineAt(at, "add rsp, 8  ; win64 align pad");
+        at = here();
+        emitByte(0x5b); // pop rbx
+        asmLineAt(at, "pop rbx");
+        at = here();
+        emitByte(0x5e); // pop rsi
+        asmLineAt(at, "pop rsi");
+        at = here();
+        emitByte(0x5f); // pop rdi
+        asmLineAt(at, "pop rdi");
+#endif
+        jmpRax();
     }
 
     // push rdi / pop rdi：trampoline 会覆盖 rdi，caller 需在调用前后保存/恢复 slot base
@@ -1554,6 +1602,26 @@ class Encoder {
         size_t at = here();
         emitByte(0x5b);
         asmLineAt(at, "pop rbx");
+    }
+    void pushRsi() {
+        size_t at = here();
+        emitByte(0x56);
+        asmLineAt(at, "push rsi");
+    }
+    void popRsi() {
+        size_t at = here();
+        emitByte(0x5e);
+        asmLineAt(at, "pop rsi");
+    }
+    void subRsp8() {
+        size_t at = here();
+        emitBytes({0x48, 0x83, 0xec, 0x08});
+        asmLineAt(at, "sub rsp, 8");
+    }
+    void addRsp8() {
+        size_t at = here();
+        emitBytes({0x48, 0x83, 0xc4, 0x08});
+        asmLineAt(at, "add rsp, 8");
     }
 
     // Debug：栈 136 字节，保存区与 JitDebugContext 布局一致；JIT 调用 jitDebugTraceWrapper，
@@ -1872,14 +1940,27 @@ class Encoder {
         asmLineAt(at, h.str());
     }
 
-    // Windows x64: copy rcx->rdi, rdx->rsi (SysV convention for internal use)
+    // Windows x64: preserve non-volatile regs, then copy rcx->rdi / rdx->rsi for internal use.
+    // 额外 sub rsp, 8 让函数体内维持 RSP=8(mod16)，与现有 call/debug-trace 对齐假设保持一致。
     void prologueWin64() {
         size_t at1 = here();
-        emitBytes({0x48, 0x89, 0xcf}); // mov rdi, rcx
-        asmLineAt(at1, "mov rdi, rcx");
+        emitByte(0x57); // push rdi
+        asmLineAt(at1, "push rdi");
         size_t at2 = here();
+        emitByte(0x56); // push rsi
+        asmLineAt(at2, "push rsi");
+        size_t at3 = here();
+        emitByte(0x53); // push rbx
+        asmLineAt(at3, "push rbx");
+        size_t at4 = here();
+        emitBytes({0x48, 0x83, 0xec, 0x08}); // sub rsp, 8
+        asmLineAt(at4, "sub rsp, 8  ; win64 align pad");
+        size_t at5 = here();
+        emitBytes({0x48, 0x89, 0xcf}); // mov rdi, rcx
+        asmLineAt(at5, "mov rdi, rcx");
+        size_t at6 = here();
         emitBytes({0x48, 0x89, 0xd6}); // mov rsi, rdx
-        asmLineAt(at2, "mov rsi, rdx");
+        asmLineAt(at6, "mov rsi, rdx");
     }
 
     // Windows x64: call trampoline(frame, ctx, pc). Assumes rdi=frame, rsi=ctx.
@@ -1958,6 +2039,7 @@ class Encoder {
     std::vector<uint8_t> &out_;
     std::ostream *asmOut_ = nullptr;
     size_t baseAddr_      = 0;
+    bool recordAsm_       = false;
     std::vector<std::pair<size_t, std::string>> asmLines_;
 };
 

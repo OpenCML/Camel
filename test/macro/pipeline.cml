@@ -1,0 +1,20 @@
+module macro_pipeline
+
+macro func add_one(x: int): int {
+    return x + 1
+}
+
+macro func double(x: int): int {
+    return x * 2
+}
+
+macro func pipeline(x: int): int {
+    let y = add_one(x)
+    let z = double(y)
+    return add_one(z)
+}
+
+func main(): int sync {
+    println(pipeline(20))
+    return 0
+}

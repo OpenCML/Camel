@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 10, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -92,6 +92,7 @@ class Node {
     static void link(LinkType type, Node *from, Node *to);
     static bool unlink(Node *from, Node *to);
     static bool replace(Node *oldNode, Node *newNode);
+    static bool replaceUses(Node *oldNode, Node *newNode);
 
   protected:
     bool macro_ = false;
@@ -278,6 +279,7 @@ class FuncNode : public Node {
     /** 执行热路径用：构造时已缓存，直接返回，避免返回 func_ptr_t 带来的引用计数开销 */
     Graph *graph() const { return graph_; }
     FunctionType *funcType() const;
+    bool isMacro() const { return func_ && func_->isMacro(); }
 
     std::string toString() const override;
 

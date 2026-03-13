@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -50,6 +50,14 @@ using PassScope    = Scope<std::string, PassFactory, std::string>;
 using PassScopePtr = scope_ptr_t<std::string, PassFactory, std::string>;
 
 namespace {
+
+FastVMConfig makeDefaultFastVmJitConfig() {
+    FastVMConfig config{};
+    config.jitMode           = FastVMConfig::JitMode::OnDemand;
+    config.jitHotThreshold   = 1;
+    config.enableJitTraceMir = false;
+    return config;
+}
 
 std::vector<std::string> splitPath(const std::string &path) {
     std::vector<std::string> result;
@@ -150,7 +158,7 @@ PassScopePtr initPassScope() {
                              {"bytecode", def(PASS(BytecodeDumpPass))},
                              {"linked_bytecode", def(PASS(LinkedBytecodeDumpPass))},
                              {"jit",
-                              def(PASS1(FastVMSchedPass, FastVMConfig{.enableJit = true}),
+                              def(PASS1(FastVMSchedPass, makeDefaultFastVmJitConfig()),
                                   {
                                       {"dump",
                                        scope({

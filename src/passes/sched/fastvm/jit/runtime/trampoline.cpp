@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
@@ -33,8 +33,10 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/rtdata.h"
 
+#include <array>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 
 using namespace camel::core::context;
 
@@ -57,6 +59,43 @@ using namespace camel::jit;
 extern "C" {
 
 #if ENABLE_FASTVM_JIT
+namespace {
+
+constexpr size_t kInlineTailArgCount = 8;
+
+class TailArgStorage {
+  public:
+    explicit TailArgStorage(size_t count)
+        : data_(count <= kInlineTailArgCount ? inline_.data() : heap_.data()) {
+        if (count > kInlineTailArgCount) {
+            heap_.resize(count);
+            data_ = heap_.data();
+        }
+    }
+
+    slot_t *data() { return data_; }
+
+  private:
+    std::array<slot_t, kInlineTailArgCount> inline_{};
+    std::vector<slot_t> heap_;
+    slot_t *data_ = nullptr;
+};
+
+inline void copyOperandsToBuffer(slot_t *dst, Frame *frame, const Bytecode &bc, size_t argsCnt) {
+    for (size_t i = 0; i < argsCnt; ++i) {
+        dst[i] = frame->get<slot_t>(bc.operands()[i]);
+    }
+}
+
+inline void
+writeCallArgsToFrame(Frame *frame, const slot_t *args, size_t argsCnt, size_t dstOffset = 1) {
+    for (size_t i = 0; i < argsCnt; ++i) {
+        frame->set(dstOffset + i, args[i]);
+    }
+}
+
+} // namespace
+
 // 由 jitDebugTrace 存根 tail-call，C linkage 供 asm "jmp jitDebugTraceBody" 解析
 // rdi 为当前 JIT 的 slot 基址；slot[0] 恒存 Frame*，据此打印当前帧（见上方 slot[0] 规范）
 extern "C" void jitDebugTraceBody(const void *ctx) {
@@ -188,10 +227,11 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
                     static_cast<void *>(reinterpret_cast<void *>(fn))));
         Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]); // slot[0] = Frame*
         Frame *newFrame    = vm->acquireFrameForCall(g);
-        for (size_t i = 0; i < argsCnt; ++i)
+        for (size_t i = 0; i < argsCnt; ++i) {
             newFrame->set(
                 i + 1,
                 callerFrame->get<slot_t>(bc.operands()[i])); // operand 可负（静态区）
+        }
 
         EXEC_WHEN_DEBUG({
             std::ostringstream os;
@@ -201,19 +241,11 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
         });
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc about to call JIT entry"));
-        newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame); // 规范：slot[0] 存 Frame*
-        slot_t result;
-        try {
-            result = fn(newFrame->slotBase(), ctx);
-        } catch (...) {
-            vm->releaseFrameForCall(newFrame);
-            throw;
-        }
+        slot_t result = vm->invokeOwnedJitFrame(fn, newFrame, ctx);
         EXEC_WHEN_DEBUG(
             GetDefaultLogger()
                 .in("JIT.Trampoline")
                 .info("trampolineFunc JIT->JIT return result={}", result));
-        vm->releaseFrameForCall(newFrame);
         return result;
     }
 
@@ -232,27 +264,22 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
         GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc before acquireFrameForCall"));
     Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
     Frame *newFrame    = vm->acquireFrameForCall(targetGraph);
-    for (size_t i = 0; i < argsCnt; ++i)
+    for (size_t i = 0; i < argsCnt; ++i) {
         newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
+    }
     (void)count;
     EXEC_WHEN_DEBUG(
         GetDefaultLogger()
             .in("JIT.Trampoline")
             .info("trampolineFunc before vm->call targetPc={}", targetPc));
-    slot_t result;
-    try {
-        result = vm->call(targetPc, newFrame);
-    } catch (...) {
-        vm->releaseFrameForCall(newFrame);
-        throw;
-    }
+    auto result = vm->callBorrowed(targetPc, newFrame);
     EXEC_WHEN_DEBUG(
         GetDefaultLogger()
             .in("JIT.Trampoline")
-            .info("trampolineFunc after vm->call result={}", result));
-    vm->releaseFrameForCall(newFrame);
+            .info("trampolineFunc after vm->call result={}", result.result));
+    vm->releaseFrameForCall(result.rootFrame, targetGraph);
     EXEC_WHEN_DEBUG(GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc EXIT"));
-    return result;
+    return result.result;
 }
 
 slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
@@ -268,26 +295,19 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
         count = incFuncExtraCount(&bc);
 
     if (targetPc == 0) {
-        GIR::Graph *g      = getFuncExtraGraph(&bc);
-        JitEntryFn fn      = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc));
         Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
-        Frame *newFrame    = vm->acquireFrameForTail(g);
-        for (size_t i = 0; i < argsCnt; ++i)
-            newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
+        GIR::Graph *g      = getFuncExtraGraph(&bc);
+        size_t jitTargetPc = getFuncExtraTargetPc(&bc);
+        TailArgStorage args(argsCnt);
+        copyOperandsToBuffer(args.data(), callerFrame, bc, argsCnt);
+        vm->releaseFrameForTail(callerFrame);
+        Frame *newFrame = vm->acquireFrameForTail(g);
+        writeCallArgsToFrame(newFrame, args.data(), argsCnt);
         EXEC_WHEN_DEBUG(
             GetDefaultLogger()
                 .in("JIT.Trampoline")
-                .debug("trampolineTail: JIT->JIT target='{}'", g->name()));
-        newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
-        slot_t result;
-        try {
-            result = fn(newFrame->slotBase(), ctx);
-        } catch (...) {
-            vm->releaseFrameForTail(newFrame);
-            throw;
-        }
-        vm->releaseFrameForTail(newFrame);
-        return result;
+                .debug("trampolineTail: JIT->JIT target='{}' pc={}", g->name(), jitTargetPc));
+        return vm->call(jitTargetPc, newFrame);
     }
 
     GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
@@ -297,16 +317,55 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
             .debug("trampolineTail: JIT->interpreter target='{}'", targetGraph->name()));
 
     Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
-    Frame *newFrame    = vm->acquireFrameForTail(targetGraph);
-    for (size_t i = 0; i < argsCnt; ++i)
-        newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
+    TailArgStorage args(argsCnt);
+    copyOperandsToBuffer(args.data(), callerFrame, bc, argsCnt);
+    vm->releaseFrameForTail(callerFrame);
+    Frame *newFrame = vm->acquireFrameForTail(targetGraph);
+    writeCallArgsToFrame(newFrame, args.data(), argsCnt);
     (void)count;
-    try {
-        return vm->call(targetPc, newFrame);
-    } catch (...) {
-        vm->releaseFrameForTail(newFrame);
-        throw;
+    return vm->call(targetPc, newFrame);
+}
+
+slot_t *prepareDirectJitCall(slot_t *callerSlots, void *ctx, const Bytecode *bc) {
+    auto *jc = static_cast<JitContext *>(ctx);
+    auto *vm = jc->vm;
+    ASSERT(bc, "prepareDirectJitCall requires non-null bytecode");
+
+    GIR::Graph *targetGraph = getFuncExtraGraph(bc);
+    size_t argsCnt          = bc->normCnt();
+    Frame *callerFrame      = reinterpret_cast<Frame *>(callerSlots[0]);
+    Frame *newFrame         = vm->acquireFrameForCall(targetGraph);
+    for (size_t i = 0; i < argsCnt; ++i) {
+        newFrame->set(i + 1, callerFrame->get<slot_t>(bc->operands()[i]));
     }
+    newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
+    return newFrame->slotBase();
+}
+
+slot_t *prepareDirectJitTailCall(slot_t *callerSlots, void *ctx, const Bytecode *bc) {
+    auto *jc = static_cast<JitContext *>(ctx);
+    auto *vm = jc->vm;
+    ASSERT(bc, "prepareDirectJitTailCall requires non-null bytecode");
+
+    GIR::Graph *targetGraph = getFuncExtraGraph(bc);
+    size_t argsCnt          = bc->normCnt();
+    Frame *callerFrame      = reinterpret_cast<Frame *>(callerSlots[0]);
+    TailArgStorage args(argsCnt);
+    copyOperandsToBuffer(args.data(), callerFrame, *bc, argsCnt);
+
+    vm->releaseFrameForTail(callerFrame);
+    Frame *newFrame = vm->acquireFrameForTail(targetGraph);
+    writeCallArgsToFrame(newFrame, args.data(), argsCnt);
+    newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
+    return newFrame->slotBase();
+}
+
+slot_t finishDirectJitCall(slot_t result, slot_t *calleeSlots, void *ctx, GIR::Graph *owner) {
+    auto *jc    = static_cast<JitContext *>(ctx);
+    auto *vm    = jc->vm;
+    auto *frame = reinterpret_cast<Frame *>(calleeSlots[0]);
+    vm->releaseFrameForCall(frame, owner);
+    return result;
 }
 
 slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc) {
@@ -366,6 +425,9 @@ slot_t trampolineFunc(slot_t *, void *, size_t) { return {}; }
 slot_t trampolineTail(slot_t *, void *, size_t) { return {}; }
 slot_t trampolineOper(slot_t *, void *, size_t) { return {}; }
 slot_t trampolineCast(slot_t *, void *, size_t) { return {}; }
+slot_t *prepareDirectJitCall(slot_t *, void *, const Bytecode *) { return nullptr; }
+slot_t *prepareDirectJitTailCall(slot_t *, void *, const Bytecode *) { return nullptr; }
+slot_t finishDirectJitCall(slot_t, slot_t *, void *, GIR::Graph *) { return {}; }
 #endif
 
 } // extern "C"

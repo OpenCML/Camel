@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -108,16 +108,20 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             meta = installFrameMetaInfoForGraph(g);
 
         std::vector<std::tuple<size_t, size_t, std::string>> instructionBoundaries;
-        CompilationUnit unit{
-            .graph                 = g,
-            .frameMeta             = meta,
-            .bytecodes             = bcSpan,
-            .entryPc               = entryPc,
-            .trampolineFunc        = reinterpret_cast<void *>(&trampolineFunc),
-            .trampolineTail        = reinterpret_cast<void *>(&trampolineTail),
-            .trampolineOper        = reinterpret_cast<void *>(&trampolineOper),
-            .trampolineCast        = reinterpret_cast<void *>(&trampolineCast),
+        CompilationDebugOptions debugOptions{
             .instructionBoundaries = &instructionBoundaries,
+            .enableDebugTrace      = true,
+        };
+        CompilationUnit unit{
+            .graph          = g,
+            .frameMeta      = meta,
+            .bytecodes      = bcSpan,
+            .entryPc        = entryPc,
+            .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
+            .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
+            .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
+            .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
+            .debug          = &debugOptions,
         };
 
         std::string failureReason;

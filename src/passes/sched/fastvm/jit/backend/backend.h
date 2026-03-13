@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,26 +39,31 @@ namespace camel::jit {
 
 namespace ctx = camel::core::context;
 
-struct CompilationUnit {
-    GIR::Graph *graph;
-    ctx::FrameMeta *frameMeta =
-        nullptr; // 编译期使用的 Frame 布局，来自 graph->getExtra<FrameMeta,0>()
-    std::span<const Bytecode> bytecodes;
-    size_t entryPc;
-    void *trampolineFunc = nullptr; // FUNC trampoline
-    void *trampolineTail = nullptr; // TAIL trampoline
-    void *trampolineOper = nullptr; // OPER trampoline
-    void *trampolineCast = nullptr; // CAST trampoline
+struct CompilationDebugOptions {
     std::ostream *asmOut = nullptr; // 若设置，编译时输出汇编指令
     // 若设置，编译后填入每条指令的 (起始偏移, 长度, 汇编文本)，供 bindump 按指令分解机器码
     std::vector<std::tuple<size_t, size_t, std::string>> *instructionBoundaries = nullptr;
     std::ostream *mirOut = nullptr; // 若设置，仅输出 MIR 后返回（不编码机器码）
     bool mirSlotOnly = false; // 若 true 且 mirOut 设置：输出 rmir（未优化 vreg MIR）并立即返回；若
                               // false 且 mirOut：输出 mir（优化后 vreg MIR）并返回
+    bool enableDebugTrace = false; // 默认运行态不生成 DebugTrace MIR，仅 dump/诊断模式打开
     // MIR 可读打印：地址/常量 -> 符号名（如 trampolineFunc、static slot -1）；disp -> 槽位名（如
     // "n"） 当 mirOut 非空时，backend 可向 mirSymbolNames 写入静态槽注释（调用方传非 const 指针）
     std::unordered_map<uint64_t, std::string> *mirSymbolNames = nullptr;
     const std::unordered_map<int, std::string> *mirSlotNames  = nullptr;
+};
+
+struct CompilationUnit {
+    GIR::Graph *graph;
+    ctx::FrameMeta *frameMeta =
+        nullptr; // 编译期使用的 Frame 布局，来自 graph->getExtra<FrameMeta,0>()
+    std::span<const Bytecode> bytecodes;
+    size_t entryPc;
+    void *trampolineFunc                 = nullptr; // FUNC trampoline
+    void *trampolineTail                 = nullptr; // TAIL trampoline
+    void *trampolineOper                 = nullptr; // OPER trampoline
+    void *trampolineCast                 = nullptr; // CAST trampoline
+    const CompilationDebugOptions *debug = nullptr;
 };
 
 struct RelocInfo {
