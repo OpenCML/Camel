@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -408,6 +408,19 @@ Frame *FastVMSchedPass::acquireFrameForTail(GIR::Graph *graph) {
 }
 
 void FastVMSchedPass::releaseFrameForTail(Frame *frame) { framePool_.release(frame); }
+
+#if defined(_MSC_VER)
+__declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
+slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *jitCtx) {
+    slot_t *slots = frame->slotBase();
+    slots[0]      = reinterpret_cast<slot_t>(frame);
+    slot_t result = fn(slots, jitCtx);
+    framePool_.release(frame);
+    return result;
+}
 
 Context &FastVMSchedPass::context() { return *context_; }
 

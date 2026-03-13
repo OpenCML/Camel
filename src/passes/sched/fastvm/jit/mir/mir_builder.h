@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,10 @@ class MirBuilder {
     void setNextPc(uint32_t pc) { nextPc_ = pc; }
 
     void emitPrologueWin64() {
+        push(MirOp::PushRdi, 0, 0);
+        push(MirOp::PushRsi, 0, 0);
+        push(MirOp::PushRbx, 0, 0);
+        push(MirOp::SubRsp8, 0, 0);
         push(MirOp::MovRegReg, kRegRdi, kRegRcx);
         push(MirOp::MovRegReg, kRegRsi, kRegRdx);
     }

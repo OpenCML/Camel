@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -283,6 +283,24 @@ std::string mirToString(const Mir &m) {
     case MirOp::PopRdi:
         os << "pop rdi";
         break;
+    case MirOp::PushRsi:
+        os << "push rsi";
+        break;
+    case MirOp::PopRsi:
+        os << "pop rsi";
+        break;
+    case MirOp::PushRbx:
+        os << "push rbx";
+        break;
+    case MirOp::PopRbx:
+        os << "pop rbx";
+        break;
+    case MirOp::SubRsp8:
+        os << "sub rsp, 8";
+        break;
+    case MirOp::AddRsp8:
+        os << "add rsp, 8";
+        break;
     case MirOp::Ret:
         os << "ret";
         break;
@@ -452,7 +470,14 @@ size_t mirSizeBytes(const Mir &m) {
         return 2;
     case MirOp::PushRdi:
     case MirOp::PopRdi:
+    case MirOp::PushRsi:
+    case MirOp::PopRsi:
+    case MirOp::PushRbx:
+    case MirOp::PopRbx:
         return 1;
+    case MirOp::SubRsp8:
+    case MirOp::AddRsp8:
+        return 4;
     case MirOp::Ret:
         return 1;
     case MirOp::JzRel32:

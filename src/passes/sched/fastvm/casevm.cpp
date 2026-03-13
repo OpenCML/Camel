@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -336,9 +336,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                     for (size_t i = 0; i < argsCnt; ++i) {
                         funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
                     }
-                    funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
-                    slot_t result            = fn(funcFrame->slotBase(), currentJitCtx_);
-                    framePool_.release(funcFrame);
+                    slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
                     currFrame->set(bc.result, result);
                 } else {
                     GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
@@ -356,9 +354,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                             for (size_t i = 0; i < argsCnt; ++i) {
                                 funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
                             }
-                            funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
-                            slot_t result            = fn(funcFrame->slotBase(), currentJitCtx_);
-                            framePool_.release(funcFrame);
+                            slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
                             currFrame->set(bc.result, result);
                             pc += bc.opsize;
                             continue;
@@ -391,6 +387,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
 
             case OpCode::TAIL: {
 #if ENABLE_FASTVM_JIT
+                bool wasRoot = (currFrame == rootFrame);
                 FrameView lastFrame(currFrame);
                 framePool_.release(currFrame);
                 if (bc.fastop[1] == 0) {
@@ -404,7 +401,17 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                     }
                     framePool_._resetTop();
                     newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
-                    return fn(newFrame->slotBase(), currentJitCtx_);
+                    slot_t result           = fn(newFrame->slotBase(), currentJitCtx_);
+                    if (wasRoot) {
+                        return result;
+                    }
+                    framePool_.release(newFrame);
+                    auto [lastPC, lastCallerFrame] = pop();
+                    pc                             = lastPC;
+                    currFrame                      = lastCallerFrame;
+                    const Bytecode &lbc            = bytecodes_[pc];
+                    currFrame->set(lbc.result, result);
+                    continue;
                 }
                 GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
                 size_t targetPc         = static_cast<size_t>(bc.fastop[1]);
@@ -423,7 +430,17 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                         }
                         framePool_._resetTop();
                         newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
-                        return fn(newFrame->slotBase(), currentJitCtx_);
+                        slot_t result           = fn(newFrame->slotBase(), currentJitCtx_);
+                        if (wasRoot) {
+                            return result;
+                        }
+                        framePool_.release(newFrame);
+                        auto [lastPC, lastCallerFrame] = pop();
+                        pc                             = lastPC;
+                        currFrame                      = lastCallerFrame;
+                        const Bytecode &lbc            = bytecodes_[pc];
+                        currFrame->set(lbc.result, result);
+                        continue;
                     }
                 }
                 currFrame              = framePool_._acquire(targetGraph);

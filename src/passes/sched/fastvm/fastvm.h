@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -109,6 +109,7 @@ class FastVMSchedPass : public GraphSchedulePass {
     void releaseFrameForCall(ctx::Frame *frame);
     ctx::Frame *acquireFrameForTail(GIR::Graph *graph);
     void releaseFrameForTail(ctx::Frame *frame);
+    slot_t invokeOwnedJitFrame(jit::JitEntryFn fn, ctx::Frame *frame, void *jitCtx);
     ctx::Context &context();
     GIR::Graph *jitFnToGraph(jit::JitEntryFn fn) const;
     slot_t invokeCallOrJit(

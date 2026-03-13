@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -526,15 +526,13 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                     targetGraph->name(),
                     argsStr);
             });
-            funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
             slot_t result;
-            result = fn(funcFrame->slotBase(), currentJitCtx_);
+            result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
             JIT_RESTORE_PC_BC();
             GetDefaultLogger().in("FastVM").debug(
                 "JIT function at pc={} returned result={}.",
                 pc,
                 result);
-            framePool_.release(funcFrame);
             currFrame->set(bc->result, result);
             NEXT();
         } else {
@@ -565,11 +563,9 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                             targetGraph->name(),
                             argsStr);
                     });
-                    funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
                     slot_t result;
-                    result = fn(funcFrame->slotBase(), currentJitCtx_);
+                    result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
                     JIT_RESTORE_PC_BC();
-                    framePool_.release(funcFrame);
                     currFrame->set(bc->result, result);
                     NEXT();
                 }
@@ -607,6 +603,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         opperf::ScopeTimer _timer(bc->opcode);
 
 #if ENABLE_FASTVM_JIT
+        bool wasRoot = (currFrame == rootFrame);
         FrameView lastFrame(currFrame);
         framePool_.release(currFrame);
         if (bc->fastop[1] == 0) {
@@ -631,12 +628,24 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             });
             newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
             slot_t result;
+            JIT_SAVE_PC_BC();
             result = fn(newFrame->slotBase(), currentJitCtx_);
+            JIT_RESTORE_PC_BC();
             GetDefaultLogger().in("FastVM").debug(
                 "JIT function at pc={} returned result={}.",
                 pc,
                 result);
-            return result;
+            if (wasRoot) {
+                return result;
+            }
+            framePool_.release(newFrame);
+            auto [lastPC, lastCallerFrame] = pop();
+            pc                             = lastPC;
+            bc                             = &bytecodes_[pc];
+            currFrame                      = lastCallerFrame;
+            Bytecode &lbc                  = bytecodes_[pc];
+            currFrame->set(lbc.result, result);
+            NEXT();
         }
         Graph *targetGraph = getFuncExtraGraph(bc);
         size_t targetPc    = static_cast<size_t>(bc->fastop[1]);
@@ -666,12 +675,24 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                 });
                 newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
                 slot_t result;
+                JIT_SAVE_PC_BC();
                 result = fn(newFrame->slotBase(), currentJitCtx_);
+                JIT_RESTORE_PC_BC();
                 GetDefaultLogger().in("FastVM").debug(
                     "JIT function at pc={} returned result={}.",
                     pc,
                     result);
-                return result;
+                if (wasRoot) {
+                    return result;
+                }
+                framePool_.release(newFrame);
+                auto [lastPC, lastCallerFrame] = pop();
+                pc                             = lastPC;
+                bc                             = &bytecodes_[pc];
+                currFrame                      = lastCallerFrame;
+                Bytecode &lbc                  = bytecodes_[pc];
+                currFrame->set(lbc.result, result);
+                NEXT();
             }
         }
         currFrame              = framePool_._acquire(targetGraph);
