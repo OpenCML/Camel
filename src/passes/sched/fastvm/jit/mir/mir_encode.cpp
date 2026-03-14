@@ -133,6 +133,8 @@ void encodeMirBuffer(
         case MirOp::VCopy: {
             int dr = pregFor(static_cast<VRegId>(m.r0));
             int sr = pregFor(static_cast<VRegId>(m.r1));
+            if (dr >= 0 && sr >= 0 && dr == sr)
+                break;
             if (dr >= 0 && sr >= 0) {
                 enc.emitMovRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(sr));
                 spillState.clearSpilledDest();
@@ -550,7 +552,13 @@ void encodeMirBuffer(
 
                 enc.addRspImm(p->calleeSlotBytes);
                 enc.popRdi();
-                enc.movToFrame(p->resultDisp, kRegRax);
+                if (p->resultVReg != 0xFF) {
+                    int preg = pregFor(static_cast<VRegId>(p->resultVReg));
+                    if (preg >= 0 && preg != static_cast<int>(kRegRax))
+                        enc.emitMovRegReg(static_cast<uint8_t>(preg), kRegRax);
+                } else {
+                    enc.movToFrame(p->resultDisp, kRegRax);
+                }
                 break;
             }
 

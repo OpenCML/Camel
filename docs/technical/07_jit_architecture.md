@@ -108,10 +108,11 @@ struct CompilationUnit {
 `X64Backend::compileBytecode` 遍历字节码，调用 `MirBuilder` 生成线性 MIR：
 
 - **算术/比较**（LADD, LSUB, LLE..LNE 等）：先尝试将静态区操作数在编译期折叠为立即数，优先生成 `VLoadImm32/VLoadImm64`、`VAddImm/VSubImm/VCmpSet*Imm`；无法立即数化时再退回普通 `VAdd/VSub/VCmpSet*`。
+- **只读 slot 值缓存**：在 MIR 构建前先扫描所有 `bc.result`，识别“从未被写入”的动态槽位；对这类槽位的首次 `VLoadFromFrame` 结果缓存在 `slotCache` 中，后续再次读取同槽位时生成 `VCopy` 而不是重复 load。缓存跨普通跳转保留，仅在 `NativeJitFuncCall`/trampoline 调用后清空。
 - **分支**（BRCH）：支持两种路径。
   - 普通路径：`VLoad + VTest + VCmovnz + JzRel32 + JmpRel32`
   - 融合路径：若 BRCH 的条件恰好来自紧邻比较结果，则比较阶段只发射 `VCmpRegImm` 设置 flags，BRCH 直接发射对应的 `JccRel32`，跳过布尔物化与 branch-index 物化
-- **函数调用**（FUNC）：根据 `isSameGraph` 生成 `NativeJitFuncCall`（含 frameless 或 Frame-based 路径参数）或退回 trampoline 调用。
+- **函数调用**（FUNC）：根据 `isSameGraph` 生成 `NativeJitFuncCall`（含 frameless 或 Frame-based 路径参数）或退回 trampoline 调用。对 frameless 调用，参数预加载和返回值写回都会显式体现在 MIR 中，便于后续 peephole 和 dead-store pass 继续优化。
 - **返回**（RETN）：`VLoadFromFrame → VRet`（将值置于 rax 后 `ret`）。
 
 #### 阶段 2：MIR 优化
@@ -123,7 +124,8 @@ struct CompilationUnit {
   - `VStoreToFrame(d, vA)` 后遇到安全的 `VLoadFromFrame(vB, d)`，替换为 `VCopy(vB, vA)`
   - 连续两次写同一 frame slot，若中间无读取，则删除前一次死 store
   - 在 jump target、call、native call、显式跳转等 barrier 处清空跟踪状态，避免跨控制流误优化
-- **当前边界**：仍是线性 MIR，无 CFG/SSA，因此优化只做局部窗口内的保守改写，不做跨基本块 CSE/DCE。
+- **反向 dead frame store 消除**：在 peephole 之后做一次反向活跃性扫描，跟踪 `liveSlots`，删除在后续路径上不再被读取的 `VStoreToFrame` / `VXmmStoreToFrame`。该 pass 会合并 jump target 处的活跃集，并把 `NativeJitFuncCall` 的隐式 frame 读写纳入分析。
+- **当前边界**：仍是线性 MIR，无 CFG/SSA，因此优化仍以局部模式匹配和保守的数据流跟踪为主，不做通用跨基本块 CSE、全局常量传播或完整 SSA DCE。
 
 #### 阶段 3：虚拟寄存器分配
 
@@ -151,7 +153,7 @@ struct CompilationUnit {
 
 ### 2.4 近期引入的定向优化
 
-这一轮优化并未引入 CFG，而是围绕 fib 这类热点递归路径做了 5 类局部改进：
+这一轮优化并未引入 CFG，而是围绕 fib 这类热点递归路径做了 8 类局部改进：
 
 1. **编译期静态常量内联**
    - `loadOperandToVReg()` 在静态操作数路径下直接读取 `staticArea` 的 `slot_t`
@@ -172,6 +174,18 @@ struct CompilationUnit {
 5. **局部 peephole**
    - 消除安全范围内的 store-then-reload
    - 消除连续写同槽位的死 store
+
+6. **BRCH/JOIN 定向简化**
+   - fused compare-branch 路径下不再物化 branch index
+   - JOIN 在“只可能从 else-path 到达”的情况下直接取 `w1`，跳过 `test/cmov` 合并链
+
+7. **只读 slot 缓存与 call result 可见化**
+   - 对只读 frame slot 的重复读取改成 `VCopy`
+   - `NativeJitFuncCall` 的 frameless 参数预加载与 result store 显式体现在 MIR 中，使 peephole 可以把 call 后 reload 融合掉
+
+8. **返回路径定向清理**
+   - JUMP / JOIN 在紧邻 `RETN` 时可直接发射 `VRet`
+   - 反向 dead-store pass 可删除 `VRet` 前对 frame 的尾部写回
 
 这些优化的共同特点是：不改变整体 pipeline 结构，但显著改善热点路径的 uop 数、寄存器依赖链与内存往返。
 
@@ -269,6 +283,8 @@ struct NativeJitCallParams {
     int32_t  resultDisp;        // 结果存储的 frame 偏移
     uint8_t  argsCnt;           // 参数个数
     int32_t  argSrcDisps[8];    // 各参数在 caller frame 中的偏移
+    uint8_t  argVRegs[8];       // frameless 参数预加载得到的 vreg；0xFF 表示仍在 call 内部加载
+    uint8_t  resultVReg;        // frameless 返回值承载 vreg；0xFF 表示仍在 call 内部写回 frame
     bool     isSameGraph;       // 是否同图调用
     uint64_t extra2Addr;        // bc->extra2() 地址（跨图用）
     uint64_t fastop1Addr;       // bc->fastop[1] 地址（跨图 JIT 状态检查）
@@ -292,7 +308,8 @@ struct NativeJitCallParams {
 **生成的 x64 序列**（以 1 个参数为例）：
 
 ```asm
-mov rax, [rdi + argDisp]    ; (1) 从 caller frame 加载参数（rdi 仍指向 caller）
+; 参数预加载已在 MIR 中显式出现，可被 peephole / slot cache 继续优化
+mov rax, [rdi + argDisp]    ; (1) 从 caller frame 加载参数（或来自只读 slot cache）
 push rdi                     ; (2) 保存 caller frame 基址
 sub rsp, 80                  ; (3) 在栈上分配 callee 帧空间（80 = 10 slots × 8，16 对齐）
 mov rdi, rsp                 ; (4) callee slot 基址 = 栈顶
@@ -300,7 +317,8 @@ mov [rdi + 8], rax           ; (5) 写入参数到 callee slot[1]
 call body_start              ; (6) 直接 call rel32 到同函数 body 入口
 add rsp, 80                  ; (7) 释放 callee 帧空间
 pop rdi                      ; (8) 恢复 caller frame 基址
-mov [rdi + resultDisp], rax  ; (9) 存储返回值到 caller frame
+; 若 resultVReg != 0xFF，rax 结果先映射到对应物理寄存器，再由显式 VStoreToFrame 写回
+mov [rdi + resultDisp], rax  ; (9) 存储返回值到 caller frame（或被后续优化删掉）
 ```
 
 **关键约束**：
@@ -310,6 +328,7 @@ mov [rdi + resultDisp], rax  ; (9) 存储返回值到 caller frame
 3. **slot[0] 未写入**：frameless 路径不写 Frame* 到 slot[0]，因为整条调用链上没有人会读取它（无 Frame 释放操作）。这在纯自递归场景下完全安全。
 4. **无慢路径**：自调用的目标就是当前正在编译的函数 body，`call rel32` 直接跳转到 body start，不存在"目标未编译"的情况。
 5. **与 Frame-based 路径可混用**：同一函数内，frameless 自调用和 Frame-based 跨图调用可以共存，互不干扰。
+6. **call 是只读 slot cache 的失效点**：所有 allocatable GPR 都可能被 clobber，因此 `slotCache` 仅在 call/trampoline 之后清空，而不会因普通 `JUMP/JOIN` 清空。
 
 ### 5.3 路径 B：Frame-based 调用（跨图或同图 fallback）
 
@@ -605,10 +624,10 @@ slot_t directSelfFuncInvoke(slot_t* callerSlots, void* ctx, const Bytecode* bc) 
 
 | 字节码 | MIR | 说明 |
 |--------|-----|------|
-| BRCH | 普通路径：`VLoad + VTest + VCmovnz + JzRel32 + JmpRel32`；融合路径：`VCmpRegImm + JccRel32` | 仅 `withCnt()==0` 的 BRCH 支持 JIT |
-| JOIN | `VCopy + VTest + VCmovnz + VStore` | 当 BRCH 走融合路径时，branch-index 物化被压缩，但 JOIN 的值合并语义仍保持一致 |
-| JUMP | JmpRel32 | 无条件跳转，rel32 通过 JumpPatch 修补 |
-| RETN | VLoad → VRet | `mov rax, vr; ret` |
+| BRCH | 普通路径：`VLoad + VTest + VCmovnz + JzRel32 + JmpRel32`；融合路径：`VCmpRegImm + JccRel32` | 仅 `withCnt()==0` 的 BRCH 支持 JIT；fused 路径下 branch-index 可完全省略 |
+| JOIN | 简化路径：`VLoad/VCopy + VStore`；普通路径：`VCopy + VTest + VCmovnz + VStore` | 对“仅 else-path 可达”的 JOIN，可直接选择 `w1`；若下一条是 `RETN`，可直接发射 `VRet` |
+| JUMP | `JmpRel32` 或直达 `VRet` | 当目标 `JOIN` 后紧跟 `RETN` 且读取该 `JOIN.result` 时，可直接返回 |
+| RETN | `VLoad → VRet` 或被前驱折叠掉 | `mov rax, vr; ret`；部分模式下由前驱 `JUMP/JOIN` 直接发射 `VRet` |
 | FUNC | NativeJitFuncCall | 详见第 5 节 |
 | TAIL | 跨图时走 trampoline + jmp | 释放当前帧后跳转到目标 |
 | OPER | trampolineOper 调用 | push rdi; Win64 ABI call; pop rdi |
@@ -647,9 +666,10 @@ jg  .recurse
 | JIT (trampoline) | ~34ms | ~12.6 cycle | 消除字节码分派 |
 | JIT + 双入口 + rbx/r12 缓存 | ~7ms | ~2.6 cycle | 消除 Win64 ABI 转换、图比较优化 |
 | JIT + frameless 栈分配 | **~4.4ms** | **~1.6 cycle** | **彻底消除 Frame 池操作** |
-| JIT + F-J 定向代码生成优化 | **~3.6-4.0ms** | 更低 | 常量内联、立即数编码、比较-分支融合、peephole |
+| JIT + F-J / K-N 定向代码生成优化 | **~2.9-3.0ms** | 更低 | 常量内联、立即数编码、比较-分支融合、JOIN/JUMP 直接返回 |
+| JIT + O/Q/P Frame Store 优化 | **~2.6ms** | 进一步下降 | 只读 slot 缓存、call result 可见化、dead frame store 消除 |
 
-### 11.2 F-J 定向优化的性能画像
+### 11.2 F-J / K-N / O-Q-P 定向优化的性能画像
 
 对 fib 这类“纯数值 + 自递归 + inline 后无外部函数/算子依赖”的函数，近期收益主要来自：
 
@@ -657,6 +677,9 @@ jg  .recurse
 - **减少常量内存访问**：静态区常量直接变成 immediates
 - **减少寄存器与内存往返**：`cmp/add/sub` 尽量直接作用于目标寄存器
 - **减少局部冗余 load/store**：peephole 把短距离 reload 改成 `VCopy`
+- **减少只读 slot 重复加载**：如 fib 中 `[rdi+8]` 的跨块重复读取被只读 slot cache 压缩
+- **减少 call 边界后的伪内存往返**：`NativeJitFuncCall` 的结果写回从“编码器内部黑盒 store”变成可继续被 peephole / dead-store 观察的显式 MIR
+- **减少尾部无意义写回**：反向活跃性扫描删除 `VRet` 前对 frame 的尾部 store
 
 ### 11.3 Frameless 优化的适用范围
 
@@ -680,7 +703,9 @@ jg  .recurse
 | Frameless 最多 7 个参数 | frameless 编码路径 | 使用 7 个临时寄存器（rax,rcx,rdx,r8-r11）暂存参数 |
 | 不支持的 opcode 导致 bail out | `compileBytecode` default case | ACCS, FILL, CALL, SCHD 等不支持 |
 | peephole 不跨控制流做传播 | `mir_optimize.cpp` | jump target、jump/call/native-call/push-pop rdi 都视为 barrier |
-| 当前 MIR 仍为线性结构 | 整个 JIT 中端 | 无 CFG/SSA，故优化以局部模式匹配为主 |
+| 只读 slot cache 只缓存“从不写入”的槽位 | `x64_backend.cpp` | 避免在无 CFG/别名分析下把可变 slot 的旧值错误传播过跳转或写回 |
+| dead-store pass 只删除 frame 写回，不删除任意计算 | `mir_optimize.cpp` | 当前仅基于 slot 活跃性，尚未扩展为通用 vreg DCE |
+| 当前 MIR 仍为线性结构 | 整个 JIT 中端 | 无 CFG/SSA，故优化以局部模式匹配和保守数据流分析为主 |
 
 ### 12.2 运行时约束
 

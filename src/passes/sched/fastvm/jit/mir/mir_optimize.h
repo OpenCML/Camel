@@ -32,11 +32,16 @@ void optimizeRemoveNoopMovRaxRax(MirBuffer &buf);
 // Peephole: store-reload 消除、死 store 消除
 void optimizePeephole(MirBuffer &buf);
 
+// Dead frame store elimination: backward liveness analysis removes VStoreToFrame
+// whose slot is never read again before function exit.
+void eliminateDeadFrameStores(MirBuffer &buf);
+
 // 多遍优化入口
 inline void runMirOptimizationPasses(MirBuffer &buf) {
     optimizeWin64RedundantArgSetup(buf);
     optimizeRemoveNoopMovRaxRax(buf);
     optimizePeephole(buf);
+    eliminateDeadFrameStores(buf);
 }
 
 } // namespace camel::jit::x64

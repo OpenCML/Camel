@@ -34,6 +34,7 @@
 
 #include <cstring>
 #include <string>
+#include <unordered_set>
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
@@ -68,15 +69,6 @@ tryGetStaticImm32(const Bytecode &bc, int opIdx, const slot_t *staticBase, int32
         return true;
     }
     return false;
-}
-
-inline void loadOperandToVReg(
-    const Bytecode &bc, int opIdx, int disp, const slot_t *staticBase, x64::VRegId v,
-    x64::MirBuilder &build) {
-    if (bc.fastop[opIdx] > 0)
-        build.emitVLoadFromFrame(v, disp);
-    else
-        emitLoadStaticConst(staticBase, bc.fastop[opIdx], v, build);
 }
 
 inline void storeResultFromVReg(int disp, x64::VRegId v, x64::MirBuilder &build) {
@@ -188,6 +180,39 @@ bool X64Backend::compileBytecode(
         bool active        = false;
         data_idx_t idxSlot = 0;
     } fusedBrchJoin;
+
+    // Phase O: read-only slot value caching — slots never written by any bytecode
+    // in this function can be loaded once and reused across jump barriers.
+    // Cache is cleared only at NativeJitFuncCall (registers clobbered by call).
+    std::unordered_set<data_idx_t> writtenSlots;
+    for (size_t p = entryPc; p < pcEnd; p += base[p].opsize)
+        if (base[p].result > 0)
+            writtenSlots.insert(base[p].result);
+    std::unordered_map<int, x64::VRegId> slotCache;
+
+    auto loadSlot = [&](data_idx_t slotIdx, int disp, x64::VRegId v) {
+        if (slotIdx > 0) {
+            auto it = slotCache.find(disp);
+            if (it != slotCache.end()) {
+                build.emitVCopy(v, it->second);
+                return;
+            }
+            build.emitVLoadFromFrame(v, disp);
+            if (!writtenSlots.count(slotIdx))
+                slotCache[disp] = v;
+        } else {
+            emitLoadStaticConst(staticBase, slotIdx, v, build);
+        }
+    };
+
+    // Shadow free-function loadOperandToVReg so all existing call sites
+    // (including LCMP_HANDLER macro) route through the cache.
+    auto loadOperandToVReg = [&](const Bytecode &bc,
+                                 int opIdx,
+                                 int disp,
+                                 const slot_t * /*sb*/,
+                                 x64::VRegId v,
+                                 x64::MirBuilder & /*b*/) { loadSlot(bc.fastop[opIdx], disp, v); };
 
 #if defined(_WIN32) || defined(_WIN64)
     auto emitPrepareDirectTailCallWin64 = [&](const Bytecode &bc, uint64_t helperAddr) {
@@ -659,10 +684,7 @@ bool X64Backend::compileBytecode(
                 // Phase K: fused cmp-BRCH already handled then-path via JUMP.
                 // JOIN only executes from else-path, so take w1 directly.
                 x64::VRegId v1 = nextVReg++;
-                if (w1 > 0)
-                    build.emitVLoadFromFrame(v1, d1);
-                else
-                    emitLoadStaticConst(staticBase, w1, v1, build);
+                loadSlot(w1, d1, v1);
 
                 // Phase N: if JOIN is immediately followed by RETN reading
                 // JOIN's result, emit VRet directly — skip the intermediate store.
@@ -682,18 +704,9 @@ bool X64Backend::compileBytecode(
                 x64::VRegId v1 = nextVReg++;
                 x64::VRegId v2 = nextVReg++;
                 x64::VRegId v3 = nextVReg++;
-                if (w0 > 0)
-                    build.emitVLoadFromFrame(v0, d0);
-                else
-                    emitLoadStaticConst(staticBase, w0, v0, build);
-                if (w1 > 0)
-                    build.emitVLoadFromFrame(v1, d1);
-                else
-                    emitLoadStaticConst(staticBase, w1, v1, build);
-                if (idxSlot > 0)
-                    build.emitVLoadFromFrame(v2, dIdx);
-                else
-                    emitLoadStaticConst(staticBase, idxSlot, v2, build);
+                loadSlot(w0, d0, v0);
+                loadSlot(w1, d1, v1);
+                loadSlot(idxSlot, dIdx, v2);
                 build.emitVCopy(v3, v0);
                 build.emitVTest(v2, dIdx);
                 build.emitVCmovnz(v3, v1);
@@ -741,11 +754,20 @@ bool X64Backend::compileBytecode(
                     uint8_t nArgs = params->argsCnt < 7 ? params->argsCnt : 7;
                     for (uint8_t ai = 0; ai < nArgs; ++ai) {
                         x64::VRegId vArg = nextVReg++;
-                        build.emitVLoadFromFrame(vArg, params->argSrcDisps[ai]);
+                        loadSlot(bc.operands()[ai], params->argSrcDisps[ai], vArg);
                         params->argVRegs[ai] = static_cast<uint8_t>(vArg);
                     }
+                    // Phase Q: externalize result store so peephole can fuse
+                    // the subsequent VLoadFromFrame into a VCopy.
+                    x64::VRegId vResult = nextVReg++;
+                    params->resultVReg  = static_cast<uint8_t>(vResult);
                 }
                 build.emitNativeJitFuncCall(params);
+                if (params->frameless)
+                    build.emitVStoreToFrame(
+                        params->resultDisp,
+                        static_cast<x64::VRegId>(params->resultVReg));
+                slotCache.clear();
                 break;
             }
 #endif
@@ -761,6 +783,7 @@ bool X64Backend::compileBytecode(
             x64::VRegId vRet = nextVReg++;
             build.emitVMovFromRax(vRet);
             build.emitVStoreToFrame(dr, vRet);
+            slotCache.clear();
             break;
         }
         case OpCode::TAIL: {
@@ -773,10 +796,7 @@ bool X64Backend::compileBytecode(
                 for (size_t i = 0; i < argsCnt; ++i) {
                     x64::VRegId v = nextVReg++;
                     argRegs.push_back(v);
-                    if (args[i] > 0)
-                        build.emitVLoadFromFrame(v, slotDisp(args[i]));
-                    else
-                        emitLoadStaticConst(staticBase, args[i], v, build);
+                    loadSlot(args[i], slotDisp(args[i]), v);
                 }
                 for (size_t i = 0; i < argsCnt; ++i)
                     build.emitVStoreToFrame(slotDisp(static_cast<int>(i + 1)), argRegs[i]);
@@ -825,20 +845,29 @@ bool X64Backend::compileBytecode(
             if (isFirstBranchToJoin) {
                 const Bytecode &joinBc = base[target];
                 if (joinBc.withCnt() >= 1) {
-                    int d0         = slotDisp(joinBc.wargs()[0]);
-                    x64::VRegId v0 = nextVReg++;
-                    if (joinBc.wargs()[0] > 0)
-                        build.emitVLoadFromFrame(v0, d0);
-                    else
-                        emitLoadStaticConst(staticBase, joinBc.wargs()[0], v0, build);
+                    int d0 = slotDisp(joinBc.wargs()[0]);
 
                     // Phase M: if JOIN is immediately followed by RETN reading
                     // JOIN's result, emit VRet directly instead of store+jmp.
                     size_t afterJoin = target + joinBc.opsize;
                     if (afterJoin < pcEnd && base[afterJoin].opcode == OpCode::RETN &&
                         base[afterJoin].fastop[0] == joinBc.result) {
+                        // Phase O+M: if the slot is already in the cache, emit
+                        // VRet(cached) directly — avoids a VCopy that the
+                        // allocator might assign to a different register.
+                        if (joinBc.wargs()[0] > 0) {
+                            auto cacheIt = slotCache.find(d0);
+                            if (cacheIt != slotCache.end()) {
+                                build.emitVRet(cacheIt->second);
+                                break;
+                            }
+                        }
+                        x64::VRegId v0 = nextVReg++;
+                        loadSlot(joinBc.wargs()[0], d0, v0);
                         build.emitVRet(v0);
                     } else {
+                        x64::VRegId v0 = nextVReg++;
+                        loadSlot(joinBc.wargs()[0], d0, v0);
                         int dr = slotDisp(joinBc.result);
                         build.emitVStoreToFrame(dr, v0);
                         build.emitJmpRel32(static_cast<uint32_t>(target + joinBc.opsize));
@@ -852,10 +881,7 @@ bool X64Backend::compileBytecode(
         case OpCode::RETN: {
             int d0         = slotDisp(bc.fastop[0]);
             x64::VRegId v0 = nextVReg++;
-            if (bc.fastop[0] > 0)
-                build.emitVLoadFromFrame(v0, d0);
-            else
-                emitLoadStaticConst(staticBase, bc.fastop[0], v0, build);
+            loadSlot(bc.fastop[0], d0, v0);
             build.emitVRet(v0);
             break;
         }
@@ -871,6 +897,7 @@ bool X64Backend::compileBytecode(
             x64::VRegId vRet = nextVReg++;
             build.emitVMovFromRax(vRet);
             build.emitVStoreToFrame(slotDisp(bc.result), vRet);
+            slotCache.clear();
             break;
         }
         case OpCode::CAST: {
@@ -885,6 +912,7 @@ bool X64Backend::compileBytecode(
             x64::VRegId vRet = nextVReg++;
             build.emitVMovFromRax(vRet);
             build.emitVStoreToFrame(slotDisp(bc.result), vRet);
+            slotCache.clear();
             break;
         }
         default:

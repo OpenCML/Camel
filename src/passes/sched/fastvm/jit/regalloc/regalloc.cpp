@@ -131,7 +131,7 @@ void collectVRegDefUse(
 
     for (size_t i = 0; i < buf.size(); ++i) {
         const Mir &m = buf[i];
-        // Phase L: track argVRegs used by frameless NativeJitFuncCall
+        // Phase L/Q: track argVRegs (use) and resultVReg (def) for frameless calls
         if (m.op == MirOp::NativeJitFuncCall) {
             auto *p = reinterpret_cast<const NativeJitCallParams *>(m.imm64);
             if (p && p->frameless) {
@@ -140,6 +140,8 @@ void collectVRegDefUse(
                     if (p->argVRegs[ai] != 0xFF)
                         useVReg(i, static_cast<VRegId>(p->argVRegs[ai]));
                 }
+                if (p->resultVReg != 0xFF)
+                    defVReg(i, static_cast<VRegId>(p->resultVReg));
             }
             continue;
         }

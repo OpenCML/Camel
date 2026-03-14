@@ -164,4 +164,78 @@ void optimizePeephole(MirBuffer &buf) {
     }
 }
 
+void eliminateDeadFrameStores(MirBuffer &buf) {
+    const size_t n = buf.size();
+    if (n == 0)
+        return;
+
+    std::unordered_set<uint32_t> jumpTargets;
+    for (const auto &m : buf) {
+        if (isJumpOp(m.op))
+            jumpTargets.insert(m.imm32);
+    }
+
+    // Backward pass: track which frame slots are "live" (read before overwritten).
+    std::unordered_set<int32_t> liveSlots;
+    // Save liveSlots snapshot at each jump target so forward jumps can merge.
+    std::unordered_map<uint32_t, std::unordered_set<int32_t>> targetLiveness;
+
+    for (size_t i = n; i > 0; --i) {
+        Mir &m = buf[i - 1];
+
+        if (m.op == MirOp::Nop || m.op == MirOp::DebugTrace)
+            continue;
+
+        // At jump targets, save current liveness for merge when we encounter the jump source.
+        if (m.hasPc() && jumpTargets.count(m.pc))
+            targetLiveness[m.pc] = liveSlots;
+
+        // Function exit: no frame slots are live after return.
+        if (m.op == MirOp::Ret || m.op == MirOp::JmpRax) {
+            liveSlots.clear();
+            continue;
+        }
+        if (m.op == MirOp::VRet) {
+            liveSlots.clear();
+            continue;
+        }
+
+        // Jump source: merge liveness from the target (already saved above).
+        if (isJumpOp(m.op)) {
+            auto it = targetLiveness.find(m.imm32);
+            if (it != targetLiveness.end())
+                liveSlots.insert(it->second.begin(), it->second.end());
+            continue;
+        }
+
+        // NativeJitFuncCall: reads arg disps (if not pre-loaded), writes result disp (if opaque).
+        if (m.op == MirOp::NativeJitFuncCall) {
+            auto *p = reinterpret_cast<const NativeJitCallParams *>(m.imm64);
+            if (p) {
+                uint8_t nArgs = p->argsCnt < 7 ? p->argsCnt : 7;
+                for (uint8_t ai = 0; ai < nArgs; ++ai) {
+                    if (p->argVRegs[ai] == 0xFF)
+                        liveSlots.insert(p->argSrcDisps[ai]);
+                }
+                if (p->resultVReg == 0xFF)
+                    liveSlots.erase(p->resultDisp);
+            }
+            continue;
+        }
+
+        if (readsFrameSlot(m.op)) {
+            liveSlots.insert(m.disp);
+            continue;
+        }
+
+        if (writesFrameSlot(m.op)) {
+            if (liveSlots.find(m.disp) == liveSlots.end())
+                m.op = MirOp::Nop;
+            else
+                liveSlots.erase(m.disp);
+            continue;
+        }
+    }
+}
+
 } // namespace camel::jit::x64
