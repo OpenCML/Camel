@@ -77,6 +77,7 @@ struct RelocInfo {
 struct CompiledCode {
     std::vector<uint8_t> code;
     size_t entryOffset;
+    size_t jitEntryOffset = 0; // offset to JIT-internal entry (skips C++ ABI wrapper)
     std::vector<RelocInfo> relocs;
 };
 

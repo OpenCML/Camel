@@ -30,14 +30,9 @@ class MirBuilder {
     // 下一条 push 的 MIR 将带上此 pc（用于 pcToOffset 与 debug）
     void setNextPc(uint32_t pc) { nextPc_ = pc; }
 
-    void emitPrologueWin64() {
-        push(MirOp::PushRdi, 0, 0);
-        push(MirOp::PushRsi, 0, 0);
-        push(MirOp::PushRbx, 0, 0);
-        push(MirOp::SubRsp8, 0, 0);
-        push(MirOp::MovRegReg, kRegRdi, kRegRcx);
-        push(MirOp::MovRegReg, kRegRsi, kRegRdx);
-    }
+    // C++ ABI wrapper is now generated as raw bytes; MIR body uses JIT internal convention.
+    // Kept as no-op for backward compatibility with code that still calls it.
+    void emitPrologueWin64() {}
 
     void emitMovRegReg(uint8_t dst, uint8_t src) { push(MirOp::MovRegReg, dst, src); }
     void emitMovRegImm32(uint8_t reg, uint32_t imm32) {

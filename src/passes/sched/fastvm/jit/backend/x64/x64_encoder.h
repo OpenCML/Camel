@@ -274,100 +274,57 @@ class Encoder {
         asmLine("sub rax, [rdi+" + std::to_string(disp) + "]");
     }
 
-    // 从编译期常量地址加载/运算（用于静态区 slot，用 rbx 作临时）
+    // Load address into scratch rbx, preserving its cached value via push/pop.
+    // All *FromMemAt helpers that need a temp use this pair.
+    void beginScratchAddr(uint64_t addr) {
+        emitByte(0x53); // push rbx (save poolTopAddr)
+        asmLine("push rbx  ; save scratch");
+        emitMovRegImm64(3, addr); // mov rbx, imm64(addr)
+    }
+    void endScratch() {
+        size_t at = here();
+        emitByte(0x5B); // pop rbx (restore poolTopAddr)
+        asmLineAt(at, "pop rbx  ; restore scratch");
+    }
+
+    // Load from absolute address into rax (uses rax as temp — no scratch needed)
     void movRaxFromMemAt(uint64_t addr) {
-        size_t at1 = here();
-        emitByte(0x48);
-        emitByte(0xbb); // mov rbx, imm64
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        std::ostringstream h;
-        h << "mov rbx, 0x" << std::hex << addr;
-        asmLineAt(at1, h.str());
+        movRaxImm64(addr); // mov rax, imm64(addr)
         size_t at2 = here();
         rexW();
-        emitBytes({0x8b, 0x03}); // mov rax, [rbx]
-        asmLineAt(at2, "mov rax, [rbx]");
+        emitBytes({0x8b, 0x00}); // mov rax, [rax]
+        asmLineAt(at2, "mov rax, [rax]");
     }
-    // 从编译期常量地址加载到任意 reg，不经过 rax（避免覆盖左操作数）
+    // Load from absolute address into any register (uses target reg as temp — no scratch needed)
     void movRegFromMemAt(uint8_t reg, uint64_t addr) {
         if (reg == 0) {
             movRaxFromMemAt(addr);
             return;
         }
-        size_t at1 = here();
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        std::ostringstream h;
-        h << "mov rbx, 0x" << std::hex << addr;
-        asmLineAt(at1, h.str());
+        emitMovRegImm64(reg, addr); // mov reg, imm64(addr)  — has its own asm annotation
+        // mov reg, [reg]
         size_t at2     = here();
-        uint8_t regEnc = (reg <= 3) ? reg : (reg >= 4 && reg <= 7) ? (reg - 4) : (reg == 8) ? 7 : 6;
-        uint8_t rex    = 0x48;
-        if (reg >= 4 && reg <= 7)
-            rex |= 4;
+        uint8_t regEnc = (reg <= 3) ? reg : static_cast<uint8_t>(reg - 4);
+        uint8_t rex =
+            (reg >= 4 && reg <= 7) ? static_cast<uint8_t>(0x4D) : static_cast<uint8_t>(0x48);
         emitByte(rex);
         emitByte(0x8b);
-        emitByte(0x03 | (regEnc << 3));
-        asmLineAt(at2, std::string("mov ") + regName(reg) + ", [rbx]");
+        emitByte(static_cast<uint8_t>((regEnc << 3) | regEnc));
+        asmLineAt(at2, std::string("mov ") + regName(reg) + ", [" + regName(reg) + "]");
     }
     void subRaxFromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        std::ostringstream h;
-        h << "mov rbx, 0x" << std::hex << addr;
-        asmLine(h.str());
+        beginScratchAddr(addr);
         rexW();
         emitBytes({0x2b, 0x03}); // sub rax, [rbx]
         asmLine("sub rax, [rbx]");
+        endScratch();
     }
     void addRaxFromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        std::ostringstream h;
-        h << "mov rbx, 0x" << std::hex << addr;
-        asmLine(h.str());
+        beginScratchAddr(addr);
         rexW();
         emitBytes({0x03, 0x03}); // add rax, [rbx]
         asmLine("add rax, [rbx]");
+        endScratch();
     }
 
     // double (float64) 算术：用 xmm0，一槽 8 字节；与 LADD/LSUB 槽布局一致
@@ -404,61 +361,22 @@ class Encoder {
         asmLine("movsd [rdi+" + std::to_string(disp) + "], xmm0");
     }
     void movXmm0FromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        std::ostringstream h;
-        h << "mov rbx, 0x" << std::hex << addr;
-        asmLine(h.str());
+        beginScratchAddr(addr);
         emitBytes({0xf2, 0x0f, 0x10, 0x03});
         asmLine("movsd xmm0, [rbx]");
+        endScratch();
     }
     void addXmm0FromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        std::ostringstream h;
-        h << "mov rbx, 0x" << std::hex << addr;
-        asmLine(h.str());
+        beginScratchAddr(addr);
         emitBytes({0xf2, 0x0f, 0x58, 0x03});
         asmLine("addsd xmm0, [rbx]");
+        endScratch();
     }
     void subXmm0FromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        std::ostringstream h;
-        h << "mov rbx, 0x" << std::hex << addr;
-        asmLine(h.str());
+        beginScratchAddr(addr);
         emitBytes({0xf2, 0x0f, 0x5c, 0x03});
         asmLine("subsd xmm0, [rbx]");
+        endScratch();
     }
     void mulXmm0FromFrame(int disp) {
         emitBytes({0xf2, 0x0f, 0x59});
@@ -480,23 +398,10 @@ class Encoder {
         asmLine("mulsd xmm0, xmm1");
     }
     void mulXmm0FromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        std::ostringstream h;
-        h << "mov rbx, 0x" << std::hex << addr;
-        asmLine(h.str());
+        beginScratchAddr(addr);
         emitBytes({0xf2, 0x0f, 0x59, 0x03});
         asmLine("mulsd xmm0, [rbx]");
+        endScratch();
     }
     void divXmm0FromFrame(int disp) {
         emitBytes({0xf2, 0x0f, 0x5e});
@@ -518,23 +423,10 @@ class Encoder {
         asmLine("divsd xmm0, xmm1");
     }
     void divXmm0FromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        std::ostringstream h;
-        h << "mov rbx, 0x" << std::hex << addr;
-        asmLine(h.str());
+        beginScratchAddr(addr);
         emitBytes({0xf2, 0x0f, 0x5e, 0x03});
         asmLine("divsd xmm0, [rbx]");
+        endScratch();
     }
     // comisd xmm0, op; setcc al; movzx rax, al（D* 比较，op 在 frame/memat/reg）
     void comisdXmm0WithFrame(int disp) {
@@ -546,23 +438,10 @@ class Encoder {
         asmLine("comisd xmm0, [rdi+" + std::to_string(disp) + "]");
     }
     void comisdXmm0WithMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        std::ostringstream h;
-        h << "mov rbx, 0x" << std::hex << addr;
-        asmLine(h.str());
+        beginScratchAddr(addr);
         emitBytes({0x66, 0x0f, 0x2f, 0x03});
         asmLine("comisd xmm0, [rbx]");
+        endScratch();
     }
     void comisdXmm0WithReg(uint8_t reg) {
         uint8_t regEnc = reg & 7;
@@ -648,21 +527,10 @@ class Encoder {
         asmLine(std::string("mov ") + regName(reg) + ", eax");
     }
     void movEaxFromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        asmLine("mov rbx, 0x" + std::to_string(addr));
+        beginScratchAddr(addr);
         emitBytes({0x8b, 0x03});
         asmLine("mov eax, [rbx]");
+        endScratch();
     }
     void addEaxFromFrame(int disp) {
         if (fitsDisp8(disp))
@@ -684,21 +552,10 @@ class Encoder {
         asmLine(std::string("add eax, ") + regName(reg));
     }
     void addEaxFromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        asmLine("mov rbx, 0x" + std::to_string(addr));
+        beginScratchAddr(addr);
         emitBytes({0x03, 0x03});
         asmLine("add eax, [rbx]");
+        endScratch();
     }
     void subEaxFromFrame(int disp) {
         if (fitsDisp8(disp))
@@ -720,21 +577,10 @@ class Encoder {
         asmLine(std::string("sub eax, ") + regName(reg));
     }
     void subEaxFromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        asmLine("mov rbx, 0x" + std::to_string(addr));
+        beginScratchAddr(addr);
         emitBytes({0x2b, 0x03});
         asmLine("sub eax, [rbx]");
+        endScratch();
     }
     void mulEaxFromFrame(int disp) {
         if (fitsDisp8(disp))
@@ -756,21 +602,10 @@ class Encoder {
         asmLine(std::string("imul eax, ") + regName(reg));
     }
     void mulEaxFromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        asmLine("mov rbx, 0x" + std::to_string(addr));
+        beginScratchAddr(addr);
         emitBytes({0x0f, 0xaf, 0x03});
         asmLine("imul eax, [rbx]");
+        endScratch();
     }
     void idivEaxByFrame(int disp) {
         emitByte(0x99); // cdq
@@ -796,23 +631,12 @@ class Encoder {
         asmLine(std::string("idiv ") + regName(reg));
     }
     void idivEaxByMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        asmLine("mov rbx, 0x" + std::to_string(addr));
+        beginScratchAddr(addr);
         emitByte(0x99);
         asmLine("cdq");
         emitBytes({0xf7, 0x3b});
         asmLine("idiv dword [rbx]");
+        endScratch();
     }
     void cmpEaxWithFrame(int disp) {
         if (fitsDisp8(disp))
@@ -824,21 +648,10 @@ class Encoder {
         asmLine("cmp eax, [rdi+" + std::to_string(disp) + "]");
     }
     void cmpEaxWithMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        asmLine("mov rbx, 0x" + std::to_string(addr));
+        beginScratchAddr(addr);
         emitBytes({0x3b, 0x03});
         asmLine("cmp eax, [rbx]");
+        endScratch();
     }
     void cmpEaxWithReg(uint8_t reg) {
         uint8_t regEnc = reg & 7;
@@ -961,21 +774,10 @@ class Encoder {
         asmLine(std::string("movd xmm0, ") + regName(reg));
     }
     void movSsXmm0FromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        asmLine("mov rbx, 0x" + std::to_string(addr));
+        beginScratchAddr(addr);
         emitBytes({0xf3, 0x0f, 0x10, 0x03});
         asmLine("movss xmm0, [rbx]");
+        endScratch();
     }
     void addSsXmm0FromFrame(int disp) {
         emitBytes({0xf3, 0x0f, 0x58});
@@ -996,21 +798,10 @@ class Encoder {
         asmLine("addss xmm0, xmm1");
     }
     void addSsXmm0FromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        asmLine("mov rbx, 0x" + std::to_string(addr));
+        beginScratchAddr(addr);
         emitBytes({0xf3, 0x0f, 0x58, 0x03});
         asmLine("addss xmm0, [rbx]");
+        endScratch();
     }
     void subSsXmm0FromFrame(int disp) {
         emitBytes({0xf3, 0x0f, 0x5c});
@@ -1031,21 +822,10 @@ class Encoder {
         asmLine("subss xmm0, xmm1");
     }
     void subSsXmm0FromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        asmLine("mov rbx, 0x" + std::to_string(addr));
+        beginScratchAddr(addr);
         emitBytes({0xf3, 0x0f, 0x5c, 0x03});
         asmLine("subss xmm0, [rbx]");
+        endScratch();
     }
     void mulSsXmm0FromFrame(int disp) {
         emitBytes({0xf3, 0x0f, 0x59});
@@ -1066,21 +846,10 @@ class Encoder {
         asmLine("mulss xmm0, xmm1");
     }
     void mulSsXmm0FromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        asmLine("mov rbx, 0x" + std::to_string(addr));
+        beginScratchAddr(addr);
         emitBytes({0xf3, 0x0f, 0x59, 0x03});
         asmLine("mulss xmm0, [rbx]");
+        endScratch();
     }
     void divSsXmm0FromFrame(int disp) {
         emitBytes({0xf3, 0x0f, 0x5e});
@@ -1101,21 +870,10 @@ class Encoder {
         asmLine("divss xmm0, xmm1");
     }
     void divSsXmm0FromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        asmLine("mov rbx, 0x" + std::to_string(addr));
+        beginScratchAddr(addr);
         emitBytes({0xf3, 0x0f, 0x5e, 0x03});
         asmLine("divss xmm0, [rbx]");
+        endScratch();
     }
     void movSsFrameFromXmm0(int disp) {
         emitBytes({0xf3, 0x0f, 0x11});
@@ -1143,21 +901,10 @@ class Encoder {
         asmLine("comiss xmm0, [rdi+" + std::to_string(disp) + "]");
     }
     void comissXmm0WithMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        asmLine("mov rbx, 0x" + std::to_string(addr));
+        beginScratchAddr(addr);
         emitBytes({0x0f, 0x2f, 0x03});
         asmLine("comiss xmm0, [rbx]");
+        endScratch();
     }
     void comissXmm0WithReg(uint8_t reg) {
         uint8_t regEnc = reg & 7;
@@ -1312,24 +1059,11 @@ class Encoder {
     // cmp rax, [addr]; setcc al; movzx（静态区右操作数），setcc: 0x9c=setl 0x9f=setg 0x94=sete
     // 0x95=setne 0x9d=setge
     void cmpRaxWithMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        std::ostringstream h;
-        h << "mov rbx, 0x" << std::hex << addr;
-        asmLine(h.str());
+        beginScratchAddr(addr);
         rexW();
         emitBytes({0x3b, 0x03}); // cmp rax, [rbx]
         asmLine("cmp rax, [rbx]");
+        endScratch();
     }
     void cmpRaxFrameSetl(int disp) {
         cmpRaxWithFrame(disp);
@@ -1426,24 +1160,11 @@ class Encoder {
         asmLine("imul rax, [rdi+" + std::to_string(disp) + "]");
     }
     void mulRaxFromMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        std::ostringstream h;
-        h << "mov rbx, 0x" << std::hex << addr;
-        asmLine(h.str());
+        beginScratchAddr(addr);
         rexW();
         emitBytes({0x0f, 0xaf, 0x03}); // imul rax, [rbx]
         asmLine("imul rax, [rbx]");
+        endScratch();
     }
 
     // cqo; idiv r/m64（LDIV，被除数已在 rax）
@@ -1474,26 +1195,13 @@ class Encoder {
         asmLine("idiv qword [rdi+" + std::to_string(disp) + "]");
     }
     void idivRaxByMemAt(uint64_t addr) {
-        emitByte(0x48);
-        emitByte(0xbb);
-        emitBytes({
-            static_cast<uint8_t>(addr & 0xff),
-            static_cast<uint8_t>((addr >> 8) & 0xff),
-            static_cast<uint8_t>((addr >> 16) & 0xff),
-            static_cast<uint8_t>((addr >> 24) & 0xff),
-            static_cast<uint8_t>((addr >> 32) & 0xff),
-            static_cast<uint8_t>((addr >> 40) & 0xff),
-            static_cast<uint8_t>((addr >> 48) & 0xff),
-            static_cast<uint8_t>((addr >> 56) & 0xff),
-        });
-        std::ostringstream h;
-        h << "mov rbx, 0x" << std::hex << addr;
-        asmLine(h.str());
+        beginScratchAddr(addr);
         emitBytes({0x48, 0x99});
         asmLine("cqo");
         rexW();
         emitBytes({0xf7, 0x3b}); // idiv [rbx]
         asmLine("idiv qword [rbx]");
+        endScratch();
     }
 
     // jmp rel32 (到 offset)
@@ -1535,25 +1243,9 @@ class Encoder {
         asmLine("jle .+" + std::to_string(static_cast<int>(rel)) + "  ; rel8");
     }
 
-    // ret
+    // ret — simple ret (JIT internal convention: no epilogue, C++ wrapper handles save/restore)
     void ret() {
         size_t at = here();
-#if defined(_WIN32) || defined(_WIN64)
-        // Win64: JIT 作为普通函数被 C++ 调用，必须在函数返回前恢复非易失寄存器。
-        // prologueWin64 额外 sub 了 8 字节以维持函数体内 RSP=8(mod16)，这里对应恢复。
-        emitBytes({0x48, 0x83, 0xc4, 0x08}); // add rsp, 8
-        asmLineAt(at, "add rsp, 8  ; win64 align pad");
-        at = here();
-        emitByte(0x5b); // pop rbx
-        asmLineAt(at, "pop rbx");
-        at = here();
-        emitByte(0x5e); // pop rsi
-        asmLineAt(at, "pop rsi");
-        at = here();
-        emitByte(0x5f); // pop rdi
-        asmLineAt(at, "pop rdi");
-        at = here();
-#endif
         emitByte(0xc3);
         asmLineAt(at, "ret");
     }
@@ -1564,23 +1256,8 @@ class Encoder {
         asmLineAt(at, "jmp rax");
     }
 
-    void tailJmpRaxWin64() {
-#if defined(_WIN32) || defined(_WIN64)
-        size_t at = here();
-        emitBytes({0x48, 0x83, 0xc4, 0x08}); // add rsp, 8
-        asmLineAt(at, "add rsp, 8  ; win64 align pad");
-        at = here();
-        emitByte(0x5b); // pop rbx
-        asmLineAt(at, "pop rbx");
-        at = here();
-        emitByte(0x5e); // pop rsi
-        asmLineAt(at, "pop rsi");
-        at = here();
-        emitByte(0x5f); // pop rdi
-        asmLineAt(at, "pop rdi");
-#endif
-        jmpRax();
-    }
+    // JIT body has no prologue to undo — just jmp rax
+    void tailJmpRaxWin64() { jmpRax(); }
 
     // push rdi / pop rdi：trampoline 会覆盖 rdi，caller 需在调用前后保存/恢复 slot base
     void pushRdi() {
@@ -2182,6 +1859,12 @@ class Encoder {
         size_t at = here();
         emitBytes({0x4C, 0x3B, 0xD8});
         asmLineAt(at, "cmp r11, rax");
+    }
+    // cmp r11, r12 — fast graph check using cached r12 (3 bytes vs 13 for mov+cmp)
+    void cmpR11R12() {
+        size_t at = here();
+        emitBytes({0x4D, 0x3B, 0xDC}); // REX.WRB=0x4D, opcode=0x3B, ModR/M=0xDC (r11,r12)
+        asmLineAt(at, "cmp r11, r12  ; graph check (cached)");
     }
     // jne rel32 (0F 85 rel32) — returns offset of the rel32 field for patching
     size_t jneRel32(int32_t rel) {

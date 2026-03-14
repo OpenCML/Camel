@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -414,6 +414,7 @@ linearScanAllocate(std::span<const Bytecode> bytecodes, size_t entryPc, size_t p
     int freeRegs[kNumAllocatableRegs];
     for (int i = 0; i < kNumAllocatableRegs; ++i)
         freeRegs[i] = 1;
+    freeRegs[kReservedRegRbx] = 0; // rbx reserved for poolTopAddr caching
 
     for (const LiveInterval &cur : intervals) {
         for (auto it = active.begin(); it != active.end();) {
@@ -508,6 +509,7 @@ bool linearScanVReg(
     int freeRegs[kNumAllocatableRegs];
     for (int i = 0; i < kNumAllocatableRegs; ++i)
         freeRegs[i] = 1;
+    freeRegs[kReservedRegRbx] = 0; // rbx reserved for poolTopAddr caching
 
     for (const VLiveInterval &cur : intervals) {
         for (auto it = active.begin(); it != active.end();) {

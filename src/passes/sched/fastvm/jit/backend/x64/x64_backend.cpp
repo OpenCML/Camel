@@ -116,7 +116,8 @@ X64Backend::compile(const CompilationUnit &unit, std::string *failureReason) {
     auto result = std::make_unique<CompiledCode>();
     if (!compileBytecode(unit, result->code, failureReason))
         return nullptr;
-    result->entryOffset = 0;
+    result->entryOffset    = 0;
+    result->jitEntryOffset = jitEntryOffset_;
     return result;
 }
 
@@ -162,9 +163,8 @@ bool X64Backend::compileBytecode(
         build.emitCallRax();
     };
 #endif
-#if defined(_WIN32) || defined(_WIN64)
-    build.emitPrologueWin64();
-#endif
+    // Prologue is now a C++ ABI wrapper generated as raw bytes before MIR encoding.
+    // The MIR body uses JIT internal convention: rdi=slots, rsi=ctx, rbx=&pool.top_.
 
     for (size_t pc = entryPc; pc < pcEnd;) {
         const Bytecode &bc = base[pc];
@@ -693,13 +693,11 @@ bool X64Backend::compileBytecode(
                 emitPrepareDirectTailCallWin64(
                     bc,
                     reinterpret_cast<uint64_t>(&prepareDirectJitTailCall));
+                // JIT body has no prologue to undo — just set up Win64 ABI and tail-jump to
+                // target's C++ entry (which has its own prologue).
                 build.emitMovRegReg(kRegRcx, kRegRax);
                 build.emitMovRegReg(kRegRdx, kRegRsi);
                 build.emitMovRegImm64(kRegRax, fnAddr);
-                build.emitAddRsp8();
-                build.emitPopRbx();
-                build.emitPopRsi();
-                build.emitPopRdi();
                 build.emitJmpRax();
                 break;
             }
@@ -830,11 +828,8 @@ bool X64Backend::compileBytecode(
         return true;
     }
 
-    // asm：优化后 MIR → 寄存器分配 + 指令派发 → 汇编/机器码（跳转目标在 encodeMirBuffer 内由 MIR
-    // 下标解析）
     VRegAllocation vregAlloc;
     linearScanVReg(mirBuf, &vregAlloc);
-    // Build：不 call wrapper，避免 JIT 内 call 导致 callee 写 [rsp] 覆盖返回地址（fn 内部 DEP）
     void *debugTraceFn =
 #ifndef NDEBUG
         ((debug && debug->enableDebugTrace) ? reinterpret_cast<void *>(&jitDebugTraceWrapper)
@@ -842,11 +837,60 @@ bool X64Backend::compileBytecode(
 #else
         nullptr;
 #endif
+
+    // Generate C++ ABI wrapper: converts Win64 ABI to JIT internal convention, then calls body.
+    // Layout: [C++ wrapper | JIT body ...]. C++ callers enter at offset 0 (wrapper).
+    // JIT-to-JIT calls enter at jitEntryOffset_ (body start), bypassing wrapper overhead.
+    size_t wrapperSize = 0;
+#if defined(_WIN32) || defined(_WIN64)
+    {
+        uint64_t poolAddr  = unit.poolTopAddr ? reinterpret_cast<uint64_t>(unit.poolTopAddr) : 0;
+        uint64_t graphAddr = reinterpret_cast<uint64_t>(unit.graph);
+        // push rdi; push rsi; push rbx; push r12  (4 pushes → RSP 8→0→8→0→8 mod 16)
+        // 4 pushes gives correct Win64 alignment: body RSP ≡ 0 (mod 16) after wrapper's call.
+        code.push_back(0x57);                  // push rdi
+        code.push_back(0x56);                  // push rsi
+        code.push_back(0x53);                  // push rbx
+        code.insert(code.end(), {0x41, 0x54}); // push r12
+        // mov rdi, rcx  (Win64 arg1 → JIT slot base)
+        code.insert(code.end(), {0x48, 0x89, 0xCF});
+        // mov rsi, rdx  (Win64 arg2 → JIT ctx)
+        code.insert(code.end(), {0x48, 0x89, 0xD6});
+        // mov rbx, imm64(poolTopAddr)  — cached &FramePool::top_
+        code.push_back(0x48);
+        code.push_back(0xBB);
+        for (int b = 0; b < 8; ++b)
+            code.push_back(static_cast<uint8_t>((poolAddr >> (b * 8)) & 0xFF));
+        // mov r12, imm64(graphAddr)  — cached current Graph* for fast frame acquire
+        code.push_back(0x49);
+        code.push_back(0xBC);
+        for (int b = 0; b < 8; ++b)
+            code.push_back(static_cast<uint8_t>((graphAddr >> (b * 8)) & 0xFF));
+        // call rel32(jitBody)
+        code.push_back(0xE8);
+        size_t callPatchPos = code.size();
+        code.insert(code.end(), {0, 0, 0, 0});
+        // pop r12; pop rbx; pop rsi; pop rdi; ret
+        code.insert(code.end(), {0x41, 0x5C}); // pop r12
+        code.push_back(0x5B);                  // pop rbx
+        code.push_back(0x5E);                  // pop rsi
+        code.push_back(0x5F);                  // pop rdi
+        code.push_back(0xC3);                  // ret
+        wrapperSize            = code.size();  // = 42 bytes
+        int32_t callRel        = static_cast<int32_t>(wrapperSize - (callPatchPos + 4));
+        code[callPatchPos]     = static_cast<uint8_t>(callRel & 0xFF);
+        code[callPatchPos + 1] = static_cast<uint8_t>((callRel >> 8) & 0xFF);
+        code[callPatchPos + 2] = static_cast<uint8_t>((callRel >> 16) & 0xFF);
+        code[callPatchPos + 3] = static_cast<uint8_t>((callRel >> 24) & 0xFF);
+    }
+#endif
+    jitEntryOffset_ = wrapperSize;
+
     x64::encodeMirBuffer(
         mirBuf,
         code,
         debug ? debug->asmOut : nullptr,
-        0,
+        0, // baseOffset=0: enc.here() already includes wrapper bytes
         &vregAlloc,
         debug ? debug->instructionBoundaries : nullptr,
         debugTraceFn);

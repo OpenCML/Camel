@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,6 +46,7 @@ class X64Backend : public IJitBackend {
     std::unordered_map<std::string, void *> trampolines_;
     std::vector<void *> allocatedPages_;
     size_t frameBaseOffset_{0};
+    size_t jitEntryOffset_{0}; // set by compileBytecode, used by compile
 };
 
 } // namespace camel::jit

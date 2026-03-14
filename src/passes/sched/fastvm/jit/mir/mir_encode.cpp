@@ -433,41 +433,43 @@ void encodeMirBuffer(
         case MirOp::NativeJitFuncCall: {
             auto *p = reinterpret_cast<const NativeJitCallParams *>(m.imm64);
 
-            // ═══ Step 1: push rdi (save caller slot base; RSP = 0 mod 16) ═══
+            // ═══ Step 1: push rdi (save caller slot base) ═══
             enc.pushRdi();
 
             size_t jnzNotCompiledRelPos = 0, jnzNotCompiledEnd = 0;
             if (!p->isSameGraph) {
                 // ═══ Cross-graph: check bc->fastop[1] == 0 (target JIT-compiled?) ═══
                 enc.movRaxImm64(p->fastop1Addr);
-                // movzx eax, byte [rax]
                 enc.emitBytes({0x0F, 0xB6, 0x00});
                 enc.asmLine("movzx eax, byte [rax]  ; fastop[1]");
                 enc.testRaxRax();
-                jnzNotCompiledRelPos = enc.jneRel32(0); // jnz = jne (ZF=0)
+                jnzNotCompiledRelPos = enc.jneRel32(0);
                 jnzNotCompiledEnd    = enc.here();
                 // Load fn from extra2
                 enc.movRaxImm64(p->extra2Addr);
                 enc.emitBytes({0x48, 0x8B, 0x00});
                 enc.asmLine("mov rax, [rax]  ; load extra2");
                 enc.shlRax16();
-                enc.shrRax16(); // fn = extra2 & 0x0000FFFFFFFFFFFF
-                // Save fn on stack (RSP = 8 mod 16)
-                enc.pushRax();
+                enc.shrRax16();
+                enc.pushRax(); // save fn on stack
             }
 
-            // ═══ Step 2-7: Frame acquire check (common) ═══
-            enc.movRbxImm64(p->poolTopAddr);
-            enc.movR10FromRbx();       // r10 = Frame* at pool top
+            // ═══ Frame acquire check ═══
+            // rbx = &pool.top_ (cached), r12 = current Graph* (cached by wrapper)
+            enc.movR10FromRbx();       // r10 = [rbx] = Frame* at pool top
             enc.movR11FromR10Disp8(8); // r11 = top->graph_
-            enc.movRaxImm64(p->targetGraphAddr);
-            enc.cmpR11Rax();
+            if (p->isSameGraph) {
+                enc.cmpR11R12(); // fast: r12 already holds current graph addr (3 bytes)
+            } else {
+                enc.movRaxImm64(p->targetGraphAddr);
+                enc.cmpR11Rax(); // cross-graph: full 64-bit comparison (13 bytes)
+            }
             size_t jneRelPos = enc.jneRel32(0);
             size_t jneEnd    = enc.here();
 
             // ═══ FAST PATH: acquire frame ═══
             enc.movR11FromR10Disp8(16); // r11 = top->next_
-            enc.movRbxFromR11();        // pool->top_ = next
+            enc.movRbxFromR11();        // [rbx] = next (update pool top)
             enc.leaR11R10Disp8(40);     // r11 = &Frame::dynamicArea_ (slot base)
             enc.movR11FromR10Store();   // slot[0] = Frame*
             for (uint8_t ai = 0; ai < p->argsCnt; ++ai) {
@@ -477,32 +479,30 @@ void encodeMirBuffer(
             enc.movRdiR11(); // switch to callee frame
 
             if (p->isSameGraph) {
-                // ═══ Same-graph: call rel32 to prologue (MIR index 0) ═══
-                // Skip shadow space: callee is our own JIT code, doesn't use home area.
-                // RSP after push rdi is 0 mod 16; call pushes RA → 8 mod 16 (correct entry).
-                enc.movRcxRdi();
-                enc.movRdxRsi();
+                // ═══ Same-graph: call rel32 to JIT body (MIR index 0) ═══
+                // JIT internal convention: rdi=slots, rsi=ctx, rbx=&pool.top_ — already set.
+                // No Win64 ABI conversion needed.
                 patches.push_back({enc.here(), 0, 5, 0, 0});
                 enc.callRel32(0);
                 patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
                 patches.back().jumpEndPos   = enc.here();
             } else {
-                // ═══ Cross-graph: pop fn from stack, call rax ═══
-                enc.popRax(); // recover fn (RSP = 0 mod 16)
+                // ═══ Cross-graph: pop fn, call through C++ entry (Win64 ABI) ═══
+                enc.popRax();
                 enc.movRcxRdi();
                 enc.movRdxRsi();
                 enc.subRspShadow();
-                enc.emitBytes({0xff, 0xd0}); // call rax
-                enc.asmLine("call rax");
+                enc.emitBytes({0xff, 0xd0});
+                enc.asmLine("call rax  ; cross-graph C++ entry");
                 enc.addRspShadow();
             }
 
             // ═══ Release frame + store result ═══
             enc.movR10FromRdi();        // r10 = Frame* from callee slot[0]
             enc.popRdi();               // restore caller slot base
-            enc.movR11FromRbx();        // r11 = current pool top
+            enc.movR11FromRbx();        // r11 = [rbx] = current pool top
             enc.movR10Disp8FromR11(16); // frame->next_ = top
-            enc.movRbxFromR10();        // pool->top_ = frame
+            enc.movRbxFromR10();        // [rbx] = frame (push back to pool)
             enc.movToFrame(p->resultDisp, 0);
             size_t jmpFastPos = enc.here();
             enc.jmpRel32(0);
@@ -511,29 +511,24 @@ void encodeMirBuffer(
             // ═══ SLOW PATH ═══
             size_t slowStart = enc.here();
             if (!p->isSameGraph) {
-                // Frame acquire failed: pop saved fn first
-                enc.popRax(); // discard saved fn (RSP = 0 mod 16)
+                enc.popRax(); // discard saved fn
                 size_t slowCommon = enc.here();
-                // Patch jnz (not compiled) to jump here (no fn was pushed)
                 enc.patchRel32At(
                     jnzNotCompiledRelPos,
                     static_cast<int32_t>(slowCommon - jnzNotCompiledEnd));
-                // Patch jne (graph mismatch) to jump to the pop rax above
                 enc.patchRel32At(jneRelPos, static_cast<int32_t>(slowStart - jneEnd));
             } else {
                 enc.patchRel32At(jneRelPos, static_cast<int32_t>(slowStart - jneEnd));
             }
 
             if (p->isSameGraph) {
-                // Same-graph slow: directSelfFuncInvoke(slots, ctx, &bc)
                 enc.movRcxRdi();
                 enc.movRdxRsi();
                 enc.movR8Imm64(p->slowPathBcAddr);
             } else {
-                // Cross-graph slow: trampolineFunc(slots, ctx, pc)
                 enc.movRcxRdi();
                 enc.movRdxRsi();
-                enc.emitMovRegImm32(4, p->slowPathPc); // mov r8d, pc
+                enc.emitMovRegImm32(4, p->slowPathPc);
             }
             enc.movRaxImm64(p->slowPathFnAddr);
             enc.callRax();
