@@ -1,0 +1,17 @@
+module mutual_tail
+
+func even(n: int): int {
+    return if n == 0 then 1 else odd(n - 1)
+}
+
+func odd(n: int): int {
+    return if n == 0 then 0 else even(n - 1)
+}
+
+func main(): int sync {
+    let n = 50000
+    let a = even(n)
+    let b = odd(n)
+    'mutual_tail({}, {}, {})'->format<n, a, b>->println
+    return 0
+}

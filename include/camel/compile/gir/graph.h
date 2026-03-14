@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 10, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -65,6 +65,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     bool operator!=(const Graph &other) const { return !(this == &other); }
 
     bool isRoot() const { return !outer_.lock(); }
+    bool isMacro() const { return funcType_ && funcType_->modifiers().macro(); }
     const std::string &name() const { return name_; }
     std::string mangledName() const { return name_ + std::format("<{}>", funcType()->mangle()); }
     const std::string &stableId() const { return stableId_; }

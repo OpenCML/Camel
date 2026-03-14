@@ -1,0 +1,18 @@
+module macro_deep_chain
+
+macro func add_one(x: int): int {
+    return x + 1
+}
+
+macro func add_three(x: int): int {
+    return add_one(add_one(add_one(x)))
+}
+
+macro func add_five(x: int): int {
+    return add_three(add_one(add_one(x)))
+}
+
+func main(): int sync {
+    println(add_five(37))
+    return 0
+}

@@ -1,0 +1,9 @@
+module exec_mod_scalar
+
+func fib(n: int): int {
+    return if n <= 1 then n else n % 2
+}
+
+func main(): int sync {
+    return fib(4)
+}

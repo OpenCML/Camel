@@ -83,6 +83,11 @@
   - `-q`, `--quote-prefer <single|double>`
   - `-m`, `--max-width <N>`（默认 80）
 
+- **camel-cpp**：将 `.cml` 转译成 C++ 并自动编译，一步到位，产物输出到 `tmp/`。
+  - 用法：`camel-cpp <file.cml>`
+  - 等效于：`camel <file.cml> std::cpp` 输出写入 `tmp/<stem>.cpp`，随后用 clang++ 编译，得到 `tmp/<stem>.exe` 和 `tmp/libcamel.dll`。
+  - 构建产物：`build/tools/camel-cpp/Release/camel-cpp.exe`（Windows 下 libcamel.dll 会一并复制，可从任意目录运行）。
+
 其他工具：`camel-codegen`、`camel-profiler`。均在 `build/tools/` 下构建。
 
 ---
@@ -98,6 +103,9 @@ camel --input main.cml --passes std::gir,other
 
 # 执行并记录性能
 camel -P main.cml
+
+# 转译到 C++ 并编译（一步到位，产物到 tmp/）
+camel-cpp test/run/linear/fib.cml
 
 # 格式化代码（使用 camel-format，不是 camel format）
 camel-format -i src/xxx.cml

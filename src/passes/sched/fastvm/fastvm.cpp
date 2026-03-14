@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,6 +40,35 @@ using namespace camel::core::context;
 #if ENABLE_FASTVM_JIT
 using namespace camel::jit;
 #endif
+
+namespace {
+
+struct HigherOrderCallSite {
+    GIR::Graph *graph     = nullptr;
+    size_t entryPc        = 0;
+    const slot_t *closure = nullptr;
+    size_t closureSize    = 0;
+};
+
+inline HigherOrderCallSite
+makeHigherOrderCallSite(Function *func, const std::unordered_map<GIR::Graph *, size_t> &offsetMap) {
+    Tuple *closure           = func->tuple();
+    const size_t closureSize = closure ? closure->size() : 0;
+    return {
+        .graph       = func->graph(),
+        .entryPc     = offsetMap.at(func->graph()),
+        .closure     = closureSize == 0 ? nullptr : closure->data(),
+        .closureSize = closureSize,
+    };
+}
+
+inline void seedClosureSlots(Frame *frame, const HigherOrderCallSite &site, size_t baseSlot) {
+    for (size_t i = 0; i < site.closureSize; ++i) {
+        frame->set(baseSlot + i, site.closure[i]);
+    }
+}
+
+} // namespace
 
 void FastVMSchedPass::precompile(GIR::Graph *graph) {
     auto [bytecodes, _, offsetMap] = compileAndLink(
@@ -87,7 +116,7 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     frameStack_.clear();
 
 #if ENABLE_FASTVM_JIT
-    if (!jitBackend_) {
+    if (jitConfig_.policy != JitPolicy::Disabled && !jitBackend_) {
         jitBackend_ = createBackend();
     }
     JitContext jitCtx{this, bytecodes_.data()};
@@ -106,7 +135,7 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 offsetMap_.size()));
         std::vector<std::pair<GIR::Graph *, std::future<CompiledCode *>>> futures;
         for (const auto &[g, entryPc] : offsetMap_) {
-            if (jitCache_.count(g))
+            if (getGraphJitFn(g))
                 continue;
             EXEC_WHEN_DEBUG(
                 GetDefaultLogger().in("JIT").debug(
@@ -122,6 +151,8 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
                 .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
                 .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
+                .poolTopAddr    = framePool_.topAddr(),
+                .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
             };
             futures.emplace_back(
                 g,
@@ -138,7 +169,8 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 JitEntryFn fn                    = jitBackend_->load(std::move(compiled));
                 if (fn) {
                     std::lock_guard lock(jitCacheMutex_);
-                    jitCache_[g] = fn;
+                    setGraphJitFn(g, fn);
+                    jitFnToGraph_[fn] = g;
                     EXEC_WHEN_DEBUG(
                         GetDefaultLogger().in("JIT").info(
                             "Compiled & loaded: graph '{}' codeSize={} bytes",
@@ -155,29 +187,34 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
                         g->name()));
             }
         }
+        for (size_t bpc = 0; bpc < bytecodes_.size();) {
+            Bytecode &bc = bytecodes_[bpc];
+            if ((bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) && bc.fastop[1] != 0) {
+                GIR::Graph *tg = getFuncExtraGraph(&bc);
+                JitEntryFn fn  = getGraphJitFn(tg);
+                if (fn)
+                    setFuncExtraFn(&bc, reinterpret_cast<void *>(fn));
+            }
+            bpc += bc.opsize;
+        }
     } else if (jitConfig_.policy == JitPolicy::OnDemand) {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("JIT").info(
                 "JIT OnDemand: start with interpreter, compile on hot threshold"));
     }
     GIR::Graph *entryGraph = graph.get();
-    auto jitIt             = jitCache_.find(entryGraph);
-    if (jitIt != jitCache_.end()) {
+    JitEntryFn entryJitFn  = getGraphJitFn(entryGraph);
+    if (jitBackend_ && entryJitFn) {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("JIT").info(
                 "Executing entry graph '{}' via JIT",
                 entryGraph->name()));
         Frame *frame = framePool_.acquire(entryGraph);
         opperf::start();
-        try {
-            [[maybe_unused]] slot_t result = jitIt->second(frame->slotBase(), &jitCtx);
-        } catch (...) {
-            framePool_.release(frame);
-            throw;
-        }
+        slot_t result = invokeOwnedJitFrame(entryJitFn, frame, &jitCtx);
         opperf::stop();
         opperf::report(std::cout);
-        framePool_.release(frame);
+        context_->captureProcessExitCode(entryGraph, result);
         return Graph::null();
     }
     EXEC_WHEN_DEBUG(
@@ -190,8 +227,8 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     size_t pc    = offsetMap_.at(graph.get());
     Frame *frame = framePool_.acquire(graph.get());
     try {
-        call(pc, frame);
-        framePool_.release(frame);
+        slot_t result = call(pc, frame);
+        context_->captureProcessExitCode(graph.get(), result);
     } catch (...) {
         pcStack_.clear();
         frameStack_.clear();
@@ -227,31 +264,27 @@ void FastVMSchedPass::evalMarkedOperator(
 
 void FastVMSchedPass::evalMarkedOperator_map_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
-    Tuple *closure = func->tuple();
+    Array *arr                     = currFrame.get<Array *>(nargs[0]);
+    Function *func                 = currFrame.get<Function *>(wargs[0]);
+    const HigherOrderCallSite site = makeHigherOrderCallSite(func, offsetMap_);
 
     Array *res = Array::create(mm::autoSpace(), arr->size());
 
     slot_t *from = arr->data();
     slot_t *to   = res->data();
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(func->graph());
+        Frame *frame = framePool_.acquire(site.graph);
 
         frame->set(1, from[i]); // 设置第一个参数
-        // 如果有闭包
-        if (closure->size() > 0) {
-            for (size_t j = 0; j < closure->size(); ++j) {
-                frame->set(j + 2, closure->get<slot_t>(j));
-            }
+        if (site.closureSize != 0) {
+            seedClosureSlots(frame, site, 2);
         }
 
 #if ENABLE_FASTVM_JIT
-        to[i] = invokeCallOrJit(offsetMap_.at(func->graph()), func->graph(), frame, currentJitCtx_);
+        to[i] = invokeCallOrJit(site.entryPc, site.graph, frame, currentJitCtx_);
 #else
-        to[i] = call(offsetMap_.at(func->graph()), frame);
+        to[i] = call(site.entryPc, frame);
 #endif
-        framePool_.release(frame);
     }
 
     currFrame.set(self, res);
@@ -259,29 +292,25 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
 
 void FastVMSchedPass::evalMarkedOperator_apply_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
-    Tuple *closure = func->tuple();
+    Array *arr                     = currFrame.get<Array *>(nargs[0]);
+    Function *func                 = currFrame.get<Function *>(wargs[0]);
+    const HigherOrderCallSite site = makeHigherOrderCallSite(func, offsetMap_);
 
     slot_t *data = arr->data();
 
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(func->graph());
+        Frame *frame = framePool_.acquire(site.graph);
 
         frame->set(1, data[i]);
-        if (closure->size() > 0) {
-            for (size_t j = 0; j < closure->size(); ++j) {
-                frame->set(j + 2, closure->get<slot_t>(j));
-            }
+        if (site.closureSize != 0) {
+            seedClosureSlots(frame, site, 2);
         }
 
 #if ENABLE_FASTVM_JIT
-        data[i] =
-            invokeCallOrJit(offsetMap_.at(func->graph()), func->graph(), frame, currentJitCtx_);
+        data[i] = invokeCallOrJit(site.entryPc, site.graph, frame, currentJitCtx_);
 #else
-        data[i] = call(offsetMap_.at(func->graph()), frame);
+        data[i] = call(site.entryPc, frame);
 #endif
-        framePool_.release(frame);
     }
 
     currFrame.set(self, arr);
@@ -289,30 +318,26 @@ void FastVMSchedPass::evalMarkedOperator_apply_arr(
 
 void FastVMSchedPass::evalMarkedOperator_filter_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
-    Tuple *closure = func->tuple();
+    Array *arr                     = currFrame.get<Array *>(nargs[0]);
+    Function *func                 = currFrame.get<Function *>(wargs[0]);
+    const HigherOrderCallSite site = makeHigherOrderCallSite(func, offsetMap_);
 
     Array *filtered = Array::create(mm::autoSpace(), arr->size());
 
     slot_t *from = arr->data();
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(func->graph());
+        Frame *frame = framePool_.acquire(site.graph);
 
         frame->set(1, from[i]);
-        if (closure->size() > 0) {
-            for (size_t j = 0; j < closure->size(); ++j) {
-                frame->set(j + 2, closure->get<slot_t>(j));
-            }
+        if (site.closureSize != 0) {
+            seedClosureSlots(frame, site, 2);
         }
 
 #if ENABLE_FASTVM_JIT
-        slot_t result =
-            invokeCallOrJit(offsetMap_.at(func->graph()), func->graph(), frame, currentJitCtx_);
+        slot_t result = invokeCallOrJit(site.entryPc, site.graph, frame, currentJitCtx_);
 #else
-        slot_t result = call(offsetMap_.at(func->graph()), frame);
+        slot_t result = call(site.entryPc, frame);
 #endif
-        framePool_.release(frame);
 
         if (fromSlot<bool>(result)) {
             filtered->append(from[i]);
@@ -326,10 +351,10 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
-    slot_t init    = currFrame.get<slot_t>(wargs[1]);
-    Tuple *closure = func->tuple();
+    Array *arr                     = currFrame.get<Array *>(nargs[0]);
+    Function *func                 = currFrame.get<Function *>(wargs[0]);
+    slot_t init                    = currFrame.get<slot_t>(wargs[1]);
+    const HigherOrderCallSite site = makeHigherOrderCallSite(func, offsetMap_);
 
     // 空数组直接返回初始值
     if (arr->size() == 0) {
@@ -341,25 +366,21 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     slot_t *from = arr->data();
 
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(func->graph());
+        Frame *frame = framePool_.acquire(site.graph);
 
         // reduce(acc, cur)
         frame->set(1, acc);
         frame->set(2, from[i]);
 
-        // 如果有闭包参数
-        if (closure->size() > 0) {
-            for (size_t j = 0; j < closure->size(); ++j) {
-                frame->set(j + 3, closure->get<slot_t>(j));
-            }
+        if (site.closureSize != 0) {
+            seedClosureSlots(frame, site, 3);
         }
 
 #if ENABLE_FASTVM_JIT
-        acc = invokeCallOrJit(offsetMap_.at(func->graph()), func->graph(), frame, currentJitCtx_);
+        acc = invokeCallOrJit(site.entryPc, site.graph, frame, currentJitCtx_);
 #else
-        acc = call(offsetMap_.at(func->graph()), frame);
+        acc = call(site.entryPc, frame);
 #endif
-        framePool_.release(frame);
     }
 
     currFrame.set(self, acc);
@@ -367,29 +388,26 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
 
 void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
-    Tuple *closure = func->tuple();
+    Array *arr                     = currFrame.get<Array *>(nargs[0]);
+    Function *func                 = currFrame.get<Function *>(wargs[0]);
+    const HigherOrderCallSite site = makeHigherOrderCallSite(func, offsetMap_);
 
     slot_t *from = arr->data();
 
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(func->graph());
+        Frame *frame = framePool_.acquire(site.graph);
 
         frame->set(1, from[i]);
 
-        if (closure->size() > 0) {
-            for (size_t j = 0; j < closure->size(); ++j) {
-                frame->set(j + 2, closure->get<slot_t>(j));
-            }
+        if (site.closureSize != 0) {
+            seedClosureSlots(frame, site, 2);
         }
 
 #if ENABLE_FASTVM_JIT
-        invokeCallOrJit(offsetMap_.at(func->graph()), func->graph(), frame, currentJitCtx_);
+        invokeCallOrJit(site.entryPc, site.graph, frame, currentJitCtx_);
 #else
-        call(offsetMap_.at(func->graph()), frame);
+        call(site.entryPc, frame);
 #endif
-        framePool_.release(frame);
     }
 
     // foreach 无返回值
@@ -397,19 +415,26 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
 }
 
 #if ENABLE_FASTVM_JIT
-Frame *FastVMSchedPass::acquireFrameForCall(GIR::Graph *graph) { return framePool_.acquire(graph); }
 
-void FastVMSchedPass::releaseFrameForCall(Frame *frame) { framePool_.release(frame); }
-
-Frame *FastVMSchedPass::acquireFrameForTail(GIR::Graph *graph) {
-    Frame *f = framePool_._acquire(graph);
-    framePool_._resetTop();
-    return f;
+#if defined(_MSC_VER)
+__declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
+slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *jitCtx) {
+    slot_t *slots = frame->slotBase();
+    slots[0]      = reinterpret_cast<slot_t>(frame);
+    try {
+        slot_t result = fn(slots, jitCtx);
+        if (framePool_.isActive(frame))
+            framePool_.release(frame);
+        return result;
+    } catch (...) {
+        if (framePool_.isActive(frame))
+            framePool_.release(frame);
+        throw;
+    }
 }
-
-void FastVMSchedPass::releaseFrameForTail(Frame *frame) { framePool_.release(frame); }
-
-Context &FastVMSchedPass::context() { return *context_; }
 
 GIR::Graph *FastVMSchedPass::jitFnToGraph(JitEntryFn fn) const {
     auto it = jitFnToGraph_.find(fn);
@@ -417,24 +442,30 @@ GIR::Graph *FastVMSchedPass::jitFnToGraph(JitEntryFn fn) const {
 }
 
 void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
-    if (jitCache_.count(graph))
+    if (getGraphJitFn(graph))
         return;
     std::lock_guard lock(jitCacheMutex_);
-    if (jitCache_.count(graph))
+    if (getGraphJitFn(graph))
         return;
     FrameMeta *meta = graph->getExtra<FrameMeta, 0>();
     if (!meta)
         meta = installFrameMetaInfoForGraph(graph);
 
+    CompilationDebugOptions debugOptions{
+        .enableDebugTrace = enableJitTraceMir_,
+    };
     CompilationUnit unit{
-        .graph          = graph,
-        .frameMeta      = meta,
-        .bytecodes      = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
-        .entryPc        = entryPc,
-        .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
-        .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
-        .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
-        .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
+        .graph                    = graph,
+        .frameMeta                = meta,
+        .bytecodes                = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
+        .entryPc                  = entryPc,
+        .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
+        .trampolineTail           = reinterpret_cast<void *>(&trampolineTail),
+        .trampolineOper           = reinterpret_cast<void *>(&trampolineOper),
+        .trampolineCast           = reinterpret_cast<void *>(&trampolineCast),
+        .poolTopAddr              = framePool_.topAddr(),
+        .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
+        .debug                    = enableJitTraceMir_ ? &debugOptions : nullptr,
     };
     auto compiled = jitBackend_->compile(unit);
     if (!compiled)
@@ -462,7 +493,7 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
     });
     auto fn = jitBackend_->load(std::move(compiled));
     if (fn) {
-        jitCache_[graph]  = fn;
+        setGraphJitFn(graph, fn);
         jitFnToGraph_[fn] = graph;
         for (size_t pc = 0; pc < bytecodes_.size();) {
             Bytecode &bc = bytecodes_[pc];
@@ -479,29 +510,51 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
     }
 }
 
+Bytecode *FastVMSchedPass::materializeCallTarget(size_t pc, Bytecode *bc) {
+    if (!bc || bc->fastop[1] == 0) {
+        return bc;
+    }
+    GIR::Graph *targetGraph = getFuncExtraGraph(bc);
+    size_t targetPc         = static_cast<size_t>(bc->fastop[1]);
+    uint32_t count          = incFuncExtraCount(bc);
+    if (tierPolicy_.shouldJit(count)) {
+        compileAndCacheGraph(targetGraph, targetPc);
+        return &bytecodes_[pc];
+    }
+    return bc;
+}
+
+slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
+    CallResult result = callBorrowed(pc, rootFrame);
+    if (result.rootFrame)
+        framePool_.release(result.rootFrame);
+    return result.result;
+}
+
+size_t FastVMSchedPass::graphEntryPc(GIR::Graph *graph) const { return offsetMap_.at(graph); }
+
 slot_t FastVMSchedPass::invokeCallOrJit(
     size_t pc, GIR::Graph *graph, Frame *frame, void *jitCtx, uint32_t callCount) {
     currentJitCtx_ = jitCtx;
-    // closure 等无 bytecode 路径仍走 jitCache_
-    auto it = jitCache_.find(graph);
-    if (it != jitCache_.end()) {
+    JitEntryFn fn  = getGraphJitFn(graph);
+    if (fn) {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("JIT").debug(
                 "invokeCallOrJit: graph '{}' pc={} -> JIT",
                 graph->name(),
                 pc));
-        return it->second(frame->slotBase(), jitCtx);
+        return invokeOwnedJitFrame(fn, frame, jitCtx);
     }
     if (tierPolicy_.shouldJit(callCount)) {
         compileAndCacheGraph(graph, pc);
-        it = jitCache_.find(graph);
-        if (it != jitCache_.end()) {
+        fn = getGraphJitFn(graph);
+        if (fn) {
             EXEC_WHEN_DEBUG(
                 GetDefaultLogger().in("JIT").debug(
                     "invokeCallOrJit: graph '{}' pc={} -> JIT (after compile)",
                     graph->name(),
                     pc));
-            return it->second(frame->slotBase(), jitCtx);
+            return invokeOwnedJitFrame(fn, frame, jitCtx);
         }
     }
     EXEC_WHEN_DEBUG(

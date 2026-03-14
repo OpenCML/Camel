@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,12 +30,12 @@
  * 等请求在子进程内执行并回显到子进程 LogSink，供 Task 日志 tab 展示。
  */
 
-#include "windows_parser_guard.h"
+#include "camel/utils/windows_parser_guard.h"
 
 #include "nlohmann/json.hpp"
 
 #include "camel/compile/gir.h"
-#include "camel/utils/dll_path.h"
+#include "camel/init.h"
 #include "camel/utils/log.h"
 #include "command/commands.h"
 #include "command/dispatcher.h"
@@ -131,7 +131,7 @@ int runWorkerMode(int argc, char *argv[]) {
         std::cerr << "Usage: camel-db --run-worker <path.cml>" << std::endl;
         return 1;
     }
-    camel::utils::setupLibrarySearchPath();
+    camel::initialize();
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::setvbuf(stderr, nullptr, _IONBF, 0);
 

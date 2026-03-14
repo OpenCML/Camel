@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,8 +33,33 @@ namespace fs = std::filesystem;
 using namespace strutil;
 using namespace camel::core::error;
 using namespace camel::core::module;
+using namespace camel::core::type;
 
 namespace camel::core::context {
+
+namespace {
+
+int deriveProcessExitCode(GIR::Graph *graph, slot_t result) {
+    if (!graph || !graph->funcType() || !graph->funcType()->hasExitType())
+        return 0;
+
+    switch (graph->funcType()->exitType()->code()) {
+    case TypeCode::Int32:
+        return static_cast<int>(static_cast<int32_t>(result));
+    case TypeCode::Int64:
+        return static_cast<int>(static_cast<int64_t>(result));
+    case TypeCode::Bool:
+        return result != 0 ? 1 : 0;
+    case TypeCode::Byte:
+        return static_cast<int>(static_cast<uint8_t>(result));
+    case TypeCode::Void:
+        return 0;
+    default:
+        return 0;
+    }
+}
+
+} // namespace
 
 Context::Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
     : entryConfig_(entryConf), diagConfig_(diagConf) {}
@@ -147,6 +172,10 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
             ud->diagnostics()->dump(os, false);
         }
     }
+}
+
+void Context::captureProcessExitCode(GIR::Graph *graph, slot_t result) {
+    processExitCode_ = deriveProcessExitCode(graph, result);
 }
 
 std::vector<module_ptr_t> Context::allUserModules() const {

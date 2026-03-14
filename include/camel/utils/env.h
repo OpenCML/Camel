@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@
 #include <Windows.h>
 #endif
 
-std::string getEnv(const std::string &key, const std::string &defaultVal = "") {
+inline std::string getEnv(const std::string &key, const std::string &defaultVal = "") {
 #ifdef _WIN32
     char *buffer = nullptr;
     size_t size  = 0;

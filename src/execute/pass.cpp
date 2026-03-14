@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,6 @@
 #include "camel/common/scope.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
-#include "camel/utils/log.h"
 #include "macro/macro.h"
 #include "passes/opt/inline/inline.h"
 #include "passes/sched/fastvm/bcdump.h"
@@ -31,6 +30,7 @@
 #include "passes/sched/fastvm/jit/dump/mirdump.h"
 #include "passes/sched/nodevm/nodevm.h"
 #include "passes/sched/taskflow/taskflow.h"
+#include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/tns/topo_node_seq.h"
 
@@ -50,6 +50,14 @@ using PassScope    = Scope<std::string, PassFactory, std::string>;
 using PassScopePtr = scope_ptr_t<std::string, PassFactory, std::string>;
 
 namespace {
+
+FastVMConfig makeDefaultFastVmJitConfig() {
+    FastVMConfig config{};
+    config.jitMode           = FastVMConfig::JitMode::OnDemand;
+    config.jitHotThreshold   = 1;
+    config.enableJitTraceMir = false;
+    return config;
+}
 
 std::vector<std::string> splitPath(const std::string &path) {
     std::vector<std::string> result;
@@ -135,6 +143,13 @@ PassScopePtr initPassScope() {
                     {"null", def(PASS(NullGraphIRPass))},
                     {"macro", def(PASS(MacroRewritePass))},
                     {"graphviz", def(PASS(GraphVizDumpPass))},
+                    {"cpp",
+                     def(PASS(CppDumpPass),
+                         {
+                             {"module", def(PASS(CppModuleDumpPass))},
+                             {"inspect", def(PASS(CppInspectDumpPass))},
+                             {"bench", def(PASS(CppBenchDumpPass))},
+                         })},
                     {"topo_node_seq", def(PASS(TopoNodeSeqDumpPass))},
                     {"nodevm", def(PASS(NodeVMSchedPass))},
                     {"fastvm",
@@ -143,7 +158,7 @@ PassScopePtr initPassScope() {
                              {"bytecode", def(PASS(BytecodeDumpPass))},
                              {"linked_bytecode", def(PASS(LinkedBytecodeDumpPass))},
                              {"jit",
-                              def(PASS1(FastVMSchedPass, FastVMConfig{.enableJit = true}),
+                              def(PASS1(FastVMSchedPass, makeDefaultFastVmJitConfig()),
                                   {
                                       {"dump",
                                        scope({
@@ -186,6 +201,10 @@ std::unordered_map<std::string, std::string> passAliases = {
     // 常用转译遍缩写
     {"std::dot", "std::graphviz"},
     {"std::gir", "std::graphviz"},
+    {"std::cxx", "std::cpp"},
+    {"std::cppmod", "std::cpp::module"},
+    {"std::cppinspect", "std::cpp::inspect"},
+    {"std::cppbench", "std::cpp::bench"},
     {"std::tns", "std::topo_node_seq"},
     {"std::bc", "std::fastvm::bytecode"},
     {"std::lbc", "std::fastvm::linked_bytecode"},
@@ -242,12 +261,12 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     return nullptr;
 }
 
-GIR::graph_ptr_t applyPasses(
+PassApplyResult applyPassesDetailed(
     GIR::graph_ptr_t graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
     std::ostream &os) {
     for (const auto &p : passes) {
         if (graph == nullptr || graph == Graph::null()) {
-            return graph;
+            return {Graph::null(), PassApplyStatus::Consumed};
         }
         ASSERT(
             !graph->dirty(),
@@ -259,13 +278,21 @@ GIR::graph_ptr_t applyPasses(
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
-                return nullptr;
+                return {nullptr, PassApplyStatus::Failed};
             }
+            if (graph == Graph::null())
+                return {Graph::null(), PassApplyStatus::Consumed};
         } else {
             throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(p);
         }
     }
 
     EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GIR-Z", graph ? graph.get() : nullptr); });
-    return graph;
+    return {graph, PassApplyStatus::Transformed};
+}
+
+GIR::graph_ptr_t applyPasses(
+    GIR::graph_ptr_t graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
+    std::ostream &os) {
+    return applyPassesDetailed(std::move(graph), passes, ctx, os).graph;
 }

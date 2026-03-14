@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/global_config.h"
 #include "camel/execute/executor.h"
+#include <array>
 #include <iostream>
 
 using namespace camel::core::error;
@@ -35,18 +36,25 @@ using namespace camel::jit;
 #if ENABLE_FASTVM_COMPUTED_GOTO
 
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
-/* Clang Win64: wrapper in trampoline.cpp. pc/bc in thread_local so JIT cannot overwrite stack. */
-static thread_local size_t s_jit_pc;
-static thread_local const Bytecode *s_jit_bc;
+/* Clang Win64: wrapper in trampoline.cpp. Use a fixed-size per-thread stack so nested direct JIT
+ * calls do not overwrite the caller's saved pc/bc, while keeping the hot path allocation-free. */
+static constexpr size_t kJitSaveStackLimit = 8192;
+static thread_local std::array<size_t, kJitSaveStackLimit> s_jit_pc_stack;
+static thread_local std::array<const Bytecode *, kJitSaveStackLimit> s_jit_bc_stack;
+static thread_local size_t s_jit_save_depth = 0;
 #define JIT_SAVE_PC_BC()                                                                           \
     do {                                                                                           \
-        s_jit_pc = pc;                                                                             \
-        s_jit_bc = bc;                                                                             \
+        ASSERT(s_jit_save_depth < kJitSaveStackLimit, "Nested JIT save stack overflow.");          \
+        s_jit_pc_stack[s_jit_save_depth] = pc;                                                     \
+        s_jit_bc_stack[s_jit_save_depth] = bc;                                                     \
+        ++s_jit_save_depth;                                                                        \
     } while (0)
 #define JIT_RESTORE_PC_BC()                                                                        \
     do {                                                                                           \
-        pc = s_jit_pc;                                                                             \
-        bc = const_cast<const Bytecode *>(s_jit_bc);                                               \
+        ASSERT(s_jit_save_depth > 0, "Nested JIT save stack underflow.");                          \
+        --s_jit_save_depth;                                                                        \
+        pc = s_jit_pc_stack[s_jit_save_depth];                                                     \
+        bc = s_jit_bc_stack[s_jit_save_depth];                                                     \
     } while (0)
 #else
 #define JIT_SAVE_PC_BC() ((void)0)
@@ -134,12 +142,16 @@ static thread_local const Bytecode *s_jit_bc;
 using namespace std;
 using namespace GIR;
 
-slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
+FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
     Frame *currFrame            = rootFrame;
+    Frame *rootActiveFrame      = rootFrame;
     const Bytecode *base        = bytecodes_.data();
     const Bytecode *bc          = nullptr;
     const size_t pcStackBase    = pcStack_.size();
     const size_t frameStackBase = frameStack_.size();
+#if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
+    const size_t jitSaveBase = s_jit_save_depth;
+#endif
 
     try {
         static void *dispatchTable[256] = {
@@ -211,8 +223,8 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         opperf::ScopeTimer _timer(bc->opcode);
 
         slot_t result = currFrame->get<slot_t>(bc->fastop[0]);
-        if (currFrame == rootFrame) {
-            return result;
+        if (currFrame == rootActiveFrame) {
+            return CallResult{result, currFrame};
         }
 
         framePool_.release(currFrame);
@@ -490,8 +502,6 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         const auto &result = call(offsetMap_.at(targetGraph), funcFrame);
         _timer.resume();
 
-        framePool_.release(funcFrame);
-
         currFrame->set(bc->result, result);
 
         NEXT();
@@ -505,17 +515,17 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         opperf::ScopeTimer _timer(bc->opcode);
 
 #if ENABLE_FASTVM_JIT
-        // fastop[1] == 0 means this is a direct call to a JIT function
+        bc = materializeCallTarget(pc, const_cast<Bytecode *>(bc));
         if (bc->fastop[1] == 0) {
             JIT_SAVE_PC_BC(); /* save pc/bc before any call can clobber them (Build opt) */
             Graph *targetGraph     = getFuncExtraGraph(bc);
             JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
-            Frame *funcFrame       = framePool_.acquire(targetGraph);
             size_t argsCnt         = bc->normCnt();
             const data_idx_t *args = bc->operands();
-            for (size_t i = 0; i < argsCnt; ++i) {
-                funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
-            }
+            Frame *funcFrame =
+                acquireCallFrameWithArgs(targetGraph, args, argsCnt, [&](data_idx_t idx) {
+                    return currFrame->get<slot_t>(idx);
+                });
             EXEC_WHEN_DEBUG({
                 std::string argsStr;
                 for (size_t i = 0; i < argsCnt; ++i) {
@@ -526,61 +536,25 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
                     targetGraph->name(),
                     argsStr);
             });
-            funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
             slot_t result;
-            result = fn(funcFrame->slotBase(), currentJitCtx_);
+            result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
             JIT_RESTORE_PC_BC();
             GetDefaultLogger().in("FastVM").debug(
                 "JIT function at pc={} returned result={}.",
                 pc,
                 result);
-            framePool_.release(funcFrame);
             currFrame->set(bc->result, result);
             NEXT();
         } else {
-            // fastop[1] != 0 means this is a call to a JIT function that needs to be compiled
             Graph *targetGraph = getFuncExtraGraph(bc);
             size_t targetPc    = static_cast<size_t>(bc->fastop[1]);
-            uint32_t count     = incFuncExtraCount(const_cast<Bytecode *>(bc));
-            if (tierPolicy_.shouldJit(count)) {
-                compileAndCacheGraph(targetGraph, targetPc);
-                bc = &bytecodes_[pc];
-                if (bc->fastop[1] == 0) {
-                    JIT_SAVE_PC_BC(); /* save pc/bc before any call can clobber them (Build opt) */
-                    Graph *g               = getFuncExtraGraph(bc);
-                    JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
-                    Frame *funcFrame       = framePool_.acquire(g);
-                    size_t argsCnt         = bc->normCnt();
-                    const data_idx_t *args = bc->operands();
-                    for (size_t i = 0; i < argsCnt; ++i) {
-                        funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
-                    }
-                    EXEC_WHEN_DEBUG({
-                        std::string argsStr;
-                        for (size_t i = 0; i < argsCnt; ++i) {
-                            argsStr += std::format("{} ", currFrame->get<slot_t>(args[i]));
-                        }
-                        GetDefaultLogger().in("FastVM").debug(
-                            "Calling JIT function of graph <{}> with args: {}",
-                            targetGraph->name(),
-                            argsStr);
-                    });
-                    funcFrame->slotBase()[0] = reinterpret_cast<slot_t>(funcFrame);
-                    slot_t result;
-                    result = fn(funcFrame->slotBase(), currentJitCtx_);
-                    JIT_RESTORE_PC_BC();
-                    framePool_.release(funcFrame);
-                    currFrame->set(bc->result, result);
-                    NEXT();
-                }
-            }
             push(pc, currFrame);
-            Frame *funcFrame       = framePool_.acquire(targetGraph);
             size_t argsCnt         = bc->normCnt();
             const data_idx_t *args = bc->operands();
-            for (size_t i = 0; i < argsCnt; ++i) {
-                funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
-            }
+            Frame *funcFrame =
+                acquireCallFrameWithArgs(targetGraph, args, argsCnt, [&](data_idx_t idx) {
+                    return currFrame->get<slot_t>(idx);
+                });
             pc        = targetPc;
             currFrame = funcFrame;
             JUMP();
@@ -608,80 +582,31 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
 
 #if ENABLE_FASTVM_JIT
         FrameView lastFrame(currFrame);
+        bc                     = materializeCallTarget(pc, const_cast<Bytecode *>(bc));
+        Graph *tailTargetGraph = getFuncExtraGraph(bc);
         framePool_.release(currFrame);
         if (bc->fastop[1] == 0) {
-            Graph *g               = getFuncExtraGraph(bc);
-            JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
-            Frame *newFrame        = framePool_._acquire(g);
             size_t argsCnt         = bc->normCnt();
             const data_idx_t *args = bc->operands();
-            for (size_t i = 0; i < argsCnt; ++i) {
-                newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
-            }
-            framePool_._resetTop();
-            EXEC_WHEN_DEBUG({
-                std::string argsStr;
-                for (size_t i = 0; i < argsCnt; ++i) {
-                    argsStr += std::format("{} ", lastFrame.get<slot_t>(args[i]));
-                }
-                GetDefaultLogger().in("FastVM").debug(
-                    "Calling JIT function of graph <{}> with args: {}",
-                    g->name(),
-                    argsStr);
-            });
-            newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
-            slot_t result;
-            result = fn(newFrame->slotBase(), currentJitCtx_);
-            GetDefaultLogger().in("FastVM").debug(
-                "JIT function at pc={} returned result={}.",
-                pc,
-                result);
-            return result;
-        }
-        Graph *targetGraph = getFuncExtraGraph(bc);
-        size_t targetPc    = static_cast<size_t>(bc->fastop[1]);
-        uint32_t count     = incFuncExtraCount(const_cast<Bytecode *>(bc));
-        if (tierPolicy_.shouldJit(count)) {
-            compileAndCacheGraph(targetGraph, targetPc);
-            bc = &bytecodes_[pc];
-            if (bc->fastop[1] == 0) {
-                Graph *g               = getFuncExtraGraph(bc);
-                JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
-                Frame *newFrame        = framePool_._acquire(g);
-                size_t argsCnt         = bc->normCnt();
-                const data_idx_t *args = bc->operands();
-                for (size_t i = 0; i < argsCnt; ++i) {
-                    newFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
-                }
-                framePool_._resetTop();
-                EXEC_WHEN_DEBUG({
-                    std::string argsStr;
-                    for (size_t i = 0; i < argsCnt; ++i) {
-                        argsStr += std::format("{} ", lastFrame.get<slot_t>(args[i]));
-                    }
-                    GetDefaultLogger().in("FastVM").debug(
-                        "Calling JIT function of graph <{}> with args: {}",
-                        g->name(),
-                        argsStr);
+            Frame *newFrame =
+                acquireTailFrameWithArgs(tailTargetGraph, args, argsCnt, [&](data_idx_t idx) {
+                    return lastFrame.get<slot_t>(idx);
                 });
-                newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
-                slot_t result;
-                result = fn(newFrame->slotBase(), currentJitCtx_);
-                GetDefaultLogger().in("FastVM").debug(
-                    "JIT function at pc={} returned result={}.",
-                    pc,
-                    result);
-                return result;
+            if (currFrame == rootActiveFrame) {
+                rootActiveFrame = newFrame;
             }
+            pc        = getFuncExtraTargetPc(bc);
+            currFrame = newFrame;
+            JUMP();
         }
-        currFrame              = framePool_._acquire(targetGraph);
+        Graph *targetGraph     = tailTargetGraph;
+        size_t targetPc        = static_cast<size_t>(bc->fastop[1]);
         size_t argsCnt         = bc->normCnt();
         const data_idx_t *args = bc->operands();
-        for (size_t i = 0; i < argsCnt; ++i) {
-            currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
-        }
-        framePool_._resetTop();
-        pc = targetPc;
+        currFrame = acquireTailFrameWithArgs(targetGraph, args, argsCnt, [&](data_idx_t idx) {
+            return lastFrame.get<slot_t>(idx);
+        });
+        pc        = targetPc;
         JUMP();
 #else
         FrameView lastFrame(currFrame);
@@ -799,9 +724,15 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         DEF_BIN_OP_LABEL(FGE, Float32, >=);
         DEF_BIN_OP_LABEL(DGE, Float64, >=);
     } catch (const RuntimeFault &fault) {
+#if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
+        s_jit_save_depth = jitSaveBase;
+#endif
         std::unordered_set<Frame *> released;
         auto releaseFrame = [&](Frame *frame) {
             if (!frame || released.count(frame) != 0) {
+                return;
+            }
+            if (!framePool_.isActive(frame)) {
                 return;
             }
             framePool_.release(frame);
@@ -809,9 +740,11 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         };
 
         Graph *siteGraph =
-            currFrame ? currFrame->graph() : (rootFrame ? rootFrame->graph() : nullptr);
+            currFrame ? currFrame->graph() : (rootActiveFrame ? rootActiveFrame->graph() : nullptr);
         releaseFrame(currFrame);
-        releaseFrame(rootFrame);
+        if (currFrame != rootActiveFrame) {
+            releaseFrame(rootActiveFrame);
+        }
         while (frameStack_.size() > frameStackBase) {
             releaseFrame(frameStack_.back());
             frameStack_.pop_back();
@@ -825,9 +758,15 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             fault,
             makePcExecutionSite(context_->sourceContext(), siteGraph, pc));
     } catch (Diagnostic &) {
+#if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
+        s_jit_save_depth = jitSaveBase;
+#endif
         std::unordered_set<Frame *> released;
         auto releaseFrame = [&](Frame *frame) {
             if (!frame || released.count(frame) != 0) {
+                return;
+            }
+            if (!framePool_.isActive(frame)) {
                 return;
             }
             framePool_.release(frame);
@@ -835,7 +774,9 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
         };
 
         releaseFrame(currFrame);
-        releaseFrame(rootFrame);
+        if (currFrame != rootActiveFrame) {
+            releaseFrame(rootActiveFrame);
+        }
         while (frameStack_.size() > frameStackBase) {
             releaseFrame(frameStack_.back());
             frameStack_.pop_back();

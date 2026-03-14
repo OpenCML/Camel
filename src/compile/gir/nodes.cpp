@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 10, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -291,6 +291,27 @@ bool Node::replace(Node *oldNode, Node *newNode) {
     for (const auto &in : oldNode->ctrlInputs_) {
         Node::link(LinkType::Ctrl, in, newNode);
     }
+    for (const auto &out : oldNode->withOutputs_) {
+        Node::link(LinkType::With, newNode, out);
+    }
+    for (const auto &out : oldNode->normOutputs_) {
+        Node::link(LinkType::Norm, newNode, out);
+    }
+    for (const auto &out : oldNode->ctrlOutputs_) {
+        Node::link(LinkType::Ctrl, newNode, out);
+    }
+    return oldNode->detach();
+}
+
+bool Node::replaceUses(Node *oldNode, Node *newNode) {
+    ASSERT(oldNode && newNode, "Cannot replace null nodes.");
+    ASSERT(oldNode != newNode, "Cannot replace a node with itself.");
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger().in("GIR").debug(
+            "Replacing node uses: {} -> {}",
+            oldNode->toString(),
+            newNode->toString()));
+
     for (const auto &out : oldNode->withOutputs_) {
         Node::link(LinkType::With, newNode, out);
     }

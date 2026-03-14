@@ -1,0 +1,7 @@
+module math_scalar
+
+import { sqrt, abs, floor } from math
+
+func fib(x: float): float {
+    return floor(sqrt(abs(x)))
+}

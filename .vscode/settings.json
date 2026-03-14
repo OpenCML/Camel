@@ -1,12 +1,15 @@
 {
     "terminal.integrated.env.windows": {
-        "PATH": "${workspaceFolder}\\out\\latest;${workspaceFolder}\\out\\latest\\bin;${env:PATH}"
+        "PATH": "${workspaceFolder}\\out\\latest;${workspaceFolder}\\out\\latest\\bin;${env:PATH}",
+        "CAMEL_HOME": "${workspaceFolder}/out/latest"
     },
     "terminal.integrated.env.osx": {
-        "PATH": "${workspaceFolder}/out/latest:${workspaceFolder}/out/latest/bin:${env:PATH}"
+        "PATH": "${workspaceFolder}/out/latest:${workspaceFolder}/out/latest/bin:${env:PATH}",
+        "CAMEL_HOME": "${workspaceFolder}/out/latest"
     },
     "terminal.integrated.env.linux": {
-        "PATH": "${workspaceFolder}/out/latest:${workspaceFolder}/out/latest/bin:${env:PATH}"
+        "PATH": "${workspaceFolder}/out/latest:${workspaceFolder}/out/latest/bin:${env:PATH}",
+        "CAMEL_HOME": "${workspaceFolder}/out/latest"
     },
     "cSpell.words": [
         "Topo"

@@ -1,0 +1,24 @@
+/**
+ * 意图：验证浮点算术在 JIT 下的基本正确性，覆盖 mul/add/div 链路。
+ * 预期：打印 `float_arith ok`；exit 0。
+ */
+module jit_float_arith
+
+func mix(x: float): float {
+    let a = x * 2.0
+    let b = a + 0.5
+    return b / 2.0
+}
+
+func main(): int sync {
+    let y = mix(1.5)
+
+    if y < 1.74 then {
+        return 1
+    } else if y > 1.76 then {
+        return 2
+    } else {
+        'float_arith ok'->println
+        return 0
+    }
+}

@@ -1,0 +1,32 @@
+/**
+ * 意图：验证 `< <= > >= == !=` 这些比较在 JIT 下的物化与控制流结果是否一致。
+ * 预期：打印 `comparison_matrix ok`；exit 0。
+ */
+module jit_comparison_matrix
+
+func score(a: int, b: int): int {
+    let lt = if a < b then 1 else 0
+    let le = if a <= b then 1 else 0
+    let gt = if a > b then 1 else 0
+    let ge = if a >= b then 1 else 0
+    let eq = if a == b then 1 else 0
+    let ne = if a != b then 1 else 0
+    return lt + le * 10 + gt * 100 + ge * 1000 + eq * 10000 + ne * 100000
+}
+
+func main(): int sync {
+    let s0 = score(2, 5)
+    let s1 = score(5, 5)
+    let s2 = score(7, 3)
+
+    if s0 != 100011 then {
+        return 1
+    } else if s1 != 11010 then {
+        return 2
+    } else if s2 != 101100 then {
+        return 3
+    } else {
+        'comparison_matrix ok'->println
+        return 0
+    }
+}

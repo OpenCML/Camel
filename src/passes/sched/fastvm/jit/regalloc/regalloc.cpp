@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,6 +42,15 @@ static bool isVRegOp(MirOp op) {
     case MirOp::VMovFromRax:
     case MirOp::VMovToRax:
     case MirOp::VRet:
+    case MirOp::VAddImm:
+    case MirOp::VSubImm:
+    case MirOp::VCmpSetLImm:
+    case MirOp::VCmpSetLEImm:
+    case MirOp::VCmpSetGImm:
+    case MirOp::VCmpSetGEImm:
+    case MirOp::VCmpSetEImm:
+    case MirOp::VCmpSetNEImm:
+    case MirOp::VCmpRegImm:
     case MirOp::VAdd:
     case MirOp::VSub:
     case MirOp::VMul:
@@ -94,7 +103,9 @@ static bool isVRegOp(MirOp op) {
     }
 }
 
-// 收集 MIR 中 V* 指令的 vreg def/use，得到 firstDef[vreg]、lastUse[vreg]
+// Collect the virtual-register live range in MIR space. The allocator only
+// needs the first definition point and the last use point because it uses a
+// plain linear-scan strategy instead of graph coloring.
 void collectVRegDefUse(
     const MirBuffer &buf, std::vector<size_t> &firstDef, std::vector<size_t> &lastUse) {
     auto ensureSize = [&](VRegId v) {
@@ -122,6 +133,23 @@ void collectVRegDefUse(
 
     for (size_t i = 0; i < buf.size(); ++i) {
         const Mir &m = buf[i];
+        // Frameless NativeJitFuncCall can consume already-loaded argument vregs
+        // and define its result directly into a new vreg. These data edges live
+        // outside the normal r0/r1/imm32 encoding, so they must be modeled here
+        // explicitly or the allocator will treat them as invisible.
+        if (m.op == MirOp::NativeJitFuncCall) {
+            auto *p = reinterpret_cast<const NativeJitCallParams *>(m.imm64);
+            if (p && p->frameless) {
+                uint8_t nArgs = p->argsCnt < 7 ? p->argsCnt : 7;
+                for (uint8_t ai = 0; ai < nArgs; ++ai) {
+                    if (p->argVRegs[ai] != 0xFF)
+                        useVReg(i, static_cast<VRegId>(p->argVRegs[ai]));
+                }
+                if (p->resultVReg != 0xFF)
+                    defVReg(i, static_cast<VRegId>(p->resultVReg));
+            }
+            continue;
+        }
         if (!isVRegOp(m.op))
             continue;
         VRegId r0   = static_cast<VRegId>(m.r0);
@@ -146,11 +174,20 @@ void collectVRegDefUse(
             useVReg(i, r0);
             break;
         case MirOp::VCopy:
+        case MirOp::VAddImm:
+        case MirOp::VSubImm:
+        case MirOp::VCmpSetLImm:
+        case MirOp::VCmpSetLEImm:
+        case MirOp::VCmpSetGImm:
+        case MirOp::VCmpSetGEImm:
+        case MirOp::VCmpSetEImm:
+        case MirOp::VCmpSetNEImm:
             defVReg(i, r0);
             useVReg(i, r1);
             break;
         case MirOp::VTest:
         case MirOp::VRet:
+        case MirOp::VCmpRegImm:
             useVReg(i, r0);
             break;
         case MirOp::VCmove:
@@ -217,7 +254,9 @@ struct LiveInterval {
     int slot;
     size_t start;
     size_t end;
-    bool spansCall = false; // 跨越 FUNC/CALL/TAIL/OPER，caller-saved 寄存器会被破坏
+    // Slot-based allocation only uses caller-saved registers, so any value that
+    // survives across a call is forced to spill.
+    bool spansCall = false;
 };
 
 inline bool isCallOpcode(OpCode op) {
@@ -249,6 +288,9 @@ void collectDefUse(
         }
     };
 
+    // This is the older slot-level allocator used outside the MIR backend.
+    // It mirrors bytecode semantics directly, so uses/defs are expressed in
+    // frame-slot indices instead of virtual registers.
     switch (bc.opcode) {
     // 定长：RETN, CAST, COPY, ACCS, JUMP
     case OpCode::RETN:
@@ -410,10 +452,13 @@ linearScanAllocate(std::span<const Bytecode> bytecodes, size_t entryPc, size_t p
     AllocationResult result;
     result.slotToReg.resize(firstDef.size(), kSpilled);
 
+    // Active intervals are always kept as the currently-live set. When a new
+    // interval arrives, expired ones are removed and their registers reused.
     std::vector<std::pair<LiveInterval, int>> active; // (interval, reg)
     int freeRegs[kNumAllocatableRegs];
     for (int i = 0; i < kNumAllocatableRegs; ++i)
         freeRegs[i] = 1;
+    freeRegs[kReservedRegRbx] = 0; // rbx reserved for poolTopAddr caching
 
     for (const LiveInterval &cur : intervals) {
         for (auto it = active.begin(); it != active.end();) {
@@ -436,6 +481,9 @@ linearScanAllocate(std::span<const Bytecode> bytecodes, size_t entryPc, size_t p
             }
         }
         if (reg < 0) {
+            // Classic linear-scan heuristic: spill the interval whose end is
+            // furthest in the future. If the current interval ends earlier, it
+            // is cheaper to keep the current one in a register instead.
             auto spill =
                 std::max_element(active.begin(), active.end(), [](const auto &a, const auto &b) {
                     return a.first.end < b.first.end;
@@ -504,10 +552,14 @@ bool linearScanVReg(
         [](const VLiveInterval &a, const VLiveInterval &b) { return a.start < b.start; });
 
     out->vregToPreg.resize(firstDef.size(), kSpilled);
+    // MIR allocation is intentionally simple: it ignores calling-convention
+    // classes and lets later lowering spill where needed. That keeps the pass
+    // fast and predictable while the MIR optimizer is still mostly linear.
     std::vector<std::pair<VLiveInterval, int>> active;
     int freeRegs[kNumAllocatableRegs];
     for (int i = 0; i < kNumAllocatableRegs; ++i)
         freeRegs[i] = 1;
+    freeRegs[kReservedRegRbx] = 0; // rbx reserved for poolTopAddr caching
 
     for (const VLiveInterval &cur : intervals) {
         for (auto it = active.begin(); it != active.end();) {

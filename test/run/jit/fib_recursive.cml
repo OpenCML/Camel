@@ -1,0 +1,39 @@
+/**
+ * 意图：验证经典自递归 fib 在 JIT 下的返回值正确性，覆盖 base-case 与递归合流。
+ * 预期：打印 `fib_recursive ok`；exit 0。
+ */
+module jit_fib_recursive
+
+func fib(n: int): int {
+    return if n <= 1 then n else fib(n - 1) + fib(n - 2)
+}
+
+func check(n: int, expected: int, code: int): int {
+    let actual = fib(n)
+    return if actual == expected then 0 else code
+}
+
+func main(): int sync {
+    let c0 = check(0, 0, 1)
+    if c0 != 0 then {
+        return c0
+    } else {
+        let c1 = check(1, 1, 2)
+        if c1 != 0 then {
+            return c1
+        } else {
+            let c2 = check(10, 55, 3)
+            if c2 != 0 then {
+                return c2
+            } else {
+                let c3 = check(15, 610, 4)
+                if c3 != 0 then {
+                    return c3
+                } else {
+                    'fib_recursive ok'->println
+                    return 0
+                }
+            }
+        }
+    }
+}

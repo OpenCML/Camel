@@ -206,6 +206,7 @@ Run the following commands to install the required dependencies:
 - **libcamel**: Camel core shared library
 - **tools/**: Standalone tools linking libcamel
   - `camel-cli`: Main entry, produces `camel` executable
+  - `camel-cpp`: Transpile `.cml` to C++ and auto-compile, outputs to `tmp/`
   - `format`: Code formatter `camel-format`
   - `codegen`: Code generation from AST `camel-codegen`
   - `profiler`: Profiling tool `camel-profiler`

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -62,7 +62,8 @@ graph_ptr_t TaskflowExecSchedPass::apply(graph_ptr_t &graph, std::ostream & /*os
 
     Frame *rootFrame = framePool_.acquire(graph.get());
     try {
-        evalGraphTF(graph.get(), rootFrame);
+        slot_t result = evalGraphTF(graph.get(), rootFrame);
+        context_->captureProcessExitCode(graph.get(), result);
         framePool_.release(rootFrame);
     } catch (...) {
         framePool_.release(rootFrame);

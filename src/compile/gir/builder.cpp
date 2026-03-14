@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -640,9 +640,16 @@ Node *Builder::createFuncDataNode(
     auto graphOrigin   = sourceContext ? sourceContext->debugMap().graphOrigin(graph->stableId())
                                        : camel::source::kInvalidOriginId;
 
+    auto markMacroNode = [&](Node *node) {
+        if (node && funcData->isMacro()) {
+            node->setMacro(true);
+        }
+    };
+
     if (allowParameterization && !callableAsResult && !graphUsedBefore) {
         if (funcData->resolved()) {
             resultNode = FuncNode::create(*currGraph_, funcData);
+            markMacroNode(resultNode);
             if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
                 sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
                 if (const auto *graphSemantic =
@@ -652,6 +659,7 @@ Node *Builder::createFuncDataNode(
             }
         } else {
             auto funcNode = FuncNode::create(*currGraph_, funcData);
+            markMacroNode(funcNode);
             for (const auto &ref : funcData->refs()) {
                 const auto &refNode = resolveNodeByRef(std::string(ref));
                 Node::link(LinkType::With, refNode, funcNode);
@@ -675,8 +683,10 @@ Node *Builder::createFuncDataNode(
     if (funcData->resolved()) {
         if (callableAsResult) {
             resultNode = DataNode::create(*currGraph_, funcData);
+            markMacroNode(resultNode);
         } else {
             auto funcNode = FuncNode::create(*currGraph_, funcData);
+            markMacroNode(funcNode);
             if (graph->parameterized()) {
                 for (const auto &ref : graph->funcType()->closureRefs()) {
                     const auto &refNode = resolveNodeByRef(std::string(ref));
@@ -698,6 +708,7 @@ Node *Builder::createFuncDataNode(
 
     // funcData not resolved, while parameterization not allowed
     auto dataNode = DataNode::create(*currGraph_, funcData);
+    markMacroNode(dataNode);
     node_vec_t refNodes;
     for (const auto &ref : funcData->refs()) {
         const auto &refNode = resolveNodeByRef(std::string(ref));
@@ -705,6 +716,7 @@ Node *Builder::createFuncDataNode(
     }
 
     auto fillNode = FillNode::create(*currGraph_, funcData->funcType());
+    markMacroNode(fillNode);
     Node::link(LinkType::Norm, dataNode, fillNode);
     for (const auto &refNode : refNodes) {
         Node::link(LinkType::With, refNode, fillNode);
@@ -714,6 +726,7 @@ Node *Builder::createFuncDataNode(
         resultNode = fillNode;
     } else {
         auto callNode = CallNode::create(*currGraph_, graph->funcType()->exitType());
+        markMacroNode(callNode);
         Node::link(LinkType::With, fillNode, callNode);
         resultNode = callNode;
     }
@@ -1169,9 +1182,19 @@ Node *Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
 
 Node *Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
-    auto res = visit(gct->at(0));
-    ASSERT(res.type() == typeid(Node *), "Unexpected result type from Enter child of EXIT node.");
-    Node *resNode = any_cast<Node *>(res);
+    auto res      = visit(gct->at(0));
+    Node *resNode = nullptr;
+    if (res.type() == typeid(Node *)) {
+        resNode = any_cast<Node *>(res);
+    } else if (res.type() == typeid(graph_ptr_t)) {
+        graph_ptr_t subGraph = any_cast<graph_ptr_t>(res);
+        currGraph_->addDependency(subGraph);
+        // Returning a function value should lower to a DATA(FunctionData) node rather than an
+        // eager call.
+        resNode = createFuncDataNode(subGraph, true, false);
+    } else {
+        ASSERT(false, "Unexpected result type from Enter child of EXIT node.");
+    }
     currGraph_->setOutput(resNode);
 
     if (nodeModifierMap_.count(resNode)) {

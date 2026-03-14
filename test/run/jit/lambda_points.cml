@@ -1,0 +1,55 @@
+/**
+ * 意图：验证 Lambda、闭包参数与自定义 filter 在 JIT 下的正确性。
+ * 预期：打印 `lambda_points ok`；exit 0。
+ */
+module jit_lambda_points
+
+type Point = { x: int, y: int }
+
+let WIDTH = 10
+let HEIGHT = 10
+
+with <predicate: (p: Point) => bool>
+func my_filter(points: Point[]): Point[] sync {
+    var result: Point[] = []
+    points->foreach<(p: Point) => sync {
+        if predicate(p) then sync {
+            result->append<p>
+            return null
+        }
+    }>
+    return result
+}
+
+func valid_points(points: Point[]): Point[] {
+    return points->my_filter<(p: Point): bool => {
+        return p.x >= 0 && p.x < WIDTH && p.y >= 0 && p.y < HEIGHT
+    }>
+}
+
+func main(): int sync {
+    let points = [
+        { x: 1, y: 2 },
+        { x: 9, y: 9 },
+        { x: -1, y: 3 },
+        { x: 3, y: 10 },
+        { x: 5, y: 5 }
+    ]
+    let cleaned = valid_points(points)
+    let p0 = cleaned[0]
+    let p1 = cleaned[1]
+    let p2 = cleaned[2]
+
+    if len(cleaned) != 3 then {
+        return 1
+    } else if p0.x != 1 then {
+        return 2
+    } else if p1.y != 9 then {
+        return 3
+    } else if p2.x != 5 then {
+        return 4
+    } else {
+        'lambda_points ok'->println
+        return 0
+    }
+}

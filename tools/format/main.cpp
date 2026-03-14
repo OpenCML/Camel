@@ -14,15 +14,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 12, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
 
+#include "camel/utils/windows_parser_guard.h"
+
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/listener.h"
+#include "camel/init.h"
 #include "camel/parse/parse.h"
-#include "camel/utils/dll_path.h"
 #include "camel/utils/log.h"
 #include "fmt.h"
 #include <filesystem>
@@ -34,7 +36,7 @@ using namespace camel::parse;
 namespace fs = std::filesystem;
 
 int main(int argc, char *argv[]) {
-    camel::utils::setupLibrarySearchPath();
+    camel::initialize();
     std::string inputPath;
     bool inplace                       = false;
     [[maybe_unused]] unsigned tabSize  = 4;

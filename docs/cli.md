@@ -83,6 +83,11 @@ Camel CLI (`camel`) handles run, check, and inspect. Formatting is provided by a
   - `-q`, `--quote-prefer <single|double>`  
   - `-m`, `--max-width <N>` (default 80)
 
+- **camel-cpp**: Transpile `.cml` to C++ and compile in one step. Outputs to `tmp/`.
+  - Usage: `camel-cpp <file.cml>`
+  - Equivalent to: `camel <file.cml> std::cpp` with output written to `tmp/<stem>.cpp`, then compiles with clang++, producing `tmp/<stem>.exe` and `tmp/libcamel.dll`.
+  - Built at: `build/tools/camel-cpp/Release/camel-cpp.exe` (Windows; libcamel.dll is copied alongside for portability).
+
 Other tools: `camel-codegen`, `camel-profiler`. All are built under `build/tools/`.
 
 ---
@@ -98,6 +103,9 @@ camel --input main.cml --passes std::gir,other
 
 # Run and record performance
 camel -P main.cml
+
+# Transpile to C++ and compile (one step, output to tmp/)
+camel-cpp test/run/linear/fib.cml
 
 # Format code (use camel-format, not camel format)
 camel-format -i src/xxx.cml

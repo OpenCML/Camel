@@ -1,0 +1,41 @@
+/**
+ * 意图：验证 tuple 元组、数组索引与普通函数流水线在 JIT 下的正确性。
+ * 预期：打印 `tuple_pipeline ok`；exit 0。
+ */
+module jit_tuple_pipeline
+
+type Signal = (int, int)
+
+func comp1(signal: Signal): Signal {
+    return (signal.0 * 2, signal.1 * 2)
+}
+
+func comp2(signal: Signal): Signal {
+    return (signal.0 - 1, signal.1 - 1)
+}
+
+func process(signals: Signal[]): Signal[] sync {
+    let res1 = signals[0]->comp1
+    let res2 = signals[1]->comp2
+    return [res1, res2]
+}
+
+func main(): int sync {
+    let signals: Signal[] = [(1, 2), (10, 20)]
+    let out = process(signals)
+    let a = out[0]
+    let b = out[1]
+
+    if a.0 != 2 then {
+        return 1
+    } else if a.1 != 4 then {
+        return 2
+    } else if b.0 != 9 then {
+        return 3
+    } else if b.1 != 19 then {
+        return 4
+    } else {
+        'tuple_pipeline ok'->println
+        return 0
+    }
+}

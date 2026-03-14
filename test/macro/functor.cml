@@ -1,0 +1,18 @@
+module macro_functor
+
+type Adder = (y: int) => int
+
+macro func make_adder(x: int): Adder {
+    return (y: int): int => {
+        return x + y
+    }
+}
+
+func sink(f: Adder): int {
+    return 42
+}
+
+func main(): int sync {
+    println(sink(make_adder(41)))
+    return 0
+}

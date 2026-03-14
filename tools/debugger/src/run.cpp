@@ -13,11 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "windows_parser_guard.h"
+#include "camel/utils/windows_parser_guard.h"
 
 #include "camel/compile/gir.h"
 #include "camel/core/error/diagnostics.h"
@@ -96,18 +96,20 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
 
         std::vector<std::string> passes = getState().runPasses;
         static const std::vector<std::string> defaultFallback{"std::default"};
-        auto graph = st.ctx->rootGraph();
-        graph      = applyPasses(graph, passes, st.ctx, std::cout);
-        if (graph == nullptr) {
+        auto graph  = st.ctx->rootGraph();
+        auto result = applyPassesDetailed(graph, passes, st.ctx, std::cout);
+        graph       = result.graph;
+        if (result.failed()) {
             const auto &diags = st.ctx->runtimeDiagSink();
             if (diags->hasErrors())
                 diags->dump(std::cout, false);
             getTaskState() = "loaded";
             return RunOutcome::Failed;
         }
-        if (graph != GIR::Graph::null()) {
-            graph = applyPasses(graph, defaultFallback, st.ctx, std::cout);
-            if (graph == nullptr) {
+        if (!result.consumed()) {
+            auto fallbackResult = applyPassesDetailed(graph, defaultFallback, st.ctx, std::cout);
+            graph               = fallbackResult.graph;
+            if (fallbackResult.failed()) {
                 const auto &diags = st.ctx->runtimeDiagSink();
                 if (diags->hasErrors())
                     diags->dump(std::cout, false);

@@ -1,0 +1,24 @@
+/**
+ * 意图：验证尾递归累加在 JIT 下的数值正确性，并覆盖大步数递归。
+ * 预期：打印 `tail_accumulate ok`；exit 0。
+ */
+module jit_tail_accumulate
+
+func sum(n: int, a: int, d: int, acc: int): int {
+    return if n == 0 then acc else sum(n - 1, a + d, d, acc + a)
+}
+
+func main(): int sync {
+    let n = 100000
+    let a = 1
+    let d = 3
+    let expected = 14999950000
+    let actual = sum(n, a, d, 0)
+
+    if actual != expected then {
+        return 1
+    } else {
+        'tail_accumulate ok'->println
+        return 0
+    }
+}
