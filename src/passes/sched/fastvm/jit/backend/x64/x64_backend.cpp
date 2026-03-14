@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -154,35 +154,6 @@ bool X64Backend::compileBytecode(
     x64::MirBuilder build(mirBuf);
     x64::VRegId nextVReg = 0; // 虚拟寄存器计数器，供 JOIN 等使用
 #if defined(_WIN32) || defined(_WIN64)
-    auto emitPrepareDirectCallWin64 = [&](const Bytecode &bc, uint64_t helperAddr) {
-        build.emitPushRdi();
-        build.emitMovRegReg(kRegRcx, kRegRdi);
-        build.emitMovRegReg(kRegRdx, kRegRsi);
-        build.emitMovRegImm64(kRegR8, reinterpret_cast<uint64_t>(&bc));
-        build.emitMovRegImm64(kRegRax, helperAddr);
-        build.emitCallRax();
-        build.emitMovRegReg(kRegRdi, kRegRax);
-    };
-    auto emitFinishDirectCallWin64 = [&](uint64_t helperAddr, uint64_t ownerGraphAddr) {
-        build.emitMovRegReg(kRegRcx, kRegRax);
-        build.emitMovRegReg(kRegRdx, kRegRdi);
-        build.emitMovRegReg(kRegR8, kRegRsi);
-        build.emitMovRegImm64(kRegR9, ownerGraphAddr);
-        build.emitMovRegImm64(kRegRax, helperAddr);
-        build.emitCallRax();
-        build.emitPopRdi();
-    };
-    auto emitDirectCallCurrentWin64 = [&]() {
-        build.emitMovRegReg(kRegRcx, kRegRdi);
-        build.emitMovRegReg(kRegRdx, kRegRsi);
-        build.emitCallRel32(static_cast<uint32_t>(entryPc));
-    };
-    auto emitDirectCallFnWin64 = [&](uint64_t fnAddr) {
-        build.emitMovRegReg(kRegRcx, kRegRdi);
-        build.emitMovRegReg(kRegRdx, kRegRsi);
-        build.emitMovRegImm64(kRegRax, fnAddr);
-        build.emitCallRax();
-    };
     auto emitPrepareDirectTailCallWin64 = [&](const Bytecode &bc, uint64_t helperAddr) {
         build.emitMovRegReg(kRegRcx, kRegRdi);
         build.emitMovRegReg(kRegRdx, kRegRsi);
@@ -655,30 +626,30 @@ bool X64Backend::compileBytecode(
         }
         case OpCode::FUNC: {
 #if defined(_WIN32) || defined(_WIN64)
-            if (getFuncExtraGraph(&bc) == unit.graph) {
-                emitPrepareDirectCallWin64(bc, reinterpret_cast<uint64_t>(&prepareDirectJitCall));
-                emitDirectCallCurrentWin64();
-                emitFinishDirectCallWin64(
-                    reinterpret_cast<uint64_t>(&finishDirectJitCall),
-                    reinterpret_cast<uint64_t>(unit.graph));
-                int dr           = slotDisp(bc.result);
-                x64::VRegId vRet = nextVReg++;
-                build.emitVMovFromRax(vRet);
-                build.emitVStoreToFrame(dr, vRet);
-                break;
-            }
-            if (bc.fastop[1] == 0) {
-                uint64_t fnAddr =
-                    reinterpret_cast<uint64_t>(getFuncExtraFn(const_cast<Bytecode *>(&bc)));
-                emitPrepareDirectCallWin64(bc, reinterpret_cast<uint64_t>(&prepareDirectJitCall));
-                emitDirectCallFnWin64(fnAddr);
-                emitFinishDirectCallWin64(
-                    reinterpret_cast<uint64_t>(&finishDirectJitCall),
-                    reinterpret_cast<uint64_t>(getFuncExtraGraph(&bc)));
-                int dr           = slotDisp(bc.result);
-                x64::VRegId vRet = nextVReg++;
-                build.emitVMovFromRax(vRet);
-                build.emitVStoreToFrame(dr, vRet);
+            if (unit.poolTopAddr) {
+                GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
+                bool sameGraph          = (targetGraph == unit.graph);
+                auto *params            = new NativeJitCallParams{};
+                params->poolTopAddr     = reinterpret_cast<uint64_t>(unit.poolTopAddr);
+                params->targetGraphAddr = reinterpret_cast<uint64_t>(targetGraph);
+                params->resultDisp      = slotDisp(bc.result);
+                params->argsCnt         = static_cast<uint8_t>(bc.normCnt());
+                for (uint8_t ai = 0; ai < params->argsCnt; ++ai)
+                    params->argSrcDisps[ai] = slotDisp(bc.operands()[ai]);
+                params->isSameGraph = sameGraph;
+                params->extra2Addr  = reinterpret_cast<uint64_t>(bc.extra2());
+                params->fastop1Addr = reinterpret_cast<uint64_t>(&bc.fastop[1]);
+                if (sameGraph) {
+                    params->slowPathFnAddr =
+                        reinterpret_cast<uint64_t>(unit.directSelfFuncInvokeAddr);
+                    params->slowPathBcAddr = reinterpret_cast<uint64_t>(&bc);
+                    params->slowPathPc     = 0;
+                } else {
+                    params->slowPathFnAddr = reinterpret_cast<uint64_t>(unit.trampolineFunc);
+                    params->slowPathBcAddr = 0;
+                    params->slowPathPc     = static_cast<uint32_t>(pc);
+                }
+                build.emitNativeJitFuncCall(params);
                 break;
             }
 #endif

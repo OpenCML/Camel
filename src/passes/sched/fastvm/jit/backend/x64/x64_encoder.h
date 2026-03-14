@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1593,6 +1593,16 @@ class Encoder {
         emitByte(0x5f);
         asmLineAt(at, "pop rdi");
     }
+    void pushRax() {
+        size_t at = here();
+        emitByte(0x50);
+        asmLineAt(at, "push rax");
+    }
+    void popRax() {
+        size_t at = here();
+        emitByte(0x58);
+        asmLineAt(at, "pop rax");
+    }
     void pushRbx() {
         size_t at = here();
         emitByte(0x53);
@@ -2033,6 +2043,178 @@ class Encoder {
         asmLine("mov rdx, " + std::to_string(pc));
         movRaxImm64(addr);
         callRax();
+    }
+
+    // shl rax, 16  — clear top 16 bits (part 1 of 48-bit mask)
+    void shlRax16() {
+        size_t at = here();
+        emitBytes({0x48, 0xC1, 0xE0, 0x10});
+        asmLineAt(at, "shl rax, 16");
+    }
+    // shr rax, 16  — restore (part 2 of 48-bit mask)
+    void shrRax16() {
+        size_t at = here();
+        emitBytes({0x48, 0xC1, 0xE8, 0x10});
+        asmLineAt(at, "shr rax, 16");
+    }
+    // cmp rax, imm32 (sign-extended)
+    void cmpRaxImm32(int32_t imm) {
+        size_t at = here();
+        emitBytes({0x48, 0x3D});
+        emitBytes({
+            static_cast<uint8_t>(imm & 0xff),
+            static_cast<uint8_t>((imm >> 8) & 0xff),
+            static_cast<uint8_t>((imm >> 16) & 0xff),
+            static_cast<uint8_t>((imm >> 24) & 0xff),
+        });
+        asmLineAt(at, "cmp rax, " + std::to_string(imm));
+    }
+    // jb rel32 (0F 82 rel32) — returns offset of the rel32 field for patching
+    size_t jbRel32(int32_t rel) {
+        size_t at     = here();
+        size_t relPos = at + 2;
+        emitBytes({0x0F, 0x82});
+        emitBytes({
+            static_cast<uint8_t>(rel & 0xff),
+            static_cast<uint8_t>((rel >> 8) & 0xff),
+            static_cast<uint8_t>((rel >> 16) & 0xff),
+            static_cast<uint8_t>((rel >> 24) & 0xff),
+        });
+        asmLineAt(at, "jb .+" + std::to_string(rel) + "  ; rel32");
+        return relPos;
+    }
+
+    // --- Native JIT call helpers ---
+
+    void movRcxRdi() {
+        size_t at = here();
+        emitBytes({0x48, 0x89, 0xf9});
+        asmLineAt(at, "mov rcx, rdi");
+    }
+    void movRdxRsi() {
+        size_t at = here();
+        emitBytes({0x48, 0x89, 0xf2});
+        asmLineAt(at, "mov rdx, rsi");
+    }
+    void movRbxImm64(uint64_t imm) { emitMovRegImm64(3, imm); }
+    void movR8Imm64(uint64_t imm) { emitMovRegImm64(4, imm); }
+    void subRspShadow() {
+        size_t at = here();
+        emitBytes({0x48, 0x83, 0xec, 0x20});
+        asmLineAt(at, "sub rsp, 32  ; shadow");
+    }
+    void addRspShadow() {
+        size_t at = here();
+        emitBytes({0x48, 0x83, 0xc4, 0x20});
+        asmLineAt(at, "add rsp, 32  ; shadow");
+    }
+
+    // --- Native self-call support (inline frame management) ---
+
+    // mov r10, [rbx] — load from memory at rbx
+    void movR10FromRbx() {
+        size_t at = here();
+        emitBytes({0x4C, 0x8B, 0x13});
+        asmLineAt(at, "mov r10, [rbx]");
+    }
+    // mov r11, [r10 + disp8]
+    void movR11FromR10Disp8(int8_t d) {
+        size_t at = here();
+        emitBytes({0x4D, 0x8B, 0x5A, static_cast<uint8_t>(d)});
+        asmLineAt(at, "mov r11, [r10+" + std::to_string(d) + "]");
+    }
+    // mov [rbx], r11 — store r11 to [rbx]
+    void movRbxFromR11() {
+        size_t at = here();
+        emitBytes({0x4C, 0x89, 0x1B});
+        asmLineAt(at, "mov [rbx], r11");
+    }
+    // mov [rbx], r10 — store r10 to [rbx]
+    void movRbxFromR10() {
+        size_t at = here();
+        emitBytes({0x4C, 0x89, 0x13});
+        asmLineAt(at, "mov [rbx], r10");
+    }
+    // mov [r10 + disp8], r11
+    void movR10Disp8FromR11(int8_t d) {
+        size_t at = here();
+        emitBytes({0x4D, 0x89, 0x5A, static_cast<uint8_t>(d)});
+        asmLineAt(at, "mov [r10+" + std::to_string(d) + "], r11");
+    }
+    // mov qword [r11 + disp8], 0
+    void movR11Disp8Imm0(int8_t d) {
+        size_t at = here();
+        emitBytes({0x49, 0xC7, 0x43, static_cast<uint8_t>(d), 0, 0, 0, 0});
+        asmLineAt(at, "mov qword [r11+" + std::to_string(d) + "], 0");
+    }
+    // lea r11, [r10 + disp8]
+    void leaR11R10Disp8(int8_t d) {
+        size_t at = here();
+        emitBytes({0x4D, 0x8D, 0x5A, static_cast<uint8_t>(d)});
+        asmLineAt(at, "lea r11, [r10+" + std::to_string(d) + "]");
+    }
+    // mov [r11], r10
+    void movR11FromR10Store() {
+        size_t at = here();
+        emitBytes({0x4D, 0x89, 0x13});
+        asmLineAt(at, "mov [r11], r10");
+    }
+    // mov rax, [r11 + disp8]
+    void movRaxFromR11Disp8(int8_t d) {
+        size_t at = here();
+        emitBytes({0x49, 0x8B, 0x43, static_cast<uint8_t>(d)});
+        asmLineAt(at, "mov rax, [r11+" + std::to_string(d) + "]");
+    }
+    // mov [r11 + disp8], rax
+    void movR11Disp8FromRax(int8_t d) {
+        size_t at = here();
+        emitBytes({0x49, 0x89, 0x43, static_cast<uint8_t>(d)});
+        asmLineAt(at, "mov [r11+" + std::to_string(d) + "], rax");
+    }
+    // mov rdi, r11
+    void movRdiR11() {
+        size_t at = here();
+        emitBytes({0x4C, 0x89, 0xDF});
+        asmLineAt(at, "mov rdi, r11");
+    }
+    // cmp r11, rax
+    void cmpR11Rax() {
+        size_t at = here();
+        emitBytes({0x4C, 0x3B, 0xD8});
+        asmLineAt(at, "cmp r11, rax");
+    }
+    // jne rel32 (0F 85 rel32) — returns offset of the rel32 field for patching
+    size_t jneRel32(int32_t rel) {
+        size_t at     = here();
+        size_t relPos = at + 2;
+        emitBytes({0x0F, 0x85});
+        emitBytes({
+            static_cast<uint8_t>(rel & 0xff),
+            static_cast<uint8_t>((rel >> 8) & 0xff),
+            static_cast<uint8_t>((rel >> 16) & 0xff),
+            static_cast<uint8_t>((rel >> 24) & 0xff),
+        });
+        asmLineAt(at, "jne .+" + std::to_string(rel) + "  ; rel32");
+        return relPos;
+    }
+    // mov r10, [rdi] — load Frame* from callee's slot[0]
+    void movR10FromRdi() {
+        size_t at = here();
+        emitBytes({0x4C, 0x8B, 0x17});
+        asmLineAt(at, "mov r10, [rdi]");
+    }
+    // mov r11, [rbx]
+    void movR11FromRbx() {
+        size_t at = here();
+        emitBytes({0x4C, 0x8B, 0x1B});
+        asmLineAt(at, "mov r11, [rbx]");
+    }
+    // patchRel32At — write a rel32 at a given offset
+    void patchRel32At(size_t pos, int32_t rel) {
+        out_[pos + 0] = static_cast<uint8_t>(rel & 0xff);
+        out_[pos + 1] = static_cast<uint8_t>((rel >> 8) & 0xff);
+        out_[pos + 2] = static_cast<uint8_t>((rel >> 16) & 0xff);
+        out_[pos + 3] = static_cast<uint8_t>((rel >> 24) & 0xff);
     }
 
   private:

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -85,6 +85,12 @@ class MirBuilder {
         push(m);
     }
     void emitCallRax() { push(MirOp::CallRax, 0, 0); }
+    void emitNativeJitFuncCall(NativeJitCallParams *params) {
+        Mir m;
+        m.op    = MirOp::NativeJitFuncCall;
+        m.imm64 = reinterpret_cast<uint64_t>(params);
+        push(m);
+    }
     void emitCallRel32(uint32_t targetPc) {
         Mir m;
         m.op    = MirOp::CallRel32;

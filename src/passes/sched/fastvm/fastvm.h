@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -67,7 +67,6 @@ class FastVMSchedPass : public GraphSchedulePass {
 
 #if ENABLE_FASTVM_JIT
     std::unique_ptr<jit::IJitBackend> jitBackend_;
-    std::unordered_map<GIR::Graph *, jit::JitEntryFn> jitCache_;
     std::unordered_map<jit::JitEntryFn, GIR::Graph *> jitFnToGraph_;
     std::mutex jitCacheMutex_;
     jit::JitConfig jitConfig_{};
@@ -162,13 +161,27 @@ class FastVMSchedPass : public GraphSchedulePass {
     size_t graphEntryPc(GIR::Graph *graph) const;
 
 #if ENABLE_FASTVM_JIT
-    ctx::Frame *acquireFrameForCall(GIR::Graph *graph);
-    void releaseFrameForCall(ctx::Frame *frame);
-    void releaseFrameForCall(ctx::Frame *frame, GIR::Graph *owner);
-    ctx::Frame *acquireFrameForTail(GIR::Graph *graph);
-    void releaseFrameForTail(ctx::Frame *frame);
+    inline ctx::Frame *acquireFrameForCall(GIR::Graph *graph) { return framePool_.acquire(graph); }
+    inline void releaseFrameForCall(ctx::Frame *frame) {
+        if (framePool_.isActive(frame))
+            framePool_.release(frame);
+    }
+    inline void releaseFrameUnchecked(ctx::Frame *frame) { framePool_.release(frame); }
+    inline void releaseFrameForCall(ctx::Frame *frame, GIR::Graph *owner) {
+        if (framePool_.isActive(frame, owner))
+            framePool_.release(frame);
+    }
+    inline ctx::Frame *acquireFrameForTail(GIR::Graph *graph) {
+        ctx::Frame *f = framePool_._acquire(graph);
+        framePool_._resetTop();
+        return f;
+    }
+    inline void releaseFrameForTail(ctx::Frame *frame) {
+        if (framePool_.isActive(frame))
+            framePool_.release(frame);
+    }
     slot_t invokeOwnedJitFrame(jit::JitEntryFn fn, ctx::Frame *frame, void *jitCtx);
-    ctx::Context &context();
+    inline ctx::Context &context() { return *context_; }
     GIR::Graph *jitFnToGraph(jit::JitEntryFn fn) const;
     slot_t invokeCallOrJit(
         size_t pc, GIR::Graph *graph, ctx::Frame *frame, void *jitCtx, uint32_t callCount = 0);

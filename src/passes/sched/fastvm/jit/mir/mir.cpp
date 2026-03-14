@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -313,6 +313,12 @@ std::string mirToString(const Mir &m) {
     case MirOp::DebugTrace:
         os << "debug_trace pc=" << m.pc;
         break;
+    case MirOp::NativeJitFuncCall: {
+        auto *p = reinterpret_cast<const NativeJitCallParams *>(m.imm64);
+        os << "native_jit_func_call " << (p->isSameGraph ? "self" : "cross")
+           << " args=" << static_cast<int>(p->argsCnt) << " resultDisp=" << p->resultDisp;
+        break;
+    }
     case MirOp::Nop:
         os << "nop";
         break;
@@ -582,7 +588,9 @@ size_t mirSizeBytes(const Mir &m) {
     case MirOp::VXmm32CmpSetNZ:
         return 5 + 4 + 3 + 4;
     case MirOp::DebugTrace:
-        return 80; // 估算：push×15 + sub + mov(pc) + lea + mov(rax,fn) + call + add + pop×15
+        return 80;
+    case MirOp::NativeJitFuncCall:
+        return 250;
     case MirOp::Nop:
         return 1;
     }

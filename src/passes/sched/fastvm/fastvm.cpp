@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -135,7 +135,7 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 offsetMap_.size()));
         std::vector<std::pair<GIR::Graph *, std::future<CompiledCode *>>> futures;
         for (const auto &[g, entryPc] : offsetMap_) {
-            if (jitCache_.count(g))
+            if (getGraphJitFn(g))
                 continue;
             EXEC_WHEN_DEBUG(
                 GetDefaultLogger().in("JIT").debug(
@@ -151,6 +151,8 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
                 .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
                 .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
+                .poolTopAddr    = framePool_.topAddr(),
+                .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
             };
             futures.emplace_back(
                 g,
@@ -167,7 +169,8 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 JitEntryFn fn                    = jitBackend_->load(std::move(compiled));
                 if (fn) {
                     std::lock_guard lock(jitCacheMutex_);
-                    jitCache_[g] = fn;
+                    setGraphJitFn(g, fn);
+                    jitFnToGraph_[fn] = g;
                     EXEC_WHEN_DEBUG(
                         GetDefaultLogger().in("JIT").info(
                             "Compiled & loaded: graph '{}' codeSize={} bytes",
@@ -184,21 +187,31 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
                         g->name()));
             }
         }
+        for (size_t bpc = 0; bpc < bytecodes_.size();) {
+            Bytecode &bc = bytecodes_[bpc];
+            if ((bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) && bc.fastop[1] != 0) {
+                GIR::Graph *tg = getFuncExtraGraph(&bc);
+                JitEntryFn fn  = getGraphJitFn(tg);
+                if (fn)
+                    setFuncExtraFn(&bc, reinterpret_cast<void *>(fn));
+            }
+            bpc += bc.opsize;
+        }
     } else if (jitConfig_.policy == JitPolicy::OnDemand) {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("JIT").info(
                 "JIT OnDemand: start with interpreter, compile on hot threshold"));
     }
     GIR::Graph *entryGraph = graph.get();
-    auto jitIt             = jitCache_.find(entryGraph);
-    if (jitBackend_ && jitIt != jitCache_.end()) {
+    JitEntryFn entryJitFn  = getGraphJitFn(entryGraph);
+    if (jitBackend_ && entryJitFn) {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("JIT").info(
                 "Executing entry graph '{}' via JIT",
                 entryGraph->name()));
         Frame *frame = framePool_.acquire(entryGraph);
         opperf::start();
-        [[maybe_unused]] slot_t result = invokeOwnedJitFrame(jitIt->second, frame, &jitCtx);
+        [[maybe_unused]] slot_t result = invokeOwnedJitFrame(entryJitFn, frame, &jitCtx);
         opperf::stop();
         opperf::report(std::cout);
         return Graph::null();
@@ -400,28 +413,6 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
 }
 
 #if ENABLE_FASTVM_JIT
-Frame *FastVMSchedPass::acquireFrameForCall(GIR::Graph *graph) { return framePool_.acquire(graph); }
-
-void FastVMSchedPass::releaseFrameForCall(Frame *frame) {
-    if (framePool_.isActive(frame))
-        framePool_.release(frame);
-}
-
-void FastVMSchedPass::releaseFrameForCall(Frame *frame, GIR::Graph *owner) {
-    if (framePool_.isActive(frame, owner))
-        framePool_.release(frame);
-}
-
-Frame *FastVMSchedPass::acquireFrameForTail(GIR::Graph *graph) {
-    Frame *f = framePool_._acquire(graph);
-    framePool_._resetTop();
-    return f;
-}
-
-void FastVMSchedPass::releaseFrameForTail(Frame *frame) {
-    if (framePool_.isActive(frame))
-        framePool_.release(frame);
-}
 
 #if defined(_MSC_VER)
 __declspec(noinline)
@@ -443,18 +434,16 @@ slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *j
     }
 }
 
-Context &FastVMSchedPass::context() { return *context_; }
-
 GIR::Graph *FastVMSchedPass::jitFnToGraph(JitEntryFn fn) const {
     auto it = jitFnToGraph_.find(fn);
     return it != jitFnToGraph_.end() ? it->second : nullptr;
 }
 
 void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
-    if (jitCache_.count(graph))
+    if (getGraphJitFn(graph))
         return;
     std::lock_guard lock(jitCacheMutex_);
-    if (jitCache_.count(graph))
+    if (getGraphJitFn(graph))
         return;
     FrameMeta *meta = graph->getExtra<FrameMeta, 0>();
     if (!meta)
@@ -464,15 +453,17 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
         .enableDebugTrace = enableJitTraceMir_,
     };
     CompilationUnit unit{
-        .graph          = graph,
-        .frameMeta      = meta,
-        .bytecodes      = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
-        .entryPc        = entryPc,
-        .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
-        .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
-        .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
-        .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
-        .debug          = enableJitTraceMir_ ? &debugOptions : nullptr,
+        .graph                    = graph,
+        .frameMeta                = meta,
+        .bytecodes                = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
+        .entryPc                  = entryPc,
+        .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
+        .trampolineTail           = reinterpret_cast<void *>(&trampolineTail),
+        .trampolineOper           = reinterpret_cast<void *>(&trampolineOper),
+        .trampolineCast           = reinterpret_cast<void *>(&trampolineCast),
+        .poolTopAddr              = framePool_.topAddr(),
+        .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
+        .debug                    = enableJitTraceMir_ ? &debugOptions : nullptr,
     };
     auto compiled = jitBackend_->compile(unit);
     if (!compiled)
@@ -500,7 +491,7 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
     });
     auto fn = jitBackend_->load(std::move(compiled));
     if (fn) {
-        jitCache_[graph]  = fn;
+        setGraphJitFn(graph, fn);
         jitFnToGraph_[fn] = graph;
         for (size_t pc = 0; pc < bytecodes_.size();) {
             Bytecode &bc = bytecodes_[pc];
@@ -543,26 +534,25 @@ size_t FastVMSchedPass::graphEntryPc(GIR::Graph *graph) const { return offsetMap
 slot_t FastVMSchedPass::invokeCallOrJit(
     size_t pc, GIR::Graph *graph, Frame *frame, void *jitCtx, uint32_t callCount) {
     currentJitCtx_ = jitCtx;
-    // closure 等无 bytecode 路径仍走 jitCache_
-    auto it = jitCache_.find(graph);
-    if (it != jitCache_.end()) {
+    JitEntryFn fn  = getGraphJitFn(graph);
+    if (fn) {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("JIT").debug(
                 "invokeCallOrJit: graph '{}' pc={} -> JIT",
                 graph->name(),
                 pc));
-        return invokeOwnedJitFrame(it->second, frame, jitCtx);
+        return invokeOwnedJitFrame(fn, frame, jitCtx);
     }
     if (tierPolicy_.shouldJit(callCount)) {
         compileAndCacheGraph(graph, pc);
-        it = jitCache_.find(graph);
-        if (it != jitCache_.end()) {
+        fn = getGraphJitFn(graph);
+        if (fn) {
             EXEC_WHEN_DEBUG(
                 GetDefaultLogger().in("JIT").debug(
                     "invokeCallOrJit: graph '{}' pc={} -> JIT (after compile)",
                     graph->name(),
                     pc));
-            return invokeOwnedJitFrame(it->second, frame, jitCtx);
+            return invokeOwnedJitFrame(fn, frame, jitCtx);
         }
     }
     EXEC_WHEN_DEBUG(
