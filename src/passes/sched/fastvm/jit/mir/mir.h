@@ -165,9 +165,11 @@ struct NativeJitCallParams {
     int32_t resultDisp;       // [rdi + resultDisp]
     uint8_t argsCnt;
     int32_t argSrcDisps[8];
-    bool isSameGraph;     // true = call rel32, false = 从 extra2 加载 fn 后 call rax
-    uint64_t extra2Addr;  // &bc->extra2()（跨图时运行时加载 fn 指针）
-    uint64_t fastop1Addr; // &bc->fastop[1]（跨图运行时检查：0 = 已编译）
+    bool isSameGraph;         // true = call rel32, false = 从 extra2 加载 fn 后 call rax
+    uint64_t extra2Addr;      // &bc->extra2()（跨图时运行时加载 fn 指针）
+    uint64_t fastop1Addr;     // &bc->fastop[1]（跨图运行时检查：0 = 已编译）
+    bool frameless;           // true = 栈分配（无 Frame 池），适用于纯自递归同图调用
+    uint32_t calleeSlotBytes; // frameless 时被调方栈帧大小（16 字节对齐）
 };
 
 using MirBuffer = std::vector<Mir>;

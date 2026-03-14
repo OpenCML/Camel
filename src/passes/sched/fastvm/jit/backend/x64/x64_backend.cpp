@@ -639,6 +639,14 @@ bool X64Backend::compileBytecode(
                 params->isSameGraph = sameGraph;
                 params->extra2Addr  = reinterpret_cast<uint64_t>(bc.extra2());
                 params->fastop1Addr = reinterpret_cast<uint64_t>(&bc.fastop[1]);
+                params->frameless   = sameGraph;
+                if (sameGraph) {
+                    size_t slotCount        = targetGraph->runtimeDataType()->size();
+                    size_t rawBytes         = slotCount * sizeof(slot_t);
+                    params->calleeSlotBytes = static_cast<uint32_t>((rawBytes + 15u) & ~15u);
+                } else {
+                    params->calleeSlotBytes = 0;
+                }
                 if (sameGraph) {
                     params->slowPathFnAddr =
                         reinterpret_cast<uint64_t>(unit.directSelfFuncInvokeAddr);

@@ -1892,6 +1892,47 @@ class Encoder {
         emitBytes({0x4C, 0x8B, 0x1B});
         asmLineAt(at, "mov r11, [rbx]");
     }
+    // --- Frameless call support (stack-based frame allocation) ---
+
+    // sub rsp, imm (imm8 or imm32)
+    void subRspImm(uint32_t n) {
+        size_t at = here();
+        if (n <= 127) {
+            emitBytes({0x48, 0x83, 0xEC, static_cast<uint8_t>(n)});
+        } else {
+            emitBytes({0x48, 0x81, 0xEC});
+            emitBytes({
+                static_cast<uint8_t>(n & 0xff),
+                static_cast<uint8_t>((n >> 8) & 0xff),
+                static_cast<uint8_t>((n >> 16) & 0xff),
+                static_cast<uint8_t>((n >> 24) & 0xff),
+            });
+        }
+        asmLineAt(at, "sub rsp, " + std::to_string(n) + "  ; frameless alloc");
+    }
+    // add rsp, imm (imm8 or imm32)
+    void addRspImm(uint32_t n) {
+        size_t at = here();
+        if (n <= 127) {
+            emitBytes({0x48, 0x83, 0xC4, static_cast<uint8_t>(n)});
+        } else {
+            emitBytes({0x48, 0x81, 0xC4});
+            emitBytes({
+                static_cast<uint8_t>(n & 0xff),
+                static_cast<uint8_t>((n >> 8) & 0xff),
+                static_cast<uint8_t>((n >> 16) & 0xff),
+                static_cast<uint8_t>((n >> 24) & 0xff),
+            });
+        }
+        asmLineAt(at, "add rsp, " + std::to_string(n) + "  ; frameless dealloc");
+    }
+    // mov rdi, rsp — set callee slot base to stack pointer
+    void movRdiRsp() {
+        size_t at = here();
+        emitBytes({0x48, 0x89, 0xE7}); // REX.W mov r/m64, r64: rsp→rdi
+        asmLineAt(at, "mov rdi, rsp  ; callee slots = stack");
+    }
+
     // patchRel32At — write a rel32 at a given offset
     void patchRel32At(size_t pos, int32_t rel) {
         out_[pos + 0] = static_cast<uint8_t>(rel & 0xff);
