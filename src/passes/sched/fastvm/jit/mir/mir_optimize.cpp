@@ -25,6 +25,9 @@
 namespace camel::jit::x64 {
 
 void optimizeWin64RedundantArgSetup(MirBuffer &buf) {
+    // The C++ ABI wrapper already moves rcx/rdx into rdi/rsi. If the MIR body
+    // immediately copies them back to rcx/rdx for a helper call, the middle two
+    // copies are redundant and only lengthen the dependency chain.
     for (size_t i = 0; i + 3 < buf.size(); ++i) {
         const Mir &a = buf[i];
         const Mir &b = buf[i + 1];
@@ -107,13 +110,17 @@ void optimizePeephole(MirBuffer &buf) {
     if (n == 0)
         return;
 
+    // Only bytecode-PC jump targets act as control-flow merge points here.
+    // Once we hit one, any pending linear-store knowledge must be discarded.
     std::unordered_set<uint32_t> jumpTargets;
     for (const auto &m : buf) {
         if (isJumpOp(m.op))
             jumpTargets.insert(m.imm32);
     }
 
-    // Track last VStoreToFrame (integer GPR only) per frame disp.
+    // Track the latest integer frame store per disp. We only keep a single
+    // linear history entry because this pass is intentionally local and
+    // conservative; non-integer stores simply invalidate the slot.
     struct StoreInfo {
         uint8_t vreg;
         size_t index;
@@ -131,6 +138,9 @@ void optimizePeephole(MirBuffer &buf) {
             pendingStore.clear();
 
         if (isBarrierOp(m.op)) {
+            // Calls and explicit control-flow transfers may clobber registers or
+            // jump to code we have not analyzed linearly, so cached knowledge is
+            // no longer trustworthy past this point.
             pendingStore.clear();
             continue;
         }
@@ -153,6 +163,9 @@ void optimizePeephole(MirBuffer &buf) {
             auto it   = pendingStore.find(d);
             if (it != pendingStore.end()) {
                 if (m.op == MirOp::VLoadFromFrame) {
+                    // The stored value already exists in a vreg, so turn the
+                    // reload into a pure copy and let register allocation decide
+                    // whether it stays in-place or becomes a move.
                     m.op   = MirOp::VCopy;
                     m.r1   = it->second.vreg;
                     m.disp = 0;
@@ -169,13 +182,17 @@ void eliminateDeadFrameStores(MirBuffer &buf) {
     if (n == 0)
         return;
 
+    // We still do not build a full CFG. Instead, record the liveness snapshot at
+    // every jump target and merge it back when visiting the corresponding jump
+    // source in reverse order.
     std::unordered_set<uint32_t> jumpTargets;
     for (const auto &m : buf) {
         if (isJumpOp(m.op))
             jumpTargets.insert(m.imm32);
     }
 
-    // Backward pass: track which frame slots are "live" (read before overwritten).
+    // Backward pass: a slot is live if some later instruction reads it before a
+    // dominating overwrite. Any store to a non-live slot is dead.
     std::unordered_set<int32_t> liveSlots;
     // Save liveSlots snapshot at each jump target so forward jumps can merge.
     std::unordered_map<uint32_t, std::unordered_set<int32_t>> targetLiveness;
@@ -217,6 +234,9 @@ void eliminateDeadFrameStores(MirBuffer &buf) {
                     if (p->argVRegs[ai] == 0xFF)
                         liveSlots.insert(p->argSrcDisps[ai]);
                 }
+                // Frameless calls can expose the result as a vreg def instead of
+                // an implicit frame write. Only the opaque path keeps resultDisp
+                // alive as a memory destination.
                 if (p->resultVReg == 0xFF)
                     liveSlots.erase(p->resultDisp);
             }

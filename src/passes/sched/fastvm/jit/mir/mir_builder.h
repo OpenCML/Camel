@@ -148,7 +148,14 @@ class MirBuilder {
         buf_.push_back(m);
     }
 
-    // 虚拟寄存器指令（VRegId 存于 r0/r1，三操作数时右操作数在 imm32）
+    // VReg instructions share the same compact encoding:
+    // - unary/binary vregs go through r0/r1
+    // - the third operand reuses imm32 to avoid growing the Mir struct
+    // This keeps MIR dense enough for debug dumps and linear optimization.
+    //
+    // `disp` on selected ops is intentionally multi-purpose:
+    // - frame byte offset for load/store
+    // - auxiliary slot location for spill-aware tests such as JOIN
     void emitVLoadFromFrame(VRegId vreg, int disp) {
         Mir m;
         m.op   = MirOp::VLoadFromFrame;
@@ -175,8 +182,10 @@ class MirBuilder {
     }
     void emitVTest(VRegId vreg, int32_t frameDisp = 0) {
         Mir m;
-        m.op   = MirOp::VTest;
-        m.r0   = static_cast<uint8_t>(vreg & 0xff);
+        m.op = MirOp::VTest;
+        m.r0 = static_cast<uint8_t>(vreg & 0xff);
+        // frameDisp is optional fallback metadata for the encoder when the
+        // tested value may end up spilled and needs to be reloaded from frame.
         m.disp = frameDisp;
         push(m);
     }

@@ -41,6 +41,9 @@ void encodeMirBuffer(
     std::vector<std::tuple<size_t, size_t, std::string>> *instructionBoundaries,
     void *debugTraceFn) {
     struct SpillState {
+        // The encoder does not materialize full spill code for every MIR op.
+        // Instead it remembers a few common linear patterns so later ops can
+        // recover frame-backed values without reloading blindly.
         int loadVReg        = -1;
         int loadDisp        = 0;
         int copyVReg        = -1;
@@ -88,7 +91,9 @@ void encodeMirBuffer(
         return vregAlloc->pregForVReg(v);
     };
     std::vector<size_t> startOffset(buf.size());
-    // pc -> 首个带该 pc 的 MIR 下标，修补时用 startOffset[targetMirIndex] 作为唯一事实来源
+    // pc -> first MIR carrying that bytecode PC. All jump patching is anchored
+    // to MIR start offsets rather than instruction estimates so earlier size
+    // changes from peephole or allocation cannot desynchronize targets.
     std::unordered_map<size_t, size_t> pcToMirIndex;
     for (size_t i = 0; i < buf.size(); ++i)
         if (buf[i].hasPc() &&
@@ -151,6 +156,10 @@ void encodeMirBuffer(
             break;
         }
         case MirOp::VTest: {
+            // VTest is used both for ordinary boolean values and JOIN's
+            // synthetic branch index. Passing an optional frame displacement lets
+            // us recover the tested value even when the source vreg never got a
+            // physical register.
             // JOIN 传入 m.disp（dIdx）时从 frame 加载并 test，不依赖 v2 的 reg，避免 VCopy(v3,v0)
             // 与 v2 同 reg 时覆盖 idx
             int disp = -1;
@@ -402,6 +411,8 @@ void encodeMirBuffer(
             auto it   = pcToMirIndex.find(static_cast<size_t>(m.imm32));
             if (it != pcToMirIndex.end())
                 ti = it->second;
+            // Emit a placeholder now and patch the rel32 once all MIR offsets
+            // are known. This keeps the main encoding loop single-pass.
             patches.push_back({enc.here(), ti, 6, 0, 0});
             enc.jzRel32(0);
             patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
@@ -458,6 +469,8 @@ void encodeMirBuffer(
         }
         case MirOp::VCmpRegImm: {
             int sr = pregFor(static_cast<VRegId>(m.r0));
+            // This MIR exists purely to feed a following Jcc. It intentionally
+            // leaves the result in flags instead of materializing a boolean.
             if (sr >= 0)
                 enc.cmpRegImm32(static_cast<uint8_t>(sr), static_cast<int32_t>(m.imm32));
             break;
@@ -542,6 +555,8 @@ void encodeMirBuffer(
                 enc.subRspImm(p->calleeSlotBytes);
                 enc.movRdiRsp();
 
+                // The callee frame uses the same slot layout as the current
+                // graph, so arguments can be copied into slots 1..N directly.
                 for (uint8_t ai = 0; ai < nArgs; ++ai)
                     enc.movToFrame(static_cast<int>((ai + 1) * sizeof(slot_t)), actualArgRegs[ai]);
 
@@ -553,6 +568,8 @@ void encodeMirBuffer(
                 enc.addRspImm(p->calleeSlotBytes);
                 enc.popRdi();
                 if (p->resultVReg != 0xFF) {
+                    // Result-visible mode: keep the call result in a vreg so a
+                    // following VStore/VLoad pair can be optimized away upstream.
                     int preg = pregFor(static_cast<VRegId>(p->resultVReg));
                     if (preg >= 0 && preg != static_cast<int>(kRegRax))
                         enc.emitMovRegReg(static_cast<uint8_t>(preg), kRegRax);
@@ -593,7 +610,7 @@ void encodeMirBuffer(
             size_t jneRelPos = enc.jneRel32(0);
             size_t jneEnd    = enc.here();
 
-            // ═══ FAST PATH: acquire frame ═══
+            // ═══ FAST PATH: acquire frame from pool and enter compiled callee ═══
             enc.movR11FromR10Disp8(16);
             enc.movRbxFromR11();
             enc.leaR11R10Disp8(40);
@@ -631,6 +648,8 @@ void encodeMirBuffer(
             size_t jmpFastEnd = enc.here();
 
             // ═══ SLOW PATH ═══
+            // Reuse the interpreter/trampoline helper when the frame pool cannot
+            // provide a compatible frame or the target graph is not compiled yet.
             size_t slowStart = enc.here();
             if (!p->isSameGraph) {
                 enc.popRax();

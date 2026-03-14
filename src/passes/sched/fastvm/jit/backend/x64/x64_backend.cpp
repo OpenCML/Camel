@@ -139,6 +139,8 @@ bool X64Backend::compileBytecode(
     using namespace x64;
     const CompilationDebugOptions *debug = unit.debug;
 
+    // Keep failure handling local so every opcode branch can return a precise
+    // bytecode PC and reason without threading error strings through helpers.
     auto fail = [&](const std::string &msg) {
         if (failureReason)
             *failureReason = msg;
@@ -158,7 +160,12 @@ bool X64Backend::compileBytecode(
     };
     (void)staticSlotAddr; // staticSlotAddr retained for debug use; constants now inlined
 
-    // 构建 MIR → 优化 → vreg 分配 → 根据 MIR 计算 pcToOffset → 编码（L2 架构）
+    // The backend is intentionally split into two stages:
+    // 1) lower bytecode to linear MIR while keeping bytecode-PC annotations
+    // 2) optimize / allocate / encode from MIR
+    //
+    // This keeps frontend pattern matching local in one pass while still
+    // leaving enough structure for later peephole and dead-store cleanup.
     x64::MirBuffer mirBuf;
     x64::MirBuilder build(mirBuf);
     x64::VRegId nextVReg = 0;
@@ -181,9 +188,14 @@ bool X64Backend::compileBytecode(
         data_idx_t idxSlot = 0;
     } fusedBrchJoin;
 
-    // Phase O: read-only slot value caching — slots never written by any bytecode
-    // in this function can be loaded once and reused across jump barriers.
-    // Cache is cleared only at NativeJitFuncCall (registers clobbered by call).
+    // Read-only slot cache:
+    // if a dynamic slot is never written by any bytecode in this function,
+    // repeated loads of that slot can be replaced by VCopy from the first load.
+    //
+    // This is deliberately stronger than a local peephole because the source
+    // slot is immutable for the whole function, so the cache may survive normal
+    // control-flow edges. Calls still clear the cache because caller-saved regs
+    // are clobbered even if the logical slot value itself is unchanged.
     std::unordered_set<data_idx_t> writtenSlots;
     for (size_t p = entryPc; p < pcEnd; p += base[p].opsize)
         if (base[p].result > 0)
@@ -191,6 +203,8 @@ bool X64Backend::compileBytecode(
     std::unordered_map<int, x64::VRegId> slotCache;
 
     auto loadSlot = [&](data_idx_t slotIdx, int disp, x64::VRegId v) {
+        // Positive indices address the dynamic frame, negative indices address
+        // compile-time-known static slots.
         if (slotIdx > 0) {
             auto it = slotCache.find(disp);
             if (it != slotCache.end()) {
@@ -223,8 +237,12 @@ bool X64Backend::compileBytecode(
         build.emitCallRax();
     };
 #endif
-    // Prologue is now a C++ ABI wrapper generated as raw bytes before MIR encoding.
-    // The MIR body uses JIT internal convention: rdi=slots, rsi=ctx, rbx=&pool.top_.
+    // The wrapper owns all ABI adaptation. MIR generation below always assumes
+    // the internal JIT convention:
+    //   rdi = current frame dynamic area
+    //   rsi = JitContext*
+    //   rbx = &FramePool::top_
+    // Keeping the body prologue-free is what makes direct JIT-to-JIT calls cheap.
 
     for (size_t pc = entryPc; pc < pcEnd;) {
         const Bytecode &bc = base[pc];
@@ -643,6 +661,9 @@ bool X64Backend::compileBytecode(
                 // Fall through to t0 (then body)
                 fusedCmp.active = false;
             } else {
+                // Generic lowering keeps BRCH as a data-flow construct:
+                // materialize the branch index into the result slot, then emit
+                // the actual branch. Later JOIN may simplify this pattern.
                 data_idx_t condIdx = bc.nargs()[0];
                 if (condIdx <= 0)
                     return fail(
@@ -699,6 +720,10 @@ bool X64Backend::compileBytecode(
                 }
                 fusedBrchJoin.active = false;
             } else {
+                // Generic JOIN is lowered as a select: start with w0, then
+                // overwrite with w1 when idx != 0. The extra frame disp passed
+                // to VTest lets the encoder recover a frame-based condition even
+                // when idx itself is spilled.
                 int dIdx = slotDisp(idxSlot), d0 = slotDisp(w0);
                 x64::VRegId v0 = nextVReg++;
                 x64::VRegId v1 = nextVReg++;
@@ -719,6 +744,9 @@ bool X64Backend::compileBytecode(
             if (unit.poolTopAddr) {
                 GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
                 bool sameGraph          = (targetGraph == unit.graph);
+                // NativeJitCallParams is the bridge between MIR lowering and the
+                // encoder's call expander. Everything the encoder needs for fast
+                // path / slow path selection is packed here once.
                 auto *params            = new NativeJitCallParams{};
                 params->poolTopAddr     = reinterpret_cast<uint64_t>(unit.poolTopAddr);
                 params->targetGraphAddr = reinterpret_cast<uint64_t>(targetGraph);
@@ -732,6 +760,10 @@ bool X64Backend::compileBytecode(
                 params->fastop1Addr = reinterpret_cast<uint64_t>(&bc.fastop[1]);
                 params->frameless   = sameGraph;
                 if (sameGraph) {
+                    // Frameless is only valid for self-recursion today: the
+                    // callee layout matches the current graph exactly, so we can
+                    // allocate a stack-backed frame and jump straight to the JIT
+                    // entry without touching the frame pool.
                     size_t slotCount        = targetGraph->runtimeDataType()->size();
                     size_t rawBytes         = slotCount * sizeof(slot_t);
                     params->calleeSlotBytes = static_cast<uint32_t>((rawBytes + 15u) & ~15u);
@@ -767,6 +799,8 @@ bool X64Backend::compileBytecode(
                     build.emitVStoreToFrame(
                         params->resultDisp,
                         static_cast<x64::VRegId>(params->resultVReg));
+                // Native calls are the main cache barrier: physical registers
+                // may no longer hold the previously cached slot values.
                 slotCache.clear();
                 break;
             }
@@ -789,6 +823,9 @@ bool X64Backend::compileBytecode(
         case OpCode::TAIL: {
 #if defined(_WIN32) || defined(_WIN64)
             if (getFuncExtraGraph(&bc) == unit.graph) {
+                // Self-tail-call is reduced to "rewrite argument slots + jump to
+                // entry". No call instruction is emitted, so no new frame is
+                // created and recursion stays in the current activation.
                 size_t argsCnt         = bc.normCnt();
                 const data_idx_t *args = bc.operands();
                 std::vector<x64::VRegId> argRegs;
@@ -875,6 +912,8 @@ bool X64Backend::compileBytecode(
                     break;
                 }
             }
+            // Fallback: keep the bytecode CFG shape and let the MIR encoder patch
+            // the final relative offset after the whole buffer is laid out.
             build.emitJmpRel32(static_cast<uint32_t>(target));
             break;
         }
@@ -940,7 +979,9 @@ bool X64Backend::compileBytecode(
         return true;
     }
 
-    // 多遍优化（当前仅 Win64 冗余 mov 等，后续可扩展 CSE、死代码删除等）
+    // Run MIR cleanup before allocation. These passes still operate on virtual
+    // registers, so they can rewrite loads/stores without worrying about
+    // physical register side effects.
     x64::runMirOptimizationPasses(mirBuf);
 
     // mir：优化后的 vreg MIR，打印并返回（不分配、不编码）
