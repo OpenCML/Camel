@@ -1,0 +1,45 @@
+/**
+ * 意图：验证多个 graph 之间的普通调用链在 JIT 下保持正确，覆盖跨函数返回值传递。
+ * 预期：打印 `mutual_tail_check ok`；exit 0。
+ */
+module jit_mutual_tail_check
+
+func keep(x: int): int {
+    return x
+}
+
+func base_even(): int {
+    return 1
+}
+
+func base_odd(): int {
+    return 0
+}
+
+func even(n: int): int {
+    return if n == 0 then base_even() else keep(base_odd())
+}
+
+func odd(n: int): int {
+    return if n == 0 then base_odd() else keep(base_even())
+}
+
+func main(): int sync {
+    let a = even(3)
+    let b = odd(3)
+    let c = even(0)
+    let d = odd(0)
+
+    if a != 0 then {
+        return 1
+    } else if b != 1 then {
+        return 2
+    } else if c != 1 then {
+        return 3
+    } else if d != 0 then {
+        return 4
+    } else {
+        'mutual_tail_check ok'->println
+        return 0
+    }
+}

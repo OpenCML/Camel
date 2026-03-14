@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,8 +44,33 @@ class NullGraphIRPass : public GraphIRPass {
     virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
 };
 
-/** Applies passes to the given graph. Returns result graph, or nullptr on error (check ctx
- * rtmDiags). */
+enum class PassApplyStatus {
+    Transformed,
+    Consumed,
+    Failed,
+};
+
+struct PassApplyResult {
+    GIR::graph_ptr_t graph;
+    PassApplyStatus status{PassApplyStatus::Transformed};
+
+    bool failed() const { return status == PassApplyStatus::Failed; }
+    bool consumed() const { return status == PassApplyStatus::Consumed; }
+};
+
+/**
+ * Applies passes to the given graph.
+ *
+ * Return value contract:
+ * - `PassApplyStatus::Failed`: pass execution failed; caller should inspect `ctx->rtmDiags()`
+ * - `PassApplyStatus::Consumed`: execution/scheduling finished successfully and consumed the graph
+ * - non-null graph: pass transformed the graph and left it for later passes
+ */
+PassApplyResult applyPassesDetailed(
+    GIR::graph_ptr_t graph, const std::vector<std::string> &passes,
+    const camel::core::context::context_ptr_t &ctx, std::ostream &os);
+
+/** Backward-compatible wrapper: only returns the graph payload, without status. */
 GIR::graph_ptr_t applyPasses(
     GIR::graph_ptr_t graph, const std::vector<std::string> &passes,
     const camel::core::context::context_ptr_t &ctx, std::ostream &os);

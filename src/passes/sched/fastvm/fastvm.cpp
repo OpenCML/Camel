@@ -211,9 +211,10 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 entryGraph->name()));
         Frame *frame = framePool_.acquire(entryGraph);
         opperf::start();
-        [[maybe_unused]] slot_t result = invokeOwnedJitFrame(entryJitFn, frame, &jitCtx);
+        slot_t result = invokeOwnedJitFrame(entryJitFn, frame, &jitCtx);
         opperf::stop();
         opperf::report(std::cout);
+        context_->captureProcessExitCode(entryGraph, result);
         return Graph::null();
     }
     EXEC_WHEN_DEBUG(
@@ -226,7 +227,8 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     size_t pc    = offsetMap_.at(graph.get());
     Frame *frame = framePool_.acquire(graph.get());
     try {
-        call(pc, frame);
+        slot_t result = call(pc, frame);
+        context_->captureProcessExitCode(graph.get(), result);
     } catch (...) {
         pcStack_.clear();
         frameStack_.clear();

@@ -228,15 +228,6 @@ bool X64Backend::compileBytecode(
                                  x64::VRegId v,
                                  x64::MirBuilder & /*b*/) { loadSlot(bc.fastop[opIdx], disp, v); };
 
-#if defined(_WIN32) || defined(_WIN64)
-    auto emitPrepareDirectTailCallWin64 = [&](const Bytecode &bc, uint64_t helperAddr) {
-        build.emitMovRegReg(kRegRcx, kRegRdi);
-        build.emitMovRegReg(kRegRdx, kRegRsi);
-        build.emitMovRegImm64(kRegR8, reinterpret_cast<uint64_t>(&bc));
-        build.emitMovRegImm64(kRegRax, helperAddr);
-        build.emitCallRax();
-    };
-#endif
     // The wrapper owns all ABI adaptation. MIR generation below always assumes
     // the internal JIT convention:
     //   rdi = current frame dynamic area
@@ -840,20 +831,13 @@ bool X64Backend::compileBytecode(
                 build.emitJmpRel32(static_cast<uint32_t>(entryPc));
                 break;
             }
-            if (bc.fastop[1] == 0) {
-                uint64_t fnAddr =
-                    reinterpret_cast<uint64_t>(getFuncExtraFn(const_cast<Bytecode *>(&bc)));
-                emitPrepareDirectTailCallWin64(
-                    bc,
-                    reinterpret_cast<uint64_t>(&prepareDirectJitTailCall));
-                // JIT body has no prologue to undo — just set up Win64 ABI and tail-jump to
-                // target's C++ entry (which has its own prologue).
-                build.emitMovRegReg(kRegRcx, kRegRax);
-                build.emitMovRegReg(kRegRdx, kRegRsi);
-                build.emitMovRegImm64(kRegRax, fnAddr);
-                build.emitJmpRax();
-                break;
-            }
+            // Cross-graph direct tail-jump used to bypass trampolineTail once the
+            // target graph had a compiled entry. That path is currently too
+            // fragile for alternating mutual-tail recursion because frame
+            // ownership changes across graphs become harder to reason about.
+            // Prefer the trampoline path here: it is slightly less direct but
+            // preserves correctness and still keeps self-tail recursion on the
+            // zero-overhead local fast path above.
 #endif
             if (!unit.trampolineTail)
                 return fail("pc=" + std::to_string(pc) + " no TAIL trampoline");

@@ -1,0 +1,39 @@
+/**
+ * 意图：验证 JIT 下 if/else、嵌套分支与 JOIN/select 结果合流是否正确。
+ * 预期：打印 `branch_join ok`；exit 0。
+ */
+module jit_branch_join
+
+func select_value(flag: int, lhs: int, rhs: int): int {
+    return if flag != 0 then lhs + 1 else rhs + 2
+}
+
+func layered(n: int): int {
+    return if n < 0 then 10 else if n == 0 then 20 else if n < 5 then 30 else 40
+}
+
+func main(): int sync {
+    let a = select_value(1, 7, 100)
+    let b = select_value(0, 7, 100)
+    let c = layered(-3)
+    let d = layered(0)
+    let e = layered(3)
+    let f = layered(9)
+
+    if a != 8 then {
+        return 1
+    } else if b != 102 then {
+        return 2
+    } else if c != 10 then {
+        return 3
+    } else if d != 20 then {
+        return 4
+    } else if e != 30 then {
+        return 5
+    } else if f != 40 then {
+        return 6
+    } else {
+        'branch_join ok'->println
+        return 0
+    }
+}

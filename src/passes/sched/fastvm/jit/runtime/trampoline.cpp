@@ -278,7 +278,6 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     if (targetPc == 0) {
         Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
         GIR::Graph *g      = getFuncExtraGraph(&bc);
-        JitEntryFn fn      = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc));
         TailArgStorage args(argsCnt);
         copyOperandsToBuffer(args.data(), callerFrame, bc, argsCnt);
         vm->releaseFrameForTail(callerFrame);
@@ -288,10 +287,13 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
             GetDefaultLogger()
                 .in("JIT.Trampoline")
                 .debug(
-                    "trampolineTail: JIT->JIT target='{}' fn={}",
-                    g->name(),
-                    static_cast<void *>(reinterpret_cast<void *>(fn))));
-        return vm->invokeOwnedJitFrame(fn, newFrame, jc);
+                    "trampolineTail: JIT->interpreter(target already compiled) target='{}'",
+                    g->name()));
+        // For non-self tail calls, prefer the interpreter entry even if the
+        // callee has compiled code. This keeps mutual-tail recursion semantics
+        // stable across graph boundaries while self-tail recursion still uses
+        // the dedicated zero-overhead fast path in the x64 backend.
+        return vm->call(vm->graphEntryPc(g), newFrame);
     }
 
     GIR::Graph *targetGraph = getFuncExtraGraph(&bc);

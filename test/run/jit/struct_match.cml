@@ -1,0 +1,37 @@
+/**
+ * 意图：验证结构体字段访问与 match 分派在 JIT 下的正确性。
+ * 预期：打印 `struct_match ok`；exit 0。
+ */
+module jit_struct_match
+
+type Point = {
+    x: int,
+    y: int
+}
+
+func move(p: Point, dir: string): Point {
+    return match dir {
+        case 'up' => { x: p.x, y: p.y - 1 }
+        case 'left' => { x: p.x - 1, y: p.y }
+        case 'right' => { x: p.x + 1, y: p.y }
+        case _ => { x: p.x, y: p.y + 1 }
+    }
+}
+
+func main(): int sync {
+    let p0 = { x: 4, y: 5 }
+    let p1 = move(p0, 'up')
+    let p2 = move(p1, 'right')
+    let p3 = move(p2, 'down')
+
+    if p1.y != 4 then {
+        return 1
+    } else if p2.x != 5 then {
+        return 2
+    } else if p3.y != 5 then {
+        return 3
+    } else {
+        'struct_match ok'->println
+        return 0
+    }
+}
