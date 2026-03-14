@@ -179,6 +179,16 @@ bool X64Backend::compileBytecode(
         OpCode cmpOp          = OpCode::RETN;
         data_idx_t resultSlot = 0; // comparison's result slot (= BRCH's condSlot)
     } fusedCmp;
+
+    // BRCH/JOIN simplification: when fused cmp-BRCH is active, the then-path
+    // is handled by JUMP (writes w0 directly), so JOIN only executes from the
+    // else-path where idx is always 1. We skip the branch-index write entirely
+    // and let JOIN take w1 directly.
+    struct FusedBrchJoinInfo {
+        bool active        = false;
+        data_idx_t idxSlot = 0;
+    } fusedBrchJoin;
+
 #if defined(_WIN32) || defined(_WIN64)
     auto emitPrepareDirectTailCallWin64 = [&](const Bytecode &bc, uint64_t helperAddr) {
         build.emitMovRegReg(kRegRcx, kRegRdi);
@@ -577,10 +587,10 @@ bool X64Backend::compileBytecode(
             size_t t1 = pc + bc.opsize + 1;
             if (fusedCmp.active) {
                 // Fused compare-branch: CPU flags already set by preceding cmp.
-                // Store idx=1 (else) unconditionally; then path handled by JUMP.
-                x64::VRegId vOne = nextVReg++;
-                build.emitVLoadImm32(vOne, 1);
-                build.emitVStoreToFrame(dr, vOne);
+                // Phase K: skip branch-index write — JOIN only executes from
+                // the else-path where idx would always be 1, so we tell JOIN
+                // to take w1 directly via fusedBrchJoin.
+                fusedBrchJoin = {true, bc.result};
                 // Emit inverted jcc: jump to else (t1) when condition is NOT met
                 auto u32t1 = static_cast<uint32_t>(t1);
                 switch (fusedCmp.cmpOp) {
@@ -643,31 +653,52 @@ bool X64Backend::compileBytecode(
             data_idx_t idxSlot = bc.nargs()[0];
             data_idx_t w0      = bc.wargs()[0];
             data_idx_t w1      = bc.wargs()[1];
-            int dIdx = slotDisp(idxSlot), d0 = slotDisp(w0), d1 = slotDisp(w1),
-                dr         = slotDisp(bc.result);
-            x64::VRegId v0 = nextVReg++;
-            x64::VRegId v1 = nextVReg++;
-            x64::VRegId v2 = nextVReg++;
-            x64::VRegId v3 = nextVReg++;
-            // result = idx ? w1 : w0 → v3 = (v2 ? v1 : v0)：先 v3=v0，test v2，cmovnz v3,v1
-            if (w0 > 0)
-                build.emitVLoadFromFrame(v0, d0);
-            else
-                emitLoadStaticConst(staticBase, w0, v0, build);
-            if (w1 > 0)
-                build.emitVLoadFromFrame(v1, d1);
-            else
-                emitLoadStaticConst(staticBase, w1, v1, build);
-            if (idxSlot > 0)
-                build.emitVLoadFromFrame(v2, dIdx);
-            else
-                emitLoadStaticConst(staticBase, idxSlot, v2, build);
-            build.emitVCopy(v3, v0); // v3 = w0 (then 分支结果，idx==0 时保持)
-            build.emitVTest(
-                v2,
-                dIdx); // 传入 disp，spill 时编码器可用 m.disp 加载 idx 并 test，不依赖 spilledLoad
-            build.emitVCmovnz(v3, v1); // idx!=0（else 分支）时 v3 = w1，与 BRCH 写的 0/1 一致
-            build.emitVStoreToFrame(dr, v3);
+            int d1 = slotDisp(w1), dr = slotDisp(bc.result);
+
+            if (fusedBrchJoin.active && fusedBrchJoin.idxSlot == idxSlot) {
+                // Phase K: fused cmp-BRCH already handled then-path via JUMP.
+                // JOIN only executes from else-path, so take w1 directly.
+                x64::VRegId v1 = nextVReg++;
+                if (w1 > 0)
+                    build.emitVLoadFromFrame(v1, d1);
+                else
+                    emitLoadStaticConst(staticBase, w1, v1, build);
+
+                // Phase N: if JOIN is immediately followed by RETN reading
+                // JOIN's result, emit VRet directly — skip the intermediate store.
+                size_t nextPc = pc + bc.opsize;
+                if (nextPc < pcEnd && base[nextPc].opcode == OpCode::RETN &&
+                    base[nextPc].fastop[0] == bc.result) {
+                    build.emitVRet(v1);
+                    // Advance pc so the loop's `pc += bc.opsize` lands past RETN.
+                    pc = nextPc + base[nextPc].opsize - bc.opsize;
+                } else {
+                    build.emitVStoreToFrame(dr, v1);
+                }
+                fusedBrchJoin.active = false;
+            } else {
+                int dIdx = slotDisp(idxSlot), d0 = slotDisp(w0);
+                x64::VRegId v0 = nextVReg++;
+                x64::VRegId v1 = nextVReg++;
+                x64::VRegId v2 = nextVReg++;
+                x64::VRegId v3 = nextVReg++;
+                if (w0 > 0)
+                    build.emitVLoadFromFrame(v0, d0);
+                else
+                    emitLoadStaticConst(staticBase, w0, v0, build);
+                if (w1 > 0)
+                    build.emitVLoadFromFrame(v1, d1);
+                else
+                    emitLoadStaticConst(staticBase, w1, v1, build);
+                if (idxSlot > 0)
+                    build.emitVLoadFromFrame(v2, dIdx);
+                else
+                    emitLoadStaticConst(staticBase, idxSlot, v2, build);
+                build.emitVCopy(v3, v0);
+                build.emitVTest(v2, dIdx);
+                build.emitVCmovnz(v3, v1);
+                build.emitVStoreToFrame(dr, v3);
+            }
             break;
         }
         case OpCode::FUNC: {
@@ -682,6 +713,7 @@ bool X64Backend::compileBytecode(
                 params->argsCnt         = static_cast<uint8_t>(bc.normCnt());
                 for (uint8_t ai = 0; ai < params->argsCnt; ++ai)
                     params->argSrcDisps[ai] = slotDisp(bc.operands()[ai]);
+                std::memset(params->argVRegs, 0xFF, sizeof(params->argVRegs));
                 params->isSameGraph = sameGraph;
                 params->extra2Addr  = reinterpret_cast<uint64_t>(bc.extra2());
                 params->fastop1Addr = reinterpret_cast<uint64_t>(&bc.fastop[1]);
@@ -702,6 +734,16 @@ bool X64Backend::compileBytecode(
                     params->slowPathFnAddr = reinterpret_cast<uint64_t>(unit.trampolineFunc);
                     params->slowPathBcAddr = 0;
                     params->slowPathPc     = static_cast<uint32_t>(pc);
+                }
+                // Phase L: for frameless calls, emit visible VLoadFromFrame for
+                // each arg so that peephole can fuse preceding store+load pairs.
+                if (params->frameless) {
+                    uint8_t nArgs = params->argsCnt < 7 ? params->argsCnt : 7;
+                    for (uint8_t ai = 0; ai < nArgs; ++ai) {
+                        x64::VRegId vArg = nextVReg++;
+                        build.emitVLoadFromFrame(vArg, params->argSrcDisps[ai]);
+                        params->argVRegs[ai] = static_cast<uint8_t>(vArg);
+                    }
                 }
                 build.emitNativeJitFuncCall(params);
                 break;
@@ -784,14 +826,23 @@ bool X64Backend::compileBytecode(
                 const Bytecode &joinBc = base[target];
                 if (joinBc.withCnt() >= 1) {
                     int d0         = slotDisp(joinBc.wargs()[0]);
-                    int dr         = slotDisp(joinBc.result);
                     x64::VRegId v0 = nextVReg++;
                     if (joinBc.wargs()[0] > 0)
                         build.emitVLoadFromFrame(v0, d0);
                     else
                         emitLoadStaticConst(staticBase, joinBc.wargs()[0], v0, build);
-                    build.emitVStoreToFrame(dr, v0);
-                    build.emitJmpRel32(static_cast<uint32_t>(target + joinBc.opsize));
+
+                    // Phase M: if JOIN is immediately followed by RETN reading
+                    // JOIN's result, emit VRet directly instead of store+jmp.
+                    size_t afterJoin = target + joinBc.opsize;
+                    if (afterJoin < pcEnd && base[afterJoin].opcode == OpCode::RETN &&
+                        base[afterJoin].fastop[0] == joinBc.result) {
+                        build.emitVRet(v0);
+                    } else {
+                        int dr = slotDisp(joinBc.result);
+                        build.emitVStoreToFrame(dr, v0);
+                        build.emitJmpRel32(static_cast<uint32_t>(target + joinBc.opsize));
+                    }
                     break;
                 }
             }

@@ -519,19 +519,29 @@ void encodeMirBuffer(
 
             if (p->frameless) {
                 // ═══ FRAMELESS PATH: stack-based self-call (no Frame pool) ═══
-                // All args loaded before rdi switch; uses native stack for callee frame.
+                // Phase L: args may already be in physical registers via pre-loaded VRegs.
                 static constexpr uint8_t argTmpRegs[] =
                     {kRegRax, kRegRcx, kRegRdx, kRegR8, kRegR9, kRegR10, kRegR11};
                 uint8_t nArgs = p->argsCnt < 7 ? p->argsCnt : 7;
-                for (uint8_t ai = 0; ai < nArgs; ++ai)
-                    enc.movRegFromFrame(argTmpRegs[ai], p->argSrcDisps[ai]);
+                uint8_t actualArgRegs[7];
+                for (uint8_t ai = 0; ai < nArgs; ++ai) {
+                    int preloadedReg = -1;
+                    if (p->argVRegs[ai] != 0xFF)
+                        preloadedReg = pregFor(static_cast<VRegId>(p->argVRegs[ai]));
+                    if (preloadedReg >= 0) {
+                        actualArgRegs[ai] = static_cast<uint8_t>(preloadedReg);
+                    } else {
+                        enc.movRegFromFrame(argTmpRegs[ai], p->argSrcDisps[ai]);
+                        actualArgRegs[ai] = argTmpRegs[ai];
+                    }
+                }
 
                 enc.pushRdi();
                 enc.subRspImm(p->calleeSlotBytes);
                 enc.movRdiRsp();
 
                 for (uint8_t ai = 0; ai < nArgs; ++ai)
-                    enc.movToFrame(static_cast<int>((ai + 1) * sizeof(slot_t)), argTmpRegs[ai]);
+                    enc.movToFrame(static_cast<int>((ai + 1) * sizeof(slot_t)), actualArgRegs[ai]);
 
                 patches.push_back({enc.here(), 0, 5, 0, 0});
                 enc.callRel32(0);
