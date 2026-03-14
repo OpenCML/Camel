@@ -1026,6 +1026,48 @@ class Encoder {
         asmLineAt(at2, "movzx rax, al");
     }
 
+    // add reg, imm32 (sign-extended to 64-bit). REX.W + 81 /0 id
+    void addRegImm32(uint8_t reg, int32_t imm) {
+        size_t at      = here();
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xC0 | (regEnc & 3));
+        if (regEnc < 4)
+            rexW();
+        else
+            rexWB();
+        emitBytes({0x81, modrm});
+        emitDisp32(imm);
+        asmLineAt(at, std::string("add ") + regName(reg) + ", " + std::to_string(imm));
+    }
+
+    // sub reg, imm32 (sign-extended to 64-bit). REX.W + 81 /5 id
+    void subRegImm32(uint8_t reg, int32_t imm) {
+        size_t at      = here();
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xE8 | (regEnc & 3));
+        if (regEnc < 4)
+            rexW();
+        else
+            rexWB();
+        emitBytes({0x81, modrm});
+        emitDisp32(imm);
+        asmLineAt(at, std::string("sub ") + regName(reg) + ", " + std::to_string(imm));
+    }
+
+    // cmp reg, imm32 (sign-extended to 64-bit). REX.W + 81 /7 id
+    void cmpRegImm32(uint8_t reg, int32_t imm) {
+        size_t at      = here();
+        uint8_t regEnc = reg & 7;
+        uint8_t modrm  = static_cast<uint8_t>(0xF8 | (regEnc & 3));
+        if (regEnc < 4)
+            rexW();
+        else
+            rexWB();
+        emitBytes({0x81, modrm});
+        emitDisp32(imm);
+        asmLineAt(at, std::string("cmp ") + regName(reg) + ", " + std::to_string(imm));
+    }
+
     // cmp rax, [rdi + disp] 64 位比较一槽（disp8 或 disp32）
     void cmpRaxWithFrame(int disp) {
         rexW();
@@ -1217,19 +1259,57 @@ class Encoder {
         asmLineAt(at, "jmp .+" + std::to_string(rel) + "  ; rel32");
     }
 
-    // jle rel32
+    // Conditional jumps: 0F 8x rel32
     void jleRel32(int32_t rel) {
         size_t at = here();
         emitBytes({0x0f, 0x8e});
-        emitBytes({
-            static_cast<uint8_t>(rel & 0xff),
-            static_cast<uint8_t>((rel >> 8) & 0xff),
-            static_cast<uint8_t>((rel >> 16) & 0xff),
-            static_cast<uint8_t>((rel >> 24) & 0xff),
-        });
+        emitBytes(
+            {static_cast<uint8_t>(rel & 0xff),
+             static_cast<uint8_t>((rel >> 8) & 0xff),
+             static_cast<uint8_t>((rel >> 16) & 0xff),
+             static_cast<uint8_t>((rel >> 24) & 0xff)});
         asmLineAt(at, "jle .+" + std::to_string(rel) + "  ; rel32");
     }
-
+    void jlRel32(int32_t rel) {
+        size_t at = here();
+        emitBytes({0x0f, 0x8c});
+        emitBytes(
+            {static_cast<uint8_t>(rel & 0xff),
+             static_cast<uint8_t>((rel >> 8) & 0xff),
+             static_cast<uint8_t>((rel >> 16) & 0xff),
+             static_cast<uint8_t>((rel >> 24) & 0xff)});
+        asmLineAt(at, "jl .+" + std::to_string(rel) + "  ; rel32");
+    }
+    void jgRel32(int32_t rel) {
+        size_t at = here();
+        emitBytes({0x0f, 0x8f});
+        emitBytes(
+            {static_cast<uint8_t>(rel & 0xff),
+             static_cast<uint8_t>((rel >> 8) & 0xff),
+             static_cast<uint8_t>((rel >> 16) & 0xff),
+             static_cast<uint8_t>((rel >> 24) & 0xff)});
+        asmLineAt(at, "jg .+" + std::to_string(rel) + "  ; rel32");
+    }
+    void jgeRel32(int32_t rel) {
+        size_t at = here();
+        emitBytes({0x0f, 0x8d});
+        emitBytes(
+            {static_cast<uint8_t>(rel & 0xff),
+             static_cast<uint8_t>((rel >> 8) & 0xff),
+             static_cast<uint8_t>((rel >> 16) & 0xff),
+             static_cast<uint8_t>((rel >> 24) & 0xff)});
+        asmLineAt(at, "jge .+" + std::to_string(rel) + "  ; rel32");
+    }
+    void jeRel32(int32_t rel) {
+        size_t at = here();
+        emitBytes({0x0f, 0x84});
+        emitBytes(
+            {static_cast<uint8_t>(rel & 0xff),
+             static_cast<uint8_t>((rel >> 8) & 0xff),
+             static_cast<uint8_t>((rel >> 16) & 0xff),
+             static_cast<uint8_t>((rel >> 24) & 0xff)});
+        asmLineAt(at, "je .+" + std::to_string(rel) + "  ; rel32");
+    }
     // jmp rel8 (短跳转, -128..127)
     void jmpRel8(int8_t rel) {
         emitByte(0xeb);
@@ -1561,6 +1641,50 @@ class Encoder {
         emitByte(0xC0 | rm | (reg << 3));
         asmLineAt(at, std::string("mov ") + regName(dst) + ", " + regName(src));
     }
+
+    // Generic reg-reg ALU: opcode r/m64, r64 (01=add, 29=sub, 39=cmp)
+    void emitAluRegReg(uint8_t opcode, uint8_t rm, uint8_t reg, const char *mnemonic) {
+        size_t at    = here();
+        auto encBits = [](uint8_t r) -> uint8_t {
+            if (r <= 3)
+                return r;
+            if (r == 8)
+                return 7; // rdi
+            if (r == 9)
+                return 6; // rsi
+            return (r >= 4 && r <= 7) ? (r - 4) : 0;
+        };
+        uint8_t rexB = (rm >= 4 && rm <= 7) ? 1 : 0;
+        uint8_t rexR = (reg >= 4 && reg <= 7) ? 4 : 0;
+        emitByte(0x48 | rexB | rexR);
+        emitByte(opcode);
+        emitByte(0xC0 | encBits(rm) | (encBits(reg) << 3));
+        asmLineAt(at, std::string(mnemonic) + " " + regName(rm) + ", " + regName(reg));
+    }
+
+    void addRegReg(uint8_t dst, uint8_t src) { emitAluRegReg(0x01, dst, src, "add"); }
+    void subRegReg(uint8_t dst, uint8_t src) { emitAluRegReg(0x29, dst, src, "sub"); }
+    void cmpRegReg(uint8_t left, uint8_t right) { emitAluRegReg(0x39, left, right, "cmp"); }
+
+    // neg r/m64 (REX.W + F7 /3)
+    void negReg(uint8_t reg) {
+        size_t at    = here();
+        auto encBits = [](uint8_t r) -> uint8_t {
+            if (r <= 3)
+                return r;
+            if (r == 8)
+                return 7;
+            if (r == 9)
+                return 6;
+            return (r >= 4 && r <= 7) ? (r - 4) : 0;
+        };
+        uint8_t rexB = (reg >= 4 && reg <= 7) ? 1 : 0;
+        emitByte(0x48 | rexB);
+        emitByte(0xF7);
+        emitByte(0xD8 | encBits(reg));
+        asmLineAt(at, std::string("neg ") + regName(reg));
+    }
+
     void emitMovRegImm32(uint8_t reg, uint32_t imm32) {
         size_t at = here();
         if (reg == 4) { // r8d

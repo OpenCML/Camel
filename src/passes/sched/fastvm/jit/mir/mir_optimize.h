@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,18 +29,14 @@ void optimizeWin64RedundantArgSetup(MirBuffer &buf);
 // 删除 no-op：mov rax, rax（MovRegFromRax(0)）
 void optimizeRemoveNoopMovRaxRax(MirBuffer &buf);
 
-// 单遍：Win64 冗余 mov + noop 删除
-inline void optimizeMirBuffer(MirBuffer &buf) {
+// Peephole: store-reload 消除、死 store 消除
+void optimizePeephole(MirBuffer &buf);
+
+// 多遍优化入口
+inline void runMirOptimizationPasses(MirBuffer &buf) {
     optimizeWin64RedundantArgSetup(buf);
     optimizeRemoveNoopMovRaxRax(buf);
-}
-
-// 多遍优化入口：当前仅 optimizeMirBuffer，后续可在此串联 CSE、死代码删除、peephole 等
-inline void runMirOptimizationPasses(MirBuffer &buf) {
-    optimizeMirBuffer(buf);
-    // TODO: 更多优化遍，例如：
-    // optimizeMirCse(buf);
-    // optimizeMirDeadCode(buf);
+    optimizePeephole(buf);
 }
 
 } // namespace camel::jit::x64

@@ -13,16 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "mir_optimize.h"
 
+#include <unordered_map>
+#include <unordered_set>
+
 namespace camel::jit::x64 {
 
 void optimizeWin64RedundantArgSetup(MirBuffer &buf) {
-    // 匹配 prologue 后紧跟的 mov rcx, rdi; mov rdx, rsi（Win64 下此时 rcx/rdx 未改，可删）
     for (size_t i = 0; i + 3 < buf.size(); ++i) {
         const Mir &a = buf[i];
         const Mir &b = buf[i + 1];
@@ -36,16 +38,130 @@ void optimizeWin64RedundantArgSetup(MirBuffer &buf) {
             continue;
         if (d.op != MirOp::MovRegReg || d.r0 != kRegRdx || d.r1 != kRegRsi)
             continue;
-        // 删除 c 和 d（保留 pc 等信息到后续指令，此处两条无 pc 或可丢弃）
         buf.erase(
             buf.begin() + static_cast<std::ptrdiff_t>(i + 2),
             buf.begin() + static_cast<std::ptrdiff_t>(i + 4));
-        return; // 只优化第一处（prologue 仅一段）
+        return;
     }
 }
 
-// 原逻辑为删除 mov rax,rax；迁移到 VReg 后无此物理 op，VMovFromRax(r0) 需分配结果才知是否为
-// noop，暂不优化
 void optimizeRemoveNoopMovRaxRax(MirBuffer &buf) { (void)buf; }
+
+static bool isJumpOp(MirOp op) {
+    switch (op) {
+    case MirOp::JzRel32:
+    case MirOp::JmpRel32:
+    case MirOp::JleRel32:
+    case MirOp::JlRel32:
+    case MirOp::JgRel32:
+    case MirOp::JgeRel32:
+    case MirOp::JeRel32:
+    case MirOp::JneRel32:
+    case MirOp::JmpRel8:
+    case MirOp::JleRel8:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool isBarrierOp(MirOp op) {
+    switch (op) {
+    case MirOp::Ret:
+    case MirOp::JmpRax:
+    case MirOp::NativeJitFuncCall:
+    case MirOp::CallRax:
+    case MirOp::CallRel32:
+    case MirOp::PushRdi:
+    case MirOp::PopRdi:
+        return true;
+    default:
+        return isJumpOp(op);
+    }
+}
+
+static bool readsFrameSlot(MirOp op) {
+    switch (op) {
+    case MirOp::VLoadFromFrame:
+    case MirOp::VXmmLoadFromFrame:
+    case MirOp::VXmm32LoadFromFrame:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool writesFrameSlot(MirOp op) {
+    switch (op) {
+    case MirOp::VStoreToFrame:
+    case MirOp::VXmmStoreToFrame:
+    case MirOp::VXmm32StoreToFrame:
+        return true;
+    default:
+        return false;
+    }
+}
+
+void optimizePeephole(MirBuffer &buf) {
+    const size_t n = buf.size();
+    if (n == 0)
+        return;
+
+    std::unordered_set<uint32_t> jumpTargets;
+    for (const auto &m : buf) {
+        if (isJumpOp(m.op))
+            jumpTargets.insert(m.imm32);
+    }
+
+    // Track last VStoreToFrame (integer GPR only) per frame disp.
+    struct StoreInfo {
+        uint8_t vreg;
+        size_t index;
+        bool read;
+    };
+    std::unordered_map<int32_t, StoreInfo> pendingStore;
+
+    for (size_t i = 0; i < n; ++i) {
+        Mir &m = buf[i];
+
+        if (m.op == MirOp::Nop || m.op == MirOp::DebugTrace)
+            continue;
+
+        if (m.hasPc() && jumpTargets.count(m.pc))
+            pendingStore.clear();
+
+        if (isBarrierOp(m.op)) {
+            pendingStore.clear();
+            continue;
+        }
+
+        if (writesFrameSlot(m.op)) {
+            int32_t d = m.disp;
+            if (m.op == MirOp::VStoreToFrame) {
+                auto it = pendingStore.find(d);
+                if (it != pendingStore.end() && !it->second.read)
+                    buf[it->second.index].op = MirOp::Nop;
+                pendingStore[d] = {m.r0, i, false};
+            } else {
+                pendingStore.erase(d);
+            }
+            continue;
+        }
+
+        if (readsFrameSlot(m.op)) {
+            int32_t d = m.disp;
+            auto it   = pendingStore.find(d);
+            if (it != pendingStore.end()) {
+                if (m.op == MirOp::VLoadFromFrame) {
+                    m.op   = MirOp::VCopy;
+                    m.r1   = it->second.vreg;
+                    m.disp = 0;
+                }
+                it->second.read = true;
+            }
+            continue;
+        }
+    }
+}
 
 } // namespace camel::jit::x64

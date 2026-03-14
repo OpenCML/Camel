@@ -46,29 +46,50 @@ namespace camel::jit {
 
 namespace {
 
-// 用 VReg 加载一个操作数到 v（frame 或 static mem）
+// Emit VLoadImm32/64 for a compile-time-known static slot value
+inline void emitLoadStaticConst(
+    const slot_t *staticBase, data_idx_t idx, x64::VRegId v, x64::MirBuilder &build) {
+    slot_t value = staticBase[static_cast<size_t>(-idx)];
+    if (value <= UINT32_MAX)
+        build.emitVLoadImm32(v, static_cast<uint32_t>(value));
+    else
+        build.emitVLoadImm64(v, value);
+}
+
+// Check if a static operand is a small int64 constant that fits in imm32
+inline bool
+tryGetStaticImm32(const Bytecode &bc, int opIdx, const slot_t *staticBase, int32_t &outImm) {
+    if (bc.fastop[opIdx] > 0)
+        return false;
+    slot_t value = staticBase[static_cast<size_t>(-bc.fastop[opIdx])];
+    auto sv      = static_cast<int64_t>(value);
+    if (sv >= INT32_MIN && sv <= INT32_MAX) {
+        outImm = static_cast<int32_t>(sv);
+        return true;
+    }
+    return false;
+}
+
 inline void loadOperandToVReg(
-    const Bytecode &bc, int opIdx, int disp, uint64_t staticAddr, x64::VRegId v,
+    const Bytecode &bc, int opIdx, int disp, const slot_t *staticBase, x64::VRegId v,
     x64::MirBuilder &build) {
     if (bc.fastop[opIdx] > 0)
         build.emitVLoadFromFrame(v, disp);
     else
-        build.emitVLoadFromMemAt(v, staticAddr);
+        emitLoadStaticConst(staticBase, bc.fastop[opIdx], v, build);
 }
 
-// 用 VReg 写回结果（始终写 frame disp）
 inline void storeResultFromVReg(int disp, x64::VRegId v, x64::MirBuilder &build) {
     build.emitVStoreToFrame(disp, v);
 }
 
-// Float：槽低 4 字节为 float，用 VXmm32* 加载/写回
 inline void loadFloatOperandToVReg(
-    const Bytecode &bc, int opIdx, int disp, uint64_t staticAddr, x64::VRegId v,
+    const Bytecode &bc, int opIdx, int disp, const slot_t *staticBase, x64::VRegId v,
     x64::MirBuilder &build) {
     if (bc.fastop[opIdx] > 0)
         build.emitVXmm32LoadFromFrame(v, disp);
     else
-        build.emitVXmm32LoadFromMemAt(v, staticAddr);
+        emitLoadStaticConst(staticBase, bc.fastop[opIdx], v, build);
 }
 inline void storeFloatResultFromVReg(int disp, x64::VRegId v, x64::MirBuilder &build) {
     build.emitVXmm32StoreToFrame(disp, v);
@@ -143,17 +164,21 @@ bool X64Backend::compileBytecode(
     auto staticSlotAddr      = [&](data_idx_t idx) -> uint64_t {
         return reinterpret_cast<uint64_t>(staticBase + static_cast<size_t>(-idx));
     };
-    auto staticSlotAddrWithComment = [&](data_idx_t idx) -> uint64_t {
-        uint64_t a = staticSlotAddr(idx);
-        if (debug && debug->mirOut && debug->mirSymbolNames)
-            (*debug->mirSymbolNames)[a] = "static slot[" + std::to_string(idx) + "]";
-        return a;
-    };
+    (void)staticSlotAddr; // staticSlotAddr retained for debug use; constants now inlined
 
     // 构建 MIR → 优化 → vreg 分配 → 根据 MIR 计算 pcToOffset → 编码（L2 架构）
     x64::MirBuffer mirBuf;
     x64::MirBuilder build(mirBuf);
-    x64::VRegId nextVReg = 0; // 虚拟寄存器计数器，供 JOIN 等使用
+    x64::VRegId nextVReg = 0;
+
+    // Compare-Branch fusion state: when a comparison detects a following BRCH
+    // using its result, it emits only VLoadFromFrame + VCmpRegImm (no setcc/store),
+    // and records info so BRCH can emit a single Jcc.
+    struct FusedCmpInfo {
+        bool active           = false;
+        OpCode cmpOp          = OpCode::RETN;
+        data_idx_t resultSlot = 0; // comparison's result slot (= BRCH's condSlot)
+    } fusedCmp;
 #if defined(_WIN32) || defined(_WIN64)
     auto emitPrepareDirectTailCallWin64 = [&](const Bytecode &bc, uint64_t helperAddr) {
         build.emitMovRegReg(kRegRcx, kRegRdi);
@@ -174,32 +199,46 @@ bool X64Backend::compileBytecode(
         }
         switch (bc.opcode) {
         case OpCode::LADD: {
-            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
-            x64::VRegId v0 = nextVReg++;
-            x64::VRegId v1 = nextVReg++;
-            x64::VRegId vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
-            build.emitVAdd(vr, v0, v1);
-            storeResultFromVReg(dr, vr, build);
+            int dr = slotDisp(bc.result);
+            int32_t imm;
+            if (tryGetStaticImm32(bc, 1, staticBase, imm)) {
+                x64::VRegId v0 = nextVReg++, vr = nextVReg++;
+                loadOperandToVReg(bc, 0, slotDisp(bc.fastop[0]), staticBase, v0, build);
+                build.emitVAddImm(vr, v0, imm);
+            } else if (tryGetStaticImm32(bc, 0, staticBase, imm)) {
+                x64::VRegId v1 = nextVReg++, vr = nextVReg++;
+                loadOperandToVReg(bc, 1, slotDisp(bc.fastop[1]), staticBase, v1, build);
+                build.emitVAddImm(vr, v1, imm);
+            } else {
+                x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+                loadOperandToVReg(bc, 0, slotDisp(bc.fastop[0]), staticBase, v0, build);
+                loadOperandToVReg(bc, 1, slotDisp(bc.fastop[1]), staticBase, v1, build);
+                build.emitVAdd(vr, v0, v1);
+            }
+            storeResultFromVReg(dr, nextVReg - 1, build);
             break;
         }
         case OpCode::LSUB: {
-            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
-            x64::VRegId v0 = nextVReg++;
-            x64::VRegId v1 = nextVReg++;
-            x64::VRegId vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
-            build.emitVSub(vr, v0, v1);
-            storeResultFromVReg(dr, vr, build);
+            int dr = slotDisp(bc.result);
+            int32_t imm;
+            if (tryGetStaticImm32(bc, 1, staticBase, imm)) {
+                x64::VRegId v0 = nextVReg++, vr = nextVReg++;
+                loadOperandToVReg(bc, 0, slotDisp(bc.fastop[0]), staticBase, v0, build);
+                build.emitVSubImm(vr, v0, imm);
+            } else {
+                x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
+                loadOperandToVReg(bc, 0, slotDisp(bc.fastop[0]), staticBase, v0, build);
+                loadOperandToVReg(bc, 1, slotDisp(bc.fastop[1]), staticBase, v1, build);
+                build.emitVSub(vr, v0, v1);
+            }
+            storeResultFromVReg(dr, nextVReg - 1, build);
             break;
         }
         case OpCode::DADD: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmmAdd(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -207,8 +246,8 @@ bool X64Backend::compileBytecode(
         case OpCode::DSUB: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmmSub(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -216,8 +255,8 @@ bool X64Backend::compileBytecode(
         case OpCode::DMUL: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmmMul(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -225,8 +264,8 @@ bool X64Backend::compileBytecode(
         case OpCode::DDIV: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmmDiv(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -234,8 +273,8 @@ bool X64Backend::compileBytecode(
         case OpCode::DLT: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmmCmpSetB(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -243,8 +282,8 @@ bool X64Backend::compileBytecode(
         case OpCode::DGT: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmmCmpSetA(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -252,8 +291,8 @@ bool X64Backend::compileBytecode(
         case OpCode::DEQ: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmmCmpSetE(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -261,8 +300,8 @@ bool X64Backend::compileBytecode(
         case OpCode::DNE: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmmCmpSetNZ(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -270,8 +309,8 @@ bool X64Backend::compileBytecode(
         case OpCode::DLE: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmmCmpSetBE(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -279,8 +318,8 @@ bool X64Backend::compileBytecode(
         case OpCode::DGE: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmmCmpSetAE(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -288,8 +327,8 @@ bool X64Backend::compileBytecode(
         case OpCode::IADD: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVAdd32(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -297,8 +336,8 @@ bool X64Backend::compileBytecode(
         case OpCode::ISUB: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVSub32(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -306,8 +345,8 @@ bool X64Backend::compileBytecode(
         case OpCode::IMUL: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVMul32(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -315,8 +354,8 @@ bool X64Backend::compileBytecode(
         case OpCode::IDIV: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVIdiv32(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -324,8 +363,8 @@ bool X64Backend::compileBytecode(
         case OpCode::ILT: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVCmpSetL32(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -333,8 +372,8 @@ bool X64Backend::compileBytecode(
         case OpCode::IGT: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVCmpSetG32(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -342,8 +381,8 @@ bool X64Backend::compileBytecode(
         case OpCode::IEQ: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVCmpSetE32(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -351,8 +390,8 @@ bool X64Backend::compileBytecode(
         case OpCode::INE: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVCmpSetNE32(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -360,8 +399,8 @@ bool X64Backend::compileBytecode(
         case OpCode::ILE: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVCmpSetLE32(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -369,8 +408,8 @@ bool X64Backend::compileBytecode(
         case OpCode::IGE: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVCmpSetGE32(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -378,8 +417,8 @@ bool X64Backend::compileBytecode(
         case OpCode::FADD: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadFloatOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmm32Add(vr, v0, v1);
             storeFloatResultFromVReg(dr, vr, build);
             break;
@@ -387,8 +426,8 @@ bool X64Backend::compileBytecode(
         case OpCode::FSUB: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadFloatOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmm32Sub(vr, v0, v1);
             storeFloatResultFromVReg(dr, vr, build);
             break;
@@ -396,8 +435,8 @@ bool X64Backend::compileBytecode(
         case OpCode::FMUL: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadFloatOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmm32Mul(vr, v0, v1);
             storeFloatResultFromVReg(dr, vr, build);
             break;
@@ -405,8 +444,8 @@ bool X64Backend::compileBytecode(
         case OpCode::FDIV: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadFloatOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmm32Div(vr, v0, v1);
             storeFloatResultFromVReg(dr, vr, build);
             break;
@@ -414,8 +453,8 @@ bool X64Backend::compileBytecode(
         case OpCode::FLT: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadFloatOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmm32CmpSetB(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -423,8 +462,8 @@ bool X64Backend::compileBytecode(
         case OpCode::FGT: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadFloatOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmm32CmpSetA(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -432,8 +471,8 @@ bool X64Backend::compileBytecode(
         case OpCode::FEQ: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadFloatOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmm32CmpSetE(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -441,8 +480,8 @@ bool X64Backend::compileBytecode(
         case OpCode::FNE: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadFloatOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmm32CmpSetNZ(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -450,8 +489,8 @@ bool X64Backend::compileBytecode(
         case OpCode::FLE: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadFloatOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmm32CmpSetBE(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -459,8 +498,8 @@ bool X64Backend::compileBytecode(
         case OpCode::FGE: {
             int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
             x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;
-            loadFloatOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadFloatOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadFloatOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadFloatOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmm32CmpSetAE(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -470,8 +509,8 @@ bool X64Backend::compileBytecode(
             x64::VRegId v0 = nextVReg++;
             x64::VRegId v1 = nextVReg++;
             x64::VRegId vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVMul(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
@@ -481,78 +520,51 @@ bool X64Backend::compileBytecode(
             x64::VRegId v0 = nextVReg++;
             x64::VRegId v1 = nextVReg++;
             x64::VRegId vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
+            loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
+            loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVIdiv(vr, v0, v1);
             storeResultFromVReg(dr, vr, build);
             break;
         }
-        case OpCode::LLE: {
-            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
-            x64::VRegId v0 = nextVReg++;
-            x64::VRegId v1 = nextVReg++;
-            x64::VRegId vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
-            build.emitVCmpSetLE(vr, v0, v1);
-            storeResultFromVReg(dr, vr, build);
-            break;
-        }
-        case OpCode::LLT: {
-            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
-            x64::VRegId v0 = nextVReg++;
-            x64::VRegId v1 = nextVReg++;
-            x64::VRegId vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
-            build.emitVCmpSetL(vr, v0, v1);
-            storeResultFromVReg(dr, vr, build);
-            break;
-        }
-        case OpCode::LGT: {
-            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
-            x64::VRegId v0 = nextVReg++;
-            x64::VRegId v1 = nextVReg++;
-            x64::VRegId vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
-            build.emitVCmpSetG(vr, v0, v1);
-            storeResultFromVReg(dr, vr, build);
-            break;
-        }
-        case OpCode::LEQ: {
-            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
-            x64::VRegId v0 = nextVReg++;
-            x64::VRegId v1 = nextVReg++;
-            x64::VRegId vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
-            build.emitVCmpSetE(vr, v0, v1);
-            storeResultFromVReg(dr, vr, build);
-            break;
-        }
-        case OpCode::LNE: {
-            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
-            x64::VRegId v0 = nextVReg++;
-            x64::VRegId v1 = nextVReg++;
-            x64::VRegId vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
-            build.emitVCmpSetNE(vr, v0, v1);
-            storeResultFromVReg(dr, vr, build);
-            break;
-        }
-        case OpCode::LGE: {
-            int d0 = slotDisp(bc.fastop[0]), d1 = slotDisp(bc.fastop[1]), dr = slotDisp(bc.result);
-            x64::VRegId v0 = nextVReg++;
-            x64::VRegId v1 = nextVReg++;
-            x64::VRegId vr = nextVReg++;
-            loadOperandToVReg(bc, 0, d0, staticSlotAddrWithComment(bc.fastop[0]), v0, build);
-            loadOperandToVReg(bc, 1, d1, staticSlotAddrWithComment(bc.fastop[1]), v1, build);
-            build.emitVCmpSetGE(vr, v0, v1);
-            storeResultFromVReg(dr, vr, build);
-            break;
-        }
+        // --- L-comparison handlers with BRCH fusion ---
+        // Look ahead: if the next BC is BRCH using our result, emit bare cmp + flags only.
+#define LCMP_HANDLER(OPCODE, CmpSetImm, CmpSetReg)                                                 \
+    case OpCode::OPCODE: {                                                                         \
+        int dr        = slotDisp(bc.result);                                                       \
+        size_t nextPc = pc + bc.opsize;                                                            \
+        bool fuse     = false;                                                                     \
+        int32_t imm;                                                                               \
+        if (nextPc < pcEnd && base[nextPc].opcode == OpCode::BRCH &&                               \
+            base[nextPc].withCnt() == 0 && base[nextPc].nargs()[0] == bc.result &&                 \
+            tryGetStaticImm32(bc, 1, staticBase, imm)) {                                           \
+            fuse           = true;                                                                 \
+            x64::VRegId v0 = nextVReg++;                                                           \
+            loadOperandToVReg(bc, 0, slotDisp(bc.fastop[0]), staticBase, v0, build);               \
+            build.emitVCmpRegImm(v0, imm);                                                         \
+            fusedCmp = {true, OpCode::OPCODE, bc.result};                                          \
+        }                                                                                          \
+        if (!fuse) {                                                                               \
+            if (tryGetStaticImm32(bc, 1, staticBase, imm)) {                                       \
+                x64::VRegId v0 = nextVReg++, vr = nextVReg++;                                      \
+                loadOperandToVReg(bc, 0, slotDisp(bc.fastop[0]), staticBase, v0, build);           \
+                build.emit##CmpSetImm(vr, v0, imm);                                                \
+            } else {                                                                               \
+                x64::VRegId v0 = nextVReg++, v1 = nextVReg++, vr = nextVReg++;                     \
+                loadOperandToVReg(bc, 0, slotDisp(bc.fastop[0]), staticBase, v0, build);           \
+                loadOperandToVReg(bc, 1, slotDisp(bc.fastop[1]), staticBase, v1, build);           \
+                build.emit##CmpSetReg(vr, v0, v1);                                                 \
+            }                                                                                      \
+            storeResultFromVReg(dr, nextVReg - 1, build);                                          \
+        }                                                                                          \
+        break;                                                                                     \
+    }
+            LCMP_HANDLER(LLE, VCmpSetLEImm, VCmpSetLE)
+            LCMP_HANDLER(LLT, VCmpSetLImm, VCmpSetL)
+            LCMP_HANDLER(LGT, VCmpSetGImm, VCmpSetG)
+            LCMP_HANDLER(LGE, VCmpSetGEImm, VCmpSetGE)
+            LCMP_HANDLER(LEQ, VCmpSetEImm, VCmpSetE)
+            LCMP_HANDLER(LNE, VCmpSetNEImm, VCmpSetNE)
+#undef LCMP_HANDLER
         case OpCode::BRCH: {
             if (bc.withCnt() != 0)
                 return fail(
@@ -560,31 +572,65 @@ bool X64Backend::compileBytecode(
                     " BRCH only supports simple if-else (withCnt=0); match-case (withCnt>0) not "
                     "yet implemented, got " +
                     std::to_string(bc.withCnt()));
-            data_idx_t condIdx = bc.nargs()[0];
-            if (condIdx <= 0)
-                return fail(
-                    "pc=" + std::to_string(pc) + " BRCH cond slot index must be positive, got " +
-                    std::to_string(condIdx));
-            int dc            = slotDisp(condIdx);
-            int dr            = slotDisp(bc.result);
-            size_t t0         = pc + bc.opsize;
-            size_t t1         = pc + bc.opsize + 1;
-            x64::VRegId vCond = nextVReg++;
-            x64::VRegId vZero = nextVReg++;
-            x64::VRegId vOne  = nextVReg++;
-            x64::VRegId vRes  = nextVReg++;
-            if (condIdx > 0)
-                build.emitVLoadFromFrame(vCond, dc);
-            else
-                build.emitVLoadFromMemAt(vCond, staticSlotAddrWithComment(condIdx));
-            build.emitVLoadImm32(vZero, 0);
-            build.emitVLoadImm32(vOne, 1);
-            build.emitVCopy(vRes, vOne); // 默认 else 分支索引 1
-            build.emitVTest(vCond);
-            build.emitVCmovnz(vRes, vZero); // cond 为真（走 then）时写 0
-            build.emitVStoreToFrame(dr, vRes);
-            build.emitJzRel32(static_cast<uint32_t>(t1));
-            build.emitJmpRel32(static_cast<uint32_t>(t0));
+            int dr    = slotDisp(bc.result);
+            size_t t0 = pc + bc.opsize;
+            size_t t1 = pc + bc.opsize + 1;
+            if (fusedCmp.active) {
+                // Fused compare-branch: CPU flags already set by preceding cmp.
+                // Store idx=1 (else) unconditionally; then path handled by JUMP.
+                x64::VRegId vOne = nextVReg++;
+                build.emitVLoadImm32(vOne, 1);
+                build.emitVStoreToFrame(dr, vOne);
+                // Emit inverted jcc: jump to else (t1) when condition is NOT met
+                auto u32t1 = static_cast<uint32_t>(t1);
+                switch (fusedCmp.cmpOp) {
+                case OpCode::LLE:
+                    build.emitJgRel32(u32t1);
+                    break;
+                case OpCode::LLT:
+                    build.emitJgeRel32(u32t1);
+                    break;
+                case OpCode::LGT:
+                    build.emitJleRel32(u32t1);
+                    break;
+                case OpCode::LGE:
+                    build.emitJlRel32(u32t1);
+                    break;
+                case OpCode::LEQ:
+                    build.emitJneRel32(u32t1);
+                    break;
+                case OpCode::LNE:
+                    build.emitJeRel32(u32t1);
+                    break;
+                default:
+                    break;
+                }
+                // Fall through to t0 (then body)
+                fusedCmp.active = false;
+            } else {
+                data_idx_t condIdx = bc.nargs()[0];
+                if (condIdx <= 0)
+                    return fail(
+                        "pc=" + std::to_string(pc) +
+                        " BRCH cond slot index must be positive, got " + std::to_string(condIdx));
+                int dc            = slotDisp(condIdx);
+                x64::VRegId vCond = nextVReg++;
+                x64::VRegId vZero = nextVReg++;
+                x64::VRegId vOne  = nextVReg++;
+                x64::VRegId vRes  = nextVReg++;
+                if (condIdx > 0)
+                    build.emitVLoadFromFrame(vCond, dc);
+                else
+                    emitLoadStaticConst(staticBase, condIdx, vCond, build);
+                build.emitVLoadImm32(vZero, 0);
+                build.emitVLoadImm32(vOne, 1);
+                build.emitVCopy(vRes, vOne);
+                build.emitVTest(vCond);
+                build.emitVCmovnz(vRes, vZero);
+                build.emitVStoreToFrame(dr, vRes);
+                build.emitJzRel32(static_cast<uint32_t>(t1));
+                build.emitJmpRel32(static_cast<uint32_t>(t0));
+            }
             break;
         }
         case OpCode::JOIN: {
@@ -607,15 +653,15 @@ bool X64Backend::compileBytecode(
             if (w0 > 0)
                 build.emitVLoadFromFrame(v0, d0);
             else
-                build.emitVLoadFromMemAt(v0, staticSlotAddrWithComment(w0));
+                emitLoadStaticConst(staticBase, w0, v0, build);
             if (w1 > 0)
                 build.emitVLoadFromFrame(v1, d1);
             else
-                build.emitVLoadFromMemAt(v1, staticSlotAddrWithComment(w1));
+                emitLoadStaticConst(staticBase, w1, v1, build);
             if (idxSlot > 0)
                 build.emitVLoadFromFrame(v2, dIdx);
             else
-                build.emitVLoadFromMemAt(v2, staticSlotAddrWithComment(idxSlot));
+                emitLoadStaticConst(staticBase, idxSlot, v2, build);
             build.emitVCopy(v3, v0); // v3 = w0 (then 分支结果，idx==0 时保持)
             build.emitVTest(
                 v2,
@@ -688,7 +734,7 @@ bool X64Backend::compileBytecode(
                     if (args[i] > 0)
                         build.emitVLoadFromFrame(v, slotDisp(args[i]));
                     else
-                        build.emitVLoadFromMemAt(v, staticSlotAddrWithComment(args[i]));
+                        emitLoadStaticConst(staticBase, args[i], v, build);
                 }
                 for (size_t i = 0; i < argsCnt; ++i)
                     build.emitVStoreToFrame(slotDisp(static_cast<int>(i + 1)), argRegs[i]);
@@ -743,7 +789,7 @@ bool X64Backend::compileBytecode(
                     if (joinBc.wargs()[0] > 0)
                         build.emitVLoadFromFrame(v0, d0);
                     else
-                        build.emitVLoadFromMemAt(v0, staticSlotAddrWithComment(joinBc.wargs()[0]));
+                        emitLoadStaticConst(staticBase, joinBc.wargs()[0], v0, build);
                     build.emitVStoreToFrame(dr, v0);
                     build.emitJmpRel32(static_cast<uint32_t>(target + joinBc.opsize));
                     break;
@@ -758,7 +804,7 @@ bool X64Backend::compileBytecode(
             if (bc.fastop[0] > 0)
                 build.emitVLoadFromFrame(v0, d0);
             else
-                build.emitVLoadFromMemAt(v0, staticSlotAddrWithComment(bc.fastop[0]));
+                emitLoadStaticConst(staticBase, bc.fastop[0], v0, build);
             build.emitVRet(v0);
             break;
         }

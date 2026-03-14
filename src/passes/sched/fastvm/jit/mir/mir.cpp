@@ -119,6 +119,38 @@ std::string mirToString(const Mir &m) {
         os << "vcmp.ne v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", v"
            << m.imm32;
         break;
+    case MirOp::VAddImm:
+        os << "vadd v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", "
+           << static_cast<int32_t>(m.imm32);
+        break;
+    case MirOp::VSubImm:
+        os << "vsub v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", "
+           << static_cast<int32_t>(m.imm32);
+        break;
+    case MirOp::VCmpSetLImm:
+        os << "vcmp.lt v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", "
+           << static_cast<int32_t>(m.imm32);
+        break;
+    case MirOp::VCmpSetLEImm:
+        os << "vcmp.le v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", "
+           << static_cast<int32_t>(m.imm32);
+        break;
+    case MirOp::VCmpSetGImm:
+        os << "vcmp.gt v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", "
+           << static_cast<int32_t>(m.imm32);
+        break;
+    case MirOp::VCmpSetGEImm:
+        os << "vcmp.ge v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", "
+           << static_cast<int32_t>(m.imm32);
+        break;
+    case MirOp::VCmpSetEImm:
+        os << "vcmp.eq v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", "
+           << static_cast<int32_t>(m.imm32);
+        break;
+    case MirOp::VCmpSetNEImm:
+        os << "vcmp.ne v" << static_cast<int>(m.r0) << ", v" << static_cast<int>(m.r1) << ", "
+           << static_cast<int32_t>(m.imm32);
+        break;
     case MirOp::VXmmLoadFromFrame:
         os << "vxmm.load v" << static_cast<int>(m.r0) << ", [rdi+" << m.disp << "]";
         break;
@@ -267,6 +299,24 @@ std::string mirToString(const Mir &m) {
         break;
     case MirOp::JleRel32:
         os << "jle pc=" << m.imm32;
+        break;
+    case MirOp::JlRel32:
+        os << "jl pc=" << m.imm32;
+        break;
+    case MirOp::JgRel32:
+        os << "jg pc=" << m.imm32;
+        break;
+    case MirOp::JgeRel32:
+        os << "jge pc=" << m.imm32;
+        break;
+    case MirOp::JeRel32:
+        os << "je pc=" << m.imm32;
+        break;
+    case MirOp::JneRel32:
+        os << "jne pc=" << m.imm32;
+        break;
+    case MirOp::VCmpRegImm:
+        os << "vcmp v" << static_cast<int>(m.r0) << ", " << static_cast<int32_t>(m.imm32);
         break;
     case MirOp::JmpRel8:
         os << "jmp rel8 " << m.disp;
@@ -501,7 +551,14 @@ size_t mirSizeBytes(const Mir &m) {
     case MirOp::JmpRel32:
         return 5;
     case MirOp::JleRel32:
+    case MirOp::JlRel32:
+    case MirOp::JgRel32:
+    case MirOp::JgeRel32:
+    case MirOp::JeRel32:
+    case MirOp::JneRel32:
         return 6;
+    case MirOp::VCmpRegImm:
+        return 3 + 7; // mov rax,src + cmp rax,imm32
     case MirOp::JmpRel8:
         return 2;
     case MirOp::JleRel8:
@@ -540,6 +597,16 @@ size_t mirSizeBytes(const Mir &m) {
     case MirOp::VCmpSetE:
     case MirOp::VCmpSetNE:
         return (fitsDisp8(m.disp) ? 3 : 6) + 3 + 4;
+    case MirOp::VAddImm:
+    case MirOp::VSubImm:
+        return 3 + 7; // mov reg,reg + op reg,imm32
+    case MirOp::VCmpSetLImm:
+    case MirOp::VCmpSetLEImm:
+    case MirOp::VCmpSetGImm:
+    case MirOp::VCmpSetGEImm:
+    case MirOp::VCmpSetEImm:
+    case MirOp::VCmpSetNEImm:
+        return 3 + 7 + 3 + 4; // mov rax,src + cmp rax,imm32 + setcc + movzx
     case MirOp::VXmmLoadFromFrame:
     case MirOp::VXmmStoreToFrame:
         return fitsDisp8(m.disp) ? 4 : 7;

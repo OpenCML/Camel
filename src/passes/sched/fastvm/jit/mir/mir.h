@@ -74,6 +74,12 @@ enum class MirOp : uint8_t {
     JzRel32,
     JmpRel32,
     JleRel32,
+    JlRel32,
+    JgRel32,
+    JgeRel32,
+    JeRel32,
+    JneRel32,
+    VCmpRegImm, // cmp vreg(r0), imm32 — sets flags, no result vreg
     JmpRel8,
     JleRel8,
     Ret, // 无操作数，用于 TAIL 等
@@ -101,6 +107,14 @@ enum class MirOp : uint8_t {
     VCmpSetGE,
     VCmpSetE,
     VCmpSetNE,
+    VAddImm,      // r0 = r1 + imm32 (signed)
+    VSubImm,      // r0 = r1 - imm32 (signed)
+    VCmpSetLImm,  // r0 = (r1 < imm32) ? 1 : 0
+    VCmpSetLEImm, // r0 = (r1 <= imm32) ? 1 : 0
+    VCmpSetGImm,  // r0 = (r1 > imm32) ? 1 : 0
+    VCmpSetGEImm, // r0 = (r1 >= imm32) ? 1 : 0
+    VCmpSetEImm,  // r0 = (r1 == imm32) ? 1 : 0
+    VCmpSetNEImm, // r0 = (r1 != imm32) ? 1 : 0
     VXmmLoadFromFrame,
     VXmmStoreToFrame,
     VXmmLoadFromMemAt,

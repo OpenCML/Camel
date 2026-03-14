@@ -1,6 +1,6 @@
 # FastVM JIT 架构文档
 
-本文档描述 Camel FastVM 的 **JIT 编译 pipeline**：从字节码到 x86-64 机器码的完整流程，涵盖双入口函数布局、JIT 内部调用约定、Frame 池管理、frameless 栈分配优化，以及与解释器/trampoline 的协同工作机制。
+本文档描述 Camel FastVM 的 **JIT 编译 pipeline**：从字节码到 x86-64 机器码的完整流程，涵盖双入口函数布局、JIT 内部调用约定、Frame 池管理、frameless 栈分配优化、近期引入的 MIR 定向代码生成优化，以及与解释器/trampoline 的协同工作机制。
 
 ---
 
@@ -11,6 +11,7 @@
 - **热点加速**：对热点图或全量图做 JIT 编译，将字节码分派开销降至原生指令级别。
 - **双入口函数**：每个 JIT 编译的函数包含一个 C++ ABI 包装器和一个精简 JIT 内部入口，JIT-to-JIT 调用可完全绕过 ABI 转换开销。
 - **frameless 自递归优化**：对纯自递归函数（如 fib with inline），完全消除 Frame 池操作，改用原生栈分配。
+- **定向代码生成优化**：优先针对热点模式做局部但高收益的改写，例如静态常量内联、立即数 MIR、比较-分支融合、局部 peephole。
 - **分层策略**：支持 Disabled（仅解释）、OnDemand（热点触发）、Always（全量预编译）。
 
 ### 1.2 目录结构
@@ -106,8 +107,10 @@ struct CompilationUnit {
 
 `X64Backend::compileBytecode` 遍历字节码，调用 `MirBuilder` 生成线性 MIR：
 
-- **算术/比较**（LADD, LSUB, DLT 等）：生成 `VLoadFromFrame → VAdd/VSub/VCmpSetLE... → VStoreToFrame`，操作数为递增的 VReg ID。
-- **分支**（BRCH）：生成 `VLoad + VTest + VCmovnz + JzRel32 + JmpRel32`，仅支持简单 if-else（`withCnt() == 0` 的 BRCH 才走 JIT，否则 bail out）。
+- **算术/比较**（LADD, LSUB, LLE..LNE 等）：先尝试将静态区操作数在编译期折叠为立即数，优先生成 `VLoadImm32/VLoadImm64`、`VAddImm/VSubImm/VCmpSet*Imm`；无法立即数化时再退回普通 `VAdd/VSub/VCmpSet*`。
+- **分支**（BRCH）：支持两种路径。
+  - 普通路径：`VLoad + VTest + VCmovnz + JzRel32 + JmpRel32`
+  - 融合路径：若 BRCH 的条件恰好来自紧邻比较结果，则比较阶段只发射 `VCmpRegImm` 设置 flags，BRCH 直接发射对应的 `JccRel32`，跳过布尔物化与 branch-index 物化
 - **函数调用**（FUNC）：根据 `isSameGraph` 生成 `NativeJitFuncCall`（含 frameless 或 Frame-based 路径参数）或退回 trampoline 调用。
 - **返回**（RETN）：`VLoadFromFrame → VRet`（将值置于 rax 后 `ret`）。
 
@@ -116,7 +119,11 @@ struct CompilationUnit {
 `runMirOptimizationPasses(mirBuf)` 执行以下优化：
 
 - **Win64 冗余 mov 删除**：在 prologue 被移到 wrapper 后，检测并删除 `mov rdi,rcx; mov rsi,rdx; mov rcx,rdi; mov rdx,rsi` 这类冗余来回复制。
-- **预留接口**：后续可扩展 CSE、DCE、拷贝传播等（需先引入 CFG）。
+- **局部 peephole**：在不构建 CFG 的前提下做线性窗口优化。
+  - `VStoreToFrame(d, vA)` 后遇到安全的 `VLoadFromFrame(vB, d)`，替换为 `VCopy(vB, vA)`
+  - 连续两次写同一 frame slot，若中间无读取，则删除前一次死 store
+  - 在 jump target、call、native call、显式跳转等 barrier 处清空跟踪状态，避免跨控制流误优化
+- **当前边界**：仍是线性 MIR，无 CFG/SSA，因此优化只做局部窗口内的保守改写，不做跨基本块 CSE/DCE。
 
 #### 阶段 3：虚拟寄存器分配
 
@@ -137,8 +144,36 @@ struct CompilationUnit {
 
 - 根据 `VRegAllocation` 将 VReg 映射到物理寄存器。
 - 处理 VReg 溢出：检测 `SpillState` 链（VCopy/VTest/VCmovnz 的溢出路径）。
+- 对 `VAdd/VSub/VCmpSet*` 优先走 reg-reg / reg-imm 直接编码，尽量避免 `rax` 中转。
+- 对比较-分支融合后的 `VCmpRegImm + JccRel32` 直接按 flags 编码，不再插入 `setcc/movzx/test/cmov`。
 - 编码 `NativeJitFuncCall`：根据 `frameless` 和 `isSameGraph` 标志选择不同路径（详见第 5 节）。
 - 记录跳转修补信息（`JumpPatch`），最后统一 patch rel32。
+
+### 2.4 近期引入的定向优化
+
+这一轮优化并未引入 CFG，而是围绕 fib 这类热点递归路径做了 5 类局部改进：
+
+1. **编译期静态常量内联**
+   - `loadOperandToVReg()` 在静态操作数路径下直接读取 `staticArea` 的 `slot_t`
+   - 生成 `VLoadImm32/VLoadImm64`，避免 `mov reg, imm64(addr); mov reg, [reg]`
+
+2. **立即数 MIR 指令**
+   - 新增 `VAddImm`、`VSubImm`、`VCmpSetL/LE/G/GE/E/NEImm`
+   - 对小整数常量优先生成 `add/sub/cmp reg, imm32`
+
+3. **比较-分支融合**
+   - 新增 `VCmpRegImm`
+   - 当比较结果仅被后继 `BRCH` 消费时，不再物化布尔值，而是直接发射 `cmp + jcc`
+
+4. **reg-to-reg 直接编码**
+   - 新增 `addRegReg`、`subRegReg`、`cmpRegReg`
+   - `VAdd/VSub/VCmpSet*` 不再固定走 `mov rax, left; op rax, right; mov dst, rax`
+
+5. **局部 peephole**
+   - 消除安全范围内的 store-then-reload
+   - 消除连续写同槽位的死 store
+
+这些优化的共同特点是：不改变整体 pipeline 结构，但显著改善热点路径的 uop 数、寄存器依赖链与内存往返。
 
 ---
 
@@ -403,7 +438,30 @@ FramePool 是一个基于连续内存区域的 LIFO 栈式分配器：
 
 ### 6.3 静态区访问
 
-静态区数据（data_idx < 0）存储在 `FrameMeta::staticArea` 中，JIT 编译期通过 `staticSlotAddr(idx)` 计算绝对地址，生成 `movRaxFromMemAt(addr)` 从绝对内存地址加载。
+静态区数据（`data_idx < 0`）存储在 `FrameMeta::staticArea` 中。当前实现优先走**编译期内联**：
+
+- JIT 构建 MIR 时直接读取 `staticArea[idx]`
+- 若值可直接视为数值常量，则生成 `VLoadImm32/VLoadImm64`
+- 若该静态值进一步参与整数算术/比较，后续还能继续折叠为 `VAddImm/VSubImm/VCmpSet*Imm`
+
+这使得热点路径中的：
+
+```asm
+mov rcx, imm64(addr)
+mov rcx, [rcx]
+cmp rax, rcx
+```
+
+可直接降为：
+
+```asm
+cmp rax, 1
+```
+
+**边界说明**：
+
+- 当前这套内联主要服务于数值型热点路径，特别是 inline 后的 fib。
+- 若后续要把该策略推广到更复杂的 boxed/reference 语义，仍需要更细的类型与别名约束，避免把“稳定地址上的对象引用”误当成纯数值立即数。
 
 ---
 
@@ -519,11 +577,18 @@ slot_t directSelfFuncInvoke(slot_t* callerSlots, void* ctx, const Bytecode* bc) 
 
 | 字节码 | MIR 序列 | x64 编码 |
 |--------|---------|---------|
-| LADD | VLoad × 2 → VAdd → VStore | `mov rax, lr; add rax, rr; mov dr, rax` |
-| LSUB | VLoad × 2 → VSub → VStore | `mov rax, lr; sub rax, rr` |
+| LADD | `VLoad/VLoadImm` → `VAdd` or `VAddImm` → `VStore` | 优先 `add dst, src` / `add reg, imm32` |
+| LSUB | `VLoad/VLoadImm` → `VSub` or `VSubImm` → `VStore` | 优先 `sub dst, src` / `sub reg, imm32` |
 | LMUL | VLoad × 2 → VMul → VStore | `mov rax, lr; imul rax, rr` |
 | LDIV | VLoad × 2 → VIdiv → VStore | `mov rax, lr; cqo; idiv rr` |
-| LLE..LGE | VLoad × 2 → VCmpSet* → VStore | `mov rax, lr; cmp rax, rr; setle al; movzx rax, al` |
+| LLE..LNE | `VLoad/VLoadImm` → `VCmpSet*` or `VCmpSet*Imm` → `VStore` | 普通路径：`cmp left, right; setcc al; movzx rax, al` |
+
+**reg-to-reg 编码规则**：
+
+- 若 `dst == left`：直接对目标寄存器原地运算
+- 若 `dst == right` 且操作满足交换律（如 add）：交换操作数，仍可原地运算
+- 若 `dst != left/right`：`mov dst, left; op dst, right`
+- 对 `cmp`：不需要结果目标寄存器，直接 `cmp left, right` 或 `cmp left, imm32`
 
 ### 10.2 浮点运算（64 位双精度）
 
@@ -540,14 +605,33 @@ slot_t directSelfFuncInvoke(slot_t* callerSlots, void* ctx, const Bytecode* bc) 
 
 | 字节码 | MIR | 说明 |
 |--------|-----|------|
-| BRCH | VLoad + VTest + VCmovnz + JzRel32 + JmpRel32 | 仅 `withCnt()==0` 的 BRCH 支持 JIT |
-| JOIN | VCopy + VTest + VCmovnz + VStore | 两路合并，选分支值写 result 槽 |
+| BRCH | 普通路径：`VLoad + VTest + VCmovnz + JzRel32 + JmpRel32`；融合路径：`VCmpRegImm + JccRel32` | 仅 `withCnt()==0` 的 BRCH 支持 JIT |
+| JOIN | `VCopy + VTest + VCmovnz + VStore` | 当 BRCH 走融合路径时，branch-index 物化被压缩，但 JOIN 的值合并语义仍保持一致 |
 | JUMP | JmpRel32 | 无条件跳转，rel32 通过 JumpPatch 修补 |
 | RETN | VLoad → VRet | `mov rax, vr; ret` |
 | FUNC | NativeJitFuncCall | 详见第 5 节 |
 | TAIL | 跨图时走 trampoline + jmp | 释放当前帧后跳转到目标 |
 | OPER | trampolineOper 调用 | push rdi; Win64 ABI call; pop rdi |
 | CAST | trampolineCast 调用 | 同 OPER |
+
+**比较-分支融合示例**：
+
+原始逻辑目标是：
+
+```c
+cond = (n <= 1);
+if (cond) ...
+```
+
+当前热点路径会尽量压缩为：
+
+```asm
+mov rax, [rdi+8]
+cmp rax, 1
+jg  .recurse
+```
+
+而不是先 `setcc`、再 store、再 reload、再 `test/cmov/jz`。
 
 **不支持的 opcode**（ACCS, FILL, CALL, SCHD 等）会导致 `compileBytecode` 返回 `false`，该图不进入 JIT 缓存。
 
@@ -563,8 +647,18 @@ slot_t directSelfFuncInvoke(slot_t* callerSlots, void* ctx, const Bytecode* bc) 
 | JIT (trampoline) | ~34ms | ~12.6 cycle | 消除字节码分派 |
 | JIT + 双入口 + rbx/r12 缓存 | ~7ms | ~2.6 cycle | 消除 Win64 ABI 转换、图比较优化 |
 | JIT + frameless 栈分配 | **~4.4ms** | **~1.6 cycle** | **彻底消除 Frame 池操作** |
+| JIT + F-J 定向代码生成优化 | **~3.6-4.0ms** | 更低 | 常量内联、立即数编码、比较-分支融合、peephole |
 
-### 11.2 Frameless 优化的适用范围
+### 11.2 F-J 定向优化的性能画像
+
+对 fib 这类“纯数值 + 自递归 + inline 后无外部函数/算子依赖”的函数，近期收益主要来自：
+
+- **减少控制流绕行**：`cmp + jcc` 取代布尔物化
+- **减少常量内存访问**：静态区常量直接变成 immediates
+- **减少寄存器与内存往返**：`cmp/add/sub` 尽量直接作用于目标寄存器
+- **减少局部冗余 load/store**：peephole 把短距离 reload 改成 `VCopy`
+
+### 11.3 Frameless 优化的适用范围
 
 | 场景 | frameless | 原因 |
 |------|-----------|------|
@@ -585,6 +679,8 @@ slot_t directSelfFuncInvoke(slot_t* callerSlots, void* ctx, const Bytecode* bc) 
 | 最大参数数 8 | `NativeJitCallParams::argSrcDisps[8]` | FUNC 字节码参数超过 8 个时，NativeJitFuncCall 无法处理 |
 | Frameless 最多 7 个参数 | frameless 编码路径 | 使用 7 个临时寄存器（rax,rcx,rdx,r8-r11）暂存参数 |
 | 不支持的 opcode 导致 bail out | `compileBytecode` default case | ACCS, FILL, CALL, SCHD 等不支持 |
+| peephole 不跨控制流做传播 | `mir_optimize.cpp` | jump target、jump/call/native-call/push-pop rdi 都视为 barrier |
+| 当前 MIR 仍为线性结构 | 整个 JIT 中端 | 无 CFG/SSA，故优化以局部模式匹配为主 |
 
 ### 12.2 运行时约束
 
@@ -594,6 +690,7 @@ slot_t directSelfFuncInvoke(slot_t* callerSlots, void* ctx, const Bytecode* bc) 
 | rbx 必须始终保持有效 | 所有 Frame-based 操作 | 任何使用 rbx 作为 scratch 的代码必须 push/pop 保护 |
 | 栈溢出风险 | frameless 深度递归 | fib(30) 约 30 层 × 80 字节 ≈ 2.4KB（安全），极深递归需注意 |
 | `fastop[1] == 0` 语义 | 跨图 JIT 状态检查 | 利用"第一条字节码的 targetPC 不会是 0"的不变量作为 JIT 编译标记 |
+| 静态常量内联以数值热点为主 | 编译期常量折叠 | 更复杂的引用/对象语义仍需后续更强类型约束 |
 
 ### 12.3 对齐约束
 

@@ -42,6 +42,15 @@ static bool isVRegOp(MirOp op) {
     case MirOp::VMovFromRax:
     case MirOp::VMovToRax:
     case MirOp::VRet:
+    case MirOp::VAddImm:
+    case MirOp::VSubImm:
+    case MirOp::VCmpSetLImm:
+    case MirOp::VCmpSetLEImm:
+    case MirOp::VCmpSetGImm:
+    case MirOp::VCmpSetGEImm:
+    case MirOp::VCmpSetEImm:
+    case MirOp::VCmpSetNEImm:
+    case MirOp::VCmpRegImm:
     case MirOp::VAdd:
     case MirOp::VSub:
     case MirOp::VMul:
@@ -146,11 +155,20 @@ void collectVRegDefUse(
             useVReg(i, r0);
             break;
         case MirOp::VCopy:
+        case MirOp::VAddImm:
+        case MirOp::VSubImm:
+        case MirOp::VCmpSetLImm:
+        case MirOp::VCmpSetLEImm:
+        case MirOp::VCmpSetGImm:
+        case MirOp::VCmpSetGEImm:
+        case MirOp::VCmpSetEImm:
+        case MirOp::VCmpSetNEImm:
             defVReg(i, r0);
             useVReg(i, r1);
             break;
         case MirOp::VTest:
         case MirOp::VRet:
+        case MirOp::VCmpRegImm:
             useVReg(i, r0);
             break;
         case MirOp::VCmove:

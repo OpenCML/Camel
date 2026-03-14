@@ -246,13 +246,14 @@ void encodeMirBuffer(
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0) {
-                if (dr != static_cast<int>(kRegRax))
-                    enc.movRaxFromReg(static_cast<uint8_t>(lr));
-                else
-                    enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(lr));
-                enc.addRaxFromReg(static_cast<uint8_t>(rr));
-                if (dr != static_cast<int>(kRegRax))
-                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+                if (dr == lr) {
+                    enc.addRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(rr));
+                } else if (dr == rr) {
+                    enc.addRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(lr));
+                } else {
+                    enc.emitMovRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(lr));
+                    enc.addRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(rr));
+                }
             }
             break;
         }
@@ -261,13 +262,15 @@ void encodeMirBuffer(
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0) {
-                if (lr != static_cast<int>(kRegRax))
-                    enc.movRaxFromReg(static_cast<uint8_t>(lr));
-                else
-                    enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(lr));
-                enc.subRaxFromReg(static_cast<uint8_t>(rr));
-                if (dr != static_cast<int>(kRegRax))
-                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+                if (dr == lr) {
+                    enc.subRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(rr));
+                } else if (dr != rr) {
+                    enc.emitMovRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(lr));
+                    enc.subRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(rr));
+                } else {
+                    enc.negReg(static_cast<uint8_t>(dr));
+                    enc.addRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(lr));
+                }
             }
             break;
         }
@@ -311,11 +314,7 @@ void encodeMirBuffer(
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0) {
-                if (lr != static_cast<int>(kRegRax))
-                    enc.movRaxFromReg(static_cast<uint8_t>(lr));
-                else
-                    enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(lr));
-                enc.cmpRaxWithReg(static_cast<uint8_t>(rr));
+                enc.cmpRegReg(static_cast<uint8_t>(lr), static_cast<uint8_t>(rr));
                 switch (m.op) {
                 case MirOp::VCmpSetL:
                     enc.setlAlMovzxRax();
@@ -333,6 +332,59 @@ void encodeMirBuffer(
                     enc.setzAlMovzxRax();
                     break;
                 case MirOp::VCmpSetNE:
+                    enc.setnzAlMovzxRax();
+                    break;
+                default:
+                    break;
+                }
+                if (dr != static_cast<int>(kRegRax))
+                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
+        case MirOp::VAddImm:
+        case MirOp::VSubImm: {
+            int dr      = pregFor(static_cast<VRegId>(m.r0));
+            int sr      = pregFor(static_cast<VRegId>(m.r1));
+            int32_t imm = static_cast<int32_t>(m.imm32);
+            if (dr >= 0 && sr >= 0) {
+                if (dr != sr)
+                    enc.emitMovRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(sr));
+                if (m.op == MirOp::VAddImm)
+                    enc.addRegImm32(static_cast<uint8_t>(dr), imm);
+                else
+                    enc.subRegImm32(static_cast<uint8_t>(dr), imm);
+            }
+            break;
+        }
+        case MirOp::VCmpSetLImm:
+        case MirOp::VCmpSetLEImm:
+        case MirOp::VCmpSetGImm:
+        case MirOp::VCmpSetGEImm:
+        case MirOp::VCmpSetEImm:
+        case MirOp::VCmpSetNEImm: {
+            int dr      = pregFor(static_cast<VRegId>(m.r0));
+            int sr      = pregFor(static_cast<VRegId>(m.r1));
+            int32_t imm = static_cast<int32_t>(m.imm32);
+            if (dr >= 0 && sr >= 0) {
+                enc.cmpRegImm32(static_cast<uint8_t>(sr), imm);
+                switch (m.op) {
+                case MirOp::VCmpSetLImm:
+                    enc.setlAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetLEImm:
+                    enc.setleAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetGImm:
+                    enc.setgAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetGEImm:
+                    enc.setgeAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetEImm:
+                    enc.setzAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetNEImm:
                     enc.setnzAlMovzxRax();
                     break;
                 default:
@@ -365,15 +417,47 @@ void encodeMirBuffer(
             patches.back().jumpEndPos   = enc.here();
             break;
         }
-        case MirOp::JleRel32: {
+        case MirOp::JleRel32:
+        case MirOp::JlRel32:
+        case MirOp::JgRel32:
+        case MirOp::JgeRel32:
+        case MirOp::JeRel32:
+        case MirOp::JneRel32: {
             size_t ti = buf.size();
             auto it   = pcToMirIndex.find(static_cast<size_t>(m.imm32));
             if (it != pcToMirIndex.end())
                 ti = it->second;
             patches.push_back({enc.here(), ti, 6, 0, 0});
-            enc.jleRel32(0);
+            switch (m.op) {
+            case MirOp::JleRel32:
+                enc.jleRel32(0);
+                break;
+            case MirOp::JlRel32:
+                enc.jlRel32(0);
+                break;
+            case MirOp::JgRel32:
+                enc.jgRel32(0);
+                break;
+            case MirOp::JgeRel32:
+                enc.jgeRel32(0);
+                break;
+            case MirOp::JeRel32:
+                enc.jeRel32(0);
+                break;
+            case MirOp::JneRel32:
+                enc.jneRel32(0);
+                break;
+            default:
+                break;
+            }
             patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
             patches.back().jumpEndPos   = enc.here();
+            break;
+        }
+        case MirOp::VCmpRegImm: {
+            int sr = pregFor(static_cast<VRegId>(m.r0));
+            if (sr >= 0)
+                enc.cmpRegImm32(static_cast<uint8_t>(sr), static_cast<int32_t>(m.imm32));
             break;
         }
         case MirOp::JmpRel8:
