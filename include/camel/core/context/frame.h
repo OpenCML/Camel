@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -339,7 +339,7 @@ class FramePool {
 
         // 尝试复用
         Frame *lastFrame = reinterpret_cast<Frame *>(top_);
-        if (lastFrame->graph_ == graph) {
+        if (LIKELY(lastFrame->graph_ == graph)) {
             EXEC_WHEN_DEBUG({
                 GetDefaultLogger()
                     .in("FramePool")
@@ -445,6 +445,8 @@ class FramePool {
                     mm::formatAddress(top_, true));
         });
     }
+
+    void *topAddr() { return &top_; }
 
     inline bool isActive(Frame *frame, GIR::Graph *graph = nullptr) const {
         if (!frame)

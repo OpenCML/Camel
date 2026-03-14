@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -261,12 +261,12 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     return nullptr;
 }
 
-GIR::graph_ptr_t applyPasses(
+PassApplyResult applyPassesDetailed(
     GIR::graph_ptr_t graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
     std::ostream &os) {
     for (const auto &p : passes) {
         if (graph == nullptr || graph == Graph::null()) {
-            return graph;
+            return {Graph::null(), PassApplyStatus::Consumed};
         }
         ASSERT(
             !graph->dirty(),
@@ -278,13 +278,21 @@ GIR::graph_ptr_t applyPasses(
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
-                return nullptr;
+                return {nullptr, PassApplyStatus::Failed};
             }
+            if (graph == Graph::null())
+                return {Graph::null(), PassApplyStatus::Consumed};
         } else {
             throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(p);
         }
     }
 
     EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GIR-Z", graph ? graph.get() : nullptr); });
-    return graph;
+    return {graph, PassApplyStatus::Transformed};
+}
+
+GIR::graph_ptr_t applyPasses(
+    GIR::graph_ptr_t graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
+    std::ostream &os) {
+    return applyPassesDetailed(std::move(graph), passes, ctx, os).graph;
 }

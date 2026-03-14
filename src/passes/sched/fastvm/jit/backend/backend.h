@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -63,6 +63,8 @@ struct CompilationUnit {
     void *trampolineTail                 = nullptr; // TAIL trampoline
     void *trampolineOper                 = nullptr; // OPER trampoline
     void *trampolineCast                 = nullptr; // CAST trampoline
+    void *poolTopAddr                    = nullptr; // &FramePool::top_ for inline frame mgmt
+    void *directSelfFuncInvokeAddr       = nullptr; // slow path fallback
     const CompilationDebugOptions *debug = nullptr;
 };
 
@@ -75,10 +77,29 @@ struct RelocInfo {
 struct CompiledCode {
     std::vector<uint8_t> code;
     size_t entryOffset;
+    size_t jitEntryOffset = 0; // offset to JIT-internal entry (skips C++ ABI wrapper)
     std::vector<RelocInfo> relocs;
 };
 
 using JitEntryFn = slot_t (*)(slot_t *slots, void *ctx);
+
+// Extra index 1 on GIR::Graph — O(1) JIT entry lookup
+struct JitGraphInfo {
+    JitEntryFn fn = nullptr;
+};
+inline JitEntryFn getGraphJitFn(GIR::Graph *g) {
+    auto *info = g->getExtra<JitGraphInfo, 1>();
+    return info ? info->fn : nullptr;
+}
+inline void setGraphJitFn(GIR::Graph *g, JitEntryFn fn) {
+    auto *info = g->getExtra<JitGraphInfo, 1>();
+    if (!info) {
+        info = new JitGraphInfo{fn};
+        g->setExtra<JitGraphInfo, 1>(info);
+    } else {
+        info->fn = fn;
+    }
+}
 
 class IJitBackend {
   public:

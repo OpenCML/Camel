@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -680,7 +680,9 @@ GIR::graph_ptr_t NodeVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     }
 
     Frame *rootFrame = framePool_.acquire(graph.get());
-    call(graph.get(), rootFrame); // call 内部负责释放 rootFrame（及可能产生的 curr/twin）
+    slot_t result =
+        call(graph.get(), rootFrame); // call 内部负责释放 rootFrame（及可能产生的 curr/twin）
+    context_->captureProcessExitCode(graph.get(), result);
     return Graph::null();
 }
 

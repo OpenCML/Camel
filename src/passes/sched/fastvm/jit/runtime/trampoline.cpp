@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
@@ -249,21 +249,9 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
         return result;
     }
 
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc path: JIT->interpreter"));
     GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("JIT.Trampoline")
-            .info(
-                "trampolineFunc JIT->interpreter target='{}' targetPc={}",
-                targetGraph->name(),
-                targetPc));
-
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc before acquireFrameForCall"));
-    Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
-    Frame *newFrame    = vm->acquireFrameForCall(targetGraph);
+    Frame *callerFrame      = reinterpret_cast<Frame *>(callerSlots[0]);
+    Frame *newFrame         = vm->acquireFrameForCall(targetGraph);
     for (size_t i = 0; i < argsCnt; ++i) {
         newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
     }
@@ -271,15 +259,8 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
     EXEC_WHEN_DEBUG(
         GetDefaultLogger()
             .in("JIT.Trampoline")
-            .info("trampolineFunc before vm->call targetPc={}", targetPc));
-    auto result = vm->callBorrowed(targetPc, newFrame);
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("JIT.Trampoline")
-            .info("trampolineFunc after vm->call result={}", result.result));
-    vm->releaseFrameForCall(result.rootFrame, targetGraph);
-    EXEC_WHEN_DEBUG(GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc EXIT"));
-    return result.result;
+            .info("trampolineFunc target='{}' targetPc={}", targetGraph->name(), targetPc));
+    return vm->invokeCallOrJit(targetPc, targetGraph, newFrame, ctx, count);
 }
 
 slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
@@ -297,7 +278,6 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     if (targetPc == 0) {
         Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
         GIR::Graph *g      = getFuncExtraGraph(&bc);
-        size_t jitTargetPc = getFuncExtraTargetPc(&bc);
         TailArgStorage args(argsCnt);
         copyOperandsToBuffer(args.data(), callerFrame, bc, argsCnt);
         vm->releaseFrameForTail(callerFrame);
@@ -306,8 +286,14 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger()
                 .in("JIT.Trampoline")
-                .debug("trampolineTail: JIT->JIT target='{}' pc={}", g->name(), jitTargetPc));
-        return vm->call(jitTargetPc, newFrame);
+                .debug(
+                    "trampolineTail: JIT->interpreter(target already compiled) target='{}'",
+                    g->name()));
+        // For non-self tail calls, prefer the interpreter entry even if the
+        // callee has compiled code. This keeps mutual-tail recursion semantics
+        // stable across graph boundaries while self-tail recursion still uses
+        // the dedicated zero-overhead fast path in the x64 backend.
+        return vm->call(vm->graphEntryPc(g), newFrame);
     }
 
     GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
@@ -365,6 +351,38 @@ slot_t finishDirectJitCall(slot_t result, slot_t *calleeSlots, void *ctx, GIR::G
     auto *vm    = jc->vm;
     auto *frame = reinterpret_cast<Frame *>(calleeSlots[0]);
     vm->releaseFrameForCall(frame, owner);
+    return result;
+}
+
+slot_t finishDirectJitCallFast(slot_t *calleeSlots, void *ctx, slot_t result) {
+    auto *jc    = static_cast<JitContext *>(ctx);
+    auto *vm    = jc->vm;
+    auto *frame = reinterpret_cast<Frame *>(calleeSlots[0]);
+    vm->releaseFrameForCall(frame);
+    return result;
+}
+
+slot_t directSelfFuncInvoke(slot_t *callerSlots, void *ctx, const Bytecode *bc) {
+    auto *jc           = static_cast<JitContext *>(ctx);
+    auto *vm           = jc->vm;
+    GIR::Graph *graph  = getFuncExtraGraph(bc);
+    JitEntryFn fn      = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
+    size_t argsCnt     = bc->normCnt();
+    Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
+    Frame *newFrame    = vm->acquireFrameForCall(graph);
+    for (size_t i = 0; i < argsCnt; ++i) {
+        newFrame->set(i + 1, callerFrame->get<slot_t>(bc->operands()[i]));
+    }
+    slot_t *slots = newFrame->slotBase();
+    slots[0]      = reinterpret_cast<slot_t>(newFrame);
+    slot_t result;
+    try {
+        result = fn(slots, ctx);
+    } catch (...) {
+        vm->releaseFrameUnchecked(newFrame);
+        throw;
+    }
+    vm->releaseFrameUnchecked(newFrame);
     return result;
 }
 

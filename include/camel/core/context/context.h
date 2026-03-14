@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/slot.h"
 #include "camel/core/source/manager.h"
 
 #include <fstream>
@@ -74,6 +75,7 @@ class Context : public std::enable_shared_from_this<Context> {
     error::runtime_error_reporter_ptr_t runtimeErrorReporter_;
     camel::source::source_context_ptr_t sourceContext_;
     std::unordered_map<std::string, void *> loadedDllHandles_; // .cmo 路径 -> 句柄，保证 DLL 不卸载
+    std::optional<int> processExitCode_;
     /** 最近一次“找到 .cmo 但加载失败”的原因，供 ModuleNotFound 报错详情使用。 */
     mutable std::string lastCmoLoadError_;
 
@@ -125,6 +127,11 @@ class Context : public std::enable_shared_from_this<Context> {
 
     void registerExecutorFactory(std::string name, std::function<std::shared_ptr<Executor>()> fact);
     void eval(std::string uri, GIR::Node *self, Frame &frame);
+
+    void clearProcessExitCode() { processExitCode_.reset(); }
+    void captureProcessExitCode(GIR::Graph *graph, slot_t result);
+    std::optional<int> processExitCode() const { return processExitCode_; }
+    int processExitCodeOr(int fallback = 0) const { return processExitCode_.value_or(fallback); }
 
     /** 由 loadCmoModule 调用，保存已加载 .cmo 的句柄以防被卸载。 */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -74,6 +74,12 @@ enum class MirOp : uint8_t {
     JzRel32,
     JmpRel32,
     JleRel32,
+    JlRel32,
+    JgRel32,
+    JgeRel32,
+    JeRel32,
+    JneRel32,
+    VCmpRegImm, // cmp vreg(r0), imm32 — sets flags, no result vreg
     JmpRel8,
     JleRel8,
     Ret, // 无操作数，用于 TAIL 等
@@ -101,6 +107,14 @@ enum class MirOp : uint8_t {
     VCmpSetGE,
     VCmpSetE,
     VCmpSetNE,
+    VAddImm,      // r0 = r1 + imm32 (signed)
+    VSubImm,      // r0 = r1 - imm32 (signed)
+    VCmpSetLImm,  // r0 = (r1 < imm32) ? 1 : 0
+    VCmpSetLEImm, // r0 = (r1 <= imm32) ? 1 : 0
+    VCmpSetGImm,  // r0 = (r1 > imm32) ? 1 : 0
+    VCmpSetGEImm, // r0 = (r1 >= imm32) ? 1 : 0
+    VCmpSetEImm,  // r0 = (r1 == imm32) ? 1 : 0
+    VCmpSetNEImm, // r0 = (r1 != imm32) ? 1 : 0
     VXmmLoadFromFrame,
     VXmmStoreToFrame,
     VXmmLoadFromMemAt,
@@ -137,7 +151,8 @@ enum class MirOp : uint8_t {
     VXmm32CmpSetA,
     VXmm32CmpSetAE,
     VXmm32CmpSetNZ,
-    DebugTrace, // 调试用：调用 jitDebugTrace(ctx)，打印 GPR + pc；仅 Debug 构建插入
+    DebugTrace,        // 调试用：调用 jitDebugTrace(ctx)，打印 GPR + pc；仅 Debug 构建插入
+    NativeJitFuncCall, // FUNC 内联帧管理 + call rel32/rax；imm64 = NativeJitCallParams*
     Nop,
 };
 
@@ -153,6 +168,24 @@ struct Mir {
 
     bool hasPc() const { return pc != kMirInvalidPc; }
     void clearPc() { pc = kMirInvalidPc; }
+};
+
+struct NativeJitCallParams {
+    uint64_t poolTopAddr;     // &FramePool::top_
+    uint64_t targetGraphAddr; // 目标 GIR::Graph*（帧复用检查）
+    uint64_t slowPathFnAddr;  // 同图: &directSelfFuncInvoke; 跨图: trampolineFunc
+    uint64_t slowPathBcAddr;  // &bc（同图 slow path 用）
+    uint32_t slowPathPc;      // bytecode pc（跨图 slow path 用）
+    int32_t resultDisp;       // [rdi + resultDisp]
+    uint8_t argsCnt;
+    int32_t argSrcDisps[8];
+    uint8_t argVRegs[8]; // VReg IDs for pre-loaded args (frameless path); 0xFF = not pre-loaded
+    uint8_t resultVReg = 0xFF; // VReg for call result (frameless); 0xFF = store inside call
+    bool isSameGraph;          // true = call rel32, false = 从 extra2 加载 fn 后 call rax
+    uint64_t extra2Addr;       // &bc->extra2()（跨图时运行时加载 fn 指针）
+    uint64_t fastop1Addr;      // &bc->fastop[1]（跨图运行时检查：0 = 已编译）
+    bool frameless;            // true = 栈分配（无 Frame 池），适用于纯自递归同图调用
+    uint32_t calleeSlotBytes;  // frameless 时被调方栈帧大小（16 字节对齐）
 };
 
 using MirBuffer = std::vector<Mir>;

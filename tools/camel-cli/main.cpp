@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 12, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -150,6 +150,7 @@ int main(int argc, char *argv[]) {
     (void)mm::metaSpace();
     (void)mm::permSpace();
 
+    int lastRunExitCode = 0;
     while (Run::repeat--) {
         try {
             parser->parse(*input);
@@ -217,6 +218,7 @@ int main(int argc, char *argv[]) {
             }
 
             if (selectedCommand == Command::Run) {
+                ctx->clearProcessExitCode();
                 EXEC_WHEN_DEBUG({
                     if (Run::profile) {
                         // Initialize and start advanced tracing using profiler configuration
@@ -234,20 +236,33 @@ int main(int argc, char *argv[]) {
 
                 try {
                     try {
-                        auto graph = ctx->rootGraph();
-                        graph      = applyPasses(graph, Run::resolvedPassList, ctx, os);
-                        if (graph == nullptr) {
+                        auto graph  = ctx->rootGraph();
+                        auto result = applyPassesDetailed(graph, Run::resolvedPassList, ctx, os);
+                        graph       = result.graph;
+                        if (result.failed()) {
                             const auto &diags = ctx->runtimeDiagSink();
-                            if (diags->hasErrors())
+                            if (diags->hasErrors()) {
                                 diags->dump(os, useJsonFormat);
+                                return 1;
+                            }
+                            os << "[camel] execution failed without diagnostics after resolved "
+                                  "passes."
+                               << endl;
                             return 1;
                         }
-                        if (graph != GIR::Graph::null()) {
-                            graph = applyPasses(graph, Run::fallbackPasses, ctx, os);
-                            if (graph == nullptr) {
+                        if (!result.consumed()) {
+                            auto fallbackResult =
+                                applyPassesDetailed(graph, Run::fallbackPasses, ctx, os);
+                            graph = fallbackResult.graph;
+                            if (fallbackResult.failed()) {
                                 const auto &diags = ctx->runtimeDiagSink();
-                                if (diags->hasErrors())
+                                if (diags->hasErrors()) {
                                     diags->dump(os, useJsonFormat);
+                                    return 1;
+                                }
+                                os << "[camel] execution failed without diagnostics after fallback "
+                                      "passes."
+                                   << endl;
                                 return 1;
                             }
                         }
@@ -272,6 +287,8 @@ int main(int argc, char *argv[]) {
                         profiler::generate_advanced_report();
                     }
                 });
+
+                lastRunExitCode = ctx->processExitCodeOr(0);
             }
 
         } catch (DiagnosticsLimitExceededBaseException &e) {
@@ -293,5 +310,5 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    return 0;
+    return selectedCommand == Command::Run ? lastRunExitCode : 0;
 }

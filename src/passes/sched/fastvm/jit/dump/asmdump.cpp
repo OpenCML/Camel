@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 07, 2026
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -65,16 +65,19 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .asmOut           = &os,
             .enableDebugTrace = true,
         };
+        static uint64_t dummyPoolTop = 0;
         CompilationUnit unit{
-            .graph          = g,
-            .frameMeta      = meta,
-            .bytecodes      = bcSpan,
-            .entryPc        = entryPc,
-            .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
-            .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
-            .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
-            .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
-            .debug          = &debugOptions,
+            .graph                    = g,
+            .frameMeta                = meta,
+            .bytecodes                = bcSpan,
+            .entryPc                  = entryPc,
+            .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
+            .trampolineTail           = reinterpret_cast<void *>(&trampolineTail),
+            .trampolineOper           = reinterpret_cast<void *>(&trampolineOper),
+            .trampolineCast           = reinterpret_cast<void *>(&trampolineCast),
+            .poolTopAddr              = &dummyPoolTop,
+            .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
+            .debug                    = &debugOptions,
         };
 
         os << g->mangledName() << ":\n";

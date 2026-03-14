@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,14 +30,9 @@ class MirBuilder {
     // 下一条 push 的 MIR 将带上此 pc（用于 pcToOffset 与 debug）
     void setNextPc(uint32_t pc) { nextPc_ = pc; }
 
-    void emitPrologueWin64() {
-        push(MirOp::PushRdi, 0, 0);
-        push(MirOp::PushRsi, 0, 0);
-        push(MirOp::PushRbx, 0, 0);
-        push(MirOp::SubRsp8, 0, 0);
-        push(MirOp::MovRegReg, kRegRdi, kRegRcx);
-        push(MirOp::MovRegReg, kRegRsi, kRegRdx);
-    }
+    // C++ ABI wrapper is now generated as raw bytes; MIR body uses JIT internal convention.
+    // Kept as no-op for backward compatibility with code that still calls it.
+    void emitPrologueWin64() {}
 
     void emitMovRegReg(uint8_t dst, uint8_t src) { push(MirOp::MovRegReg, dst, src); }
     void emitMovRegImm32(uint8_t reg, uint32_t imm32) {
@@ -72,6 +67,43 @@ class MirBuilder {
         m.imm32 = targetPc;
         push(m);
     }
+    void emitJlRel32(uint32_t targetPc) {
+        Mir m;
+        m.op    = MirOp::JlRel32;
+        m.imm32 = targetPc;
+        push(m);
+    }
+    void emitJgRel32(uint32_t targetPc) {
+        Mir m;
+        m.op    = MirOp::JgRel32;
+        m.imm32 = targetPc;
+        push(m);
+    }
+    void emitJgeRel32(uint32_t targetPc) {
+        Mir m;
+        m.op    = MirOp::JgeRel32;
+        m.imm32 = targetPc;
+        push(m);
+    }
+    void emitJeRel32(uint32_t targetPc) {
+        Mir m;
+        m.op    = MirOp::JeRel32;
+        m.imm32 = targetPc;
+        push(m);
+    }
+    void emitJneRel32(uint32_t targetPc) {
+        Mir m;
+        m.op    = MirOp::JneRel32;
+        m.imm32 = targetPc;
+        push(m);
+    }
+    void emitVCmpRegImm(VRegId src, int32_t imm) {
+        Mir m;
+        m.op    = MirOp::VCmpRegImm;
+        m.r0    = static_cast<uint8_t>(src & 0xff);
+        m.imm32 = static_cast<uint32_t>(imm);
+        push(m);
+    }
     void emitJmpRel8(int32_t rel) {
         Mir m;
         m.op   = MirOp::JmpRel8;
@@ -85,6 +117,12 @@ class MirBuilder {
         push(m);
     }
     void emitCallRax() { push(MirOp::CallRax, 0, 0); }
+    void emitNativeJitFuncCall(NativeJitCallParams *params) {
+        Mir m;
+        m.op    = MirOp::NativeJitFuncCall;
+        m.imm64 = reinterpret_cast<uint64_t>(params);
+        push(m);
+    }
     void emitCallRel32(uint32_t targetPc) {
         Mir m;
         m.op    = MirOp::CallRel32;
@@ -110,7 +148,14 @@ class MirBuilder {
         buf_.push_back(m);
     }
 
-    // 虚拟寄存器指令（VRegId 存于 r0/r1，三操作数时右操作数在 imm32）
+    // VReg instructions share the same compact encoding:
+    // - unary/binary vregs go through r0/r1
+    // - the third operand reuses imm32 to avoid growing the Mir struct
+    // This keeps MIR dense enough for debug dumps and linear optimization.
+    //
+    // `disp` on selected ops is intentionally multi-purpose:
+    // - frame byte offset for load/store
+    // - auxiliary slot location for spill-aware tests such as JOIN
     void emitVLoadFromFrame(VRegId vreg, int disp) {
         Mir m;
         m.op   = MirOp::VLoadFromFrame;
@@ -137,8 +182,10 @@ class MirBuilder {
     }
     void emitVTest(VRegId vreg, int32_t frameDisp = 0) {
         Mir m;
-        m.op   = MirOp::VTest;
-        m.r0   = static_cast<uint8_t>(vreg & 0xff);
+        m.op = MirOp::VTest;
+        m.r0 = static_cast<uint8_t>(vreg & 0xff);
+        // frameDisp is optional fallback metadata for the encoder when the
+        // tested value may end up spilled and needs to be reloaded from frame.
         m.disp = frameDisp;
         push(m);
     }
@@ -258,6 +305,72 @@ class MirBuilder {
         m.r0    = static_cast<uint8_t>(dst & 0xff);
         m.r1    = static_cast<uint8_t>(left & 0xff);
         m.imm32 = static_cast<uint32_t>(right);
+        push(m);
+    }
+
+    // Immediate-operand arithmetic/compare: r0 = r1 op imm32
+    void emitVAddImm(VRegId dst, VRegId src, int32_t imm) {
+        Mir m;
+        m.op    = MirOp::VAddImm;
+        m.r0    = static_cast<uint8_t>(dst & 0xff);
+        m.r1    = static_cast<uint8_t>(src & 0xff);
+        m.imm32 = static_cast<uint32_t>(imm);
+        push(m);
+    }
+    void emitVSubImm(VRegId dst, VRegId src, int32_t imm) {
+        Mir m;
+        m.op    = MirOp::VSubImm;
+        m.r0    = static_cast<uint8_t>(dst & 0xff);
+        m.r1    = static_cast<uint8_t>(src & 0xff);
+        m.imm32 = static_cast<uint32_t>(imm);
+        push(m);
+    }
+    void emitVCmpSetLImm(VRegId dst, VRegId src, int32_t imm) {
+        Mir m;
+        m.op    = MirOp::VCmpSetLImm;
+        m.r0    = static_cast<uint8_t>(dst & 0xff);
+        m.r1    = static_cast<uint8_t>(src & 0xff);
+        m.imm32 = static_cast<uint32_t>(imm);
+        push(m);
+    }
+    void emitVCmpSetLEImm(VRegId dst, VRegId src, int32_t imm) {
+        Mir m;
+        m.op    = MirOp::VCmpSetLEImm;
+        m.r0    = static_cast<uint8_t>(dst & 0xff);
+        m.r1    = static_cast<uint8_t>(src & 0xff);
+        m.imm32 = static_cast<uint32_t>(imm);
+        push(m);
+    }
+    void emitVCmpSetGImm(VRegId dst, VRegId src, int32_t imm) {
+        Mir m;
+        m.op    = MirOp::VCmpSetGImm;
+        m.r0    = static_cast<uint8_t>(dst & 0xff);
+        m.r1    = static_cast<uint8_t>(src & 0xff);
+        m.imm32 = static_cast<uint32_t>(imm);
+        push(m);
+    }
+    void emitVCmpSetGEImm(VRegId dst, VRegId src, int32_t imm) {
+        Mir m;
+        m.op    = MirOp::VCmpSetGEImm;
+        m.r0    = static_cast<uint8_t>(dst & 0xff);
+        m.r1    = static_cast<uint8_t>(src & 0xff);
+        m.imm32 = static_cast<uint32_t>(imm);
+        push(m);
+    }
+    void emitVCmpSetEImm(VRegId dst, VRegId src, int32_t imm) {
+        Mir m;
+        m.op    = MirOp::VCmpSetEImm;
+        m.r0    = static_cast<uint8_t>(dst & 0xff);
+        m.r1    = static_cast<uint8_t>(src & 0xff);
+        m.imm32 = static_cast<uint32_t>(imm);
+        push(m);
+    }
+    void emitVCmpSetNEImm(VRegId dst, VRegId src, int32_t imm) {
+        Mir m;
+        m.op    = MirOp::VCmpSetNEImm;
+        m.r0    = static_cast<uint8_t>(dst & 0xff);
+        m.r1    = static_cast<uint8_t>(src & 0xff);
+        m.imm32 = static_cast<uint32_t>(imm);
         push(m);
     }
 

@@ -1,0 +1,27 @@
+/**
+ * 意图：验证局部递归函数对外层局部状态的捕获在 JIT 下保持正确。
+ * 预期：打印 `nested_call_state ok`；exit 0。
+ */
+module jit_nested_call_state
+
+func run(depth: int): int {
+    let base = 11
+
+    func visit(n: int): int {
+        return if n == 0 then base else visit(n - 1) + 1
+    }
+
+    return visit(depth)
+}
+
+func main(): int sync {
+    let actual = run(24)
+    let expected = 35
+
+    if actual != expected then {
+        return 1
+    } else {
+        'nested_call_state ok'->println
+        return 0
+    }
+}

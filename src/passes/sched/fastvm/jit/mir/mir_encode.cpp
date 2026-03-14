@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,6 +41,9 @@ void encodeMirBuffer(
     std::vector<std::tuple<size_t, size_t, std::string>> *instructionBoundaries,
     void *debugTraceFn) {
     struct SpillState {
+        // The encoder does not materialize full spill code for every MIR op.
+        // Instead it remembers a few common linear patterns so later ops can
+        // recover frame-backed values without reloading blindly.
         int loadVReg        = -1;
         int loadDisp        = 0;
         int copyVReg        = -1;
@@ -88,7 +91,9 @@ void encodeMirBuffer(
         return vregAlloc->pregForVReg(v);
     };
     std::vector<size_t> startOffset(buf.size());
-    // pc -> 首个带该 pc 的 MIR 下标，修补时用 startOffset[targetMirIndex] 作为唯一事实来源
+    // pc -> first MIR carrying that bytecode PC. All jump patching is anchored
+    // to MIR start offsets rather than instruction estimates so earlier size
+    // changes from peephole or allocation cannot desynchronize targets.
     std::unordered_map<size_t, size_t> pcToMirIndex;
     for (size_t i = 0; i < buf.size(); ++i)
         if (buf[i].hasPc() &&
@@ -133,6 +138,8 @@ void encodeMirBuffer(
         case MirOp::VCopy: {
             int dr = pregFor(static_cast<VRegId>(m.r0));
             int sr = pregFor(static_cast<VRegId>(m.r1));
+            if (dr >= 0 && sr >= 0 && dr == sr)
+                break;
             if (dr >= 0 && sr >= 0) {
                 enc.emitMovRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(sr));
                 spillState.clearSpilledDest();
@@ -149,6 +156,10 @@ void encodeMirBuffer(
             break;
         }
         case MirOp::VTest: {
+            // VTest is used both for ordinary boolean values and JOIN's
+            // synthetic branch index. Passing an optional frame displacement lets
+            // us recover the tested value even when the source vreg never got a
+            // physical register.
             // JOIN 传入 m.disp（dIdx）时从 frame 加载并 test，不依赖 v2 的 reg，避免 VCopy(v3,v0)
             // 与 v2 同 reg 时覆盖 idx
             int disp = -1;
@@ -246,13 +257,14 @@ void encodeMirBuffer(
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0) {
-                if (dr != static_cast<int>(kRegRax))
-                    enc.movRaxFromReg(static_cast<uint8_t>(lr));
-                else
-                    enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(lr));
-                enc.addRaxFromReg(static_cast<uint8_t>(rr));
-                if (dr != static_cast<int>(kRegRax))
-                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+                if (dr == lr) {
+                    enc.addRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(rr));
+                } else if (dr == rr) {
+                    enc.addRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(lr));
+                } else {
+                    enc.emitMovRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(lr));
+                    enc.addRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(rr));
+                }
             }
             break;
         }
@@ -261,13 +273,15 @@ void encodeMirBuffer(
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0) {
-                if (lr != static_cast<int>(kRegRax))
-                    enc.movRaxFromReg(static_cast<uint8_t>(lr));
-                else
-                    enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(lr));
-                enc.subRaxFromReg(static_cast<uint8_t>(rr));
-                if (dr != static_cast<int>(kRegRax))
-                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+                if (dr == lr) {
+                    enc.subRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(rr));
+                } else if (dr != rr) {
+                    enc.emitMovRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(lr));
+                    enc.subRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(rr));
+                } else {
+                    enc.negReg(static_cast<uint8_t>(dr));
+                    enc.addRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(lr));
+                }
             }
             break;
         }
@@ -311,11 +325,7 @@ void encodeMirBuffer(
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0) {
-                if (lr != static_cast<int>(kRegRax))
-                    enc.movRaxFromReg(static_cast<uint8_t>(lr));
-                else
-                    enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(lr));
-                enc.cmpRaxWithReg(static_cast<uint8_t>(rr));
+                enc.cmpRegReg(static_cast<uint8_t>(lr), static_cast<uint8_t>(rr));
                 switch (m.op) {
                 case MirOp::VCmpSetL:
                     enc.setlAlMovzxRax();
@@ -343,11 +353,66 @@ void encodeMirBuffer(
             }
             break;
         }
+        case MirOp::VAddImm:
+        case MirOp::VSubImm: {
+            int dr      = pregFor(static_cast<VRegId>(m.r0));
+            int sr      = pregFor(static_cast<VRegId>(m.r1));
+            int32_t imm = static_cast<int32_t>(m.imm32);
+            if (dr >= 0 && sr >= 0) {
+                if (dr != sr)
+                    enc.emitMovRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(sr));
+                if (m.op == MirOp::VAddImm)
+                    enc.addRegImm32(static_cast<uint8_t>(dr), imm);
+                else
+                    enc.subRegImm32(static_cast<uint8_t>(dr), imm);
+            }
+            break;
+        }
+        case MirOp::VCmpSetLImm:
+        case MirOp::VCmpSetLEImm:
+        case MirOp::VCmpSetGImm:
+        case MirOp::VCmpSetGEImm:
+        case MirOp::VCmpSetEImm:
+        case MirOp::VCmpSetNEImm: {
+            int dr      = pregFor(static_cast<VRegId>(m.r0));
+            int sr      = pregFor(static_cast<VRegId>(m.r1));
+            int32_t imm = static_cast<int32_t>(m.imm32);
+            if (dr >= 0 && sr >= 0) {
+                enc.cmpRegImm32(static_cast<uint8_t>(sr), imm);
+                switch (m.op) {
+                case MirOp::VCmpSetLImm:
+                    enc.setlAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetLEImm:
+                    enc.setleAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetGImm:
+                    enc.setgAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetGEImm:
+                    enc.setgeAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetEImm:
+                    enc.setzAlMovzxRax();
+                    break;
+                case MirOp::VCmpSetNEImm:
+                    enc.setnzAlMovzxRax();
+                    break;
+                default:
+                    break;
+                }
+                if (dr != static_cast<int>(kRegRax))
+                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+            }
+            break;
+        }
         case MirOp::JzRel32: {
             size_t ti = buf.size();
             auto it   = pcToMirIndex.find(static_cast<size_t>(m.imm32));
             if (it != pcToMirIndex.end())
                 ti = it->second;
+            // Emit a placeholder now and patch the rel32 once all MIR offsets
+            // are known. This keeps the main encoding loop single-pass.
             patches.push_back({enc.here(), ti, 6, 0, 0});
             enc.jzRel32(0);
             patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
@@ -365,15 +430,49 @@ void encodeMirBuffer(
             patches.back().jumpEndPos   = enc.here();
             break;
         }
-        case MirOp::JleRel32: {
+        case MirOp::JleRel32:
+        case MirOp::JlRel32:
+        case MirOp::JgRel32:
+        case MirOp::JgeRel32:
+        case MirOp::JeRel32:
+        case MirOp::JneRel32: {
             size_t ti = buf.size();
             auto it   = pcToMirIndex.find(static_cast<size_t>(m.imm32));
             if (it != pcToMirIndex.end())
                 ti = it->second;
             patches.push_back({enc.here(), ti, 6, 0, 0});
-            enc.jleRel32(0);
+            switch (m.op) {
+            case MirOp::JleRel32:
+                enc.jleRel32(0);
+                break;
+            case MirOp::JlRel32:
+                enc.jlRel32(0);
+                break;
+            case MirOp::JgRel32:
+                enc.jgRel32(0);
+                break;
+            case MirOp::JgeRel32:
+                enc.jgeRel32(0);
+                break;
+            case MirOp::JeRel32:
+                enc.jeRel32(0);
+                break;
+            case MirOp::JneRel32:
+                enc.jneRel32(0);
+                break;
+            default:
+                break;
+            }
             patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
             patches.back().jumpEndPos   = enc.here();
+            break;
+        }
+        case MirOp::VCmpRegImm: {
+            int sr = pregFor(static_cast<VRegId>(m.r0));
+            // This MIR exists purely to feed a following Jcc. It intentionally
+            // leaves the result in flags instead of materializing a boolean.
+            if (sr >= 0)
+                enc.cmpRegImm32(static_cast<uint8_t>(sr), static_cast<int32_t>(m.imm32));
             break;
         }
         case MirOp::JmpRel8:
@@ -430,6 +529,158 @@ void encodeMirBuffer(
             if (debugTraceFn)
                 enc.emitDebugTraceCall(m.pc, debugTraceFn);
             break;
+        case MirOp::NativeJitFuncCall: {
+            auto *p = reinterpret_cast<const NativeJitCallParams *>(m.imm64);
+
+            if (p->frameless) {
+                // ═══ FRAMELESS PATH: stack-based self-call (no Frame pool) ═══
+                // Phase L: args may already be in physical registers via pre-loaded VRegs.
+                static constexpr uint8_t argTmpRegs[] =
+                    {kRegRax, kRegRcx, kRegRdx, kRegR8, kRegR9, kRegR10, kRegR11};
+                uint8_t nArgs = p->argsCnt < 7 ? p->argsCnt : 7;
+                uint8_t actualArgRegs[7];
+                for (uint8_t ai = 0; ai < nArgs; ++ai) {
+                    int preloadedReg = -1;
+                    if (p->argVRegs[ai] != 0xFF)
+                        preloadedReg = pregFor(static_cast<VRegId>(p->argVRegs[ai]));
+                    if (preloadedReg >= 0) {
+                        actualArgRegs[ai] = static_cast<uint8_t>(preloadedReg);
+                    } else {
+                        enc.movRegFromFrame(argTmpRegs[ai], p->argSrcDisps[ai]);
+                        actualArgRegs[ai] = argTmpRegs[ai];
+                    }
+                }
+
+                enc.pushRdi();
+                enc.subRspImm(p->calleeSlotBytes);
+                enc.movRdiRsp();
+
+                // The callee frame uses the same slot layout as the current
+                // graph, so arguments can be copied into slots 1..N directly.
+                for (uint8_t ai = 0; ai < nArgs; ++ai)
+                    enc.movToFrame(static_cast<int>((ai + 1) * sizeof(slot_t)), actualArgRegs[ai]);
+
+                patches.push_back({enc.here(), 0, 5, 0, 0});
+                enc.callRel32(0);
+                patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
+                patches.back().jumpEndPos   = enc.here();
+
+                enc.addRspImm(p->calleeSlotBytes);
+                enc.popRdi();
+                if (p->resultVReg != 0xFF) {
+                    // Result-visible mode: keep the call result in a vreg so a
+                    // following VStore/VLoad pair can be optimized away upstream.
+                    int preg = pregFor(static_cast<VRegId>(p->resultVReg));
+                    if (preg >= 0 && preg != static_cast<int>(kRegRax))
+                        enc.emitMovRegReg(static_cast<uint8_t>(preg), kRegRax);
+                } else {
+                    enc.movToFrame(p->resultDisp, kRegRax);
+                }
+                break;
+            }
+
+            // ═══ FRAME-BASED PATH (cross-graph or non-frameless) ═══
+            enc.pushRdi();
+
+            size_t jnzNotCompiledRelPos = 0, jnzNotCompiledEnd = 0;
+            if (!p->isSameGraph) {
+                enc.movRaxImm64(p->fastop1Addr);
+                enc.emitBytes({0x0F, 0xB6, 0x00});
+                enc.asmLine("movzx eax, byte [rax]  ; fastop[1]");
+                enc.testRaxRax();
+                jnzNotCompiledRelPos = enc.jneRel32(0);
+                jnzNotCompiledEnd    = enc.here();
+                enc.movRaxImm64(p->extra2Addr);
+                enc.emitBytes({0x48, 0x8B, 0x00});
+                enc.asmLine("mov rax, [rax]  ; load extra2");
+                enc.shlRax16();
+                enc.shrRax16();
+                enc.pushRax();
+            }
+
+            // ═══ Frame acquire check ═══
+            enc.movR10FromRbx();
+            enc.movR11FromR10Disp8(8);
+            if (p->isSameGraph) {
+                enc.cmpR11R12();
+            } else {
+                enc.movRaxImm64(p->targetGraphAddr);
+                enc.cmpR11Rax();
+            }
+            size_t jneRelPos = enc.jneRel32(0);
+            size_t jneEnd    = enc.here();
+
+            // ═══ FAST PATH: acquire frame from pool and enter compiled callee ═══
+            enc.movR11FromR10Disp8(16);
+            enc.movRbxFromR11();
+            enc.leaR11R10Disp8(40);
+            enc.movR11FromR10Store();
+            for (uint8_t ai = 0; ai < p->argsCnt; ++ai) {
+                enc.movRaxFromFrame(p->argSrcDisps[ai]);
+                enc.movR11Disp8FromRax(static_cast<int8_t>((ai + 1) * 8));
+            }
+            enc.movRdiR11();
+
+            if (p->isSameGraph) {
+                patches.push_back({enc.here(), 0, 5, 0, 0});
+                enc.callRel32(0);
+                patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
+                patches.back().jumpEndPos   = enc.here();
+            } else {
+                enc.popRax();
+                enc.movRcxRdi();
+                enc.movRdxRsi();
+                enc.subRspShadow();
+                enc.emitBytes({0xff, 0xd0});
+                enc.asmLine("call rax  ; cross-graph C++ entry");
+                enc.addRspShadow();
+            }
+
+            // ═══ Release frame + store result ═══
+            enc.movR10FromRdi();
+            enc.popRdi();
+            enc.movR11FromRbx();
+            enc.movR10Disp8FromR11(16);
+            enc.movRbxFromR10();
+            enc.movToFrame(p->resultDisp, 0);
+            size_t jmpFastPos = enc.here();
+            enc.jmpRel32(0);
+            size_t jmpFastEnd = enc.here();
+
+            // ═══ SLOW PATH ═══
+            // Reuse the interpreter/trampoline helper when the frame pool cannot
+            // provide a compatible frame or the target graph is not compiled yet.
+            size_t slowStart = enc.here();
+            if (!p->isSameGraph) {
+                enc.popRax();
+                size_t slowCommon = enc.here();
+                enc.patchRel32At(
+                    jnzNotCompiledRelPos,
+                    static_cast<int32_t>(slowCommon - jnzNotCompiledEnd));
+                enc.patchRel32At(jneRelPos, static_cast<int32_t>(slowStart - jneEnd));
+            } else {
+                enc.patchRel32At(jneRelPos, static_cast<int32_t>(slowStart - jneEnd));
+            }
+
+            if (p->isSameGraph) {
+                enc.movRcxRdi();
+                enc.movRdxRsi();
+                enc.movR8Imm64(p->slowPathBcAddr);
+            } else {
+                enc.movRcxRdi();
+                enc.movRdxRsi();
+                enc.emitMovRegImm32(4, p->slowPathPc);
+            }
+            enc.movRaxImm64(p->slowPathFnAddr);
+            enc.callRax();
+            enc.popRdi();
+            enc.movToFrame(p->resultDisp, 0);
+
+            // ═══ DONE ═══
+            size_t donePos = enc.here();
+            enc.patchRel32At(jmpFastPos + 1, static_cast<int32_t>(donePos - jmpFastEnd));
+            break;
+        }
         case MirOp::Nop:
             enc.nop();
             break;
