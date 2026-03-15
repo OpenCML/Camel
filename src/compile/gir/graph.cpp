@@ -53,7 +53,7 @@ Node *requireMappedNode(
 }
 
 node_vec_t mapNodeVecPreservingOrder(
-    const node_vec_t &nodes, const std::unordered_map<Node *, Node *> &nodeMap, bool allowMissing,
+    node_span_t nodes, const std::unordered_map<Node *, Node *> &nodeMap, bool allowMissing,
     const char *message) {
     node_vec_t mapped;
     mapped.reserve(nodes.size());
@@ -301,7 +301,7 @@ std::string Graph::makeStableId(const std::string &name) { return makeGraphStabl
 
 Graph::Graph(FunctionType *funcType, const graph_ptr_t &graph, const std::string &name)
     : name_(name), stableId_(makeStableId(name)), outer_(graph),
-      arena_(graph ? graph->arena() : std::make_shared<GraphArena>()) {
+      arena_(graph ? graph->arena() : std::make_shared<GraphArena>(64 * 1024)) {
     signature_.funcType        = funcType;
     signature_.staticDataType  = TupleType::create();
     signature_.runtimeDataType = TupleType::create();
@@ -349,6 +349,7 @@ graph_ptr_t GraphBuilder::createGraph(
 }
 
 void GraphBuilder::assertBuildable(const char *action) const {
+    ASSERT(graph_ != nullptr, "GraphBuilder has been consumed by sealGraph().");
     ASSERT(
         !graph_->finalized_,
         std::format("Cannot {} finalized graph '{}'. Clone it first.", action, graph_->name_));
@@ -416,6 +417,9 @@ void GraphBuilder::eraseNode(Node *node) const {
     graph_->nodes_.erase(
         std::remove(graph_->nodes_.begin(), graph_->nodes_.end(), node),
         graph_->nodes_.end());
+    graph_->nodeStableIds_.erase(node);
+    graph_->nodePortNames_.erase(node);
+    graph_->nodeAccsKeys_.erase(node);
     markMutated();
 }
 
@@ -497,6 +501,50 @@ void GraphBuilder::setOutput(Node *node) const {
 // =============================================================================
 // Graph 查询与数据段
 // =============================================================================
+
+const std::string &Graph::nodeStableId(const Node *node) const {
+    auto it = nodeStableIds_.find(node);
+    ASSERT(it != nodeStableIds_.end(), "Node stableId not found in Graph's centralized storage.");
+    return it->second;
+}
+
+const std::string &Graph::nodePortName(const Node *node) const {
+    auto it = nodePortNames_.find(node);
+    ASSERT(it != nodePortNames_.end(), "Port name not found in Graph's centralized storage.");
+    return it->second;
+}
+
+const std::string &Graph::nodeAccsKey(const Node *node) const {
+    auto it = nodeAccsKeys_.find(node);
+    ASSERT(
+        it != nodeAccsKeys_.end(),
+        "AccsNode string key not found in Graph's centralized storage.");
+    return it->second;
+}
+
+OperatorIndex *Graph::registerOperIndex(std::shared_ptr<OperatorIndex> idx) {
+    auto *raw               = idx.get();
+    operIndexRegistry_[raw] = std::move(idx);
+    return raw;
+}
+
+std::shared_ptr<OperatorIndex> Graph::lookupOperIndex(const OperatorIndex *raw) const {
+    auto it = operIndexRegistry_.find(raw);
+    ASSERT(it != operIndexRegistry_.end(), "OperatorIndex not registered in Graph.");
+    return it->second;
+}
+
+FunctionData *Graph::registerFuncData(func_ptr_t fd) {
+    auto *raw              = fd.get();
+    funcDataRegistry_[raw] = std::move(fd);
+    return raw;
+}
+
+func_ptr_t Graph::lookupFuncData(const FunctionData *raw) const {
+    auto it = funcDataRegistry_.find(raw);
+    ASSERT(it != funcDataRegistry_.end(), "FunctionData not registered in Graph.");
+    return it->second;
+}
 
 std::string Graph::location() const {
     if (outer_.expired()) {
@@ -776,7 +824,8 @@ graph_ptr_t GraphBuilder::cloneGraph(const graph_ptr_t &graph) {
             }
             auto *funcNode = tt::as_ptr<FuncNode>(node);
             funcNode->setFunc(
-                tt::as_shared<FunctionData>(remapDataGraphRefs(funcNode->func(), graphMap)));
+                *newGraph,
+                tt::as_shared<FunctionData>(remapDataGraphRefs(funcNode->funcShared(), graphMap)));
         }
     }
     for (const auto &[srcGraph, newGraph] : graphMap) {
@@ -785,14 +834,6 @@ graph_ptr_t GraphBuilder::cloneGraph(const graph_ptr_t &graph) {
         }
     }
     return cloned;
-}
-
-void GraphBuilder::finalizeGraph(const graph_ptr_t &graph) {
-    if (!graph) {
-        return;
-    }
-    GraphBuilder builder(graph);
-    builder.finalize();
 }
 
 void GraphBuilder::finalize() const {
@@ -804,30 +845,43 @@ void GraphBuilder::finalize() const {
     graph_->finalized_ = true;
 }
 
-void GraphBuilder::finalizeGraphRecursively(const graph_ptr_t &graph) {
+void GraphBuilder::sealGraph() {
+    finalize();
+
+    // --- Freeze 阶段：将所有节点的邻接 vectors 搬迁到 arena ---
+    // finalize 后节点布局已确定（rearrange + FrameMeta 已安装），
+    // 此时将 draft vectors 的数据复制到 arena 定长数组，然后释放 vectors。
+    auto &arena = *graph_->arena_;
+    for (auto &owned : graph_->ownedNodes_) {
+        if (owned && !owned->isFrozen()) {
+            owned->freezeAdjacency(arena);
+        }
+    }
+
+    // consume 语义：seal 后 builder 不可再使用
+    graph_ = nullptr;
+}
+
+void GraphBuilder::sealGraphRecursively(const graph_ptr_t &graph) {
     if (!graph) {
         return;
     }
     std::unordered_set<Graph *> visited;
-    std::function<void(Graph *)> freezeDfs = [&](Graph *curr) {
+    std::function<void(Graph *)> sealDfs = [&](Graph *curr) {
         if (curr == nullptr || !visited.insert(curr).second) {
             return;
         }
-        GraphBuilder(curr).finalize();
+        GraphBuilder(curr).sealGraph();
         for (const auto &[_, subGraphs] : curr->subGraphs_) {
             for (const auto &subGraph : subGraphs) {
-                freezeDfs(subGraph.get());
+                sealDfs(subGraph.get());
             }
         }
         for (const auto &dep : curr->dependencies_) {
-            freezeDfs(dep.get());
+            sealDfs(dep.get());
         }
     };
-    freezeDfs(graph.get());
-}
-
-void GraphBuilder::finalizeRecursively() const {
-    finalizeGraphRecursively(graph_->shared_from_this());
+    sealDfs(graph.get());
 }
 
 camel::core::context::FrameMeta *GraphBuilder::ensureFrameMeta() const {
@@ -956,52 +1010,80 @@ Node *GraphBuilder::inlineNode(Node *node, bool forceSync) const {
     return syncNode;
 }
 
-void GraphBuilder::rearrange() const {
-    GetDefaultLogger().in("GIR").debug("Rearranging graph {}.", graph_->name_);
+LayoutResult GraphBuilder::computeLayout(const Graph &graph) {
+    LayoutResult result;
     data_idx_t stcIdx = -1, rtmIdx = 1;
-    data_vec_t newStaticDataArr{Data::null()};
+    result.staticDataArr = {Data::null()};
     type_vec_t staticDataTypes{Type::Void()}, runtimeDataTypes{Type::Void()}, closureTypes;
 
-    for (Node *node : graph_->normPorts_) {
-        node->setIndex(rtmIdx++);
+    // 用于 exitNode 查找其 input 的新 index
+    std::unordered_map<Node *, data_idx_t> indexMap;
+
+    auto assignIndex = [&](Node *node, data_idx_t idx) {
+        result.nodeIndices.emplace_back(node, idx);
+        indexMap[node] = idx;
+    };
+
+    for (Node *node : graph.normPorts_) {
+        assignIndex(node, rtmIdx++);
         runtimeDataTypes.push_back(node->dataType());
     }
-    for (Node *node : graph_->withPorts_) {
-        node->setIndex(rtmIdx++);
+    for (Node *node : graph.withPorts_) {
+        assignIndex(node, rtmIdx++);
         runtimeDataTypes.push_back(node->dataType());
     }
-    for (Node *node : graph_->closure_) {
-        node->setIndex(rtmIdx++);
+    for (Node *node : graph.closure_) {
+        assignIndex(node, rtmIdx++);
         runtimeDataTypes.push_back(node->dataType());
         closureTypes.push_back(node->dataType());
     }
-    for (Node *node : graph_->nodes_) {
+    for (Node *node : graph.nodes_) {
         NodeType type = node->type();
         ASSERT(type != NodeType::DREF, "DREF nodes should not exist in finalized graph.");
         if (type == NodeType::DATA) {
             auto *dataNode = tt::as_ptr<DataNode>(node);
-            newStaticDataArr.push_back(dataNode->data());
-            dataNode->setIndex(stcIdx--);
+            result.staticDataArr.push_back(dataNode->data());
+            assignIndex(dataNode, stcIdx--);
             staticDataTypes.push_back(dataNode->dataType());
         } else {
             if (type == NodeType::SYNC || type == NodeType::NREF) {
                 continue;
             }
-            node->setIndex(rtmIdx++);
+            assignIndex(node, rtmIdx++);
             runtimeDataTypes.push_back(node->dataType());
         }
     }
 
-    if (graph_->exitNode_) {
-        graph_->exitNode_->setIndex(graph_->exitNode_->normInputs().front()->index());
+    if (graph.exitNode_) {
+        Node *exitInput    = graph.exitNode_->normInputs().front();
+        auto it            = indexMap.find(exitInput);
+        data_idx_t exitIdx = (it != indexMap.end()) ? it->second : exitInput->index();
+        assignIndex(graph.exitNode_, exitIdx);
     }
 
-    graph_->signature_.runtimeDataSize = rtmIdx;
-    graph_->staticDataArr_             = std::move(newStaticDataArr);
-    graph_->signature_.staticDataType  = TupleType::create(std::move(staticDataTypes));
-    graph_->signature_.runtimeDataType = TupleType::create(std::move(runtimeDataTypes));
-    graph_->signature_.closureType     = TupleType::create(std::move(closureTypes));
-    graph_->setFrameMeta(nullptr);
+    result.runtimeDataSize = rtmIdx;
+    result.staticDataType  = TupleType::create(std::move(staticDataTypes));
+    result.runtimeDataType = TupleType::create(std::move(runtimeDataTypes));
+    result.closureType     = TupleType::create(std::move(closureTypes));
+    return result;
+}
+
+void GraphBuilder::applyLayout(Graph &graph, const LayoutResult &layout) {
+    for (auto [node, idx] : layout.nodeIndices) {
+        node->setIndex(idx);
+    }
+    graph.signature_.runtimeDataSize = layout.runtimeDataSize;
+    graph.staticDataArr_             = layout.staticDataArr;
+    graph.signature_.staticDataType  = layout.staticDataType;
+    graph.signature_.runtimeDataType = layout.runtimeDataType;
+    graph.signature_.closureType     = layout.closureType;
+    graph.setFrameMeta(nullptr);
+}
+
+void GraphBuilder::rearrange() const {
+    GetDefaultLogger().in("GIR").debug("Rearranging graph {}.", graph_->name_);
+    auto layout = computeLayout(*graph_);
+    applyLayout(*graph_, layout);
 }
 
 } // namespace camel::compile::gir

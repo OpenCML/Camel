@@ -205,22 +205,22 @@ bytecode_vec_t compile(
             switch (srcDataType->code()) {
             case TypeCode::Tuple: {
                 ASSERT(accNode->isNum(), "ACCS index must be numeric.");
-                index                 = accNode->index<size_t>();
+                index                 = accNode->numIndex();
                 const auto &tupleType = tt::as_ptr<TupleType>(srcDataType);
                 if (index >= tupleType->size()) {
                     ctx->rtmDiags()->of(SemanticDiag::InvalidAccessIndex).commit(to_string(index));
-                    index = 0; // 越界时回退为 0，与 Struct 无效时行为一致
+                    index = 0;
                 }
                 break;
             }
             case TypeCode::Struct: {
                 ASSERT(!accNode->isNum(), "ACCS index must be string.");
                 const auto *structType = tt::as_ptr<camel::core::type::StructType>(srcDataType);
-                const auto &optIndex   = structType->findField(accNode->index<std::string>());
+                const auto &optIndex   = structType->findField(accNode->strIndex());
                 if (!optIndex.has_value()) {
                     ctx->rtmDiags()
                         ->of(SemanticDiag::InvalidAccessIndex)
-                        .commit(accNode->index<std::string>());
+                        .commit(accNode->strIndex());
                 }
                 index = optIndex.value();
                 break;

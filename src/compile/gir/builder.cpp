@@ -198,8 +198,8 @@ inline void registerNodeOrigin(
 // 从 GCT 构建 GIR 图。全过程分为两个阶段：
 // 1. 构造阶段：visit(gct) 遍历 GCT，通过 GraphBuilder 增量创建图和节点。
 //    此阶段所有图均为 non-finalized，可自由编辑（含闭包捕获、参数化等结构变形）。
-// 2. 导出阶段：finalizeRecursively() 一次性为所有图计算 slot 编号、layout、FrameMeta。
-//    导出后所有图标记为 finalized，不再允许直接编辑。
+// 2. 封印阶段：sealGraphRecursively() 一次性为所有图计算 slot 编号、layout、FrameMeta。
+//    封印后所有图标记为 finalized，不再允许直接编辑。
 graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     waited_ = false;
     synced_ = false;
@@ -229,7 +229,7 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
             GraphBuilder(currGraph_).setOutput(funcNode);
         }
 
-        GraphBuilder(rootGraph_).finalizeRecursively();
+        GraphBuilder::sealGraphRecursively(rootGraph_);
     } catch (Diagnostic &d) {
         diags_->add(std::move(d));
         rootGraph_ = nullptr;

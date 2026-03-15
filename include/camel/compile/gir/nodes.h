@@ -27,6 +27,7 @@
 
 namespace camel::compile::gir {
 
+class GraphArena;
 class NodeMutation;
 class JoinNode;
 
@@ -39,8 +40,9 @@ class Node {
     static std::string makeStableId(Graph &graph, NodeType nodeType);
 
     Node(Graph &graph, NodeType nodeType, Type *dataType, data_idx_t index)
-        : graph_(graph), nodeType_(nodeType), dataType_(dataType), dataIndex_(index),
-          stableId_(makeStableId(graph, nodeType)) {}
+        : graph_(&graph), nodeType_(nodeType), dataType_(dataType), dataIndex_(index) {
+        graph.nodeStableIds_[this] = makeStableId(graph, nodeType);
+    }
     virtual ~Node() = default;
 
     NodeType type() const { return nodeType_; }
@@ -56,40 +58,62 @@ class Node {
     bool operator==(const Node &other) const { return this == &other; }
     bool operator!=(const Node &other) const { return !(this == &other); }
 
-    Graph &graph() const { return graph_; }
+    Graph &graph() const { return *graph_; }
     data_idx_t index() const;
     void setIndex(data_idx_t index) { dataIndex_ = index; }
-    const std::string &stableId() const { return stableId_; }
+    const std::string &stableId() const { return graph_->nodeStableId(this); }
     bool macro() const { return macro_; }
     bool constant() const { return const_; }
     void setMacro(bool m) { macro_ = m; }
     void setConstant(bool c) { const_ = c; }
 
     node_vec_t dataInputs() const;
-    const node_vec_t &normInputs() const { return normInputs_; }
-    const node_vec_t &withInputs() const { return withInputs_; }
-    const node_vec_t &ctrlInputs() const { return ctrlInputs_; }
+    node_span_t normInputs() const {
+        return frozen_ ? node_span_t{frzNormIn_.p, frzNormIn_.n}
+                       : node_span_t{normInputs_.data(), normInputs_.size()};
+    }
+    node_span_t withInputs() const {
+        return frozen_ ? node_span_t{frzWithIn_.p, frzWithIn_.n}
+                       : node_span_t{withInputs_.data(), withInputs_.size()};
+    }
+    node_span_t ctrlInputs() const {
+        return frozen_ ? node_span_t{frzCtrlIn_.p, frzCtrlIn_.n}
+                       : node_span_t{ctrlInputs_.data(), ctrlInputs_.size()};
+    }
     node_vec_t inputs() const;
 
-    const node_vec_t &normOutputs() const { return normOutputs_; }
-    const node_vec_t &withOutputs() const { return withOutputs_; }
-    const node_vec_t &ctrlOutputs() const { return ctrlOutputs_; }
+    node_span_t normOutputs() const {
+        return frozen_ ? node_span_t{frzNormOut_.p, frzNormOut_.n}
+                       : node_span_t{normOutputs_.data(), normOutputs_.size()};
+    }
+    node_span_t withOutputs() const {
+        return frozen_ ? node_span_t{frzWithOut_.p, frzWithOut_.n}
+                       : node_span_t{withOutputs_.data(), withOutputs_.size()};
+    }
+    node_span_t ctrlOutputs() const {
+        return frozen_ ? node_span_t{frzCtrlOut_.p, frzCtrlOut_.n}
+                       : node_span_t{ctrlOutputs_.data(), ctrlOutputs_.size()};
+    }
     node_vec_t dataOutputs() const;
     node_vec_t outputs() const;
 
     bool hasDeepLinkedTo(Node *node, size_t maxJumps = 99) const;
     bool hasLinkedTo(Node *node) const;
     bool hasMatchedJoinOutput() const {
-        return withOutputs_.size() == 1 && withOutputs_.front()->type() == NodeType::JOIN;
+        auto wo = withOutputs();
+        return wo.size() == 1 && wo.front()->type() == NodeType::JOIN;
     }
     JoinNode *matchedJoinOutput() const;
 
-    size_t inDegree() const { return normInputs_.size() + withInputs_.size() + ctrlInputs_.size(); }
-    size_t outDegree() const {
-        return withOutputs_.size() + normOutputs_.size() + ctrlOutputs_.size();
+    size_t inDegree() const {
+        return normInputs().size() + withInputs().size() + ctrlInputs().size();
     }
-    size_t dataInDegree() const { return normInputs_.size() + withInputs_.size(); }
-    size_t dataOutDegree() const { return normOutputs_.size() + withOutputs_.size(); }
+    size_t outDegree() const {
+        return withOutputs().size() + normOutputs().size() + ctrlOutputs().size();
+    }
+    size_t dataInDegree() const { return normInputs().size() + withInputs().size(); }
+    size_t dataOutDegree() const { return normOutputs().size() + withOutputs().size(); }
+    bool isFrozen() const { return frozen_; }
 
     bool isSource() const { return inDegree() == 0; }
     bool isReturn() const { return outDegree() == 0; }
@@ -97,15 +121,17 @@ class Node {
     bool detach();
 
   protected:
-    bool macro_ = false;
-    bool const_ = false;
+    bool macro_  = false;
+    bool const_  = false;
+    bool frozen_ = false;
 
-    Graph &graph_;
+    Graph *graph_;
     NodeType nodeType_;
     Type *dataType_;
     data_idx_t dataIndex_;
-    std::string stableId_;
 
+    // --- Draft 模式邻接表 ---
+    // 仅 draft 节点（frozen_==false）使用，支持动态增删。
     node_vec_t normInputs_;
     node_vec_t withInputs_;
     node_vec_t ctrlInputs_;
@@ -114,18 +140,50 @@ class Node {
     node_vec_t withOutputs_;
     node_vec_t ctrlOutputs_;
 
+    // --- Frozen 模式邻接表 ---
+    // 仅 frozen 节点（frozen_==true）使用，指向 arena 上的定长数组。
+    // Frozen 节点的 draft vectors 保持空（默认构造态），不占 heap 内存。
+    struct FrzAdj {
+        Node **p   = nullptr;
+        uint16_t n = 0;
+    };
+    FrzAdj frzNormIn_, frzWithIn_, frzCtrlIn_;
+    FrzAdj frzNormOut_, frzWithOut_, frzCtrlOut_;
+
   private:
     friend class Builder;
     friend class GraphBuilder;
     friend class GraphRewriteSession;
     friend class NodeMutation;
 
-    node_vec_t &mutableNormInputs() { return normInputs_; }
-    node_vec_t &mutableWithInputs() { return withInputs_; }
-    node_vec_t &mutableCtrlInputs() { return ctrlInputs_; }
-    node_vec_t &mutableNormOutputs() { return normOutputs_; }
-    node_vec_t &mutableWithOutputs() { return withOutputs_; }
-    node_vec_t &mutableCtrlOutputs() { return ctrlOutputs_; }
+    node_vec_t &mutableNormInputs() {
+        ASSERT(!frozen_, "Cannot mutate frozen node.");
+        return normInputs_;
+    }
+    node_vec_t &mutableWithInputs() {
+        ASSERT(!frozen_, "Cannot mutate frozen node.");
+        return withInputs_;
+    }
+    node_vec_t &mutableCtrlInputs() {
+        ASSERT(!frozen_, "Cannot mutate frozen node.");
+        return ctrlInputs_;
+    }
+    node_vec_t &mutableNormOutputs() {
+        ASSERT(!frozen_, "Cannot mutate frozen node.");
+        return normOutputs_;
+    }
+    node_vec_t &mutableWithOutputs() {
+        ASSERT(!frozen_, "Cannot mutate frozen node.");
+        return withOutputs_;
+    }
+    node_vec_t &mutableCtrlOutputs() {
+        ASSERT(!frozen_, "Cannot mutate frozen node.");
+        return ctrlOutputs_;
+    }
+
+    /// 将 draft 邻接 vectors 搬迁到 arena 定长数组，然后清空 vectors 并置 frozen_=true。
+    /// 由 GraphBuilder::sealGraph() 在 freeze 阶段调用。
+    void freezeAdjacency(GraphArena &arena);
 
     static void link(LinkType type, Node *from, Node *to);
     static bool unlink(Node *from, Node *to);
@@ -163,7 +221,7 @@ class DataNode : public Node {
 
     static Node *create(Graph &graph, const data_ptr_t &data);
 
-    data_ptr_t data() const { return graph_.materializeStaticData(dataIndex_); }
+    data_ptr_t data() const { return graph_->materializeStaticData(dataIndex_); }
 
     std::string toString() const override;
 
@@ -171,17 +229,18 @@ class DataNode : public Node {
 };
 
 class PortNode : public Node {
-    std::string name_;
     bool isVar_;
 
   public:
     PortNode(Graph &graph, Type *type, data_idx_t index, const std::string &name, bool isVar)
-        : Node(graph, NodeType::PORT, type, index), name_(name), isVar_(isVar) {}
+        : Node(graph, NodeType::PORT, type, index), isVar_(isVar) {
+        graph.nodePortNames_[this] = name;
+    }
     ~PortNode() = default;
 
     static Node *create(Graph &graph, Type *type, const std::string &name, bool isVar);
 
-    const std::string &name() const { return name_; }
+    const std::string &name() const { return graph_->nodePortName(this); }
     bool isVar() const { return isVar_; }
 
     std::string toString() const override;
@@ -230,16 +289,25 @@ class FillNode : public Node {
 
 class AccsNode : public Node {
   public:
-    AccsNode(
-        Graph &graph, Type *type, data_idx_t index,
-        const std::variant<std::string, size_t> &accsIdx)
-        : Node(graph, NodeType::ACCS, type, index), accsIndex_(accsIdx) {}
+    AccsNode(Graph &graph, Type *type, data_idx_t index, size_t numIdx)
+        : Node(graph, NodeType::ACCS, type, index), isNum_(true), numIndex_(numIdx) {}
+    AccsNode(Graph &graph, Type *type, data_idx_t index, const std::string &strKey)
+        : Node(graph, NodeType::ACCS, type, index), isNum_(false), numIndex_(0) {
+        graph.nodeAccsKeys_[this] = strKey;
+    }
     ~AccsNode() = default;
 
     static Node *create(Graph &graph, Type *type, const std::variant<std::string, size_t> &accsIdx);
 
-    bool isNum() const { return std::holds_alternative<size_t>(accsIndex_); }
-    template <typename T> T index() const { return std::get<T>(accsIndex_); }
+    bool isNum() const { return isNum_; }
+    size_t numIndex() const {
+        ASSERT(isNum_, "AccsNode: numeric index requested on string-keyed accessor.");
+        return numIndex_;
+    }
+    const std::string &strIndex() const {
+        ASSERT(!isNum_, "AccsNode: string index requested on numeric accessor.");
+        return graph_->nodeAccsKey(this);
+    }
     std::string index2String() const;
 
     std::string toString() const override;
@@ -247,7 +315,8 @@ class AccsNode : public Node {
     Node *clone(Graph &graph) const override;
 
   private:
-    std::variant<std::string, size_t> accsIndex_;
+    bool isNum_;
+    size_t numIndex_;
 };
 
 // 控制流节点
@@ -259,19 +328,21 @@ class BrchNode : public Node {
 
     static Node *create(Graph &graph, Type *type);
 
-    bool hasSelectorInput() const { return normInputs_.size() == 1; }
+    bool hasSelectorInput() const { return normInputs().size() == 1; }
     Node *selectorInput() const {
-        ASSERT(normInputs_.size() == 1, "BRCH node must have exactly one selector input.");
-        return normInputs_.front();
+        ASSERT(normInputs().size() == 1, "BRCH node must have exactly one selector input.");
+        return normInputs().front();
     }
-    const node_vec_t &caseInputs() const { return withInputs_; }
+    node_span_t caseInputs() const { return withInputs(); }
     bool hasMatchedJoin() const {
-        return normOutputs_.size() == 1 && normOutputs_.front()->type() == NodeType::JOIN;
+        auto no = normOutputs();
+        return no.size() == 1 && no.front()->type() == NodeType::JOIN;
     }
-    size_t armCount() const { return ctrlOutputs_.size(); }
+    size_t armCount() const { return ctrlOutputs().size(); }
     Node *armHead(size_t index) const {
-        ASSERT(index < ctrlOutputs_.size(), "BRCH arm index out of range.");
-        return ctrlOutputs_[index];
+        auto co = ctrlOutputs();
+        ASSERT(index < co.size(), "BRCH arm index out of range.");
+        return co[index];
     }
     JoinNode *matchedJoin() const;
 
@@ -289,18 +360,20 @@ class JoinNode : public Node {
     static Node *create(Graph &graph, Type *type);
 
     bool hasMatchedBranch() const {
-        return !normInputs_.empty() && normInputs_.front()->type() == NodeType::BRCH;
+        auto ni = normInputs();
+        return !ni.empty() && ni.front()->type() == NodeType::BRCH;
     }
     BrchNode *matchedBranch() const;
-    bool hasBranchIndexInput() const { return !normInputs_.empty(); }
+    bool hasBranchIndexInput() const { return !normInputs().empty(); }
     Node *branchIndexInput() const {
-        ASSERT(!normInputs_.empty(), "JOIN node must have a branch-index input.");
-        return normInputs_.front();
+        ASSERT(!normInputs().empty(), "JOIN node must have a branch-index input.");
+        return normInputs().front();
     }
-    size_t armCount() const { return withInputs_.size(); }
+    size_t armCount() const { return withInputs().size(); }
     Node *armTail(size_t index) const {
-        ASSERT(index < withInputs_.size(), "JOIN arm index out of range.");
-        return withInputs_[index];
+        auto wi = withInputs();
+        ASSERT(index < wi.size(), "JOIN arm index out of range.");
+        return wi[index];
     }
 
     std::string toString() const override;
@@ -317,17 +390,18 @@ class CallNode : public Node {
 
     static Node *create(Graph &graph, Type *type);
 
-    bool hasCallee() const { return !withInputs_.empty(); }
+    bool hasCallee() const { return !withInputs().empty(); }
     Node *calleeInput() const {
-        ASSERT(!withInputs_.empty(), "CALL node has no callee input.");
-        return withInputs_.front();
+        ASSERT(!withInputs().empty(), "CALL node has no callee input.");
+        return withInputs().front();
     }
-    size_t withArgCount() const { return withInputs_.empty() ? 0 : withInputs_.size() - 1; }
+    size_t withArgCount() const { return withInputs().empty() ? 0 : withInputs().size() - 1; }
     Node *withArg(size_t index) const {
-        ASSERT(index < withArgCount(), "CALL with-arg index out of range.");
-        return withInputs_[index + 1];
+        auto wi = withInputs();
+        ASSERT(index + 1 < wi.size(), "CALL with-arg index out of range.");
+        return wi[index + 1];
     }
-    const node_vec_t &normArgs() const { return normInputs_; }
+    node_span_t normArgs() const { return normInputs(); }
 
     std::string toString() const override;
 
@@ -348,20 +422,23 @@ class BindNode : public Node {
 };
 
 class FuncNode : public Node {
-    func_ptr_t func_;
+    camel::core::data::FunctionData *func_;
     Graph *graph_; // 构造时确定，FunctionData 必然有 graph
 
   public:
-    FuncNode(Graph &graph, data_idx_t index, func_ptr_t func)
+    FuncNode(Graph &graph, data_idx_t index, camel::core::data::FunctionData *func)
         : Node(graph, NodeType::FUNC, func->funcType()->exitType(), index), func_(func),
           graph_(&func_->graph()) {}
     ~FuncNode() = default;
 
     static Node *create(Graph &graph, func_ptr_t func);
 
-    func_ptr_t func() const { return func_; }
-    void setFunc(const func_ptr_t &func) {
-        func_ = func;
+    camel::core::data::FunctionData *func() const { return func_; }
+    /// 返回 FunctionData 的 shared_ptr（用于 clone/remap/GC 等需要所有权语义的场景）。
+    /// 热路径请使用 func() 返回的裸指针以避免引用计数开销。
+    func_ptr_t funcShared() const { return Node::graph_->lookupFuncData(func_); }
+    void setFunc(Graph &ownerGraph, const func_ptr_t &func) {
+        func_ = ownerGraph.registerFuncData(func);
         ASSERT(func_ != nullptr, "Function is null for FunctionNode.");
         graph_ = &func_->graph();
         setDataType(func_->funcType()->exitType());
@@ -372,7 +449,8 @@ class FuncNode : public Node {
     FunctionType *funcType() const;
     bool isMacro() const { return func_ && func_->isMacro(); }
     bool hasMatchedJoin() const {
-        return withOutputs_.size() == 1 && withOutputs_.front()->type() == NodeType::JOIN;
+        auto wo = withOutputs();
+        return wo.size() == 1 && wo.front()->type() == NodeType::JOIN;
     }
     JoinNode *matchedJoin() const;
 
@@ -382,17 +460,17 @@ class FuncNode : public Node {
 };
 
 class OperNode : public Node {
-    oper_idx_ptr_t operator_;
+    ::OperatorIndex *operator_;
     mutable ::operator_t cachedOp_ = nullptr;
 
   public:
-    OperNode(Graph &graph, data_idx_t index, oper_idx_ptr_t op)
+    OperNode(Graph &graph, data_idx_t index, ::OperatorIndex *op)
         : Node(graph, NodeType::OPER, op->funcType()->exitType(), index), operator_(op) {}
     ~OperNode() = default;
 
     static Node *create(Graph &graph, oper_idx_ptr_t op);
 
-    oper_idx_ptr_t oper() const { return operator_; }
+    ::OperatorIndex *oper() const { return operator_; }
     FunctionType *funcType() const;
 
     ::operator_t getCachedOp() const { return cachedOp_; }

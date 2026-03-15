@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -314,10 +314,10 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
             break;
         }
         case NodeType::FUNC: {
-            func_ptr_t func = tt::as_ptr<FuncNode>(node)->func();
-            label           = func->name().empty() ? func->graph().name() : func->name();
-            shape           = "Mdiamond";
-            size            = "width=1.1, height=1.1";
+            auto *func = tt::as_ptr<FuncNode>(node)->func();
+            label      = func->name().empty() ? func->graph().name() : func->name();
+            shape      = "Mdiamond";
+            size       = "width=1.1, height=1.1";
             break;
         }
         case NodeType::OPER: {

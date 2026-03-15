@@ -76,7 +76,7 @@ inline slot_t getStaticNodeSlot(Node *node) {
     return meta->staticArea->get<slot_t>(static_cast<size_t>(-node->index()));
 }
 
-inline bool areStaticDataInputs(const node_vec_t &inputs, size_t start = 0) {
+inline bool areStaticDataInputs(node_span_t inputs, size_t start = 0) {
     for (size_t i = start; i < inputs.size(); ++i) {
         if (inputs[i] == nullptr || inputs[i]->type() != NodeType::DATA) {
             return false;
@@ -279,7 +279,7 @@ class MacroExecutor {
         }
         os << "[macro] execute direct macro " << node->func()->name() << "\n";
         return executeFunction(
-            makeRuntimeFunctionFromData(node->func()),
+            makeRuntimeFunctionFromData(node->funcShared()),
             [&](Frame *frame, Graph *graph) {
                 const auto &withPorts = graph->withPorts();
                 const auto &normPorts = graph->normPorts();
@@ -492,11 +492,11 @@ class MacroExecutor {
                 auto *accsNode    = tt::as_ptr<AccsNode>(node);
                 data_idx_t srcIdx = node->dataInputs().front()->index();
                 if (accsNode->isNum()) {
-                    size_t idx  = accsNode->index<size_t>();
+                    size_t idx  = accsNode->numIndex();
                     auto *tuple = frame->get<::Tuple *>(srcIdx);
                     frame->set(node->index(), tuple->get<slot_t>(idx));
                 } else {
-                    auto key         = accsNode->index<std::string>();
+                    auto key         = accsNode->strIndex();
                     auto *st         = frame->get<::Struct *>(srcIdx);
                     Type *structType = frame->typeAt<Type>(srcIdx);
                     frame->set(node->index(), st->get<slot_t>(key, structType));

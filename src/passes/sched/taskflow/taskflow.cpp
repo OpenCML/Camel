@@ -251,8 +251,8 @@ void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
                 if (!visited.count(sub))
                     q.push(sub);
             } else if (n->type() == NodeType::BRCH) {
-                const node_vec_t &candidates = n->ctrlOutputs();
-                Node *join                   = n->normOutputs().front();
+                const auto candidates = n->ctrlOutputs();
+                Node *join            = n->normOutputs().front();
                 for (const auto &c : candidates)
                     globalBuildCtx_.skipNodes.insert(c);
                 globalBuildCtx_.skipNodes.insert(n);
@@ -427,12 +427,12 @@ tf::Task TaskflowExecSchedPass::buildAccsTask(FlowT &flowLike, Node *n, Frame *f
             auto accsNode     = tt::as_ptr<AccsNode>(n);
             data_idx_t srcIdx = n->dataInputs().front()->index();
             if (accsNode->isNum()) {
-                size_t idx = accsNode->index<size_t>();
+                size_t idx = accsNode->numIndex();
                 Tuple *t   = frame->get<Tuple *>(srcIdx);
                 ASSERT(idx < t->size(), "Tuple index out of bounds in Taskflow.");
                 frame->set(n->index(), t->get<slot_t>(idx));
             } else {
-                std::string key  = accsNode->index<std::string>();
+                std::string key  = accsNode->strIndex();
                 Struct *s        = frame->get<Struct *>(srcIdx);
                 Type *structType = frame->typeAt<Type>(srcIdx);
                 frame->set(n->index(), s->get<slot_t>(key, structType));
@@ -531,9 +531,10 @@ template <typename FlowT>
 void TaskflowExecSchedPass::buildBranchJoinRegion(
     FlowT &flowLike, Graph *graph, Frame *frame, std::unordered_map<Node *, tf::Task> &taskMap,
     Node *brch) {
-    auto *brchNode        = tt::as_ptr<BrchNode>(brch);
-    node_vec_t candidates = brch->ctrlOutputs();
-    Node *join            = brchNode->matchedJoin();
+    auto *brchNode = tt::as_ptr<BrchNode>(brch);
+    auto ctrlOuts  = brch->ctrlOutputs();
+    node_vec_t candidates(ctrlOuts.begin(), ctrlOuts.end());
+    Node *join = brchNode->matchedJoin();
 
     auto selector =
         flowLike
@@ -593,7 +594,7 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
             })
             .name("JOIN");
 
-    auto precede_from_inputs = [&](const node_vec_t &inputs, tf::Task tsk) {
+    auto precede_from_inputs = [&](node_span_t inputs, tf::Task tsk) {
         for (const auto &in : inputs) {
             if (&in->graph() != graph)
                 continue;
@@ -737,7 +738,7 @@ void TaskflowExecSchedPass::connectDependencies(
     FlowT &flow, Graph *graph, std::unordered_map<Node *, tf::Task> &taskMap) {
     std::unordered_set<Node *> &skipNodes = globalBuildCtx_.skipNodes;
 
-    auto add_edges_from_inputs = [&](const node_vec_t &inputs, tf::Task tsk) {
+    auto add_edges_from_inputs = [&](node_span_t inputs, tf::Task tsk) {
         for (const auto &in : inputs) {
             if (&in->graph() != graph)
                 continue;

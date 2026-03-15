@@ -18,6 +18,7 @@
  */
 
 #include "camel/compile/gir/nodes.h"
+#include "camel/compile/gir/arena.h"
 #include "camel/compile/gir/builder.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
@@ -40,6 +41,39 @@ std::string makeNodeStableId(Graph &graph, NodeType nodeType) {
 } // namespace
 
 // =============================================================================
+// Node freeze 支持
+// =============================================================================
+
+void Node::freezeAdjacency(GraphArena &arena) {
+    ASSERT(!frozen_, "Node is already frozen.");
+
+    auto copyToArena = [&](const node_vec_t &vec) -> FrzAdj {
+        if (vec.empty())
+            return {};
+        auto n  = static_cast<uint16_t>(vec.size());
+        auto *p = static_cast<Node **>(arena.alloc(sizeof(Node *) * n, alignof(Node *)));
+        std::memcpy(p, vec.data(), sizeof(Node *) * n);
+        return {p, n};
+    };
+
+    frzNormIn_  = copyToArena(normInputs_);
+    frzWithIn_  = copyToArena(withInputs_);
+    frzCtrlIn_  = copyToArena(ctrlInputs_);
+    frzNormOut_ = copyToArena(normOutputs_);
+    frzWithOut_ = copyToArena(withOutputs_);
+    frzCtrlOut_ = copyToArena(ctrlOutputs_);
+
+    // 释放 draft vectors 的堆内存
+    normInputs_  = {};
+    withInputs_  = {};
+    ctrlInputs_  = {};
+    normOutputs_ = {};
+    withOutputs_ = {};
+    ctrlOutputs_ = {};
+    frozen_      = true;
+}
+
+// =============================================================================
 // Node 索引与连通性
 // =============================================================================
 
@@ -51,7 +85,7 @@ data_idx_t Node::index() const {
     ASSERT(nodeType_ != NodeType::SYNC, "SYNC node has no data index.");
     ASSERT(nodeType_ != NodeType::DREF, "DREF node has no data index.");
     if (nodeType_ == NodeType::NREF) {
-        return normInputs_.front()->index();
+        return normInputs().front()->index();
     }
     return dataIndex_;
 }
@@ -63,35 +97,40 @@ std::string Node::toString() const {
 Node::operator std::string() const { return toString(); }
 
 node_vec_t Node::dataInputs() const {
+    auto ni = normInputs(), wi = withInputs();
     node_vec_t inputs;
-    inputs.insert(inputs.end(), normInputs_.begin(), normInputs_.end());
-    inputs.insert(inputs.end(), withInputs_.begin(), withInputs_.end());
+    inputs.reserve(ni.size() + wi.size());
+    inputs.insert(inputs.end(), ni.begin(), ni.end());
+    inputs.insert(inputs.end(), wi.begin(), wi.end());
     return inputs;
 }
 
 node_vec_t Node::inputs() const {
+    auto ni = normInputs(), wi = withInputs(), ci = ctrlInputs();
     node_vec_t inputs;
-    inputs.reserve(normInputs_.size() + withInputs_.size() + ctrlInputs_.size());
-    inputs.insert(inputs.end(), normInputs_.begin(), normInputs_.end());
-    inputs.insert(inputs.end(), withInputs_.begin(), withInputs_.end());
-    inputs.insert(inputs.end(), ctrlInputs_.begin(), ctrlInputs_.end());
+    inputs.reserve(ni.size() + wi.size() + ci.size());
+    inputs.insert(inputs.end(), ni.begin(), ni.end());
+    inputs.insert(inputs.end(), wi.begin(), wi.end());
+    inputs.insert(inputs.end(), ci.begin(), ci.end());
     return inputs;
 }
 
 node_vec_t Node::dataOutputs() const {
+    auto no = normOutputs(), wo = withOutputs();
     node_vec_t outputs;
-    outputs.reserve(normOutputs_.size() + withOutputs_.size());
-    outputs.insert(outputs.end(), normOutputs_.begin(), normOutputs_.end());
-    outputs.insert(outputs.end(), withOutputs_.begin(), withOutputs_.end());
+    outputs.reserve(no.size() + wo.size());
+    outputs.insert(outputs.end(), no.begin(), no.end());
+    outputs.insert(outputs.end(), wo.begin(), wo.end());
     return outputs;
 }
 
 node_vec_t Node::outputs() const {
+    auto no = normOutputs(), wo = withOutputs(), co = ctrlOutputs();
     node_vec_t outputs;
-    outputs.reserve(normOutputs_.size() + withOutputs_.size() + ctrlOutputs_.size());
-    outputs.insert(outputs.end(), normOutputs_.begin(), normOutputs_.end());
-    outputs.insert(outputs.end(), withOutputs_.begin(), withOutputs_.end());
-    outputs.insert(outputs.end(), ctrlOutputs_.begin(), ctrlOutputs_.end());
+    outputs.reserve(no.size() + wo.size() + co.size());
+    outputs.insert(outputs.end(), no.begin(), no.end());
+    outputs.insert(outputs.end(), wo.begin(), wo.end());
+    outputs.insert(outputs.end(), co.begin(), co.end());
     return outputs;
 }
 
@@ -115,7 +154,7 @@ bool Node::hasDeepLinkedTo(Node *node, size_t maxJumps) const {
 
         visited.insert(current);
 
-        for (auto *out : current->withOutputs_) {
+        for (auto *out : current->withOutputs()) {
             if (out == node)
                 return true;
             if (visited.find(out) == visited.end()) {
@@ -123,7 +162,7 @@ bool Node::hasDeepLinkedTo(Node *node, size_t maxJumps) const {
                     return true;
             }
         }
-        for (auto *out : current->normOutputs_) {
+        for (auto *out : current->normOutputs()) {
             if (out == node)
                 return true;
             if (visited.find(out) == visited.end()) {
@@ -131,7 +170,7 @@ bool Node::hasDeepLinkedTo(Node *node, size_t maxJumps) const {
                     return true;
             }
         }
-        for (auto *out : current->ctrlOutputs_) {
+        for (auto *out : current->ctrlOutputs()) {
             if (out == node)
                 return true;
             if (visited.find(out) == visited.end()) {
@@ -142,15 +181,15 @@ bool Node::hasDeepLinkedTo(Node *node, size_t maxJumps) const {
         return false;
     };
 
-    for (auto *out : withOutputs_) {
+    for (auto *out : withOutputs()) {
         if (dfs(out, maxJumps - 1))
             return true;
     }
-    for (auto *out : normOutputs_) {
+    for (auto *out : normOutputs()) {
         if (dfs(out, maxJumps - 1))
             return true;
     }
-    for (auto *out : ctrlOutputs_) {
+    for (auto *out : ctrlOutputs()) {
         if (dfs(out, maxJumps - 1))
             return true;
     }
@@ -158,15 +197,15 @@ bool Node::hasDeepLinkedTo(Node *node, size_t maxJumps) const {
 }
 
 bool Node::hasLinkedTo(Node *node) const {
-    for (auto *out : withOutputs_) {
+    for (auto *out : withOutputs()) {
         if (out == node)
             return true;
     }
-    for (auto *out : normOutputs_) {
+    for (auto *out : normOutputs()) {
         if (out == node)
             return true;
     }
-    for (auto *out : ctrlOutputs_) {
+    for (auto *out : ctrlOutputs()) {
         if (out == node)
             return true;
     }
@@ -175,7 +214,7 @@ bool Node::hasLinkedTo(Node *node) const {
 
 JoinNode *Node::matchedJoinOutput() const {
     ASSERT(hasMatchedJoinOutput(), "Node does not have a single matched JOIN output.");
-    return tt::as_ptr<JoinNode>(withOutputs_.front());
+    return tt::as_ptr<JoinNode>(withOutputs().front());
 }
 
 // =============================================================================
@@ -183,6 +222,7 @@ JoinNode *Node::matchedJoinOutput() const {
 // =============================================================================
 
 void Node::link(LinkType type, Node *from, Node *to) {
+    ASSERT(!from->frozen_ && !to->frozen_, "Cannot mutate frozen nodes.");
     ASSERT(
         from->nodeType_ != NodeType::DREF,
         "DREF nodes cannot be linked as input to other nodes.");
@@ -409,12 +449,12 @@ bool Node::replace(Node *oldNode, Node *newNode) {
             oldNode->toString(),
             newNode->toString()));
 
-    const node_vec_t withInputs  = oldNode->withInputs_;
-    const node_vec_t normInputs  = oldNode->normInputs_;
-    const node_vec_t ctrlInputs  = oldNode->ctrlInputs_;
-    const node_vec_t withOutputs = oldNode->withOutputs_;
-    const node_vec_t normOutputs = oldNode->normOutputs_;
-    const node_vec_t ctrlOutputs = oldNode->ctrlOutputs_;
+    const node_vec_t withInputs(oldNode->withInputs().begin(), oldNode->withInputs().end());
+    const node_vec_t normInputs(oldNode->normInputs().begin(), oldNode->normInputs().end());
+    const node_vec_t ctrlInputs(oldNode->ctrlInputs().begin(), oldNode->ctrlInputs().end());
+    const node_vec_t withOutputs(oldNode->withOutputs().begin(), oldNode->withOutputs().end());
+    const node_vec_t normOutputs(oldNode->normOutputs().begin(), oldNode->normOutputs().end());
+    const node_vec_t ctrlOutputs(oldNode->ctrlOutputs().begin(), oldNode->ctrlOutputs().end());
 
     // 整节点替换与单边替换必须复用同一套保序语义，否则 BRCH/JOIN/CALL 这类依赖槽位
     // 顺序的节点会在“节点级 rewrite”里悄悄漂移。
@@ -468,9 +508,9 @@ bool Node::replaceUses(Node *oldNode, Node *newNode) {
             oldNode->toString(),
             newNode->toString()));
 
-    const node_vec_t withOutputs = oldNode->withOutputs_;
-    const node_vec_t normOutputs = oldNode->normOutputs_;
-    const node_vec_t ctrlOutputs = oldNode->ctrlOutputs_;
+    const node_vec_t withOutputs(oldNode->withOutputs().begin(), oldNode->withOutputs().end());
+    const node_vec_t normOutputs(oldNode->normOutputs().begin(), oldNode->normOutputs().end());
+    const node_vec_t ctrlOutputs(oldNode->ctrlOutputs().begin(), oldNode->ctrlOutputs().end());
 
     for (Node *out : withOutputs) {
         Node::replaceInput(LinkType::With, out, oldNode, newNode);
@@ -485,32 +525,32 @@ bool Node::replaceUses(Node *oldNode, Node *newNode) {
 }
 
 bool Node::detach() {
-    auto tempWithInputs = withInputs_;
+    node_vec_t tempWithInputs(withInputs().begin(), withInputs().end());
     for (auto *input : tempWithInputs) {
         if (!unlink(input, this))
             return false;
     }
-    auto tempNormInputs = normInputs_;
+    node_vec_t tempNormInputs(normInputs().begin(), normInputs().end());
     for (auto *input : tempNormInputs) {
         if (!unlink(input, this))
             return false;
     }
-    auto tempCtrlInputs = ctrlInputs_;
+    node_vec_t tempCtrlInputs(ctrlInputs().begin(), ctrlInputs().end());
     for (auto *input : tempCtrlInputs) {
         if (!unlink(input, this))
             return false;
     }
-    auto tempWithOutputs = withOutputs_;
+    node_vec_t tempWithOutputs(withOutputs().begin(), withOutputs().end());
     for (auto *output : tempWithOutputs) {
         if (!unlink(this, output))
             return false;
     }
-    auto tempNormOutputs = normOutputs_;
+    node_vec_t tempNormOutputs(normOutputs().begin(), normOutputs().end());
     for (auto *output : tempNormOutputs) {
         if (!unlink(this, output))
             return false;
     }
-    auto tempCtrlOutputs = ctrlOutputs_;
+    node_vec_t tempCtrlOutputs(ctrlOutputs().begin(), ctrlOutputs().end());
     for (auto *output : tempCtrlOutputs) {
         if (!unlink(this, output))
             return false;
@@ -538,7 +578,7 @@ Node *DataNode::clone(Graph &graph) const {
     // Graph clone/rewrite 需要复制原始编译期静态条目，而不是把 frozen static slot 先
     // materialize 回 data_ptr_t 再二次解释。否则某些只允许运行时表示的静态 ref 槽位
     // 会在 clone 阶段被错误展开。
-    return DataNode::create(graph, graph_.getStaticData(dataIndex_));
+    return DataNode::create(graph, graph_->getStaticData(dataIndex_));
 }
 
 // =============================================================================
@@ -556,12 +596,12 @@ std::string PortNode::toString() const {
         "PORT({}, {}{}): {}",
         dataIndex_,
         isVar_ ? "var " : "",
-        name_,
+        name(),
         dataType()->toString());
 }
 
 Node *PortNode::clone(Graph &graph) const {
-    return PortNode::create(graph, dataType_, name_, isVar_);
+    return PortNode::create(graph, dataType_, name(), isVar_);
 }
 
 // =============================================================================
@@ -617,23 +657,32 @@ Node *FillNode::clone(Graph &graph) const { return FillNode::create(graph, dataT
 Node *AccsNode::create(Graph &graph, Type *type, const std::variant<std::string, size_t> &accsIdx) {
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = builder.ownNode(std::make_unique<AccsNode>(graph, type, index, accsIdx));
+    Node *node;
+    if (std::holds_alternative<size_t>(accsIdx)) {
+        node = builder.ownNode(
+            std::make_unique<AccsNode>(graph, type, index, std::get<size_t>(accsIdx)));
+    } else {
+        node = builder.ownNode(
+            std::make_unique<AccsNode>(graph, type, index, std::get<std::string>(accsIdx)));
+    }
     builder.addNode(node);
     return node;
 }
 
 std::string AccsNode::index2String() const {
-    if (std::holds_alternative<size_t>(accsIndex_)) {
-        return std::to_string(std::get<size_t>(accsIndex_));
-    }
-    return std::get<std::string>(accsIndex_);
+    return isNum_ ? std::to_string(numIndex_) : strIndex();
 }
 
 std::string AccsNode::toString() const {
     return std::format("ACCS({}, ${}): {}", dataIndex_, index2String(), dataType()->toString());
 }
 
-Node *AccsNode::clone(Graph &graph) const { return AccsNode::create(graph, dataType_, accsIndex_); }
+Node *AccsNode::clone(Graph &graph) const {
+    if (isNum_) {
+        return AccsNode::create(graph, dataType_, std::variant<std::string, size_t>(numIndex_));
+    }
+    return AccsNode::create(graph, dataType_, std::variant<std::string, size_t>(strIndex()));
+}
 
 // =============================================================================
 // BrchNode, JoinNode, CallNode, BindNode
@@ -652,9 +701,10 @@ std::string BrchNode::toString() const {
 }
 
 JoinNode *BrchNode::matchedJoin() const {
-    ASSERT(normOutputs_.size() == 1, "BRCH node must have exactly one matched JOIN output.");
-    ASSERT(normOutputs_.front()->type() == NodeType::JOIN, "BRCH norm output must be JOIN.");
-    return tt::as_ptr<JoinNode>(normOutputs_.front());
+    auto no = normOutputs();
+    ASSERT(no.size() == 1, "BRCH node must have exactly one matched JOIN output.");
+    ASSERT(no.front()->type() == NodeType::JOIN, "BRCH norm output must be JOIN.");
+    return tt::as_ptr<JoinNode>(no.front());
 }
 
 Node *BrchNode::clone(Graph &graph) const { return BrchNode::create(graph, dataType_); }
@@ -672,9 +722,10 @@ std::string JoinNode::toString() const {
 }
 
 BrchNode *JoinNode::matchedBranch() const {
-    ASSERT(!normInputs_.empty(), "JOIN node must have a matched BRCH input.");
-    ASSERT(normInputs_.front()->type() == NodeType::BRCH, "JOIN norm input must be BRCH.");
-    return tt::as_ptr<BrchNode>(normInputs_.front());
+    auto ni = normInputs();
+    ASSERT(!ni.empty(), "JOIN node must have a matched BRCH input.");
+    ASSERT(ni.front()->type() == NodeType::BRCH, "JOIN norm input must be BRCH.");
+    return tt::as_ptr<BrchNode>(ni.front());
 }
 
 Node *JoinNode::clone(Graph &graph) const { return JoinNode::create(graph, dataType_); }
@@ -712,9 +763,10 @@ Node *BindNode::clone(Graph &graph) const { return BindNode::create(graph, dataT
 // =============================================================================
 
 Node *FuncNode::create(Graph &graph, func_ptr_t func) {
+    auto *raw = graph.registerFuncData(func);
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = builder.ownNode(std::make_unique<FuncNode>(graph, index, func));
+    Node *node       = builder.ownNode(std::make_unique<FuncNode>(graph, index, raw));
     builder.addNode(node);
     return node;
 }
@@ -726,7 +778,7 @@ FunctionType *FuncNode::funcType() const {
 
 JoinNode *FuncNode::matchedJoin() const {
     ASSERT(hasMatchedJoin(), "FUNC node does not have a single matched JOIN continuation.");
-    return tt::as_ptr<JoinNode>(withOutputs_.front());
+    return tt::as_ptr<JoinNode>(withOutputs().front());
 }
 
 std::string FuncNode::toString() const {
@@ -738,12 +790,16 @@ std::string FuncNode::toString() const {
         dataType()->toString());
 }
 
-Node *FuncNode::clone(Graph &graph) const { return FuncNode::create(graph, func_); }
+Node *FuncNode::clone(Graph &graph) const {
+    auto sp = Node::graph_->lookupFuncData(func_);
+    return FuncNode::create(graph, sp);
+}
 
 Node *OperNode::create(Graph &graph, oper_idx_ptr_t op) {
+    auto *raw = graph.registerOperIndex(op);
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = builder.ownNode(std::make_unique<OperNode>(graph, index, op));
+    Node *node       = builder.ownNode(std::make_unique<OperNode>(graph, index, raw));
     builder.addNode(node);
     return node;
 }
@@ -763,7 +819,10 @@ std::string OperNode::toString() const {
         dataType()->toString());
 }
 
-Node *OperNode::clone(Graph &graph) const { return OperNode::create(graph, operator_); }
+Node *OperNode::clone(Graph &graph) const {
+    auto sp = graph_->lookupOperIndex(operator_);
+    return OperNode::create(graph, sp);
+}
 
 // =============================================================================
 // ExitNode, DrefNode, SyncNode, NRefNode
@@ -784,7 +843,7 @@ Node *DrefNode::create(Graph &graph, const dref_target_t &target) {
 }
 
 std::string DrefNode::toString() const {
-    return std::format("DREF({}): {}", graph_.name(), dataType()->toString());
+    return std::format("DREF({}): {}", graph_->name(), dataType()->toString());
 }
 
 Node *DrefNode::clone(Graph &graph) const {

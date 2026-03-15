@@ -25,19 +25,37 @@
 
 namespace camel::compile::gir {
 
+using type_vec_t = camel::core::type::type_vec_t;
+
+// =============================================================================
+// LayoutResult：computeLayout() 的纯计算输出。
+//
+// 包含图中所有节点的新 slot 编号映射、静态数据数组、以及各类签名类型，
+// 由 applyLayout() 一次性写入 Graph。将 layout 计算与 Graph 变更解耦，
+// 使得 sealGraph / exportRoot 等流程可以先计算再搬运。
+// =============================================================================
+struct LayoutResult {
+    std::vector<std::pair<Node *, data_idx_t>> nodeIndices;
+    data_vec_t staticDataArr;
+    TupleType *staticDataType  = nullptr;
+    TupleType *runtimeDataType = nullptr;
+    TupleType *closureType     = nullptr;
+    size_t runtimeDataSize     = 1;
+};
+
 // =============================================================================
 // GraphBuilder：Graph 的唯一底层构造/变换入口。
 //
 // 职责：
 //   1. 创建新图 (createGraph)、克隆图 (cloneGraph)。
-//   2. 在非 finalized 图上执行结构编辑：增删节点、端口、闭包、子图、依赖。
-//   3. 一次性导出终态布局 (finalize)：重排 slot 编号、生成 signature/layout、
-//      安装 FrameMeta。finalize 后图标记为 finalized，不再允许后续编辑。
+//   2. 在 draft（非 finalized）图上执行结构编辑：增删节点、端口、闭包、子图、依赖。
+//   3. 封印 (sealGraph)：一次性执行布局计算（rearrange + FrameMeta），然后将所有
+//      节点的 draft 邻接 vectors 冻结到 arena 定长数组上。封印后图不再允许编辑。
 //
 // 设计约束：
 //   - Graph 自身不暴露任何 mutable 接口，所有写操作均通过 GraphBuilder (friend)。
-//   - finalize 是单向终结，不可 "un-finalize"。要修改已终结图必须先 cloneGraph。
-//   - rearrange() 仅在 finalize 内部调用，不对外暴露。
+//   - sealGraph 是单向终结。要修改已封印的图必须先 cloneGraph 出 draft 副本。
+//   - computeLayout() / applyLayout() 将布局计算与变更解耦。
 // =============================================================================
 class GraphBuilder {
   public:
@@ -50,8 +68,6 @@ class GraphBuilder {
     static graph_ptr_t createGraph(
         FunctionType *funcType, const graph_ptr_t &outer = nullptr, const std::string &name = "");
     static graph_ptr_t cloneGraph(const graph_ptr_t &graph);
-    static void finalizeGraph(const graph_ptr_t &graph);
-    static void finalizeGraphRecursively(const graph_ptr_t &graph);
 
     Graph &graph() const { return *graph_; }
     graph_ptr_t graphPtr() const { return graph().shared_from_this(); }
@@ -78,10 +94,24 @@ class GraphBuilder {
 
     void touch() const { markMutated(); }
     Node *inlineNode(Node *node, bool forceSync = false) const;
-    void finalize() const;
-    void finalizeRecursively() const;
+    /// 封印此图：执行布局计算（rearrange + FrameMeta），然后将所有节点的
+    /// draft 邻接 vectors 搬迁到 arena 上的定长数组。具有 consume 语义：
+    /// 调用后 builder 不再可用（graph_ 置 nullptr）。
+    void sealGraph();
+    /// 递归封印整棵图树（深度优先）。
+    static void sealGraphRecursively(const graph_ptr_t &graph);
+
+    /// 纯计算：遍历 graph 的 ports/closure/nodes，生成 slot 编号映射和签名类型，
+    /// 不修改 Graph 任何成员。后续由 applyLayout() 一次性写入。
+    static LayoutResult computeLayout(const Graph &graph);
+
+    /// 将 computeLayout() 的结果写入 graph：更新每个节点的 dataIndex、
+    /// 更新 Graph 的 signature / staticDataArr / FrameMeta。
+    static void applyLayout(Graph &graph, const LayoutResult &layout);
 
   private:
+    /// 内部：执行 rearrange + installFrameMeta 并标记 finalized。幂等。
+    void finalize() const;
     void rearrange() const;
     void assertBuildable(const char *action) const;
     void markMutated() const;
@@ -90,19 +120,19 @@ class GraphBuilder {
 };
 
 // =============================================================================
-// GraphDraft：一次 rewrite / build 的工作态。
+// GraphDraft：一次 rewrite 的工作态。
 //
 // GraphDraft 持有 source graph 的 cloneGraph 工作副本（draft-owned），并负责：
 //   1. 约束所有编辑只能发生在 draft-owned graph 上（assertDraftOwned）。
-//   2. 记录哪些 graph 被改动（dirtyGraphs_），延迟到 finalize 时统一导出。
+//   2. 编辑结束后由 seal() 一次性封印整棵子图树。
 //   3. 为 GraphRewriteSession 提供 graph-in / graph-out 的内部编辑原语。
 //
 // 使用流程：
-//   GraphDraft draft(frozenGraph);        // 1. 从 frozen 源图创建 draft
+//   GraphDraft draft(frozenGraph);        // 1. 从 frozen 源图克隆出 draft
 //   draft.eraseNode(n);                   // 2. 在 draft 上执行编辑
 //   draft.replaceNode(old, new);
-//   draft.finalize();                     // 3. 一次性导出：rearrange + FrameMeta
-//   return draft.root();                  // 4. 返回新的 finalized graph
+//   draft.seal();                         // 3. 封印：rearrange + FrameMeta + freeze
+//   return draft.root();                  // 4. 返回新的 sealed graph
 //
 // draft 内的编辑通过 GraphBuilder 的底层 API 完成，但 draft 保证只操作克隆副本，
 // 绝不触碰原始 source graph。
@@ -182,13 +212,12 @@ class GraphDraft {
         markDirty(&node->graph());
         return result;
     }
-    /// 统一导出：对所有 dirty graph 执行 finalize，然后递归 finalize 整棵子图树。
-    void finalize() {
-        for (Graph *graph : dirtyGraphs_) {
-            GraphBuilder(graph).finalize();
-        }
-        GraphBuilder::finalizeGraphRecursively(root_);
+    /// 统一封印导出：递归对整棵子图树执行 sealGraph（含 rearrange + FrameMeta + freeze）。
+    /// sealGraph 内部调用 finalize（幂等），对已 finalized 的图自动跳过布局阶段，
+    /// 但仍执行 freeze 邻接表搬迁。
+    void seal() {
         dirtyGraphs_.clear();
+        GraphBuilder::sealGraphRecursively(root_);
     }
 
   private:

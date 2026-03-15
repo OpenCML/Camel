@@ -340,12 +340,12 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 auto accsNode     = tt::as_ptr<AccsNode>(n);
                 data_idx_t srcIdx = n->dataInputs().front()->index();
                 if (accsNode->isNum()) {
-                    size_t idx = accsNode->index<size_t>();
+                    size_t idx = accsNode->numIndex();
                     Tuple *t   = currFrame->get<Tuple *>(srcIdx);
                     ASSERT(idx < t->size(), "Tuple index out of bounds in NodeVM.");
                     currFrame->set(n->index(), t->get<slot_t>(idx));
                 } else {
-                    std::string key  = accsNode->index<std::string>();
+                    std::string key  = accsNode->strIndex();
                     Struct *s        = currFrame->get<Struct *>(srcIdx);
                     Type *structType = currFrame->typeAt<Type>(srcIdx);
                     currFrame->set(n->index(), s->get<slot_t>(key, structType));

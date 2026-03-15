@@ -32,14 +32,14 @@ struct RewriteResult {
 // GraphRewriteSession：pass 侧看到的高层 rewrite 接口。
 //
 // pass 只描述"删什么、替换什么、内联什么"，不直接操心工作图何时重排、
-// 何时 finalize。所有实际编辑都落到内部 GraphDraft 上，finish() 统一导出新图。
+// 何时封印。所有实际编辑都落到内部 GraphDraft 上，finish() 统一封印并导出新图。
 //
 // 典型用法（在 rewrite pass 的 apply 方法中）：
 //   GraphRewriteSession session(frozenGraph);
 //   for (Node *n : session.root()->nodes()) {
 //       if (shouldReplace(n)) session.replaceNode(n, makeNew(n));
 //   }
-//   return session.finish();  // -> RewriteResult { newFrozenGraph, changed }
+//   return session.finish();  // -> RewriteResult { newSealedGraph, changed }
 // =============================================================================
 class GraphRewriteSession {
   public:
@@ -104,7 +104,7 @@ class GraphRewriteSession {
 
     RewriteResult finish() {
         if (draft_.root()) {
-            draft_.finalize();
+            draft_.seal();
         }
         return RewriteResult{draft_.root(), changed_};
     }

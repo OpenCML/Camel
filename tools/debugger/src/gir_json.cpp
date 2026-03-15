@@ -319,9 +319,9 @@ void nodeLabelShapeStyle(Node *node, std::string &label, std::string &shape, std
         shape = "diamond";
         break;
     case NodeType::FUNC: {
-        func_ptr_t func = tt::as_ptr<FuncNode>(node)->func();
-        label           = func->name().empty() ? func->graph().name() : func->name();
-        shape           = "Mdiamond";
+        auto *func = tt::as_ptr<FuncNode>(node)->func();
+        label      = func->name().empty() ? func->graph().name() : func->name();
+        shape      = "Mdiamond";
         break;
     }
     case NodeType::OPER: {
@@ -373,7 +373,7 @@ void nodeRawFields(Node *node, json &j) {
         break;
     }
     case NodeType::FUNC: {
-        func_ptr_t func    = tt::as_ptr<FuncNode>(node)->func();
+        auto *func         = tt::as_ptr<FuncNode>(node)->func();
         j["funcName"]      = func->name();
         j["funcGraphName"] = func->graph().name();
         break;

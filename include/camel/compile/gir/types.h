@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include <list>
 #include <memory>
+#include <span>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -73,6 +74,7 @@ using graph_vec_ptr_t = std::shared_ptr<graph_vec_t>;
 using node_uptr_t     = std::unique_ptr<Node>;
 using node_lst_t      = std::list<Node *>;
 using node_vec_t      = std::vector<Node *>;
+using node_span_t     = std::span<Node *const>;
 using node_set_t      = std::unordered_set<Node *>;
 
 using data_idx_t = int16_t;

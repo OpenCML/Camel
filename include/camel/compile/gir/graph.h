@@ -31,6 +31,8 @@
 #include "camel/utils/type.h"
 #include "types.h"
 
+class OperatorIndex;
+
 namespace camel::core::context {
 struct FrameMeta;
 }
@@ -55,9 +57,12 @@ using func_ptr_t   = camel::core::data::func_ptr_t;
 // =============================================================================
 // Graph：GIR 函数/子图的最终只读产物。
 //
-// Graph 一旦由 GraphBuilder::finalize() 导出后即视为不可变。
+// Graph 一旦由 GraphBuilder::sealGraph() 封印后即视为不可变。
 // 所有结构编辑（增删节点、改边、重排布局）都在 GraphDraft / GraphBuilder 的
-// 工作态上完成，最终通过 finalize 一次性写入新图。
+// draft 工作态上完成，最终通过 sealGraph 一次性导出封印图。
+//
+// 封印后，所有节点的邻接 vectors 被搬迁到 arena 上的定长数组（frozen 模式），
+// draft vectors 被释放，节点不再允许结构编辑。
 //
 // extras_ 提供 O(1) 图级缓存槽位（FrameMeta、JIT entry、topo cache 等），
 // 由各后端/工具自行约定 index 并维护失效协议，Graph 本身只提供通用
@@ -96,7 +101,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     std::string toString() const;
 
-    /// finalized() 表示此图已经历 finalize 导出，拥有完整的 slot 编号、layout 与 FrameMeta。
+    /// finalized() 表示此图已经历 sealGraph 封印，拥有完整的 slot 编号、layout 与 FrameMeta，
+    /// 且所有节点的邻接表已搬迁至 arena（frozen 模式）。
     /// 此标志为单向标记：一旦设为 true 则永不回退。要修改图必须克隆后在 draft 上操作。
     bool finalized() const { return finalized_; }
 
@@ -144,6 +150,20 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const node_vec_t &closure() const { return closure_; }
     size_t argsCount() const { return normPorts_.size() + withPorts_.size() + closure_.size(); }
 
+    const std::string &nodeStableId(const Node *node) const;
+    const std::string &nodePortName(const Node *node) const;
+    const std::string &nodeAccsKey(const Node *node) const;
+
+    /// 将 OperatorIndex shared_ptr 注册到本图，返回裸指针供 OperNode 持有。
+    ::OperatorIndex *registerOperIndex(std::shared_ptr<::OperatorIndex> idx);
+    /// 从注册表查找裸指针对应的 shared_ptr（用于 clone 时传递所有权到新图）。
+    std::shared_ptr<::OperatorIndex> lookupOperIndex(const ::OperatorIndex *raw) const;
+
+    /// 将 FunctionData shared_ptr 注册到本图，返回裸指针供 FuncNode 持有。
+    camel::core::data::FunctionData *registerFuncData(func_ptr_t fd);
+    /// 从注册表查找裸指针对应的 shared_ptr（用于 clone/remap 等需要 shared_ptr 语义的场景）。
+    func_ptr_t lookupFuncData(const camel::core::data::FunctionData *raw) const;
+
     /// 通用 extra 缓存槽位。index 由各后端/工具自行约定，Graph 不感知具体用途。
     template <typename T, std::size_t Index> T *getExtra() const { return extras_.get<T, Index>(); }
     template <typename T, std::size_t Index> void setExtra(T *ptr) const {
@@ -151,6 +171,11 @@ class Graph : public std::enable_shared_from_this<Graph> {
     }
 
   private:
+    friend class Node;
+    friend class PortNode;
+    friend class FuncNode;
+    friend class OperNode;
+    friend class AccsNode;
     friend class Builder;
     friend class GraphBuilder;
     friend class GraphRewriteSession;
@@ -183,15 +208,30 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     // --- 节点所有权 ---
     // 当前 Node 由 ownedNodes_ (unique_ptr) 管理，Graph 析构时自动释放。
-    // 后续可考虑让 finalized 图的 Node 进入 arena 以提升地址局部性；
-    // draft 阶段可保留 unique_ptr 的灵活管理方式。
+    // 后续 frozen 图的 Node 进入 arena 以提升地址局部性；
+    // draft 阶段保留 unique_ptr 的灵活管理方式。
     std::vector<node_uptr_t> ownedNodes_;
+
+    // --- 节点属性集中存储 ---
+    // stableId 和 portName 不存于 Node 自身，由 Graph 集中管理。
+    // 使 Node 更接近平凡析构（无 std::string 成员），
+    // 同时避免 frozen arena node 需要存储动态字符串。
+    std::unordered_map<const Node *, std::string> nodeStableIds_;
+    std::unordered_map<const Node *, std::string> nodePortNames_;
+    std::unordered_map<const Node *, std::string> nodeAccsKeys_;
+
+    // --- 非平凡数据集中持有 ---
+    // OperNode/FuncNode 持有裸指针，实际 shared_ptr 所有权由 Graph 集中管理。
+    // 这使 Node 本身更接近平凡析构，为 arena 化分配铺路。
+    std::unordered_map<const ::OperatorIndex *, std::shared_ptr<::OperatorIndex>>
+        operIndexRegistry_;
+    std::unordered_map<const camel::core::data::FunctionData *, func_ptr_t> funcDataRegistry_;
     node_vec_t normPorts_, withPorts_, closure_;
     node_vec_t nodes_;
     Node *exitNode_ = nullptr;
 
-    /// 单向终结标记。finalize() 设为 true 后永不回退。
-    /// 要修改已终结的图，必须克隆出 draft 副本再操作。
+    /// 单向终结标记。sealGraph() 设为 true 后永不回退。
+    /// 要修改已封印的图，必须克隆出 draft 副本再操作。
     bool finalized_ = false;
 
     bool looped_        = false;
