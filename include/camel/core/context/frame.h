@@ -356,18 +356,8 @@ class FramePool {
         }
 
         // 分配新 Frame 并初始化
-        FrameMeta *meta = graph->getExtra<FrameMeta, 0>();
-        if (meta == nullptr) {
-            meta = installFrameMetaInfoForGraph(graph);
-            EXEC_WHEN_DEBUG({
-                GetDefaultLogger()
-                    .in("FramePool")
-                    .info(
-                        "[{}] Installed FrameMeta for graph <{}>",
-                        mm::formatAddress(this, true),
-                        graph->name());
-            });
-        }
+        FrameMeta *meta = graph->frameMeta();
+        ASSERT(meta != nullptr, std::format("Graph '{}' has no frozen FrameMeta.", graph->name()));
         size_t frameSize = meta->frameSize;
         if (top_ + frameSize > end_) {
             EXEC_WHEN_DEBUG({

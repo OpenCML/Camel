@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 12, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,22 +35,16 @@ using namespace camel::core::type;
 
 namespace camel::compile::gir {
 
+namespace {
+constexpr std::size_t kSourceContextExtraIndex = 3;
+}
+
 inline void tryRemoveCtrlLink(Node *from, Node *to) {
     // if from has already linked to to by a ctrl link, remove it first
     // sometimes we may need to change a ctrl link (linked before) to a data link
     // because data link has higher priority than ctrl link
     // and we don't want to have duplicate links
-    auto &fromCtrlOutputs = from->ctrlOutputs();
-    if (std::find(fromCtrlOutputs.begin(), fromCtrlOutputs.end(), to) != fromCtrlOutputs.end()) {
-        fromCtrlOutputs.erase(
-            std::remove(fromCtrlOutputs.begin(), fromCtrlOutputs.end(), to),
-            fromCtrlOutputs.end());
-
-        auto &toCtrlInputs = to->ctrlInputs();
-        toCtrlInputs.erase(
-            std::remove(toCtrlInputs.begin(), toCtrlInputs.end(), from),
-            toCtrlInputs.end());
-    }
+    (void)NodeMutation::unlinkCtrl(from, to);
 }
 
 inline bool linkCheek(Node *from, Node *to) {
@@ -210,9 +204,10 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
 
     nodeScope_  = node_scope_t::create();
     graphScope_ = graph_scope_t::create();
-    rootGraph_  = Graph::create(FunctionType::create(), nullptr, "__root__");
+    rootGraph_  = GraphBuilder::createGraph(FunctionType::create(), nullptr, "__root__");
     if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
-        rootGraph_->setExtra<camel::source::SourceContext, 3>(sourceContext.get());
+        rootGraph_->setExtra<camel::source::SourceContext, kSourceContextExtraIndex>(
+            sourceContext.get());
     }
     currGraph_ = rootGraph_;
 
@@ -226,10 +221,10 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
             ASSERT(mainGraphSet.size() == 1, "Multiple main graphs found.");
             auto mainGraph = *mainGraphSet.begin();
             auto funcNode  = createFuncDataNode(mainGraph, false, false);
-            currGraph_->setOutput(funcNode);
+            GraphBuilder(currGraph_).setOutput(funcNode);
         }
 
-        rootGraph_->rearrange();
+        GraphBuilder(rootGraph_).finalizeRecursively();
     } catch (Diagnostic &d) {
         diags_->add(std::move(d));
         rootGraph_ = nullptr;
@@ -240,18 +235,19 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
 
 graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name) {
     if (name.empty()) {
-        currGraph_ = Graph::create(funcType, currGraph_);
+        currGraph_ = GraphBuilder::createGraph(funcType, currGraph_);
     } else {
         auto graphs = graphScope_->get(name);
         if (graphs.has_value() && !graphs.value()->empty()) {
             currGraph_ = graphs.value()->front();
         } else {
-            currGraph_ = Graph::create(funcType, currGraph_, name);
+            currGraph_ = GraphBuilder::createGraph(funcType, currGraph_, name);
             insertGraph(name, currGraph_);
         }
     }
     if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
-        currGraph_->setExtra<camel::source::SourceContext, 3>(sourceContext.get());
+        currGraph_->setExtra<camel::source::SourceContext, kSourceContextExtraIndex>(
+            sourceContext.get());
     }
     nodeScope_  = nodeScope_->enter(name);
     graphScope_ = graphScope_->enter(name);
@@ -261,8 +257,7 @@ graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name)
 void Builder::leaveScope() {
     nodeScope_  = nodeScope_->leave();
     graphScope_ = graphScope_->leave();
-    currGraph_->rearrange();
-    currGraph_ = currGraph_->outer();
+    currGraph_  = currGraph_->outer();
 }
 
 bool Builder::insertNode(const std::string &name, Node *node) {
@@ -297,7 +292,7 @@ Node *Builder::resolveCrossGraphRef(Node *node, const std::string &name) {
 
         // 插入一个 Port 节点
         Node *port = PortNode::create(*curr, node->dataType(), name, false);
-        curr->addClosure(port);
+        GraphBuilder(curr).addClosure(port);
         scope->insert(name, port);
 
         // 向外层图和作用域继续遍历
@@ -412,11 +407,11 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     Node *res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
     if (!graph->hasOutput()) {
         if (res) {
-            graph->setOutput(res);
+            GraphBuilder(graph).setOutput(res);
         } else {
             // function with no return value, setting null by default
             Node *resNode = DataNode::create(*graph, Data::null());
-            graph->setOutput(resNode);
+            GraphBuilder(graph).setOutput(resNode);
         }
     }
     leaveScope();
@@ -664,7 +659,7 @@ Node *Builder::createFuncDataNode(
                 const auto &refNode = resolveNodeByRef(std::string(ref));
                 Node::link(LinkType::With, refNode, funcNode);
             }
-            funcData->graph().parametrizeClosure();
+            GraphBuilder(funcData->graph().shared_from_this()).parametrizeClosure();
             resultNode = funcNode;
             if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
                 sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
@@ -770,7 +765,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // The subtree returned a subgraph,
             // which means that a lambda function is passed as a parameter
             graph_ptr_t inputGraph = any_cast<graph_ptr_t>(dataRes);
-            currGraph_->addDependency(inputGraph);
+            GraphBuilder(currGraph_).addDependency(inputGraph);
             auto inputNode = createFuncDataNode(inputGraph, true, false);
             normInputNodes.push_back(inputNode);
             normInputTypes.push_back(inputNode->dataType());
@@ -831,7 +826,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     .commit(argTypesStr, overloadsStr);
                 throw BuildAbortException();
             }
-            currGraph_->addDependency(targetGraph);
+            GraphBuilder(currGraph_).addDependency(targetGraph);
             // 如果目标图是当前图的子图，说明其是在当前图作用域中定义的
             // 这意味这它的闭包捕获在当前图中都能找到对应节点
             // 因而可以允许将闭包捕获优化成参数传递
@@ -978,7 +973,7 @@ Node *Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             // The subtree returned a subgraph,
             // which means that a lambda function is passed as a parameter
             graph_ptr_t subGraph = any_cast<graph_ptr_t>(dataRes);
-            currGraph_->addDependency(subGraph);
+            GraphBuilder(currGraph_).addDependency(subGraph);
             auto inputNode = createFuncDataNode(subGraph, true, false);
             inputs.push_back(inputNode);
         } else if (dataRes.type() == typeid(Node *)) {
@@ -1113,16 +1108,16 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         Node *resNode = visitExecNode(caseExecNode);
         if (!subGraph->hasOutput()) {
             if (resNode) {
-                subGraph->setOutput(resNode);
+                GraphBuilder(subGraph).setOutput(resNode);
             } else {
                 // function with no return value, setting null by default
                 Node *nullNode = DataNode::create(*subGraph, Data::null());
-                subGraph->setOutput(nullNode);
+                GraphBuilder(subGraph).setOutput(nullNode);
             }
         }
         leaveScope();
 
-        currGraph_->addDependency(subGraph);
+        GraphBuilder(currGraph_).addDependency(subGraph);
         Type *exitType = subGraph->funcType()->exitType();
 
         // 保证所有捕获的变量都在 BRCH 节点执行之前准备好
@@ -1188,14 +1183,14 @@ Node *Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         resNode = any_cast<Node *>(res);
     } else if (res.type() == typeid(graph_ptr_t)) {
         graph_ptr_t subGraph = any_cast<graph_ptr_t>(res);
-        currGraph_->addDependency(subGraph);
+        GraphBuilder(currGraph_).addDependency(subGraph);
         // Returning a function value should lower to a DATA(FunctionData) node rather than an
         // eager call.
         resNode = createFuncDataNode(subGraph, true, false);
     } else {
         ASSERT(false, "Unexpected result type from Enter child of EXIT node.");
     }
-    currGraph_->setOutput(resNode);
+    GraphBuilder(currGraph_).setOutput(resNode);
 
     if (nodeModifierMap_.count(resNode)) {
         Node *modifier   = nodeModifierMap_[resNode];

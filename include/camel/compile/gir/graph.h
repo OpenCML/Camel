@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 12, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include <unordered_map>
 
+#include "arena.h"
 #include "camel/core/data.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
@@ -30,7 +31,19 @@
 #include "camel/utils/type.h"
 #include "types.h"
 
+namespace camel::core::context {
+struct FrameMeta;
+}
+
+namespace camel::source {
+class SourceContext;
+}
+
 namespace camel::compile::gir {
+
+class Builder;
+class GraphBuilder;
+class GraphRewriteSession;
 
 using Type         = camel::core::type::Type;
 using FunctionType = camel::core::type::FunctionType;
@@ -45,6 +58,8 @@ using func_ptr_t   = camel::core::data::func_ptr_t;
 
 class Graph : public std::enable_shared_from_this<Graph> {
   public:
+    static constexpr std::size_t kFrameMetaExtraIndex = 0;
+
     static std::string makeStableId(const std::string &name);
 
     Graph(const Graph &other)            = delete;
@@ -56,16 +71,13 @@ class Graph : public std::enable_shared_from_this<Graph> {
         FunctionType *funcType, const graph_ptr_t &graph = nullptr, const std::string &name = "");
     ~Graph();
 
-    static graph_ptr_t create(
-        FunctionType *funcType, const graph_ptr_t &graph = nullptr, const std::string &name = "");
-
     static graph_ptr_t null() { return nullptr; }
 
     bool operator==(const Graph &other) const { return this == &other; }
     bool operator!=(const Graph &other) const { return !(this == &other); }
 
     bool isRoot() const { return !outer_.lock(); }
-    bool isMacro() const { return funcType_ && funcType_->modifiers().macro(); }
+    bool isMacro() const { return signature_.funcType && signature_.funcType->modifiers().macro(); }
     const std::string &name() const { return name_; }
     std::string mangledName() const { return name_ + std::format("<{}>", funcType()->mangle()); }
     const std::string &stableId() const { return stableId_; }
@@ -78,50 +90,41 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     std::string toString() const;
 
-    FunctionType *funcType() const { return funcType_; }
-    const TupleType *staticDataType() const { return staticDataType_; }
-    const TupleType *runtimeDataType() const { return runtimeDataType_; }
-    const TupleType *closureType() const { return closureType_; }
+    FunctionType *funcType() const { return signature_.funcType; }
+    graph_arena_ptr_t arena() const { return arena_; }
+    camel::core::context::FrameMeta *frameMeta() const;
+    void setFrameMeta(camel::core::context::FrameMeta *meta) const {
+        setExtra<camel::core::context::FrameMeta, kFrameMetaExtraIndex>(meta);
+    }
+    const TupleType *staticDataType() const { return signature_.staticDataType; }
+    const TupleType *runtimeDataType() const { return signature_.runtimeDataType; }
+    const TupleType *closureType() const { return signature_.closureType; }
+    bool frozen() const { return frozen_; }
 
     const data_vec_t &staticDataArr() const { return staticDataArr_; }
-    data_idx_t addStaticData(const data_ptr_t &data);
-    data_idx_t addRuntimeData();
-    void setStaticData(data_idx_t index, const data_ptr_t &data);
+    data_ptr_t materializeStaticData(data_idx_t index) const;
     data_ptr_t getStaticData(data_idx_t index) const;
     size_t staticDataSize() const { return staticDataArr_.size(); }
-    size_t runtimeDataSize() const { return runtimeDataSize_; }
+    size_t runtimeDataSize() const { return signature_.runtimeDataSize; }
 
-    std::optional<std::unordered_set<graph_ptr_t>> getSubGraphsByName(const std::string &name);
-    void addSubGraph(const graph_ptr_t &graph);
-    void delSubGraph(const graph_ptr_t &graph);
-    std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> &subGraphs() {
+    std::optional<std::unordered_set<graph_ptr_t>>
+    getSubGraphsByName(const std::string &name) const;
+    const std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> &subGraphs() const {
         return subGraphs_;
     }
 
-    std::unordered_set<graph_wptr_t, WeakPtrHash, WeakPtrEqual> &dependents() {
+    const std::unordered_set<graph_wptr_t, WeakPtrHash, WeakPtrEqual> &dependents() const {
         return dependents_;
     }
-    std::unordered_set<graph_ptr_t> &dependencies() { return dependencies_; }
-    void addDependency(const graph_ptr_t &graph);
-    void delDependency(const graph_ptr_t &graph);
-
-    Node *ownNode(node_uptr_t node);
-    void addNode(Node *node);
-    void delNode(Node *node);
-
-    void addPort(Node *node, bool isWith = false);
-    void addClosure(Node *node);
+    const std::unordered_set<graph_ptr_t> &dependencies() const { return dependencies_; }
     bool parameterized() const { return parameterized_; }
-
-    void parametrizeClosure();
 
     Node *exitNode() const;
     Node *outputNode() const;
     bool hasOutput() const { return exitNode_ != nullptr; }
-    void setOutput(Node *node);
 
-    const node_vec_t &nodes() { return nodes_; }
-    node_vec_t ports() {
+    const node_vec_t &nodes() const { return nodes_; }
+    node_vec_t ports() const {
         node_vec_t ports;
         ports.reserve(normPorts_.size() + withPorts_.size());
         ports.insert(ports.end(), normPorts_.begin(), normPorts_.end());
@@ -130,17 +133,10 @@ class Graph : public std::enable_shared_from_this<Graph> {
     }
     bool hasPorts() const { return !normPorts_.empty() || !withPorts_.empty(); }
     bool hasClosure() const { return !closure_.empty(); }
-    const node_vec_t &normPorts() { return normPorts_; }
-    const node_vec_t &withPorts() { return withPorts_; }
-    const node_vec_t &closure() { return closure_; }
+    const node_vec_t &normPorts() const { return normPorts_; }
+    const node_vec_t &withPorts() const { return withPorts_; }
+    const node_vec_t &closure() const { return closure_; }
     size_t argsCount() const { return normPorts_.size() + withPorts_.size() + closure_.size(); }
-
-    graph_ptr_t clone() const;
-
-    Node *inlineNode(Node *node, bool forceSync = false);
-
-    bool dirty() const { return dirty_; }
-    void rearrange();
 
     template <typename T, std::size_t Index> T *getExtra() const { return extras_.get<T, Index>(); }
     template <typename T, std::size_t Index> void setExtra(T *ptr) const {
@@ -148,25 +144,34 @@ class Graph : public std::enable_shared_from_this<Graph> {
     }
 
   private:
+    friend class Builder;
+    friend class GraphBuilder;
+    friend class GraphRewriteSession;
+
     std::string name_;
     std::string stableId_;
     graph_wptr_t outer_;
+    graph_arena_ptr_t arena_;
 
     std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> subGraphs_;
     std::unordered_set<graph_ptr_t> dependencies_;
     std::unordered_set<graph_wptr_t, WeakPtrHash, WeakPtrEqual> dependents_;
 
-    FunctionType *funcType_;
-    TupleType *staticDataType_, *runtimeDataType_, *closureType_;
+    struct SignatureLayout {
+        FunctionType *funcType     = nullptr;
+        TupleType *staticDataType  = nullptr;
+        TupleType *runtimeDataType = nullptr;
+        TupleType *closureType     = nullptr;
+        size_t runtimeDataSize     = 1;
+    } signature_;
     data_vec_t staticDataArr_ = {nullptr};
-    size_t runtimeDataSize_   = 1;
 
     std::vector<node_uptr_t> ownedNodes_;
     node_vec_t normPorts_, withPorts_, closure_;
     node_vec_t nodes_;
     Node *exitNode_ = nullptr;
 
-    bool dirty_ = false;
+    bool frozen_ = false;
 
     bool looped_        = false;
     bool parameterized_ = false;

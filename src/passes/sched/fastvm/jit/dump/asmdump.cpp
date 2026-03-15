@@ -57,9 +57,8 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     std::span<const Bytecode> bcSpan(bytecodes.data(), bytecodes.size());
 
     for (const auto &[g, entryPc] : offsetMap) {
-        FrameMeta *meta = g->getExtra<FrameMeta, 0>();
-        if (!meta)
-            meta = installFrameMetaInfoForGraph(g);
+        FrameMeta *meta = g->frameMeta();
+        ASSERT(meta != nullptr, std::format("Graph '{}' has no frozen FrameMeta.", g->name()));
 
         CompilationDebugOptions debugOptions{
             .asmOut           = &os,

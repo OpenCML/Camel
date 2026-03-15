@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Mar. 12, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,8 +22,8 @@
 #include "camel/common/algo/topo.h"
 #include "camel/compile/gir/graph.h"
 #include "camel/compile/gir/nodes.h"
+#include "camel/compile/gir/rewrite.h"
 #include "camel/core/context/frame.h"
-#include "camel/core/data.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/conv.h"
@@ -32,8 +32,6 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/execute/executor.h"
-#include "camel/utils/log.h"
-
 #include <format>
 #include <optional>
 #include <unordered_set>
@@ -58,16 +56,33 @@ class MacroExecutionError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
-inline void setFrameValueFromData(Frame &frame, data_idx_t index, const data_ptr_t &data) {
-    ASSERT(data != nullptr, "Macro evaluation produced null data pointer.");
-    if (data->type()->isGCTraced()) {
-        frame.set(index, makeGCRefFromGCTracedData(data, mm::autoSpace()));
-    } else if (data->type()->isPrimitive()) {
-        frame.set(index, makeSlotFromPrimitiveData(data));
-    } else {
-        throw MacroExecutionError(
-            std::format("Unsupported compile-time data type '{}'.", data->type()->toString()));
+inline ::Function *makeRuntimeFunctionFromData(const data_ptr_t &data) {
+    ASSERT(data != nullptr, "Macro callee data is null.");
+    ASSERT(
+        data->type()->code() == TypeCode::Function,
+        std::format("Expected function data, got '{}'.", data->type()->toString()));
+    return tt::as_ptr<::Function>(makeGCRefFromGCTracedData(data, mm::autoSpace()));
+}
+
+inline FrameMeta *requireFrameMeta(Graph *graph) {
+    ASSERT(graph != nullptr, "Graph is null.");
+    return GraphBuilder(graph).ensureFrameMeta();
+}
+
+inline slot_t getStaticNodeSlot(Node *node) {
+    ASSERT(node != nullptr, "Node is null.");
+    ASSERT(node->type() == NodeType::DATA, "Node is not static DATA.");
+    auto *meta = requireFrameMeta(&node->graph());
+    return meta->staticArea->get<slot_t>(static_cast<size_t>(-node->index()));
+}
+
+inline bool areStaticDataInputs(const node_vec_t &inputs, size_t start = 0) {
+    for (size_t i = start; i < inputs.size(); ++i) {
+        if (inputs[i] == nullptr || inputs[i]->type() != NodeType::DATA) {
+            return false;
+        }
     }
+    return true;
 }
 
 inline data_ptr_t slotToCompileTimeData(slot_t slot, Type *type);
@@ -182,12 +197,28 @@ inline void fillFrameForDirectFunc(Frame *from, Frame *dest, Graph *graph, Node 
     }
 }
 
+inline void fillFrameForIndirectCall(Frame *from, Frame *dest, Graph *graph, Node *node) {
+    const auto &normNodes = node->normInputs();
+    const auto &normPorts = graph->normPorts();
+    ASSERT(normNodes.size() == normPorts.size(), "Norm nodes and ports count mismatch.");
+    for (size_t i = 0; i < normNodes.size(); ++i) {
+        dest->set(normPorts[i]->index(), from->get<slot_t>(normNodes[i]->index()));
+    }
+
+    const auto &withNodes = node->withInputs();
+    const auto &withPorts = graph->withPorts();
+    ASSERT(withNodes.size() == withPorts.size() + 1, "With nodes and ports count mismatch.");
+    for (size_t i = 0; i < withPorts.size(); ++i) {
+        dest->set(withPorts[i]->index(), from->get<slot_t>(withNodes[i + 1]->index()));
+    }
+}
+
 class MacroExecutor {
   public:
     explicit MacroExecutor(const context_ptr_t &context)
         : context_(context), framePool_(kMacroFramePoolSize) {}
 
-    std::optional<data_ptr_t> tryExecute(Node *node, std::ostream &os) {
+    std::optional<slot_t> tryExecute(Node *node, std::ostream &os) {
         try {
             if (node == nullptr) {
                 return std::nullopt;
@@ -219,20 +250,6 @@ class MacroExecutor {
     FramePool framePool_;
     size_t recursionDepth_ = 0;
 
-    std::optional<data_vec_t>
-    collectStaticInputs(const node_vec_t &inputs, size_t start = 0) const {
-        data_vec_t dataList;
-        dataList.reserve(inputs.size() - start);
-        for (size_t i = start; i < inputs.size(); ++i) {
-            Node *input = inputs[i];
-            if (input->type() != NodeType::DATA) {
-                return std::nullopt;
-            }
-            dataList.push_back(tt::as_ptr<DataNode>(input)->data());
-        }
-        return dataList;
-    }
-
     bool macroCallsFunctionParam(Graph *graph) const {
         std::unordered_set<Node *> paramNodes;
         for (Node *p : graph->withPorts())
@@ -242,70 +259,91 @@ class MacroExecutor {
         for (Node *p : graph->closure())
             paramNodes.insert(p);
         for (Node *n : graph->nodes()) {
-            if (n->type() != NodeType::CALL || n->withInputs().empty())
+            if (n->type() != NodeType::CALL || !tt::as_ptr<CallNode>(n)->hasCallee())
                 continue;
-            if (paramNodes.count(n->withInputs().front()))
+            if (paramNodes.count(tt::as_ptr<CallNode>(n)->calleeInput()))
                 return true;
         }
         return false;
     }
 
-    std::optional<data_ptr_t> tryExecuteDirectFunc(FuncNode *node, std::ostream &os) {
+    std::optional<slot_t> tryExecuteDirectFunc(FuncNode *node, std::ostream &os) {
         if (!node || !node->isMacro()) {
             return std::nullopt;
         }
-        auto withArgs = collectStaticInputs(node->withInputs());
-        auto normArgs = collectStaticInputs(node->normInputs());
-        if (!withArgs || !normArgs) {
+        if (!areStaticDataInputs(node->withInputs()) || !areStaticDataInputs(node->normInputs())) {
             return std::nullopt;
         }
         if (macroCallsFunctionParam(&node->func()->graph())) {
             return std::nullopt;
         }
         os << "[macro] execute direct macro " << node->func()->name() << "\n";
-        return executeFunction(node->func(), *withArgs, *normArgs);
+        return executeFunction(
+            makeRuntimeFunctionFromData(node->func()),
+            [&](Frame *frame, Graph *graph) {
+                const auto &withPorts = graph->withPorts();
+                const auto &normPorts = graph->normPorts();
+                ASSERT(
+                    withPorts.size() == node->withInputs().size(),
+                    "With nodes and ports count mismatch.");
+                ASSERT(
+                    normPorts.size() == node->normInputs().size(),
+                    "Norm nodes and ports count mismatch.");
+                for (size_t i = 0; i < withPorts.size(); ++i) {
+                    frame->set(withPorts[i]->index(), getStaticNodeSlot(node->withInputs()[i]));
+                }
+                for (size_t i = 0; i < normPorts.size(); ++i) {
+                    frame->set(normPorts[i]->index(), getStaticNodeSlot(node->normInputs()[i]));
+                }
+            });
     }
 
-    std::optional<data_ptr_t> tryExecuteIndirectCall(CallNode *node, std::ostream &os) {
-        if (!node || node->withInputs().empty()) {
+    std::optional<slot_t> tryExecuteIndirectCall(CallNode *node, std::ostream &os) {
+        if (!node || !node->hasCallee()) {
             return std::nullopt;
         }
-        Node *calleeNode = node->withInputs().front();
+        Node *calleeNode = node->calleeInput();
         if (calleeNode->type() != NodeType::DATA) {
             return std::nullopt;
         }
-        const auto &calleeData = tt::as_ptr<DataNode>(calleeNode)->data();
-        auto funcData          = tt::as_shared<FunctionData>(calleeData);
-        if (!funcData || !funcData->isMacro()) {
+        auto *funcObj = fromSlot<::Function *>(getStaticNodeSlot(calleeNode));
+        if (!funcObj || !funcObj->graph()->isMacro()) {
             return std::nullopt;
         }
-        auto withArgs = collectStaticInputs(node->withInputs(), 1);
-        auto normArgs = collectStaticInputs(node->normInputs());
-        if (!withArgs || !normArgs) {
+        if (!areStaticDataInputs(node->withInputs(), 1) ||
+            !areStaticDataInputs(node->normInputs())) {
             return std::nullopt;
         }
-        if (macroCallsFunctionParam(&funcData->graph())) {
+        if (macroCallsFunctionParam(funcObj->graph())) {
             return std::nullopt;
         }
-        os << "[macro] execute indirect macro " << funcData->name() << "\n";
-        return executeFunction(funcData, *withArgs, *normArgs);
+        os << "[macro] execute indirect macro " << funcObj->graph()->name() << "\n";
+        return executeFunction(funcObj, [&](Frame *frame, Graph *graph) {
+            const auto &withPorts = graph->withPorts();
+            const auto &normPorts = graph->normPorts();
+            ASSERT(
+                withPorts.size() + 1 == node->withInputs().size(),
+                "With nodes and ports count mismatch.");
+            ASSERT(
+                normPorts.size() == node->normInputs().size(),
+                "Norm nodes and ports count mismatch.");
+            for (size_t i = 0; i < withPorts.size(); ++i) {
+                frame->set(withPorts[i]->index(), getStaticNodeSlot(node->withArg(i)));
+            }
+            for (size_t i = 0; i < normPorts.size(); ++i) {
+                frame->set(normPorts[i]->index(), getStaticNodeSlot(node->normInputs()[i]));
+            }
+        });
     }
 
-    data_ptr_t executeFunction(
-        const func_ptr_t &funcData, const data_vec_t &withArgs, const data_vec_t &normArgs) {
-        if (!funcData) {
+    template <typename FillArgs> slot_t executeFunction(::Function *funcObj, FillArgs &&fillArgs) {
+        if (!funcObj) {
             throw MacroExecutionError("Macro callee is null.");
         }
-        if (!funcData->isMacro()) {
-            throw MacroExecutionError(
-                std::format("'{}' is not marked as macro.", funcData->name()));
+        Graph *graph = funcObj->graph();
+        if (!graph->isMacro()) {
+            throw MacroExecutionError(std::format("'{}' is not marked as macro.", graph->name()));
         }
-        if (!funcData->resolved()) {
-            throw MacroExecutionError(
-                std::format("Macro '{}' has unresolved closure values.", funcData->name()));
-        }
-
-        Graph *graph = &funcData->graph();
         if (recursionDepth_ >= kMaxMacroRecursionDepth) {
             throw MacroExecutionError(
                 std::format("Macro recursion depth exceeded at '{}'.", graph->name()));
@@ -313,9 +351,19 @@ class MacroExecutor {
 
         Frame *frame = framePool_.acquire(graph);
         try {
-            prepareFrame(frame, graph, withArgs, normArgs, funcData->closure());
+            fillArgs(frame, graph);
+            if (graph->hasClosure()) {
+                auto *closure            = funcObj->tuple();
+                const auto &closureNodes = graph->closure();
+                ASSERT(
+                    closure != nullptr && closureNodes.size() == closure->size(),
+                    "Closure tuple mismatch in macro execution.");
+                for (size_t i = 0; i < closureNodes.size(); ++i) {
+                    frame->set(closureNodes[i]->index(), closure->get<slot_t>(i));
+                }
+            }
             recursionDepth_++;
-            data_ptr_t result = executeGraph(graph, frame);
+            slot_t result = executeGraph(graph, frame);
             recursionDepth_--;
             framePool_.release(frame);
             return result;
@@ -328,49 +376,8 @@ class MacroExecutor {
         }
     }
 
-    void prepareFrame(
-        Frame *frame, Graph *graph, const data_vec_t &withArgs, const data_vec_t &normArgs,
-        const data_vec_t &closureArgs) {
-        if (graph->withPorts().size() != withArgs.size()) {
-            throw MacroExecutionError(
-                std::format(
-                    "Macro '{}' expects {} with args but got {}.",
-                    graph->name(),
-                    graph->withPorts().size(),
-                    withArgs.size()));
-        }
-        if (graph->normPorts().size() != normArgs.size()) {
-            throw MacroExecutionError(
-                std::format(
-                    "Macro '{}' expects {} norm args but got {}.",
-                    graph->name(),
-                    graph->normPorts().size(),
-                    normArgs.size()));
-        }
-        if (graph->closure().size() != closureArgs.size()) {
-            throw MacroExecutionError(
-                std::format(
-                    "Macro '{}' expects {} closure values but got {}.",
-                    graph->name(),
-                    graph->closure().size(),
-                    closureArgs.size()));
-        }
-
-        for (size_t i = 0; i < withArgs.size(); ++i) {
-            setFrameValueFromData(*frame, graph->withPorts()[i]->index(), withArgs[i]);
-        }
-        for (size_t i = 0; i < normArgs.size(); ++i) {
-            setFrameValueFromData(*frame, graph->normPorts()[i]->index(), normArgs[i]);
-        }
-        for (size_t i = 0; i < closureArgs.size(); ++i) {
-            setFrameValueFromData(*frame, graph->closure()[i]->index(), closureArgs[i]);
-        }
-    }
-
     std::vector<Node *> buildTopoNodes(Graph *graph) const {
-        ASSERT(
-            !graph->dirty(),
-            std::format("Graph {} is dirty, please rearrange before macros.", graph->name()));
+        (void)requireFrameMeta(graph);
         return findReachable(
             graph->exitNode(),
             [](Node *n) {
@@ -391,7 +398,7 @@ class MacroExecutor {
             true);
     }
 
-    data_ptr_t executeGraph(Graph *graph, Frame *frame) {
+    slot_t executeGraph(Graph *graph, Frame *frame) {
         if (recursionDepth_ > kMaxMacroRecursionDepth) {
             throw MacroExecutionError(
                 std::format("Macro recursion depth exceeded at '{}'.", graph->name()));
@@ -497,9 +504,8 @@ class MacroExecutor {
             } break;
 
             case NodeType::BRCH: {
-                const auto &normIns  = node->normInputs();
-                const auto &withIns  = node->withInputs();
-                const auto &ctrlOuts = node->ctrlOutputs();
+                const auto &normIns = node->normInputs();
+                const auto &withIns = node->withInputs();
                 ASSERT(normIns.size() == 1, "BRCH node must have exactly one norm input.");
 
                 size_t jumpIdx = 0;
@@ -534,9 +540,10 @@ class MacroExecutor {
                 }
 
                 frame->set(node->index(), fromSlot<Int32>(static_cast<Int32>(jumpIdx)));
-                Node *targetJoin = node->normOutputs().front();
-                tillNode         = ctrlOuts[jumpIdx];
-                skipNode         = targetJoin->withInputs()[jumpIdx];
+                auto *brchNode   = tt::as_ptr<BrchNode>(node);
+                auto *targetJoin = brchNode->matchedJoin();
+                tillNode         = brchNode->armHead(jumpIdx);
+                skipNode         = targetJoin->armTail(jumpIdx);
                 joinNode         = targetJoin;
             } break;
 
@@ -550,30 +557,23 @@ class MacroExecutor {
             } break;
 
             case NodeType::CALL: {
-                if (node->withInputs().empty()) {
+                auto *callNode = tt::as_ptr<CallNode>(node);
+                if (!callNode->hasCallee()) {
                     throw MacroExecutionError("CALL node has no callee.");
                 }
-                Node *calleeInput   = node->withInputs().front();
+                Node *calleeInput   = callNode->calleeInput();
                 ::Function *funcObj = nullptr;
                 bool calleeIsMacro  = false;
                 if (calleeInput->type() == NodeType::DATA) {
-                    auto *dataNode         = tt::as_ptr<DataNode>(calleeInput);
-                    const auto &calleeData = dataNode->data();
-                    if (!calleeData || calleeData->type()->code() != TypeCode::Function) {
-                        throw MacroExecutionError("CALL callee must be a function.");
+                    funcObj = fromSlot<::Function *>(getStaticNodeSlot(calleeInput));
+                    if (!funcObj) {
+                        throw MacroExecutionError("CALL static callee is null.");
                     }
-                    auto funcData = tt::as_shared<FunctionData>(calleeData);
-                    if (!funcData) {
-                        throw MacroExecutionError("CALL callee FunctionData is null.");
-                    }
-                    calleeIsMacro = funcData->isMacro();
-                    funcObj       = tt::as_ptr<::Function>(
-                        makeGCRefFromGCTracedData(funcData, mm::autoSpace()));
+                    calleeIsMacro = funcObj->graph()->isMacro();
                 } else {
                     funcObj = frame->get<::Function *>(calleeInput->index());
                     if (funcObj) {
-                        auto funcData = FunctionData::create(*funcObj->graph());
-                        calleeIsMacro = funcData->isMacro();
+                        calleeIsMacro = funcObj->graph()->isMacro();
                     }
                 }
                 if (!funcObj) {
@@ -587,17 +587,7 @@ class MacroExecutor {
                 Graph *funcGraph   = funcObj->graph();
                 Frame *calleeFrame = framePool_.acquire(funcGraph);
                 try {
-                    if (node->normInputs().size() != funcGraph->normPorts().size()) {
-                        throw MacroExecutionError(
-                            std::format(
-                                "CALL into '{}' has mismatched norm arg count.",
-                                funcGraph->name()));
-                    }
-                    for (size_t i = 0; i < node->normInputs().size(); ++i) {
-                        calleeFrame->set(
-                            funcGraph->normPorts()[i]->index(),
-                            frame->get<slot_t>(node->normInputs()[i]->index()));
-                    }
+                    fillFrameForIndirectCall(frame, calleeFrame, funcGraph, node);
                     if (funcGraph->hasClosure()) {
                         auto *closure            = funcObj->tuple();
                         const auto &closureNodes = funcGraph->closure();
@@ -609,10 +599,10 @@ class MacroExecutor {
                         }
                     }
                     recursionDepth_++;
-                    data_ptr_t result = executeGraph(funcGraph, calleeFrame);
+                    slot_t result = executeGraph(funcGraph, calleeFrame);
                     recursionDepth_--;
                     framePool_.release(calleeFrame);
-                    setFrameValueFromData(*frame, node->index(), result);
+                    frame->set(node->index(), result);
                 } catch (...) {
                     if (recursionDepth_ > 0) {
                         recursionDepth_--;
@@ -629,10 +619,10 @@ class MacroExecutor {
                 try {
                     fillFrameForDirectFunc(frame, calleeFrame, funcGraph, node);
                     recursionDepth_++;
-                    data_ptr_t result = executeGraph(funcGraph, calleeFrame);
+                    slot_t result = executeGraph(funcGraph, calleeFrame);
                     recursionDepth_--;
                     framePool_.release(calleeFrame);
-                    setFrameValueFromData(*frame, node->index(), result);
+                    frame->set(node->index(), result);
                 } catch (...) {
                     if (recursionDepth_ > 0) {
                         recursionDepth_--;
@@ -675,11 +665,7 @@ class MacroExecutor {
             } break;
 
             case NodeType::DATA: {
-                auto *dataNode = tt::as_ptr<DataNode>(node);
-                const auto &d  = dataNode->data();
-                if (d) {
-                    setFrameValueFromData(*frame, node->index(), d);
-                }
+                frame->set(node->index(), getStaticNodeSlot(node));
             } break;
 
             case NodeType::EXIT:
@@ -695,9 +681,7 @@ class MacroExecutor {
         }
 
         Node *outputNode = graph->outputNode();
-        return slotToCompileTimeData(
-            frame->get<slot_t>(outputNode->index()),
-            outputNode->dataType());
+        return frame->get<slot_t>(outputNode->index());
     }
 };
 
@@ -722,13 +706,15 @@ std::vector<graph_ptr_t> collectAllGraphs(const graph_ptr_t &root) {
     return result;
 }
 
-Node *materializeMacroResult(const graph_ptr_t &owner, const data_ptr_t &result) {
+Node *materializeMacroResult(
+    GraphRewriteSession &session, const graph_ptr_t &owner, slot_t resultSlot, Type *resultType) {
     ASSERT(owner != nullptr, "Owner graph is null.");
+    auto result = slotToCompileTimeData(resultSlot, resultType);
     ASSERT(result != nullptr, "Macro result data is null.");
     if (result->type()->code() == TypeCode::Function) {
         auto funcData = tt::as_shared<FunctionData>(result);
         if (funcData && &funcData->graph() != owner.get()) {
-            owner->addDependency(funcData->graph().shared_from_this());
+            session.addDependency(owner, funcData->graph().shared_from_this());
         }
     }
     Node *node = DataNode::create(*owner, result);
@@ -748,14 +734,15 @@ graph_ptr_t MacroRewritePass::apply(graph_ptr_t &graph, ostream &os) {
         return graph;
     }
 
+    GraphRewriteSession session(graph);
+    graph_ptr_t workingRoot = session.root();
     MacroExecutor executor(context_);
     bool changed = true;
     while (changed) {
         changed     = false;
-        auto graphs = collectAllGraphs(graph);
+        auto graphs = collectAllGraphs(workingRoot);
         for (const auto &currGraph : graphs) {
-            bool graphChanged = false;
-            auto nodes        = currGraph->nodes();
+            auto nodes = currGraph->nodes();
             for (Node *node : nodes) {
                 if (std::find(currGraph->nodes().begin(), currGraph->nodes().end(), node) ==
                     currGraph->nodes().end()) {
@@ -767,20 +754,17 @@ graph_ptr_t MacroRewritePass::apply(graph_ptr_t &graph, ostream &os) {
                     continue;
                 }
 
-                Node *newNode = materializeMacroResult(currGraph, *result);
-                Node::replaceUses(node, newNode);
-                currGraph->delNode(node);
-                graphChanged = true;
-                changed      = true;
+                Node *newNode =
+                    materializeMacroResult(session, currGraph, *result, node->dataType());
+                session.replaceNode(node, newNode);
+                changed = true;
                 os << "[macro] rewrote " << node->stableId() << " -> " << newNode->stableId()
                    << "\n";
-            }
-            if (graphChanged) {
-                currGraph->rearrange();
-                currGraph->setExtra<FrameMeta, 0>(nullptr);
             }
         }
     }
 
+    auto result = session.finish();
+    graph       = result.graph;
     return graph;
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,14 +39,15 @@ using namespace camel::core::rtdata;
 using namespace camel::core::error;
 
 NodeVMSchedPass::~NodeVMSchedPass() {
-    for (Graph *g : graphsWithTopoCache_)
+    for (Graph *g : graphsWithTopoCache_) {
         g->setExtra<node_vec_t, kTopoNodesExtraIndex>(nullptr);
+    }
 }
 
 std::span<Node *> NodeVMSchedPass::buildTopoNodes(Graph *graph) {
     ASSERT(
-        !graph->dirty(),
-        std::format("Graph {} is dirty, please rearrange before executing.", graph->name()));
+        graph->frozen(),
+        std::format("Graph {} is not finalized before executing.", graph->name()));
 
     Node *exitNode   = graph->exitNode();
     auto sortedNodes = findReachable(
@@ -352,9 +353,8 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             } break;
 
             case NodeType::BRCH: {
-                const auto &normIns  = n->normInputs();
-                const auto &withIns  = n->withInputs();
-                const auto &ctrlOuts = n->ctrlOutputs();
+                const auto &normIns = n->normInputs();
+                const auto &withIns = n->withInputs();
                 ASSERT(normIns.size() == 1, "Branch node must have exactly one norm input.");
 
                 size_t jumpIdx = 0;
@@ -389,12 +389,13 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 currFrame->set(n->index(), fromSlot<Int32>(static_cast<Int32>(jumpIdx)));
 
                 // BRCH 有且仅有 1 个 normOutput，即对应的 JOIN
-                Node *targetJoin = n->normOutputs().front();
+                auto *brchNode   = tt::as_ptr<BrchNode>(n);
+                auto *targetJoin = brchNode->matchedJoin();
 
                 // 分支跳转：跳到选中分支的 head，顺序执行到 tail，再跳到 JOIN
-                tillNode = ctrlOuts[jumpIdx]; // 选中分支的头节点
+                tillNode = brchNode->armHead(jumpIdx); // 选中分支的头节点
                 skipNode =
-                    targetJoin->withInputs()[jumpIdx]; // 选中分支的尾节点（连到 JOIN 的 with 输入）
+                    targetJoin->armTail(jumpIdx); // 选中分支的尾节点（连到 JOIN 的 with 输入）
                 joinNode = targetJoin;
 
                 EXEC_WHEN_DEBUG(
@@ -424,8 +425,9 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             } break;
 
             case NodeType::CALL: {
-                ASSERT(n->withInputs().size() == 1, "CALL node must have exactly one with input");
-                const auto &funcNode = n->withInputs().front();
+                auto *callNode = tt::as_ptr<CallNode>(n);
+                ASSERT(callNode->hasCallee(), "CALL node must have exactly one callee input");
+                const auto &funcNode = callNode->calleeInput();
                 Function *func       = currFrame->get<Function *>(funcNode->index());
                 Graph *funcGraph     = func->graph();
 
@@ -463,8 +465,9 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 Graph *funcGraph = tt::as_ptr<FuncNode>(n)->graph();
 
                 // 尾调用优化
-                bool isTailCall = n == lastNode || (lastNodeIsJoin && !n->withOutputs().empty() &&
-                                                    n->withOutputs().front() == lastNode);
+                bool isTailCall =
+                    n == lastNode || (lastNodeIsJoin && tt::as_ptr<FuncNode>(n)->hasMatchedJoin() &&
+                                      tt::as_ptr<FuncNode>(n)->matchedJoin() == lastNode);
                 if (isTailCall) {
                     EXEC_WHEN_DEBUG(
                         GetDefaultLogger().in("NodeVM").debug(

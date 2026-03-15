@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 12, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,9 @@
 #include <variant>
 
 namespace camel::compile::gir {
+
+class NodeMutation;
+class JoinNode;
 
 // =============================================================================
 // Node：图节点基类，持有类型、数据槽索引、入边/出边
@@ -63,19 +66,23 @@ class Node {
     void setConstant(bool c) { const_ = c; }
 
     node_vec_t dataInputs() const;
-    node_vec_t &normInputs() { return normInputs_; }
-    node_vec_t &withInputs() { return withInputs_; }
-    node_vec_t &ctrlInputs() { return ctrlInputs_; }
+    const node_vec_t &normInputs() const { return normInputs_; }
+    const node_vec_t &withInputs() const { return withInputs_; }
+    const node_vec_t &ctrlInputs() const { return ctrlInputs_; }
     node_vec_t inputs() const;
 
-    node_vec_t &normOutputs() { return normOutputs_; }
-    node_vec_t &withOutputs() { return withOutputs_; }
-    node_vec_t &ctrlOutputs() { return ctrlOutputs_; }
+    const node_vec_t &normOutputs() const { return normOutputs_; }
+    const node_vec_t &withOutputs() const { return withOutputs_; }
+    const node_vec_t &ctrlOutputs() const { return ctrlOutputs_; }
     node_vec_t dataOutputs() const;
     node_vec_t outputs() const;
 
     bool hasDeepLinkedTo(Node *node, size_t maxJumps = 99) const;
     bool hasLinkedTo(Node *node) const;
+    bool hasMatchedJoinOutput() const {
+        return withOutputs_.size() == 1 && withOutputs_.front()->type() == NodeType::JOIN;
+    }
+    JoinNode *matchedJoinOutput() const;
 
     size_t inDegree() const { return normInputs_.size() + withInputs_.size() + ctrlInputs_.size(); }
     size_t outDegree() const {
@@ -88,11 +95,6 @@ class Node {
     bool isReturn() const { return outDegree() == 0; }
 
     bool detach();
-
-    static void link(LinkType type, Node *from, Node *to);
-    static bool unlink(Node *from, Node *to);
-    static bool replace(Node *oldNode, Node *newNode);
-    static bool replaceUses(Node *oldNode, Node *newNode);
 
   protected:
     bool macro_ = false;
@@ -111,6 +113,45 @@ class Node {
     node_vec_t normOutputs_;
     node_vec_t withOutputs_;
     node_vec_t ctrlOutputs_;
+
+  private:
+    friend class Builder;
+    friend class GraphBuilder;
+    friend class GraphRewriteSession;
+    friend class NodeMutation;
+
+    node_vec_t &mutableNormInputs() { return normInputs_; }
+    node_vec_t &mutableWithInputs() { return withInputs_; }
+    node_vec_t &mutableCtrlInputs() { return ctrlInputs_; }
+    node_vec_t &mutableNormOutputs() { return normOutputs_; }
+    node_vec_t &mutableWithOutputs() { return withOutputs_; }
+    node_vec_t &mutableCtrlOutputs() { return ctrlOutputs_; }
+
+    static void link(LinkType type, Node *from, Node *to);
+    static bool unlink(Node *from, Node *to);
+    static bool unlinkCtrl(Node *from, Node *to);
+    static void replaceInput(LinkType type, Node *owner, Node *oldInput, Node *newInput);
+    static void replaceOutput(LinkType type, Node *owner, Node *oldOutput, Node *newOutput);
+    static bool replace(Node *oldNode, Node *newNode);
+    static bool replaceUses(Node *oldNode, Node *newNode);
+};
+
+class NodeMutation {
+  public:
+    static node_vec_t &normInputs(Node *node) { return node->mutableNormInputs(); }
+    static node_vec_t &withInputs(Node *node) { return node->mutableWithInputs(); }
+    static node_vec_t &ctrlInputs(Node *node) { return node->mutableCtrlInputs(); }
+    static node_vec_t &normOutputs(Node *node) { return node->mutableNormOutputs(); }
+    static node_vec_t &withOutputs(Node *node) { return node->mutableWithOutputs(); }
+    static node_vec_t &ctrlOutputs(Node *node) { return node->mutableCtrlOutputs(); }
+
+    static void link(LinkType type, Node *from, Node *to);
+    static bool unlink(Node *from, Node *to);
+    static bool unlinkCtrl(Node *from, Node *to);
+    static void replaceInput(LinkType type, Node *owner, Node *oldInput, Node *newInput);
+    static void replaceOutput(LinkType type, Node *owner, Node *oldOutput, Node *newOutput);
+    static bool replace(Node *oldNode, Node *newNode);
+    static bool replaceUses(Node *oldNode, Node *newNode);
 };
 
 // 数据与端口类节点
@@ -122,7 +163,7 @@ class DataNode : public Node {
 
     static Node *create(Graph &graph, const data_ptr_t &data);
 
-    data_ptr_t data() const { return graph_.getStaticData(dataIndex_); }
+    data_ptr_t data() const { return graph_.materializeStaticData(dataIndex_); }
 
     std::string toString() const override;
 
@@ -218,6 +259,22 @@ class BrchNode : public Node {
 
     static Node *create(Graph &graph, Type *type);
 
+    bool hasSelectorInput() const { return normInputs_.size() == 1; }
+    Node *selectorInput() const {
+        ASSERT(normInputs_.size() == 1, "BRCH node must have exactly one selector input.");
+        return normInputs_.front();
+    }
+    const node_vec_t &caseInputs() const { return withInputs_; }
+    bool hasMatchedJoin() const {
+        return normOutputs_.size() == 1 && normOutputs_.front()->type() == NodeType::JOIN;
+    }
+    size_t armCount() const { return ctrlOutputs_.size(); }
+    Node *armHead(size_t index) const {
+        ASSERT(index < ctrlOutputs_.size(), "BRCH arm index out of range.");
+        return ctrlOutputs_[index];
+    }
+    JoinNode *matchedJoin() const;
+
     std::string toString() const override;
 
     Node *clone(Graph &graph) const override;
@@ -230,6 +287,21 @@ class JoinNode : public Node {
     ~JoinNode() = default;
 
     static Node *create(Graph &graph, Type *type);
+
+    bool hasMatchedBranch() const {
+        return !normInputs_.empty() && normInputs_.front()->type() == NodeType::BRCH;
+    }
+    BrchNode *matchedBranch() const;
+    bool hasBranchIndexInput() const { return !normInputs_.empty(); }
+    Node *branchIndexInput() const {
+        ASSERT(!normInputs_.empty(), "JOIN node must have a branch-index input.");
+        return normInputs_.front();
+    }
+    size_t armCount() const { return withInputs_.size(); }
+    Node *armTail(size_t index) const {
+        ASSERT(index < withInputs_.size(), "JOIN arm index out of range.");
+        return withInputs_[index];
+    }
 
     std::string toString() const override;
 
@@ -244,6 +316,18 @@ class CallNode : public Node {
     ~CallNode() = default;
 
     static Node *create(Graph &graph, Type *type);
+
+    bool hasCallee() const { return !withInputs_.empty(); }
+    Node *calleeInput() const {
+        ASSERT(!withInputs_.empty(), "CALL node has no callee input.");
+        return withInputs_.front();
+    }
+    size_t withArgCount() const { return withInputs_.empty() ? 0 : withInputs_.size() - 1; }
+    Node *withArg(size_t index) const {
+        ASSERT(index < withArgCount(), "CALL with-arg index out of range.");
+        return withInputs_[index + 1];
+    }
+    const node_vec_t &normArgs() const { return normInputs_; }
 
     std::string toString() const override;
 
@@ -276,10 +360,21 @@ class FuncNode : public Node {
     static Node *create(Graph &graph, func_ptr_t func);
 
     func_ptr_t func() const { return func_; }
+    void setFunc(const func_ptr_t &func) {
+        func_ = func;
+        ASSERT(func_ != nullptr, "Function is null for FunctionNode.");
+        graph_ = &func_->graph();
+        setDataType(func_->funcType()->exitType());
+    }
     /** 执行热路径用：构造时已缓存，直接返回，避免返回 func_ptr_t 带来的引用计数开销 */
     Graph *graph() const { return graph_; }
+    Graph *bodyGraph() const { return graph_; }
     FunctionType *funcType() const;
     bool isMacro() const { return func_ && func_->isMacro(); }
+    bool hasMatchedJoin() const {
+        return withOutputs_.size() == 1 && withOutputs_.front()->type() == NodeType::JOIN;
+    }
+    JoinNode *matchedJoin() const;
 
     std::string toString() const override;
 

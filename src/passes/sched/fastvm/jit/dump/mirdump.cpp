@@ -60,9 +60,8 @@ static graph_ptr_t applyMirDump(
     std::unordered_map<uint64_t, std::string> mirSymbolNames;
 
     for (const auto &[g, entryPc] : offsetMap) {
-        FrameMeta *meta = g->getExtra<FrameMeta, 0>();
-        if (!meta)
-            meta = installFrameMetaInfoForGraph(g);
+        FrameMeta *meta = g->frameMeta();
+        ASSERT(meta != nullptr, std::format("Graph '{}' has no frozen FrameMeta.", g->name()));
 
         mirSymbolNames.clear();
         mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineFunc)] = "trampolineFunc";

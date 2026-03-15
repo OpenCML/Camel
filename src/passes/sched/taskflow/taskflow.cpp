@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -531,8 +531,9 @@ template <typename FlowT>
 void TaskflowExecSchedPass::buildBranchJoinRegion(
     FlowT &flowLike, Graph *graph, Frame *frame, std::unordered_map<Node *, tf::Task> &taskMap,
     Node *brch) {
+    auto *brchNode        = tt::as_ptr<BrchNode>(brch);
     node_vec_t candidates = brch->ctrlOutputs();
-    Node *join            = brch->normOutputs().front();
+    Node *join            = brchNode->matchedJoin();
 
     auto selector =
         flowLike
@@ -641,9 +642,9 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
                         Frame *funcFrame = acquirePreparedNodeCallFrame(tgtGraph, candidate, frame);
                         out              = runPreparedSubgraph(csf, tgtGraph, funcFrame);
                     } else if (candidate->type() == NodeType::CALL) {
+                        auto *callNode = tt::as_ptr<CallNode>(candidate);
                         Graph *tgtGraph =
-                            frame->get<Function *>(candidate->withInputs().front()->index())
-                                ->graph();
+                            frame->get<Function *>(callNode->calleeInput()->index())->graph();
                         Frame *funcFrame = acquirePreparedNodeCallFrame(tgtGraph, candidate, frame);
                         out              = runPreparedSubgraph(csf, tgtGraph, funcFrame);
                     } else if (candidate->type() == NodeType::OPER) {

@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "inline.h"
 
 #include "camel/common/algo/topo.h"
+#include "camel/compile/gir/rewrite.h"
 #include "camel/core/error/runtime.h"
 #include "camel/utils/log.h"
 
@@ -28,9 +29,12 @@ using namespace GIR;
 using namespace camel::core::error;
 
 graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
+    GraphRewriteSession session(graph);
+    graph_ptr_t workingRoot = session.root();
+
     std::vector<graph_ptr_t> allGraphs;
-    allGraphs.push_back(graph);
-    for (const auto &[_, gSet] : graph->subGraphs()) {
+    allGraphs.push_back(workingRoot);
+    for (const auto &[_, gSet] : workingRoot->subGraphs()) {
         for (const auto &g : gSet) {
             auto sortedSubGraphs =
                 findReachable(g, [](const graph_ptr_t &g) { return g->dependencies(); });
@@ -49,9 +53,11 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
 
         for (const auto &brch : g->nodes()) {
             if (brch->type() == NodeType::BRCH) {
-                for (const auto &path : brch->ctrlOutputs()) {
-                    if (path->withOutputs().front()->type() == NodeType::JOIN &&
-                        path->type() == NodeType::FUNC) {
+                auto *brchNode = tt::as_ptr<BrchNode>(brch);
+                for (size_t i = 0; i < brchNode->armCount(); ++i) {
+                    Node *path = brchNode->armHead(i);
+                    if (path->type() == NodeType::FUNC &&
+                        tt::as_ptr<FuncNode>(path)->hasMatchedJoin()) {
                         targets.emplace_back(brch, path);
                     }
                 }
@@ -59,30 +65,36 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
         }
 
         for (const auto &[brch, path] : targets) {
-            const auto &pathGraph = tt::as_ptr<FuncNode>(path)->func()->graph().shared_from_this();
-            Node *syncNode        = g->inlineNode(path, true);
+            auto *funcPath        = tt::as_ptr<FuncNode>(path);
+            auto *joinNode        = funcPath->matchedJoin();
+            const auto &pathGraph = funcPath->func()->graph().shared_from_this();
+            Node *syncNode        = session.inlineNode(path, true);
 
             if (!syncNode) {
                 throwRuntimeFault(RuntimeDiag::GraphInliningFailed, brch->toString(), g->name());
             }
+            session.markChanged();
 
+            Node *branchHead = nullptr;
             if (syncNode->ctrlOutputs().size() > 1) {
-                Node::link(LinkType::Ctrl, brch, syncNode);
+                session.link(LinkType::Ctrl, brch, syncNode);
+                branchHead = syncNode;
             } else {
                 for (const auto &out : syncNode->ctrlOutputs()) {
-                    Node::link(LinkType::Ctrl, brch, out);
+                    session.link(LinkType::Ctrl, brch, out);
+                    branchHead = out;
                 }
-                syncNode->detach();
-                g->delNode(syncNode);
+                session.eraseNode(syncNode);
             }
+            ASSERT(branchHead != nullptr, "Inlined branch head is null.");
+            Node *branchTail = joinNode->armTail(joinNode->armCount() - 1);
 
-            path->detach();
-            g->delNode(path);
+            session.replaceOutput(LinkType::Ctrl, brch, path, branchHead);
+            session.replaceInput(LinkType::With, joinNode, path, branchTail);
+            session.eraseNode(path);
 
-            g->delSubGraph(pathGraph);
-            g->delDependency(pathGraph);
-
-            g->rearrange();
+            session.eraseSubGraph(g, pathGraph);
+            session.eraseDependency(g, pathGraph);
 
             GetDefaultLogger()
                 .in("InlinePass")
@@ -95,5 +107,7 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
         }
     }
 
+    auto result = session.finish();
+    graph       = result.graph;
     return graph;
 }

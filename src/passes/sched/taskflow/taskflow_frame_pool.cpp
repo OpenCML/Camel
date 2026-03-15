@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 09, 2026
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,9 +51,10 @@ TaskflowFramePool::GraphArena &TaskflowFramePool::getOrCreateArena(Graph *graph)
 
 void TaskflowFramePool::allocateChunk(GraphArena &arena, size_t minFrameCount) {
     if (arena.meta == nullptr) {
-        arena.meta = arena.graph->getExtra<FrameMeta, 0>();
-        if (arena.meta == nullptr)
-            arena.meta = installFrameMetaInfoForGraph(arena.graph);
+        arena.meta = arena.graph->frameMeta();
+        ASSERT(
+            arena.meta != nullptr,
+            std::format("Graph '{}' has no frozen FrameMeta.", arena.graph->name()));
         arena.frameSize = arena.meta->frameSize;
         ASSERT(arena.frameSize > 0, "Frame size must be positive.");
         arena.chunkFrames = std::max(minChunkFrames_, chunkBytes_ / arena.frameSize);

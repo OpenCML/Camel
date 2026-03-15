@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -422,9 +422,8 @@ bytecode_vec_t compile(
         }
 
         // 如果该节点的输出连接到 JOIN 节点，则插入一个跳转到 JOIN 的 JUMP
-        if (node->withOutputs().size() == 1 &&
-            node->withOutputs().front()->type() == NodeType::JOIN) {
-            auto *joinNode = node->withOutputs().front();
+        if (node->hasMatchedJoinOutput()) {
+            auto *joinNode = node->matchedJoinOutput();
             joinTargetMap[joinNode].push_back({
                 bytecodes.size(),
                 currIdx,

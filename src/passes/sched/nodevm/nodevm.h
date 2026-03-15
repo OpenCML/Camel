@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  *
  * NodeVM：在图节点上直接执行，无字节码编译。用于展示在 GIR 上直接执行的流程。
@@ -34,18 +34,17 @@
 namespace ctx = camel::core::context;
 
 class NodeVMSchedPass : public GraphSchedulePass {
-    inline static const size_t maxRecursionDepth_ = 256;
+    inline static const size_t maxRecursionDepth_            = 256;
+    inline static constexpr std::size_t kTopoNodesExtraIndex = 2;
 
     size_t currRecursionDepth_ = 0;
     ctx::FramePool framePool_{1 * camel::core::mm::MB};
-    // 热路径走 Graph extra 的 O(1) 缓存；冷路径写入 topoNodesOwned_ 并挂到 extra 上
+    // NodeVM 自己维护 topo cache；GIR 本体不保存任何 VM 专属执行缓存。
     std::unordered_set<GIR::Graph *> graphsWithTopoCache_;
     std::unordered_map<GIR::Graph *, std::vector<GIR::Node *>> topoNodesOwned_;
 
     // 复用 buffer，避免 OPER 分支内每次堆分配（先 norm 后 with，用偏移区分）
     std::vector<GIR::data_idx_t> operIndices_;
-
-    static constexpr size_t kTopoNodesExtraIndex = 1;
 
     slot_t call(GIR::Graph *graph, ctx::Frame *rootFrame);
     std::span<GIR::Node *> buildTopoNodes(GIR::Graph *graph);

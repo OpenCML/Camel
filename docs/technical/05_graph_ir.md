@@ -80,7 +80,7 @@
 
 ## 6. 典型节点子类
 
-- **DataNode**：通过 `Graph::getStaticData(dataIndex_)` 取编译期数据。
+- **DataNode**：通过 `Graph::materializeStaticData(dataIndex_)` 暴露只读静态值视图；冻结图优先从静态运行时池回投到编译期表示。
 - **PortNode**：name_、isVar_，由 `addRuntimeData()` 分配槽位。
 - **FuncNode**：保存 `func_ptr_t`，类型为函数返回类型。
 - **OperNode**：保存 `oper_idx_ptr_t`，类型为算子返回类型；OPER 指令在运行时通过 operator_t 分发。
