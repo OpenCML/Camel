@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -205,22 +205,22 @@ bytecode_vec_t compile(
             switch (srcDataType->code()) {
             case TypeCode::Tuple: {
                 ASSERT(accNode->isNum(), "ACCS index must be numeric.");
-                index                 = accNode->index<size_t>();
+                index                 = accNode->numIndex();
                 const auto &tupleType = tt::as_ptr<TupleType>(srcDataType);
                 if (index >= tupleType->size()) {
                     ctx->rtmDiags()->of(SemanticDiag::InvalidAccessIndex).commit(to_string(index));
-                    index = 0; // 越界时回退为 0，与 Struct 无效时行为一致
+                    index = 0;
                 }
                 break;
             }
             case TypeCode::Struct: {
                 ASSERT(!accNode->isNum(), "ACCS index must be string.");
                 const auto *structType = tt::as_ptr<camel::core::type::StructType>(srcDataType);
-                const auto &optIndex   = structType->findField(accNode->index<std::string>());
+                const auto &optIndex   = structType->findField(accNode->strIndex());
                 if (!optIndex.has_value()) {
                     ctx->rtmDiags()
                         ->of(SemanticDiag::InvalidAccessIndex)
-                        .commit(accNode->index<std::string>());
+                        .commit(accNode->strIndex());
                 }
                 index = optIndex.value();
                 break;
@@ -422,9 +422,8 @@ bytecode_vec_t compile(
         }
 
         // 如果该节点的输出连接到 JOIN 节点，则插入一个跳转到 JOIN 的 JUMP
-        if (node->withOutputs().size() == 1 &&
-            node->withOutputs().front()->type() == NodeType::JOIN) {
-            auto *joinNode = node->withOutputs().front();
+        if (node->hasMatchedJoinOutput()) {
+            auto *joinNode = node->matchedJoinOutput();
             joinTargetMap[joinNode].push_back({
                 bytecodes.size(),
                 currIdx,

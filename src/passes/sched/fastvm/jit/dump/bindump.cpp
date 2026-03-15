@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -103,9 +103,8 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     std::span<const Bytecode> bcSpan(bytecodes.data(), bytecodes.size());
 
     for (const auto &[g, entryPc] : offsetMap) {
-        FrameMeta *meta = g->getExtra<FrameMeta, 0>();
-        if (!meta)
-            meta = installFrameMetaInfoForGraph(g);
+        FrameMeta *meta = g->frameMeta();
+        ASSERT(meta != nullptr, std::format("Graph '{}' has no frozen FrameMeta.", g->name()));
 
         std::vector<std::tuple<size_t, size_t, std::string>> instructionBoundaries;
         CompilationDebugOptions debugOptions{

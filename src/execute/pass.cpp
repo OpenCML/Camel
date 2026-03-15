@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -269,8 +269,8 @@ PassApplyResult applyPassesDetailed(
             return {Graph::null(), PassApplyStatus::Consumed};
         }
         ASSERT(
-            !graph->dirty(),
-            std::format("Graph {} is dirty, please rearrange it first.", graph->name()));
+            graph->finalized(),
+            std::format("Graph {} is not finalized before pass execution.", graph->name()));
 
         auto factory = findPassFactory(p, os);
         if (factory) {

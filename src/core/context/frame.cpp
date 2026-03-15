@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,15 +27,23 @@ using namespace camel::core::rtdata;
 namespace camel::core::context {
 
 FrameMeta *installFrameMetaInfoForGraph(GIR::Graph *graph) {
+    if (auto *cached = graph->frameMeta()) {
+        return cached;
+    }
+
     const TupleType *runtimeDataType = graph->runtimeDataType();
     const TupleType *staticDataType  = graph->staticDataType();
-    Tuple *staticArea                = Tuple::create(staticDataType->size(), mm::permSpace());
-    const auto &staticDataArr        = graph->staticDataArr();
+    mm::IAllocator *allocator        = &mm::metaSpace();
+    if (auto arena = graph->arena()) {
+        allocator = &arena->allocator();
+    }
+    Tuple *staticArea         = Tuple::create(staticDataType->size(), *allocator);
+    const auto &staticDataArr = graph->staticDataArr();
 
     for (size_t i = 1; i < staticDataType->size(); ++i) {
         const auto &elem = staticDataArr[i];
         if (elem->type()->isGCTraced()) {
-            Object *elemRef = makeGCRefFromGCTracedData(elem, mm::permSpace());
+            Object *elemRef = makeGCRefFromGCTracedData(elem, *allocator);
             staticArea->set<Object *>(i, elemRef);
         } else if (elem->type()->isPrimitive()) {
             slot_t slot = makeSlotFromPrimitiveData(elem);
@@ -45,12 +53,12 @@ FrameMeta *installFrameMetaInfoForGraph(GIR::Graph *graph) {
         }
     }
 
-    FrameMeta *meta       = mm::constructAt<FrameMeta>(mm::metaSpace());
+    FrameMeta *meta       = mm::constructAt<FrameMeta>(*allocator);
     meta->frameSize       = sizeof(Frame) + sizeof(slot_t) * runtimeDataType->size();
     meta->runtimeDataType = runtimeDataType;
     meta->staticArea      = staticArea;
 
-    graph->setExtra<FrameMeta, 0>(meta);
+    graph->setExtra<FrameMeta, kFrameMetaExtraIndex>(meta);
 
     return meta;
 }

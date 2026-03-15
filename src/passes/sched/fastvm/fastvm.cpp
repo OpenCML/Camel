@@ -447,9 +447,8 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
     std::lock_guard lock(jitCacheMutex_);
     if (getGraphJitFn(graph))
         return;
-    FrameMeta *meta = graph->getExtra<FrameMeta, 0>();
-    if (!meta)
-        meta = installFrameMetaInfoForGraph(graph);
+    FrameMeta *meta = graph->frameMeta();
+    ASSERT(meta != nullptr, std::format("Graph '{}' has no frozen FrameMeta.", graph->name()));
 
     CompilationDebugOptions debugOptions{
         .enableDebugTrace = enableJitTraceMir_,

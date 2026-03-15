@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -496,16 +496,16 @@ std::string CppEmitter::emitExpr(Node *node, expr_cache_t &cache) {
 
     case NodeType::JOIN: {
         auto *joinNode = tt::as_ptr<JoinNode>(node);
-        if (joinNode->normInputs().empty() || joinNode->withInputs().size() != 2) {
+        if (joinNode->armCount() != 2 || !joinNode->hasMatchedBranch()) {
             throw std::runtime_error("JOIN shape is not supported for direct C++ emission");
         }
-        auto *brchNode = joinNode->normInputs().front();
-        if (brchNode->type() != NodeType::BRCH || brchNode->normInputs().size() != 1) {
+        auto *brchNode = joinNode->matchedBranch();
+        if (!brchNode->hasSelectorInput()) {
             throw std::runtime_error("JOIN is not driven by a supported BRCH node");
         }
-        const auto condExpr = emitExpr(brchNode->normInputs().front(), cache);
-        const auto thenExpr = emitExpr(joinNode->withInputs()[0], cache);
-        const auto elseExpr = emitExpr(joinNode->withInputs()[1], cache);
+        const auto condExpr = emitExpr(brchNode->selectorInput(), cache);
+        const auto thenExpr = emitExpr(joinNode->armTail(0), cache);
+        const auto elseExpr = emitExpr(joinNode->armTail(1), cache);
         result              = std::format("({} ? {} : {})", condExpr, thenExpr, elseExpr);
     } break;
 
@@ -607,8 +607,9 @@ std::string CppEmitter::emitDirectFunction(Graph *graph, const GraphLoweringPlan
         std::unordered_set<Node *> joinArmNodes;
         for (Node *n : plan.topoNodes) {
             if (n->type() == NodeType::JOIN) {
-                for (auto *arm : tt::as_ptr<JoinNode>(n)->withInputs()) {
-                    joinArmNodes.insert(arm);
+                auto *joinNode = tt::as_ptr<JoinNode>(n);
+                for (size_t i = 0; i < joinNode->armCount(); ++i) {
+                    joinArmNodes.insert(joinNode->armTail(i));
                 }
             }
         }

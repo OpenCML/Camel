@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -53,12 +53,17 @@ namespace {
 using json = nlohmann::json;
 using namespace GIR;
 
+namespace {
+constexpr std::size_t kSourceContextExtraIndex = 3;
+}
+
 std::string ptrToId(const void *ptr) {
     return std::format("0x{:x}", reinterpret_cast<uintptr_t>(ptr));
 }
 
 camel::source::SourceContext *sourceContextForGraph(const graph_ptr_t &graph) {
-    return graph ? graph->getExtra<camel::source::SourceContext, 3>() : nullptr;
+    return graph ? graph->getExtra<camel::source::SourceContext, kSourceContextExtraIndex>()
+                 : nullptr;
 }
 
 json rangeToJson(const CharRange &range) {
@@ -314,9 +319,9 @@ void nodeLabelShapeStyle(Node *node, std::string &label, std::string &shape, std
         shape = "diamond";
         break;
     case NodeType::FUNC: {
-        func_ptr_t func = tt::as_ptr<FuncNode>(node)->func();
-        label           = func->name().empty() ? func->graph().name() : func->name();
-        shape           = "Mdiamond";
+        auto *func = tt::as_ptr<FuncNode>(node)->func();
+        label      = func->name().empty() ? func->graph().name() : func->name();
+        shape      = "Mdiamond";
         break;
     }
     case NodeType::OPER: {
@@ -368,7 +373,7 @@ void nodeRawFields(Node *node, json &j) {
         break;
     }
     case NodeType::FUNC: {
-        func_ptr_t func    = tt::as_ptr<FuncNode>(node)->func();
+        auto *func         = tt::as_ptr<FuncNode>(node)->func();
         j["funcName"]      = func->name();
         j["funcGraphName"] = func->graph().name();
         break;
@@ -396,7 +401,8 @@ json nodeToJson(Node *node) {
     j["style"]     = style;
     j["graphName"] = node->graph().name();
     j["nodeRepr"]  = node->toString();
-    if (auto *sourceContext = node->graph().getExtra<camel::source::SourceContext, 3>()) {
+    if (auto *sourceContext =
+            node->graph().getExtra<camel::source::SourceContext, kSourceContextExtraIndex>()) {
         auto origin = sourceContext->debugMap().nodeOrigin(node->stableId());
         attachOriginAndSemantic(
             j,

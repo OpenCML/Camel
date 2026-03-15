@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,6 +34,10 @@ struct FrameMeta {
     const type::TupleType *runtimeDataType;
     ::Tuple *staticArea;
 };
+
+/// FrameMeta 在 Graph::extras_ 中的 O(1) 缓存槽位。
+/// 仅由 installFrameMetaInfoForGraph 和 Graph 内部使用。
+inline constexpr std::size_t kFrameMetaExtraIndex = 0;
 
 FrameMeta *installFrameMetaInfoForGraph(GIR::Graph *graph);
 
@@ -356,18 +360,8 @@ class FramePool {
         }
 
         // 分配新 Frame 并初始化
-        FrameMeta *meta = graph->getExtra<FrameMeta, 0>();
-        if (meta == nullptr) {
-            meta = installFrameMetaInfoForGraph(graph);
-            EXEC_WHEN_DEBUG({
-                GetDefaultLogger()
-                    .in("FramePool")
-                    .info(
-                        "[{}] Installed FrameMeta for graph <{}>",
-                        mm::formatAddress(this, true),
-                        graph->name());
-            });
-        }
+        FrameMeta *meta = graph->frameMeta();
+        ASSERT(meta != nullptr, std::format("Graph '{}' has no frozen FrameMeta.", graph->name()));
         size_t frameSize = meta->frameSize;
         if (top_ + frameSize > end_) {
             EXEC_WHEN_DEBUG({

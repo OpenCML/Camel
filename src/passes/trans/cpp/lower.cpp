@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -213,15 +213,17 @@ GraphLoweringPlan analyzeGraphForCpp(Graph *graph) {
         } break;
 
         case NodeType::BRCH:
-            if (node->normInputs().size() != 1 || !node->withInputs().empty() ||
-                node->ctrlOutputs().size() != 2) {
+            if (!tt::as_ptr<BrchNode>(node)->hasSelectorInput() ||
+                !tt::as_ptr<BrchNode>(node)->caseInputs().empty() ||
+                tt::as_ptr<BrchNode>(node)->armCount() != 2) {
                 addIssue(plan, node, "only two-way scalar if-else branches are supported");
             }
             break;
 
         case NodeType::JOIN:
-            if (node->normInputs().size() != 1 || node->withInputs().size() != 2 ||
-                node->normInputs().front()->type() != NodeType::BRCH) {
+            if (!tt::as_ptr<JoinNode>(node)->hasBranchIndexInput() ||
+                !tt::as_ptr<JoinNode>(node)->hasMatchedBranch() ||
+                tt::as_ptr<JoinNode>(node)->armCount() != 2) {
                 addIssue(plan, node, "join must be driven by a matching two-way BRCH");
             }
             break;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -132,9 +132,9 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             string res;
             switch (n->type()) {
             case NodeType::FUNC: {
-                func_ptr_t func = tt::as_ptr<FuncNode>(n)->func();
-                string name     = func->name().empty() ? func->graph().name() : func->name();
-                res             = format("CALL: {}", name);
+                auto *func  = tt::as_ptr<FuncNode>(n)->func();
+                string name = func->name().empty() ? func->graph().name() : func->name();
+                res         = format("CALL: {}", name);
                 for (const auto &inputNode : n->dataInputs()) {
                     res += format(", {}", pointerToIdent(inputNode));
                 }
