@@ -195,6 +195,11 @@ inline void registerNodeOrigin(
     }
 }
 
+// 从 GCT 构建 GIR 图。全过程分为两个阶段：
+// 1. 构造阶段：visit(gct) 遍历 GCT，通过 GraphBuilder 增量创建图和节点。
+//    此阶段所有图均为 non-finalized，可自由编辑（含闭包捕获、参数化等结构变形）。
+// 2. 导出阶段：finalizeRecursively() 一次性为所有图计算 slot 编号、layout、FrameMeta。
+//    导出后所有图标记为 finalized，不再允许直接编辑。
 graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     waited_ = false;
     synced_ = false;
@@ -278,6 +283,10 @@ bool Builder::insertGraph(const std::string &name, const graph_ptr_t &graph) {
     return true;
 }
 
+// 跨图引用解析：当前函数图引用了外层图的节点时，
+// 沿外层图链逐层插入 PortNode 作为闭包捕获端口。
+// 这里直接修改沿途图的 closure 集合，但因为是在初始编译阶段（finalize 之前），
+// 所有图尚未 finalized，这些修改通过 GraphBuilder::addClosure 受 assertBuildable 保护。
 Node *Builder::resolveCrossGraphRef(Node *node, const std::string &name) {
     Graph *curr            = currGraph_.get();
     node_scope_ptr_t scope = nodeScope_;
@@ -621,6 +630,10 @@ Node *Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
     return node;
 }
 
+// 为一个子图创建函数值节点。当 allowParameterization=true 时，
+// 可能会调用 parametrizeClosure() 将子图的闭包捕获转为 with 参数，
+// 这会直接修改子图的端口结构。此操作只在初始编译阶段（finalize 之前）发生，
+// 所有图尚未 finalized，由 assertBuildable 保护。
 Node *Builder::createFuncDataNode(
     const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
     ASSERT(

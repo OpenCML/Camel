@@ -46,7 +46,7 @@ NodeVMSchedPass::~NodeVMSchedPass() {
 
 std::span<Node *> NodeVMSchedPass::buildTopoNodes(Graph *graph) {
     ASSERT(
-        graph->frozen(),
+        graph->finalized(),
         std::format("Graph {} is not finalized before executing.", graph->name()));
 
     Node *exitNode   = graph->exitNode();
@@ -404,7 +404,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                         "joinNode={}",
                         n->toString(),
                         jumpIdx,
-                        ctrlOuts.size(),
+                        brchNode->armCount(),
                         tillNode->toString(),
                         skipNode->toString(),
                         joinNode->toString()));

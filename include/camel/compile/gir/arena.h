@@ -26,8 +26,17 @@
 
 namespace camel::compile::gir {
 
-// GraphArena 为 Graph / Node / frozen static area 提供独立分配域。
-// 这样 GIR 可以脱离通用 metaspace 的长期驻留语义，同时保留批量分配的局部性。
+// =============================================================================
+// GraphArena：为 GIR 的 frozen 产物（FrameMeta、frozen static area 等）提供
+// 独立的内存分配域。
+//
+// 根图在创建时分配一个 arena，子图默认继承外层图的 arena，从而保证：
+//   - 同一图族的 frozen 产物具有内存局部性；
+//   - GIR 可以脱离通用 metaspace 的长期驻留语义，在图被销毁时批量回收。
+//
+// 当前 Node 仍使用 std::unique_ptr 由 Graph::ownedNodes_ 管理，
+// 未来可选择让 frozen Node 也进入 arena 以进一步提升地址稳定性和局部性。
+// =============================================================================
 class GraphArena {
   public:
     static constexpr size_t kDefaultCapacity = 8 * camel::core::mm::MB;

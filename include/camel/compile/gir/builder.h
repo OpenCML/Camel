@@ -25,9 +25,20 @@
 
 namespace camel::compile::gir {
 
-// GraphBuilder 是 Graph 的唯一构造/变换入口。
-// 它负责把“对图做什么”翻译成 draft/build 期的容器更新与最终 finalize，
-// 而 Graph 自身只保留冻结产物所需的只读视图。
+// =============================================================================
+// GraphBuilder：Graph 的唯一底层构造/变换入口。
+//
+// 职责：
+//   1. 创建新图 (createGraph)、克隆图 (cloneGraph)。
+//   2. 在非 finalized 图上执行结构编辑：增删节点、端口、闭包、子图、依赖。
+//   3. 一次性导出终态布局 (finalize)：重排 slot 编号、生成 signature/layout、
+//      安装 FrameMeta。finalize 后图标记为 finalized，不再允许后续编辑。
+//
+// 设计约束：
+//   - Graph 自身不暴露任何 mutable 接口，所有写操作均通过 GraphBuilder (friend)。
+//   - finalize 是单向终结，不可 "un-finalize"。要修改已终结图必须先 cloneGraph。
+//   - rearrange() 仅在 finalize 内部调用，不对外暴露。
+// =============================================================================
 class GraphBuilder {
   public:
     explicit GraphBuilder(Graph &graph) : graph_(&graph) {}
@@ -65,15 +76,12 @@ class GraphBuilder {
     void addDependency(const graph_ptr_t &dep) const;
     void eraseDependency(const graph_ptr_t &dep) const;
 
-    // 某些 draft 级边编辑不会立刻重建整图，只需把目标 graph 标记为“布局已失效”。
     void touch() const { markMutated(); }
     Node *inlineNode(Node *node, bool forceSync = false) const;
     void finalize() const;
     void finalizeRecursively() const;
 
   private:
-    // 只在 finalize/export 阶段生成最终 slot/layout。
-    // draft 期不再暴露手动 rearrange API，避免回到“每改一次图就重排一次”的旧模式。
     void rearrange() const;
     void assertBuildable(const char *action) const;
     void markMutated() const;
@@ -81,11 +89,24 @@ class GraphBuilder {
     Graph *graph_;
 };
 
-// GraphDraft 表示一次 rewrite/build 的工作态。
-// 它持有 source graph 的克隆工作副本，并负责：
-// 1. 约束所有编辑只能发生在 draft-owned graph 上；
-// 2. 记录哪些 graph 被改动，延迟到 finalize 时统一导出最终布局；
-// 3. 为 GraphRewriteSession 提供 graph-in / graph-out 的内部编辑原语。
+// =============================================================================
+// GraphDraft：一次 rewrite / build 的工作态。
+//
+// GraphDraft 持有 source graph 的 cloneGraph 工作副本（draft-owned），并负责：
+//   1. 约束所有编辑只能发生在 draft-owned graph 上（assertDraftOwned）。
+//   2. 记录哪些 graph 被改动（dirtyGraphs_），延迟到 finalize 时统一导出。
+//   3. 为 GraphRewriteSession 提供 graph-in / graph-out 的内部编辑原语。
+//
+// 使用流程：
+//   GraphDraft draft(frozenGraph);        // 1. 从 frozen 源图创建 draft
+//   draft.eraseNode(n);                   // 2. 在 draft 上执行编辑
+//   draft.replaceNode(old, new);
+//   draft.finalize();                     // 3. 一次性导出：rearrange + FrameMeta
+//   return draft.root();                  // 4. 返回新的 finalized graph
+//
+// draft 内的编辑通过 GraphBuilder 的底层 API 完成，但 draft 保证只操作克隆副本，
+// 绝不触碰原始 source graph。
+// =============================================================================
 class GraphDraft {
   public:
     explicit GraphDraft(const graph_ptr_t &source)
@@ -161,7 +182,7 @@ class GraphDraft {
         markDirty(&node->graph());
         return result;
     }
-    // 统一在导出阶段 finalize，确保索引布局、静态池与 FrameMeta 一次性收敛。
+    /// 统一导出：对所有 dirty graph 执行 finalize，然后递归 finalize 整棵子图树。
     void finalize() {
         for (Graph *graph : dirtyGraphs_) {
             GraphBuilder(graph).finalize();

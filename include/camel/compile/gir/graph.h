@@ -53,13 +53,19 @@ using data_ptr_t   = camel::core::data::data_ptr_t;
 using func_ptr_t   = camel::core::data::func_ptr_t;
 
 // =============================================================================
-// Graph：函数/子图，包含节点集合、端口、静态/运行时数据段
+// Graph：GIR 函数/子图的最终只读产物。
+//
+// Graph 一旦由 GraphBuilder::finalize() 导出后即视为不可变。
+// 所有结构编辑（增删节点、改边、重排布局）都在 GraphDraft / GraphBuilder 的
+// 工作态上完成，最终通过 finalize 一次性写入新图。
+//
+// extras_ 提供 O(1) 图级缓存槽位（FrameMeta、JIT entry、topo cache 等），
+// 由各后端/工具自行约定 index 并维护失效协议，Graph 本身只提供通用
+// getExtra / setExtra 泛型接口。
 // =============================================================================
 
 class Graph : public std::enable_shared_from_this<Graph> {
   public:
-    static constexpr std::size_t kFrameMetaExtraIndex = 0;
-
     static std::string makeStableId(const std::string &name);
 
     Graph(const Graph &other)            = delete;
@@ -90,16 +96,16 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     std::string toString() const;
 
+    /// finalized() 表示此图已经历 finalize 导出，拥有完整的 slot 编号、layout 与 FrameMeta。
+    /// 此标志为单向标记：一旦设为 true 则永不回退。要修改图必须克隆后在 draft 上操作。
+    bool finalized() const { return finalized_; }
+
     FunctionType *funcType() const { return signature_.funcType; }
     graph_arena_ptr_t arena() const { return arena_; }
     camel::core::context::FrameMeta *frameMeta() const;
-    void setFrameMeta(camel::core::context::FrameMeta *meta) const {
-        setExtra<camel::core::context::FrameMeta, kFrameMetaExtraIndex>(meta);
-    }
     const TupleType *staticDataType() const { return signature_.staticDataType; }
     const TupleType *runtimeDataType() const { return signature_.runtimeDataType; }
     const TupleType *closureType() const { return signature_.closureType; }
-    bool frozen() const { return frozen_; }
 
     const data_vec_t &staticDataArr() const { return staticDataArr_; }
     data_ptr_t materializeStaticData(data_idx_t index) const;
@@ -138,6 +144,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const node_vec_t &closure() const { return closure_; }
     size_t argsCount() const { return normPorts_.size() + withPorts_.size() + closure_.size(); }
 
+    /// 通用 extra 缓存槽位。index 由各后端/工具自行约定，Graph 不感知具体用途。
     template <typename T, std::size_t Index> T *getExtra() const { return extras_.get<T, Index>(); }
     template <typename T, std::size_t Index> void setExtra(T *ptr) const {
         extras_.set<T, Index>(ptr);
@@ -147,6 +154,14 @@ class Graph : public std::enable_shared_from_this<Graph> {
     friend class Builder;
     friend class GraphBuilder;
     friend class GraphRewriteSession;
+
+    // FrameMeta 的 extra index 由 Graph 内部约定，对外不暴露。
+    // 各 VM/工具的 extra index 在各自的头文件中定义。
+    static constexpr std::size_t kFrameMetaExtraIndex_ = 0;
+
+    void setFrameMeta(camel::core::context::FrameMeta *meta) const {
+        setExtra<camel::core::context::FrameMeta, kFrameMetaExtraIndex_>(meta);
+    }
 
     std::string name_;
     std::string stableId_;
@@ -166,12 +181,18 @@ class Graph : public std::enable_shared_from_this<Graph> {
     } signature_;
     data_vec_t staticDataArr_ = {nullptr};
 
+    // --- 节点所有权 ---
+    // 当前 Node 由 ownedNodes_ (unique_ptr) 管理，Graph 析构时自动释放。
+    // 后续可考虑让 finalized 图的 Node 进入 arena 以提升地址局部性；
+    // draft 阶段可保留 unique_ptr 的灵活管理方式。
     std::vector<node_uptr_t> ownedNodes_;
     node_vec_t normPorts_, withPorts_, closure_;
     node_vec_t nodes_;
     Node *exitNode_ = nullptr;
 
-    bool frozen_ = false;
+    /// 单向终结标记。finalize() 设为 true 后永不回退。
+    /// 要修改已终结的图，必须克隆出 draft 副本再操作。
+    bool finalized_ = false;
 
     bool looped_        = false;
     bool parameterized_ = false;

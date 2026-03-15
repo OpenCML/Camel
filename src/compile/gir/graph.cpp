@@ -349,11 +349,15 @@ graph_ptr_t GraphBuilder::createGraph(
 }
 
 void GraphBuilder::assertBuildable(const char *action) const {
-    ASSERT(!graph_->frozen_, std::format("Cannot {} frozen graph '{}'.", action, graph_->name_));
+    ASSERT(
+        !graph_->finalized_,
+        std::format("Cannot {} finalized graph '{}'. Clone it first.", action, graph_->name_));
 }
 
 void GraphBuilder::markMutated() const {
-    graph_->frozen_ = false;
+    // 只失效布局缓存，不改变 finalized 标记。
+    // 在当前模型下，只有非 finalized 的图（初始构造或 draft clone）才会走到这里，
+    // 因为 finalized 图的 mutation 会被 assertBuildable 拦截。
     graph_->setFrameMeta(nullptr);
 }
 
@@ -452,7 +456,8 @@ void GraphBuilder::parametrizeClosure() const {
         graph_->closure_.end());
     graph_->closure_.clear();
     graph_->parameterized_ = true;
-    rearrange();
+    // 不再立即 rearrange：slot 编号和 layout 统一在 finalize 时一次性导出。
+    markMutated();
 }
 
 Node *Graph::exitNode() const {
@@ -518,7 +523,7 @@ std::string Graph::toString() const {
 }
 
 camel::core::context::FrameMeta *Graph::frameMeta() const {
-    return getExtra<camel::core::context::FrameMeta, kFrameMetaExtraIndex>();
+    return getExtra<camel::core::context::FrameMeta, kFrameMetaExtraIndex_>();
 }
 
 data_ptr_t Graph::materializeStaticData(data_idx_t index) const {
@@ -533,9 +538,9 @@ data_ptr_t Graph::materializeStaticData(data_idx_t index) const {
             index,
             staticDataArr_.size()));
 
-    // While Graph is still in the transitional state, prefer the original compile-time
-    // entry when it exists. Some static slots (e.g. ref placeholders captured by lambda
-    // lowering) are not losslessly reconstructible from the frozen runtime slot view.
+    // 编译期 staticDataArr_ 是权威来源：它保存原始 data_ptr_t，
+    // 支持无损 clone/remap（例如 lambda lowering 中的引用占位符）。
+    // 仅当编译期条目为空时，才回退到 FrameMeta::staticArea 的 runtime slot 视图。
     if (staticDataArr_[idx] != nullptr) {
         return staticDataArr_[idx];
     }
@@ -677,7 +682,7 @@ graph_ptr_t GraphBuilder::cloneGraph(const graph_ptr_t &graph) {
         newGraph->signature_.staticDataType  = src->signature_.staticDataType;
         newGraph->signature_.runtimeDataType = src->signature_.runtimeDataType;
         newGraph->signature_.closureType     = src->signature_.closureType;
-        newGraph->frozen_                    = false;
+        // clone 出的图默认 finalized_ = false，可直接编辑，无需显式 unfrozen。
         newGraph->setFrameMeta(nullptr);
 
         if (auto *sourceContext =
@@ -791,12 +796,12 @@ void GraphBuilder::finalizeGraph(const graph_ptr_t &graph) {
 }
 
 void GraphBuilder::finalize() const {
-    if (graph_->frozen_) {
+    if (graph_->finalized_) {
         return;
     }
     rearrange();
     camel::core::context::installFrameMetaInfoForGraph(graph_);
-    graph_->frozen_ = true;
+    graph_->finalized_ = true;
 }
 
 void GraphBuilder::finalizeGraphRecursively(const graph_ptr_t &graph) {

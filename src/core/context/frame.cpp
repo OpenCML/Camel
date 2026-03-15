@@ -58,7 +58,7 @@ FrameMeta *installFrameMetaInfoForGraph(GIR::Graph *graph) {
     meta->runtimeDataType = runtimeDataType;
     meta->staticArea      = staticArea;
 
-    graph->setFrameMeta(meta);
+    graph->setExtra<FrameMeta, kFrameMetaExtraIndex>(meta);
 
     return meta;
 }

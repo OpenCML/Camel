@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -119,6 +119,9 @@ class Function : public rtdata::Object {
   private:
     explicit Function(GIR::Graph *g) : graph_(g), closure_(nullptr) {}
 
+    // graph_ 逃逸路径：运行时 Function 持有 Graph 裸指针。
+    // 存活约束：Function 在 VM 栈帧中被创建，其生命周期不超过执行期间。
+    // 图的 shared_ptr 由调度遍根持有，保证执行期间 Graph 不被销毁。
     GIR::Graph *graph_;
     Tuple *closure_;
 };

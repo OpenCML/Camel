@@ -269,7 +269,7 @@ PassApplyResult applyPassesDetailed(
             return {Graph::null(), PassApplyStatus::Consumed};
         }
         ASSERT(
-            graph->frozen(),
+            graph->finalized(),
             std::format("Graph {} is not finalized before pass execution.", graph->name()));
 
         auto factory = findPassFactory(p, os);

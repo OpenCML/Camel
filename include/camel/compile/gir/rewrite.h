@@ -28,9 +28,19 @@ struct RewriteResult {
     bool changed;
 };
 
-// GraphRewriteSession 是 pass 侧看到的高层 rewrite 接口。
-// pass 只描述“删什么、替换什么、内联什么”，不再直接操心工作图何时重排、
-// 何时 finalize。所有实际编辑都落到 GraphDraft 上，finish() 再统一导出新图。
+// =============================================================================
+// GraphRewriteSession：pass 侧看到的高层 rewrite 接口。
+//
+// pass 只描述"删什么、替换什么、内联什么"，不直接操心工作图何时重排、
+// 何时 finalize。所有实际编辑都落到内部 GraphDraft 上，finish() 统一导出新图。
+//
+// 典型用法（在 rewrite pass 的 apply 方法中）：
+//   GraphRewriteSession session(frozenGraph);
+//   for (Node *n : session.root()->nodes()) {
+//       if (shouldReplace(n)) session.replaceNode(n, makeNew(n));
+//   }
+//   return session.finish();  // -> RewriteResult { newFrozenGraph, changed }
+// =============================================================================
 class GraphRewriteSession {
   public:
     explicit GraphRewriteSession(const graph_ptr_t &graph) : draft_(graph) {}
