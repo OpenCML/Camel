@@ -1,0 +1,26 @@
+module decorator_multi
+
+with <k: int>
+func add_n(f: (x: int) => int): (x: int) => int {
+    return (x: int): int => {
+        return f(x) + k
+    }
+}
+
+with <m: int>
+func mul_n(f: (x: int) => int): (x: int) => int {
+    return (x: int): int => {
+        return f(x) * m
+    }
+}
+
+@add_n<1>
+@mul_n<2>
+func core(x: int): int {
+    return x + 3
+}
+
+func main(): int sync {
+    let v = core(1)
+    return if v == 9 then 0 else 1
+}

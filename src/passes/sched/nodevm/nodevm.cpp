@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -322,6 +322,10 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 case TypeCode::Function: {
                     auto func          = tt::as_ptr<Function>(srcObj);
                     Tuple *closureData = func->tuple();
+                    ASSERT(closureData != nullptr, "Closure data is null in FILL.");
+                    ASSERT(
+                        closureData->size() == dataInputs.size(),
+                        "Closure data size mismatch in FILL.");
                     for (size_t j = 0; j < dataInputs.size(); ++j) {
                         closureData->set<slot_t>(j, currFrame->get<slot_t>(dataInputs[j]->index()));
                     }

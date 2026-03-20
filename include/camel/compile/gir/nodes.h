@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -497,7 +497,8 @@ class ExitNode : public Node {
 
 class DrefNode : public Node {
   public:
-    using dref_target_t = std::variant<graph_vec_ptr_t, oper_group_ptr_t>;
+    // FUNC overload set / OPERATOR group / pre-built inlined graph.
+    using dref_target_t = std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>;
 
     DrefNode(Graph &graph, const dref_target_t &target)
         : Node(graph, NodeType::DREF, Type::Void(), 0), target_(target) {}

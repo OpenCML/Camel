@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -643,14 +643,29 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
 }
 
 /*
-FuncDecl(Ref ref) : FuncData ;
+FuncDecl(Ref ref) : FuncAnno* anno, FuncData ;
 */
 node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
     ENTER("FuncDecl");
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for FuncDecl");
-    const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(0);
-    const auto &funcLoad     = ast->loadAs<AST::FuncDeclLoad>();
+    ASSERT(ast->size() >= 1, "FuncDecl AST should have at least one child.");
+
+    const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(ast->size() - 1);
     node_ptr_t funcNode      = visitFuncData(funcDataNode);
+
+    // Decorator annotations are lowered to ANNO nodes attached after FUNC payload.
+    // Each ANNO node owns one lowered GCT expression (currently lowered from funcAnno -> Data).
+    if (ast->size() > 1) {
+        const auto &annoListNode = ast->atAs<AST::RepeatedLoad>(0);
+        for (const auto &annoAst : *annoListNode) {
+            ASSERT(annoAst->type() == AST::LoadType::Data, "FuncAnno should lower to AST Data.");
+            node_ptr_t annoExprNode = visitData(annoAst);
+            node_ptr_t annoNode     = createNodeAs<AnnoLoad>(annoAst->toString());
+            *annoNode << annoExprNode;
+            *funcNode << annoNode;
+        }
+    }
+
     LEAVE("FuncDecl");
     return funcNode;
 }

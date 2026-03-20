@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -206,10 +206,12 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     varied_ = false;
     diags_  = diags;
     usedGraphs_.clear();
+    syntheticRefIndex_ = 0;
 
-    nodeScope_  = node_scope_t::create();
-    graphScope_ = graph_scope_t::create();
-    rootGraph_  = GraphBuilder::createGraph(FunctionType::create(), nullptr, "__root__");
+    nodeScope_      = node_scope_t::create();
+    graphScope_     = graph_scope_t::create();
+    decoratedScope_ = decorated_scope_t::create();
+    rootGraph_      = GraphBuilder::createGraph(FunctionType::create(), nullptr, "__root__");
     if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
         rootGraph_->setExtra<camel::source::SourceContext, kSourceContextExtraIndex>(
             sourceContext.get());
@@ -254,15 +256,17 @@ graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name)
         currGraph_->setExtra<camel::source::SourceContext, kSourceContextExtraIndex>(
             sourceContext.get());
     }
-    nodeScope_  = nodeScope_->enter(name);
-    graphScope_ = graphScope_->enter(name);
+    nodeScope_      = nodeScope_->enter(name);
+    graphScope_     = graphScope_->enter(name);
+    decoratedScope_ = decoratedScope_->enter(name);
     return currGraph_;
 }
 
 void Builder::leaveScope() {
-    nodeScope_  = nodeScope_->leave();
-    graphScope_ = graphScope_->leave();
-    currGraph_  = currGraph_->outer();
+    nodeScope_      = nodeScope_->leave();
+    graphScope_     = graphScope_->leave();
+    decoratedScope_ = decoratedScope_->leave();
+    currGraph_      = currGraph_->outer();
 }
 
 bool Builder::insertNode(const std::string &name, Node *node) {
@@ -280,6 +284,14 @@ bool Builder::insertGraph(const std::string &name, const graph_ptr_t &graph) {
         graphs->push_back(graph);
     }
     graphScope_->insert(name, std::make_shared<graph_vec_t>(1, graph));
+    return true;
+}
+
+bool Builder::insertDecoratedGraph(const std::string &name, const graph_ptr_t &graph) {
+    if (!decoratedScope_) {
+        return false;
+    }
+    decoratedScope_->insert(name, graph);
     return true;
 }
 
@@ -398,7 +410,6 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
 
 graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     ENTER("FUNC");
-    // Type * type = visitTypeNode(gct->atAs<GCT::TypeLoad>(0));
     std::string name         = gct->loadAs<GCT::FuncLoad>()->name();
     GCT::node_ptr_t typeLoad = gct->atAs<GCT::TypeLoad>(0);
     Type *type               = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
@@ -424,6 +435,19 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         }
     }
     leaveScope();
+
+    std::vector<GCT::node_ptr_t> annoNodes;
+    for (size_t i = 2; i < gct->size(); ++i) {
+        const auto &annoNode = gct->at(i);
+        if (annoNode && annoNode->type() == GCT::LoadType::ANNO) {
+            annoNodes.push_back(annoNode);
+        }
+    }
+    if (!annoNodes.empty()) {
+        graph_ptr_t decorated = buildDecoratedGraph(name, graph, annoNodes);
+        insertDecoratedGraph(name, decorated);
+    }
+
     LEAVE("FUNC");
     return graph;
 }
@@ -536,7 +560,14 @@ Node *Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         return node;
     }
     graph_ptr_t &graph = currGraph_;
-    auto optGraphs     = graphsAt(name);
+    auto optDecorated  = decoratedGraphAt(name);
+    if (optDecorated.has_value()) {
+        Node *drefNode = DrefNode::create(*graph, optDecorated.value());
+        registerNodeOrigin(context_, drefNode, gct, "gir.dref.decorated");
+        LEAVE("DREF");
+        return drefNode;
+    }
+    auto optGraphs = graphsAt(name);
     if (optGraphs.has_value()) {
         auto graphs = optGraphs.value();
         if (!graphs->empty()) {
@@ -572,6 +603,12 @@ Node *Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             auto ops       = std::get<oper_group_ptr_t>(e);
             Node *drefNode = DrefNode::create(*graph, ops);
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");
+            LEAVE("DREF");
+            return drefNode;
+        } else if (std::holds_alternative<graph_ptr_t>(e)) {
+            auto decorated = std::get<graph_ptr_t>(e);
+            Node *drefNode = DrefNode::create(*graph, decorated);
+            registerNodeOrigin(context_, drefNode, gct, "gir.dref.decorated");
             LEAVE("DREF");
             return drefNode;
         }
@@ -753,6 +790,67 @@ Node *Builder::createFuncDataNode(
     return resultNode;
 }
 
+Node *Builder::applyDecoratorAnno(const GCT::node_ptr_t &annoNode, Node *funcValueNode) {
+    ASSERT(annoNode && annoNode->type() == GCT::LoadType::ANNO, "Expected ANNO node.");
+    ASSERT(annoNode->size() == 1, "ANNO node should have exactly one lowered expression child.");
+    ASSERT(funcValueNode != nullptr, "Decorator input function value is null.");
+
+    const auto &withNode = annoNode->atAs<GCT::WithLoad>(0);
+
+    const std::string tmpScopeName = "__decorator_tmp_scope_" + std::to_string(syntheticRefIndex_);
+    const std::string tmpRefName   = "__decorator_tmp_ref_" + std::to_string(syntheticRefIndex_++);
+    nodeScope_                     = nodeScope_->enter(tmpScopeName);
+    nodeScope_->insert(tmpRefName, funcValueNode);
+
+    GCT::node_ptr_t linkNode = std::make_shared<GCT::Node>(
+        std::dynamic_pointer_cast<GCT::Load>(std::make_shared<GCT::LinkLoad>(1)));
+    *linkNode << withNode->clone();
+    *linkNode << std::make_shared<GCT::Node>(std::dynamic_pointer_cast<GCT::Load>(
+        std::make_shared<GCT::DRefLoad>(Reference(tmpRefName))));
+
+    Node *decoratedValue = visitLinkNode(linkNode);
+    nodeScope_           = nodeScope_->leave();
+    return decoratedValue;
+}
+
+graph_ptr_t Builder::buildDecoratedGraph(
+    const std::string &funcName, const graph_ptr_t &rawGraph,
+    const std::vector<GCT::node_ptr_t> &annoNodes) {
+    ASSERT(rawGraph != nullptr, "Raw function graph is null.");
+    if (annoNodes.empty()) {
+        return rawGraph;
+    }
+
+    graph_ptr_t decoratedGraph = enterScope(
+        FunctionType::create(),
+        "__decorated__" + funcName + "_" + std::to_string(syntheticRefIndex_++));
+    registerGraphOrigin(
+        context_,
+        decoratedGraph,
+        annoNodes.back(),
+        "gir.func.decorated.graph",
+        {},
+        {},
+        true);
+
+    // Seed value is the original function object.
+    Node *decoratedValue = createFuncDataNode(rawGraph, true, false);
+    for (auto it = annoNodes.rbegin(); it != annoNodes.rend(); ++it) {
+        decoratedValue = applyDecoratorAnno(*it, decoratedValue);
+    }
+
+    if (decoratedValue->dataType()->code() != TypeCode::Function) {
+        diags_->of(SemanticDiag::ArgumentsMismatch)
+            .atOrigin(annoNodes.front()->load()->origin())
+            .commit("decorator must return function", decoratedValue->dataType()->toString());
+        throw BuildAbortException();
+    }
+
+    GraphBuilder(decoratedGraph).setOutput(decoratedValue);
+    leaveScope();
+    return decoratedGraph;
+}
+
 Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ENTER("LINK");
     any targetNodeRes = visit(gct->at(0));
@@ -764,6 +862,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     graph_ptr_t targetGraph       = nullptr;
     oper_idx_ptr_t targetOperator = nullptr;
     FunctionType *targetFuncType  = nullptr;
+    std::vector<Node *> inlineLaterNodes;
     node_vec_t withInputNodes, normInputNodes;
     type_vec_t withInputTypes, normInputTypes;
 
@@ -784,6 +883,33 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             normInputTypes.push_back(inputNode->dataType());
         } else if (dataRes.type() == typeid(Node *)) {
             Node *inputNode = any_cast<Node *>(dataRes);
+            if (inputNode->type() == NodeType::DREF) {
+                auto *argDref = tt::as_ptr<DrefNode>(inputNode);
+                if (std::holds_alternative<graph_ptr_t>(argDref->target())) {
+                    auto decoratedGraph = std::get<graph_ptr_t>(argDref->target());
+                    GraphBuilder(currGraph_).addDependency(decoratedGraph);
+                    if (!decoratedGraph->funcType()->hasExitType() ||
+                        decoratedGraph->funcType()->exitType()->code() != TypeCode::Function) {
+                        diags_->of(SemanticDiag::ArgumentsMismatch)
+                            .atOrigin(gct->load()->origin())
+                            .commit(
+                                "decorated graph should return function",
+                                decoratedGraph->funcType()->toString());
+                        throw BuildAbortException();
+                    }
+                    Node *decoratorFactoryNode = createFuncDataNode(decoratedGraph, false, true);
+                    ASSERT(
+                        decoratorFactoryNode->type() == NodeType::FUNC,
+                        "Decorated graph should lower to a FUNC node before inlining.");
+                    FunctionType *factoryType =
+                        tt::as_ptr<FunctionType>(decoratedGraph->funcType()->exitType());
+                    (void)
+                        factoryType; // type info is used through decoratorFactoryNode->dataType().
+                    inlineLaterNodes.push_back(decoratorFactoryNode);
+                    argDref->detach();
+                    inputNode = decoratorFactoryNode;
+                }
+            }
             normInputNodes.push_back(inputNode);
             if (inputNode->type() == NodeType::FUNC) {
                 const auto &funcNode = tt::as_ptr<FuncNode>(inputNode);
@@ -873,8 +999,36 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             registerNodeOrigin(context_, operNode, gct->at(0), "gir.link.oper");
             targetNode     = operNode;
             targetFuncType = targetOperator->funcType();
+        } else if (std::holds_alternative<graph_ptr_t>(drefNode->target())) {
+            auto decoratedGraph = std::get<graph_ptr_t>(drefNode->target());
+            GraphBuilder(currGraph_).addDependency(decoratedGraph);
+            if (!decoratedGraph->funcType()->hasExitType() ||
+                decoratedGraph->funcType()->exitType()->code() != TypeCode::Function) {
+                diags_->of(SemanticDiag::ArgumentsMismatch)
+                    .atOrigin(gct->load()->origin())
+                    .commit(
+                        "decorated graph should return function",
+                        decoratedGraph->funcType()->toString());
+                throw BuildAbortException();
+            }
+
+            // 1) evaluate decorated graph itself (it should yield a function value)
+            Node *decoratorFactoryNode = createFuncDataNode(decoratedGraph, false, true);
+            ASSERT(
+                decoratorFactoryNode->type() == NodeType::FUNC,
+                "Decorated graph should lower to a FUNC node before inlining.");
+
+            FunctionType *factoryType =
+                tt::as_ptr<FunctionType>(decoratedGraph->funcType()->exitType());
+            inlineLaterNodes.push_back(decoratorFactoryNode);
+
+            // 2) call returned callable with user's args.
+            // The with-input is the decorator graph output after inlining.
+            targetNode = CallNode::create(*currGraph_, factoryType->exitType());
+            Node::link(LinkType::With, decoratorFactoryNode, targetNode);
+            targetFuncType = factoryType;
         } else {
-            ASSERT(false, "DrefNode must refer to a graph or an operator group.");
+            ASSERT(false, "DrefNode must refer to graph(s), operator group, or inlined graph.");
         }
         drefNode->detach();
     } else {
@@ -966,6 +1120,47 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             Node::link(LinkType::Ctrl, lastSyncedNode_, targetNode);
         }
         lastSyncedNode_ = targetNode;
+    }
+
+    // Inline decorated helper graphs after downstream links are fully established.
+    // This rewires the decorated graph output directly into the target inputs.
+    for (Node *inlineNode : inlineLaterNodes) {
+        node_vec_t withOwners(inlineNode->withOutputs().begin(), inlineNode->withOutputs().end());
+        node_vec_t normOwners(inlineNode->normOutputs().begin(), inlineNode->normOutputs().end());
+        node_vec_t ctrlOwners(inlineNode->ctrlOutputs().begin(), inlineNode->ctrlOutputs().end());
+        GraphBuilder(currGraph_).inlineNode(inlineNode, false);
+
+        // Preserve owner input slot semantics (especially CALL/BRCH/JOIN) by replacing
+        // the old inline helper input with the newly appended inlined output.
+        for (Node *owner : withOwners) {
+            if (!owner || owner->withInputs().empty()) {
+                continue;
+            }
+            Node *newInput = owner->withInputs().back();
+            if (newInput != inlineNode) {
+                NodeMutation::replaceInput(LinkType::With, owner, inlineNode, newInput);
+            }
+        }
+        for (Node *owner : normOwners) {
+            if (!owner || owner->normInputs().empty()) {
+                continue;
+            }
+            Node *newInput = owner->normInputs().back();
+            if (newInput != inlineNode) {
+                NodeMutation::replaceInput(LinkType::Norm, owner, inlineNode, newInput);
+            }
+        }
+        for (Node *owner : ctrlOwners) {
+            if (!owner || owner->ctrlInputs().empty()) {
+                continue;
+            }
+            Node *newInput = owner->ctrlInputs().back();
+            if (newInput != inlineNode) {
+                NodeMutation::replaceInput(LinkType::Ctrl, owner, inlineNode, newInput);
+            }
+        }
+
+        GraphBuilder(currGraph_).eraseNode(inlineNode);
     }
 
     LEAVE("LINK");
@@ -1183,7 +1378,21 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
 Node *Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
     ENTER("ANNO");
-    ASSERT(false, "Annotation nodes are not supported in the current version of the compiler.");
+    ASSERT(gct->size() == 1, "ANNO node should have exactly one child.");
+    const auto &res = visit(gct->at(0));
+    if (res.type() == typeid(Node *)) {
+        Node *node = any_cast<Node *>(res);
+        LEAVE("ANNO");
+        return node;
+    }
+    if (res.type() == typeid(graph_ptr_t)) {
+        graph_ptr_t graph = any_cast<graph_ptr_t>(res);
+        GraphBuilder(currGraph_).addDependency(graph);
+        Node *node = createFuncDataNode(graph, true, false);
+        LEAVE("ANNO");
+        return node;
+    }
+    ASSERT(false, "Unexpected child result type in ANNO node.");
     LEAVE("ANNO");
     return nullptr;
 }
@@ -1251,6 +1460,11 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
     const auto &exptLoad = gct->loadAs<GCT::ExptLoad>();
     const auto &exports  = exptLoad->exports();
     for (const Reference &ref : exports) {
+        auto optDecorated = decoratedGraphAt(ref.toString());
+        if (optDecorated.has_value()) {
+            module_->exportEntity(ref, optDecorated.value());
+            continue;
+        }
         auto optNode = nodeAt(ref);
         if (optNode.has_value()) {
             module_->exportEntity(ref, optNode.value());
