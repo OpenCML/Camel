@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -169,7 +169,31 @@ PassScopePtr initPassScope() {
                                        })},
                                   })},
                          })},
-                    {"inline", def(PASS(InlineRewritePass))},
+                    {"inline",
+                     def(PASS1(InlineRewritePass, InlineRewriteConfig{}),
+                         {
+                             {"small", def([](const context_ptr_t &ctx) {
+                                  return std::make_unique<InlineRewritePass>(
+                                      ctx,
+                                      InlineRewriteConfig{
+                                          .strategy = InlineTargetStrategy::Small,
+                                      });
+                              })},
+                             {"arm", def([](const context_ptr_t &ctx) {
+                                  return std::make_unique<InlineRewritePass>(
+                                      ctx,
+                                      InlineRewriteConfig{
+                                          .strategy = InlineTargetStrategy::Arm,
+                                      });
+                              })},
+                             {"hybrid", def([](const context_ptr_t &ctx) {
+                                  return std::make_unique<InlineRewritePass>(
+                                      ctx,
+                                      InlineRewriteConfig{
+                                          .strategy = InlineTargetStrategy::Hybrid,
+                                      });
+                              })},
+                         })},
                     {"taskflow", def(PASS(TaskflowExecSchedPass))},
                     {"tfdump", def(PASS(TfDumpPass))},
                 }),
@@ -269,8 +293,8 @@ PassApplyResult applyPassesDetailed(
             return {Graph::null(), PassApplyStatus::Consumed};
         }
         ASSERT(
-            !graph->dirty(),
-            std::format("Graph {} is dirty, please rearrange it first.", graph->name()));
+            graph->finalized(),
+            std::format("Graph {} is not finalized before pass execution.", graph->name()));
 
         auto factory = findPassFactory(p, os);
         if (factory) {

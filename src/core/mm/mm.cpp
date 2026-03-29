@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 10, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@ namespace camel::core::mm {
 
 // 由 GC 系统自动管理，需要从根对象可达
 GenerationalAllocatorWithGC &autoSpace() {
-    static GenerationalAllocatorWithGC allocator(
+    static auto *allocator = new GenerationalAllocatorWithGC(
         GenerationalAllocatorWithGC::Config{
             .birthSize             = 32 * MB, // 32 MB
             .havenSize             = 4 * MB,  // 4 MB
@@ -33,19 +33,21 @@ GenerationalAllocatorWithGC &autoSpace() {
             .minorGCTriggerRatio   = 0.9f,    // 小垃圾回收触发比例
             .majorGCTriggerRatio   = 0.8f     // 大垃圾回收触发比例
         });
-    return allocator;
+    return *allocator;
 }
 
 // 元数据区，手动管理分配和释放
 FreeListAllocator &metaSpace() {
-    static FreeListAllocator allocator(16 * MB, "meta"); // 16 MB
-    return allocator;
+    // 进程级元空间采用“有意泄漏”单例，规避静态析构顺序问题：
+    // 某些全局对象在进程退出阶段才释放，仍可能调用 metaSpace().free()。
+    static auto *allocator = new FreeListAllocator(16 * MB, "meta"); // 16 MB
+    return *allocator;
 }
 
 // 永久代，只分配，不释放
 BumpPointerAllocator &permSpace() {
-    static BumpPointerAllocator allocator(32 * MB, "perm"); // 32 MB
-    return allocator;
+    static auto *allocator = new BumpPointerAllocator(32 * MB, "perm"); // 32 MB
+    return *allocator;
 }
 
 } // namespace camel::core::mm

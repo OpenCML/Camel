@@ -11,8 +11,8 @@
 **设计要点**：
 - 宏是“值宏”，执行后产生 DATA，不做代码级 AST/GIR 重写
 - 编译期执行尽量复用运行时能力（Frame、OPER 等）
-- 任何 DATA 节点视为编译期有值；函数值以 `DATA(FunctionData)` 表示
-- 宏返回的运行时对象需转回 `data::Data` 再包装为 DATA 节点
+- 任何 DATA 节点视为编译期有值；函数值以 `DATA(Function*)` 静态槽表示
+- 宏返回的运行时对象直接复用结果 `slot_t` 回填 DATA 节点，不再回投成编译期 `Data`
 
 ---
 
@@ -23,20 +23,20 @@
 | 能力 | 状态 | 说明 |
 |------|------|------|
 | 直接宏调用 (FUNC) | ✅ | `add_one(41)` 可编译期求值 |
-| 间接宏调用 (CALL) | ✅ | `DATA(FunctionData)` 形式的宏调用 |
+| 间接宏调用 (CALL) | ✅ | `DATA(Function*)` 形式的宏调用 |
 | 链式宏调用 | ✅ | 宏内调用其他宏，如 `add_two` → `add_one` |
 | 宏返回函数值 | ✅ | `make_adder(x)` 返回闭包，可传给普通函数 |
 | DATA 节点作为输入 | ✅ | 遍历时将 DATA 值写入 frame，避免未初始化读取 |
-| CALLEE 为 DATA | ✅ | CALL 的 callee 从 DataNode 取 FunctionData |
+| CALLEE 为 DATA | ✅ | CALL 的 callee 从 DataNode 取 `Function*` |
 | rearrange 后 FrameMeta 失效 | ✅ | 宏遍修改图后清除缓存，避免运行时用旧布局崩溃 |
 
 ### 2.2 关键代码改动
 
 - **`Node::replaceUses()`**：只替换旧节点输出，不继承输入，适配宏结果替换语义
-- **`Graph::isMacro()` / `FunctionData::isMacro()`**：暴露宏标记
-- **GIR builder `visitExitNode()`**：支持将 `graph_ptr_t` 返回值包装为 `DATA(FunctionData)`
+- **`Graph::isMacro()`**：暴露宏标记，`FuncNode`/静态函数常量统一复用目标图上的宏属性
+- **GIR builder `visitExitNode()`**：支持将 `graph_ptr_t` 返回值包装为 `DATA(Function*)`
 - **MacroExecutor**：编译期图执行器，支持 CAST/COPY/FILL/ACCS/BRCH/JOIN/CALL/FUNC/OPER 等节点
-- **`slotToCompileTimeData` / `objectToCompileTimeData`**：运行时对象 ↔ 编译期 Data 的双向转换
+- **`getStaticNodeSlot` / `DataNode::createStaticSlot`**：运行时 slot 直接回填静态 DATA 节点
 
 ---
 
@@ -72,13 +72,13 @@
 
 **现象**：CALL 的 callee 若为 DATA 节点，其值从未写入 frame，直接 `frame->get<>` 会读到未初始化内存。
 
-**解决方案**：在 CALL 处理分支中，若 `calleeInput->type() == NodeType::DATA`，从 `DataNode::data()` 取出 `FunctionData`，经 `makeGCRefFromGCTracedData` 转为 `::Function` 再执行。
+**解决方案**：在 CALL 处理分支中，若 `calleeInput->type() == NodeType::DATA`，直接通过 `getStaticNodeSlot(calleeInput)` 读取静态槽，再按 `::Function*` 解释并调用。这样不再依赖旧的编译期常量回投路径。
 
 ### 3.4 DATA 节点值未写入 frame
 
 **现象**：OPER、CALL 等节点从 frame 读取输入时，若输入为 DATA 节点，会读到未初始化 slot。
 
-**解决方案**：在 `executeGraph` 的 switch 中为 `NodeType::DATA` 增加分支，将 `DataNode::data()` 经 `setFrameValueFromData` 写入 frame 对应 slot。
+**解决方案**：在 `executeGraph` 的 switch 中为 `NodeType::DATA` 增加分支：`frame->set(node->index(), getStaticNodeSlot(node))`。即把图静态区中的 `slot_t` 原样写入运行时 frame，避免经 `Data` 中间层转换。
 
 ---
 
@@ -129,6 +129,6 @@ $env:CAMEL_HOME = "D:/Projects/Camel/out/latest"
 | `src/execute/macro/macro.h` | 宏遍声明 |
 | `include/camel/compile/gir/nodes.h` | `Node::replaceUses()` |
 | `include/camel/compile/gir/graph.h` | `Graph::isMacro()` |
-| `include/camel/core/data/composite/func.h` | `FunctionData::isMacro()` |
+| `include/camel/core/rtdata/func.h` | 运行时 `Function*` 表示 |
 | `src/compile/gir/builder.cpp` | `visitExitNode` 对函数值返回的 lowering |
 | `test/macro/` | 宏功能测试用例 |

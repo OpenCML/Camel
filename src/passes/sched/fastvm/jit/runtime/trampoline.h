@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 30, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,6 +45,7 @@ extern "C" slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc);
 extern "C" slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc);
 extern "C" slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc);
 extern "C" slot_t trampolineCast(slot_t *slots, void *ctx, size_t pc);
+extern "C" slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc);
 extern "C" slot_t *prepareDirectJitCall(slot_t *callerSlots, void *ctx, const Bytecode *bc);
 extern "C" slot_t *prepareDirectJitTailCall(slot_t *callerSlots, void *ctx, const Bytecode *bc);
 extern "C" slot_t

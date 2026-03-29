@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -269,7 +269,7 @@ std::vector<Graph *> CppEmitter::collectEmissionRoots(Graph *entry) const {
         }
     }
 
-    if (roots.empty() && entry->hasOutput()) {
+    if (roots.empty()) {
         roots.push_back(entry);
     }
 
@@ -298,7 +298,6 @@ bool CppEmitter::shouldEmitStatementBody(const GraphLoweringPlan &plan) const {
         switch (node->type()) {
         case NodeType::DATA:
         case NodeType::PORT:
-        case NodeType::EXIT:
         case NodeType::BRCH:
             continue;
         default:
@@ -362,7 +361,7 @@ std::string CppEmitter::emitBindingSymbol(Node *node, std::optional<size_t> stmt
         }
         case NodeType::FUNC: {
             auto *funcNode = tt::as_ptr<FuncNode>(node);
-            return namer_.valueSymbolStmt(node, hintFor(funcNode->graph()->name()), *stmtIndex);
+            return namer_.valueSymbolStmt(node, hintFor(funcNode->bodyGraph()->name()), *stmtIndex);
         }
         case NodeType::CAST:
             return namer_.valueSymbolStmt(node, "cast", *stmtIndex);
@@ -385,7 +384,7 @@ std::string CppEmitter::emitBindingSymbol(Node *node, std::optional<size_t> stmt
         auto *funcNode = tt::as_ptr<FuncNode>(node);
         return namer_.valueSymbol(
             node,
-            hintFor(funcNode->graph()->name() + "_" + std::to_string(node->index())));
+            hintFor(funcNode->bodyGraph()->name() + "_" + std::to_string(node->index())));
     }
     case NodeType::CAST:
         return namer_.valueSymbol(node, "cast_" + std::to_string(node->index()));
@@ -452,7 +451,7 @@ std::string CppEmitter::emitExpr(Node *node, expr_cache_t &cache) {
     switch (node->type()) {
     case NodeType::DATA: {
         auto *dataNode = tt::as_ptr<DataNode>(node);
-        auto literal   = cppLiteralFor(dataNode->data());
+        auto literal   = cppLiteralFor(dataNode->dataSlot(), dataNode->dataType());
         if (!literal.has_value()) {
             throw std::runtime_error(
                 std::format("unsupported literal in node '{}'", node->toString()));
@@ -472,7 +471,7 @@ std::string CppEmitter::emitExpr(Node *node, expr_cache_t &cache) {
 
     case NodeType::FUNC: {
         auto *funcNode = tt::as_ptr<FuncNode>(node);
-        Graph *callee  = funcNode->graph();
+        Graph *callee  = funcNode->bodyGraph();
         std::ostringstream oss;
         oss << namer_.graphSymbol(callee) << "(";
         bool first = true;
@@ -496,16 +495,16 @@ std::string CppEmitter::emitExpr(Node *node, expr_cache_t &cache) {
 
     case NodeType::JOIN: {
         auto *joinNode = tt::as_ptr<JoinNode>(node);
-        if (joinNode->normInputs().empty() || joinNode->withInputs().size() != 2) {
+        if (joinNode->armCount() != 2 || !joinNode->hasMatchedBranch()) {
             throw std::runtime_error("JOIN shape is not supported for direct C++ emission");
         }
-        auto *brchNode = joinNode->normInputs().front();
-        if (brchNode->type() != NodeType::BRCH || brchNode->normInputs().size() != 1) {
+        auto *brchNode = joinNode->matchedBranch();
+        if (!brchNode->hasSelectorInput()) {
             throw std::runtime_error("JOIN is not driven by a supported BRCH node");
         }
-        const auto condExpr = emitExpr(brchNode->normInputs().front(), cache);
-        const auto thenExpr = emitExpr(joinNode->withInputs()[0], cache);
-        const auto elseExpr = emitExpr(joinNode->withInputs()[1], cache);
+        const auto condExpr = emitExpr(brchNode->selectorInput(), cache);
+        const auto thenExpr = emitExpr(joinNode->armTail(0), cache);
+        const auto elseExpr = emitExpr(joinNode->armTail(1), cache);
         result              = std::format("({} ? {} : {})", condExpr, thenExpr, elseExpr);
     } break;
 
@@ -518,6 +517,16 @@ std::string CppEmitter::emitExpr(Node *node, expr_cache_t &cache) {
             "static_cast<{}>({})",
             cppTypeFor(node->dataType()),
             emitExpr(node->normInputs().front(), cache));
+        break;
+
+    case NodeType::GATE:
+        if (node->normInputs().empty()) {
+            throw std::runtime_error(
+                std::format("GATE node '{}' has no Norm input", node->toString()));
+        }
+        // GATE 仅用于 value/control 会合；在 direct C++ 路径下，控制依赖由拓扑语句顺序保障，
+        // 表达式层面直接透传其值输入即可。
+        result = emitExpr(node->normInputs().front(), cache);
         break;
 
     default:
@@ -607,8 +616,9 @@ std::string CppEmitter::emitDirectFunction(Graph *graph, const GraphLoweringPlan
         std::unordered_set<Node *> joinArmNodes;
         for (Node *n : plan.topoNodes) {
             if (n->type() == NodeType::JOIN) {
-                for (auto *arm : tt::as_ptr<JoinNode>(n)->withInputs()) {
-                    joinArmNodes.insert(arm);
+                auto *joinNode = tt::as_ptr<JoinNode>(n);
+                for (size_t i = 0; i < joinNode->armCount(); ++i) {
+                    joinArmNodes.insert(joinNode->armTail(i));
                 }
             }
         }
@@ -618,7 +628,6 @@ std::string CppEmitter::emitDirectFunction(Graph *graph, const GraphLoweringPlan
             switch (node->type()) {
             case NodeType::DATA:
             case NodeType::PORT:
-            case NodeType::EXIT:
                 continue;
             case NodeType::BRCH:
                 continue;

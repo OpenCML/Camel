@@ -1,0 +1,24 @@
+/**
+ * 覆盖点：
+ * 1) 入口目标集合大小为 1 时，不应创建 entry SYNC；
+ * 2) 内联后行为正确。
+ */
+module inline_entry_single_target_no_sync
+
+func inc(v: int): int {
+    let t = v + 1
+    return t
+}
+
+func main(): int sync {
+    let x = 7
+    let y = inc(x)
+
+    if y != 8 then {
+        return 1
+    } else sync {
+        'inline_entry_single_target_no_sync ok'->println
+        return 0
+    }
+}
+

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,14 +28,6 @@ namespace camel::core::context {
 namespace rtdata = camel::core::rtdata;
 namespace type   = camel::core::type;
 namespace mm     = camel::core::mm;
-
-struct FrameMeta {
-    size_t frameSize;
-    const type::TupleType *runtimeDataType;
-    ::Tuple *staticArea;
-};
-
-FrameMeta *installFrameMetaInfoForGraph(GIR::Graph *graph);
 
 class FramePool;
 class TaskflowFramePool;
@@ -356,19 +348,10 @@ class FramePool {
         }
 
         // 分配新 Frame 并初始化
-        FrameMeta *meta = graph->getExtra<FrameMeta, 0>();
-        if (meta == nullptr) {
-            meta = installFrameMetaInfoForGraph(graph);
-            EXEC_WHEN_DEBUG({
-                GetDefaultLogger()
-                    .in("FramePool")
-                    .info(
-                        "[{}] Installed FrameMeta for graph <{}>",
-                        mm::formatAddress(this, true),
-                        graph->name());
-            });
-        }
-        size_t frameSize = meta->frameSize;
+        ASSERT(
+            graph->hasFrameLayout(),
+            std::format("Graph '{}' has no finalized frame layout.", graph->name()));
+        size_t frameSize = graph->frameSize();
         if (top_ + frameSize > end_) {
             EXEC_WHEN_DEBUG({
                 GetDefaultLogger()
@@ -382,7 +365,7 @@ class FramePool {
             });
             throw std::bad_alloc{};
         }
-        Frame *frame = new (top_) Frame(graph, meta->staticArea, meta->runtimeDataType);
+        Frame *frame = new (top_) Frame(graph, graph->staticArea(), graph->runtimeDataType());
 
         EXEC_WHEN_DEBUG({
             GetDefaultLogger()

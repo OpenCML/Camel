@@ -44,3 +44,6 @@ pypi/camel-lang/stdlib/
 pypi/camel-lang/src/camel_lang.egg-info
 
 profile_reports/
+
+.cursor/
+.claude/

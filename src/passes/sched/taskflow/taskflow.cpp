@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,19 +44,11 @@ using namespace camel::core::rtdata;
 
 // 从图的 exit 节点读取返回值（与 NodeVM 一致：slot_t）
 static slot_t get_graph_return(Graph *g, Frame *frame) {
-    auto retNode = g->exitNode();
-    if (retNode->normInputs().empty())
-        return NullSlot;
-    return frame->get<slot_t>(retNode->normInputs().front()->index());
+    return frame->get<slot_t>(g->exitNode()->index());
 }
 
 graph_ptr_t TaskflowExecSchedPass::apply(graph_ptr_t &graph, std::ostream & /*os*/) {
-    if (!graph->hasOutput()) {
-        throw reportRuntimeFault(
-            *context_,
-            RuntimeFault::make(RuntimeDiag::MissingMainFunction, context_->mainModule()->name()),
-            makeGraphExecutionSite(context_->sourceContext(), graph.get(), 0, "taskflow"));
-    }
+    (void)graph->exitNode();
 
     buildGraphsInfo(graph.get());
 
@@ -247,12 +239,12 @@ void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
 
             if (n->type() == NodeType::FUNC) {
                 auto fn    = tt::as_ptr<FuncNode>(n);
-                Graph *sub = &fn->func()->graph();
+                Graph *sub = fn->bodyGraph();
                 if (!visited.count(sub))
                     q.push(sub);
             } else if (n->type() == NodeType::BRCH) {
-                const node_vec_t &candidates = n->ctrlOutputs();
-                Node *join                   = n->normOutputs().front();
+                const auto candidates = n->ctrlOutputs();
+                Node *join            = n->normOutputs().front();
                 for (const auto &c : candidates)
                     globalBuildCtx_.skipNodes.insert(c);
                 globalBuildCtx_.skipNodes.insert(n);
@@ -269,7 +261,7 @@ void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
             }
         }
 
-        // 提前安装 FrameMeta 并预热一个 frame，避免首次进入子图时在 worker 线程里做冷启动。
+        // 图在 seal 后已具备 finalized frame layout；这里只做 frame 预热，避免首次进入子图冷启动。
         framePool_.warmup(g, 1);
     }
 }
@@ -287,13 +279,6 @@ void TaskflowExecSchedPass::instantiate_graph_instance_generic(
     std::unordered_map<Node *, tf::Task> taskMap;
     buildNormalNodeTasks(flowLike, graph, frame, taskMap);
     connectDependencies(flowLike, graph, taskMap);
-}
-
-template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildExitTask(FlowT &flowLike, Node *n, Frame *frame) {
-    (void)n;
-    (void)frame;
-    return flowLike.emplace([]() {}).name("EXIT");
 }
 
 template <typename FlowT>
@@ -427,12 +412,12 @@ tf::Task TaskflowExecSchedPass::buildAccsTask(FlowT &flowLike, Node *n, Frame *f
             auto accsNode     = tt::as_ptr<AccsNode>(n);
             data_idx_t srcIdx = n->dataInputs().front()->index();
             if (accsNode->isNum()) {
-                size_t idx = accsNode->index<size_t>();
+                size_t idx = accsNode->numIndex();
                 Tuple *t   = frame->get<Tuple *>(srcIdx);
                 ASSERT(idx < t->size(), "Tuple index out of bounds in Taskflow.");
                 frame->set(n->index(), t->get<slot_t>(idx));
             } else {
-                std::string key  = accsNode->index<std::string>();
+                std::string key  = accsNode->strIndex();
                 Struct *s        = frame->get<Struct *>(srcIdx);
                 Type *structType = frame->typeAt<Type>(srcIdx);
                 frame->set(n->index(), s->get<slot_t>(key, structType));
@@ -452,11 +437,11 @@ tf::Task TaskflowExecSchedPass::buildFuncTask(FlowT &flowLike, Node *n, Frame *f
                         "Executing FUNC (entering subgraph) graph={} node={} -> subgraph={}",
                         n->graph().name(),
                         n->toString(),
-                        tt::as_ptr<FuncNode>(n)->func()->graph().name());
+                        tt::as_ptr<FuncNode>(n)->bodyGraph()->name());
                 if (camel::DebugBreakpoint::IsEnabled("gir_node"))
                     camel::DebugBreakpoint::Hit("gir_node", n);
             });
-            Graph *tgtGraph  = &tt::as_ptr<FuncNode>(n)->func()->graph();
+            Graph *tgtGraph  = tt::as_ptr<FuncNode>(n)->bodyGraph();
             Frame *funcFrame = acquirePreparedNodeCallFrame(tgtGraph, n, frame);
             frame->set(n->index(), runPreparedSubgraph(sf, tgtGraph, funcFrame));
         })
@@ -531,8 +516,10 @@ template <typename FlowT>
 void TaskflowExecSchedPass::buildBranchJoinRegion(
     FlowT &flowLike, Graph *graph, Frame *frame, std::unordered_map<Node *, tf::Task> &taskMap,
     Node *brch) {
-    node_vec_t candidates = brch->ctrlOutputs();
-    Node *join            = brch->normOutputs().front();
+    auto *brchNode = tt::as_ptr<BrchNode>(brch);
+    auto ctrlOuts  = brch->ctrlOutputs();
+    node_vec_t candidates(ctrlOuts.begin(), ctrlOuts.end());
+    Node *join = brchNode->matchedJoin();
 
     auto selector =
         flowLike
@@ -592,7 +579,7 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
             })
             .name("JOIN");
 
-    auto precede_from_inputs = [&](const node_vec_t &inputs, tf::Task tsk) {
+    auto precede_from_inputs = [&](node_span_t inputs, tf::Task tsk) {
         for (const auto &in : inputs) {
             if (&in->graph() != graph)
                 continue;
@@ -637,13 +624,13 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
 
                     slot_t out = NullSlot;
                     if (candidate->type() == NodeType::FUNC) {
-                        Graph *tgtGraph  = &tt::as_ptr<FuncNode>(candidate)->func()->graph();
+                        Graph *tgtGraph  = tt::as_ptr<FuncNode>(candidate)->bodyGraph();
                         Frame *funcFrame = acquirePreparedNodeCallFrame(tgtGraph, candidate, frame);
                         out              = runPreparedSubgraph(csf, tgtGraph, funcFrame);
                     } else if (candidate->type() == NodeType::CALL) {
+                        auto *callNode = tt::as_ptr<CallNode>(candidate);
                         Graph *tgtGraph =
-                            frame->get<Function *>(candidate->withInputs().front()->index())
-                                ->graph();
+                            frame->get<Function *>(callNode->calleeInput()->index())->graph();
                         Frame *funcFrame = acquirePreparedNodeCallFrame(tgtGraph, candidate, frame);
                         out              = runPreparedSubgraph(csf, tgtGraph, funcFrame);
                     } else if (candidate->type() == NodeType::OPER) {
@@ -710,9 +697,6 @@ void TaskflowExecSchedPass::buildNormalNodeTasks(
         case NodeType::OPER:
             t = buildOperTask(flowLike, n, frame);
             break;
-        case NodeType::EXIT:
-            t = buildExitTask(flowLike, n, frame);
-            break;
         case NodeType::BRCH:
             buildBranchJoinRegion(flowLike, graph, frame, taskMap, n);
             continue;
@@ -726,9 +710,6 @@ void TaskflowExecSchedPass::buildNormalNodeTasks(
         tf::Task t    = buildPortTask(flowLike, port, frame);
         taskMap[port] = t;
     }
-    Node *exitNode    = graph->exitNode();
-    tf::Task exitTask = buildExitTask(flowLike, exitNode, frame);
-    taskMap[exitNode] = exitTask;
 }
 
 template <typename FlowT>
@@ -736,7 +717,7 @@ void TaskflowExecSchedPass::connectDependencies(
     FlowT &flow, Graph *graph, std::unordered_map<Node *, tf::Task> &taskMap) {
     std::unordered_set<Node *> &skipNodes = globalBuildCtx_.skipNodes;
 
-    auto add_edges_from_inputs = [&](const node_vec_t &inputs, tf::Task tsk) {
+    auto add_edges_from_inputs = [&](node_span_t inputs, tf::Task tsk) {
         for (const auto &in : inputs) {
             if (&in->graph() != graph)
                 continue;

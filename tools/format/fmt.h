@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Mar. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,6 @@
 #include "antlr4-runtime/antlr4-runtime.h"
 #include "camel/parse/antlr/OpenCMLVisitor.h"
 #include "camel/utils/assert.h"
-
 
 class Formatter : public OpenCMLVisitor {
   private:
@@ -404,6 +403,8 @@ class Formatter : public OpenCMLVisitor {
     std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context);
 
     std::any visitFuncData(OpenCMLParser::FuncDataContext *context);
+
+    std::any visitFuncAnno(OpenCMLParser::FuncAnnoContext *context);
 
     std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context);
 

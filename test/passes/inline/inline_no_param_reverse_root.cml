@@ -1,0 +1,23 @@
+/**
+ * 覆盖点：
+ * 1) 无参数函数：入口目标来自 exitNode（值出口锚点）反向推导（而非参数门控）；
+ * 2) 内联后仍返回正确结果。
+ */
+module inline_no_param_reverse_root
+
+func calc(): int {
+    let base = 20
+    let y = base + 22
+    return y
+}
+
+func main(): int sync {
+    let out = calc()
+    if out != 42 then {
+        return 1
+    } else sync {
+        'inline_no_param_reverse_root ok'->println
+        return 0
+    }
+}
+

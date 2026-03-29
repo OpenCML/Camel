@@ -1,0 +1,21 @@
+/**
+ * 覆盖点：
+ * 1) 无参数且仅 DATA/PORT 直达值出口锚点的子图，入口目标集合可能为空；
+ * 2) 应通过隐式 valueExit 目标保证最终仍有且仅有一个 ctrlEntry。
+ */
+module inline_empty_entry_targets_fallback
+
+func literal(): int {
+    return 42
+}
+
+func main(): int sync {
+    let v = literal()
+    if v != 42 then {
+        return 1
+    } else sync {
+        'inline_empty_entry_targets_fallback ok'->println
+        return 0
+    }
+}
+

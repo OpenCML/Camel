@@ -1,0 +1,22 @@
+module decorator_value_pass
+
+with <delta: int>
+func add_n(f: (x: int) => int): (x: int) => int {
+    return (x: int): int => {
+        return f(x) + delta
+    }
+}
+
+func apply_once(f: (x: int) => int, x: int): int {
+    return f(x)
+}
+
+@add_n<5>
+func inc(x: int): int {
+    return x + 1
+}
+
+func main(): int sync {
+    let v = apply_once(inc, 10)
+    return if v == 16 then 0 else 1
+}

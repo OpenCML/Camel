@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 12, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -131,7 +131,7 @@ int runWorkerMode(int argc, char *argv[]) {
         std::cerr << "Usage: camel-db --run-worker <path.cml>" << std::endl;
         return 1;
     }
-    camel::initialize();
+    camel::ScopedRuntime camelRuntime;
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::setvbuf(stderr, nullptr, _IONBF, 0);
 
@@ -192,7 +192,7 @@ int runWorkerMode(int argc, char *argv[]) {
             if (std::strcmp(type, "gir_node") == 0 && ctx != nullptr) {
                 auto *node           = static_cast<const GIR::Node *>(ctx);
                 uintptr_t ptr        = reinterpret_cast<uintptr_t>(node);
-                std::string stableId = getStableNodeId(node);
+                std::string stableId = getDebugNodeId(node);
                 if (getServer().isGirBreakpointNode(ptr) ||
                     getServer().isGirBreakpointNodeStable(stableId)) {
                     std::string nodeId = std::format("0x{:x}", ptr);

@@ -1,0 +1,25 @@
+/**
+ * 覆盖点：
+ * 1) BRCH arm 上 FUNC 内联后，控制/值路径替换正确；
+ * 2) 多分支 JOIN 行为保持正确。
+ */
+module inline_branch_arm_behavior
+
+func pick(flag: int, lhs: int, rhs: int): int {
+    return if flag != 0 then lhs + 3 else rhs + 4
+}
+
+func main(): int sync {
+    let a = pick(1, 7, 100)
+    let b = pick(0, 7, 100)
+
+    if a != 10 then {
+        return 1
+    } else if b != 104 then {
+        return 2
+    } else sync {
+        'inline_branch_arm_behavior ok'->println
+        return 0
+    }
+}
+

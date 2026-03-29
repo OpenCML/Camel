@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -82,6 +82,10 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitFuncData(OpenCMLParser::FuncDataContext *context) {
         return dumpNode(context, "FuncData");
+    };
+
+    std::any visitFuncAnno(OpenCMLParser::FuncAnnoContext *context) {
+        return dumpNode(context, "FuncAnno");
     };
 
     std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {

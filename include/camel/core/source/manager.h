@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 07, 2026
- * Updated: Mar. 10, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,10 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+namespace camel::compile::gir {
+class Node;
+}
 
 namespace camel::source {
 
@@ -260,15 +264,29 @@ class SourceContext {
     void registerAstSemantic(origin_id_t origin, SemanticBundle bundle);
     void registerGctSemantic(origin_id_t origin, SemanticBundle bundle);
     void registerGirGraphSemantic(const std::string &graphId, SemanticBundle bundle);
-    void registerGirNodeSemantic(const std::string &nodeId, SemanticBundle bundle);
 
     const SemanticBundle *astSemantic(origin_id_t origin) const;
     const SemanticBundle *gctSemantic(origin_id_t origin) const;
     const SemanticBundle *girGraphSemantic(const std::string &graphId) const;
-    const SemanticBundle *girNodeSemantic(const std::string &nodeId) const;
+    /// GIR 节点语义：草稿期走 origin 侧表，seal 后走实体 id 侧表（`Node::debugEntityId()` 即
+    /// `gnode:…`）。
+    const SemanticBundle *girNodeSemantic(const camel::compile::gir::Node *node) const;
 
     void cloneGirGraphDebugInfo(const std::string &fromGraphId, const std::string &toGraphId);
-    void cloneGirNodeDebugInfo(const std::string &fromNodeId, const std::string &toNodeId);
+    /// GIR 克隆/内联时复制调试绑定（源节点可为草稿或已 seal）。
+    void cloneGirNodeDebugBinding(
+        const camel::compile::gir::Node *fromNode, const camel::compile::gir::Node *toNode);
+
+    /// 构图期绑定；seal 前不写入 DebugMap 字符串键。
+    void bindGirNodeDraftDebug(
+        const camel::compile::gir::Node *node, origin_id_t origin, SemanticBundle bundle);
+    void unbindGirNodeDraftDebug(const camel::compile::gir::Node *node);
+
+    /// 在 rearrange 之后将草稿绑定落到 `entityId`（DebugMap + 已 seal 语义表）。
+    void sealPromoteGirNodeDebug(const camel::compile::gir::Node *node, std::string entityId);
+
+    origin_id_t girNodeDraftOrigin(const camel::compile::gir::Node *node) const;
+    origin_id_t resolveGirNodeOrigin(const camel::compile::gir::Node *node) const;
 
     void setCurrentRuntimeOrigin(origin_id_t origin);
     origin_id_t currentRuntimeOrigin() const;
@@ -281,7 +299,10 @@ class SourceContext {
     OriginSemanticMap astSemantic_; // AST 语义锚点 side table。
     OriginSemanticMap gctSemantic_; // GCT lowering 语义来源 side table。
     EntitySemanticMap girGraphs_;   // GIR graph 级语义来源 side table。
-    EntitySemanticMap girNodes_;    // GIR node 级语义来源 side table。
+    EntitySemanticMap girNodes_;    // GIR node 级语义来源 side table（seal 后实体 id 键）。
+    /// GIR 节点语义按 origin 索引（与草稿 Node* 映射配合，避免依赖构造期字符串 id）。
+    OriginSemanticMap girNodeByOrigin_;
+    std::unordered_map<const camel::compile::gir::Node *, origin_id_t> girDraftNodeOrigins_;
 
     mutable std::mutex runtimeOriginMutex_;
     origin_id_t currentRuntimeOrigin_ = kInvalidOriginId; // 当前线程最近一次执行到的源码来源。

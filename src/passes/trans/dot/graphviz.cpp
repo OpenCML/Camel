@@ -13,13 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "graphviz.h"
+#include "camel/core/rtdata/base.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/type.h"
+#include <ranges>
+#include <sstream>
 
 using namespace std;
 using namespace GIR;
@@ -258,7 +261,9 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
     node_vec_t nodes;
     for (Node *n : graph->nodes())
         nodes.push_back(n);
-    nodes.push_back(graph->exitNode()); // 包含ExitNode
+    if (std::ranges::find(nodes, graph->exitNode()) == nodes.end()) {
+        nodes.push_back(graph->exitNode()); // 允许出口锚点位于 ports/closure。
+    }
 
     for (size_t i = 0; i < nodes.size(); ++i) {
         const auto &node = nodes[i];
@@ -268,8 +273,9 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
         switch (node->type()) {
         case NodeType::DATA: {
             auto sourceNode = tt::as_ptr<DataNode>(node);
-            data_ptr_t data = sourceNode->data();
-            label           = data->toString();
+            std::ostringstream oss;
+            camel::core::rtdata::printSlot(oss, sourceNode->dataSlot(), sourceNode->dataType());
+            label = oss.str();
             break;
         }
         case NodeType::CAST: {
@@ -314,10 +320,10 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
             break;
         }
         case NodeType::FUNC: {
-            func_ptr_t func = tt::as_ptr<FuncNode>(node)->func();
-            label           = func->name().empty() ? func->graph().name() : func->name();
-            shape           = "Mdiamond";
-            size            = "width=1.1, height=1.1";
+            auto *func = tt::as_ptr<FuncNode>(node);
+            label      = func->bodyGraph()->name();
+            shape      = "Mdiamond";
+            size       = "width=1.1, height=1.1";
             break;
         }
         case NodeType::OPER: {
@@ -326,20 +332,14 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
             shape     = "diamond";
             break;
         }
-        case NodeType::EXIT: {
-            label = "EXIT";
-            shape = "doublecircle";
-            size  = "width=0.9, height=0.9";
-            break;
-        }
         case NodeType::SYNC: {
             label = "SYNC";
             shape = "diamond";
             style = "dashed";
             break;
         }
-        case NodeType::NREF: {
-            label = "NREF";
+        case NodeType::GATE: {
+            label = "GATE";
             shape = "diamond";
             style = "dashed";
             break;

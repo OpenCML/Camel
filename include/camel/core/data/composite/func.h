@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Mar. 12, 2026
+ * Updated: Mar. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,6 +41,10 @@ using func_vec_t  = std::vector<func_ptr_t>;
 using func_list_t = std::initializer_list<func_ptr_t>;
 
 class FunctionData : public CompositeData {
+    // graph_ 逃逸路径：FunctionData 持有对 Graph 的引用。
+    // 存活约束：FunctionData 作为 staticDataArr_ 的元素被 Graph 间接持有，
+    // 或在 cloneGraph 时被 remapDataGraphRefs 重映射到新图。
+    // 只要持有 FunctionData 的 Graph 存活，引用目标图即存活。
     GIR::Graph &graph_;
     data_vec_t closure_;
 

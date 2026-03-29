@@ -13,46 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/context/frame.h"
-#include "camel/core/rtdata/conv.h"
 
 using namespace camel::core::context;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
 
-namespace camel::core::context {
-
-FrameMeta *installFrameMetaInfoForGraph(GIR::Graph *graph) {
-    const TupleType *runtimeDataType = graph->runtimeDataType();
-    const TupleType *staticDataType  = graph->staticDataType();
-    Tuple *staticArea                = Tuple::create(staticDataType->size(), mm::permSpace());
-    const auto &staticDataArr        = graph->staticDataArr();
-
-    for (size_t i = 1; i < staticDataType->size(); ++i) {
-        const auto &elem = staticDataArr[i];
-        if (elem->type()->isGCTraced()) {
-            Object *elemRef = makeGCRefFromGCTracedData(elem, mm::permSpace());
-            staticArea->set<Object *>(i, elemRef);
-        } else if (elem->type()->isPrimitive()) {
-            slot_t slot = makeSlotFromPrimitiveData(elem);
-            staticArea->set<slot_t>(i, slot);
-        } else {
-            ASSERT(false, "Unsupported element type.");
-        }
-    }
-
-    FrameMeta *meta       = mm::constructAt<FrameMeta>(mm::metaSpace());
-    meta->frameSize       = sizeof(Frame) + sizeof(slot_t) * runtimeDataType->size();
-    meta->runtimeDataType = runtimeDataType;
-    meta->staticArea      = staticArea;
-
-    graph->setExtra<FrameMeta, 0>(meta);
-
-    return meta;
-}
-
-} // namespace camel::core::context
+namespace camel::core::context {} // namespace camel::core::context

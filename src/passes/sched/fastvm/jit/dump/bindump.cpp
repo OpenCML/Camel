@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 30, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -103,9 +103,12 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     std::span<const Bytecode> bcSpan(bytecodes.data(), bytecodes.size());
 
     for (const auto &[g, entryPc] : offsetMap) {
-        FrameMeta *meta = g->getExtra<FrameMeta, 0>();
-        if (!meta)
-            meta = installFrameMetaInfoForGraph(g);
+        ASSERT(
+            g->finalized(),
+            std::format("Graph '{}' must be sealed before JIT machine-code dump.", g->name()));
+        ASSERT(
+            g->hasFrameLayout(),
+            std::format("Graph '{}' has no finalized frame layout.", g->name()));
 
         std::vector<std::tuple<size_t, size_t, std::string>> instructionBoundaries;
         CompilationDebugOptions debugOptions{
@@ -113,15 +116,15 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .enableDebugTrace      = true,
         };
         CompilationUnit unit{
-            .graph          = g,
-            .frameMeta      = meta,
-            .bytecodes      = bcSpan,
-            .entryPc        = entryPc,
-            .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
-            .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
-            .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
-            .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
-            .debug          = &debugOptions,
+            .graph              = g,
+            .bytecodes          = bcSpan,
+            .entryPc            = entryPc,
+            .trampolineFunc     = reinterpret_cast<void *>(&trampolineFunc),
+            .trampolineTail     = reinterpret_cast<void *>(&trampolineTail),
+            .trampolineOper     = reinterpret_cast<void *>(&trampolineOper),
+            .trampolineCast     = reinterpret_cast<void *>(&trampolineCast),
+            .trampolineBytecode = reinterpret_cast<void *>(&trampolineBytecode),
+            .debug              = &debugOptions,
         };
 
         std::string failureReason;

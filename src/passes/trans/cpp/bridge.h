@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include "camel/core/context/context.h"
 #include "camel/core/data/base.h"
+#include "camel/core/slot.h"
 #include "camel/core/type/base.h"
 #include "lower.h"
 
@@ -54,6 +55,7 @@ bool isPureScalarTypeForCpp(camel::core::type::Type *type);
 bool isBridgeableTypeForCpp(camel::core::type::Type *type);
 std::string cppTypeFor(camel::core::type::Type *type);
 std::optional<std::string> cppLiteralFor(const camel::core::data::data_ptr_t &data);
+std::optional<std::string> cppLiteralFor(slot_t slot, camel::core::type::Type *type);
 
 CppBridgePlan collectCppBridgePlan(
     const camel::core::context::context_ptr_t &ctx, const std::vector<GraphLoweringPlan> &plans);

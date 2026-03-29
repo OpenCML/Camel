@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,14 +39,15 @@ using namespace camel::core::rtdata;
 using namespace camel::core::error;
 
 NodeVMSchedPass::~NodeVMSchedPass() {
-    for (Graph *g : graphsWithTopoCache_)
+    for (Graph *g : graphsWithTopoCache_) {
         g->setExtra<node_vec_t, kTopoNodesExtraIndex>(nullptr);
+    }
 }
 
 std::span<Node *> NodeVMSchedPass::buildTopoNodes(Graph *graph) {
     ASSERT(
-        !graph->dirty(),
-        std::format("Graph {} is dirty, please rearrange before executing.", graph->name()));
+        graph->finalized(),
+        std::format("Graph {} is not finalized before executing.", graph->name()));
 
     Node *exitNode   = graph->exitNode();
     auto sortedNodes = findReachable(
@@ -65,7 +66,7 @@ std::span<Node *> NodeVMSchedPass::buildTopoNodes(Graph *graph) {
             }
             return ins;
         },
-        true // skip the start node itself
+        false // include output anchor itself
     );
 
     EXEC_WHEN_DEBUG({
@@ -77,7 +78,14 @@ std::span<Node *> NodeVMSchedPass::buildTopoNodes(Graph *graph) {
         }
         size_t totalNodeCnt =
             graph->nodes().size() + graph->ports().size() + graph->closure().size();
-        if (sortedNodes.size() != totalNodeCnt) {
+        auto contains = [](node_span_t nodes, Node *target) {
+            return std::find(nodes.begin(), nodes.end(), target) != nodes.end();
+        };
+        const bool exitCounted =
+            contains(graph->nodes(), exitNode) || contains(graph->normPorts(), exitNode) ||
+            contains(graph->withPorts(), exitNode) || contains(graph->closure(), exitNode);
+        const size_t expectedTopoCnt = totalNodeCnt + (exitCounted ? 0 : 1);
+        if (sortedNodes.size() != expectedTopoCnt) {
             GIR::node_vec_t unreachableNodes;
             for (Node *n : graph->nodes()) {
                 if (n != exitNode &&
@@ -194,16 +202,10 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
     // 尾调用优化主循环：不退出 C++ 栈帧，用新的 currGraph/currFrame 继续执行
     loop_start: {
         const size_t nodesSize = currNodes.size();
-        Node *lastNode         = currGraph->outputNode();
-        if (!lastNode->ctrlOutputs().empty()) {
-            // 如果最后一个值节点有控制输出
-            // 说明在最后一个值节点和退出节点之间存在有副作用但不产生返回值的分支
-            // 那这也意味着推出节点必然会有控制边输入
-            // 需要从退出节点回溯找到最后一个控制边输入的节点
-            ASSERT(
-                !currGraph->exitNode()->ctrlInputs().empty(),
-                "Exit node has no control inputs.");
-            lastNode = currGraph->exitNode()->ctrlInputs().back();
+        Node *lastNode         = currGraph->exitNode();
+        if (lastNode->type() == NodeType::GATE && !lastNode->ctrlInputs().empty()) {
+            // 返回锚点为 GATE 时，以其控制输入作为控制完成路径的最后执行节点。
+            lastNode = lastNode->ctrlInputs().back();
         }
         bool lastNodeIsJoin = lastNode->type() == NodeType::JOIN;
 
@@ -213,8 +215,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             currentNode = n;
             if (InternalGlobalConfig::IsInspectionMode() && context_) {
                 if (auto sourceContext = context_->sourceContext()) {
-                    sourceContext->setCurrentRuntimeOrigin(
-                        sourceContext->debugMap().nodeOrigin(n->stableId()));
+                    sourceContext->setCurrentRuntimeOrigin(sourceContext->resolveGirNodeOrigin(n));
                 }
             }
 
@@ -321,6 +322,10 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 case TypeCode::Function: {
                     auto func          = tt::as_ptr<Function>(srcObj);
                     Tuple *closureData = func->tuple();
+                    ASSERT(closureData != nullptr, "Closure data is null in FILL.");
+                    ASSERT(
+                        closureData->size() == dataInputs.size(),
+                        "Closure data size mismatch in FILL.");
                     for (size_t j = 0; j < dataInputs.size(); ++j) {
                         closureData->set<slot_t>(j, currFrame->get<slot_t>(dataInputs[j]->index()));
                     }
@@ -339,12 +344,12 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 auto accsNode     = tt::as_ptr<AccsNode>(n);
                 data_idx_t srcIdx = n->dataInputs().front()->index();
                 if (accsNode->isNum()) {
-                    size_t idx = accsNode->index<size_t>();
+                    size_t idx = accsNode->numIndex();
                     Tuple *t   = currFrame->get<Tuple *>(srcIdx);
                     ASSERT(idx < t->size(), "Tuple index out of bounds in NodeVM.");
                     currFrame->set(n->index(), t->get<slot_t>(idx));
                 } else {
-                    std::string key  = accsNode->index<std::string>();
+                    std::string key  = accsNode->strIndex();
                     Struct *s        = currFrame->get<Struct *>(srcIdx);
                     Type *structType = currFrame->typeAt<Type>(srcIdx);
                     currFrame->set(n->index(), s->get<slot_t>(key, structType));
@@ -352,9 +357,8 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             } break;
 
             case NodeType::BRCH: {
-                const auto &normIns  = n->normInputs();
-                const auto &withIns  = n->withInputs();
-                const auto &ctrlOuts = n->ctrlOutputs();
+                const auto &normIns = n->normInputs();
+                const auto &withIns = n->withInputs();
                 ASSERT(normIns.size() == 1, "Branch node must have exactly one norm input.");
 
                 size_t jumpIdx = 0;
@@ -389,12 +393,13 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 currFrame->set(n->index(), fromSlot<Int32>(static_cast<Int32>(jumpIdx)));
 
                 // BRCH 有且仅有 1 个 normOutput，即对应的 JOIN
-                Node *targetJoin = n->normOutputs().front();
+                auto *brchNode   = tt::as_ptr<BrchNode>(n);
+                auto *targetJoin = brchNode->matchedJoin();
 
                 // 分支跳转：跳到选中分支的 head，顺序执行到 tail，再跳到 JOIN
-                tillNode = ctrlOuts[jumpIdx]; // 选中分支的头节点
+                tillNode = brchNode->armHead(jumpIdx); // 选中分支的头节点
                 skipNode =
-                    targetJoin->withInputs()[jumpIdx]; // 选中分支的尾节点（连到 JOIN 的 with 输入）
+                    targetJoin->armTail(jumpIdx); // 选中分支的尾节点（连到 JOIN 的 with 输入）
                 joinNode = targetJoin;
 
                 EXEC_WHEN_DEBUG(
@@ -403,7 +408,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                         "joinNode={}",
                         n->toString(),
                         jumpIdx,
-                        ctrlOuts.size(),
+                        brchNode->armCount(),
                         tillNode->toString(),
                         skipNode->toString(),
                         joinNode->toString()));
@@ -424,8 +429,9 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             } break;
 
             case NodeType::CALL: {
-                ASSERT(n->withInputs().size() == 1, "CALL node must have exactly one with input");
-                const auto &funcNode = n->withInputs().front();
+                auto *callNode = tt::as_ptr<CallNode>(n);
+                ASSERT(callNode->hasCallee(), "CALL node must have exactly one callee input");
+                const auto &funcNode = callNode->calleeInput();
                 Function *func       = currFrame->get<Function *>(funcNode->index());
                 Graph *funcGraph     = func->graph();
 
@@ -460,11 +466,12 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             } break;
 
             case NodeType::FUNC: {
-                Graph *funcGraph = tt::as_ptr<FuncNode>(n)->graph();
+                Graph *funcGraph = tt::as_ptr<FuncNode>(n)->bodyGraph();
 
                 // 尾调用优化
-                bool isTailCall = n == lastNode || (lastNodeIsJoin && !n->withOutputs().empty() &&
-                                                    n->withOutputs().front() == lastNode);
+                bool isTailCall =
+                    n == lastNode || (lastNodeIsJoin && tt::as_ptr<FuncNode>(n)->hasMatchedJoin() &&
+                                      tt::as_ptr<FuncNode>(n)->matchedJoin() == lastNode);
                 if (isTailCall) {
                     EXEC_WHEN_DEBUG(
                         GetDefaultLogger().in("NodeVM").debug(
@@ -583,15 +590,13 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 currFrame->set(n->index(), result);
             } break;
 
-            case NodeType::EXIT:
-                [[fallthrough]];
             case NodeType::PORT:
                 [[fallthrough]];
             case NodeType::DATA:
                 [[fallthrough]];
             case NodeType::SYNC:
                 [[fallthrough]];
-            case NodeType::NREF:
+            case NodeType::GATE:
                 break;
 
             default: {
@@ -612,9 +617,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
 
         currRecursionDepth_--;
 
-        Node *exitNode    = currGraph->exitNode();
-        const auto &input = exitNode->normInputs();
-        result = input.empty() ? NullSlot : currFrame->get<slot_t>(input.front()->index());
+        result = currFrame->get<slot_t>(currGraph->exitNode()->index());
 
         // 按约定顺序释放栈帧（见文件顶部三种情形说明）
         if (twinFrame != nullptr) {
@@ -672,12 +675,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
 }
 
 GIR::graph_ptr_t NodeVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    if (!graph->hasOutput()) {
-        throw reportRuntimeFault(
-            *context_,
-            RuntimeFault::make(RuntimeDiag::MissingMainFunction, context_->mainModule()->name()),
-            makeGraphExecutionSite(context_->sourceContext(), graph.get()));
-    }
+    (void)graph->exitNode();
 
     Frame *rootFrame = framePool_.acquire(graph.get());
     slot_t result =

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,7 +40,7 @@ using namespace camel::core::module;
 namespace fs = std::filesystem;
 
 int main(int argc, char *argv[]) {
-    camel::initialize();
+    camel::ScopedRuntime camelRuntime;
     std::string inputPath;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];

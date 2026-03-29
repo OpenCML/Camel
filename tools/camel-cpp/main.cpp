@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 12, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -118,7 +118,7 @@ static int runCompile(const fs::path &projRoot, const fs::path &cppPath, const s
 }
 
 int main(int argc, char *argv[]) {
-    camel::initialize();
+    camel::ScopedRuntime camelRuntime;
 
     if (argc < 2) {
         std::cerr << "Usage: camel-cpp <file.cml>\n";

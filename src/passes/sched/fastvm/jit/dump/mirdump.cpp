@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 08, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 30, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,15 +60,19 @@ static graph_ptr_t applyMirDump(
     std::unordered_map<uint64_t, std::string> mirSymbolNames;
 
     for (const auto &[g, entryPc] : offsetMap) {
-        FrameMeta *meta = g->getExtra<FrameMeta, 0>();
-        if (!meta)
-            meta = installFrameMetaInfoForGraph(g);
+        ASSERT(
+            g->finalized(),
+            std::format("Graph '{}' must be sealed before JIT MIR dump.", g->name()));
+        ASSERT(
+            g->hasFrameLayout(),
+            std::format("Graph '{}' has no finalized frame layout.", g->name()));
 
         mirSymbolNames.clear();
-        mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineFunc)] = "trampolineFunc";
-        mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineTail)] = "trampolineTail";
-        mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineOper)] = "trampolineOper";
-        mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineCast)] = "trampolineCast";
+        mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineFunc)]     = "trampolineFunc";
+        mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineTail)]     = "trampolineTail";
+        mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineOper)]     = "trampolineOper";
+        mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineCast)]     = "trampolineCast";
+        mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineBytecode)] = "trampolineBytecode";
 
         CompilationDebugOptions debugOptions{
             .mirOut           = &os,
@@ -80,13 +84,13 @@ static graph_ptr_t applyMirDump(
         static uint64_t dummyPoolTop = 0;
         CompilationUnit unit{
             .graph                    = g,
-            .frameMeta                = meta,
             .bytecodes                = bcSpan,
             .entryPc                  = entryPc,
             .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
             .trampolineTail           = reinterpret_cast<void *>(&trampolineTail),
             .trampolineOper           = reinterpret_cast<void *>(&trampolineOper),
             .trampolineCast           = reinterpret_cast<void *>(&trampolineCast),
+            .trampolineBytecode       = reinterpret_cast<void *>(&trampolineBytecode),
             .poolTopAddr              = &dummyPoolTop,
             .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
             .debug                    = &debugOptions,

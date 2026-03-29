@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,8 @@
 
 #include "camel/core/data/primary.h"
 #include "camel/core/module/module.h"
+#include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
@@ -73,13 +75,6 @@ void recordTypeUsage(CppBridgePlan &plan, Type *type) {
     plan.usesRtdataNamespace = true;
     if (type->code() == TypeCode::String) {
         plan.usesStringHeader = true;
-    }
-}
-
-void recordLiteralUsage(CppBridgePlan &plan, const data::data_ptr_t &value) {
-    if (std::dynamic_pointer_cast<data::StringData>(value)) {
-        plan.usesStringHeader = true;
-        plan.usesMmNamespace  = true;
     }
 }
 
@@ -194,6 +189,35 @@ std::optional<std::string> cppLiteralFor(const data::data_ptr_t &value) {
             escapeCppStringLiteral(stringData->data()));
     }
     return std::nullopt;
+}
+
+std::optional<std::string> cppLiteralFor(slot_t slot, Type *type) {
+    if (!type) {
+        return std::nullopt;
+    }
+    switch (type->code()) {
+    case TypeCode::Int32:
+        return std::to_string(camel::core::rtdata::fromSlot<int32_t>(slot));
+    case TypeCode::Int64:
+        return std::to_string(camel::core::rtdata::fromSlot<int64_t>(slot)) + "LL";
+    case TypeCode::Float32:
+        return std::to_string(camel::core::rtdata::fromSlot<float>(slot)) + "f";
+    case TypeCode::Float64:
+        return std::to_string(camel::core::rtdata::fromSlot<double>(slot));
+    case TypeCode::Bool:
+        return camel::core::rtdata::fromSlot<bool>(slot) ? "true" : "false";
+    case TypeCode::String: {
+        auto *str = camel::core::rtdata::fromSlot<String *>(slot);
+        if (!str) {
+            return std::nullopt;
+        }
+        return std::format(
+            "String::from(\"{}\", mm::autoSpace())",
+            escapeCppStringLiteral(str->toString()));
+    }
+    default:
+        return std::nullopt;
+    }
 }
 
 std::string implMarkExpr(ImplMark mark) {
@@ -394,7 +418,14 @@ CppBridgePlan collectCppBridgePlan(
 
             if (node->type() == NodeType::DATA) {
                 auto *dataNode = tt::as_ptr<DataNode>(node);
-                recordLiteralUsage(plan, dataNode->data());
+                auto literal   = cppLiteralFor(dataNode->dataSlot(), dataNode->dataType());
+                if (literal.has_value()) {
+                    if (dataNode->dataType()->code() == TypeCode::String) {
+                        plan.usesRtdataNamespace = true;
+                        plan.usesStringHeader    = true;
+                        plan.usesMmNamespace     = true;
+                    }
+                }
             }
 
             if (node->type() != NodeType::OPER) {

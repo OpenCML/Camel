@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
  * GIR 懒加载 JSON 序列化实现。
  */
 
+#include <sstream>
 #include <stdio.h>
 
 #ifndef EOF
@@ -31,6 +32,7 @@
 #include "camel/compile/gir/nodes.h"
 #include "camel/compile/gir/types.h"
 #include "camel/core/error/diagnostics/range.h"
+#include "camel/core/rtdata/base.h"
 #include "camel/core/source/manager.h"
 #include "camel/utils/type.h"
 #include "gir_json.h"
@@ -53,12 +55,17 @@ namespace {
 using json = nlohmann::json;
 using namespace GIR;
 
+namespace {
+constexpr std::size_t kSourceContextExtraIndex = 3;
+}
+
 std::string ptrToId(const void *ptr) {
     return std::format("0x{:x}", reinterpret_cast<uintptr_t>(ptr));
 }
 
 camel::source::SourceContext *sourceContextForGraph(const graph_ptr_t &graph) {
-    return graph ? graph->getExtra<camel::source::SourceContext, 3>() : nullptr;
+    return graph ? graph->getExtra<camel::source::SourceContext, kSourceContextExtraIndex>()
+                 : nullptr;
 }
 
 json rangeToJson(const CharRange &range) {
@@ -151,8 +158,6 @@ std::string inferEdgeSemanticRole(Node *to, const std::string &linkType, size_t 
             return "receiver";
         case NodeType::CAST:
             return "valueProducer";
-        case NodeType::EXIT:
-            return "valueProducer";
         default:
             return "normInput";
         }
@@ -180,7 +185,7 @@ std::string inferEdgeSemanticRole(Node *to, const std::string &linkType, size_t 
             return "captureReady";
         case NodeType::FUNC:
             return "branchLaunch";
-        case NodeType::EXIT:
+        case NodeType::GATE:
             return "returnBarrier";
         default:
             return "control";
@@ -271,7 +276,9 @@ void nodeLabelShapeStyle(Node *node, std::string &label, std::string &shape, std
     switch (node->type()) {
     case NodeType::DATA: {
         auto sourceNode = tt::as_ptr<DataNode>(node);
-        label           = sourceNode->data() ? sourceNode->data()->toString() : "";
+        std::ostringstream oss;
+        camel::core::rtdata::printSlot(oss, sourceNode->dataSlot(), sourceNode->dataType());
+        label = oss.str();
         break;
     }
     case NodeType::PORT: {
@@ -314,9 +321,9 @@ void nodeLabelShapeStyle(Node *node, std::string &label, std::string &shape, std
         shape = "diamond";
         break;
     case NodeType::FUNC: {
-        func_ptr_t func = tt::as_ptr<FuncNode>(node)->func();
-        label           = func->name().empty() ? func->graph().name() : func->name();
-        shape           = "Mdiamond";
+        auto *func = tt::as_ptr<FuncNode>(node);
+        label      = func->bodyGraph()->name();
+        shape      = "Mdiamond";
         break;
     }
     case NodeType::OPER: {
@@ -325,17 +332,13 @@ void nodeLabelShapeStyle(Node *node, std::string &label, std::string &shape, std
         shape     = "diamond";
         break;
     }
-    case NodeType::EXIT:
-        label = "EXIT";
-        shape = "doublecircle";
-        break;
     case NodeType::SYNC:
         label = "SYNC";
         shape = "diamond";
         style = "dashed";
         break;
-    case NodeType::NREF:
-        label = "NREF";
+    case NodeType::GATE:
+        label = "GATE";
         shape = "diamond";
         style = "dashed";
         break;
@@ -354,7 +357,9 @@ void nodeRawFields(Node *node, json &j) {
     switch (node->type()) {
     case NodeType::DATA: {
         auto sourceNode = tt::as_ptr<DataNode>(node);
-        j["dataRepr"]   = sourceNode->data() ? sourceNode->data()->toString() : "";
+        std::ostringstream oss;
+        camel::core::rtdata::printSlot(oss, sourceNode->dataSlot(), sourceNode->dataType());
+        j["dataRepr"] = oss.str();
         break;
     }
     case NodeType::PORT: {
@@ -368,9 +373,9 @@ void nodeRawFields(Node *node, json &j) {
         break;
     }
     case NodeType::FUNC: {
-        func_ptr_t func    = tt::as_ptr<FuncNode>(node)->func();
-        j["funcName"]      = func->name();
-        j["funcGraphName"] = func->graph().name();
+        auto *func         = tt::as_ptr<FuncNode>(node);
+        j["funcName"]      = func->bodyGraph()->name();
+        j["funcGraphName"] = func->bodyGraph()->name();
         break;
     }
     case NodeType::OPER: {
@@ -387,7 +392,7 @@ json nodeToJson(Node *node) {
     json j;
     j["id"]       = ptrToId(node);
     j["graphId"]  = node->graph().stableId();
-    j["stableId"] = node->stableId();
+    j["stableId"] = node->debugEntityId();
     j["type"]     = to_string(node->type());
     std::string label, shape, style;
     nodeLabelShapeStyle(node, label, shape, style);
@@ -396,14 +401,11 @@ json nodeToJson(Node *node) {
     j["style"]     = style;
     j["graphName"] = node->graph().name();
     j["nodeRepr"]  = node->toString();
-    if (auto *sourceContext = node->graph().getExtra<camel::source::SourceContext, 3>()) {
-        auto origin = sourceContext->debugMap().nodeOrigin(node->stableId());
-        attachOriginAndSemantic(
-            j,
-            sourceContext,
-            origin,
-            sourceContext->girNodeSemantic(node->stableId()),
-            "node");
+    if (auto *sourceContext =
+            node->graph().getExtra<camel::source::SourceContext, kSourceContextExtraIndex>()) {
+        auto origin    = sourceContext->resolveGirNodeOrigin(node);
+        auto *semantic = sourceContext->girNodeSemantic(node);
+        attachOriginAndSemantic(j, sourceContext, origin, semantic, "node");
     }
     nodeRawFields(node, j);
     return j;
@@ -428,15 +430,21 @@ json expandedGraphToJson(const graph_ptr_t &graph) {
             j["dependencies"].push_back(graphSummary(dep));
 
     node_vec_t nodes;
+    std::unordered_set<Node *> seen;
+    auto pushUnique = [&](Node *n) {
+        if (n && seen.insert(n).second) {
+            nodes.push_back(n);
+        }
+    };
     for (Node *n : graph->nodes())
-        nodes.push_back(n);
-    nodes.push_back(graph->exitNode());
+        pushUnique(n);
+    pushUnique(graph->exitNode());
     for (Node *port : graph->normPorts())
-        nodes.push_back(port);
+        pushUnique(port);
     for (Node *port : graph->withPorts())
-        nodes.push_back(port);
+        pushUnique(port);
     for (Node *c : graph->closure())
-        nodes.push_back(c);
+        pushUnique(c);
 
     for (Node *n : nodes)
         j["nodes"].push_back(nodeToJson(n));
@@ -499,8 +507,8 @@ json expandedGraphToJson(const graph_ptr_t &graph) {
 
 } // namespace
 
-std::string getStableNodeId(const Node *node) {
-    return node ? const_cast<Node *>(node)->stableId() : std::string{};
+std::string getDebugNodeId(const Node *node) {
+    return node ? const_cast<Node *>(node)->debugEntityId() : std::string{};
 }
 
 std::pair<std::string, std::string>

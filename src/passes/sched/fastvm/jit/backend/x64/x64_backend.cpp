@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 30, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -147,14 +147,18 @@ bool X64Backend::compileBytecode(
         return false;
     };
 
-    if (!unit.frameMeta)
-        return fail("no FrameMeta for graph '" + unit.graph->name() + "'");
+    if (!unit.graph)
+        return fail("null graph in JIT compilation unit");
+    if (!unit.graph->finalized())
+        return fail("graph '" + unit.graph->name() + "' is not sealed");
+    if (!unit.graph->hasFrameLayout())
+        return fail("incomplete frame layout for graph '" + unit.graph->name() + "'");
 
     const Bytecode *base = unit.bytecodes.data();
     size_t pcEnd         = unit.bytecodes.size();
     size_t entryPc       = unit.entryPc;
 
-    const slot_t *staticBase = unit.frameMeta->staticArea->data();
+    const slot_t *staticBase = unit.graph->staticArea()->data();
     auto staticSlotAddr      = [&](data_idx_t idx) -> uint64_t {
         return reinterpret_cast<uint64_t>(staticBase + static_cast<size_t>(-idx));
     };
@@ -927,6 +931,25 @@ bool X64Backend::compileBytecode(
             if (!unit.trampolineCast)
                 return fail("pc=" + std::to_string(pc) + " no CAST trampoline");
             uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineCast);
+#if defined(_WIN32) || defined(_WIN64)
+            build.emitCallTrampolineOperWin64(static_cast<uint32_t>(pc), addr);
+#else
+            build.emitCallTrampolineOperSysV(static_cast<uint32_t>(pc), addr);
+#endif
+            x64::VRegId vRet = nextVReg++;
+            build.emitVMovFromRax(vRet);
+            build.emitVStoreToFrame(slotDisp(bc.result), vRet);
+            slotCache.clear();
+            break;
+        }
+        case OpCode::COPY:
+        case OpCode::FILL:
+        case OpCode::CALL:
+        case OpCode::ACCS: {
+            if (!unit.trampolineBytecode) {
+                return fail("pc=" + std::to_string(pc) + " no generic bytecode trampoline");
+            }
+            uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineBytecode);
 #if defined(_WIN32) || defined(_WIN64)
             build.emitCallTrampolineOperWin64(static_cast<uint32_t>(pc), addr);
 #else

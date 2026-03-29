@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 10, 2026
+ * Updated: Mar. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,6 +70,16 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
             return std::nullopt;
         }
         return OperatorGroup::create(name, std::move(allResolvers));
+    }
+    if (std::holds_alternative<GIR::graph_ptr_t>(first)) {
+        for (const auto &ent : entities) {
+            if (auto *pg = std::get_if<GIR::graph_ptr_t>(&ent)) {
+                if (*pg) {
+                    return *pg;
+                }
+            }
+        }
+        return std::nullopt;
     }
     // node_ptr_t 或其它：返回第一个
     return first;
