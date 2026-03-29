@@ -13,9 +13,9 @@
 - **outer_**：外层图（闭包/嵌套函数时非空）。
 - **signature_**：图的签名与布局摘要，内部包含 `funcType`、`staticDataType`、`runtimeDataType`、`closureType`、`runtimeDataSize`。
 - **staticDataArr_**：静态数据区（`slot_t`），索引 0 保留为空；负 `data_idx_t` 通过它寻址。
-- **nodes_**：图中所有节点（含 PORT、DATA、OPER、CALL、EXIT 等）。
+- **nodes_**：图中所有节点（含 PORT、DATA、OPER、CALL、GATE 等）。
 - **normPorts_ / withPorts_ / closure_**：普通参数端口、with 参数端口、闭包捕获节点。
-- **exitNode_**：图的唯一出口节点（EXIT）。
+- **exitNode_**：图的值出口锚点（可为普通值节点或 `GATE`）。
 - **subGraphs_**：按名称索引的子图集合（嵌套函数）。
 - **dependencies_ / dependents_**：图级依赖（被谁依赖 / 依赖谁），用于多图调度或内联等。
 - **arena_**：图私有的 `GraphArena`。seal 后 frozen 邻接数组等只读数据分配在这里，并随 Graph 一起释放。
@@ -53,7 +53,7 @@
 - `GraphBuilder::createGraph(funcType, outer, name)`：创建 draft 图。
 - `GraphBuilder::cloneGraph(graph)`：克隆图，产出新的 draft 图。
 - `ports()` / `normPorts()` / `withPorts()` / `closure()`：端口与闭包节点。
-- `setOutput(node)` / `exitNode()` / `outputNode()`：设置与获取出口。
+- `setOutput(node)` / `exitNode()` / `outputNode()`：设置与获取值出口锚点（`outputNode()` 与 `exitNode()` 语义一致）。
 - `GraphBuilder::parametrizeClosure()`：将闭包捕获转为参数节点。
 - `GraphBuilder::sealGraph()`：封印单图。
 - `GraphBuilder::sealGraphRecursively()`：递归封印图树。
@@ -91,7 +91,6 @@
 | BIND   | 部分应用（绑定参数） |
 | FUNC   | 直接子图调用节点，节点内缓存目标 `Graph*` 与运行时 `Function*` 原型 |
 | OPER   | 原子算子，节点内持有裸 `OperatorIndex*` |
-| EXIT   | 图出口，产出返回值 |
 | SYNC   | 同步点（无私有数据） |
 | GATE   | **数据与控制依赖的聚合门控节点**（无私有数据；见下节语义约定） |
 | DREF   | 临时解引用节点（图构造用，通常不加入图） |
@@ -104,7 +103,7 @@
 
 - **边约束（角色定义）**：作为上述门控使用时，`GATE` **至少应有一条 `Norm` 入边**（值来源）与 **至少一条 `Ctrl` 入边**（控制完成或控制序）。二者缺一则不再是该语义下的 `GATE`，而应视为构图错误或尚未完成的中间态。
 - **放行语义**：调度/执行上可理解为：**仅当 `Ctrl` 侧所表达的控制序已满足时，才沿 `Norm` 边向下游“放行”该值**（具体实现由 VM 与算子约定；图上则体现为同时依赖两类边）。
-- **典型场景**：子图出口上，若“值出口”与“控制完成点”不是同一节点（例如存在经 `println` 等再连到 `EXIT` 的副作用控制路径），则通过 `GATE` 将控制锚到值路径，供 `BRCH/JOIN` 臂或调用点统一消费；详见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md)。
+- **典型场景**：子图出口上，若“值出口”与“控制完成点”不是同一节点（例如存在经 `println` 等副作用控制路径），则通过 `GATE` 将控制锚到值路径，供 `BRCH/JOIN` 臂或调用点统一消费；详见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md)。
 
 ### 4.2 `DATA` 与 `PORT`
 
@@ -169,10 +168,10 @@
   - **语义**：对应注册表中的**内置或模块算子**（`OperatorIndex*`），如算术、`println`、类型谓词等；**无**独立子图，体为 C++ 算子实现。  
   - **边**：实参走 **`Norm` / `With`**，由算子签名决定；若有副作用或需排序，配合 **`Ctrl`** 边连接前后控制头。
 
-### 4.8 `EXIT`
+### 4.8 值出口锚点（`exitNode`）
 
-- **语义**：图的**唯一返回值出口**（一张可执行图在 IR 层面对外只有一个 `EXIT` 节点语义）。**`Norm` 入边**提供返回的**值**；可选 **最多一条 `Ctrl` 入边**表达“控制完成后再返回”（与 `validateGraph` 中 `EXIT.ctrlInputs.size() <= 1` 契约一致，见 §7.5）。  
-- **约束**：`Graph::setOutput` / seal 路径要求存在 `EXIT` 且结构合法；从 `EXIT` 反向可达定义了“本会执行到的子图区域”。
+- **语义**：图的**唯一返回值锚点**。`Graph::exitNode()` 直接返回最终值节点；该节点可以是普通值节点，也可以是用于值-控会合的 `GATE`。  
+- **约束**：`Graph::setOutput` / seal 路径要求存在 `exitNode`；从该锚点反向可达定义了“本会执行到的子图区域”。若 `exitNode` 是 `GATE`，其结构必须满足 `Norm>=1 && Ctrl>=1`（见验证器契约）。
 
 ### 4.9 `DREF`
 
@@ -214,7 +213,6 @@ Node 自身只保留查询入口，不再直接持有这些 `std::string`。
 - **PortNode**：端口名不再存于节点内，而由 Graph 集中管理；槽位由 `addRuntimeData()` 分配。
 - **FuncNode**：节点内保存目标 `Graph*` 与一个运行时 `Function*` 原型；调度热路径直接取 `graph()`，宏执行等非热路径可复用 `rtFunc()`。
 - **OperNode**：节点内保存裸 `OperatorIndex*`；真正所有权由 Graph 的 `operIndexRegistry_` 维护。
-- **ExitNode**：图的唯一出口，可带 dataIndex_ 指向返回值槽位。
 - **BrchNode / JoinNode**：与 BRCH/JOIN 字节码对应，用于条件分支与汇合。
 - **GateNode**：即 **`GATE`**（§4.1），数据-控制聚合门控。
 - **SyncNode**：即 **`SYNC`**（§4.5），控制汇聚。
@@ -241,7 +239,7 @@ Node 自身只保留查询入口，不再直接持有这些 `std::string`。
 - `detail::NodeMutation` 仅作为 Builder/Rewrite 内部桥接，不属于稳定对外 API；
   结构改写应经 `GraphBuilder/GraphDraft/GraphRewriteSession` 通道进入。
 - 结构自检：`validateGraph` / `validateGraphRecursively`（`GraphDraft::seal()` 在递归封印前会调用后者）。
-  其中 **`hasOutput()==true`（存在 EXIT）是 seal 前硬约束**，缺失 output 直接视为图结构不完整并拒绝封印。
+  其中 **必须存在 `exitNode`（值出口锚点）是 seal 前硬约束**，缺失 output 直接视为图结构不完整并拒绝封印。
 
 **内联与 import 相关类型**（与 `include/camel/compile/gir/builder.h` 一致）：
 
@@ -310,8 +308,8 @@ Node 自身只保留查询入口，不再直接持有这些 `std::string`。
 - **SCC 内目标冻结**：每个 SCC 只处理进入该 SCC 时捕获到的初始 inline target；处理中新增的 FUNC 不在同轮继续展开，避免振荡。
 - **重定向完整性**：seal 前不允许残留 legacy 图引用。实现上以断言检查 `FUNC.bodyGraph` 与 `DATA(Function).graph` 不再指向 source graph。
 - **GATE 门控保留**：当分支内联存在 value + side-effect ctrl 两路出口时，使用 `GATE`（`Norm` + `Ctrl` 双入边的聚合门控）将 ctrl 依赖锚定到值路径，避免 `BRCH/JOIN` 臂语义破坏。
-- **`EXIT` 控制入边契约**：`EXIT.ctrlInputs.size() <= 1`；`inlineCallable` 以 `valueExit` 或唯一 `EXIT.ctrlInputs[0]` 为完成锚点，必要时内部插入 `GATE`，不再通过 `exitSync` 汇聚。由 `validateGraph` 校验；详见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md)。
-- **slot-safe prune**：内联后的不可达裁剪不再直接调用通用 `pruneUnreachable` 全量删点；先从 `EXIT` 反向求 live 集，再对 BRCH/JOIN 槽位相关节点做 pin（`BRCH.ctrlOutputs` / `JOIN.withInputs` / `JOIN.ctrlInputs` / `JOIN.normInputs`），仅删除非 live 且非 pinned 节点，避免 arm-slot 对齐被 detach/unlink 破坏。
+- **值出口门控契约**：`inlineCallable` 以 `valueExit` 为完成锚点；若值与控制完成点分离，则先插入 `GATE` 再导出 `valueExit`，不再依赖专用 `EXIT.ctrlInputs` 契约。由 `validateGraph` 校验 `GATE` 结构。
+- **slot-safe prune**：内联后的不可达裁剪不再直接调用通用 `pruneUnreachable` 全量删点；先从 `exitNode` 反向求 live 集，再对 BRCH/JOIN 槽位相关节点做 pin（`BRCH.ctrlOutputs` / `JOIN.withInputs` / `JOIN.ctrlInputs` / `JOIN.normInputs`），仅删除非 live 且非 pinned 节点，避免 arm-slot 对齐被 detach/unlink 破坏。
 
 预算策略（budget）：
 

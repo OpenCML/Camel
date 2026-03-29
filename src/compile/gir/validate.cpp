@@ -29,19 +29,24 @@ namespace camel::compile::gir {
 
 namespace {
 
-void validateSingleControlCompletionLeaf(const Graph &graph) {
-    Node *exitNode  = graph.exitNode();
-    Node *valueExit = exitNode->normInputs().front();
-    if (!valueExit) {
-        ASSERT(false, std::format("Graph '{}' has null value-exit input.", graph.name()));
+void validateExitAnchor(const Graph &graph) {
+    Node *exitNode = graph.exitNode();
+    ASSERT(exitNode != nullptr, std::format("Graph '{}' has no output anchor.", graph.name()));
+    if (exitNode->type() != NodeType::GATE) {
+        return;
     }
     ASSERT(
-        exitNode->ctrlInputs().size() <= 1,
+        !exitNode->normInputs().empty(),
         std::format(
-            "Graph '{}' violates control completion contract: EXIT has {} ctrl inputs (expected <= "
-            "1).",
-            graph.name(),
-            exitNode->ctrlInputs().size()));
+            "Output anchor GATE '{}' in graph '{}' must have at least one Norm input.",
+            exitNode->toString(),
+            graph.name()));
+    ASSERT(
+        !exitNode->ctrlInputs().empty(),
+        std::format(
+            "Output anchor GATE '{}' in graph '{}' must have at least one Ctrl input.",
+            exitNode->toString(),
+            graph.name()));
 }
 
 void validateSymmetricAdjacency(LinkType type, Node *from, Node *to) {
@@ -123,12 +128,10 @@ void validateFuncGraphReference(const Graph &graph, Node *node) {
 namespace validate {
 
 void assertGraphSealingPreconditions(const Graph &graph) {
-    // 完整性硬约束：进入 seal 的图必须先有 output（EXIT 节点）。
-    ASSERT(graph.hasOutput(), std::format("Graph '{}' has no output (EXIT node).", graph.name()));
-    ASSERT(graph.exitNode() != nullptr, std::format("Graph '{}' has no exit node.", graph.name()));
+    // 完整性硬约束：进入 seal 的图必须先有 output（值出口锚点）。
     ASSERT(
-        graph.exitNode()->normInputs().size() == 1,
-        std::format("Graph '{}' exit node must have exactly one input.", graph.name()));
+        graph.exitNode() != nullptr,
+        std::format("Graph '{}' has no output anchor.", graph.name()));
 
     for (Node *node : graph.normPorts()) {
         validateNodeAdjacency(node);
@@ -180,7 +183,7 @@ void assertGraphSealingPreconditions(const Graph &graph) {
         }
     }
     validateNodeAdjacency(graph.exitNode());
-    validateSingleControlCompletionLeaf(graph);
+    validateExitAnchor(graph);
 
     for (const auto &[name, subGraphs] : graph.subGraphs()) {
         for (const auto &subGraph : subGraphs) {

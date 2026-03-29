@@ -302,7 +302,7 @@ class MacroExecutor {
                 }
                 return ins;
             },
-            true);
+            false);
     }
 
     slot_t executeGraph(Graph *graph, Frame *frame) {
@@ -575,7 +575,6 @@ class MacroExecutor {
                 frame->set(node->index(), getStaticNodeSlot(node));
             } break;
 
-            case NodeType::EXIT:
             case NodeType::PORT:
             case NodeType::SYNC:
             case NodeType::GATE:

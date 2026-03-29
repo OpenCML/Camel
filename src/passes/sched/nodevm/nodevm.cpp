@@ -66,7 +66,7 @@ std::span<Node *> NodeVMSchedPass::buildTopoNodes(Graph *graph) {
             }
             return ins;
         },
-        true // skip the start node itself
+        false // include output anchor itself
     );
 
     EXEC_WHEN_DEBUG({
@@ -78,7 +78,14 @@ std::span<Node *> NodeVMSchedPass::buildTopoNodes(Graph *graph) {
         }
         size_t totalNodeCnt =
             graph->nodes().size() + graph->ports().size() + graph->closure().size();
-        if (sortedNodes.size() != totalNodeCnt) {
+        auto contains = [](node_span_t nodes, Node *target) {
+            return std::find(nodes.begin(), nodes.end(), target) != nodes.end();
+        };
+        const bool exitCounted =
+            contains(graph->nodes(), exitNode) || contains(graph->normPorts(), exitNode) ||
+            contains(graph->withPorts(), exitNode) || contains(graph->closure(), exitNode);
+        const size_t expectedTopoCnt = totalNodeCnt + (exitCounted ? 0 : 1);
+        if (sortedNodes.size() != expectedTopoCnt) {
             GIR::node_vec_t unreachableNodes;
             for (Node *n : graph->nodes()) {
                 if (n != exitNode &&
@@ -195,16 +202,10 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
     // 尾调用优化主循环：不退出 C++ 栈帧，用新的 currGraph/currFrame 继续执行
     loop_start: {
         const size_t nodesSize = currNodes.size();
-        Node *lastNode         = currGraph->outputNode();
-        if (!lastNode->ctrlOutputs().empty()) {
-            // 如果最后一个值节点有控制输出
-            // 说明在最后一个值节点和退出节点之间存在有副作用但不产生返回值的分支
-            // 那这也意味着推出节点必然会有控制边输入
-            // 需要从退出节点回溯找到最后一个控制边输入的节点
-            ASSERT(
-                !currGraph->exitNode()->ctrlInputs().empty(),
-                "Exit node has no control inputs.");
-            lastNode = currGraph->exitNode()->ctrlInputs().back();
+        Node *lastNode         = currGraph->exitNode();
+        if (lastNode->type() == NodeType::GATE && !lastNode->ctrlInputs().empty()) {
+            // 返回锚点为 GATE 时，以其控制输入作为控制完成路径的最后执行节点。
+            lastNode = lastNode->ctrlInputs().back();
         }
         bool lastNodeIsJoin = lastNode->type() == NodeType::JOIN;
 
@@ -589,8 +590,6 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 currFrame->set(n->index(), result);
             } break;
 
-            case NodeType::EXIT:
-                [[fallthrough]];
             case NodeType::PORT:
                 [[fallthrough]];
             case NodeType::DATA:
@@ -618,9 +617,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
 
         currRecursionDepth_--;
 
-        Node *exitNode    = currGraph->exitNode();
-        const auto &input = exitNode->normInputs();
-        result = input.empty() ? NullSlot : currFrame->get<slot_t>(input.front()->index());
+        result = currFrame->get<slot_t>(currGraph->exitNode()->index());
 
         // 按约定顺序释放栈帧（见文件顶部三种情形说明）
         if (twinFrame != nullptr) {
@@ -678,12 +675,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
 }
 
 GIR::graph_ptr_t NodeVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    if (!graph->hasOutput()) {
-        throw reportRuntimeFault(
-            *context_,
-            RuntimeFault::make(RuntimeDiag::MissingMainFunction, context_->mainModule()->name()),
-            makeGraphExecutionSite(context_->sourceContext(), graph.get()));
-    }
+    (void)graph->exitNode();
 
     Frame *rootFrame = framePool_.acquire(graph.get());
     slot_t result =

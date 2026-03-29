@@ -108,7 +108,7 @@
 ### 3.1 输入前提
 
 - 目标节点必须是当前图中的 `FUNC`；
-- `FUNC.bodyGraph` 非空且有 `EXIT`。
+- `FUNC.bodyGraph` 非空且有值出口锚点（`exitNode`）。
 
 ### 3.2 输出契约（`InlineResult`）
 
@@ -119,20 +119,19 @@
 ### 3.3 入口控制生成规则
 
 1. 优先基于参数映射生成参数门控目标（`GATE`）；
-2. 无参数门控时，从 `EXIT` 反向可达区域推导入口根；
+2. 无参数门控时，从 `exitNode`（值出口锚点）反向可达区域推导入口根；
 3. 入口目标数：
    - `>1`：创建 `entrySync` 并扇出；
    - `=1`：直接以该目标作为 `ctrlEntry`（不建 `SYNC`）。
 
-若入口目标集合为空（例如子图只有 DATA/PORT 到 `EXIT` 的路径），先将 `valueExit` 作为
+若入口目标集合为空（例如子图只有 DATA/PORT 到值出口锚点的路径），先将 `valueExit` 作为
 隐式入口目标，再按上述规则收敛，保证最终只返回一个 `ctrlEntry`。
 
 ### 3.4 控制完成语义
 
-- 控制完成锚点优先由 `EXIT` 结构决定：
-  - 默认是 `valueExit`；
-  - 若 `EXIT` 有 ctrl 输入，则使用唯一的 `EXIT.ctrlInputs[0]`。
-- 验证器保证 `EXIT.ctrlInputs.size() <= 1`。
+- 控制完成锚点统一使用 `valueExit`。
+- 若值与控制完成点分离，先在目标图内部插入 `GATE`，再导出该 `GATE` 作为 `valueExit`。
+- 验证器保证 `GATE` 满足 `Norm>=1 && Ctrl>=1`。
 - 因此不再使用 `exitSync` 兜底汇聚。
 
 ---
@@ -141,11 +140,11 @@
 
 `GraphBuilder::validateGraph` 当前关键检查：
 
-1. 图必须有 `EXIT`，且 `EXIT` 恰有一个 norm 输入；
+1. 图必须有值出口锚点 `exitNode`；
 2. 邻接表双向一致（输入/输出镜像）；
 3. `BRCH/JOIN` arm 数匹配；
 4. `FUNC` 图引用与 dependency 注册一致；
-5. `EXIT.ctrlInputs.size() <= 1`。
+5. 若 `exitNode` 为 `GATE`，则必须满足 `Norm>=1 && Ctrl>=1`。
 
 ---
 

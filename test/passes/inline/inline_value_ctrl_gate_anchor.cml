@@ -1,0 +1,23 @@
+/**
+ * 覆盖点：
+ * 1) callee 内部“值出口”和“控制完成点”分离（先算值，再副作用 println，再 return）；
+ * 2) 内联后应通过 GATE 维持 value/ctrl 会合语义。
+ */
+module inline_value_ctrl_gate_anchor
+
+func calc(): int sync {
+    let y = 40 + 2
+    'gate_anchor_side_effect'->println
+    return y
+}
+
+func main(): int sync {
+    let out = calc()
+    if out != 42 then {
+        return 1
+    } else sync {
+        'inline_value_ctrl_gate_anchor ok'->println
+        return 0
+    }
+}
+

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Mar. 30, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -931,6 +931,25 @@ bool X64Backend::compileBytecode(
             if (!unit.trampolineCast)
                 return fail("pc=" + std::to_string(pc) + " no CAST trampoline");
             uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineCast);
+#if defined(_WIN32) || defined(_WIN64)
+            build.emitCallTrampolineOperWin64(static_cast<uint32_t>(pc), addr);
+#else
+            build.emitCallTrampolineOperSysV(static_cast<uint32_t>(pc), addr);
+#endif
+            x64::VRegId vRet = nextVReg++;
+            build.emitVMovFromRax(vRet);
+            build.emitVStoreToFrame(slotDisp(bc.result), vRet);
+            slotCache.clear();
+            break;
+        }
+        case OpCode::COPY:
+        case OpCode::FILL:
+        case OpCode::CALL:
+        case OpCode::ACCS: {
+            if (!unit.trampolineBytecode) {
+                return fail("pc=" + std::to_string(pc) + " no generic bytecode trampoline");
+            }
+            uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineBytecode);
 #if defined(_WIN32) || defined(_WIN64)
             build.emitCallTrampolineOperWin64(static_cast<uint32_t>(pc), addr);
 #else

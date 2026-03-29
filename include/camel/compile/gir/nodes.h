@@ -506,20 +506,7 @@ class OperNode : public Node {
     Node *clone(Graph &graph) const override;
 };
 
-// 出口与辅助节点
-class ExitNode : public Node {
-  public:
-    ExitNode(Graph &graph, Type *type, data_idx_t index)
-        : Node(graph, NodeType::EXIT, type, index) {}
-    ~ExitNode() = default;
-
-    static Node *create(Graph &graph, Type *type, data_idx_t index = 0);
-
-    std::string toString() const override;
-
-    Node *clone(Graph &graph) const override;
-};
-
+// 辅助节点
 class DrefNode : public Node {
   public:
     // FUNC overload set / OPERATOR group / pre-built inlined graph.

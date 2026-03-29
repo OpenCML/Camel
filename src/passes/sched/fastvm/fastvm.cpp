@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Mar. 30, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,6 @@
 #include "jit/runtime/trampoline.h"
 
 #include <cstdio>
-#include <future>
 #endif
 
 using namespace std;
@@ -103,12 +102,7 @@ std::pair<size_t, Frame *> FastVMSchedPass::pop() {
 }
 
 graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    if (!graph->hasOutput()) {
-        throw reportRuntimeFault(
-            *context_,
-            RuntimeFault::make(RuntimeDiag::MissingMainFunction, context_->mainModule()->name()),
-            makeGraphExecutionSite(context_->sourceContext(), graph.get()));
-    }
+    (void)graph->exitNode();
 
     precompile(graph.get());
 
@@ -119,6 +113,12 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     if (jitConfig_.policy != JitPolicy::Disabled && !jitBackend_) {
         jitBackend_ = createBackend();
     }
+    // 每轮 apply 重置“本轮可重试”状态，避免旧轮次失败状态污染新字节码。
+    for (const auto &[g, _] : offsetMap_) {
+        if (g) {
+            setGraphJitCompileFailed(g, false, true);
+        }
+    }
     JitContext jitCtx{this, bytecodes_.data()};
     currentJitCtx_ = &jitCtx;
     EXEC_WHEN_DEBUG(
@@ -127,83 +127,20 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
             jitConfig_.policy == JitPolicy::Disabled
                 ? "Disabled"
                 : (jitConfig_.policy == JitPolicy::Always ? "Always" : "OnDemand")));
-    // Always: 启动时全量预编译；OnDemand: 不预编译，运行时按需编译
+    GIR::Graph *entryGraph = graph.get();
     if (jitConfig_.policy == JitPolicy::Always) {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("JIT").info(
-                "JIT Always: compiling {} graph(s) (async)",
-                offsetMap_.size()));
-        std::vector<std::pair<GIR::Graph *, std::future<CompiledCode *>>> futures;
-        for (const auto &[g, entryPc] : offsetMap_) {
-            if (getGraphJitFn(g))
-                continue;
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("JIT").debug(
-                    "Submitting async compile: graph '{}' entryPc={}",
-                    g->name(),
-                    entryPc));
-            auto *backend = jitBackend_.get();
-            CompilationUnit unit{
-                .graph          = g,
-                .bytecodes      = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
-                .entryPc        = entryPc,
-                .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
-                .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
-                .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
-                .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
-                .poolTopAddr    = framePool_.topAddr(),
-                .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
-            };
-            futures.emplace_back(
-                g,
-                std::async(std::launch::async, [backend, unit]() -> CompiledCode * {
-                    auto compiled = backend->compile(unit);
-                    return compiled.release();
-                }));
-        }
-        for (auto &[g, fut] : futures) {
-            CompiledCode *raw = fut.get();
-            if (raw) {
-                auto compiled                    = std::unique_ptr<CompiledCode>(raw);
-                [[maybe_unused]] size_t codeSize = compiled->code.size();
-                JitEntryFn fn                    = jitBackend_->load(std::move(compiled));
-                if (fn) {
-                    std::lock_guard lock(jitCacheMutex_);
-                    setGraphJitFn(g, fn);
-                    jitFnToGraph_[fn] = g;
-                    EXEC_WHEN_DEBUG(
-                        GetDefaultLogger().in("JIT").info(
-                            "Compiled & loaded: graph '{}' codeSize={} bytes",
-                            g->name(),
-                            codeSize));
-                } else {
-                    EXEC_WHEN_DEBUG(
-                        GetDefaultLogger().in("JIT").warn("Load failed for graph '{}'", g->name()));
-                }
-            } else {
-                EXEC_WHEN_DEBUG(
-                    GetDefaultLogger().in("JIT").debug(
-                        "Compile failed/skipped for graph '{}'",
-                        g->name()));
-            }
-        }
-        for (size_t bpc = 0; bpc < bytecodes_.size();) {
-            Bytecode &bc = bytecodes_[bpc];
-            if ((bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) && bc.fastop[1] >= 0) {
-                GIR::Graph *tg = getFuncExtraGraph(&bc);
-                JitEntryFn fn  = getGraphJitFn(tg);
-                if (fn)
-                    setFuncExtraFn(&bc, reinterpret_cast<void *>(fn));
-            }
-            bpc += bc.opsize;
-        }
+                "JIT Always: switched to lazy compile-by-touch (no startup full-graph compile)"));
+        // Always 模式仍保持“能编就编”的策略，但触发时机改为首次触达目标图，
+        // 避免启动期对整张图集做全量编译引入的失败放大与开销抖动。
+        compileAndCacheGraph(entryGraph, offsetMap_.at(entryGraph));
     } else if (jitConfig_.policy == JitPolicy::OnDemand) {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("JIT").info(
                 "JIT OnDemand: start with interpreter, compile on hot threshold"));
     }
-    GIR::Graph *entryGraph = graph.get();
-    JitEntryFn entryJitFn  = getGraphJitFn(entryGraph);
+    JitEntryFn entryJitFn = getGraphJitFn(entryGraph);
     if (jitBackend_ && entryJitFn) {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("JIT").info(
@@ -442,10 +379,11 @@ GIR::Graph *FastVMSchedPass::jitFnToGraph(JitEntryFn fn) const {
 }
 
 void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
-    if (getGraphJitFn(graph))
+    if (!graph) {
         return;
+    }
     std::lock_guard lock(jitCacheMutex_);
-    if (getGraphJitFn(graph))
+    if (getGraphJitFn(graph) || getGraphJitCompileFailed(graph))
         return;
     ASSERT(
         graph->finalized(),
@@ -465,13 +403,25 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
         .trampolineTail           = reinterpret_cast<void *>(&trampolineTail),
         .trampolineOper           = reinterpret_cast<void *>(&trampolineOper),
         .trampolineCast           = reinterpret_cast<void *>(&trampolineCast),
+        .trampolineBytecode       = reinterpret_cast<void *>(&trampolineBytecode),
         .poolTopAddr              = framePool_.topAddr(),
         .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
         .debug                    = enableJitTraceMir_ ? &debugOptions : nullptr,
     };
-    auto compiled = jitBackend_->compile(unit);
-    if (!compiled)
+    std::string failureReason;
+    auto compiled = jitBackend_->compile(unit, &failureReason);
+    if (!compiled) {
+        setGraphJitCompileFailed(graph, true);
+        if (!getGraphJitFailureReported(graph)) {
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger().in("JIT").warn(
+                    "OnDemand compile skipped for graph '{}': {}",
+                    graph->name(),
+                    failureReason.empty() ? "unknown failure" : failureReason));
+            setGraphJitFailureReported(graph, true);
+        }
         return;
+    }
     // Debug 模式下将实际执行的 code 按 16 进制打印到日志，便于与 bindump 对比
     EXEC_WHEN_DEBUG({
         if (!compiled->code.empty()) {
@@ -497,6 +447,8 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
     if (fn) {
         setGraphJitFn(graph, fn);
         jitFnToGraph_[fn] = graph;
+        setGraphJitCompileFailed(graph, false);
+        setGraphJitFailureReported(graph, false);
         for (size_t pc = 0; pc < bytecodes_.size();) {
             Bytecode &bc = bytecodes_[pc];
             if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
@@ -509,6 +461,15 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
             GetDefaultLogger().in("JIT").info(
                 "OnDemand: compiled & cached graph '{}'",
                 graph->name()));
+    } else {
+        setGraphJitCompileFailed(graph, true);
+        if (!getGraphJitFailureReported(graph)) {
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger().in("JIT").warn(
+                    "OnDemand compile load failed for graph '{}'.",
+                    graph->name()));
+            setGraphJitFailureReported(graph, true);
+        }
     }
 }
 
@@ -517,8 +478,11 @@ Bytecode *FastVMSchedPass::materializeCallTarget(size_t pc, Bytecode *bc) {
         return bc;
     }
     GIR::Graph *targetGraph = getFuncExtraGraph(bc);
-    size_t targetPc         = static_cast<size_t>(bc->fastop[1]);
-    uint32_t count          = incFuncExtraCount(bc);
+    if (targetGraph && getGraphJitCompileFailed(targetGraph)) {
+        return bc;
+    }
+    size_t targetPc = static_cast<size_t>(bc->fastop[1]);
+    uint32_t count  = incFuncExtraCount(bc);
     if (tierPolicy_.shouldJit(count)) {
         compileAndCacheGraph(targetGraph, targetPc);
         return &bytecodes_[pc];
@@ -547,7 +511,7 @@ slot_t FastVMSchedPass::invokeCallOrJit(
                 pc));
         return invokeOwnedJitFrame(fn, frame, jitCtx);
     }
-    if (tierPolicy_.shouldJit(callCount)) {
+    if (!getGraphJitCompileFailed(graph) && tierPolicy_.shouldJit(callCount)) {
         compileAndCacheGraph(graph, pc);
         fn = getGraphJitFn(graph);
         if (fn) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 09, 2026
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,12 +69,7 @@ std::string sanitizeClusterId(const std::string &name) {
 } // namespace
 
 void TaskflowExecSchedPass::buildAndDump(Graph *graph, std::ostream &os) {
-    if (!graph->hasOutput()) {
-        throw reportRuntimeFault(
-            *context_,
-            RuntimeFault::make(RuntimeDiag::MissingMainFunction, context_->mainModule()->name()),
-            makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow"));
-    }
+    (void)graph->exitNode();
     buildGraphsInfo(graph);
 
     os << "digraph Taskflow {\n";

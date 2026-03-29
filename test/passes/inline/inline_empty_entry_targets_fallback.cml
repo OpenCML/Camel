@@ -1,6 +1,6 @@
 /**
  * 覆盖点：
- * 1) 无参数且仅 DATA/PORT 直达 EXIT 的子图，入口目标集合可能为空；
+ * 1) 无参数且仅 DATA/PORT 直达值出口锚点的子图，入口目标集合可能为空；
  * 2) 应通过隐式 valueExit 目标保证最终仍有且仅有一个 ctrlEntry。
  */
 module inline_empty_entry_targets_fallback

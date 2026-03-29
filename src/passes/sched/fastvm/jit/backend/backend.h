@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 28, 2026
+ * Updated: Mar. 30, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,6 +61,7 @@ struct CompilationUnit {
     void *trampolineTail                 = nullptr; // TAIL trampoline
     void *trampolineOper                 = nullptr; // OPER trampoline
     void *trampolineCast                 = nullptr; // CAST trampoline
+    void *trampolineBytecode             = nullptr; // slow-path bytecode trampoline
     void *poolTopAddr                    = nullptr; // &FramePool::top_ for inline frame mgmt
     void *directSelfFuncInvokeAddr       = nullptr; // slow path fallback
     const CompilationDebugOptions *debug = nullptr;
@@ -86,7 +87,9 @@ inline static constexpr std::size_t kJitGraphInfoExtraIndex = 1;
 // JIT entry 仍通过 Graph extra 做 O(1) 查询，但 extra index 由 JIT 自己约定维护，
 // 不把这类后端细节暴露为 Graph 的专用接口。
 struct JitGraphInfo {
-    JitEntryFn fn = nullptr;
+    JitEntryFn fn        = nullptr;
+    bool compileFailed   = false;
+    bool failureReported = false;
 };
 inline JitEntryFn getGraphJitFn(GIR::Graph *g) {
     auto *info = g->getExtra<JitGraphInfo, kJitGraphInfoExtraIndex>();
@@ -100,6 +103,33 @@ inline void setGraphJitFn(GIR::Graph *g, JitEntryFn fn) {
     } else {
         info->fn = fn;
     }
+}
+inline bool getGraphJitCompileFailed(GIR::Graph *g) {
+    auto *info = g->getExtra<JitGraphInfo, kJitGraphInfoExtraIndex>();
+    return info ? info->compileFailed : false;
+}
+inline void setGraphJitCompileFailed(GIR::Graph *g, bool failed, bool resetReport = false) {
+    auto *info = g->getExtra<JitGraphInfo, kJitGraphInfoExtraIndex>();
+    if (!info) {
+        info = new JitGraphInfo{};
+        g->setExtra<JitGraphInfo, kJitGraphInfoExtraIndex>(info);
+    }
+    info->compileFailed = failed;
+    if (resetReport) {
+        info->failureReported = false;
+    }
+}
+inline bool getGraphJitFailureReported(GIR::Graph *g) {
+    auto *info = g->getExtra<JitGraphInfo, kJitGraphInfoExtraIndex>();
+    return info ? info->failureReported : false;
+}
+inline void setGraphJitFailureReported(GIR::Graph *g, bool reported) {
+    auto *info = g->getExtra<JitGraphInfo, kJitGraphInfoExtraIndex>();
+    if (!info) {
+        info = new JitGraphInfo{};
+        g->setExtra<JitGraphInfo, kJitGraphInfoExtraIndex>(info);
+    }
+    info->failureReported = reported;
 }
 
 class IJitBackend {

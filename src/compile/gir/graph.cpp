@@ -38,6 +38,7 @@
 #include <functional>
 #include <stdexcept>
 #include <string_view>
+#include <unordered_set>
 
 using namespace camel::core::error;
 using namespace camel::core::data;
@@ -221,9 +222,13 @@ Graph::computeNodeDebugFingerprintForNode(Node *node, uint64_t tieBreaker) const
 }
 
 void Graph::promoteNodeDebugIds(camel::source::SourceContext *sourceContext) {
-    uint64_t seq    = 0;
+    uint64_t seq = 0;
+    std::unordered_set<Node *> promoted;
     auto promoteOne = [&](Node *n) {
         if (n == nullptr) {
+            return;
+        }
+        if (!promoted.insert(n).second) {
             return;
         }
         NodeDebugFingerprint fp = computeNodeDebugFingerprintForNode(n, seq++);
@@ -255,14 +260,10 @@ void Graph::promoteNodeDebugIds(camel::source::SourceContext *sourceContext) {
 
 Node *Graph::exitNode() const {
     Node *exit = activeState() ? activeState()->exitNode : exitNode_;
-    ASSERT(exit != nullptr, std::format("Graph {} has no exit node.", name_));
+    ASSERT(exit != nullptr, std::format("Graph {} has no output node.", name_));
     return exit;
 }
-Node *Graph::outputNode() const {
-    Node *exit = activeState() ? activeState()->exitNode : exitNode_;
-    ASSERT(exit != nullptr, std::format("Graph {} has no exit node.", name_));
-    return exit->normInputs().front();
-}
+Node *Graph::outputNode() const { return exitNode(); }
 
 // =============================================================================
 // Graph 查询与数据段

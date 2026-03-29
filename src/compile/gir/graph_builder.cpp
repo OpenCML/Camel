@@ -146,7 +146,6 @@ collectEntryRootsFromExit(const Graph &graph, const std::unordered_map<Node *, N
         case NodeType::SYNC:
         case NodeType::GATE:
         case NodeType::DREF:
-        case NodeType::EXIT:
             return false;
         default:
             return true;
@@ -154,10 +153,7 @@ collectEntryRootsFromExit(const Graph &graph, const std::unordered_map<Node *, N
     };
 
     std::unordered_set<Node *> reachable;
-    std::vector<Node *> stack;
-    if (graph.hasOutput()) {
-        stack.push_back(graph.exitNode());
-    }
+    std::vector<Node *> stack{graph.exitNode()};
     while (!stack.empty()) {
         Node *curr = stack.back();
         stack.pop_back();
@@ -215,6 +211,7 @@ collectEntryRootsFromExit(const Graph &graph, const std::unordered_map<Node *, N
 
 node_vec_t collectConsumersByInput(const Graph &graph, Node *needle, LinkType type) {
     node_vec_t consumers;
+    std::unordered_set<Node *> seen;
     if (!needle) {
         return consumers;
     }
@@ -234,15 +231,15 @@ node_vec_t collectConsumersByInput(const Graph &graph, Node *needle, LinkType ty
             return {};
         }();
         if (std::ranges::find(inputs, needle) != inputs.end()) {
-            consumers.push_back(owner);
+            if (seen.insert(owner).second) {
+                consumers.push_back(owner);
+            }
         }
     };
     for (Node *owner : graph.nodes()) {
         maybePush(owner);
     }
-    if (graph.hasOutput()) {
-        maybePush(graph.exitNode());
-    }
+    maybePush(graph.exitNode());
     return consumers;
 }
 
@@ -256,9 +253,6 @@ bool hasSubgraphReference(const Graph &graph, const graph_ptr_t &subGraph) {
 }
 
 node_vec_t collectUnreachableNodes(const Graph &graph) {
-    if (!graph.hasOutput()) {
-        return {};
-    }
     Node *exit = graph.exitNode();
     std::unordered_set<Node *> live;
     std::vector<Node *> stack{exit};
@@ -556,8 +550,7 @@ void GraphBuilder::setOutput(Node *node) const {
         st.funcType->setExitType(actualExitType);
     }
 
-    st.exitNode = ExitNode::create(*graph_, node->dataType(), node->index());
-    Node::link(LinkType::Norm, node, st.exitNode);
+    st.exitNode = node;
     markMutated();
 }
 void GraphBuilder::addSubGraph(const graph_ptr_t &graph) const {
@@ -717,48 +710,18 @@ graph_ptr_t GraphBuilder::cloneGraph(const graph_ptr_t &graph) {
         }
     }
 
-    // clone 过程分两步补齐 EXIT 映射：当图直接返回 PORT/closure 时，端口输出会先指向尚未映射的
-    // EXIT，故端口阶段也允许临时缺失，随后在 EXIT 映射完成后统一补回。
     overwriteFreshNodeAdjacencyPreservingOrder(src->withPorts(), nodeMap, true);
     overwriteFreshNodeAdjacencyPreservingOrder(src->normPorts(), nodeMap, true);
     overwriteFreshNodeAdjacencyPreservingOrder(src->closure(), nodeMap, true);
     overwriteFreshNodeAdjacencyPreservingOrder(src->nodes(), nodeMap, true);
-    if (src->hasOutput()) {
-        Node *srcExit    = src->exitNode();
-        Node *outputNode = srcExit->normInputs().front();
-        Node *newOutput  = requireMappedNode(
-            outputNode,
-            nodeMap,
-            "Output node not found in node map during graph cloning.");
-        Node *newExitNode = ExitNode::create(*newGraph, newOutput->dataType(), newOutput->index());
-        nodeMap[srcExit]  = newExitNode;
-        overwriteFreshNodeAdjacencyPreservingOrder({srcExit}, nodeMap);
-        for (Node *in : newExitNode->normInputs()) {
-            if (std::ranges::find(in->normOutputs(), newExitNode) == in->normOutputs().end()) {
-                detail::NodeMutation::normOutputs(in).push_back(newExitNode);
-            }
-        }
-        for (Node *in : newExitNode->withInputs()) {
-            if (std::ranges::find(in->withOutputs(), newExitNode) == in->withOutputs().end()) {
-                detail::NodeMutation::withOutputs(in).push_back(newExitNode);
-            }
-        }
-        for (Node *in : newExitNode->ctrlInputs()) {
-            if (std::ranges::find(in->ctrlOutputs(), newExitNode) == in->ctrlOutputs().end()) {
-                detail::NodeMutation::ctrlOutputs(in).push_back(newExitNode);
-            }
-        }
-        newGraph->exitNode_ = newExitNode;
-        if (newGraph->builderState_) {
-            newGraph->builderState_->exitNode = newExitNode;
-        }
-        if (auto *sourceContext =
-                src->getExtra<camel::source::SourceContext, kSourceContextExtraIndex>()) {
-            sourceContext->cloneGirNodeDebugBinding(srcExit, newExitNode);
-        }
-    } else {
-        Node *nullOutput = DataNode::create(*newGraph, Data::null());
-        GraphBuilder(newGraph).setOutput(nullOutput);
+    Node *srcExit   = src->exitNode();
+    Node *newOutput = requireMappedNode(
+        srcExit,
+        nodeMap,
+        "Output node not found in node map during graph cloning.");
+    newGraph->exitNode_ = newOutput;
+    if (newGraph->builderState_) {
+        newGraph->builderState_->exitNode = newOutput;
     }
 
     // 浅拷贝策略：共享依赖与子图引用，不递归克隆。
@@ -786,12 +749,11 @@ graph_ptr_t GraphBuilder::cloneGraph(const graph_ptr_t &graph) {
         dep->dependents_.insert(newGraph);
     }
     ASSERT(
-        newGraph->hasOutput(),
+        newGraph->exitNode_ != nullptr,
         std::format(
-            "cloneGraph produced graph '{}' without output (source='{}', sourceHasOutput={}).",
+            "cloneGraph produced graph '{}' without output (source='{}').",
             newGraph->name_,
-            src->name(),
-            src->hasOutput() ? "true" : "false"));
+            src->name()));
     return newGraph;
 }
 
@@ -938,8 +900,9 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
         for (Node *n : targetGraph.nodes()) {
             declared.insert(n);
         }
-        if (targetGraph.hasOutput()) {
-            declared.insert(targetGraph.exitNode());
+        Node *exitAnchor = targetGraph.exitNode();
+        if (&exitAnchor->graph() == &targetGraph) {
+            declared.insert(exitAnchor);
         }
 
         std::unordered_set<Node *> seen;
@@ -962,9 +925,11 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
         for (Node *n : targetGraph.nodes()) {
             scanInputs(n);
         }
-        if (targetGraph.hasOutput()) {
-            scanInputs(targetGraph.exitNode());
+        exitAnchor = targetGraph.exitNode();
+        if (!declared.contains(exitAnchor) && seen.insert(exitAnchor).second) {
+            freeInputs.push_back(exitAnchor);
         }
+        scanInputs(exitAnchor);
         return freeInputs;
     };
     node_vec_t freeInputs = collectFreeInputs();
@@ -1037,16 +1002,6 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
         nodeMap[port] = gatedInput;
     }
 
-    if (!targetGraph.hasOutput()) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("GIR").warn(
-                "Cannot inline FUNC node {} in graph {}: target graph '{}' has no output.",
-                node->toString(),
-                graph_->name_,
-                targetGraph.name()));
-        return InlineResult{};
-    }
-
     for (Node *n : targetGraph.nodes()) {
         Node *clonedNode = n->clone(*graph_);
         nodeMap[n]       = clonedNode;
@@ -1068,9 +1023,17 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
             requireMappedNode(port, nodeMap, "With port not found in node map during inlining."),
             nodeMap);
     }
-    Node *targetOutput = targetGraph.exitNode()->normInputs().front();
-    result.valueExit =
-        requireMappedNode(targetOutput, nodeMap, "Target output node not found during inlining.");
+    Node *targetOutput = targetGraph.exitNode();
+    if (auto outIt = nodeMap.find(targetOutput); outIt != nodeMap.end()) {
+        result.valueExit = outIt->second;
+    } else {
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger().in("GIR").warn(
+                "Cannot inline FUNC node {} in graph {}: target output anchor is not mapped.",
+                node->toString(),
+                graph_->name_));
+        return InlineResult{};
+    }
     const node_vec_t normConsumers = collectConsumersByInput(*graph_, node, LinkType::Norm);
     const node_vec_t withConsumers = collectConsumersByInput(*graph_, node, LinkType::With);
     const node_vec_t ctrlConsumers = collectConsumersByInput(*graph_, node, LinkType::Ctrl);
@@ -1088,7 +1051,7 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
         }
     }
     if (entryTargets.empty()) {
-        // 当子图仅由 DATA/PORT 直达 EXIT 时，反向推导可能得不到可执行入口根。
+        // 当子图仅由 DATA/PORT 直达值出口锚点时，反向推导可能得不到可执行入口根。
         // 此时将 valueExit 作为隐式入口目标，再按统一收敛逻辑求 ctrlEntry。
         entryTargets.push_back(result.valueExit);
     }
@@ -1104,29 +1067,8 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
         result.ctrlEntry = entryTargets.front();
     }
 
-    Node *completionCtrl      = result.valueExit;
-    const auto exitCtrlInputs = targetGraph.exitNode()->ctrlInputs();
-    ASSERT(
-        exitCtrlInputs.size() <= 1,
-        std::format(
-            "Target graph '{}' has {} EXIT ctrl inputs during inlining (expected <= 1).",
-            targetGraph.name(),
-            exitCtrlInputs.size()));
-    if (!exitCtrlInputs.empty()) {
-        completionCtrl = requireMappedNode(
-            exitCtrlInputs.front(),
-            nodeMap,
-            "Mapped EXIT ctrl completion node not found during inlining.");
-    }
+    Node *completionCtrl = result.valueExit;
     ASSERT(completionCtrl != nullptr, "Inlined callable has no control completion anchor.");
-
-    if (completionCtrl != result.valueExit) {
-        auto *gatedValue = GateNode::create(*graph_);
-        detail::NodeMutation::setDataType(gatedValue, result.valueExit->dataType());
-        Node::link(LinkType::Ctrl, completionCtrl, gatedValue);
-        Node::link(LinkType::Norm, result.valueExit, gatedValue);
-        result.valueExit = gatedValue;
-    }
 
     for (auto *out : normConsumers) {
         Node::replaceInput(LinkType::Norm, out, node, result.valueExit);
@@ -1221,14 +1163,6 @@ LayoutResult GraphBuilder::computeLayout(const Graph &graph) {
             assignIndex(node, rtmIdx++);
             runtimeDataTypes.push_back(node->dataType());
         }
-    }
-
-    if (graph.hasOutput()) {
-        Node *exitNode     = graph.exitNode();
-        Node *exitInput    = exitNode->normInputs().front();
-        auto it            = indexMap.find(exitInput);
-        data_idx_t exitIdx = (it != indexMap.end()) ? it->second : exitInput->index();
-        assignIndex(exitNode, exitIdx);
     }
 
     result.runtimeDataSize = rtmIdx;

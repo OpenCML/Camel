@@ -464,7 +464,7 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         insertNode(portNode->name(), port);
     }
     Node *res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
-    if (!graph->hasOutput()) {
+    if (graph->exitNode_ == nullptr) {
         if (res) {
             GraphBuilder(graph).setOutput(res);
         } else {
@@ -1313,7 +1313,7 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         graph_ptr_t subGraph = enterScope(FunctionType::create());
         registerGraphOrigin(context_, subGraph, caseExecNode, "gir.brch.case.graph");
         Node *resNode = visitExecNode(caseExecNode);
-        if (!subGraph->hasOutput()) {
+        if (subGraph->exitNode_ == nullptr) {
             if (resNode) {
                 GraphBuilder(subGraph).setOutput(resNode);
             } else {
@@ -1411,20 +1411,29 @@ Node *Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     } else {
         ASSERT(false, "Unexpected result type from Enter child of EXIT node.");
     }
-    GraphBuilder(currGraph_).setOutput(resNode);
-
+    Node *outputAnchor = resNode;
+    node_vec_t pendingCtrlInputs;
     if (nodeModifierMap_.count(resNode)) {
-        Node *modifier   = nodeModifierMap_[resNode];
-        Node *returnNode = currGraph_->exitNode();
-        if (modifier && linkCheek(modifier, returnNode)) {
-            Node::link(LinkType::Ctrl, modifier, returnNode);
+        Node *modifier = nodeModifierMap_[resNode];
+        if (modifier && linkCheek(modifier, resNode)) {
+            pendingCtrlInputs.push_back(modifier);
         }
     }
-
-    Node *exitNode = currGraph_->exitNode();
-    if (synced_ && lastSyncedNode_ && linkCheek(lastSyncedNode_, exitNode)) {
-        Node::link(LinkType::Ctrl, lastSyncedNode_, exitNode);
+    if (synced_ && lastSyncedNode_ && linkCheek(lastSyncedNode_, resNode)) {
+        pendingCtrlInputs.push_back(lastSyncedNode_);
     }
+    if (!pendingCtrlInputs.empty() && resNode->type() != NodeType::GATE) {
+        auto *gatedValue = GateNode::create(*currGraph_);
+        detail::NodeMutation::setDataType(gatedValue, resNode->dataType());
+        Node::link(LinkType::Norm, resNode, gatedValue);
+        outputAnchor = gatedValue;
+    }
+    for (Node *ctrlInput : pendingCtrlInputs) {
+        if (ctrlInput && linkCheek(ctrlInput, outputAnchor)) {
+            Node::link(LinkType::Ctrl, ctrlInput, outputAnchor);
+        }
+    }
+    GraphBuilder(currGraph_).setOutput(outputAnchor);
 
     LEAVE("EXIT");
     return resNode;

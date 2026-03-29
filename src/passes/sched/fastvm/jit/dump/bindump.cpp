@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Mar. 30, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -116,14 +116,15 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .enableDebugTrace      = true,
         };
         CompilationUnit unit{
-            .graph          = g,
-            .bytecodes      = bcSpan,
-            .entryPc        = entryPc,
-            .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
-            .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
-            .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
-            .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
-            .debug          = &debugOptions,
+            .graph              = g,
+            .bytecodes          = bcSpan,
+            .entryPc            = entryPc,
+            .trampolineFunc     = reinterpret_cast<void *>(&trampolineFunc),
+            .trampolineTail     = reinterpret_cast<void *>(&trampolineTail),
+            .trampolineOper     = reinterpret_cast<void *>(&trampolineOper),
+            .trampolineCast     = reinterpret_cast<void *>(&trampolineCast),
+            .trampolineBytecode = reinterpret_cast<void *>(&trampolineBytecode),
+            .debug              = &debugOptions,
         };
 
         std::string failureReason;

@@ -158,8 +158,6 @@ std::string inferEdgeSemanticRole(Node *to, const std::string &linkType, size_t 
             return "receiver";
         case NodeType::CAST:
             return "valueProducer";
-        case NodeType::EXIT:
-            return "valueProducer";
         default:
             return "normInput";
         }
@@ -187,7 +185,7 @@ std::string inferEdgeSemanticRole(Node *to, const std::string &linkType, size_t 
             return "captureReady";
         case NodeType::FUNC:
             return "branchLaunch";
-        case NodeType::EXIT:
+        case NodeType::GATE:
             return "returnBarrier";
         default:
             return "control";
@@ -334,10 +332,6 @@ void nodeLabelShapeStyle(Node *node, std::string &label, std::string &shape, std
         shape     = "diamond";
         break;
     }
-    case NodeType::EXIT:
-        label = "EXIT";
-        shape = "doublecircle";
-        break;
     case NodeType::SYNC:
         label = "SYNC";
         shape = "diamond";
@@ -436,15 +430,21 @@ json expandedGraphToJson(const graph_ptr_t &graph) {
             j["dependencies"].push_back(graphSummary(dep));
 
     node_vec_t nodes;
+    std::unordered_set<Node *> seen;
+    auto pushUnique = [&](Node *n) {
+        if (n && seen.insert(n).second) {
+            nodes.push_back(n);
+        }
+    };
     for (Node *n : graph->nodes())
-        nodes.push_back(n);
-    nodes.push_back(graph->exitNode());
+        pushUnique(n);
+    pushUnique(graph->exitNode());
     for (Node *port : graph->normPorts())
-        nodes.push_back(port);
+        pushUnique(port);
     for (Node *port : graph->withPorts())
-        nodes.push_back(port);
+        pushUnique(port);
     for (Node *c : graph->closure())
-        nodes.push_back(c);
+        pushUnique(c);
 
     for (Node *n : nodes)
         j["nodes"].push_back(nodeToJson(n));

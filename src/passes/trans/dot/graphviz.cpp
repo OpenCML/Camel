@@ -21,6 +21,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/type.h"
+#include <ranges>
 #include <sstream>
 
 using namespace std;
@@ -260,8 +261,9 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
     node_vec_t nodes;
     for (Node *n : graph->nodes())
         nodes.push_back(n);
-    ASSERT(graph->hasOutput(), std::format("Graph '{}' has no output.", graph->name()));
-    nodes.push_back(graph->exitNode()); // 包含ExitNode
+    if (std::ranges::find(nodes, graph->exitNode()) == nodes.end()) {
+        nodes.push_back(graph->exitNode()); // 允许出口锚点位于 ports/closure。
+    }
 
     for (size_t i = 0; i < nodes.size(); ++i) {
         const auto &node = nodes[i];
@@ -328,12 +330,6 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
             auto oper = tt::as_ptr<OperNode>(node);
             label     = oper->oper()->name();
             shape     = "diamond";
-            break;
-        }
-        case NodeType::EXIT: {
-            label = "EXIT";
-            shape = "doublecircle";
-            size  = "width=0.9, height=0.9";
             break;
         }
         case NodeType::SYNC: {

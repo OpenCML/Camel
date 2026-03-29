@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Mar. 30, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
@@ -45,14 +45,18 @@ using namespace camel::core::context;
 #include "../../fastvm.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/mm.h"
 #include "camel/core/operator.h"
 #include "camel/utils/log.h"
+#include "camel/utils/type.h"
 #include "jit_debug_trace.h"
 
 #include <iomanip>
 #include <sstream>
 
 using namespace camel::core::error;
+using namespace camel::core::rtdata;
+using namespace camel::core::type;
 using namespace camel::jit;
 #endif
 
@@ -439,12 +443,147 @@ slot_t trampolineCast(slot_t *slots, void *ctx, size_t pc) {
     return result;
 }
 
+slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
+    auto *jc     = static_cast<JitContext *>(ctx);
+    auto *vm     = jc->vm;
+    auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
+    Bytecode &bc = base[pc];
+    Frame *frame = reinterpret_cast<Frame *>(slots[0]); // 规范：slot[0] = Frame*
+
+    switch (bc.opcode) {
+    case OpCode::COPY: {
+        const data_idx_t srcIdx = bc.fastop[0];
+        TypeCode srcCode        = frame->codeAt(srcIdx);
+        slot_t result;
+        if (isGCTraced(srcCode)) {
+            Object *srcData  = frame->get<Object *>(srcIdx);
+            Type *srcTypePtr = frame->typeAt<Type>(srcIdx);
+            result           = reinterpret_cast<slot_t>(
+                srcData->clone(camel::core::mm::autoSpace(), srcTypePtr, false));
+        } else {
+            result = frame->get<slot_t>(srcIdx);
+        }
+        frame->set(bc.result, result);
+        return result;
+    }
+    case OpCode::ACCS: {
+        const data_idx_t srcIdx   = bc.fastop[0];
+        const data_idx_t indexIdx = bc.fastop[1];
+        TypeCode srcType          = frame->codeAt(srcIdx);
+        slot_t result             = NullSlot;
+        if (srcType == TypeCode::Tuple) {
+            Tuple *t = frame->get<Tuple *>(srcIdx);
+            ASSERT(
+                static_cast<size_t>(indexIdx) < t->size(),
+                "Tuple access index out of range in JIT trampoline.");
+            result = t->get<slot_t>(static_cast<size_t>(indexIdx));
+        } else if (srcType == TypeCode::Struct) {
+            Struct *s = frame->get<Struct *>(srcIdx);
+            ASSERT(
+                static_cast<size_t>(indexIdx) < s->size(),
+                "Struct access index out of range in JIT trampoline.");
+            result = s->get<slot_t>(static_cast<size_t>(indexIdx));
+        } else if (srcType == TypeCode::Array) {
+            Array *a = frame->get<Array *>(srcIdx);
+            ASSERT(
+                static_cast<size_t>(indexIdx) < a->size(),
+                "Array access index out of range in JIT trampoline.");
+            result = a->get<slot_t>(static_cast<size_t>(indexIdx));
+        } else {
+            ASSERT(false, "Unsupported source type for ACCS in JIT trampoline.");
+        }
+        frame->set(bc.result, result);
+        return result;
+    }
+    case OpCode::FILL: {
+        const data_arr_t nargs = bc.nargs();
+        const data_arr_t wargs = bc.wargs();
+        ASSERT(!nargs.empty(), "FILL requires one norm input as destination template.");
+        const data_idx_t srcIdx = nargs[0];
+        TypeCode srcCode        = frame->codeAt(srcIdx);
+        Type *srcType           = frame->typeAt<Type>(srcIdx);
+        ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced in JIT trampoline.");
+        Object *srcObj =
+            frame->get<Object *>(srcIdx)->clone(camel::core::mm::autoSpace(), srcType, false);
+        ASSERT(srcObj != nullptr, "FILL target data is null in JIT trampoline.");
+
+        switch (srcCode) {
+        case TypeCode::Tuple: {
+            auto *type          = tt::as_ptr<TupleType>(srcType);
+            auto *tup           = tt::as_ptr<Tuple>(srcObj);
+            const size_t *refs  = type->refs();
+            const size_t nField = wargs.size();
+            for (size_t j = 0; j < nField; ++j) {
+                tup->set<slot_t>(refs[j], frame->get<slot_t>(wargs[j]));
+            }
+        } break;
+        case TypeCode::Array: {
+            auto *arr = tt::as_ptr<Array>(srcObj);
+            for (size_t j = 0; j < wargs.size(); ++j) {
+                arr->set<slot_t>(j, frame->get<slot_t>(wargs[j]));
+            }
+        } break;
+        case TypeCode::Struct: {
+            auto *type          = tt::as_ptr<StructType>(srcType);
+            auto *str           = tt::as_ptr<Struct>(srcObj);
+            const size_t *refs  = type->refs();
+            const size_t nField = wargs.size();
+            for (size_t j = 0; j < nField; ++j) {
+                str->set<slot_t>(refs[j], frame->get<slot_t>(wargs[j]));
+            }
+        } break;
+        case TypeCode::Function: {
+            auto *func          = tt::as_ptr<Function>(srcObj);
+            Tuple *closureData  = func->tuple();
+            const size_t nField = wargs.size();
+            ASSERT(closureData != nullptr, "Closure data is null in FILL.");
+            ASSERT(closureData->size() == nField, "Closure data size mismatch in FILL.");
+            for (size_t j = 0; j < nField; ++j) {
+                closureData->set<slot_t>(j, frame->get<slot_t>(wargs[j]));
+            }
+        } break;
+        default:
+            ASSERT(false, "Unsupported FILL target type in JIT trampoline.");
+        }
+
+        slot_t result = reinterpret_cast<slot_t>(srcObj);
+        frame->set(bc.result, result);
+        return result;
+    }
+    case OpCode::CALL: {
+        const data_arr_t nargs = bc.nargs();
+        const data_arr_t wargs = bc.wargs();
+        ASSERT(!wargs.empty(), "CALL requires with-arg[0] as Function.");
+        auto *function    = frame->get<Function *>(wargs[0]);
+        auto *targetGraph = function->graph();
+        Frame *funcFrame  = vm->acquireFrameForCall(targetGraph);
+
+        size_t i = 0;
+        for (; i < nargs.size(); ++i) {
+            funcFrame->set(i + 1, frame->get<slot_t>(nargs[i]));
+        }
+        Tuple *closureData = function->tuple();
+        for (size_t j = 0; j < closureData->size(); ++j) {
+            funcFrame->set(i + j + 1, closureData->get<slot_t>(j));
+        }
+
+        slot_t result = vm->call(vm->graphEntryPc(targetGraph), funcFrame);
+        frame->set(bc.result, result);
+        return result;
+    }
+    default:
+        ASSERT(false, "Unsupported opcode in trampolineBytecode.");
+        return NullSlot;
+    }
+}
+
 #else
 // JIT 关闭时仅提供占位符号，避免链接未定义；不应被调用
 slot_t trampolineFunc(slot_t *, void *, size_t) { return {}; }
 slot_t trampolineTail(slot_t *, void *, size_t) { return {}; }
 slot_t trampolineOper(slot_t *, void *, size_t) { return {}; }
 slot_t trampolineCast(slot_t *, void *, size_t) { return {}; }
+slot_t trampolineBytecode(slot_t *, void *, size_t) { return {}; }
 slot_t *prepareDirectJitCall(slot_t *, void *, const Bytecode *) { return nullptr; }
 slot_t *prepareDirectJitTailCall(slot_t *, void *, const Bytecode *) { return nullptr; }
 slot_t finishDirectJitCall(slot_t, slot_t *, void *, GIR::Graph *) { return {}; }

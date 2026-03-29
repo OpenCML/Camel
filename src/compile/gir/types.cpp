@@ -54,8 +54,6 @@ std::string to_string(NodeType type) {
         return "FUNC";
     case NodeType::OPER:
         return "OPER";
-    case NodeType::EXIT:
-        return "EXIT";
     case NodeType::DREF:
         return "DREF";
     case NodeType::SYNC:

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 28, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -269,7 +269,7 @@ std::vector<Graph *> CppEmitter::collectEmissionRoots(Graph *entry) const {
         }
     }
 
-    if (roots.empty() && entry->hasOutput()) {
+    if (roots.empty()) {
         roots.push_back(entry);
     }
 
@@ -298,7 +298,6 @@ bool CppEmitter::shouldEmitStatementBody(const GraphLoweringPlan &plan) const {
         switch (node->type()) {
         case NodeType::DATA:
         case NodeType::PORT:
-        case NodeType::EXIT:
         case NodeType::BRCH:
             continue;
         default:
@@ -520,6 +519,16 @@ std::string CppEmitter::emitExpr(Node *node, expr_cache_t &cache) {
             emitExpr(node->normInputs().front(), cache));
         break;
 
+    case NodeType::GATE:
+        if (node->normInputs().empty()) {
+            throw std::runtime_error(
+                std::format("GATE node '{}' has no Norm input", node->toString()));
+        }
+        // GATE 仅用于 value/control 会合；在 direct C++ 路径下，控制依赖由拓扑语句顺序保障，
+        // 表达式层面直接透传其值输入即可。
+        result = emitExpr(node->normInputs().front(), cache);
+        break;
+
     default:
         throw std::runtime_error(
             std::format(
@@ -619,7 +628,6 @@ std::string CppEmitter::emitDirectFunction(Graph *graph, const GraphLoweringPlan
             switch (node->type()) {
             case NodeType::DATA:
             case NodeType::PORT:
-            case NodeType::EXIT:
                 continue;
             case NodeType::BRCH:
                 continue;

@@ -903,18 +903,8 @@ Node *OperNode::clone(Graph &graph) const {
 }
 
 // =============================================================================
-// ExitNode, DrefNode, SyncNode, GateNode
+// DrefNode, SyncNode, GateNode
 // =============================================================================
-
-Node *ExitNode::create(Graph &graph, Type *type, data_idx_t index) {
-    return makeOwnedNode<ExitNode>(graph, graph, type, index);
-}
-
-std::string ExitNode::toString() const {
-    return std::format("EXIT({}): {}", dataIndex_, dataType()->toString());
-}
-
-Node *ExitNode::clone(Graph &graph) const { return ExitNode::create(graph, dataType_); }
 
 Node *DrefNode::create(Graph &graph, const dref_target_t &target) {
     return makeOwnedNode<DrefNode>(graph, graph, target);

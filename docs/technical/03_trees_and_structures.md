@@ -140,7 +140,7 @@ Module: main
 | **EXEC** | 可执行块 |
 | **LINK** | 普通调用/数据流链接（argcnt=…） |
 | **WITH** | with 参数/泛型参数链接 |
-| **GATE** | 对变量的引用（绑定名） |
+| **NREF** | 对变量的引用（绑定名） |
 | **DREF** | 对符号的解引用（如 println、fib、__add__、format） |
 | **DATA** | 编译期常量（地址、类型、字面量） |
 | **EXIT** | 返回（return） |
