@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
  * GIR 懒加载 JSON 序列化实现。
  */
 
+#include <sstream>
 #include <stdio.h>
 
 #ifndef EOF
@@ -31,6 +32,7 @@
 #include "camel/compile/gir/nodes.h"
 #include "camel/compile/gir/types.h"
 #include "camel/core/error/diagnostics/range.h"
+#include "camel/core/rtdata/base.h"
 #include "camel/core/source/manager.h"
 #include "camel/utils/type.h"
 #include "gir_json.h"
@@ -276,7 +278,9 @@ void nodeLabelShapeStyle(Node *node, std::string &label, std::string &shape, std
     switch (node->type()) {
     case NodeType::DATA: {
         auto sourceNode = tt::as_ptr<DataNode>(node);
-        label           = sourceNode->data() ? sourceNode->data()->toString() : "";
+        std::ostringstream oss;
+        camel::core::rtdata::printSlot(oss, sourceNode->dataSlot(), sourceNode->dataType());
+        label = oss.str();
         break;
     }
     case NodeType::PORT: {
@@ -319,8 +323,8 @@ void nodeLabelShapeStyle(Node *node, std::string &label, std::string &shape, std
         shape = "diamond";
         break;
     case NodeType::FUNC: {
-        auto *func = tt::as_ptr<FuncNode>(node)->func();
-        label      = func->name().empty() ? func->graph().name() : func->name();
+        auto *func = tt::as_ptr<FuncNode>(node);
+        label      = func->bodyGraph()->name();
         shape      = "Mdiamond";
         break;
     }
@@ -359,7 +363,9 @@ void nodeRawFields(Node *node, json &j) {
     switch (node->type()) {
     case NodeType::DATA: {
         auto sourceNode = tt::as_ptr<DataNode>(node);
-        j["dataRepr"]   = sourceNode->data() ? sourceNode->data()->toString() : "";
+        std::ostringstream oss;
+        camel::core::rtdata::printSlot(oss, sourceNode->dataSlot(), sourceNode->dataType());
+        j["dataRepr"] = oss.str();
         break;
     }
     case NodeType::PORT: {
@@ -373,9 +379,9 @@ void nodeRawFields(Node *node, json &j) {
         break;
     }
     case NodeType::FUNC: {
-        auto *func         = tt::as_ptr<FuncNode>(node)->func();
-        j["funcName"]      = func->name();
-        j["funcGraphName"] = func->graph().name();
+        auto *func         = tt::as_ptr<FuncNode>(node);
+        j["funcName"]      = func->bodyGraph()->name();
+        j["funcGraphName"] = func->bodyGraph()->name();
         break;
     }
     case NodeType::OPER: {
@@ -392,7 +398,7 @@ json nodeToJson(Node *node) {
     json j;
     j["id"]       = ptrToId(node);
     j["graphId"]  = node->graph().stableId();
-    j["stableId"] = node->stableId();
+    j["stableId"] = node->debugEntityId();
     j["type"]     = to_string(node->type());
     std::string label, shape, style;
     nodeLabelShapeStyle(node, label, shape, style);
@@ -403,13 +409,9 @@ json nodeToJson(Node *node) {
     j["nodeRepr"]  = node->toString();
     if (auto *sourceContext =
             node->graph().getExtra<camel::source::SourceContext, kSourceContextExtraIndex>()) {
-        auto origin = sourceContext->debugMap().nodeOrigin(node->stableId());
-        attachOriginAndSemantic(
-            j,
-            sourceContext,
-            origin,
-            sourceContext->girNodeSemantic(node->stableId()),
-            "node");
+        auto origin    = sourceContext->resolveGirNodeOrigin(node);
+        auto *semantic = sourceContext->girNodeSemantic(node);
+        attachOriginAndSemantic(j, sourceContext, origin, semantic, "node");
     }
     nodeRawFields(node, j);
     return j;
@@ -505,8 +507,8 @@ json expandedGraphToJson(const graph_ptr_t &graph) {
 
 } // namespace
 
-std::string getStableNodeId(const Node *node) {
-    return node ? const_cast<Node *>(node)->stableId() : std::string{};
+std::string getDebugNodeId(const Node *node) {
+    return node ? const_cast<Node *>(node)->debugEntityId() : std::string{};
 }
 
 std::pair<std::string, std::string>

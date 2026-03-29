@@ -13,7 +13,7 @@
 #include "camel/init.h"
 
 int main(int argc, char *argv[]) {
-    camel::initialize();
+    camel::ScopedRuntime camelRuntime;
     std::string mode = (argc > 1) ? argv[1] : "help";
     if (mode == "-h" || mode == "--help" || mode == "help") {
         std::cerr << "Usage: camel-profiler <start|stop|report>\n"

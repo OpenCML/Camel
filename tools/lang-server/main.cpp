@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 12, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
@@ -175,7 +175,7 @@ static void parseAndPublishDiagnostics(ostream &out, const string &uri, const st
 }
 
 int main(int argc, char *argv[]) {
-    camel::initialize();
+    camel::ScopedRuntime camelRuntime;
 
     (void)mm::autoSpace();
     (void)mm::metaSpace();

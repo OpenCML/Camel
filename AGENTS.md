@@ -1,66 +1,75 @@
-# Agent 使用指南
+# Agent Development Guide
 
-## 环境说明
-- 工作环境为 Windows，命令连接请用 `;` 而非 `&&`
+## 1. Environment and Command Conventions
+- Runtime shell: Windows PowerShell.
+- Use `;` to chain commands. Do **not** use `&&`.
 
-## 编译
-- 普通：`npm run build`
-- 调试：`npm run debug`
-- 性能分析：`npm run profile`
-- 产物目录：`out/latest/bin/`，主程序为 `camel.exe`
+## 2. Build Policy
+- Standard build: `npm run build`
+- Debug build: `npm run debug`
+- Profiling build: `npm run profile`
+- Build artifacts: `out/latest/bin/`; executable: `camel.exe`
+- Never modify or replace build artifacts manually.
+- Use only the commands above. They handle artifact synchronization and ensure you run the latest binaries.
 
-## 运行
-- 依赖动态库：`libcamel.dll`
-- 需配置 `CAMEL_HOME` 指向安装目录（含 bin、lib 等）
+## 3. Runtime Prerequisites
+- Required dynamic library: `libcamel.dll`
+- `CAMEL_HOME` must point to the installation root (including `bin`, `lib`, etc.).
 
-**CMD：**
+**PowerShell example:**
 ```
-set CAMEL_HOME=项目根目录\out\latest
-set PATH=%PATH%;%CAMEL_HOME%\bin
-```
-
-**PowerShell：**
-```
-$env:CAMEL_HOME = "项目根目录\out\latest"
+$env:CAMEL_HOME = "project-root\out\latest"
 $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 ```
 
-### 调试输出
+### Debug Logging
+- In a **debug build**, `-v` or `--log-level debug` enables verbose logs.
+- For high-call-volume workloads (for example, `fib 30`), verbose logging can become prohibitively large and may stall execution or overflow output.
+- Logging flags must appear **before** the target file. Arguments after the target file are interpreted as passes.
+  - Invalid: `camel fib.cml -v`
+  - Valid: `camel -v --log-level debug std::gir fib.cml`
 
-`-v` 或 `--log-level debug` 可在 **debug 模式** 编译下执行时打印详细日志。
+**Recommended practice:**
+- Prefer `build` mode for routine verification (`-v` is inactive there).
+- During debugging, start with small inputs (for example, `fib 3`, `fib 4`) and scale incrementally.
+- Use `Select-Object` when output throttling is required.
 
-**注意**：输出量非常大。对于高调用次数的任务（如 `fib 30` 约 300 万次函数调用），**非常不建议**在 debug 模式下执行，更不建议开启调试输出，否则会长时间卡死或输出溢出。
+## 4. Pass Execution Model
+- Canonical syntax: `camel xxx.cml pass1 pass2 ...`
+- `std::nvm` is the fallback pass:
+  - when no pass is specified, or
+  - when specified passes complete without yielding an empty graph,
+  - execution continues in `std::nvm`.
 
-**建议做法**：
-- 使用 **build 模式** 编译并执行（此时 `-v` 不生效，适合正常跑测）
-- 或缩小测试规模，如改用 `fib 3` / `fib 4` 逐步验证程序行为
+### Common Passes
 
-## Passes 用法
+| Pass | Description |
+|------|-------------|
+| `std::gir` | Translation pass: prints the current GIR and returns an empty graph |
+| `std::nvm` | Scheduling pass: executes on the node VM linearly, then returns an empty graph |
+| `std::fvm` | Scheduling pass: high-performance bytecode VM (faster than `nvm`), returns an empty graph |
+| `std::jit` | Scheduling pass: JIT-enabled bytecode VM (fastest), returns an empty graph |
+| `std::inline` | Optimization pass: inlines small functions (subgraphs) into larger graphs to reduce call overhead; returns an optimized graph |
 
-基本格式：`camel xxx.cml pass1 pass2 ...`
-
-`std::nvm` 是 fallback pass，即当用户没有指定任何pass，或者用户指定的passes处理完后没有得到空图，则继续送入 `std::nvm` 处理。
-
-### 常见 Pass
-
-| Pass | 说明 |
-|------|------|
-| `std::gir` | 转译遍，将当前 GIR 打印出来，返回空图 |
-| `std::nvm` | 调度遍，节点虚拟机，线性执行，得到结果后返回空图 |
-| `std::fvm` | 调度遍，高速字节码虚拟机，比 nvm 更快，返回空图 |
-| `std::jit` | 调度遍，启用 JIT 的字节码虚拟机，速度最快，返回空图 |
-| `std::inline` | 优化遍，将输入 GIR 中的小函数（子图）内联到大图中以减少函数调用开销，在高频分支和函数调用场景有一定作用，返回优化后的图 |
-
-### 示例
-
+### Examples
 ```
-camel fib.cml std::gir              # 仅打印 GIR
-camel fib.cml std::inline std::fvm  # 先内联优化，再高速字节码虚拟机执行
+camel fib.cml std::gir               # Print GIR only
+camel fib.cml std::inline std::fvm   # Inline first, then execute on high-performance VM
 ```
 
-## Agent 开发规范
+## 5. Agent Engineering Standards
+- Prefer TDD: write tests before implementation whenever feasible.
+- Place test cases under `test/`.
+- For substantial refactors, update `docs/` in the same change set.
+- Add comments for non-trivial or opaque logic, explicitly documenting intent and critical constraints.
 
-- **TDD 测试驱动**：尽量采用测试驱动开发，先写测试再实现
-- **测试用例**：多写测试样例，放在 `test/` 目录下
-- **文档同步**：进行较大规模重构时，及时更新 `docs/` 中的文档
-- **代码注释**：比较晦涩、复杂的函数必须有注释说明
+## 6. Development Preferences and Quality Bar
+- Target language standard: C++23. Prefer modern C++ idioms and features where appropriate.
+- Maintain strong commentary (in English) and documentation discipline. Aim for approximately 30% comment density in new code; do not mirror legacy under-commented areas.
+- Favor elegant, correctness-first designs. Avoid short-term bypasses introduced solely to minimize code churn.
+- Follow industrial-grade best practices with a long-term perspective; refactor proactively and frequently to prevent technical debt accumulation.
+- This project is currently internal-only. Unless explicitly required, do not optimize for forward compatibility. Prioritize cleanliness and correctness; avoid dual-track APIs.
+- Escalate fundamental design conflicts or ambiguous trade-offs early. Record decisions and rationale in both documentation and code comments.
+- Every implementation plan must define explicit acceptance criteria and validate against them during execution.
+- If a single file grows beyond 800 lines, evaluate decomposition. New `.h/.cpp` files must include a standard file header (copyright notice, aligned with existing files), followed by a dedicated multi-line comment describing file responsibilities.
+- Enforce strict declaration/implementation separation. Avoid implementation logic in header files unless strictly necessary. Keep headers in `include/` and implementations in `src/`.

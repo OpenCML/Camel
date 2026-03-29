@@ -13,11 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 07, 2026
- * Updated: Mar. 10, 2026
+ * Updated: Mar. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/source/manager.h"
+
+#include "camel/compile/gir/nodes.h"
 
 #include <algorithm>
 
@@ -434,10 +436,6 @@ void SourceContext::registerGirGraphSemantic(const std::string &graphId, Semanti
     girGraphs_.registerBundle(graphId, std::move(bundle));
 }
 
-void SourceContext::registerGirNodeSemantic(const std::string &nodeId, SemanticBundle bundle) {
-    girNodes_.registerBundle(nodeId, std::move(bundle));
-}
-
 const SemanticBundle *SourceContext::astSemantic(origin_id_t origin) const {
     return astSemantic_.bundle(origin);
 }
@@ -450,8 +448,14 @@ const SemanticBundle *SourceContext::girGraphSemantic(const std::string &graphId
     return girGraphs_.bundle(graphId);
 }
 
-const SemanticBundle *SourceContext::girNodeSemantic(const std::string &nodeId) const {
-    return girNodes_.bundle(nodeId);
+const SemanticBundle *SourceContext::girNodeSemantic(const camel::compile::gir::Node *node) const {
+    if (node == nullptr) {
+        return nullptr;
+    }
+    if (origin_id_t o = girNodeDraftOrigin(node); o != kInvalidOriginId) {
+        return girNodeByOrigin_.bundle(o);
+    }
+    return girNodes_.bundle(node->graph().nodeDebugEntityId(node));
 }
 
 void SourceContext::cloneGirGraphDebugInfo(
@@ -467,17 +471,72 @@ void SourceContext::cloneGirGraphDebugInfo(
     }
 }
 
-void SourceContext::cloneGirNodeDebugInfo(
-    const std::string &fromNodeId, const std::string &toNodeId) {
-    if (fromNodeId.empty() || toNodeId.empty() || fromNodeId == toNodeId) {
+void SourceContext::bindGirNodeDraftDebug(
+    const camel::compile::gir::Node *node, origin_id_t origin, SemanticBundle bundle) {
+    if (node == nullptr || origin == kInvalidOriginId) {
         return;
     }
-    if (auto origin = debugMap_.nodeOrigin(fromNodeId); origin != kInvalidOriginId) {
-        debugMap_.registerNodeOrigin(toNodeId, origin);
+    girDraftNodeOrigins_[node] = origin;
+    girNodeByOrigin_.registerBundle(origin, std::move(bundle));
+}
+
+void SourceContext::unbindGirNodeDraftDebug(const camel::compile::gir::Node *node) {
+    if (node == nullptr) {
+        return;
     }
-    if (const auto *bundle = girNodes_.bundle(fromNodeId)) {
-        girNodes_.registerBundle(toNodeId, *bundle);
+    girDraftNodeOrigins_.erase(node);
+}
+
+origin_id_t SourceContext::girNodeDraftOrigin(const camel::compile::gir::Node *node) const {
+    if (node == nullptr) {
+        return kInvalidOriginId;
     }
+    auto it = girDraftNodeOrigins_.find(node);
+    return it == girDraftNodeOrigins_.end() ? kInvalidOriginId : it->second;
+}
+
+origin_id_t SourceContext::resolveGirNodeOrigin(const camel::compile::gir::Node *node) const {
+    if (node == nullptr) {
+        return kInvalidOriginId;
+    }
+    if (origin_id_t o = girNodeDraftOrigin(node); o != kInvalidOriginId) {
+        return o;
+    }
+    return debugMap_.nodeOrigin(node->graph().nodeDebugEntityId(node));
+}
+
+void SourceContext::sealPromoteGirNodeDebug(
+    const camel::compile::gir::Node *node, std::string entityId) {
+    if (node == nullptr) {
+        return;
+    }
+    origin_id_t o = girNodeDraftOrigin(node);
+    if (o == kInvalidOriginId) {
+        return;
+    }
+    debugMap_.registerNodeOrigin(entityId, o);
+    if (const auto *bundle = girNodeByOrigin_.bundle(o)) {
+        girNodes_.registerBundle(entityId, *bundle);
+    }
+}
+
+void SourceContext::cloneGirNodeDebugBinding(
+    const camel::compile::gir::Node *fromNode, const camel::compile::gir::Node *toNode) {
+    if (fromNode == nullptr || toNode == nullptr || fromNode == toNode) {
+        return;
+    }
+    origin_id_t o = resolveGirNodeOrigin(fromNode);
+    if (o == kInvalidOriginId) {
+        return;
+    }
+    const SemanticBundle *bundlePtr = girNodeSemantic(fromNode);
+    SemanticBundle bundle;
+    if (bundlePtr != nullptr) {
+        bundle = *bundlePtr;
+    } else {
+        bundle.mainOrigin = o;
+    }
+    bindGirNodeDraftDebug(toNode, o, std::move(bundle));
 }
 
 void SourceContext::setCurrentRuntimeOrigin(origin_id_t origin) {

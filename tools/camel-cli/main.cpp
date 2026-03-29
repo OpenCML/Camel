@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -71,7 +71,7 @@ using namespace CLI;
 string targetFile = "";
 
 int main(int argc, char *argv[]) {
-    camel::initialize();
+    camel::ScopedRuntime camelRuntime;
     if (!parseArgs(argc, argv))
         return 0;
 

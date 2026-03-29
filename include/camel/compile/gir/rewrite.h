@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 12, 2026
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,7 +32,8 @@ struct RewriteResult {
 // GraphRewriteSession：pass 侧看到的高层 rewrite 接口。
 //
 // pass 只描述"删什么、替换什么、内联什么"，不直接操心工作图何时重排、
-// 何时封印。所有实际编辑都落到内部 GraphDraft 上，finish() 统一封印并导出新图。
+// 何时封印。所有实际编辑都落到内部 GraphDraft 上；若整个 session 未产生改写，
+// finish() 会直接返回原始 source graph，避免导出一份只做了浅克隆的伪结果。
 //
 // 典型用法（在 rewrite pass 的 apply 方法中）：
 //   GraphRewriteSession session(frozenGraph);
@@ -55,6 +56,12 @@ class GraphRewriteSession {
         changed_     = changed_ || changed;
         return changed;
     }
+    bool replaceAllUses(Node *oldNode, Node *newNode) {
+        ASSERT(oldNode != nullptr && newNode != nullptr, "Cannot replace uses of null node.");
+        bool changed = draft_.replaceAllUses(oldNode, newNode);
+        changed_     = changed_ || changed;
+        return changed;
+    }
 
     void eraseNode(Node *node) {
         ASSERT(node != nullptr, "Cannot erase null node.");
@@ -62,15 +69,39 @@ class GraphRewriteSession {
         changed_ = true;
     }
 
+    graph_ptr_t importSubGraph(
+        const graph_ptr_t &owner, const graph_ptr_t &subGraph,
+        GraphImportMode mode = GraphImportMode::ReferenceOnly) {
+        graph_ptr_t imported = draft_.importSubGraph(owner, subGraph, mode);
+        changed_             = true;
+        return imported;
+    }
+
     void addDependency(const graph_ptr_t &owner, const graph_ptr_t &dependency) {
         ASSERT(owner != nullptr && dependency != nullptr, "Cannot add null dependency.");
         draft_.addDependency(owner, dependency);
         changed_ = true;
     }
+    graph_ptr_t importDependency(
+        const graph_ptr_t &owner, const graph_ptr_t &dependency,
+        GraphImportMode mode = GraphImportMode::ReferenceOnly) {
+        graph_ptr_t imported = draft_.importDependency(owner, dependency, mode);
+        changed_             = true;
+        return imported;
+    }
 
     void eraseDependency(const graph_ptr_t &owner, const graph_ptr_t &dependency) {
         ASSERT(owner != nullptr && dependency != nullptr, "Cannot erase null dependency.");
         draft_.eraseDependency(owner, dependency);
+        changed_ = true;
+    }
+    void retargetDependency(
+        const graph_ptr_t &owner, const graph_ptr_t &oldDependency,
+        const graph_ptr_t &newDependency, GraphImportMode mode = GraphImportMode::ReferenceOnly) {
+        ASSERT(
+            owner != nullptr && oldDependency != nullptr && newDependency != nullptr,
+            "Cannot retarget null dependency.");
+        draft_.retargetDependency(owner, oldDependency, newDependency, mode);
         changed_ = true;
     }
 
@@ -80,10 +111,10 @@ class GraphRewriteSession {
         changed_ = true;
     }
 
-    Node *inlineNode(Node *node, bool forceSync = false) {
+    InlineResult inlineCallable(Node *node, const InlineOptions &options = {}) {
         ASSERT(node != nullptr, "Cannot inline null node.");
-        Node *result = draft_.inlineNode(node, forceSync);
-        changed_     = true;
+        InlineResult result = draft_.inlineCallable(node, options);
+        changed_            = changed_ || static_cast<bool>(result);
         return result;
     }
 
@@ -101,8 +132,15 @@ class GraphRewriteSession {
         draft_.replaceOutput(type, owner, oldOutput, newOutput);
         changed_ = true;
     }
+    void pruneUnreachable(const graph_ptr_t &graph) {
+        draft_.pruneUnreachable(graph);
+        changed_ = true;
+    }
 
     RewriteResult finish() {
+        if (!changed_) {
+            return RewriteResult{draft_.sourceRoot(), false};
+        }
         if (draft_.root()) {
             draft_.seal();
         }

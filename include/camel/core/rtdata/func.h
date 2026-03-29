@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,20 +38,13 @@ class Function : public rtdata::Object {
     Function &operator=(const Function &) = delete;
 
     static Function *
-    create(GIR::Graph *graph, const type::Type *tupleType, camel::core::mm::IAllocator &allocator) {
-        ASSERT(tupleType && tupleType->code() == type::TypeCode::Tuple, "Type must be TupleType");
-        const type::TupleType *tt = static_cast<const type::TupleType *>(tupleType);
-
-        void *mem = allocator.alloc(sizeof(Function), alignof(Function));
-        if (!mem)
-            throw std::bad_alloc();
-
-        auto *fn     = new (mem) Function(graph);
-        fn->closure_ = Tuple::create(tt->size(), allocator);
-        return fn;
-    }
+    create(GIR::Graph *graph, const type::Type *tupleType, camel::core::mm::IAllocator &allocator);
 
     GIR::Graph *graph() const { return graph_; }
+    void setGraph(GIR::Graph *graph) {
+        ASSERT(graph != nullptr, "Function graph cannot be null.");
+        graph_ = graph;
+    }
     Tuple *tuple() { return closure_; }
     const Tuple *tuple() const { return closure_; }
 
@@ -90,9 +83,7 @@ class Function : public rtdata::Object {
 
         if (closure_) {
             const type::TupleType *tupleTypePtr = tupleType();
-            fnNew->closure_ =
-                deep ? static_cast<Tuple *>(closure_->clone(allocator, tupleTypePtr, true))
-                     : closure_;
+            fnNew->closure_ = static_cast<Tuple *>(closure_->clone(allocator, tupleTypePtr, deep));
         } else {
             fnNew->closure_ = nullptr;
         }

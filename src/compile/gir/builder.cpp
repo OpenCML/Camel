@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 18, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builder.h"
 
+#include "camel/core/rtdata/func.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/str.h"
@@ -37,7 +38,28 @@ namespace camel::compile::gir {
 
 namespace {
 constexpr std::size_t kSourceContextExtraIndex = 3;
+
+camel::core::mm::IAllocator &runtimeFunctionAllocator(Graph &ownerGraph) {
+    return ownerGraph.arena()->allocator();
 }
+
+TupleType *currentClosureTupleType(const graph_ptr_t &graph) {
+    type_vec_t closureTypes;
+    closureTypes.reserve(graph->closure().size());
+    for (Node *node : graph->closure()) {
+        closureTypes.push_back(node->dataType());
+    }
+    return TupleType::create(std::move(closureTypes));
+}
+
+::Function *createRuntimeFunction(Graph &ownerGraph, const graph_ptr_t &targetGraph) {
+    ASSERT(targetGraph != nullptr, "Target graph is null when materializing runtime Function.");
+    return ::Function::create(
+        targetGraph.get(),
+        currentClosureTupleType(targetGraph),
+        runtimeFunctionAllocator(ownerGraph));
+}
+} // namespace
 
 inline void tryRemoveCtrlLink(Node *from, Node *to) {
     // if from has already linked to to by a ctrl link, remove it first
@@ -181,9 +203,9 @@ inline void registerNodeOrigin(
     auto origin =
         deriveGirOrigin(context, gct, camel::source::OriginKind::GirNode, label, mergedInputs);
     if (origin != camel::source::kInvalidOriginId) {
-        sourceContext->debugMap().registerNodeOrigin(node->stableId(), origin);
-        sourceContext->registerGirNodeSemantic(
-            node->stableId(),
+        sourceContext->bindGirNodeDraftDebug(
+            node,
+            origin,
             makeGirSemanticBundle(
                 origin,
                 context,
@@ -195,10 +217,27 @@ inline void registerNodeOrigin(
     }
 }
 
+inline void bindGraphScopedFuncNodeDebug(
+    const camel::source::source_context_ptr_t &sourceContext,
+    camel::source::origin_id_t graphOrigin, const graph_ptr_t &graph, Node *node) {
+    camel::source::SourceContext *sc = sourceContext.get();
+    if (!sc || graphOrigin == camel::source::kInvalidOriginId || !node) {
+        return;
+    }
+    if (const auto *graphSemantic = sc->girGraphSemantic(graph->stableId())) {
+        sc->bindGirNodeDraftDebug(node, graphOrigin, *graphSemantic);
+    } else {
+        camel::source::SemanticBundle bundle;
+        bundle.mainOrigin = graphOrigin;
+        sc->bindGirNodeDraftDebug(node, graphOrigin, std::move(bundle));
+    }
+}
+
 // 从 GCT 构建 GIR 图。全过程分为两个阶段：
 // 1. 构造阶段：visit(gct) 遍历 GCT，通过 GraphBuilder 增量创建图和节点。
 //    此阶段所有图均为 non-finalized，可自由编辑（含闭包捕获、参数化等结构变形）。
-// 2. 封印阶段：sealGraphRecursively() 一次性为所有图计算 slot 编号、layout、FrameMeta。
+// 2. 封印阶段：sealGraphRecursively() 一次性为所有图计算 slot 编号、layout 与 finalized frame
+// layout。
 //    封印后所有图标记为 finalized，不再允许直接编辑。
 graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     waited_ = false;
@@ -479,7 +518,7 @@ Node *Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             for (const auto &refNode : refNodes) {
                 Node::link(LinkType::With, refNode, node);
                 if (auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr) {
-                    auto origin = sourceContext->debugMap().nodeOrigin(refNode->stableId());
+                    auto origin = sourceContext->resolveGirNodeOrigin(refNode);
                     if (origin != camel::source::kInvalidOriginId) {
                         mergedInputs.push_back(origin);
                     }
@@ -493,9 +532,9 @@ Node *Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                 {
                     semanticPart(
                         camel::source::SemanticRole::ValueProducer,
-                        node->stableId().empty()
-                            ? camel::source::kInvalidOriginId
-                            : context_->sourceContext()->debugMap().nodeOrigin(srcNode->stableId()),
+                        context_->sourceContext()
+                            ? context_->sourceContext()->resolveGirNodeOrigin(srcNode)
+                            : camel::source::kInvalidOriginId,
                         -1,
                         "base"),
                 },
@@ -678,46 +717,40 @@ Node *Builder::createFuncDataNode(
         "Cannot enable both callableAsResult and allowParameterization options.");
 
     bool graphUsedBefore = usedGraphs_.find(graph.get()) != usedGraphs_.end();
+    bool resolved        = graph->closure().empty();
+    auto *runtimeFunc    = createRuntimeFunction(*currGraph_, graph);
 
-    auto funcData      = FunctionData::create(*graph);
     Node *resultNode   = nullptr;
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
     auto graphOrigin   = sourceContext ? sourceContext->debugMap().graphOrigin(graph->stableId())
                                        : camel::source::kInvalidOriginId;
 
     auto markMacroNode = [&](Node *node) {
-        if (node && funcData->isMacro()) {
+        if (node && graph->isMacro()) {
             node->setMacro(true);
         }
     };
 
     if (allowParameterization && !callableAsResult && !graphUsedBefore) {
-        if (funcData->resolved()) {
-            resultNode = FuncNode::create(*currGraph_, funcData);
+        if (resolved) {
+            resultNode = FuncNode::create(*currGraph_, graph);
             markMacroNode(resultNode);
-            if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
-                sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
-                if (const auto *graphSemantic =
-                        sourceContext->girGraphSemantic(graph->stableId())) {
-                    sourceContext->registerGirNodeSemantic(resultNode->stableId(), *graphSemantic);
-                }
-            }
+            bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, resultNode);
         } else {
-            auto funcNode = FuncNode::create(*currGraph_, funcData);
+            std::vector<std::string> closureRefs;
+            closureRefs.reserve(graph->closure().size());
+            for (Node *closureNode : graph->closure()) {
+                closureRefs.push_back(tt::as_ptr<PortNode>(closureNode)->name());
+            }
+            GraphBuilder(graph).parametrizeClosure();
+            auto funcNode = FuncNode::create(*currGraph_, graph);
             markMacroNode(funcNode);
-            for (const auto &ref : funcData->refs()) {
-                const auto &refNode = resolveNodeByRef(std::string(ref));
+            for (const auto &ref : closureRefs) {
+                const auto &refNode = resolveNodeByRef(ref);
                 Node::link(LinkType::With, refNode, funcNode);
             }
-            GraphBuilder(funcData->graph().shared_from_this()).parametrizeClosure();
             resultNode = funcNode;
-            if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
-                sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
-                if (const auto *graphSemantic =
-                        sourceContext->girGraphSemantic(graph->stableId())) {
-                    sourceContext->registerGirNodeSemantic(resultNode->stableId(), *graphSemantic);
-                }
-            }
+            bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, resultNode);
         }
 
         usedGraphs_.insert(graph.get());
@@ -725,12 +758,15 @@ Node *Builder::createFuncDataNode(
     }
 
     // allowParameterization = false
-    if (funcData->resolved()) {
+    if (resolved) {
         if (callableAsResult) {
-            resultNode = DataNode::create(*currGraph_, funcData);
+            resultNode = DataNode::createStaticSlot(
+                *currGraph_,
+                graph->funcType(),
+                camel::core::rtdata::toSlot<::Function *>(runtimeFunc));
             markMacroNode(resultNode);
         } else {
-            auto funcNode = FuncNode::create(*currGraph_, funcData);
+            auto funcNode = FuncNode::create(*currGraph_, graph);
             markMacroNode(funcNode);
             if (graph->parameterized()) {
                 for (const auto &ref : graph->funcType()->closureRefs()) {
@@ -740,27 +776,25 @@ Node *Builder::createFuncDataNode(
             }
             resultNode = funcNode;
         }
-        if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
-            sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
-            if (const auto *graphSemantic = sourceContext->girGraphSemantic(graph->stableId())) {
-                sourceContext->registerGirNodeSemantic(resultNode->stableId(), *graphSemantic);
-            }
-        }
+        bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, resultNode);
 
         usedGraphs_.insert(graph.get());
         return resultNode;
     }
 
-    // funcData not resolved, while parameterization not allowed
-    auto dataNode = DataNode::create(*currGraph_, funcData);
+    // graph still carries unresolved closure captures while parameterization is disabled
+    auto dataNode = DataNode::createStaticSlot(
+        *currGraph_,
+        graph->funcType(),
+        camel::core::rtdata::toSlot<::Function *>(runtimeFunc));
     markMacroNode(dataNode);
     node_vec_t refNodes;
-    for (const auto &ref : funcData->refs()) {
-        const auto &refNode = resolveNodeByRef(std::string(ref));
+    for (Node *closureNode : graph->closure()) {
+        const auto &refNode = resolveNodeByRef(tt::as_ptr<PortNode>(closureNode)->name());
         refNodes.push_back(refNode);
     }
 
-    auto fillNode = FillNode::create(*currGraph_, funcData->funcType());
+    auto fillNode = FillNode::create(*currGraph_, graph->funcType());
     markMacroNode(fillNode);
     Node::link(LinkType::Norm, dataNode, fillNode);
     for (const auto &refNode : refNodes) {
@@ -775,12 +809,7 @@ Node *Builder::createFuncDataNode(
         Node::link(LinkType::With, fillNode, callNode);
         resultNode = callNode;
     }
-    if (sourceContext && graphOrigin != camel::source::kInvalidOriginId) {
-        sourceContext->debugMap().registerNodeOrigin(resultNode->stableId(), graphOrigin);
-        if (const auto *graphSemantic = sourceContext->girGraphSemantic(graph->stableId())) {
-            sourceContext->registerGirNodeSemantic(resultNode->stableId(), *graphSemantic);
-        }
-    }
+    bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, resultNode);
 
     // 保证在最后再更新 usedGraphs_
     // 因为在构造过程中可能会更新图的闭包捕获
@@ -1053,7 +1082,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         Node::link(LinkType::With, targetNode, invokeNode);
         std::vector<camel::source::origin_id_t> callInputs;
         if (auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr) {
-            auto calleeOrigin = sourceContext->debugMap().nodeOrigin(targetNode->stableId());
+            auto calleeOrigin = sourceContext->resolveGirNodeOrigin(targetNode);
             if (calleeOrigin != camel::source::kInvalidOriginId) {
                 callInputs.push_back(calleeOrigin);
             }
@@ -1125,40 +1154,10 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // Inline decorated helper graphs after downstream links are fully established.
     // This rewires the decorated graph output directly into the target inputs.
     for (Node *inlineNode : inlineLaterNodes) {
-        node_vec_t withOwners(inlineNode->withOutputs().begin(), inlineNode->withOutputs().end());
-        node_vec_t normOwners(inlineNode->normOutputs().begin(), inlineNode->normOutputs().end());
-        node_vec_t ctrlOwners(inlineNode->ctrlOutputs().begin(), inlineNode->ctrlOutputs().end());
-        GraphBuilder(currGraph_).inlineNode(inlineNode, false);
-
-        // Preserve owner input slot semantics (especially CALL/BRCH/JOIN) by replacing
-        // the old inline helper input with the newly appended inlined output.
-        for (Node *owner : withOwners) {
-            if (!owner || owner->withInputs().empty()) {
-                continue;
-            }
-            Node *newInput = owner->withInputs().back();
-            if (newInput != inlineNode) {
-                NodeMutation::replaceInput(LinkType::With, owner, inlineNode, newInput);
-            }
-        }
-        for (Node *owner : normOwners) {
-            if (!owner || owner->normInputs().empty()) {
-                continue;
-            }
-            Node *newInput = owner->normInputs().back();
-            if (newInput != inlineNode) {
-                NodeMutation::replaceInput(LinkType::Norm, owner, inlineNode, newInput);
-            }
-        }
-        for (Node *owner : ctrlOwners) {
-            if (!owner || owner->ctrlInputs().empty()) {
-                continue;
-            }
-            Node *newInput = owner->ctrlInputs().back();
-            if (newInput != inlineNode) {
-                NodeMutation::replaceInput(LinkType::Ctrl, owner, inlineNode, newInput);
-            }
-        }
+        InlineResult inlineResult = GraphBuilder(currGraph_).inlineCallable(inlineNode);
+        ASSERT(
+            inlineResult.valueExit != nullptr,
+            "Decorated helper inline must produce a value exit.");
 
         GraphBuilder(currGraph_).eraseNode(inlineNode);
     }
@@ -1406,7 +1405,7 @@ Node *Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     } else if (res.type() == typeid(graph_ptr_t)) {
         graph_ptr_t subGraph = any_cast<graph_ptr_t>(res);
         GraphBuilder(currGraph_).addDependency(subGraph);
-        // Returning a function value should lower to a DATA(FunctionData) node rather than an
+        // Returning a function value should lower to a DATA(Function) static slot rather than an
         // eager call.
         resNode = createFuncDataNode(subGraph, true, false);
     } else {

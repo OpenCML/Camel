@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,7 +60,18 @@ void FunctionData::resolve(const data_vec_t &dataList) {
 
 bool FunctionData::equals(const data_ptr_t &other) const { return true; }
 
-data_ptr_t FunctionData::clone(bool deep) const { return std::make_shared<FunctionData>(graph_); }
+data_ptr_t FunctionData::clone(bool deep) const {
+    auto cloned = std::make_shared<FunctionData>(graph_);
+    if (deep) {
+        cloned->closure_.reserve(closure_.size());
+        for (const auto &elem : closure_) {
+            cloned->closure_.push_back(elem ? elem->clone(true) : nullptr);
+        }
+    } else {
+        cloned->closure_ = closure_;
+    }
+    return cloned;
+}
 
 const std::string FunctionData::toString() const {
     FunctionType *type = dynamic_cast<FunctionType *>(type_);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,7 +41,6 @@ namespace mm = camel::core::mm;
 using namespace std;
 using namespace GIR;
 using namespace camel::core::context;
-using namespace camel::core::data;
 using namespace camel::core::error;
 using namespace camel::core::rtdata;
 using namespace camel::core::type;
@@ -56,24 +55,28 @@ class MacroExecutionError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
-inline ::Function *makeRuntimeFunctionFromData(const data_ptr_t &data) {
-    ASSERT(data != nullptr, "Macro callee data is null.");
-    ASSERT(
-        data->type()->code() == TypeCode::Function,
-        std::format("Expected function data, got '{}'.", data->type()->toString()));
-    return tt::as_ptr<::Function>(makeGCRefFromGCTracedData(data, mm::autoSpace()));
+inline ::Function *
+makeRuntimeFunctionFromGraph(Graph *graph, camel::core::mm::IAllocator &allocator) {
+    ASSERT(graph != nullptr, "Macro callee graph is null.");
+    return ::Function::create(graph, graph->closureType(), allocator);
 }
 
-inline FrameMeta *requireFrameMeta(Graph *graph) {
+inline Graph *requireFinalizedGraphLayout(Graph *graph) {
     ASSERT(graph != nullptr, "Graph is null.");
-    return GraphBuilder(graph).ensureFrameMeta();
+    ASSERT(
+        graph->finalized(),
+        std::format("Graph '{}' must be sealed before macro execution.", graph->name()));
+    ASSERT(
+        graph->hasFrameLayout(),
+        std::format("Graph '{}' has no finalized frame layout.", graph->name()));
+    return graph;
 }
 
 inline slot_t getStaticNodeSlot(Node *node) {
     ASSERT(node != nullptr, "Node is null.");
     ASSERT(node->type() == NodeType::DATA, "Node is not static DATA.");
-    auto *meta = requireFrameMeta(&node->graph());
-    return meta->staticArea->get<slot_t>(static_cast<size_t>(-node->index()));
+    auto *graph = requireFinalizedGraphLayout(&node->graph());
+    return graph->staticArea()->get<slot_t>(static_cast<size_t>(-node->index()));
 }
 
 inline bool areStaticDataInputs(node_span_t inputs, size_t start = 0) {
@@ -83,102 +86,6 @@ inline bool areStaticDataInputs(node_span_t inputs, size_t start = 0) {
         }
     }
     return true;
-}
-
-inline data_ptr_t slotToCompileTimeData(slot_t slot, Type *type);
-
-inline data_ptr_t objectToCompileTimeData(Object *obj, Type *type) {
-    if (obj == nullptr) {
-        return Data::null();
-    }
-
-    switch (type->code()) {
-    case TypeCode::String: {
-        auto *str = static_cast<::String *>(obj);
-        return std::make_shared<StringData>(str->toString());
-    }
-
-    case TypeCode::Tuple: {
-        auto *tuple          = static_cast<::Tuple *>(obj);
-        auto *tupleType      = tt::as_ptr<TupleType>(type);
-        data_vec_t dataItems = {};
-        dataItems.reserve(tupleType->size());
-        for (size_t i = 0; i < tupleType->size(); ++i) {
-            dataItems.push_back(slotToCompileTimeData(tuple->get<slot_t>(i), tupleType->typeAt(i)));
-        }
-        return TupleData::create(type, std::move(dataItems));
-    }
-
-    case TypeCode::Array: {
-        auto *array          = static_cast<::Array *>(obj);
-        auto *arrayType      = tt::as_ptr<ArrayType>(type);
-        data_vec_t dataItems = {};
-        dataItems.reserve(array->size());
-        for (size_t i = 0; i < array->size(); ++i) {
-            dataItems.push_back(
-                slotToCompileTimeData(array->get<slot_t>(i), arrayType->elemType()));
-        }
-        return ArrayData::from(arrayType->elemType(), dataItems);
-    }
-
-    case TypeCode::Struct: {
-        auto *st       = static_cast<::Struct *>(obj);
-        auto *structTy = tt::as_ptr<StructType>(type);
-        std::map<std::string, data_ptr_t> fields;
-        for (size_t i = 0; i < structTy->size(); ++i) {
-            fields.emplace(
-                std::string(structTy->fieldName(i)),
-                slotToCompileTimeData(st->get<slot_t>(i), structTy->typeAt(i)));
-        }
-        return StructData::create(std::move(fields));
-    }
-
-    case TypeCode::Function: {
-        auto *fn            = static_cast<::Function *>(obj);
-        auto result         = FunctionData::create(*fn->graph());
-        const auto *closure = fn->tuple();
-        if (closure && closure->size() > 0) {
-            const auto *closureType = fn->graph()->closureType();
-            data_vec_t closureData  = {};
-            closureData.reserve(closure->size());
-            for (size_t i = 0; i < closure->size(); ++i) {
-                closureData.push_back(
-                    slotToCompileTimeData(closure->get<slot_t>(i), closureType->typeAt(i)));
-            }
-            result->resolve(closureData);
-        }
-        return result;
-    }
-
-    default:
-        throw MacroExecutionError(
-            std::format("Unsupported GC-traced result type '{}'.", type->toString()));
-    }
-}
-
-inline data_ptr_t slotToCompileTimeData(slot_t slot, Type *type) {
-    switch (type->code()) {
-    case TypeCode::Void:
-        return Data::null();
-    case TypeCode::Int32:
-        return std::make_shared<IntData>(fromSlot<Int32>(slot));
-    case TypeCode::Int64:
-        return std::make_shared<LongData>(fromSlot<Int64>(slot));
-    case TypeCode::Float32:
-        return std::make_shared<FloatData>(fromSlot<Float32>(slot));
-    case TypeCode::Float64:
-        return std::make_shared<DoubleData>(fromSlot<Float64>(slot));
-    case TypeCode::Bool:
-        return std::make_shared<BoolData>(fromSlot<Bool>(slot));
-    case TypeCode::Byte:
-        return std::make_shared<PrimaryData<char>>(static_cast<char>(fromSlot<Byte>(slot)));
-    default:
-        if (type->isGCTraced()) {
-            return objectToCompileTimeData(fromSlot<Object *>(slot), type);
-        }
-        throw MacroExecutionError(
-            std::format("Unsupported result type '{}' for macro execution.", type->toString()));
-    }
 }
 
 inline void fillFrameForDirectFunc(Frame *from, Frame *dest, Graph *graph, Node *node) {
@@ -232,14 +139,14 @@ class MacroExecutor {
                 return std::nullopt;
             }
         } catch (const MacroExecutionError &e) {
-            os << "[macro] skip " << node->stableId() << ": " << e.what() << "\n";
+            os << "[macro] skip " << node->debugEntityId() << ": " << e.what() << "\n";
             return std::nullopt;
         } catch (const Diagnostic &d) {
             (void)d;
-            os << "[macro] diagnostic while evaluating " << node->stableId() << "\n";
+            os << "[macro] diagnostic while evaluating " << node->debugEntityId() << "\n";
             return std::nullopt;
         } catch (const std::exception &e) {
-            os << "[macro] exception while evaluating " << node->stableId() << ": " << e.what()
+            os << "[macro] exception while evaluating " << node->debugEntityId() << ": " << e.what()
                << "\n";
             return std::nullopt;
         }
@@ -274,12 +181,12 @@ class MacroExecutor {
         if (!areStaticDataInputs(node->withInputs()) || !areStaticDataInputs(node->normInputs())) {
             return std::nullopt;
         }
-        if (macroCallsFunctionParam(&node->func()->graph())) {
+        if (macroCallsFunctionParam(node->bodyGraph())) {
             return std::nullopt;
         }
-        os << "[macro] execute direct macro " << node->func()->name() << "\n";
+        os << "[macro] execute direct macro " << node->bodyGraph()->name() << "\n";
         return executeFunction(
-            makeRuntimeFunctionFromData(node->funcShared()),
+            makeRuntimeFunctionFromGraph(node->bodyGraph(), mm::autoSpace()),
             [&](Frame *frame, Graph *graph) {
                 const auto &withPorts = graph->withPorts();
                 const auto &normPorts = graph->normPorts();
@@ -377,7 +284,7 @@ class MacroExecutor {
     }
 
     std::vector<Node *> buildTopoNodes(Graph *graph) const {
-        (void)requireFrameMeta(graph);
+        (void)requireFinalizedGraphLayout(graph);
         return findReachable(
             graph->exitNode(),
             [](Node *n) {
@@ -614,7 +521,7 @@ class MacroExecutor {
 
             case NodeType::FUNC: {
                 auto *funcNode     = tt::as_ptr<FuncNode>(node);
-                Graph *funcGraph   = funcNode->graph();
+                Graph *funcGraph   = funcNode->bodyGraph();
                 Frame *calleeFrame = framePool_.acquire(funcGraph);
                 try {
                     fillFrameForDirectFunc(frame, calleeFrame, funcGraph, node);
@@ -709,18 +616,16 @@ std::vector<graph_ptr_t> collectAllGraphs(const graph_ptr_t &root) {
 Node *materializeMacroResult(
     GraphRewriteSession &session, const graph_ptr_t &owner, slot_t resultSlot, Type *resultType) {
     ASSERT(owner != nullptr, "Owner graph is null.");
-    auto result = slotToCompileTimeData(resultSlot, resultType);
-    ASSERT(result != nullptr, "Macro result data is null.");
-    if (result->type()->code() == TypeCode::Function) {
-        auto funcData = tt::as_shared<FunctionData>(result);
-        if (funcData && &funcData->graph() != owner.get()) {
-            session.addDependency(owner, funcData->graph().shared_from_this());
+    if (resultType->code() == TypeCode::Function) {
+        auto *funcObj = fromSlot<::Function *>(resultSlot);
+        if (funcObj && funcObj->graph() != owner.get()) {
+            session.addDependency(owner, funcObj->graph()->shared_from_this());
         }
     }
-    Node *node = DataNode::create(*owner, result);
-    if (result->type()->code() == TypeCode::Function) {
-        auto funcData = tt::as_shared<FunctionData>(result);
-        if (funcData && funcData->isMacro()) {
+    Node *node = DataNode::createStaticSlot(*owner, resultType, resultSlot);
+    if (resultType->code() == TypeCode::Function) {
+        auto *funcObj = fromSlot<::Function *>(resultSlot);
+        if (funcObj && funcObj->graph()->isMacro()) {
             node->setMacro(true);
         }
     }
@@ -758,8 +663,8 @@ graph_ptr_t MacroRewritePass::apply(graph_ptr_t &graph, ostream &os) {
                     materializeMacroResult(session, currGraph, *result, node->dataType());
                 session.replaceNode(node, newNode);
                 changed = true;
-                os << "[macro] rewrote " << node->stableId() << " -> " << newNode->stableId()
-                   << "\n";
+                os << "[macro] rewrote " << node->debugEntityId() << " -> "
+                   << newNode->debugEntityId() << "\n";
             }
         }
     }

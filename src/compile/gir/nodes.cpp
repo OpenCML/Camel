@@ -13,29 +13,46 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/compile/gir/nodes.h"
 #include "camel/compile/gir/arena.h"
 #include "camel/compile/gir/builder.h"
+#include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/func.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
-#include <atomic>
 #include <functional>
+#include <sstream>
 
 namespace camel::compile::gir {
 
 namespace {
 
-std::string makeNodeStableId(Graph &graph, NodeType nodeType) {
-    // Node index is reassigned by Graph::rearrange(), and graph rewrites such as
-    // inlining can also move/clone nodes across graphs. If stableId depended on
-    // index(), any previously registered node->origin mapping would become stale.
-    // Generate an immutable id once at construction time instead.
-    static std::atomic<uint64_t> nextId = 1;
-    return std::format("{}::{}#{}", graph.stableId(), to_string(nodeType), nextId++);
+TupleType *currentClosureTupleType(const graph_ptr_t &graph) {
+    type_vec_t closureTypes;
+    closureTypes.reserve(graph->closure().size());
+    for (Node *node : graph->closure()) {
+        closureTypes.push_back(node->dataType());
+    }
+    return TupleType::create(std::move(closureTypes));
+}
+
+inline void assertDraftMutable(const Node *node, const char *action) {
+    ASSERT(node != nullptr, "Node is null.");
+    (void)action;
+    ASSERT(!node->graph().finalized(), "Cannot mutate sealed graph node.");
+}
+template <typename T, typename... Args> T *makeOwnedNode(Graph &graph, Args &&...args) {
+    auto arena = graph.arena();
+    ASSERT(arena != nullptr, "Graph arena is null.");
+    // Node 本体直接进入 FrozenRegion，确保 seal 后 releaseDraftRegion 不影响节点生命周期。
+    Node *owned = GraphBuilder(graph).ownNode(arena->constructTrackedInRegion<T>(
+        GraphArena::Region::Frozen,
+        std::forward<Args>(args)...));
+    return tt::as_ptr<T>(owned);
 }
 
 } // namespace
@@ -51,7 +68,7 @@ void Node::freezeAdjacency(GraphArena &arena) {
         if (vec.empty())
             return {};
         auto n  = static_cast<uint16_t>(vec.size());
-        auto *p = static_cast<Node **>(arena.alloc(sizeof(Node *) * n, alignof(Node *)));
+        auto *p = static_cast<Node **>(arena.allocFrozen(sizeof(Node *) * n, alignof(Node *)));
         std::memcpy(p, vec.data(), sizeof(Node *) * n);
         return {p, n};
     };
@@ -77,14 +94,11 @@ void Node::freezeAdjacency(GraphArena &arena) {
 // Node 索引与连通性
 // =============================================================================
 
-std::string Node::makeStableId(Graph &graph, NodeType nodeType) {
-    return makeNodeStableId(graph, nodeType);
-}
-
 data_idx_t Node::index() const {
     ASSERT(nodeType_ != NodeType::SYNC, "SYNC node has no data index.");
     ASSERT(nodeType_ != NodeType::DREF, "DREF node has no data index.");
     if (nodeType_ == NodeType::NREF) {
+        ASSERT(!normInputs().empty(), "NREF node must have one norm input before reading index.");
         return normInputs().front()->index();
     }
     return dataIndex_;
@@ -222,6 +236,8 @@ JoinNode *Node::matchedJoinOutput() const {
 // =============================================================================
 
 void Node::link(LinkType type, Node *from, Node *to) {
+    assertDraftMutable(from, "link");
+    assertDraftMutable(to, "link");
     ASSERT(!from->frozen_ && !to->frozen_, "Cannot mutate frozen nodes.");
     ASSERT(
         from->nodeType_ != NodeType::DREF,
@@ -264,6 +280,8 @@ void Node::link(LinkType type, Node *from, Node *to) {
 }
 
 bool Node::unlink(Node *from, Node *to) {
+    assertDraftMutable(from, "unlink");
+    assertDraftMutable(to, "unlink");
     ASSERT(from && to, "Cannot unlink null nodes.");
     ASSERT(from != to, "Cannot unlink a node from itself.");
     ASSERT(
@@ -320,6 +338,8 @@ bool Node::unlink(Node *from, Node *to) {
 }
 
 bool Node::unlinkCtrl(Node *from, Node *to) {
+    assertDraftMutable(from, "unlink ctrl edge");
+    assertDraftMutable(to, "unlink ctrl edge");
     ASSERT(from && to, "Cannot unlink null nodes.");
     ASSERT(from != to, "Cannot unlink a node from itself.");
     ASSERT(
@@ -370,17 +390,12 @@ node_vec_t &selectOutputs(LinkType type, Node *node) {
     return NodeMutation::normOutputs(node);
 }
 
-size_t eraseOne(node_vec_t &nodes, Node *target) {
-    auto it = std::find(nodes.begin(), nodes.end(), target);
-    ASSERT(it != nodes.end(), "Target edge not found when erasing one occurrence.");
-    const size_t index = static_cast<size_t>(it - nodes.begin());
-    nodes.erase(it);
-    return index;
-}
-
 } // namespace
 
 void Node::replaceInput(LinkType type, Node *owner, Node *oldInput, Node *newInput) {
+    assertDraftMutable(owner, "replace input");
+    assertDraftMutable(oldInput, "replace input");
+    assertDraftMutable(newInput, "replace input");
     ASSERT(owner && oldInput && newInput, "Cannot replace input with null nodes.");
     ASSERT(&owner->graph() == &oldInput->graph(), "Old input belongs to a different graph.");
     ASSERT(&owner->graph() == &newInput->graph(), "New input belongs to a different graph.");
@@ -396,21 +411,37 @@ void Node::replaceInput(LinkType type, Node *owner, Node *oldInput, Node *newInp
     ASSERT(ownerIt != inputs.end(), "Old input edge not found when replacing input.");
     size_t ownerIndex = static_cast<size_t>(ownerIt - inputs.begin());
 
-    auto existingIt = std::find(inputs.begin(), inputs.end(), newInput);
-    if (existingIt != inputs.end()) {
-        size_t existingIndex = eraseOne(inputs, newInput);
-        eraseOne(newOutputs, owner);
-        if (existingIndex < ownerIndex) {
-            ownerIndex--;
+    const bool preserveBranchSlots = (type == LinkType::With && owner->type() == NodeType::JOIN) ||
+                                     (type == LinkType::Ctrl && owner->type() == NodeType::BRCH);
+    if (!preserveBranchSlots) {
+        auto existingIt = std::find(inputs.begin(), inputs.end(), newInput);
+        if (existingIt != inputs.end()) {
+            size_t existingIndex = static_cast<size_t>(existingIt - inputs.begin());
+            inputs.erase(existingIt);
+            if (auto newOutIt = std::find(newOutputs.begin(), newOutputs.end(), owner);
+                newOutIt != newOutputs.end()) {
+                newOutputs.erase(newOutIt);
+            }
+            if (existingIndex < ownerIndex) {
+                ownerIndex--;
+            }
         }
     }
 
     inputs[ownerIndex] = newInput;
-    eraseOne(oldOutputs, owner);
-    newOutputs.push_back(owner);
+    if (auto oldOutIt = std::find(oldOutputs.begin(), oldOutputs.end(), owner);
+        oldOutIt != oldOutputs.end()) {
+        oldOutputs.erase(oldOutIt);
+    }
+    if (std::find(newOutputs.begin(), newOutputs.end(), owner) == newOutputs.end()) {
+        newOutputs.push_back(owner);
+    }
 }
 
 void Node::replaceOutput(LinkType type, Node *owner, Node *oldOutput, Node *newOutput) {
+    assertDraftMutable(owner, "replace output");
+    assertDraftMutable(oldOutput, "replace output");
+    assertDraftMutable(newOutput, "replace output");
     ASSERT(owner && oldOutput && newOutput, "Cannot replace output with null nodes.");
     ASSERT(&owner->graph() == &oldOutput->graph(), "Old output belongs to a different graph.");
     ASSERT(&owner->graph() == &newOutput->graph(), "New output belongs to a different graph.");
@@ -426,21 +457,36 @@ void Node::replaceOutput(LinkType type, Node *owner, Node *oldOutput, Node *newO
     ASSERT(ownerIt != outputs.end(), "Old output edge not found when replacing output.");
     size_t ownerIndex = static_cast<size_t>(ownerIt - outputs.begin());
 
-    auto existingIt = std::find(outputs.begin(), outputs.end(), newOutput);
-    if (existingIt != outputs.end()) {
-        size_t existingIndex = eraseOne(outputs, newOutput);
-        eraseOne(newInputs, owner);
-        if (existingIndex < ownerIndex) {
-            ownerIndex--;
+    const bool preserveBranchSlots = (type == LinkType::Ctrl && owner->type() == NodeType::BRCH) ||
+                                     (type == LinkType::With && owner->type() == NodeType::JOIN);
+    if (!preserveBranchSlots) {
+        auto existingIt = std::find(outputs.begin(), outputs.end(), newOutput);
+        if (existingIt != outputs.end()) {
+            size_t existingIndex = static_cast<size_t>(existingIt - outputs.begin());
+            outputs.erase(existingIt);
+            if (auto newInIt = std::find(newInputs.begin(), newInputs.end(), owner);
+                newInIt != newInputs.end()) {
+                newInputs.erase(newInIt);
+            }
+            if (existingIndex < ownerIndex) {
+                ownerIndex--;
+            }
         }
     }
 
     outputs[ownerIndex] = newOutput;
-    eraseOne(oldInputs, owner);
-    newInputs.push_back(owner);
+    if (auto oldInIt = std::find(oldInputs.begin(), oldInputs.end(), owner);
+        oldInIt != oldInputs.end()) {
+        oldInputs.erase(oldInIt);
+    }
+    if (std::find(newInputs.begin(), newInputs.end(), owner) == newInputs.end()) {
+        newInputs.push_back(owner);
+    }
 }
 
 bool Node::replace(Node *oldNode, Node *newNode) {
+    assertDraftMutable(oldNode, "replace node");
+    assertDraftMutable(newNode, "replace node");
     ASSERT(oldNode && newNode, "Cannot replace null nodes.");
     ASSERT(oldNode != newNode, "Cannot replace a node with itself.");
     EXEC_WHEN_DEBUG(
@@ -500,6 +546,8 @@ bool NodeMutation::replaceUses(Node *oldNode, Node *newNode) {
 }
 
 bool Node::replaceUses(Node *oldNode, Node *newNode) {
+    assertDraftMutable(oldNode, "replace node uses");
+    assertDraftMutable(newNode, "replace node uses");
     ASSERT(oldNode && newNode, "Cannot replace null nodes.");
     ASSERT(oldNode != newNode, "Cannot replace a node with itself.");
     EXEC_WHEN_DEBUG(
@@ -525,6 +573,7 @@ bool Node::replaceUses(Node *oldNode, Node *newNode) {
 }
 
 bool Node::detach() {
+    assertDraftMutable(this, "detach");
     node_vec_t tempWithInputs(withInputs().begin(), withInputs().end());
     for (auto *input : tempWithInputs) {
         if (!unlink(input, this))
@@ -565,20 +614,27 @@ bool Node::detach() {
 Node *DataNode::create(Graph &graph, const data_ptr_t &data) {
     GraphBuilder builder(graph);
     data_idx_t index = builder.addStaticData(data);
-    Node *node       = builder.ownNode(std::make_unique<DataNode>(graph, data->type(), index));
+    Node *node       = makeOwnedNode<DataNode>(graph, graph, data->type(), index);
+    builder.addNode(node);
+    return node;
+}
+
+Node *DataNode::createStaticSlot(Graph &graph, Type *type, slot_t slot) {
+    GraphBuilder builder(graph);
+    data_idx_t index = builder.addStaticSlot(slot);
+    Node *node       = makeOwnedNode<DataNode>(graph, graph, type, index);
     builder.addNode(node);
     return node;
 }
 
 std::string DataNode::toString() const {
-    return std::format("DATA({}, {}): {}", dataIndex_, data()->toString(), dataType()->toString());
+    std::ostringstream oss;
+    camel::core::rtdata::printSlot(oss, dataSlot(), dataType());
+    return std::format("DATA({}, {}): {}", dataIndex_, oss.str(), dataType()->toString());
 }
 
 Node *DataNode::clone(Graph &graph) const {
-    // Graph clone/rewrite 需要复制原始编译期静态条目，而不是把 frozen static slot 先
-    // materialize 回 data_ptr_t 再二次解释。否则某些只允许运行时表示的静态 ref 槽位
-    // 会在 clone 阶段被错误展开。
-    return DataNode::create(graph, graph_->getStaticData(dataIndex_));
+    return DataNode::createStaticSlot(graph, dataType(), dataSlot());
 }
 
 // =============================================================================
@@ -588,7 +644,7 @@ Node *DataNode::clone(Graph &graph) const {
 Node *PortNode::create(Graph &graph, Type *type, const std::string &name, bool isVar) {
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    return builder.ownNode(std::make_unique<PortNode>(graph, type, index, name, isVar));
+    return makeOwnedNode<PortNode>(graph, graph, type, index, name, isVar);
 }
 
 std::string PortNode::toString() const {
@@ -611,7 +667,7 @@ Node *PortNode::clone(Graph &graph) const {
 Node *CastNode::create(Graph &graph, Type *type) {
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = builder.ownNode(std::make_unique<CastNode>(graph, type, index));
+    Node *node       = makeOwnedNode<CastNode>(graph, graph, type, index);
     builder.addNode(node);
     return node;
 }
@@ -625,7 +681,7 @@ Node *CastNode::clone(Graph &graph) const { return CastNode::create(graph, dataT
 Node *CopyNode::create(Graph &graph, Type *type) {
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = builder.ownNode(std::make_unique<CopyNode>(graph, type, index));
+    Node *node       = makeOwnedNode<CopyNode>(graph, graph, type, index);
     builder.addNode(node);
     return node;
 }
@@ -639,7 +695,7 @@ Node *CopyNode::clone(Graph &graph) const { return CopyNode::create(graph, dataT
 Node *FillNode::create(Graph &graph, Type *type) {
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = builder.ownNode(std::make_unique<FillNode>(graph, type, index));
+    Node *node       = makeOwnedNode<FillNode>(graph, graph, type, index);
     builder.addNode(node);
     return node;
 }
@@ -659,11 +715,9 @@ Node *AccsNode::create(Graph &graph, Type *type, const std::variant<std::string,
     data_idx_t index = builder.addRuntimeData();
     Node *node;
     if (std::holds_alternative<size_t>(accsIdx)) {
-        node = builder.ownNode(
-            std::make_unique<AccsNode>(graph, type, index, std::get<size_t>(accsIdx)));
+        node = makeOwnedNode<AccsNode>(graph, graph, type, index, std::get<size_t>(accsIdx));
     } else {
-        node = builder.ownNode(
-            std::make_unique<AccsNode>(graph, type, index, std::get<std::string>(accsIdx)));
+        node = makeOwnedNode<AccsNode>(graph, graph, type, index, std::get<std::string>(accsIdx));
     }
     builder.addNode(node);
     return node;
@@ -691,7 +745,7 @@ Node *AccsNode::clone(Graph &graph) const {
 Node *BrchNode::create(Graph &graph, Type *type) {
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = builder.ownNode(std::make_unique<BrchNode>(graph, type, index));
+    Node *node       = makeOwnedNode<BrchNode>(graph, graph, type, index);
     builder.addNode(node);
     return node;
 }
@@ -712,7 +766,7 @@ Node *BrchNode::clone(Graph &graph) const { return BrchNode::create(graph, dataT
 Node *JoinNode::create(Graph &graph, Type *type) {
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = builder.ownNode(std::make_unique<JoinNode>(graph, type, index));
+    Node *node       = makeOwnedNode<JoinNode>(graph, graph, type, index);
     builder.addNode(node);
     return node;
 }
@@ -733,7 +787,7 @@ Node *JoinNode::clone(Graph &graph) const { return JoinNode::create(graph, dataT
 Node *CallNode::create(Graph &graph, Type *type) {
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = builder.ownNode(std::make_unique<CallNode>(graph, type, index));
+    Node *node       = makeOwnedNode<CallNode>(graph, graph, type, index);
     builder.addNode(node);
     return node;
 }
@@ -747,7 +801,7 @@ Node *CallNode::clone(Graph &graph) const { return CallNode::create(graph, dataT
 Node *BindNode::create(Graph &graph, Type *type) {
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = builder.ownNode(std::make_unique<BindNode>(graph, type, index));
+    Node *node       = makeOwnedNode<BindNode>(graph, graph, type, index);
     builder.addNode(node);
     return node;
 }
@@ -762,18 +816,22 @@ Node *BindNode::clone(Graph &graph) const { return BindNode::create(graph, dataT
 // FuncNode, OperNode
 // =============================================================================
 
-Node *FuncNode::create(Graph &graph, func_ptr_t func) {
-    auto *raw = graph.registerFuncData(func);
+Node *FuncNode::create(Graph &graph, const graph_ptr_t &bodyGraph) {
+    ASSERT(bodyGraph != nullptr, "Function graph is null for FunctionNode.");
+    auto *rtFunc = ::Function::create(
+        bodyGraph.get(),
+        currentClosureTupleType(bodyGraph),
+        graph.arena()->allocator());
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = builder.ownNode(std::make_unique<FuncNode>(graph, index, raw));
+    Node *node       = makeOwnedNode<FuncNode>(graph, graph, index, bodyGraph.get(), rtFunc);
     builder.addNode(node);
     return node;
 }
 
 FunctionType *FuncNode::funcType() const {
-    ASSERT(func_, "Function is not set for FunctionNode.");
-    return tt::as_ptr<FunctionType>(func_->type());
+    ASSERT(graph_, "Function graph is not set for FunctionNode.");
+    return graph_->funcType();
 }
 
 JoinNode *FuncNode::matchedJoin() const {
@@ -785,21 +843,20 @@ std::string FuncNode::toString() const {
     return std::format(
         "FUNC({}, {}: {}): {}",
         dataIndex_,
-        func_->name().empty() ? func_->graph().name() : func_->name(),
+        graph_ ? graph_->name() : "<null>",
         funcType()->toString(),
         dataType()->toString());
 }
 
 Node *FuncNode::clone(Graph &graph) const {
-    auto sp = Node::graph_->lookupFuncData(func_);
-    return FuncNode::create(graph, sp);
+    return FuncNode::create(graph, graph_->shared_from_this());
 }
 
 Node *OperNode::create(Graph &graph, oper_idx_ptr_t op) {
     auto *raw = graph.registerOperIndex(op);
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = builder.ownNode(std::make_unique<OperNode>(graph, index, raw));
+    Node *node       = makeOwnedNode<OperNode>(graph, graph, index, raw);
     builder.addNode(node);
     return node;
 }
@@ -829,7 +886,7 @@ Node *OperNode::clone(Graph &graph) const {
 // =============================================================================
 
 Node *ExitNode::create(Graph &graph, Type *type, data_idx_t index) {
-    return GraphBuilder(graph).ownNode(std::make_unique<ExitNode>(graph, type, index));
+    return makeOwnedNode<ExitNode>(graph, graph, type, index);
 }
 
 std::string ExitNode::toString() const {
@@ -839,7 +896,7 @@ std::string ExitNode::toString() const {
 Node *ExitNode::clone(Graph &graph) const { return ExitNode::create(graph, dataType_); }
 
 Node *DrefNode::create(Graph &graph, const dref_target_t &target) {
-    return GraphBuilder(graph).ownNode(std::make_unique<DrefNode>(graph, target));
+    return makeOwnedNode<DrefNode>(graph, graph, target);
 }
 
 std::string DrefNode::toString() const {
@@ -853,7 +910,7 @@ Node *DrefNode::clone(Graph &graph) const {
 
 Node *SyncNode::create(Graph &graph) {
     GraphBuilder builder(graph);
-    Node *node = builder.ownNode(std::make_unique<SyncNode>(graph));
+    Node *node = makeOwnedNode<SyncNode>(graph, graph);
     builder.addNode(node);
     return node;
 }
@@ -866,7 +923,7 @@ Node *SyncNode::clone(Graph &graph) const { return SyncNode::create(graph); }
 
 Node *NRefNode::create(Graph &graph) {
     GraphBuilder builder(graph);
-    Node *node = builder.ownNode(std::make_unique<NRefNode>(graph));
+    Node *node = makeOwnedNode<NRefNode>(graph, graph);
     builder.addNode(node);
     return node;
 }

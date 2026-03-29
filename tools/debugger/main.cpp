@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 12, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
             return debugger::runWorkerMode(argc, argv);
     }
 
-    camel::initialize();
+    camel::ScopedRuntime camelRuntime;
     // 行缓冲关闭，便于 pipe/日志实时输出到 Web UI 或控制台，避免输出延迟。
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::setvbuf(stderr, nullptr, _IONBF, 0);

@@ -1,0 +1,33 @@
+/**
+ * 意图：验证 std::inline 裁剪掉分支中唯一引用的子图后，
+ * 父图的 subGraphs_/dependencies_ 仍保持一致。
+ * 手动回归：camel inline_unique_subgraph.cml std::inline std::fvm
+ * 预期：打印 `inline_unique_subgraph ok`；exit 0。
+ */
+module inline_unique_subgraph
+
+func choose(flag: int, x: int): int {
+    func plus1(v: int): int {
+        return v + 1
+    }
+
+    func plus2(v: int): int {
+        return v + 2
+    }
+
+    return if flag != 0 then plus1(x) else plus2(x)
+}
+
+func main(): int sync {
+    let a = choose(1, 40)
+    let b = choose(0, 40)
+
+    if a != 41 then {
+        return 1
+    } else if b != 42 then {
+        return 2
+    } else {
+        'inline_unique_subgraph ok'->println
+        return 0
+    }
+}

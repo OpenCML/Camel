@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -447,15 +447,18 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
     std::lock_guard lock(jitCacheMutex_);
     if (getGraphJitFn(graph))
         return;
-    FrameMeta *meta = graph->frameMeta();
-    ASSERT(meta != nullptr, std::format("Graph '{}' has no frozen FrameMeta.", graph->name()));
+    ASSERT(
+        graph->finalized(),
+        std::format("Graph '{}' must be sealed before JIT compilation.", graph->name()));
+    ASSERT(
+        graph->hasFrameLayout(),
+        std::format("Graph '{}' has no finalized frame layout.", graph->name()));
 
     CompilationDebugOptions debugOptions{
         .enableDebugTrace = enableJitTraceMir_,
     };
     CompilationUnit unit{
         .graph                    = graph,
-        .frameMeta                = meta,
         .bytecodes                = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
         .entryPc                  = entryPc,
         .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),

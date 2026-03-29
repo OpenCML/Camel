@@ -12,7 +12,7 @@
 - **name_ / stableId_**：图名与稳定标识；`stableId_` 用于跨 clone / rewrite 追踪图来源。
 - **outer_**：外层图（闭包/嵌套函数时非空）。
 - **signature_**：图的签名与布局摘要，内部包含 `funcType`、`staticDataType`、`runtimeDataType`、`closureType`、`runtimeDataSize`。
-- **staticDataArr_**：静态数据区，索引 0 保留为空；负 `data_idx_t` 通过它寻址。
+- **staticDataArr_**：静态数据区（`slot_t`），索引 0 保留为空；负 `data_idx_t` 通过它寻址。
 - **nodes_**：图中所有节点（含 PORT、DATA、OPER、CALL、EXIT 等）。
 - **normPorts_ / withPorts_ / closure_**：普通参数端口、with 参数端口、闭包捕获节点。
 - **exitNode_**：图的唯一出口节点（EXIT）。
@@ -21,21 +21,23 @@
 - **arena_**：图私有的 `GraphArena`。seal 后 frozen 邻接数组等只读数据分配在这里，并随 Graph 一起释放。
 - **extras_**：图级 O(1) 扩展缓存槽位。Graph 本身不绑定具体 VM；各后端自行约定 index。
 
-### 2.2 Draft / Sealed / Frozen 生命周期
+### 2.2 Draft / Sealing / Sealed 生命周期
 
-当前 GIR 采用显式的“两阶段”模型：
+当前 GIR 采用 builder staging + seal 单向物化：
 
 1. **Draft 阶段**
    - 图通过 `GraphBuilder` 或 `GraphDraft` 被构造/编辑。
    - Node 的邻接关系保存在 `std::vector<Node *>` 中，便于增删改边。
    - 图允许增删节点、替换边、内联、调整依赖等结构性修改。
 
-2. **Seal 阶段**
+2. **Sealing 阶段（唯一物化入口）**
    - 通过 `GraphBuilder::sealGraph()` 或 `sealGraphRecursively()` 完成。
-   - 内部先执行布局计算与写回：`computeLayout()` -> `applyLayout()`。
-   - 然后安装 `FrameMeta`，最后把所有节点的邻接 `vector` 搬迁到 arena 中的定长数组。
+   - 内部经 `finalize()`：若图已 `Sealed`，则直接返回（幂等）；否则按固定流水执行：
+     `rearrange` → `promoteNodeDebugIds` → `freezeAdjacency` → `packStaticSlotsToFrozen`
+     → `installFinalFrameLayout` → `releaseDraftRegion`。
+   - `sealGraph()` 负责调用 `finalize()` 并执行 builder 的 **consume 语义**（`graph_` 置空）。
 
-3. **Frozen 阶段**
+3. **Sealed 阶段**
    - `Graph::finalized()` 为 `true`。
    - 节点只允许只读访问，不再允许结构编辑。
    - 如需改写，必须先 `cloneGraph()` 得到新的 draft 副本。
@@ -44,7 +46,7 @@
 
 - **data_idx_t**：有符号整数；**正数**表示运行时槽位（动态区），**0** 表示空，**负数**表示静态区索引的相反数（见注释）。
 - **addStaticData / addRuntimeData**：向图注册静态/运行时槽位并返回索引。
-- **getStaticData / setStaticData**：按索引读写静态数据。
+- **getStaticDataSlot / setStaticData**：按索引读静态槽位；构图期可由 `setStaticData` 用编译期数据重写槽位。
 
 ### 2.4 常用方法
 
@@ -56,6 +58,7 @@
 - `GraphBuilder::sealGraph()`：封印单图。
 - `GraphBuilder::sealGraphRecursively()`：递归封印图树。
 - `computeLayout()` / `applyLayout()`：布局纯计算与写回分离，供 seal/export 路径复用。
+- **`LayoutResult`**（`builder.h`）：`computeLayout()` 的只读汇总结果——节点与槽位映射、`staticDataArr`、各 `TupleType` 与 `runtimeDataSize` 等；由 `applyLayout()` 一次性写回 Graph，与 seal/export 解耦。
 
 ## 3. 边类型（LinkType）
 
@@ -86,7 +89,7 @@
 | JOIN   | 分支汇合 |
 | CALL   | 调用（闭包/函数值） |
 | BIND   | 部分应用（绑定参数） |
-| FUNC   | 子图/函数引用，节点内持有裸 `FunctionData*` |
+| FUNC   | 直接子图调用节点，节点内缓存目标 `Graph*` 与运行时 `Function*` 原型 |
 | OPER   | 原子算子，节点内持有裸 `OperatorIndex*` |
 | EXIT   | 图出口，产出返回值 |
 | SYNC   | 同步点（无私有数据） |
@@ -112,7 +115,10 @@
 
 为了让 frozen 节点尽量不直接持有非平凡析构成员，若干属性已从 Node 自身移到 Graph 侧集中保存：
 
-- `stableId`：由 `Graph::nodeStableIds_` 保存。
+- **节点调试实体 id**（`Node::debugEntityId()` / `Graph::nodeStableIds_`）：
+  - **Draft**：构造时为占位串 `draft:{指针十六进制}`，仅保证同进程内可区分。
+  - **Seal**：`GraphBuilder::finalize()` 在 `rearrange()` 之后调用 `Graph::promoteNodeDebugIds()`，将每条目替换为 **`NodeDebugFingerprint` 物化字符串** `gnode:{016x}{016x}`（定义见 `include/camel/compile/gir/types.h`）。指纹输入包含：所属图的 `stableId()`、`NodeType`、`dataIndex`、各 `LinkType` 上规范化排序后的邻接槽位，以及类型相关盐（如 `PORT` 端口名、`FUNC` 子图 `stableId`、`OPER` 的 `OperatorIndex*`、`DATA` 的静态槽位字节等）；并在同图固定遍历序下混入 **tie-breaker 序号**，进一步降低 128-bit 碰撞风险。
+  - **SourceContext**：构图期 `bindGirNodeDraftDebug(Node*, origin_id, SemanticBundle)`；seal 时 `sealPromoteGirNodeDebug(Node*, entityId)` 写入 `DebugMap` 与按实体 id 索引的语义表。对外查询统一 `resolveGirNodeOrigin(Node*)`、`girNodeSemantic(Node*)`；克隆/内联用 `cloneGirNodeDebugBinding`。
 - `PortNode::name`：由 `Graph::nodePortNames_` 保存。
 - `AccsNode` 的字符串 key：由 `Graph::nodeAccsKeys_` 保存。
 
@@ -120,9 +126,9 @@ Node 自身只保留查询入口，不再直接持有这些 `std::string`。
 
 ## 6. 典型节点子类
 
-- **DataNode**：通过 `Graph::materializeStaticData(dataIndex_)` 暴露只读静态值视图；冻结图优先从静态运行时池回投到编译期表示。
+- **DataNode**：通过 `dataSlot()` 暴露静态槽位，配合 `dataType()` 解释具体值；不再经旧的静态值回投路径重建编译期 `Data`。
 - **PortNode**：端口名不再存于节点内，而由 Graph 集中管理；槽位由 `addRuntimeData()` 分配。
-- **FuncNode**：节点内保存裸 `FunctionData*`；真正所有权由 Graph 的 `funcDataRegistry_` / 静态数据侧统一维护。
+- **FuncNode**：节点内保存目标 `Graph*` 与一个运行时 `Function*` 原型；调度热路径直接取 `graph()`，宏执行等非热路径可复用 `rtFunc()`。
 - **OperNode**：节点内保存裸 `OperatorIndex*`；真正所有权由 Graph 的 `operIndexRegistry_` 维护。
 - **ExitNode**：图的唯一出口，可带 dataIndex_ 指向返回值槽位。
 - **BrchNode / JoinNode**：与 BRCH/JOIN 字节码对应，用于条件分支与汇合。
@@ -144,28 +150,92 @@ Node 自身只保留查询入口，不再直接持有这些 `std::string`。
 - Graph 自身不暴露公开的 mutable 接口。
 - `sealGraph()` 具有 **consume 语义**：调用后 builder 失效。
 - `computeLayout()` 与 `applyLayout()` 分离，使布局计算可在不同导出路径中复用。
+- `GraphBuilderState` 作为构图期 staging：写入先落 staging，并保持与 Graph draft 视图同步；
+  `seal` 时进入唯一终态物化流程并消费 staging，Graph 仅保留执行期只读视图。
+- 结构自检：`validateGraph` / `validateGraphRecursively`（`GraphDraft::seal()` 在递归封印前会调用后者）。
+  其中 **`hasOutput()==true`（存在 EXIT）是 seal 前硬约束**，缺失 output 直接视为图结构不完整并拒绝封印。
+
+**内联与 import 相关类型**（与 `include/camel/compile/gir/builder.h` 一致）：
+
+- **`InlineOptions` / `InlineSyncPolicy`**：`Auto`、`Force`、`Never` 控制内联时控制同步边的插入策略。
+- **`inlineCallable()`** 返回 **`InlineResult`**（调用点、值出口、控制入/出、控制叶、导入的子图与依赖等），作为唯一内联入口。
+- **`GraphImportMode`**：`importSubGraph` / `importDependency` 可选用 **`ReferenceOnly`**（仅登记共享引用）或 **`CloneIntoDraft`**（先 `cloneIntoDraft` 再登记），与下节「仅 root 默认 owned」规则一致。
 
 ### 7.2 GraphDraft
 
 `GraphDraft` 是 rewrite pass 的工作态包装：
 
 - 从 sealed graph 克隆出一个 draft 副本；
-- 只允许编辑 draft-owned graph；
-- 完成编辑后通过 `seal()` 一次性封印整棵图树。
+- 默认只允许编辑 root draft-owned graph；
+- 若要改写子图或依赖图，必须显式 `importSubGraph(...)` / `importDependency(...)` 或 `cloneIntoDraft(...)`；
+- 完成编辑后通过 `seal()`：先 **`validateGraphRecursively(root_)`**，再 **`GraphBuilder::sealGraphRecursively(root_)`**（内部按子图与依赖做 DFS，每张图走单图 `sealGraph()`）。
+
+说明：当前 `cloneGraph()` 是浅克隆策略。`GraphDraft` 仅把 root 视为 draft-owned；子图/依赖图默认共享引用，不递归纳入 draft-owned 集合。只有在显式 import/clone 后，它们才进入当前 rewrite 事务的可写集合。
 
 因此，rewrite pass 不再直接在原图上做“边改边 rearrange”的历史式修改。
 
-### 7.3 GraphRewriteSession
+### 7.3 补充：不可变与裁剪契约
+
+- `finalized()==true` 的图只允许只读访问；任何追加 runtime/static 槽、改邻接、改依赖边的路径都必须先 clone 到 draft。
+- 运行期入口（FastVM/JIT/Taskflow/Macro）不再补全布局，只接受 sealed graph。
+- 裁剪子图必须由显式 rewrite pass 负责。以 inline 为例，删除 `FUNC` 路径后必须同步执行：
+  - `eraseSubGraph(owner, subGraph)`
+  - `eraseDependency(owner, subGraph)`
+  - 若存在跨图节点替换，还需同步更新对应输入/输出边
+- Graph 析构不承担“自动修复依赖关系”的职责；依赖与子图注册表的一致性必须在改写时收口。
+
+### 7.4 GraphRewriteSession
 
 `GraphRewriteSession` 是 pass 侧看到的高层接口，包装了：
 
-- `replaceNode`
+- `substituteNode` / `replaceNode`
+- `replaceAllUses`
 - `eraseNode`
 - `replaceInput` / `replaceOutput`
-- `inlineNode`
-- `addDependency` / `eraseDependency`
+- `inlineCallable`
+- `importSubGraph` / `importDependency` / `retargetDependency`
+- `pruneUnreachable`
 
-`finish()` 内部会触发 `GraphDraft::seal()`，返回新的 sealed graph。
+其中 `inlineCallable()` 返回显式 `InlineResult`，把 value exit、control entry/exit、导入的引用图等信息一并交还给 pass，而不是再依赖“最后一个输入/输出是谁”的隐式约定。
+
+`finish()` 在 `changed == false` 时会直接返回原始 source root；只有真正发生 rewrite 时，才会触发 `GraphDraft::seal()` 并导出新的 sealed graph。
+
+### 7.5 Inline Pass 的 SCC-DAG 强正确性语义
+
+`std::inline` 目前采用 **SCC 缩点 + DAG 逆拓扑** 的执行框架，而不是旧的“逐图扫描 + 反复重跑”：
+
+1. 先收集可达图并建立 draft 映射；
+2. 构建会话级 use-index（`FUNC.bodyGraph` + `DATA(Function).graph`）；
+3. uses 驱动执行 legacy->draft 重定向，并同步 `dependencies`；
+4. 基于图引用关系做 SCC 分解并缩点为 DAG；
+5. 按逆拓扑（callee-first）处理 SCC。
+
+关键约束：
+
+- **SCC 内目标冻结**：每个 SCC 只处理进入该 SCC 时捕获到的初始 inline target；处理中新增的 FUNC 不在同轮继续展开，避免振荡。
+- **重定向完整性**：seal 前不允许残留 legacy 图引用。实现上以断言检查 `FUNC.bodyGraph` 与 `DATA(Function).graph` 不再指向 source graph。
+- **NREF 门控保留**：当分支内联存在 value + side-effect ctrl 两路出口时，使用 `NREF` 将 ctrl 依赖锚定到值路径，避免 `BRCH/JOIN` 臂语义破坏。
+- **slot-safe prune**：内联后的不可达裁剪不再直接调用通用 `pruneUnreachable` 全量删点；先从 `EXIT` 反向求 live 集，再对 BRCH/JOIN 槽位相关节点做 pin（`BRCH.ctrlOutputs` / `JOIN.withInputs` / `JOIN.ctrlInputs` / `JOIN.normInputs`），仅删除非 live 且非 pinned 节点，避免 arm-slot 对齐被 detach/unlink 破坏。
+
+预算策略（budget）：
+
+- 主调度逻辑不依赖 budget 决策；
+- budget 仅作为“异常防护哨兵”：
+  - **Debug 构建**：触发即 `ASSERT`（立即失败，强制暴露算法失控）；
+  - **Release 构建**：保护性告警并停止当前 SCC 处理，防止线上失控。
+
+### 7.6 FastVM BRCH/JOIN/JUMP 协议收敛
+
+`std::inline` 场景下，FastVM 侧做了两条强约束收敛：
+
+- BRCH 生成阶段按**语义 arm 数**（if:2，match:withCnt+1）固定发射 JUMP 占位，避免“按当前可达输出数量发射”导致的 `jumpIdx` 偏移漂移。
+- BRCH 目标回填从单索引映射改为**多索引映射**（`target -> [jumpIdx...]`），保证多个 arm 收敛到同一控制头节点时不会覆盖回填位。
+
+对应回归：
+
+- `fib.cml std::inline std::gir` 通过；
+- `inline_unique_subgraph.cml std::inline std::gir` 通过；
+- `inline_unique_subgraph.cml std::inline std::fvm` 通过。
 
 ## 8. 内存与所有权模型
 
@@ -173,30 +243,33 @@ Node 自身只保留查询入口，不再直接持有这些 `std::string`。
 
 - `Graph` 仍由 `graph_ptr_t`（`std::shared_ptr<Graph>`）管理生命周期。
 - Graph 析构时会一并释放：
-  - `ownedNodes_` 中的 draft 节点；
+  - `ownedNodes_` 记录的节点对象（由 `GraphArena` tracked dtor 统一析构）；
   - `arena_`；
   - Graph 侧集中持有的字符串与注册表。
 
 ### 8.2 Draft 节点与 Frozen 节点
 
 - **Draft 节点**
-  - 由 `ownedNodes_` 中的 `unique_ptr<Node>` 管理。
+  - 在 `GraphArena` 上构造，`Graph` 通过 `ownedNodes_` 记录节点集合。
   - 使用 `std::vector<Node *>` 维护邻接关系。
   - 支持增删改边。
 
 - **Frozen 节点**
-  - 当前对象本身仍由 Graph 持有，但其邻接数据已迁入 `GraphArena`。
+  - 对象本身与邻接数据都位于 `GraphArena` 生命周期域内。
   - 对外只暴露 span 只读视图。
   - 任何结构修改都会被断言拦截。
 
-### 8.3 GraphArena
+### 8.3 GraphArena（metaSpace 分段区域）
 
-`GraphArena` 是图私有的 bump allocator：
+`GraphArena` 是图私有的 **metaSpace 分段 arena**：
 
-- 为 frozen 邻接数组等只读数据提供整块连续内存；
-- 不支持逐对象 `free`；
-- Graph 销毁时整体释放；
-- 避免 metaspace/freelist 在高频小对象上的碎片和管理开销。
+- 底层不再直接 `malloc`，而是按 block 向 `metaSpace` 申请；
+- 内部区分 `DraftRegion` / `FrozenRegion` 两个逻辑区，支持 `releaseDraftRegion()`；
+- Node 对象通过 tracked dtor 托管析构，邻接冻结数组与静态槽打包落在 FrozenRegion；
+- 提供图级指标：`peakBytes`、`wasteBytes`、`blockCount`、`draftFreedBytes`、`allocFailCount`；
+- 支持 seal 前容量预热（`reserveFrozenBytes`），降低大图 finalize 期间扩块抖动。
+- 每个 block 带前后 guard band（debug 检查），用于尽早暴露 arena 用户侧越界写。
+- `releaseDraftRegion()` 当前采用“逻辑释放 + 延迟物理回收”：seal 后先释放 draft 对象生命周期（tracked dtor），物理块回收延迟到 `GraphArena` 析构统一处理；若检测到 `metaSpace` 已损坏则跳过回收并直接丢弃块引用，避免 teardown 二次崩溃。
 
 ## 9. 与字节码/后端的对应
 

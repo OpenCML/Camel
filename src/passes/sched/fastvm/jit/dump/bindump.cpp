@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -103,8 +103,12 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     std::span<const Bytecode> bcSpan(bytecodes.data(), bytecodes.size());
 
     for (const auto &[g, entryPc] : offsetMap) {
-        FrameMeta *meta = g->frameMeta();
-        ASSERT(meta != nullptr, std::format("Graph '{}' has no frozen FrameMeta.", g->name()));
+        ASSERT(
+            g->finalized(),
+            std::format("Graph '{}' must be sealed before JIT machine-code dump.", g->name()));
+        ASSERT(
+            g->hasFrameLayout(),
+            std::format("Graph '{}' has no finalized frame layout.", g->name()));
 
         std::vector<std::tuple<size_t, size_t, std::string>> instructionBoundaries;
         CompilationDebugOptions debugOptions{
@@ -113,7 +117,6 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         };
         CompilationUnit unit{
             .graph          = g,
-            .frameMeta      = meta,
             .bytecodes      = bcSpan,
             .entryPc        = entryPc,
             .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),

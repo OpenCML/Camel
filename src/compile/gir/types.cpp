@@ -13,14 +13,20 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/compile/gir/types.h"
 #include "camel/utils/assert.h"
 
+#include <format>
+
 namespace camel::compile::gir {
+
+std::string NodeDebugFingerprint::toEntityId() const {
+    return std::format("gnode:{:016x}{:016x}", word0, word1);
+}
 
 std::string to_string(NodeType type) {
     switch (type) {

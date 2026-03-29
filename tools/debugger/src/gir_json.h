@@ -1,9 +1,20 @@
 /**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
+ * You may use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
  *
- * GIR 懒加载 JSON 序列化：按图 ID 返回摘要或单图展开（nodes/edges），
- * 供前端 dagre + Vue Flow 渲染。ID 为 graph/node 指针地址字符串。
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Feb. 22, 2026
+ * Updated: Mar. 28, 2026
+ * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
@@ -25,7 +36,7 @@ namespace debugger {
 std::pair<std::string, std::string>
 getGirJson(const GIR::graph_ptr_t &root, const std::string &graphId);
 
-/// 返回节点的稳定 ID（graphId_nIndex），与 JSON 中 stableId 一致，用于跨 Run 断点匹配。
-std::string getStableNodeId(const GIR::Node *node);
+/// 返回节点的调试实体 ID，与 JSON 中 `stableId` 一致（seal 后为 `gnode:{032x}` 内容寻址形式）。
+std::string getDebugNodeId(const GIR::Node *node);
 
 } // namespace debugger

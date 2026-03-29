@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 19, 2025
- * Updated: Feb. 24, 2026
+ * Updated: Mar. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,8 +29,12 @@
 #include <crtdbg.h>
 #include <stacktrace>
 #define HAS_STACKTRACE 1
-// 避免调用 abort() 时触发 Windows 错误报告对话框
-#define ENABLE_ABORT_BEHAVIOR() _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT)
+inline void disable_windows_abort_dialogs() {
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    _CrtSetReportMode(_CRT_ASSERT, 0);
+    _CrtSetReportMode(_CRT_ERROR, 0);
+    _CrtSetReportMode(_CRT_WARN, 0);
+}
 #else
 #define HAS_STACKTRACE 0
 #endif
@@ -92,6 +96,8 @@ inline void handle_assert_failure(
               << "\033[1;32m    Suggestion : \033[0m" << suggestion << "\n";
 
 #if HAS_STACKTRACE
+    disable_windows_abort_dialogs();
+
     std::cerr << "\n\033[1;31mStack Trace:\033[0m\n";
     auto trace                  = std::stacktrace::current();
     constexpr size_t skip_front = 1;

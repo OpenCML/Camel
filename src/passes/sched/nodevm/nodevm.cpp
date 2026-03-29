@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 20, 2026
+ * Updated: Mar. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -214,8 +214,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             currentNode = n;
             if (InternalGlobalConfig::IsInspectionMode() && context_) {
                 if (auto sourceContext = context_->sourceContext()) {
-                    sourceContext->setCurrentRuntimeOrigin(
-                        sourceContext->debugMap().nodeOrigin(n->stableId()));
+                    sourceContext->setCurrentRuntimeOrigin(sourceContext->resolveGirNodeOrigin(n));
                 }
             }
 
@@ -466,7 +465,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             } break;
 
             case NodeType::FUNC: {
-                Graph *funcGraph = tt::as_ptr<FuncNode>(n)->graph();
+                Graph *funcGraph = tt::as_ptr<FuncNode>(n)->bodyGraph();
 
                 // 尾调用优化
                 bool isTailCall =

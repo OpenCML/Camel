@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 09, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -50,14 +50,20 @@ TaskflowFramePool::GraphArena &TaskflowFramePool::getOrCreateArena(Graph *graph)
 }
 
 void TaskflowFramePool::allocateChunk(GraphArena &arena, size_t minFrameCount) {
-    if (arena.meta == nullptr) {
-        arena.meta = arena.graph->frameMeta();
+    if (arena.runtimeDataType == nullptr || arena.staticArea == nullptr) {
         ASSERT(
-            arena.meta != nullptr,
-            std::format("Graph '{}' has no frozen FrameMeta.", arena.graph->name()));
-        arena.frameSize = arena.meta->frameSize;
+            arena.graph->finalized(),
+            std::format(
+                "Graph '{}' must be sealed before taskflow frame allocation.",
+                arena.graph->name()));
+        ASSERT(
+            arena.graph->hasFrameLayout(),
+            std::format("Graph '{}' has no finalized frame layout.", arena.graph->name()));
+        arena.frameSize = arena.graph->frameSize();
         ASSERT(arena.frameSize > 0, "Frame size must be positive.");
-        arena.chunkFrames = std::max(minChunkFrames_, chunkBytes_ / arena.frameSize);
+        arena.runtimeDataType = arena.graph->runtimeDataType();
+        arena.staticArea      = arena.graph->staticArea();
+        arena.chunkFrames     = std::max(minChunkFrames_, chunkBytes_ / arena.frameSize);
         if (arena.chunkFrames == 0)
             arena.chunkFrames = 1;
     }
@@ -72,12 +78,11 @@ void TaskflowFramePool::allocateChunk(GraphArena &arena, size_t minFrameCount) {
     arena.freeFrames.reserve(arena.freeFrames.size() + frameCount);
     for (size_t i = 0; i < frameCount; ++i) {
         std::byte *slot = chunk + i * arena.frameSize;
-        auto *frame =
-            new (slot) Frame(arena.graph, arena.meta->staticArea, arena.meta->runtimeDataType);
+        auto *frame     = new (slot) Frame(arena.graph, arena.staticArea, arena.runtimeDataType);
 #ifndef NDEBUG
         std::fill_n(
             frame->slotBase(),
-            arena.meta->runtimeDataType->size(),
+            arena.runtimeDataType->size(),
             camel::core::mm::kDebugUninitializedSlot);
 #endif
         arena.freeFrames.push_back(frame);
@@ -94,7 +99,7 @@ Frame *TaskflowFramePool::acquire(Graph *graph) {
 #ifndef NDEBUG
     std::fill_n(
         frame->slotBase(),
-        arena.meta->runtimeDataType->size(),
+        arena.runtimeDataType->size(),
         camel::core::mm::kDebugUninitializedSlot);
 #endif
     return frame;
