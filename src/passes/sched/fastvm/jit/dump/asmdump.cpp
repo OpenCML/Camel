@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 07, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Mar. 30, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -77,6 +77,7 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .trampolineTail           = reinterpret_cast<void *>(&trampolineTail),
             .trampolineOper           = reinterpret_cast<void *>(&trampolineOper),
             .trampolineCast           = reinterpret_cast<void *>(&trampolineCast),
+            .trampolineBytecode       = reinterpret_cast<void *>(&trampolineBytecode),
             .poolTopAddr              = &dummyPoolTop,
             .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
             .debug                    = &debugOptions,
