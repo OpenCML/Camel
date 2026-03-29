@@ -185,9 +185,6 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     Node *exitNode() const;
     Node *outputNode() const;
-    bool hasOutput() const {
-        return (activeState() ? activeState()->exitNode : exitNode_) != nullptr;
-    }
 
     const node_vec_t &nodes() const { return activeState() ? activeState()->nodes : nodes_; }
     node_vec_t ports() const {

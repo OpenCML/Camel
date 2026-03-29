@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Mar. 28, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,6 @@
 #include "camel/utils/type.h"
 
 #include <iomanip>
-#include <queue>
 #include <sstream>
 
 using namespace std;
@@ -92,7 +91,7 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 }
                 return ins;
             },
-            true);
+            false);
         EXEC_WHEN_DEBUG({
             GetDefaultLogger().in("Topo").debug(
                 "Topologically sorted nodes for graph {}:",
@@ -100,9 +99,17 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             for (const auto &n : sortedNodes) {
                 GetDefaultLogger().in("Topo").debug("  {}", n->toString());
             }
-            if (sortedNodes.size() != graph->nodes().size() - 1) {
+            size_t totalNodeCnt = g->nodes().size() + g->ports().size() + g->closure().size();
+            auto contains       = [](node_span_t nodes, Node *target) {
+                return std::find(nodes.begin(), nodes.end(), target) != nodes.end();
+            };
+            const bool exitCounted =
+                contains(g->nodes(), exitNode) || contains(g->normPorts(), exitNode) ||
+                contains(g->withPorts(), exitNode) || contains(g->closure(), exitNode);
+            const size_t expectedTopoCnt = totalNodeCnt + (exitCounted ? 0 : 1);
+            if (sortedNodes.size() != expectedTopoCnt) {
                 GIR::node_vec_t unreachableNodes;
-                for (Node *n : graph->nodes()) {
+                for (Node *n : g->nodes()) {
                     if (n != exitNode &&
                         std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
                         unreachableNodes.push_back(n);
@@ -117,7 +124,7 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 }
                 GetDefaultLogger().in("Topo").warn(
                     "Unreachable nodes in graph {} detected: {}",
-                    graph->name(),
+                    g->name(),
                     nodeStrs);
             }
         });

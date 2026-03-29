@@ -94,6 +94,19 @@ struct SccGraphPlan {
     std::vector<size_t> processOrder;
 };
 
+node_vec_t collectUseCarrierNodes(const graph_ptr_t &graph) {
+    node_vec_t carriers;
+    carriers.reserve(graph->nodes().size() + 1);
+    for (Node *node : graph->nodes()) {
+        carriers.push_back(node);
+    }
+    Node *exitAnchor = graph->exitNode();
+    if (std::ranges::find(carriers, exitAnchor) == carriers.end()) {
+        carriers.push_back(exitAnchor);
+    }
+    return carriers;
+}
+
 std::vector<const Graph *> collectReferencedGraphs(const graph_ptr_t &graph) {
     std::vector<const Graph *> refs;
     refs.reserve(graph->dependencies().size() + graph->subGraphs().size() + graph->nodes().size());
@@ -105,7 +118,7 @@ std::vector<const Graph *> collectReferencedGraphs(const graph_ptr_t &graph) {
     for (const auto &dep : graph->dependencies()) {
         refs.push_back(dep.get());
     }
-    for (Node *node : graph->nodes()) {
+    for (Node *node : collectUseCarrierNodes(graph)) {
         if (node->type() == NodeType::FUNC) {
             auto *func = tt::as_ptr<FuncNode>(node);
             if (func->bodyGraph()) {
@@ -134,7 +147,7 @@ GraphUseIndex buildUseIndex(const std::vector<graph_ptr_t> &draftGraphs) {
     // 作为 legacy->draft 重定向与 dependency 同步的唯一批处理入口。
     GraphUseIndex index;
     for (const auto &owner : draftGraphs) {
-        for (Node *node : owner->nodes()) {
+        for (Node *node : collectUseCarrierNodes(owner)) {
             if (node->type() == NodeType::FUNC) {
                 auto *func = tt::as_ptr<FuncNode>(node);
                 if (func->bodyGraph()) {
@@ -173,7 +186,7 @@ void assertNoLegacyGraphRefs(
     const std::vector<graph_ptr_t> &draftGraphs,
     const std::unordered_set<const Graph *> &legacySources) {
     for (const auto &owner : draftGraphs) {
-        for (Node *node : owner->nodes()) {
+        for (Node *node : collectUseCarrierNodes(owner)) {
             if (node->type() == NodeType::FUNC) {
                 auto *func = tt::as_ptr<FuncNode>(node);
                 if (!func->bodyGraph()) {
@@ -556,9 +569,7 @@ void assertAdjacencyPointersBelongToGraph(const graph_ptr_t &graph) {
     for (Node *n : graph->closure()) {
         liveNodes.insert(n);
     }
-    if (graph->hasOutput()) {
-        liveNodes.insert(graph->exitNode());
-    }
+    liveNodes.insert(graph->exitNode());
 
     auto assertNodeList =
         [&](Node *owner, const auto &nodes, const char *dir, const char *linkType) {
@@ -596,7 +607,7 @@ void assertAdjacencyPointersBelongToGraph(const graph_ptr_t &graph) {
 
 std::unordered_set<Node *> collectLiveNodesFromExit(const graph_ptr_t &graph) {
     std::unordered_set<Node *> live;
-    if (!graph || !graph->hasOutput()) {
+    if (!graph) {
         return live;
     }
     std::vector<Node *> stack{graph->exitNode()};
@@ -657,11 +668,34 @@ std::unordered_set<Node *> collectBranchSlotPinnedNodes(const graph_ptr_t &graph
 }
 
 size_t pruneUnreachableSlotSafe(GraphRewriteSession &session, const graph_ptr_t &graph) {
-    if (!graph || !graph->hasOutput()) {
+    if (!graph) {
         return 0;
     }
     std::unordered_set<Node *> live   = collectLiveNodesFromExit(graph);
     std::unordered_set<Node *> pinned = collectBranchSlotPinnedNodes(graph);
+    // Pinned nodes (especially JOIN arm tails) must keep their producer chains.
+    // Otherwise we may preserve a slot anchor GATE but erase its only Norm input.
+    std::vector<Node *> pinnedStack(pinned.begin(), pinned.end());
+    while (!pinnedStack.empty()) {
+        Node *curr = pinnedStack.back();
+        pinnedStack.pop_back();
+        if (!curr) {
+            continue;
+        }
+        auto pushInput = [&](node_span_t inputs) {
+            for (Node *in : inputs) {
+                if (!in || &in->graph() != graph.get()) {
+                    continue;
+                }
+                if (pinned.insert(in).second) {
+                    pinnedStack.push_back(in);
+                }
+            }
+        };
+        pushInput(curr->withInputs());
+        pushInput(curr->normInputs());
+        pushInput(curr->ctrlInputs());
+    }
 
     std::vector<Node *> toErase;
     toErase.reserve(graph->nodes().size());
@@ -838,12 +872,7 @@ graph_ptr_t ensureEditableGraph(
     }
 
     graph_ptr_t canonical = session.canonicalGraph(imported);
-    ASSERT(
-        canonical->hasOutput(),
-        std::format(
-            "Draft graph '{}' cloned from '{}' has no output.",
-            canonical->name(),
-            sourceGraph->name()));
+    (void)canonical->exitNode();
     cache[sourceGraph.get()] = canonical;
     EXEC_WHEN_DEBUG(
         GetDefaultLogger()
@@ -1052,9 +1081,7 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
         }
 
         for (const auto &changedGraph : changedGraphs) {
-            ASSERT(
-                changedGraph->hasOutput(),
-                std::format("Graph '{}' lost output after inline rewrite.", changedGraph->name()));
+            (void)changedGraph->exitNode();
             const size_t pruned = pruneUnreachableSlotSafe(session, changedGraph);
             EXEC_WHEN_DEBUG(
                 GetDefaultLogger()

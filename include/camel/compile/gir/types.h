@@ -46,7 +46,6 @@ enum class NodeType {
     BIND,
     FUNC,
     OPER,
-    EXIT,
     SYNC,
     GATE,
     DREF,

@@ -50,7 +50,7 @@ std::vector<Node *> buildTopoNodes(Graph *graph) {
             }
             return inputs;
         },
-        true);
+        false);
 }
 
 void addIssue(GraphLoweringPlan &plan, const Node *node, std::string reason) {
@@ -192,7 +192,6 @@ GraphLoweringPlan analyzeGraphForCpp(Graph *graph) {
         } break;
 
         case NodeType::PORT:
-        case NodeType::EXIT:
             break;
 
         case NodeType::OPER: {
@@ -257,12 +256,26 @@ GraphLoweringPlan analyzeGraphForCpp(Graph *graph) {
             }
             break;
 
+        case NodeType::GATE:
+            if (!hasBridgeableOutput(node) || !hasBridgeableInputs(node)) {
+                addIssue(plan, node, "GATE requires C++-bridgeable inputs and outputs");
+                break;
+            }
+            if (node->normInputs().empty()) {
+                addIssue(plan, node, "GATE must have at least one Norm input");
+                break;
+            }
+            if (node->ctrlInputs().empty()) {
+                addIssue(plan, node, "GATE must have at least one Ctrl input");
+                break;
+            }
+            break;
+
         case NodeType::FILL:
         case NodeType::ACCS:
         case NodeType::CALL:
         case NodeType::BIND:
         case NodeType::SYNC:
-        case NodeType::GATE:
         case NodeType::DREF:
             addIssue(plan, node, "node type is not supported by the direct C++ path yet");
             break;

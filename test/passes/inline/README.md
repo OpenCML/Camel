@@ -5,7 +5,7 @@
 - **策略化目标选择**：`std::inline::small`（非 arm 小子图）/ `std::inline::arm`（arm 小子图）/ `std::inline::hybrid`（两者并集，`std::inline` 默认等价 `hybrid`）；
 - **SCC 入口保护**：若 SCC 内调用目标属于“被 SCC 外调用的入口 callee”，则默认不内联，避免递归入口向内反复展开；
 - 入口 `ctrlEntry` 收敛规则（单目标不建 `SYNC`，多目标建 `SYNC`）；
-- 无参数函数的 `EXIT` 反向入口推导；
+- 无参数函数的 `exitNode`（值出口锚点）反向入口推导；
 - 内联后“一次性子图”注册表清理（`subGraphs/dependencies` sweep）；
 - 分支场景下内联后值/控路径保持正确。
 
@@ -31,5 +31,6 @@ camel "inline_strategy_small_non_arm.cml" std::inline::arm std::gir
 camel "inline_strategy_hybrid_mix.cml" std::inline::hybrid std::gir
 camel "inline_strategy_hybrid_mix.cml" std::inline std::gir
 camel "inline_scc_entry_guard_recursion.cml" std::inline std::gir
+camel "inline_value_ctrl_gate_anchor.cml" std::inline std::gir
 ```
 

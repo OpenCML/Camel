@@ -94,7 +94,7 @@ bytecode_vec_t compile(
 
             return inputs;
         },
-        true // 跳过起始节点本身
+        false // 包含值出口锚点本身
     );
 
     // Debug 模式下打印拓扑排序结果并检查不可达节点
@@ -108,7 +108,14 @@ bytecode_vec_t compile(
 
         size_t totalNodeCount =
             graph->nodes().size() + graph->ports().size() + graph->closure().size();
-        if (topoSortedNodes.size() != totalNodeCount) {
+        auto contains = [](node_span_t nodes, Node *target) {
+            return std::find(nodes.begin(), nodes.end(), target) != nodes.end();
+        };
+        const bool exitCounted =
+            contains(graph->nodes(), exitNode) || contains(graph->normPorts(), exitNode) ||
+            contains(graph->withPorts(), exitNode) || contains(graph->closure(), exitNode);
+        const size_t expectedTopoCount = totalNodeCount + (exitCounted ? 0 : 1);
+        if (topoSortedNodes.size() != expectedTopoCount) {
             node_vec_t unreachableNodes;
             for (Node *node : graph->nodes()) {
                 if (node != exitNode &&
@@ -470,8 +477,6 @@ bytecode_vec_t compile(
         }
 
         case NodeType::PORT:
-            [[fallthrough]];
-        case NodeType::EXIT:
             [[fallthrough]];
         case NodeType::SYNC:
             [[fallthrough]];

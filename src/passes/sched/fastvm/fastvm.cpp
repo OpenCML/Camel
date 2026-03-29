@@ -103,12 +103,7 @@ std::pair<size_t, Frame *> FastVMSchedPass::pop() {
 }
 
 graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    if (!graph->hasOutput()) {
-        throw reportRuntimeFault(
-            *context_,
-            RuntimeFault::make(RuntimeDiag::MissingMainFunction, context_->mainModule()->name()),
-            makeGraphExecutionSite(context_->sourceContext(), graph.get()));
-    }
+    (void)graph->exitNode();
 
     precompile(graph.get());
 

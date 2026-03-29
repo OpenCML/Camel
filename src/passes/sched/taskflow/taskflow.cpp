@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Mar. 28, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,19 +44,11 @@ using namespace camel::core::rtdata;
 
 // 从图的 exit 节点读取返回值（与 NodeVM 一致：slot_t）
 static slot_t get_graph_return(Graph *g, Frame *frame) {
-    auto retNode = g->exitNode();
-    if (retNode->normInputs().empty())
-        return NullSlot;
-    return frame->get<slot_t>(retNode->normInputs().front()->index());
+    return frame->get<slot_t>(g->exitNode()->index());
 }
 
 graph_ptr_t TaskflowExecSchedPass::apply(graph_ptr_t &graph, std::ostream & /*os*/) {
-    if (!graph->hasOutput()) {
-        throw reportRuntimeFault(
-            *context_,
-            RuntimeFault::make(RuntimeDiag::MissingMainFunction, context_->mainModule()->name()),
-            makeGraphExecutionSite(context_->sourceContext(), graph.get(), 0, "taskflow"));
-    }
+    (void)graph->exitNode();
 
     buildGraphsInfo(graph.get());
 
@@ -287,13 +279,6 @@ void TaskflowExecSchedPass::instantiate_graph_instance_generic(
     std::unordered_map<Node *, tf::Task> taskMap;
     buildNormalNodeTasks(flowLike, graph, frame, taskMap);
     connectDependencies(flowLike, graph, taskMap);
-}
-
-template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildExitTask(FlowT &flowLike, Node *n, Frame *frame) {
-    (void)n;
-    (void)frame;
-    return flowLike.emplace([]() {}).name("EXIT");
 }
 
 template <typename FlowT>
@@ -712,9 +697,6 @@ void TaskflowExecSchedPass::buildNormalNodeTasks(
         case NodeType::OPER:
             t = buildOperTask(flowLike, n, frame);
             break;
-        case NodeType::EXIT:
-            t = buildExitTask(flowLike, n, frame);
-            break;
         case NodeType::BRCH:
             buildBranchJoinRegion(flowLike, graph, frame, taskMap, n);
             continue;
@@ -728,9 +710,6 @@ void TaskflowExecSchedPass::buildNormalNodeTasks(
         tf::Task t    = buildPortTask(flowLike, port, frame);
         taskMap[port] = t;
     }
-    Node *exitNode    = graph->exitNode();
-    tf::Task exitTask = buildExitTask(flowLike, exitNode, frame);
-    taskMap[exitNode] = exitTask;
 }
 
 template <typename FlowT>
