@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 
 #include "arena.h"
 #include "camel/core/data.h"
+#include "camel/core/slot.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/debug.h"
@@ -32,10 +33,9 @@
 #include "types.h"
 
 class OperatorIndex;
+class Tuple;
 
-namespace camel::core::context {
-struct FrameMeta;
-}
+namespace camel::core::context {}
 
 namespace camel::source {
 class SourceContext;
@@ -45,14 +45,35 @@ namespace camel::compile::gir {
 
 class Builder;
 class GraphBuilder;
-class GraphRewriteSession;
 
-using Type         = camel::core::type::Type;
-using FunctionType = camel::core::type::FunctionType;
-using TupleType    = camel::core::type::TupleType;
-using data_vec_t   = camel::core::data::data_vec_t;
-using data_ptr_t   = camel::core::data::data_ptr_t;
-using func_ptr_t   = camel::core::data::func_ptr_t;
+using Type              = camel::core::type::Type;
+using FunctionType      = camel::core::type::FunctionType;
+using TupleType         = camel::core::type::TupleType;
+using data_vec_t        = camel::core::data::data_vec_t;
+using data_ptr_t        = camel::core::data::data_ptr_t;
+using static_slot_vec_t = std::vector<slot_t>;
+
+struct GraphBuilderState {
+    std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> subGraphs;
+    std::unordered_set<graph_ptr_t> dependencies;
+    node_vec_t normPorts, withPorts, closure;
+    node_vec_t nodes;
+    static_slot_vec_t staticDataArr = {NullSlot};
+    FunctionType *funcType          = nullptr;
+    TupleType *staticDataType       = nullptr;
+    TupleType *runtimeDataType      = nullptr;
+    TupleType *closureType          = nullptr;
+    size_t runtimeDataSize          = 1;
+    Node *exitNode                  = nullptr;
+    bool looped                     = false;
+    bool parameterized              = false;
+};
+
+enum class SealState {
+    Draft,
+    Sealing,
+    Sealed,
+};
 
 // =============================================================================
 // Graph：GIR 函数/子图的最终只读产物。
@@ -64,7 +85,7 @@ using func_ptr_t   = camel::core::data::func_ptr_t;
 // 封印后，所有节点的邻接 vectors 被搬迁到 arena 上的定长数组（frozen 模式），
 // draft vectors 被释放，节点不再允许结构编辑。
 //
-// extras_ 提供 O(1) 图级缓存槽位（FrameMeta、JIT entry、topo cache 等），
+// extras_ 提供 O(1) 图级缓存槽位（JIT entry、topo cache 等），
 // 由各后端/工具自行约定 index 并维护失效协议，Graph 本身只提供通用
 // getExtra / setExtra 泛型接口。
 // =============================================================================
@@ -93,64 +114,103 @@ class Graph : public std::enable_shared_from_this<Graph> {
     std::string mangledName() const { return name_ + std::format("<{}>", funcType()->mangle()); }
     const std::string &stableId() const { return stableId_; }
     std::string location() const;
-    bool looped() const { return looped_; }
-    bool empty() const { return nodes_.empty(); }
+    bool looped() const { return activeState() ? activeState()->looped : looped_; }
+    bool empty() const { return (activeState() ? activeState()->nodes : nodes_).empty(); }
     graph_ptr_t outer() const;
-    size_t inDegree() const { return dependencies_.size(); }
+    size_t inDegree() const {
+        return (activeState() ? activeState()->dependencies : dependencies_).size();
+    }
     size_t outDegree() const { return dependents_.size(); }
 
     std::string toString() const;
 
-    /// finalized() 表示此图已经历 sealGraph 封印，拥有完整的 slot 编号、layout 与 FrameMeta，
-    /// 且所有节点的邻接表已搬迁至 arena（frozen 模式）。
-    /// 此标志为单向标记：一旦设为 true 则永不回退。要修改图必须克隆后在 draft 上操作。
-    bool finalized() const { return finalized_; }
+    /// Sealed 表示此图已经历 sealGraph 封印，拥有完整的 slot 编号、layout 与执行期静态区，
+    /// 且所有节点邻接已冻结到 FrozenRegion。状态机是单向的：
+    /// Draft -> Sealing -> Sealed。
+    ///
+    /// 约束：
+    /// - sealed 图只读；
+    /// - draft 可变视图仅存在于 builderState_（staging）；
+    /// - Graph 的“_ 字段”在 draft 期是 staging 的镜像缓存，仅用于兼容只读访问。
+    bool finalized() const { return sealState_ == SealState::Sealed; }
+    bool hasDraftStaging() const { return builderState_ != nullptr; }
+    bool hasMutableDraftView() const { return hasDraftStaging() && !finalized(); }
 
-    FunctionType *funcType() const { return signature_.funcType; }
+    FunctionType *funcType() const {
+        return activeState() ? activeState()->funcType : signature_.funcType;
+    }
     graph_arena_ptr_t arena() const { return arena_; }
-    camel::core::context::FrameMeta *frameMeta() const;
-    const TupleType *staticDataType() const { return signature_.staticDataType; }
-    const TupleType *runtimeDataType() const { return signature_.runtimeDataType; }
-    const TupleType *closureType() const { return signature_.closureType; }
+    size_t frameSize() const { return frameSize_; }
+    ::Tuple *staticArea() const { return staticArea_; }
+    bool hasFrameLayout() const { return frameSize_ != 0 && staticArea_ != nullptr; }
+    const TupleType *staticDataType() const {
+        return activeState() ? activeState()->staticDataType : signature_.staticDataType;
+    }
+    const TupleType *runtimeDataType() const {
+        return activeState() ? activeState()->runtimeDataType : signature_.runtimeDataType;
+    }
+    const TupleType *closureType() const {
+        return activeState() ? activeState()->closureType : signature_.closureType;
+    }
 
-    const data_vec_t &staticDataArr() const { return staticDataArr_; }
-    data_ptr_t materializeStaticData(data_idx_t index) const;
-    data_ptr_t getStaticData(data_idx_t index) const;
-    size_t staticDataSize() const { return staticDataArr_.size(); }
-    size_t runtimeDataSize() const { return signature_.runtimeDataSize; }
+    const static_slot_vec_t &staticDataArr() const {
+        return activeState() ? activeState()->staticDataArr : staticDataArr_;
+    }
+    slot_t getStaticDataSlot(data_idx_t index) const;
+    size_t staticDataSize() const {
+        if (hasPackedStaticData_) {
+            return packedStaticDataSize_;
+        }
+        return staticDataArr().size();
+    }
+    size_t runtimeDataSize() const {
+        return activeState() ? activeState()->runtimeDataSize : signature_.runtimeDataSize;
+    }
 
     std::optional<std::unordered_set<graph_ptr_t>>
     getSubGraphsByName(const std::string &name) const;
     const std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> &subGraphs() const {
-        return subGraphs_;
+        return activeState() ? activeState()->subGraphs : subGraphs_;
     }
 
     const std::unordered_set<graph_wptr_t, WeakPtrHash, WeakPtrEqual> &dependents() const {
         return dependents_;
     }
-    const std::unordered_set<graph_ptr_t> &dependencies() const { return dependencies_; }
-    bool parameterized() const { return parameterized_; }
+    const std::unordered_set<graph_ptr_t> &dependencies() const {
+        return activeState() ? activeState()->dependencies : dependencies_;
+    }
+    bool parameterized() const {
+        return activeState() ? activeState()->parameterized : parameterized_;
+    }
 
     Node *exitNode() const;
     Node *outputNode() const;
-    bool hasOutput() const { return exitNode_ != nullptr; }
+    bool hasOutput() const {
+        return (activeState() ? activeState()->exitNode : exitNode_) != nullptr;
+    }
 
-    const node_vec_t &nodes() const { return nodes_; }
+    const node_vec_t &nodes() const { return activeState() ? activeState()->nodes : nodes_; }
     node_vec_t ports() const {
+        const auto &norm = normPorts();
+        const auto &with = withPorts();
         node_vec_t ports;
-        ports.reserve(normPorts_.size() + withPorts_.size());
-        ports.insert(ports.end(), normPorts_.begin(), normPorts_.end());
-        ports.insert(ports.end(), withPorts_.begin(), withPorts_.end());
+        ports.reserve(norm.size() + with.size());
+        ports.insert(ports.end(), norm.begin(), norm.end());
+        ports.insert(ports.end(), with.begin(), with.end());
         return ports;
     }
-    bool hasPorts() const { return !normPorts_.empty() || !withPorts_.empty(); }
-    bool hasClosure() const { return !closure_.empty(); }
-    const node_vec_t &normPorts() const { return normPorts_; }
-    const node_vec_t &withPorts() const { return withPorts_; }
-    const node_vec_t &closure() const { return closure_; }
-    size_t argsCount() const { return normPorts_.size() + withPorts_.size() + closure_.size(); }
+    bool hasPorts() const { return !normPorts().empty() || !withPorts().empty(); }
+    bool hasClosure() const { return !closure().empty(); }
+    const node_vec_t &normPorts() const {
+        return activeState() ? activeState()->normPorts : normPorts_;
+    }
+    const node_vec_t &withPorts() const {
+        return activeState() ? activeState()->withPorts : withPorts_;
+    }
+    const node_vec_t &closure() const { return activeState() ? activeState()->closure : closure_; }
+    size_t argsCount() const { return normPorts().size() + withPorts().size() + closure().size(); }
 
-    const std::string &nodeStableId(const Node *node) const;
+    const std::string &nodeDebugEntityId(const Node *node) const;
     const std::string &nodePortName(const Node *node) const;
     const std::string &nodeAccsKey(const Node *node) const;
 
@@ -159,11 +219,6 @@ class Graph : public std::enable_shared_from_this<Graph> {
     /// 从注册表查找裸指针对应的 shared_ptr（用于 clone 时传递所有权到新图）。
     std::shared_ptr<::OperatorIndex> lookupOperIndex(const ::OperatorIndex *raw) const;
 
-    /// 将 FunctionData shared_ptr 注册到本图，返回裸指针供 FuncNode 持有。
-    camel::core::data::FunctionData *registerFuncData(func_ptr_t fd);
-    /// 从注册表查找裸指针对应的 shared_ptr（用于 clone/remap 等需要 shared_ptr 语义的场景）。
-    func_ptr_t lookupFuncData(const camel::core::data::FunctionData *raw) const;
-
     /// 通用 extra 缓存槽位。index 由各后端/工具自行约定，Graph 不感知具体用途。
     template <typename T, std::size_t Index> T *getExtra() const { return extras_.get<T, Index>(); }
     template <typename T, std::size_t Index> void setExtra(T *ptr) const {
@@ -171,6 +226,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
     }
 
   private:
+    // draft 期读取统一经 staging；sealed 后 staging 被消费，读取落回只读固化字段。
+    const GraphBuilderState *activeState() const { return builderState_.get(); }
     friend class Node;
     friend class PortNode;
     friend class FuncNode;
@@ -178,15 +235,14 @@ class Graph : public std::enable_shared_from_this<Graph> {
     friend class AccsNode;
     friend class Builder;
     friend class GraphBuilder;
-    friend class GraphRewriteSession;
 
-    // FrameMeta 的 extra index 由 Graph 内部约定，对外不暴露。
-    // 各 VM/工具的 extra index 在各自的头文件中定义。
-    static constexpr std::size_t kFrameMetaExtraIndex_ = 0;
-
-    void setFrameMeta(camel::core::context::FrameMeta *meta) const {
-        setExtra<camel::core::context::FrameMeta, kFrameMetaExtraIndex_>(meta);
-    }
+    /// rearrange 之后、安装执行期布局之前：写入 gnode: 实体 id 并 promote SourceContext 调试映射。
+    void promoteNodeDebugIds(camel::source::SourceContext *sourceContext);
+    NodeDebugFingerprint computeNodeDebugFingerprintForNode(Node *node, uint64_t tieBreaker) const;
+    /// 草稿节点占位 id（指针十六进制），seal 时会替换为内容寻址实体 id。
+    static void installProvisionalNodeStableId(Graph &graph, const Node *node);
+    void packStaticSlotsToFrozen();
+    void installFinalFrameLayout();
 
     std::string name_;
     std::string stableId_;
@@ -204,13 +260,17 @@ class Graph : public std::enable_shared_from_this<Graph> {
         TupleType *closureType     = nullptr;
         size_t runtimeDataSize     = 1;
     } signature_;
-    data_vec_t staticDataArr_ = {nullptr};
+    static_slot_vec_t staticDataArr_ = {NullSlot};
+    bool hasPackedStaticData_        = false;
+    slot_t *packedStaticData_        = nullptr;
+    size_t packedStaticDataSize_     = 0;
+    size_t frameSize_                = 0;
+    ::Tuple *staticArea_             = nullptr;
 
     // --- 节点所有权 ---
-    // 当前 Node 由 ownedNodes_ (unique_ptr) 管理，Graph 析构时自动释放。
-    // 后续 frozen 图的 Node 进入 arena 以提升地址局部性；
-    // draft 阶段保留 unique_ptr 的灵活管理方式。
-    std::vector<node_uptr_t> ownedNodes_;
+    // Node 对象在 GraphArena 中构造；arena 通过 tracked dtor 在 Graph 销毁时统一析构节点对象。
+    // Graph 仅记录节点集合用于遍历、freeze 及调试映射维护。
+    std::vector<Node *> ownedNodes_;
 
     // --- 节点属性集中存储 ---
     // stableId 和 portName 不存于 Node 自身，由 Graph 集中管理。
@@ -221,21 +281,22 @@ class Graph : public std::enable_shared_from_this<Graph> {
     std::unordered_map<const Node *, std::string> nodeAccsKeys_;
 
     // --- 非平凡数据集中持有 ---
-    // OperNode/FuncNode 持有裸指针，实际 shared_ptr 所有权由 Graph 集中管理。
+    // OperNode 持有裸指针，实际 shared_ptr 所有权由 Graph 集中管理。
     // 这使 Node 本身更接近平凡析构，为 arena 化分配铺路。
     std::unordered_map<const ::OperatorIndex *, std::shared_ptr<::OperatorIndex>>
         operIndexRegistry_;
-    std::unordered_map<const camel::core::data::FunctionData *, func_ptr_t> funcDataRegistry_;
     node_vec_t normPorts_, withPorts_, closure_;
     node_vec_t nodes_;
     Node *exitNode_ = nullptr;
 
     /// 单向终结标记。sealGraph() 设为 true 后永不回退。
     /// 要修改已封印的图，必须克隆出 draft 副本再操作。
-    bool finalized_ = false;
+    SealState sealState_ = SealState::Draft;
 
-    bool looped_        = false;
-    bool parameterized_ = false;
+    bool looped_                     = false;
+    bool parameterized_              = false;
+    uint64_t provisionalDebugIdSeed_ = 0;
+    std::shared_ptr<GraphBuilderState> builderState_;
 
     mutable ExtraStorage<4> extras_;
 };

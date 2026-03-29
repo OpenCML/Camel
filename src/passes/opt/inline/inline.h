@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,10 +21,27 @@
 
 #include "camel/execute/pass/opt.h"
 
+enum class InlineTargetStrategy {
+    Small,
+    Arm,
+    Hybrid,
+};
+
+struct InlineRewriteConfig {
+    InlineTargetStrategy strategy           = InlineTargetStrategy::Hybrid;
+    size_t smallSubgraphMaxNonDataPortNodes = 8;
+    bool blockCallsToSccEntryCallees        = true;
+};
+
 class InlineRewritePass : public GraphRewritePass {
   public:
-    InlineRewritePass(const camel::core::context::context_ptr_t &ctx) : GraphRewritePass(ctx) {};
+    InlineRewritePass(
+        const camel::core::context::context_ptr_t &ctx, const InlineRewriteConfig &config = {})
+        : GraphRewritePass(ctx), config_(config) {};
     virtual ~InlineRewritePass() = default;
 
     virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
+
+  private:
+    InlineRewriteConfig config_{};
 };

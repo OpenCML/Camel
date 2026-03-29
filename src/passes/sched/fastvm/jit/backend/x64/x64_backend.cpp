@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -147,14 +147,18 @@ bool X64Backend::compileBytecode(
         return false;
     };
 
-    if (!unit.frameMeta)
-        return fail("no FrameMeta for graph '" + unit.graph->name() + "'");
+    if (!unit.graph)
+        return fail("null graph in JIT compilation unit");
+    if (!unit.graph->finalized())
+        return fail("graph '" + unit.graph->name() + "' is not sealed");
+    if (!unit.graph->hasFrameLayout())
+        return fail("incomplete frame layout for graph '" + unit.graph->name() + "'");
 
     const Bytecode *base = unit.bytecodes.data();
     size_t pcEnd         = unit.bytecodes.size();
     size_t entryPc       = unit.entryPc;
 
-    const slot_t *staticBase = unit.frameMeta->staticArea->data();
+    const slot_t *staticBase = unit.graph->staticArea()->data();
     auto staticSlotAddr      = [&](data_idx_t idx) -> uint64_t {
         return reinterpret_cast<uint64_t>(staticBase + static_cast<size_t>(-idx));
     };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,8 +52,9 @@ class TaskflowFramePool {
   private:
     struct GraphArena {
         GIR::Graph *graph{nullptr};
-        FrameMeta *meta{nullptr};
         size_t frameSize{0};
+        const camel::core::type::TupleType *runtimeDataType{nullptr};
+        ::Tuple *staticArea{nullptr};
         size_t chunkFrames{0};
         std::mutex mutex;
         std::vector<Frame *> freeFrames;

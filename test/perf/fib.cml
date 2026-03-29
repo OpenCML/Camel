@@ -1,6 +1,6 @@
 module fib
 
-import { perfms } from perf
+import { now } from time
 
 func fib(n: int): int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
@@ -8,15 +8,10 @@ func fib(n: int): int {
 
 func main(): int sync {
     let idx = 30
-    let runs = 100
-
-    let (average, margin_error) = perfms<runs>((): void => {
-        fib(idx)
-    })
-
-    'average time cost: {:.2f} +/- {:.2f} ms (95% CI)'
-        ->format<average, margin_error>
-        ->println
-
+    'Start computing fibonacci({})...'->format<idx>->println
+    let start = now()
+    let res = fib(idx)
+    let duration = now() - start
+    'Fibonacci({}) = {} (computed in {:.4f} seconds)'->format<idx, res, duration>->println
     return 0
 }

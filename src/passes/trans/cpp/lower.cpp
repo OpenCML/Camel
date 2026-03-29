@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -186,7 +186,7 @@ GraphLoweringPlan analyzeGraphForCpp(Graph *graph) {
         switch (node->type()) {
         case NodeType::DATA: {
             auto *dataNode = tt::as_ptr<DataNode>(node);
-            if (!cppLiteralFor(dataNode->data()).has_value()) {
+            if (!cppLiteralFor(dataNode->dataSlot(), dataNode->dataType()).has_value()) {
                 addIssue(plan, node, "data literal cannot be emitted as a C++ literal");
             }
         } break;
@@ -230,7 +230,7 @@ GraphLoweringPlan analyzeGraphForCpp(Graph *graph) {
 
         case NodeType::FUNC: {
             auto *funcNode = tt::as_ptr<FuncNode>(node);
-            Graph *callee  = funcNode->graph();
+            Graph *callee  = funcNode->bodyGraph();
             if (callee->hasClosure()) {
                 addIssue(plan, node, "direct function lowering does not support closures");
                 break;
@@ -262,7 +262,7 @@ GraphLoweringPlan analyzeGraphForCpp(Graph *graph) {
         case NodeType::CALL:
         case NodeType::BIND:
         case NodeType::SYNC:
-        case NodeType::NREF:
+        case NodeType::GATE:
         case NodeType::DREF:
             addIssue(plan, node, "node type is not supported by the direct C++ path yet");
             break;

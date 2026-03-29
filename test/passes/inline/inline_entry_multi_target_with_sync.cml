@@ -1,0 +1,26 @@
+/**
+ * 覆盖点：
+ * 1) 多个参数门控目标时，应创建 entry SYNC 收敛为单一 ctrlEntry；
+ * 2) 内联后多参数值流保持正确。
+ */
+module inline_entry_multi_target_with_sync
+
+func combine(a: int, b: int): int {
+    let x = a + 1
+    let y = b + 2
+    return x + y
+}
+
+func main(): int sync {
+    let p = 5
+    let q = 10
+    let r = combine(p, q)
+
+    if r != 18 then {
+        return 1
+    } else sync {
+        'inline_entry_multi_target_with_sync ok'->println
+        return 0
+    }
+}
+

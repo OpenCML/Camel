@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 12, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
@@ -36,7 +36,7 @@ using namespace camel::parse;
 namespace fs = std::filesystem;
 
 int main(int argc, char *argv[]) {
-    camel::initialize();
+    camel::ScopedRuntime camelRuntime;
     std::string inputPath;
     bool inplace                       = false;
     [[maybe_unused]] unsigned tabSize  = 4;

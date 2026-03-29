@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -530,13 +530,43 @@ any Builder::visitFuncData(OpenCMLParser::FuncDataContext *context) {
 }
 
 /*
+funcAnno   : '@' identRef angledValues? ;
+*/
+any Builder::visitFuncAnno(OpenCMLParser::FuncAnnoContext *context) {
+    ENTER("FuncAnno");
+
+    Reference ref       = any_cast<Reference>(visitIdentRef(context->identRef()));
+    node_ptr_t annoNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
+    setNodeTokenRangeByContext(annoNode, context);
+    *annoNode << createNodeAs<RefDataLoad>(ref);
+
+    if (context->angledValues()) {
+        auto [dataList, namedDataList] =
+            any_cast<std::pair<node_ptr_t, node_ptr_t>>(visitAngledValues(context->angledValues()));
+        *annoNode << dataList << namedDataList;
+    }
+
+    LEAVE("FuncAnno");
+    return annoNode;
+}
+
+/*
 funcDecl   :
+        funcAnno*
         (WITH angledParams)?
         EXPORT? implMark? modifiers?
         FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 */
 any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     ENTER("FuncDecl");
+
+    node_ptr_t annoListNode = nullptr;
+    if (!context->funcAnno().empty()) {
+        annoListNode = createNodeAs<RepeatedLoad>("FuncAnno");
+        for (const auto &funcAnno : context->funcAnno()) {
+            *annoListNode << any2node(visitFuncAnno(funcAnno));
+        }
+    }
 
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
     TokenRange typeRange    = {
@@ -615,6 +645,9 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     *funcNode << blockNode;
 
     node_ptr_t funcDeclNode = createNodeAs<FuncDeclLoad>(ref);
+    if (annoListNode) {
+        *funcDeclNode << annoListNode;
+    }
     *funcDeclNode << funcNode;
     setNodeTokenRangeByContext(funcDeclNode, context);
     registerAstSemanticBundle(

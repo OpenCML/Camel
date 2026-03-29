@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -55,7 +55,6 @@ struct CompilationDebugOptions {
 
 struct CompilationUnit {
     GIR::Graph *graph;
-    ctx::FrameMeta *frameMeta = nullptr; // 编译期使用的 Frame 布局，来自 graph->frameMeta()
     std::span<const Bytecode> bytecodes;
     size_t entryPc;
     void *trampolineFunc                 = nullptr; // FUNC trampoline

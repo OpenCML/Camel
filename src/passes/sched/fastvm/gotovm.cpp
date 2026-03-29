@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -516,7 +516,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
 #if ENABLE_FASTVM_JIT
         bc = materializeCallTarget(pc, const_cast<Bytecode *>(bc));
-        if (bc->fastop[1] == 0) {
+        if (bc->fastop[1] < 0) {
             JIT_SAVE_PC_BC(); /* save pc/bc before any call can clobber them (Build opt) */
             Graph *targetGraph     = getFuncExtraGraph(bc);
             JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
@@ -585,7 +585,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         bc                     = materializeCallTarget(pc, const_cast<Bytecode *>(bc));
         Graph *tailTargetGraph = getFuncExtraGraph(bc);
         framePool_.release(currFrame);
-        if (bc->fastop[1] == 0) {
+        if (bc->fastop[1] < 0) {
             size_t argsCnt         = bc->normCnt();
             const data_idx_t *args = bc->operands();
             Frame *newFrame =

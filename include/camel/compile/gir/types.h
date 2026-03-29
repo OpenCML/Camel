@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include <cstdint>
 #include <list>
 #include <memory>
 #include <span>
@@ -47,7 +48,7 @@ enum class NodeType {
     OPER,
     EXIT,
     SYNC,
-    NREF,
+    GATE,
     DREF,
 };
 
@@ -71,13 +72,21 @@ using graph_ptr_t     = std::shared_ptr<Graph>;
 using graph_wptr_t    = std::weak_ptr<Graph>;
 using graph_vec_t     = std::vector<graph_ptr_t>;
 using graph_vec_ptr_t = std::shared_ptr<graph_vec_t>;
-using node_uptr_t     = std::unique_ptr<Node>;
 using node_lst_t      = std::list<Node *>;
 using node_vec_t      = std::vector<Node *>;
 using node_span_t     = std::span<Node *const>;
 using node_set_t      = std::unordered_set<Node *>;
 
 using data_idx_t = int16_t;
+
+/// Seal 后节点的调试/内容寻址指纹（128-bit），物化为 `gnode:{word0}{word1}` 实体 id。
+struct NodeDebugFingerprint {
+    uint64_t word0 = 0;
+    uint64_t word1 = 0;
+
+    std::string toEntityId() const;
+    auto operator<=>(const NodeDebugFingerprint &) const = default;
+};
 using arr_size_t = uint16_t;
 
 struct WeakPtrHash {

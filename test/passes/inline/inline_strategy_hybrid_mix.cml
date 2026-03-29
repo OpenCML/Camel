@@ -1,0 +1,29 @@
+/**
+ * 覆盖点：
+ * 1) 同图同时存在「非 arm 小子图调用」与「arm 小子图调用」；
+ * 2) `std::inline::hybrid`/`std::inline` 应同时覆盖两类目标；
+ * 3) `std::inline::arm` 仅保证 arm 小子图路径（非 arm 目标需在 std::gir 下仍可见）。
+ */
+module inline_strategy_hybrid_mix
+
+func inc(v: int): int {
+    return v + 1
+}
+
+func pick(flag: int, v: int): int {
+    return if flag != 0 then v + 2 else v + 3
+}
+
+func main(): int sync {
+    let a = inc(40)
+    let b = pick(1, 5)
+
+    if a != 41 then {
+        return 1
+    } else if b != 7 then {
+        return 2
+    } else sync {
+        'inline_strategy_hybrid_mix ok'->println
+        return 0
+    }
+}

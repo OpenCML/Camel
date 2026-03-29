@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,15 +21,42 @@
 
 #include "camel/utils/dll_path.h"
 
+#include <atomic>
 #include <mutex>
 
 namespace camel {
 
 /// 主机端初始化（SDK 工具如 camel、camel-cpp 等）：设置库搜索路径等，在使用 libcamel 前调用；幂等。
 /// 适用于运行在 SDK 内的可执行文件，以 exe 所在目录为 base（exe/、exe/libs、exe/../libs）。
+inline std::atomic<bool> &runtimeInitialized() {
+    static std::atomic<bool> initialized{false};
+    return initialized;
+}
+
 inline void initialize() {
+    runtimeInitialized().store(true, std::memory_order_release);
     static std::once_flag once;
     std::call_once(once, []() { camel::utils::setupLibrarySearchPathForHost(); });
 }
+
+/// 主机端收尾：释放 initialize() 注册的全局资源；幂等。
+inline void finalize() {
+    if (!runtimeInitialized().exchange(false, std::memory_order_acq_rel)) {
+        return;
+    }
+    // 当前仅保留统一收尾入口，后续新增全局对象时在此集中释放。
+}
+
+/// 作用域生命周期守卫：构造时 initialize()，析构时 finalize()。
+class ScopedRuntime {
+  public:
+    ScopedRuntime() { initialize(); }
+    ~ScopedRuntime() { finalize(); }
+
+    ScopedRuntime(const ScopedRuntime &)            = delete;
+    ScopedRuntime &operator=(const ScopedRuntime &) = delete;
+    ScopedRuntime(ScopedRuntime &&)                 = delete;
+    ScopedRuntime &operator=(ScopedRuntime &&)      = delete;
+};
 
 } // namespace camel

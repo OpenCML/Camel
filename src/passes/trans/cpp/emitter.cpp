@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -362,7 +362,7 @@ std::string CppEmitter::emitBindingSymbol(Node *node, std::optional<size_t> stmt
         }
         case NodeType::FUNC: {
             auto *funcNode = tt::as_ptr<FuncNode>(node);
-            return namer_.valueSymbolStmt(node, hintFor(funcNode->graph()->name()), *stmtIndex);
+            return namer_.valueSymbolStmt(node, hintFor(funcNode->bodyGraph()->name()), *stmtIndex);
         }
         case NodeType::CAST:
             return namer_.valueSymbolStmt(node, "cast", *stmtIndex);
@@ -385,7 +385,7 @@ std::string CppEmitter::emitBindingSymbol(Node *node, std::optional<size_t> stmt
         auto *funcNode = tt::as_ptr<FuncNode>(node);
         return namer_.valueSymbol(
             node,
-            hintFor(funcNode->graph()->name() + "_" + std::to_string(node->index())));
+            hintFor(funcNode->bodyGraph()->name() + "_" + std::to_string(node->index())));
     }
     case NodeType::CAST:
         return namer_.valueSymbol(node, "cast_" + std::to_string(node->index()));
@@ -452,7 +452,7 @@ std::string CppEmitter::emitExpr(Node *node, expr_cache_t &cache) {
     switch (node->type()) {
     case NodeType::DATA: {
         auto *dataNode = tt::as_ptr<DataNode>(node);
-        auto literal   = cppLiteralFor(dataNode->data());
+        auto literal   = cppLiteralFor(dataNode->dataSlot(), dataNode->dataType());
         if (!literal.has_value()) {
             throw std::runtime_error(
                 std::format("unsupported literal in node '{}'", node->toString()));
@@ -472,7 +472,7 @@ std::string CppEmitter::emitExpr(Node *node, expr_cache_t &cache) {
 
     case NodeType::FUNC: {
         auto *funcNode = tt::as_ptr<FuncNode>(node);
-        Graph *callee  = funcNode->graph();
+        Graph *callee  = funcNode->bodyGraph();
         std::ostringstream oss;
         oss << namer_.graphSymbol(callee) << "(";
         bool first = true;

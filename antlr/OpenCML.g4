@@ -67,7 +67,9 @@ blockStmt  : WAIT? stmtBlock ;
 stmtBlock  : SYNC? '{' stmtList? '}' ;
 blockExpr  : stmtBlock | dataExpr ;
 funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
+funcAnno   : '@' identRef angledValues? ;
 funcDecl   :
+        funcAnno*
         (WITH angledParams)?
         EXPORT? implMark? modifiers?
         FUNC identDef parentParams (':' typeExpr)? stmtBlock ;

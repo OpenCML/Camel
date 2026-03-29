@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,14 +22,18 @@
 #include "camel/core/operator.h"
 #include "graph.h"
 
-#include <memory>
 #include <variant>
+
+class Function;
 
 namespace camel::compile::gir {
 
 class GraphArena;
-class NodeMutation;
 class JoinNode;
+class FuncNode;
+namespace detail {
+class NodeMutation;
+}
 
 // =============================================================================
 // Node：图节点基类，持有类型、数据槽索引、入边/出边
@@ -37,11 +41,9 @@ class JoinNode;
 
 class Node {
   public:
-    static std::string makeStableId(Graph &graph, NodeType nodeType);
-
     Node(Graph &graph, NodeType nodeType, Type *dataType, data_idx_t index)
         : graph_(&graph), nodeType_(nodeType), dataType_(dataType), dataIndex_(index) {
-        graph.nodeStableIds_[this] = makeStableId(graph, nodeType);
+        Graph::installProvisionalNodeStableId(graph, this);
     }
     virtual ~Node() = default;
 
@@ -50,7 +52,6 @@ class Node {
         ASSERT(dataType_ != nullptr, "Node has no data type.");
         return dataType_;
     }
-    void setDataType(Type *type) { dataType_ = type; }
     virtual std::string toString() const;
     virtual operator std::string() const;
     virtual Node *clone(Graph &graph) const = 0;
@@ -60,12 +61,9 @@ class Node {
 
     Graph &graph() const { return *graph_; }
     data_idx_t index() const;
-    void setIndex(data_idx_t index) { dataIndex_ = index; }
-    const std::string &stableId() const { return graph_->nodeStableId(this); }
+    const std::string &debugEntityId() const { return graph_->nodeDebugEntityId(this); }
     bool macro() const { return macro_; }
     bool constant() const { return const_; }
-    void setMacro(bool m) { macro_ = m; }
-    void setConstant(bool c) { const_ = c; }
 
     node_vec_t dataInputs() const;
     node_span_t normInputs() const {
@@ -121,6 +119,23 @@ class Node {
     bool detach();
 
   protected:
+    void setDataType(Type *type) {
+        ASSERT(!graph_->finalized(), "Cannot mutate node type after graph is sealed.");
+        dataType_ = type;
+    }
+    void setIndex(data_idx_t index) {
+        ASSERT(!graph_->finalized(), "Cannot mutate node index after graph is sealed.");
+        dataIndex_ = index;
+    }
+    void setMacro(bool m) {
+        ASSERT(!graph_->finalized(), "Cannot mutate node flags after graph is sealed.");
+        macro_ = m;
+    }
+    void setConstant(bool c) {
+        ASSERT(!graph_->finalized(), "Cannot mutate node flags after graph is sealed.");
+        const_ = c;
+    }
+
     bool macro_  = false;
     bool const_  = false;
     bool frozen_ = false;
@@ -154,7 +169,7 @@ class Node {
     friend class Builder;
     friend class GraphBuilder;
     friend class GraphRewriteSession;
-    friend class NodeMutation;
+    friend class detail::NodeMutation;
 
     node_vec_t &mutableNormInputs() {
         ASSERT(!frozen_, "Cannot mutate frozen node.");
@@ -194,8 +209,17 @@ class Node {
     static bool replaceUses(Node *oldNode, Node *newNode);
 };
 
+namespace detail {
+// 内部节点改写桥接：仅供 GraphBuilder/GraphDraft/rewrite 通道使用，
+// 不作为对外稳定 API。
 class NodeMutation {
   public:
+    static void setDataType(Node *node, Type *type) { node->setDataType(type); }
+    static void setIndex(Node *node, data_idx_t index) { node->setIndex(index); }
+    static void setMacro(Node *node, bool m) { node->setMacro(m); }
+    static void setConstant(Node *node, bool c) { node->setConstant(c); }
+    static void setBodyGraph(FuncNode *node, Graph *bodyGraph);
+
     static node_vec_t &normInputs(Node *node) { return node->mutableNormInputs(); }
     static node_vec_t &withInputs(Node *node) { return node->mutableWithInputs(); }
     static node_vec_t &ctrlInputs(Node *node) { return node->mutableCtrlInputs(); }
@@ -211,6 +235,7 @@ class NodeMutation {
     static bool replace(Node *oldNode, Node *newNode);
     static bool replaceUses(Node *oldNode, Node *newNode);
 };
+} // namespace detail
 
 // 数据与端口类节点
 class DataNode : public Node {
@@ -220,8 +245,9 @@ class DataNode : public Node {
     ~DataNode() = default;
 
     static Node *create(Graph &graph, const data_ptr_t &data);
+    static Node *createStaticSlot(Graph &graph, Type *type, slot_t slot);
 
-    data_ptr_t data() const { return graph_->materializeStaticData(dataIndex_); }
+    slot_t dataSlot() const { return graph_->getStaticDataSlot(dataIndex_); }
 
     std::string toString() const override;
 
@@ -422,32 +448,22 @@ class BindNode : public Node {
 };
 
 class FuncNode : public Node {
-    camel::core::data::FunctionData *func_;
-    Graph *graph_; // 构造时确定，FunctionData 必然有 graph
+    ::Function *rtFunc_;
+    Graph *graph_;
 
   public:
-    FuncNode(Graph &graph, data_idx_t index, camel::core::data::FunctionData *func)
-        : Node(graph, NodeType::FUNC, func->funcType()->exitType(), index), func_(func),
-          graph_(&func_->graph()) {}
+    FuncNode(Graph &graph, data_idx_t index, Graph *bodyGraph, ::Function *rtFunc)
+        : Node(graph, NodeType::FUNC, bodyGraph->funcType()->exitType(), index), rtFunc_(rtFunc),
+          graph_(bodyGraph) {}
     ~FuncNode() = default;
 
-    static Node *create(Graph &graph, func_ptr_t func);
+    static Node *create(Graph &graph, const graph_ptr_t &bodyGraph);
+    static Node *create(Graph &graph, Graph *bodyGraph);
 
-    camel::core::data::FunctionData *func() const { return func_; }
-    /// 返回 FunctionData 的 shared_ptr（用于 clone/remap/GC 等需要所有权语义的场景）。
-    /// 热路径请使用 func() 返回的裸指针以避免引用计数开销。
-    func_ptr_t funcShared() const { return Node::graph_->lookupFuncData(func_); }
-    void setFunc(Graph &ownerGraph, const func_ptr_t &func) {
-        func_ = ownerGraph.registerFuncData(func);
-        ASSERT(func_ != nullptr, "Function is null for FunctionNode.");
-        graph_ = &func_->graph();
-        setDataType(func_->funcType()->exitType());
-    }
-    /** 执行热路径用：构造时已缓存，直接返回，避免返回 func_ptr_t 带来的引用计数开销 */
-    Graph *graph() const { return graph_; }
+    ::Function *rtFunc() const { return rtFunc_; }
     Graph *bodyGraph() const { return graph_; }
     FunctionType *funcType() const;
-    bool isMacro() const { return func_ && func_->isMacro(); }
+    bool isMacro() const { return graph_ && graph_->isMacro(); }
     bool hasMatchedJoin() const {
         auto wo = withOutputs();
         return wo.size() == 1 && wo.front()->type() == NodeType::JOIN;
@@ -457,6 +473,15 @@ class FuncNode : public Node {
     std::string toString() const override;
 
     Node *clone(Graph &graph) const override;
+
+  private:
+    void setBodyGraph(Graph *bodyGraph) {
+        ASSERT(bodyGraph != nullptr, "FuncNode body graph cannot be null.");
+        ASSERT(!graph().finalized(), "Cannot retarget FuncNode after graph is sealed.");
+        graph_ = bodyGraph;
+        setDataType(bodyGraph->funcType()->exitType());
+    }
+    friend class detail::NodeMutation;
 };
 
 class OperNode : public Node {
@@ -497,7 +522,8 @@ class ExitNode : public Node {
 
 class DrefNode : public Node {
   public:
-    using dref_target_t = std::variant<graph_vec_ptr_t, oper_group_ptr_t>;
+    // FUNC overload set / OPERATOR group / pre-built inlined graph.
+    using dref_target_t = std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>;
 
     DrefNode(Graph &graph, const dref_target_t &target)
         : Node(graph, NodeType::DREF, Type::Void(), 0), target_(target) {}
@@ -527,10 +553,10 @@ class SyncNode : public Node {
     Node *clone(Graph &graph) const override;
 };
 
-class NRefNode : public Node {
+class GateNode : public Node {
   public:
-    NRefNode(Graph &graph) : Node(graph, NodeType::NREF, Type::Void(), 0) {}
-    ~NRefNode() = default;
+    GateNode(Graph &graph) : Node(graph, NodeType::GATE, Type::Void(), 0) {}
+    ~GateNode() = default;
 
     static Node *create(Graph &graph);
 

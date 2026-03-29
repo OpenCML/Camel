@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,10 +33,12 @@ namespace camel::compile::gir {
 
 using void_ptr_t = void *;
 
-using node_scope_t      = Scope<std::string, Node *>;
-using node_scope_ptr_t  = std::shared_ptr<node_scope_t>;
-using graph_scope_t     = Scope<std::string, std::shared_ptr<graph_vec_t>>;
-using graph_scope_ptr_t = std::shared_ptr<graph_scope_t>;
+using node_scope_t          = Scope<std::string, Node *>;
+using node_scope_ptr_t      = std::shared_ptr<node_scope_t>;
+using graph_scope_t         = Scope<std::string, std::shared_ptr<graph_vec_t>>;
+using graph_scope_ptr_t     = std::shared_ptr<graph_scope_t>;
+using decorated_scope_t     = Scope<std::string, graph_ptr_t>;
+using decorated_scope_ptr_t = std::shared_ptr<decorated_scope_t>;
 
 class Builder {
   public:
@@ -55,6 +57,7 @@ class Builder {
 
     node_scope_ptr_t nodeScope_;
     graph_scope_ptr_t graphScope_;
+    decorated_scope_ptr_t decoratedScope_;
 
     camel::core::context::context_ptr_t context_;
     camel::core::module::module_ptr_t module_;
@@ -68,7 +71,8 @@ class Builder {
     // 已经被调用过的 Graph 不能再追加闭包捕获
     std::unordered_set<Graph *> usedGraphs_;
     std::unordered_map<Node *, Node *> nodeModifierMap_;
-    Node *lastSyncedNode_ = nullptr;
+    Node *lastSyncedNode_     = nullptr;
+    size_t syntheticRefIndex_ = 0;
 
     std::optional<Node *> nodeAt(const std::string &name) {
         EXEC_WHEN_DEBUG({
@@ -99,15 +103,23 @@ class Builder {
         });
         return graphScope_->get(name);
     }
+    std::optional<graph_ptr_t> decoratedGraphAt(const std::string &name) {
+        return decoratedScope_ ? decoratedScope_->get(name) : std::nullopt;
+    }
 
     bool insertNode(const std::string &name, Node *node);
     bool insertGraph(const std::string &name, const graph_ptr_t &graph);
+    bool insertDecoratedGraph(const std::string &name, const graph_ptr_t &graph);
 
     graph_ptr_t enterScope(FunctionType *funcType, const std::string &name = "");
     void leaveScope();
 
     Node *
     createFuncDataNode(const graph_ptr_t &graph, bool getCallableNode, bool allowParameterization);
+    graph_ptr_t buildDecoratedGraph(
+        const std::string &funcName, const graph_ptr_t &rawGraph,
+        const std::vector<GCT::node_ptr_t> &annoNodes);
+    Node *applyDecoratorAnno(const GCT::node_ptr_t &annoNode, Node *funcValueNode);
     Node *resolveCrossGraphRef(Node *node, const std::string &name);
     Node *resolveNodeByRef(const std::string &name);
 

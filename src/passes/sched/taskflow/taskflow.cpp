@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -247,7 +247,7 @@ void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
 
             if (n->type() == NodeType::FUNC) {
                 auto fn    = tt::as_ptr<FuncNode>(n);
-                Graph *sub = &fn->func()->graph();
+                Graph *sub = fn->bodyGraph();
                 if (!visited.count(sub))
                     q.push(sub);
             } else if (n->type() == NodeType::BRCH) {
@@ -269,7 +269,7 @@ void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
             }
         }
 
-        // 提前安装 FrameMeta 并预热一个 frame，避免首次进入子图时在 worker 线程里做冷启动。
+        // 图在 seal 后已具备 finalized frame layout；这里只做 frame 预热，避免首次进入子图冷启动。
         framePool_.warmup(g, 1);
     }
 }
@@ -452,11 +452,11 @@ tf::Task TaskflowExecSchedPass::buildFuncTask(FlowT &flowLike, Node *n, Frame *f
                         "Executing FUNC (entering subgraph) graph={} node={} -> subgraph={}",
                         n->graph().name(),
                         n->toString(),
-                        tt::as_ptr<FuncNode>(n)->func()->graph().name());
+                        tt::as_ptr<FuncNode>(n)->bodyGraph()->name());
                 if (camel::DebugBreakpoint::IsEnabled("gir_node"))
                     camel::DebugBreakpoint::Hit("gir_node", n);
             });
-            Graph *tgtGraph  = &tt::as_ptr<FuncNode>(n)->func()->graph();
+            Graph *tgtGraph  = tt::as_ptr<FuncNode>(n)->bodyGraph();
             Frame *funcFrame = acquirePreparedNodeCallFrame(tgtGraph, n, frame);
             frame->set(n->index(), runPreparedSubgraph(sf, tgtGraph, funcFrame));
         })
@@ -639,7 +639,7 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
 
                     slot_t out = NullSlot;
                     if (candidate->type() == NodeType::FUNC) {
-                        Graph *tgtGraph  = &tt::as_ptr<FuncNode>(candidate)->func()->graph();
+                        Graph *tgtGraph  = tt::as_ptr<FuncNode>(candidate)->bodyGraph();
                         Frame *funcFrame = acquirePreparedNodeCallFrame(tgtGraph, candidate, frame);
                         out              = runPreparedSubgraph(csf, tgtGraph, funcFrame);
                     } else if (candidate->type() == NodeType::CALL) {

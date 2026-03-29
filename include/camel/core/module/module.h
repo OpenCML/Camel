@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 10, 2026
+ * Updated: Mar. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,8 +40,8 @@ using graph_vec_ptr_t = std::shared_ptr<graph_vec_t>;
 namespace GIR = camel::compile::gir;
 namespace camel::core::module {
 
-using Type            = camel::core::type::Type;
-using entity          = std::variant<GIR::Node *, GIR::graph_vec_ptr_t, oper_group_ptr_t>;
+using Type   = camel::core::type::Type;
+using entity = std::variant<GIR::Node *, GIR::graph_vec_ptr_t, oper_group_ptr_t, GIR::graph_ptr_t>;
 using entity_ns_ptr_t = std::shared_ptr<Namespace<std::string, entity>>;
 using type_ns_ptr_t   = std::shared_ptr<Namespace<std::string, Type *>>;
 

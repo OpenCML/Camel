@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 07, 2026
- * Updated: Mar. 10, 2026
+ * Updated: Mar. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "camel/compile/gir/graph.h"
 #include "camel/compile/gir/nodes.h"
 #include "camel/core/context/context.h"
+#include "camel/core/source/manager.h"
 
 #include <filesystem>
 #include <format>
@@ -77,7 +78,7 @@ camel::source::origin_id_t resolveOriginFromSite(
     const auto &debugMap = sourceContext->debugMap();
 
     if (site.node) {
-        auto origin = debugMap.nodeOrigin(site.node->stableId());
+        auto origin = sourceContext->resolveGirNodeOrigin(site.node);
         if (origin != camel::source::kInvalidOriginId) {
             return origin;
         }
@@ -209,9 +210,9 @@ ExecutionSite makeNodeExecutionSite(
     site.kind = kind;
     site.node = node;
     if (node) {
-        site.stableId = node->stableId();
+        site.stableId = node->debugEntityId();
         if (sourceContext) {
-            site.cachedOrigin = sourceContext->debugMap().nodeOrigin(site.stableId);
+            site.cachedOrigin = sourceContext->resolveGirNodeOrigin(node);
         }
     }
     return site;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -88,6 +88,8 @@ class Builder : public OpenCMLVisitor {
     std::any visitBlockExpr(OpenCMLParser::BlockExprContext *context);
 
     std::any visitFuncData(OpenCMLParser::FuncDataContext *context);
+
+    std::any visitFuncAnno(OpenCMLParser::FuncAnnoContext *context);
 
     std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context);
 

@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "graphviz.h"
+#include "camel/core/rtdata/base.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/type.h"
+#include <sstream>
 
 using namespace std;
 using namespace GIR;
@@ -258,6 +260,7 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
     node_vec_t nodes;
     for (Node *n : graph->nodes())
         nodes.push_back(n);
+    ASSERT(graph->hasOutput(), std::format("Graph '{}' has no output.", graph->name()));
     nodes.push_back(graph->exitNode()); // 包含ExitNode
 
     for (size_t i = 0; i < nodes.size(); ++i) {
@@ -268,8 +271,9 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
         switch (node->type()) {
         case NodeType::DATA: {
             auto sourceNode = tt::as_ptr<DataNode>(node);
-            data_ptr_t data = sourceNode->data();
-            label           = data->toString();
+            std::ostringstream oss;
+            camel::core::rtdata::printSlot(oss, sourceNode->dataSlot(), sourceNode->dataType());
+            label = oss.str();
             break;
         }
         case NodeType::CAST: {
@@ -314,8 +318,8 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
             break;
         }
         case NodeType::FUNC: {
-            auto *func = tt::as_ptr<FuncNode>(node)->func();
-            label      = func->name().empty() ? func->graph().name() : func->name();
+            auto *func = tt::as_ptr<FuncNode>(node);
+            label      = func->bodyGraph()->name();
             shape      = "Mdiamond";
             size       = "width=1.1, height=1.1";
             break;
@@ -338,8 +342,8 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
             style = "dashed";
             break;
         }
-        case NodeType::NREF: {
-            label = "NREF";
+        case NodeType::GATE: {
+            label = "GATE";
             shape = "diamond";
             style = "dashed";
             break;

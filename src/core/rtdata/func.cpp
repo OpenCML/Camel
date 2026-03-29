@@ -13,22 +13,33 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 17, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/rtdata/func.h"
-#include "camel/compile/gir.h"
+#include "camel/compile/gir/graph.h"
 
 const type::TupleType *Function::tupleType() const { return graph_->closureType(); }
 
+Function *Function::create(
+    GIR::Graph *graph, const type::Type *tupleType, camel::core::mm::IAllocator &allocator) {
+    ASSERT(tupleType && tupleType->code() == type::TypeCode::Tuple, "Type must be TupleType");
+    const type::TupleType *tt = static_cast<const type::TupleType *>(tupleType);
+    ASSERT(graph != nullptr, "Function graph cannot be null.");
+    ASSERT(tt->size() == graph->closure().size(), "Function closure tuple size mismatch.");
+
+    void *mem = allocator.alloc(sizeof(Function), alignof(Function));
+    if (!mem)
+        throw std::bad_alloc();
+
+    auto *fn     = new (mem) Function(graph);
+    fn->closure_ = Tuple::create(tt->size(), allocator);
+    return fn;
+}
+
 void Function::print(std::ostream &os, const type::Type *type) const {
-    os << "Function(graph=" << graph_->name() << ", tuple=";
-    if (closure_) {
-        const type::TupleType *tupleTypePtr = tupleType();
-        closure_->print(os, tupleTypePtr);
-    } else {
-        os << "null";
-    }
+    os << "Function(graph=" << graph_->name() << ", tupleSlots=";
+    os << (closure_ ? std::to_string(closure_->size()) : "null");
     os << ")";
 }

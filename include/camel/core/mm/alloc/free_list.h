@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 09, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,6 +33,7 @@
 #include <cstddef>
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace camel::core::mm {
@@ -89,15 +90,16 @@ class FreeListAllocator : public IAllocator {
                     installHeader(blockStart, curr->size);
                     *prevPtr = curr->next;
                 }
+                void *payloadPtr = blockStart + sizeof(ObjectHeader);
+                size_t allocSize = (remaining >= sizeof(FreeBlock)) ? total_size : curr->size;
+                allocatedSizes_[payloadPtr] = allocSize;
                 EXEC_WHEN_DEBUG({
                     if (debugRegion_) {
-                        size_t allocSize =
-                            (remaining >= sizeof(FreeBlock)) ? total_size : curr->size;
                         invokePostAllocHook(
                             AllocEvent{blockStart + sizeof(ObjectHeader), allocSize, debugRegion_});
                     }
                 });
-                return blockStart + sizeof(ObjectHeader);
+                return payloadPtr;
             }
 
             prevPtr = &(curr->next);
@@ -112,18 +114,30 @@ class FreeListAllocator : public IAllocator {
         if (UNLIKELY(!ptr))
             return;
 
-        ObjectHeader *header = headerOf(ptr);
-        size_t total_size    = header->size();
+        auto allocIt = allocatedSizes_.find(ptr);
+        ASSERT(
+            allocIt != allocatedSizes_.end(),
+            "Free pointer was not allocated by this allocator.");
+        size_t total_size = allocIt->second;
+        allocatedSizes_.erase(allocIt);
 
         ASSERT(total_size % alignof(slot_t) == 0, "Object size not aligned");
         ASSERT(total_size >= sizeof(ObjectHeader), "Invalid object size");
 
-        std::byte *blockData = reinterpret_cast<std::byte *>(header);
+        std::byte *blockData = static_cast<std::byte *>(ptr) - sizeof(ObjectHeader);
+        ASSERT(blockData >= start_ && blockData < end_, "Free pointer is out of allocator range.");
+        ASSERT(blockData + total_size <= end_, "Free block exceeds allocator range.");
 
         // 检测重复释放：检查是否与任何空闲块重叠
         EXEC_WHEN_DEBUG({
             FreeBlock *fb = freeList_;
             while (fb) {
+                std::byte *fb_addr = reinterpret_cast<std::byte *>(fb);
+                ASSERT(
+                    fb_addr >= start_ && fb_addr < end_,
+                    "Free list pointer is out of allocator range.");
+                ASSERT(fb->size >= sizeof(FreeBlock), "Free list block size is invalid.");
+                ASSERT(fb_addr + fb->size <= end_, "Free list block exceeds allocator range.");
                 std::byte *fb_start  = reinterpret_cast<std::byte *>(fb);
                 std::byte *fb_end    = fb_start + fb->size;
                 std::byte *block_end = blockData + total_size;
@@ -147,10 +161,19 @@ class FreeListAllocator : public IAllocator {
         blocks.reserve(objects.size());
 
         for (auto *hdr : objects) {
-            size_t obj_size = hdr->size();
+            void *payload = reinterpret_cast<std::byte *>(hdr) + sizeof(ObjectHeader);
+            auto allocIt  = allocatedSizes_.find(payload);
+            ASSERT(
+                allocIt != allocatedSizes_.end(),
+                "Bulk free pointer was not allocated by this allocator.");
+            size_t obj_size = allocIt->second;
+            allocatedSizes_.erase(allocIt);
             ASSERT(obj_size % alignof(slot_t) == 0, "Object size not aligned");
             ASSERT(obj_size >= sizeof(ObjectHeader), "Invalid object size");
-            blocks.emplace_back(reinterpret_cast<std::byte *>(hdr), obj_size);
+            std::byte *addr = reinterpret_cast<std::byte *>(hdr);
+            ASSERT(addr >= start_ && addr < end_, "Bulk free pointer is out of allocator range.");
+            ASSERT(addr + obj_size <= end_, "Bulk free block exceeds allocator range.");
+            blocks.emplace_back(addr, obj_size);
         }
 
         // 按地址排序
@@ -195,6 +218,7 @@ class FreeListAllocator : public IAllocator {
         freeList_             = reinterpret_cast<FreeBlock *>(start_);
         freeList_->size       = total_capacity;
         freeList_->next       = nullptr;
+        allocatedSizes_.clear();
     }
 
     size_t available() const override {
@@ -282,7 +306,10 @@ class FreeListAllocator : public IAllocator {
                 freeBlockSet.insert(curr);
 
                 std::byte *curr_start = reinterpret_cast<std::byte *>(curr);
-                std::byte *curr_end   = curr_start + curr->size;
+                if (UNLIKELY(curr_start < start_ || curr_start >= end_)) {
+                    return false;
+                }
+                std::byte *curr_end = curr_start + curr->size;
 
                 // 边界检查
                 if (UNLIKELY(curr_start < start_ || curr_end > end_)) {
@@ -324,6 +351,10 @@ class FreeListAllocator : public IAllocator {
             while (UNLIKELY(scan < end_)) {
                 // 检查当前位置是否是空闲块
                 if (UNLIKELY(expected_fb && reinterpret_cast<std::byte *>(expected_fb) == scan)) {
+                    std::byte *expected_addr = reinterpret_cast<std::byte *>(expected_fb);
+                    if (UNLIKELY(expected_addr < start_ || expected_addr >= end_)) {
+                        return false;
+                    }
                     // 是空闲块
                     scan += expected_fb->size;
                     expected_fb = expected_fb->next;
@@ -395,6 +426,7 @@ class FreeListAllocator : public IAllocator {
     std::byte *end_;
     FreeBlock *freeList_;
     mutable std::mutex mutex_;
+    std::unordered_map<void *, size_t> allocatedSizes_;
 
     // 辅助函数：从用户指针获取对象头
     ObjectHeader *headerOf(void *ptr) const {

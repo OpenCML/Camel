@@ -19,6 +19,11 @@
 | [10_source_mapping_and_debug_locations.md](10_source_mapping_and_debug_locations.md) | 源码映射、Origin 派生链，以及 GCT/GIR/Runtime 如何回到源码区间 |
 | [11_semantic_models_and_reverse_mapping_foundation.md](11_semantic_models_and_reverse_mapping_foundation.md) | AST/GCT/GIR 节点语义、层间 lowering、基础缺口审计与相对精确逆映射底座 |
 | [12_namespace_convention.md](12_namespace_convention.md) | **命名空间规范**：路径与命名空间映射、别名约定、新代码规则及迁移状态 |
+| [13_macro_system_progress.md](13_macro_system_progress.md) | 宏系统重构阶段性进展、风险与后续路线 |
+| [14_funcnode_runtime_convergence.md](14_funcnode_runtime_convergence.md) | FuncNode 运行时收敛方案与迁移要点 |
+| [15_gir_graph_gc_milestone.md](15_gir_graph_gc_milestone.md) | GIR Graph 垃圾回收里程碑与阶段成果 |
+| [16_inline_rewrite_algorithm.md](16_inline_rewrite_algorithm.md) | `std::inline` 重写算法、SCC 调度、Graph API 协作与不变量 |
+| [17_graph_rewrite_api_contracts.md](17_graph_rewrite_api_contracts.md) | Graph 重写 API 契约：事务边界、可写域、内联入口规则与验证器约束 |
 
 ## 相关文档（docs 目录）
 

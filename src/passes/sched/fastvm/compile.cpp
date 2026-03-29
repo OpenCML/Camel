@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "camel/common/algo/topo.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/rtdata/func.h"
 #include "camel/execute/executor.h"
 
 #include <algorithm>
@@ -133,9 +134,17 @@ bytecode_vec_t compile(
 
     auto bytecodes = bytecode_vec_t();
     bytecodes.reserve(topoSortedNodes.size() * 3); // 预估容量
+    std::unordered_set<Node *> topoNodeSet(topoSortedNodes.begin(), topoSortedNodes.end());
 
-    // 用于回填跳转地址的映射表
-    unordered_map<Node *, size_t> brchTargetMap;
+    // 用于回填跳转地址的映射表。
+    //
+    // 为什么同一个目标节点会被多个 BRCH arm 共享？
+    // 1) 多个 arm 的控制流在重写/优化后直接收敛到同一控制头节点；
+    // 2) arm 头节点不可达时会回退到 matched JOIN，多个 arm 可能回退到同一个 JOIN；
+    // 3) BRCH/JOIN 的槽位语义允许不同 arm 槽位引用同一节点（按槽位区分语义，而非按指针唯一）。
+    //
+    // 因此目标 -> 占位索引必须是一对多映射，否则后写会覆盖先写，导致部分 JUMP 无法回填。
+    unordered_map<Node *, vector<size_t>> brchTargetMap;
     // JOIN*, FROM*
     unordered_map<Node *, vector<pair<size_t, size_t>>> joinTargetMap;
 
@@ -144,15 +153,16 @@ bytecode_vec_t compile(
 
         size_t currIdx     = bytecodes.size();
         auto sourceContext = ctx ? ctx->sourceContext() : nullptr;
-        auto nodeOrigin    = sourceContext ? sourceContext->debugMap().nodeOrigin(node->stableId())
+        auto nodeOrigin    = sourceContext ? sourceContext->resolveGirNodeOrigin(node)
                                            : camel::source::kInvalidOriginId;
 
         // 回填之前记录的 JUMP 跳转地址
-        if (brchTargetMap.find(node) != brchTargetMap.end()) {
-            size_t jumpIndex = brchTargetMap[node];
-            auto &header     = bytecodes[jumpIndex];
-            header.fastop[0] = as_index(bytecodes.size());
-            brchTargetMap.erase(node);
+        if (auto it = brchTargetMap.find(node); it != brchTargetMap.end()) {
+            for (size_t jumpIndex : it->second) {
+                auto &header     = bytecodes[jumpIndex];
+                header.fastop[0] = as_index(bytecodes.size());
+            }
+            brchTargetMap.erase(it);
         }
 
         vector<data_idx_t> normOps, withOps;
@@ -241,18 +251,78 @@ bytecode_vec_t compile(
         }
 
         case NodeType::BRCH: {
+            auto *brch = tt::as_ptr<BrchNode>(node);
             appendBytecode(bytecodes, OpCode::BRCH, node->index(), {}, normOps, withOps);
 
-            // 为这个 BRCH 节点的每个控制输出添加一个占位跳转指令
-            for (const auto &ctrlOut : node->ctrlOutputs()) {
-                // 记录跳转目标
-                brchTargetMap[ctrlOut] = bytecodes.size();
-                // 占位跳转指令，目标地址稍后回填
-                appendBytecode(
-                    bytecodes,
-                    OpCode::JUMP,
-                    0, // 占位，无实际节点对应
-                    {0});
+            // BRCH 语义 arm 数与 JOIN 的 with 槽位一一对应：
+            // - if/else: withCnt == 0, armCount == 2
+            // - match:  armCount == withCnt + 1 (最后一个是 default/else)
+            const size_t expectedArmCount = withOps.empty() ? 2 : withOps.size() + 1;
+            Node *joinFallbackTarget      = nullptr;
+            if (brch->hasMatchedJoin() && topoNodeSet.contains(brch->matchedJoin())) {
+                joinFallbackTarget = brch->matchedJoin();
+            }
+
+            vector<Node *> armHeads;
+            armHeads.reserve(expectedArmCount);
+
+            // 优先使用 matched JOIN 的 ctrlInputs 顺序作为 arm 顺序来源，确保与 JOIN 槽位对齐。
+            // 某些图形态下 JOIN 可能暂时不显式携带 ctrlInputs（例如历史图或部分重写中间态），
+            // 此时回退到 BRCH.ctrlOutputs 顺序。
+            if (brch->hasMatchedJoin() &&
+                brch->matchedJoin()->ctrlInputs().size() == expectedArmCount) {
+                auto *joinNode = brch->matchedJoin();
+                auto joinCtrls = joinNode->ctrlInputs();
+                for (size_t armIdx = 0; armIdx < expectedArmCount; ++armIdx) {
+                    Node *head = joinCtrls[armIdx];
+                    if (!topoNodeSet.contains(head)) {
+                        ASSERT(
+                            joinFallbackTarget != nullptr,
+                            std::format(
+                                "BRCH arm head is unreachable and no JOIN fallback exists in "
+                                "compile for graph '{}': brch={}, arm={}, head={}.",
+                                graph->name(),
+                                brch->toString(),
+                                armIdx,
+                                head ? head->toString() : "<null>"));
+                        head = joinFallbackTarget;
+                    }
+                    armHeads.push_back(head);
+                }
+            } else {
+                // 兜底路径：无 matched JOIN 时回退到 BRCH 的 ctrlOutputs 顺序。
+                auto ctrlOuts = brch->ctrlOutputs();
+                ASSERT(
+                    ctrlOuts.size() >= expectedArmCount,
+                    std::format(
+                        "BRCH ctrl output count is insufficient in compile for graph '{}': "
+                        "brch={}, expectedArms={}, ctrlOuts={}.",
+                        graph->name(),
+                        brch->toString(),
+                        expectedArmCount,
+                        ctrlOuts.size()));
+                for (size_t armIdx = 0; armIdx < expectedArmCount; ++armIdx) {
+                    Node *head = ctrlOuts[armIdx];
+                    if (!topoNodeSet.contains(head)) {
+                        ASSERT(
+                            joinFallbackTarget != nullptr,
+                            std::format(
+                                "BRCH ctrl output arm is unreachable and no JOIN fallback exists "
+                                "in compile for graph '{}': brch={}, arm={}, head={}.",
+                                graph->name(),
+                                brch->toString(),
+                                armIdx,
+                                head ? head->toString() : "<null>"));
+                        head = joinFallbackTarget;
+                    }
+                    armHeads.push_back(head);
+                }
+            }
+
+            // 为每个语义 arm 生成固定一条 JUMP 占位，保证 BRCH jumpIdx 与 arm slot 严格一致。
+            for (Node *armHead : armHeads) {
+                brchTargetMap[armHead].push_back(bytecodes.size());
+                appendBytecode(bytecodes, OpCode::JUMP, 0, {0});
             }
             if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
                 (*localPcOrigins)[currIdx] = nodeOrigin;
@@ -307,7 +377,7 @@ bytecode_vec_t compile(
                 normOps,
                 {},
                 true,
-                {.graph = &(funcNode->func()->graph())},
+                {.graph = funcNode->bodyGraph()},
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
                 2
 #else
@@ -391,7 +461,7 @@ bytecode_vec_t compile(
 
         case NodeType::DATA:
             [[fallthrough]];
-        case NodeType::NREF: {
+        case NodeType::GATE: {
             // 一般无操作
             // 但在内联函数中，有时候会直连JOIN
             // 这时候需要插入一个JUMP节点而不能直接跳过
@@ -454,25 +524,43 @@ compileAndLink(context_ptr_t ctx, GIR::Graph *entry, const CompileStrategy &opt)
     std::vector<BytecodeIndex> graphs;
     std::unordered_map<GIR::Graph *, size_t> offsetMap;
 
-    // 收集所有被依赖的子图（包含 entry 自身）
-    std::vector<graph_ptr_t> allGraphs;
-    for (const auto &[_, gSet] : entry->subGraphs()) {
-        for (const auto &g : gSet) {
-            auto sortedSubGraphs =
-                findReachable(g, [](const graph_ptr_t &g) { return g->dependencies(); }, false);
-            allGraphs.insert(allGraphs.end(), sortedSubGraphs.begin(), sortedSubGraphs.end());
-        }
-    }
-    allGraphs.push_back(entry->shared_from_this());
-
-    // 去重
+    // 收集 entry 通过 subGraphs / dependencies 任一关系可达的全部图。
     std::unordered_set<GIR::Graph *> visited;
     std::vector<GIR::Graph *> uniqueGraphs;
-    for (const auto &g : allGraphs) {
-        if (visited.insert(g.get()).second) {
-            uniqueGraphs.push_back(g.get());
+    std::function<void(const graph_ptr_t &)> collect = [&](const graph_ptr_t &curr) {
+        if (!curr || !visited.insert(curr.get()).second) {
+            return;
         }
-    }
+        uniqueGraphs.push_back(curr.get());
+        for (const auto &[_, gSet] : curr->subGraphs()) {
+            for (const auto &subGraph : gSet) {
+                collect(subGraph);
+            }
+        }
+        for (const auto &dep : curr->dependencies()) {
+            collect(dep);
+        }
+        for (Node *node : curr->nodes()) {
+            if (node->type() == NodeType::FUNC) {
+                auto *funcNode = tt::as_ptr<FuncNode>(node);
+                if (funcNode->bodyGraph()) {
+                    collect(funcNode->bodyGraph()->shared_from_this());
+                }
+                continue;
+            }
+            if (node->type() == NodeType::DATA) {
+                auto *dataNode = tt::as_ptr<DataNode>(node);
+                if (dataNode->dataType()->code() != TypeCode::Function) {
+                    continue;
+                }
+                auto *func = camel::core::rtdata::fromSlot<::Function *>(dataNode->dataSlot());
+                if (func && func->graph()) {
+                    collect(func->graph()->shared_from_this());
+                }
+            }
+        }
+    };
+    collect(entry->shared_from_this());
     reverse(uniqueGraphs.begin(), uniqueGraphs.end());
 
     // 编译所有图
@@ -543,7 +631,7 @@ std::string opCodeToString(const Bytecode &bc, const context_ptr_t &context) {
 
             operandStr += ")";
 
-            if (bc.fastop[1] != 0) {
+            if (bc.fastop[1] >= 0) {
                 operandStr += " -> ";
                 operandStr += std::to_string(bc.fastop[1]);
             }

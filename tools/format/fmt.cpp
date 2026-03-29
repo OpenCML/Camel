@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Nov. 13, 2025
+ * Updated: Mar. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -94,7 +94,7 @@ inline bool isMultiLine(const antlr4::ParserRuleContext *context) {
         return false;
     }
     const size_t firstTokenLine = context->getStart()->getLine();
-    size_t secondTokenLine = 0;
+    size_t secondTokenLine      = 0;
     // get second token
     const auto secondToken = context->children[1];
     if (antlr4::ParserRuleContext::is(secondToken)) {
@@ -260,9 +260,9 @@ any Formatter::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
 importDecl : IMPORT (moduleName | (identDef | bracedIdents) FROM moduleName) ;
 */
 any Formatter::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
-    string result = "import ";
-    const string path = any_cast<string>(visitModuleName(context->moduleName()));
-    const auto &identDef = context->identDef();
+    string result            = "import ";
+    const string path        = any_cast<string>(visitModuleName(context->moduleName()));
+    const auto &identDef     = context->identDef();
     const auto &bracedIdents = context->bracedIdents();
     if (context->FROM()) {
         if (identDef) {
@@ -281,9 +281,9 @@ any Formatter::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
 exportDecl : EXPORT (dataDecl | typeDecl | bracedIdents) ;
 */
 any Formatter::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
-    string result = "export ";
-    const auto &dataDecl = context->dataDecl();
-    const auto &typeDecl = context->typeDecl();
+    string result            = "export ";
+    const auto &dataDecl     = context->dataDecl();
+    const auto &typeDecl     = context->typeDecl();
     const auto &bracedIdents = context->bracedIdents();
     if (dataDecl) {
         return result + any_cast<string>(visitDataDecl(dataDecl));
@@ -308,14 +308,14 @@ stmtBlock  : SYNC? '{' stmtList? '}' ;
 */
 any Formatter::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
     const auto &stmtList = context->stmtList();
-    string result = context->SYNC() ? "sync " : "";
+    string result        = context->SYNC() ? "sync " : "";
     if (stmtList) {
         return result + "{" + any_cast<string>(visitStmtList(stmtList)) + "}";
     } else {
         result += "{";
         const size_t firstTokIdx = context->getStart()->getTokenIndex();
-        const size_t lastTokIdx = context->getStop()->getTokenIndex();
-        bool foundComment = false;
+        const size_t lastTokIdx  = context->getStop()->getTokenIndex();
+        bool foundComment        = false;
         pushIndent();
         for (size_t i = firstTokIdx + 1; i < lastTokIdx; i++) {
             if (tokens[i]->getChannel() > 1) {
@@ -345,10 +345,10 @@ funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExp
 */
 any Formatter::visitFuncData(OpenCMLParser::FuncDataContext *context) {
     string result;
-    const auto &modifiers = context->modifiers();
+    const auto &modifiers    = context->modifiers();
     const auto &angledParams = context->angledParams();
     const auto &parentParams = context->parentParams();
-    const auto &blockExpr = context->blockExpr();
+    const auto &blockExpr    = context->blockExpr();
 
     if (modifiers) {
         result += any_cast<string>(visitModifiers(modifiers)) + " ";
@@ -370,20 +370,38 @@ any Formatter::visitFuncData(OpenCMLParser::FuncDataContext *context) {
 }
 
 /*
+funcAnno   : '@' identRef angledValues? ;
+*/
+any Formatter::visitFuncAnno(OpenCMLParser::FuncAnnoContext *context) {
+    string result = "@";
+    result += any_cast<string>(visitIdentRef(context->identRef()));
+    if (context->angledValues()) {
+        result += any_cast<string>(visitAngledValues(context->angledValues()));
+    }
+    return result;
+}
+
+/*
 funcDecl   :
+        funcAnno*
         (WITH angledParams)?
         EXPORT? implMark? modifiers?
         FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
 */
 any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     string result;
+    const auto &funcAnnos    = context->funcAnno();
     const auto &angledParams = context->angledParams();
-    const auto &implMark = context->implMark();
-    const auto &modifiers = context->modifiers();
-    const auto &identDef = context->identDef();
+    const auto &implMark     = context->implMark();
+    const auto &modifiers    = context->modifiers();
+    const auto &identDef     = context->identDef();
     const auto &parentParams = context->parentParams();
-    const auto &typeExpr = context->typeExpr();
-    const auto &stmtBlock = context->stmtBlock();
+    const auto &typeExpr     = context->typeExpr();
+    const auto &stmtBlock    = context->stmtBlock();
+
+    for (const auto &funcAnno : funcAnnos) {
+        result += any_cast<string>(visitFuncAnno(funcAnno)) + lineEnd();
+    }
 
     if (angledParams) {
         result += "with " + any_cast<string>(visitAngledParams(angledParams)) + lineEnd();
@@ -460,9 +478,9 @@ dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
 any Formatter::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
     string result;
     const string &letOrVar = context->children[0]->getText();
-    const auto &carrier = context->carrier();
-    const auto &typeList = context->typeList();
-    const auto &dataList = context->dataList();
+    const auto &carrier    = context->carrier();
+    const auto &typeList   = context->typeList();
+    const auto &dataList   = context->dataList();
     result += letOrVar + " " + any_cast<string>(visitCarrier(carrier));
     if (typeList) {
         result += ": " + any_cast<string>(visitTypeList(typeList));
@@ -495,7 +513,7 @@ any Formatter::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
 useDecl    : USE (identDef '=')? identRef ;
 */
 any Formatter::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
-    string result = "use ";
+    string result        = "use ";
     const auto &identDef = context->identDef();
     if (identDef) {
         result += any_cast<string>(visitIdentDef(identDef)) + " = ";
@@ -617,7 +635,7 @@ any Formatter::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
 argumentList : indexValues (',' pairedValues)? | pairedValues ;
 */
 any Formatter::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
-    const auto &indexValues = context->indexValues();
+    const auto &indexValues  = context->indexValues();
     const auto &pairedValues = context->pairedValues();
     string result;
     if (indexValues) {
@@ -757,7 +775,7 @@ any Formatter::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
     {
         string condition = any_cast<string>(visitLogicalOrExpr(context->logicalOrExpr()));
         string thenBlock = any_cast<string>(visitBlockExpr(context->blockExpr(0)));
-        string result = "if " + condition + " then " + thenBlock;
+        string result    = "if " + condition + " then " + thenBlock;
         if (context->ELSE()) {
             string elseBlock = any_cast<string>(visitBlockExpr(context->blockExpr(1)));
             if (elseBlock.starts_with("if ") && !thenBlock.ends_with("}")) {
@@ -1012,7 +1030,7 @@ any Formatter::visitArrayData(OpenCMLParser::ArrayDataContext *context) {
             return "[" + any_cast<string>(visitIndexValues(indexValues)) + "]";
         } else {
             const auto &dataExprs = context->dataExpr();
-            string result = "[" + any_cast<string>(visitDataExpr(dataExprs[0]));
+            string result         = "[" + any_cast<string>(visitDataExpr(dataExprs[0]));
             result += " for " + any_cast<string>(visitIdentRef(context->identRef())) + " in " +
                       any_cast<string>(visitDataExpr(dataExprs[1]));
             if (dataExprs.size() > 2) {
@@ -1164,7 +1182,7 @@ arrayType
     ;
 */
 any Formatter::visitArrayType(OpenCMLParser::ArrayTypeContext *context) {
-    string result = any_cast<string>(visitSpecType(context->specType()));
+    string result     = any_cast<string>(visitSpecType(context->specType()));
     const size_t size = (context->children.size() - 1) / 2;
     for (size_t i = 0; i < size; i++) {
         result += "[]";
@@ -1277,7 +1295,7 @@ funcType
 */
 any Formatter::visitFuncType(OpenCMLParser::FuncTypeContext *context) {
     string result;
-    const auto &modifiers = context->modifiers();
+    const auto &modifiers    = context->modifiers();
     const auto &angledParams = context->angledParams();
     const auto &parentParams = context->parentParams();
     if (modifiers) {
