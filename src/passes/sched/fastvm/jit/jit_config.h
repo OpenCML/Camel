@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 17, 2026
+ * Updated: Mar. 30, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,7 +29,7 @@ namespace camel::jit {
 enum class JitPolicy {
     Disabled, // 始终解释执行
     OnDemand, // 热点触发 JIT
-    Always,   // 启动时全量 JIT
+    Always,   // 首次触达即 JIT（不做启动期全量编译）
 };
 
 struct JitConfig {
