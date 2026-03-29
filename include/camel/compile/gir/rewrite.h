@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "builder.h"
+#include "draft.h"
 
 namespace camel::compile::gir {
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 28, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -147,7 +147,11 @@ bool X64Backend::compileBytecode(
         return false;
     };
 
-    if (!unit.graph || !unit.graph->hasFrameLayout())
+    if (!unit.graph)
+        return fail("null graph in JIT compilation unit");
+    if (!unit.graph->finalized())
+        return fail("graph '" + unit.graph->name() + "' is not sealed");
+    if (!unit.graph->hasFrameLayout())
         return fail("incomplete frame layout for graph '" + unit.graph->name() + "'");
 
     const Bytecode *base = unit.bytecodes.data();

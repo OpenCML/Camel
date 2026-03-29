@@ -29,8 +29,11 @@ class Function;
 namespace camel::compile::gir {
 
 class GraphArena;
-class NodeMutation;
 class JoinNode;
+class FuncNode;
+namespace detail {
+class NodeMutation;
+}
 
 // =============================================================================
 // Node：图节点基类，持有类型、数据槽索引、入边/出边
@@ -49,10 +52,6 @@ class Node {
         ASSERT(dataType_ != nullptr, "Node has no data type.");
         return dataType_;
     }
-    void setDataType(Type *type) {
-        ASSERT(!graph_->finalized(), "Cannot mutate node type after graph is sealed.");
-        dataType_ = type;
-    }
     virtual std::string toString() const;
     virtual operator std::string() const;
     virtual Node *clone(Graph &graph) const = 0;
@@ -62,21 +61,9 @@ class Node {
 
     Graph &graph() const { return *graph_; }
     data_idx_t index() const;
-    void setIndex(data_idx_t index) {
-        ASSERT(!graph_->finalized(), "Cannot mutate node index after graph is sealed.");
-        dataIndex_ = index;
-    }
     const std::string &debugEntityId() const { return graph_->nodeDebugEntityId(this); }
     bool macro() const { return macro_; }
     bool constant() const { return const_; }
-    void setMacro(bool m) {
-        ASSERT(!graph_->finalized(), "Cannot mutate node flags after graph is sealed.");
-        macro_ = m;
-    }
-    void setConstant(bool c) {
-        ASSERT(!graph_->finalized(), "Cannot mutate node flags after graph is sealed.");
-        const_ = c;
-    }
 
     node_vec_t dataInputs() const;
     node_span_t normInputs() const {
@@ -132,6 +119,23 @@ class Node {
     bool detach();
 
   protected:
+    void setDataType(Type *type) {
+        ASSERT(!graph_->finalized(), "Cannot mutate node type after graph is sealed.");
+        dataType_ = type;
+    }
+    void setIndex(data_idx_t index) {
+        ASSERT(!graph_->finalized(), "Cannot mutate node index after graph is sealed.");
+        dataIndex_ = index;
+    }
+    void setMacro(bool m) {
+        ASSERT(!graph_->finalized(), "Cannot mutate node flags after graph is sealed.");
+        macro_ = m;
+    }
+    void setConstant(bool c) {
+        ASSERT(!graph_->finalized(), "Cannot mutate node flags after graph is sealed.");
+        const_ = c;
+    }
+
     bool macro_  = false;
     bool const_  = false;
     bool frozen_ = false;
@@ -165,7 +169,7 @@ class Node {
     friend class Builder;
     friend class GraphBuilder;
     friend class GraphRewriteSession;
-    friend class NodeMutation;
+    friend class detail::NodeMutation;
 
     node_vec_t &mutableNormInputs() {
         ASSERT(!frozen_, "Cannot mutate frozen node.");
@@ -205,8 +209,17 @@ class Node {
     static bool replaceUses(Node *oldNode, Node *newNode);
 };
 
+namespace detail {
+// 内部节点改写桥接：仅供 GraphBuilder/GraphDraft/rewrite 通道使用，
+// 不作为对外稳定 API。
 class NodeMutation {
   public:
+    static void setDataType(Node *node, Type *type) { node->setDataType(type); }
+    static void setIndex(Node *node, data_idx_t index) { node->setIndex(index); }
+    static void setMacro(Node *node, bool m) { node->setMacro(m); }
+    static void setConstant(Node *node, bool c) { node->setConstant(c); }
+    static void setBodyGraph(FuncNode *node, Graph *bodyGraph);
+
     static node_vec_t &normInputs(Node *node) { return node->mutableNormInputs(); }
     static node_vec_t &withInputs(Node *node) { return node->mutableWithInputs(); }
     static node_vec_t &ctrlInputs(Node *node) { return node->mutableCtrlInputs(); }
@@ -222,6 +235,7 @@ class NodeMutation {
     static bool replace(Node *oldNode, Node *newNode);
     static bool replaceUses(Node *oldNode, Node *newNode);
 };
+} // namespace detail
 
 // 数据与端口类节点
 class DataNode : public Node {
@@ -448,12 +462,6 @@ class FuncNode : public Node {
 
     ::Function *rtFunc() const { return rtFunc_; }
     Graph *bodyGraph() const { return graph_; }
-    void setBodyGraph(Graph *bodyGraph) {
-        ASSERT(bodyGraph != nullptr, "FuncNode body graph cannot be null.");
-        ASSERT(!graph().finalized(), "Cannot retarget FuncNode after graph is sealed.");
-        graph_ = bodyGraph;
-        setDataType(bodyGraph->funcType()->exitType());
-    }
     FunctionType *funcType() const;
     bool isMacro() const { return graph_ && graph_->isMacro(); }
     bool hasMatchedJoin() const {
@@ -465,6 +473,15 @@ class FuncNode : public Node {
     std::string toString() const override;
 
     Node *clone(Graph &graph) const override;
+
+  private:
+    void setBodyGraph(Graph *bodyGraph) {
+        ASSERT(bodyGraph != nullptr, "FuncNode body graph cannot be null.");
+        ASSERT(!graph().finalized(), "Cannot retarget FuncNode after graph is sealed.");
+        graph_ = bodyGraph;
+        setDataType(bodyGraph->funcType()->exitType());
+    }
+    friend class detail::NodeMutation;
 };
 
 class OperNode : public Node {

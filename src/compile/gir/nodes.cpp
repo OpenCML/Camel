@@ -368,27 +368,27 @@ namespace {
 node_vec_t &selectInputs(LinkType type, Node *node) {
     switch (type) {
     case LinkType::With:
-        return NodeMutation::withInputs(node);
+        return detail::NodeMutation::withInputs(node);
     case LinkType::Norm:
-        return NodeMutation::normInputs(node);
+        return detail::NodeMutation::normInputs(node);
     case LinkType::Ctrl:
-        return NodeMutation::ctrlInputs(node);
+        return detail::NodeMutation::ctrlInputs(node);
     }
     ASSERT(false, "Unsupported link type when selecting inputs.");
-    return NodeMutation::normInputs(node);
+    return detail::NodeMutation::normInputs(node);
 }
 
 node_vec_t &selectOutputs(LinkType type, Node *node) {
     switch (type) {
     case LinkType::With:
-        return NodeMutation::withOutputs(node);
+        return detail::NodeMutation::withOutputs(node);
     case LinkType::Norm:
-        return NodeMutation::normOutputs(node);
+        return detail::NodeMutation::normOutputs(node);
     case LinkType::Ctrl:
-        return NodeMutation::ctrlOutputs(node);
+        return detail::NodeMutation::ctrlOutputs(node);
     }
     ASSERT(false, "Unsupported link type when selecting outputs.");
-    return NodeMutation::normOutputs(node);
+    return detail::NodeMutation::normOutputs(node);
 }
 
 } // namespace
@@ -526,24 +526,33 @@ bool Node::replace(Node *oldNode, Node *newNode) {
     return oldNode->detach();
 }
 
-void NodeMutation::link(LinkType type, Node *from, Node *to) { Node::link(type, from, to); }
+void detail::NodeMutation::link(LinkType type, Node *from, Node *to) { Node::link(type, from, to); }
 
-bool NodeMutation::unlink(Node *from, Node *to) { return Node::unlink(from, to); }
+bool detail::NodeMutation::unlink(Node *from, Node *to) { return Node::unlink(from, to); }
 
-bool NodeMutation::unlinkCtrl(Node *from, Node *to) { return Node::unlinkCtrl(from, to); }
+bool detail::NodeMutation::unlinkCtrl(Node *from, Node *to) { return Node::unlinkCtrl(from, to); }
 
-void NodeMutation::replaceInput(LinkType type, Node *owner, Node *oldInput, Node *newInput) {
+void detail::NodeMutation::replaceInput(
+    LinkType type, Node *owner, Node *oldInput, Node *newInput) {
     Node::replaceInput(type, owner, oldInput, newInput);
 }
 
-void NodeMutation::replaceOutput(LinkType type, Node *owner, Node *oldOutput, Node *newOutput) {
+void detail::NodeMutation::replaceOutput(
+    LinkType type, Node *owner, Node *oldOutput, Node *newOutput) {
     Node::replaceOutput(type, owner, oldOutput, newOutput);
 }
 
-bool NodeMutation::replace(Node *oldNode, Node *newNode) { return Node::replace(oldNode, newNode); }
+bool detail::NodeMutation::replace(Node *oldNode, Node *newNode) {
+    return Node::replace(oldNode, newNode);
+}
 
-bool NodeMutation::replaceUses(Node *oldNode, Node *newNode) {
+bool detail::NodeMutation::replaceUses(Node *oldNode, Node *newNode) {
     return Node::replaceUses(oldNode, newNode);
+}
+
+void detail::NodeMutation::setBodyGraph(FuncNode *node, Graph *bodyGraph) {
+    ASSERT(node != nullptr, "FuncNode is null.");
+    node->setBodyGraph(bodyGraph);
 }
 
 bool Node::replaceUses(Node *oldNode, Node *newNode) {
@@ -946,7 +955,7 @@ std::string GateNode::toString() const {
 
 Node *GateNode::clone(Graph &graph) const {
     Node *node = GateNode::create(graph);
-    node->setDataType(dataType());
+    detail::NodeMutation::setDataType(node, dataType());
     return node;
 }
 

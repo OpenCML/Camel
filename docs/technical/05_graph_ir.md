@@ -200,7 +200,7 @@
 为了让 frozen 节点尽量不直接持有非平凡析构成员，若干属性已从 Node 自身移到 Graph 侧集中保存：
 
 - **节点调试实体 id**（`Node::debugEntityId()` / `Graph::nodeStableIds_`）：
-  - **Draft**：构造时为占位串 `draft:{指针十六进制}`，仅保证同进程内可区分。
+  - **Draft**：构造时为占位串 `draft:{graphStableId}:{seq}`，仅保证图内可区分；不再暴露节点地址语义。
   - **Seal**：`GraphBuilder::finalize()` 在 `rearrange()` 之后调用 `Graph::promoteNodeDebugIds()`，将每条目替换为 **`NodeDebugFingerprint` 物化字符串** `gnode:{016x}{016x}`（定义见 `include/camel/compile/gir/types.h`）。指纹输入包含：所属图的 `stableId()`、`NodeType`、`dataIndex`、各 `LinkType` 上规范化排序后的邻接槽位，以及类型相关盐（如 `PORT` 端口名、`FUNC` 子图 `stableId`、`OPER` 的 `OperatorIndex*`、`DATA` 的静态槽位字节等）；并在同图固定遍历序下混入 **tie-breaker 序号**，进一步降低 128-bit 碰撞风险。
   - **SourceContext**：构图期 `bindGirNodeDraftDebug(Node*, origin_id, SemanticBundle)`；seal 时 `sealPromoteGirNodeDebug(Node*, entityId)` 写入 `DebugMap` 与按实体 id 索引的语义表。对外查询统一 `resolveGirNodeOrigin(Node*)`、`girNodeSemantic(Node*)`；克隆/内联用 `cloneGirNodeDebugBinding`。
 - `PortNode::name`：由 `Graph::nodePortNames_` 保存。
@@ -238,6 +238,8 @@ Node 自身只保留查询入口，不再直接持有这些 `std::string`。
 - `computeLayout()` 与 `applyLayout()` 分离，使布局计算可在不同导出路径中复用。
 - `GraphBuilderState` 作为构图期 staging：写入先落 staging，并保持与 Graph draft 视图同步；
   `seal` 时进入唯一终态物化流程并消费 staging，Graph 仅保留执行期只读视图。
+- `detail::NodeMutation` 仅作为 Builder/Rewrite 内部桥接，不属于稳定对外 API；
+  结构改写应经 `GraphBuilder/GraphDraft/GraphRewriteSession` 通道进入。
 - 结构自检：`validateGraph` / `validateGraphRecursively`（`GraphDraft::seal()` 在递归封印前会调用后者）。
   其中 **`hasOutput()==true`（存在 EXIT）是 seal 前硬约束**，缺失 output 直接视为图结构不完整并拒绝封印。
 

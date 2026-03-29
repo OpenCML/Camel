@@ -7,7 +7,7 @@
 - `GraphRewriteSession`
 - `GraphDraft`
 - `GraphBuilder`（含 `inlineCallable`）
-- `NodeMutation` / `Node::link|replace|unlink`
+- `detail::NodeMutation`（内部桥接）/ `Node::link|replace|unlink`
 
 ---
 

@@ -66,7 +66,7 @@ inline void tryRemoveCtrlLink(Node *from, Node *to) {
     // sometimes we may need to change a ctrl link (linked before) to a data link
     // because data link has higher priority than ctrl link
     // and we don't want to have duplicate links
-    (void)NodeMutation::unlinkCtrl(from, to);
+    (void)detail::NodeMutation::unlinkCtrl(from, to);
 }
 
 inline bool linkCheek(Node *from, Node *to) {
@@ -727,7 +727,7 @@ Node *Builder::createFuncDataNode(
 
     auto markMacroNode = [&](Node *node) {
         if (node && graph->isMacro()) {
-            node->setMacro(true);
+            detail::NodeMutation::setMacro(node, true);
         }
     };
 
@@ -1345,7 +1345,7 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
         if (joinType == nullptr) {
             joinType = exitType;
-            tt::as_ptr<JoinNode>(joinNode)->setDataType(joinType);
+            detail::NodeMutation::setDataType(joinNode, joinType);
         } else {
             if (!exitType->equals(joinType)) {
                 diags_->of(SemanticDiag::BranchReturnTypeMismatch)

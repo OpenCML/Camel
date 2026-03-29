@@ -127,7 +127,14 @@ class Graph : public std::enable_shared_from_this<Graph> {
     /// Sealed 表示此图已经历 sealGraph 封印，拥有完整的 slot 编号、layout 与执行期静态区，
     /// 且所有节点邻接已冻结到 FrozenRegion。状态机是单向的：
     /// Draft -> Sealing -> Sealed。
+    ///
+    /// 约束：
+    /// - sealed 图只读；
+    /// - draft 可变视图仅存在于 builderState_（staging）；
+    /// - Graph 的“_ 字段”在 draft 期是 staging 的镜像缓存，仅用于兼容只读访问。
     bool finalized() const { return sealState_ == SealState::Sealed; }
+    bool hasDraftStaging() const { return builderState_ != nullptr; }
+    bool hasMutableDraftView() const { return hasDraftStaging() && !finalized(); }
 
     FunctionType *funcType() const {
         return activeState() ? activeState()->funcType : signature_.funcType;
@@ -219,6 +226,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     }
 
   private:
+    // draft 期读取统一经 staging；sealed 后 staging 被消费，读取落回只读固化字段。
     const GraphBuilderState *activeState() const { return builderState_.get(); }
     friend class Node;
     friend class PortNode;
@@ -285,8 +293,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
     /// 要修改已封印的图，必须克隆出 draft 副本再操作。
     SealState sealState_ = SealState::Draft;
 
-    bool looped_        = false;
-    bool parameterized_ = false;
+    bool looped_                     = false;
+    bool parameterized_              = false;
+    uint64_t provisionalDebugIdSeed_ = 0;
     std::shared_ptr<GraphBuilderState> builderState_;
 
     mutable ExtraStorage<4> extras_;

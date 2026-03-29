@@ -626,7 +626,7 @@ Node *materializeMacroResult(
     if (resultType->code() == TypeCode::Function) {
         auto *funcObj = fromSlot<::Function *>(resultSlot);
         if (funcObj && funcObj->graph()->isMacro()) {
-            node->setMacro(true);
+            detail::NodeMutation::setMacro(node, true);
         }
     }
     return node;
