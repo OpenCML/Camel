@@ -343,8 +343,8 @@ void nodeLabelShapeStyle(Node *node, std::string &label, std::string &shape, std
         shape = "diamond";
         style = "dashed";
         break;
-    case NodeType::NREF:
-        label = "NREF";
+    case NodeType::GATE:
+        label = "GATE";
         shape = "diamond";
         style = "dashed";
         break;

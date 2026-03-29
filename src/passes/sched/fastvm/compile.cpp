@@ -461,7 +461,7 @@ bytecode_vec_t compile(
 
         case NodeType::DATA:
             [[fallthrough]];
-        case NodeType::NREF: {
+        case NodeType::GATE: {
             // 一般无操作
             // 但在内联函数中，有时候会直连JOIN
             // 这时候需要插入一个JUMP节点而不能直接跳过
@@ -631,7 +631,7 @@ std::string opCodeToString(const Bytecode &bc, const context_ptr_t &context) {
 
             operandStr += ")";
 
-            if (bc.fastop[1] != 0) {
+            if (bc.fastop[1] >= 0) {
                 operandStr += " -> ";
                 operandStr += std::to_string(bc.fastop[1]);
             }

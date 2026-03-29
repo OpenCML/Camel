@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
@@ -203,17 +203,18 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
     Bytecode &bc = base[pc];
 
-    size_t targetPc = static_cast<size_t>(bc.fastop[1]);
-    size_t argsCnt  = bc.normCnt();
+    const data_idx_t targetSlot = bc.fastop[1];
+    size_t targetPc             = targetSlot < 0 ? 0 : static_cast<size_t>(targetSlot);
+    size_t argsCnt              = bc.normCnt();
     EXEC_WHEN_DEBUG(
         GetDefaultLogger()
             .in("JIT.Trampoline")
             .info("trampolineFunc bc: targetPc={} argsCnt={}", targetPc, argsCnt));
     uint32_t count = 0;
-    if (targetPc != 0)
+    if (targetSlot >= 0)
         count = incFuncExtraCount(&bc);
 
-    if (targetPc == 0) {
+    if (targetSlot < 0) {
         EXEC_WHEN_DEBUG(
             GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc path: JIT->JIT"));
         GIR::Graph *g = getFuncExtraGraph(&bc);
@@ -269,13 +270,14 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
     Bytecode &bc = base[pc];
 
-    size_t targetPc = static_cast<size_t>(bc.fastop[1]);
-    size_t argsCnt  = bc.normCnt();
-    uint32_t count  = 0;
-    if (targetPc != 0)
+    const data_idx_t targetSlot = bc.fastop[1];
+    size_t targetPc             = targetSlot < 0 ? 0 : static_cast<size_t>(targetSlot);
+    size_t argsCnt              = bc.normCnt();
+    uint32_t count              = 0;
+    if (targetSlot >= 0)
         count = incFuncExtraCount(&bc);
 
-    if (targetPc == 0) {
+    if (targetSlot < 0) {
         Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
         GIR::Graph *g      = getFuncExtraGraph(&bc);
         TailArgStorage args(argsCnt);

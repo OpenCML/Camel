@@ -140,7 +140,7 @@ Module: main
 | **EXEC** | 可执行块 |
 | **LINK** | 普通调用/数据流链接（argcnt=…） |
 | **WITH** | with 参数/泛型参数链接 |
-| **NREF** | 对变量的引用（绑定名） |
+| **GATE** | 对变量的引用（绑定名） |
 | **DREF** | 对符号的解引用（如 println、fib、__add__、format） |
 | **DATA** | 编译期常量（地址、类型、字面量） |
 | **EXIT** | 返回（return） |
@@ -171,7 +171,7 @@ EXEC
   - **LINK**（argcnt=2）：**DREF: __le__**，**DREF: n**，**DATA: 1L**（条件 n <= 1）。
   - **CASE: (true)**：**EXEC** → **DREF: n**（then 分支）。
   - **CASE: (else)**：**EXEC** → **LINK**（**DREF: __add__**，两次 **LINK** 调用 fib(n-1)、fib(n-2)）。
-- **FUNC: main** 下 **SYNC**：多个 **NREF**（idx, start, res, duration）各自绑定 **DATA** 或 **LINK**（now、fib、format、println），最后 **EXIT: return** → **DATA: 0L**。
+- **FUNC: main** 下 **SYNC**：多个 **GATE**（idx, start, res, duration）各自绑定 **DATA** 或 **LINK**（now、fib、format、println），最后 **EXIT: return** → **DATA: 0L**。
 
 GCT 中的 **DREF** 对应算子或函数符号，**LINK/WITH** 表示参数传递与调用关系，**BRCH/CASE** 对应 if-then-else 或 match，为后续转为 GIR 的节点与边做准备。
 

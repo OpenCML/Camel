@@ -1,0 +1,37 @@
+/**
+ * 覆盖点：
+ * 1) BRCH arm 内联后，一次性子图应可被 use-site sweep 清理；
+ * 2) 运行结果保持正确。
+ *
+ * 建议：
+ * camel "test/passes/inline/inline_registry_sweep_unique_arm.cml" std::inline std::gir
+ * camel "test/passes/inline/inline_registry_sweep_unique_arm.cml" std::inline std::fvm
+ */
+module inline_registry_sweep_unique_arm
+
+func choose(flag: int, x: int): int {
+    func plus1(v: int): int {
+        return v + 1
+    }
+
+    func plus2(v: int): int {
+        return v + 2
+    }
+
+    return if flag != 0 then plus1(x) else plus2(x)
+}
+
+func main(): int sync {
+    let a = choose(1, 40)
+    let b = choose(0, 40)
+
+    if a != 41 then {
+        return 1
+    } else if b != 42 then {
+        return 2
+    } else sync {
+        'inline_registry_sweep_unique_arm ok'->println
+        return 0
+    }
+}
+

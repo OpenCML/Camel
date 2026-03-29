@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 28, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -342,8 +342,8 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
             style = "dashed";
             break;
         }
-        case NodeType::NREF: {
-            label = "NREF";
+        case NodeType::GATE: {
+            label = "GATE";
             shape = "diamond";
             style = "dashed";
             break;

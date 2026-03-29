@@ -189,7 +189,7 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
         }
         for (size_t bpc = 0; bpc < bytecodes_.size();) {
             Bytecode &bc = bytecodes_[bpc];
-            if ((bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) && bc.fastop[1] != 0) {
+            if ((bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) && bc.fastop[1] >= 0) {
                 GIR::Graph *tg = getFuncExtraGraph(&bc);
                 JitEntryFn fn  = getGraphJitFn(tg);
                 if (fn)
@@ -500,7 +500,7 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
         for (size_t pc = 0; pc < bytecodes_.size();) {
             Bytecode &bc = bytecodes_[pc];
             if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
-                if (bc.fastop[1] != 0 && getFuncExtraGraph(&bc) == graph)
+                if (bc.fastop[1] >= 0 && getFuncExtraGraph(&bc) == graph)
                     setFuncExtraFn(&bc, reinterpret_cast<void *>(fn));
             }
             pc += bc.opsize;
@@ -513,7 +513,7 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
 }
 
 Bytecode *FastVMSchedPass::materializeCallTarget(size_t pc, Bytecode *bc) {
-    if (!bc || bc->fastop[1] == 0) {
+    if (!bc || bc->fastop[1] < 0) {
         return bc;
     }
     GIR::Graph *targetGraph = getFuncExtraGraph(bc);

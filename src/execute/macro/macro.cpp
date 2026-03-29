@@ -578,7 +578,7 @@ class MacroExecutor {
             case NodeType::EXIT:
             case NodeType::PORT:
             case NodeType::SYNC:
-            case NodeType::NREF:
+            case NodeType::GATE:
                 break;
 
             default:

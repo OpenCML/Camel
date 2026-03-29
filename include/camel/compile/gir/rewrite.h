@@ -47,6 +47,18 @@ class GraphRewriteSession {
     explicit GraphRewriteSession(const graph_ptr_t &graph) : draft_(graph) {}
 
     graph_ptr_t root() const { return draft_.root(); }
+    graph_ptr_t ensureDraftGraph(const graph_ptr_t &graph) {
+        ASSERT(graph != nullptr, "Cannot ensure null graph in rewrite session.");
+        graph_ptr_t draft = draft_.cloneIntoDraft(graph);
+        if (draft.get() != graph.get()) {
+            changed_ = true;
+        }
+        return draft;
+    }
+    graph_ptr_t canonicalGraph(const graph_ptr_t &graph) const {
+        return draft_.canonicalGraph(graph);
+    }
+    bool hasDraftGraph(const Graph *graph) const { return draft_.hasDraftFor(graph); }
 
     void markChanged() { changed_ = true; }
 

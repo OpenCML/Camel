@@ -82,10 +82,9 @@ using GraphUseIndex = std::unordered_map<const Graph *, std::vector<GraphUseSite
 
 struct InlineTarget {
     graph_ptr_t owner;
-    Node *branch   = nullptr;
-    Node *path     = nullptr;
-    JoinNode *join = nullptr;
-    graph_ptr_t bodyGraph;
+    Node *path             = nullptr;
+    const Graph *bodyGraph = nullptr;
+    bool isBranchArmHead   = false;
 };
 
 struct SccGraphPlan {
@@ -170,71 +169,6 @@ GraphUseIndex buildUseIndex(const std::vector<graph_ptr_t> &draftGraphs) {
     return index;
 }
 
-void retargetLegacyRefsByUseIndex(
-    GraphRewriteSession &session, const graph_ptr_t &sourceRoot, const GraphUseIndex &useIndex,
-    std::unordered_map<const Graph *, graph_ptr_t> &cache) {
-    // 这里不做“局部就地猜测修补”，而是按 use-index 一次性重定向全部引用，
-    // 再统一同步 ownerGraph 的 dependency，避免后续 seal 出现悬挂 legacy 引用。
-    for (const auto &[legacyGraph, useSites] : useIndex) {
-        auto legacyIt = cache.find(legacyGraph);
-        graph_ptr_t draftRef;
-        if (legacyIt != cache.end()) {
-            draftRef = legacyIt->second;
-        } else {
-            draftRef = ensureEditableGraph(
-                session,
-                sourceRoot,
-                const_cast<Graph *>(legacyGraph)->shared_from_this(),
-                cache);
-        }
-        graph_ptr_t legacyRef = const_cast<Graph *>(legacyGraph)->shared_from_this();
-        if (legacyRef == draftRef) {
-            continue;
-        }
-        for (const auto &use : useSites) {
-            Graph *ownerRaw = use.owner.get();
-            if (!ownerRaw) {
-                continue;
-            }
-            if (use.kind == UseKind::FuncBody) {
-                auto *funcNode = tt::as_ptr<FuncNode>(use.node);
-                if (!funcNode || !funcNode->bodyGraph()) {
-                    continue;
-                }
-                if (funcNode->bodyGraph() != draftRef.get()) {
-                    funcNode->setBodyGraph(draftRef.get());
-                }
-            } else {
-                auto *dataNode = tt::as_ptr<DataNode>(use.node);
-                if (!dataNode ||
-                    dataNode->dataType()->code() != camel::core::type::TypeCode::Function) {
-                    continue;
-                }
-                auto *funcObj = camel::core::rtdata::fromSlot<::Function *>(dataNode->dataSlot());
-                if (!funcObj || !funcObj->graph()) {
-                    continue;
-                }
-                funcObj->setGraph(draftRef.get());
-            }
-            if (use.owner->dependencies().contains(legacyRef)) {
-                session.eraseDependency(use.owner, legacyRef);
-            }
-            if (!use.owner->dependencies().contains(draftRef)) {
-                session.importDependency(use.owner, draftRef);
-            }
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger()
-                    .in("InlinePass")
-                    .debug(
-                        "Retargeted graph use in owner {}: {} -> {}.",
-                        use.owner->name(),
-                        legacyRef->name(),
-                        draftRef->name()));
-            (void)ownerRaw;
-        }
-    }
-}
-
 void assertNoLegacyGraphRefs(
     const std::vector<graph_ptr_t> &draftGraphs,
     const std::unordered_set<const Graph *> &legacySources) {
@@ -267,6 +201,72 @@ void assertNoLegacyGraphRefs(
                         funcObj->graph()->name(),
                         owner->name()));
             }
+        }
+    }
+}
+
+void sweepUnreferencedGraphRegistries(
+    GraphRewriteSession &session, const std::vector<graph_ptr_t> &draftGraphs) {
+    GraphUseIndex useIndex = buildUseIndex(draftGraphs);
+    std::unordered_map<const Graph *, std::unordered_set<const Graph *>> referencedByOwner;
+    referencedByOwner.reserve(draftGraphs.size());
+    for (const auto &[calleeGraph, useSites] : useIndex) {
+        for (const auto &use : useSites) {
+            if (!use.owner) {
+                continue;
+            }
+            referencedByOwner[use.owner.get()].insert(calleeGraph);
+        }
+    }
+
+    for (const auto &owner : draftGraphs) {
+        const auto it = referencedByOwner.find(owner.get());
+        std::unordered_set<const Graph *> emptySet;
+        const auto &liveRefs = (it == referencedByOwner.end()) ? emptySet : it->second;
+
+        std::vector<graph_ptr_t> staleDeps;
+        staleDeps.reserve(owner->dependencies().size());
+        for (const auto &dep : owner->dependencies()) {
+            if (!liveRefs.contains(dep.get())) {
+                staleDeps.push_back(dep);
+            }
+        }
+        for (const auto &dep : staleDeps) {
+            session.eraseDependency(owner, dep);
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger()
+                    .in("InlinePass")
+                    .debug(
+                        "Pruned stale dependency '{}' from owner '{}'.",
+                        dep->name(),
+                        owner->name()));
+        }
+
+        std::vector<graph_ptr_t> staleSubGraphs;
+        for (const auto &[_, subGraphs] : owner->subGraphs()) {
+            for (const auto &sub : subGraphs) {
+                if (liveRefs.contains(sub.get())) {
+                    continue;
+                }
+                if (std::ranges::find_if(staleSubGraphs, [&](const graph_ptr_t &g) {
+                        return g.get() == sub.get();
+                    }) == staleSubGraphs.end()) {
+                    staleSubGraphs.push_back(sub);
+                }
+            }
+        }
+        for (const auto &sub : staleSubGraphs) {
+            session.eraseSubGraph(owner, sub);
+            if (owner->dependencies().contains(sub)) {
+                session.eraseDependency(owner, sub);
+            }
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger()
+                    .in("InlinePass")
+                    .debug(
+                        "Pruned stale subgraph '{}' from owner '{}'.",
+                        sub->name(),
+                        owner->name()));
         }
     }
 }
@@ -384,15 +384,117 @@ SccGraphPlan buildSccGraphPlan(const std::vector<graph_ptr_t> &sourceGraphs) {
     return plan;
 }
 
+bool isSmallSubgraphForInline(const Graph *bodyGraph, const InlineRewriteConfig &config) {
+    if (!bodyGraph) {
+        return false;
+    }
+    size_t nonDataPortCount = 0;
+    for (Node *node : bodyGraph->nodes()) {
+        if (node->type() == NodeType::DATA || node->type() == NodeType::PORT) {
+            continue;
+        }
+        nonDataPortCount++;
+        if (nonDataPortCount > config.smallSubgraphMaxNonDataPortNodes) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool shouldInlineByStrategy(
+    const InlineTarget &target, const InlineRewriteConfig &config, const bool isSmallSubgraph) {
+    const bool isArmSmall    = target.isBranchArmHead && isSmallSubgraph;
+    const bool isNonArmSmall = !target.isBranchArmHead && isSmallSubgraph;
+    switch (config.strategy) {
+    case InlineTargetStrategy::Small:
+        // Small strategy intentionally excludes BRCH arm-head calls.
+        return isNonArmSmall;
+    case InlineTargetStrategy::Arm:
+        return isArmSmall;
+    case InlineTargetStrategy::Hybrid:
+        return isNonArmSmall || isArmSmall;
+    default:
+        return false;
+    }
+}
+
+struct SccEntryGuard {
+    std::unordered_set<const Graph *> entryRootDraftGraphs;
+    std::unordered_set<const Graph *> protectedCalleeDraftGraphs;
+};
+
+SccEntryGuard buildSccEntryGuard(
+    size_t sccId, const SccGraphPlan &plan, const GraphUseIndex &useIndex,
+    const std::unordered_map<const Graph *, graph_ptr_t> &editableBySource) {
+    SccEntryGuard guard;
+    std::unordered_map<const Graph *, const Graph *> sourceByDraft;
+    sourceByDraft.reserve(editableBySource.size());
+    for (const auto &[sourceGraph, draftGraph] : editableBySource) {
+        sourceByDraft[draftGraph.get()] = sourceGraph;
+    }
+
+    for (const Graph *callee : plan.components[sccId]) {
+        auto editableIt = editableBySource.find(callee);
+        if (editableIt == editableBySource.end()) {
+            continue;
+        }
+        const Graph *draftCallee = editableIt->second.get();
+        auto it                  = useIndex.find(draftCallee);
+        if (it == useIndex.end()) {
+            continue;
+        }
+        for (const auto &use : it->second) {
+            if (!use.owner) {
+                continue;
+            }
+            const auto sourceOwnerIt = sourceByDraft.find(use.owner.get());
+            if (sourceOwnerIt == sourceByDraft.end()) {
+                guard.entryRootDraftGraphs.insert(draftCallee);
+                continue;
+            }
+            auto ownerCompIt = plan.componentOf.find(sourceOwnerIt->second);
+            if (ownerCompIt == plan.componentOf.end() || ownerCompIt->second != sccId) {
+                // 入口定义（SCC 维度）：callee 被 SCC 外 caller 调用。
+                // 不做传播推断，避免把 arm 包装图误判为“入口”并误伤合法内联。
+                guard.entryRootDraftGraphs.insert(draftCallee);
+                continue;
+            }
+        }
+    }
+    // 仅保护“入口 callee 自身”：
+    // 在 SCC 内，凡是目标命中入口 callee 的调用都不再内联。
+    guard.protectedCalleeDraftGraphs = guard.entryRootDraftGraphs;
+    return guard;
+}
+
 std::vector<InlineTarget> collectInitialInlineTargetsForScc(
     size_t sccId, const SccGraphPlan &plan,
-    const std::unordered_map<const Graph *, graph_ptr_t> &editableBySource) {
+    const std::unordered_map<const Graph *, graph_ptr_t> &editableBySource,
+    const InlineRewriteConfig &config, const SccEntryGuard &entryGuard) {
     // SCC 内“初始目标冻结”：
     // 本轮只处理进入 SCC 时已存在的 FUNC 目标；
     // 内联过程中新增的 FUNC 留给后续 pass 轮次，避免单轮振荡/爆炸。
-    std::vector<InlineTarget> targets;
+    std::vector<InlineTarget> candidates;
     for (const Graph *sourceGraph : plan.components[sccId]) {
         graph_ptr_t g = editableBySource.at(sourceGraph);
+        std::unordered_set<Node *> seenPaths;
+        for (Node *node : g->nodes()) {
+            if (node->type() != NodeType::FUNC) {
+                continue;
+            }
+            auto *funcNode = tt::as_ptr<FuncNode>(node);
+            if (!funcNode->bodyGraph()) {
+                continue;
+            }
+            candidates.push_back(
+                InlineTarget{
+                    .owner           = g,
+                    .path            = node,
+                    .bodyGraph       = funcNode->bodyGraph(),
+                    .isBranchArmHead = false,
+                });
+            seenPaths.insert(node);
+        }
         for (Node *brch : g->nodes()) {
             if (brch->type() != NodeType::BRCH) {
                 continue;
@@ -407,16 +509,37 @@ std::vector<InlineTarget> collectInitialInlineTargetsForScc(
                 if (!funcPath->hasMatchedJoin() || !funcPath->bodyGraph()) {
                     continue;
                 }
-                targets.push_back(
-                    InlineTarget{
-                        .owner     = g,
-                        .branch    = brch,
-                        .path      = path,
-                        .join      = funcPath->matchedJoin(),
-                        .bodyGraph = funcPath->bodyGraph()->shared_from_this(),
-                    });
+                if (seenPaths.insert(path).second) {
+                    candidates.push_back(
+                        InlineTarget{
+                            .owner           = g,
+                            .path            = path,
+                            .bodyGraph       = funcPath->bodyGraph(),
+                            .isBranchArmHead = true,
+                        });
+                    continue;
+                }
+                for (auto &candidate : candidates) {
+                    if (candidate.path == path) {
+                        candidate.isBranchArmHead = true;
+                        break;
+                    }
+                }
             }
         }
+    }
+    std::vector<InlineTarget> targets;
+    targets.reserve(candidates.size());
+    for (const auto &candidate : candidates) {
+        if (config.blockCallsToSccEntryCallees && candidate.bodyGraph &&
+            entryGuard.protectedCalleeDraftGraphs.contains(candidate.bodyGraph)) {
+            continue;
+        }
+        const bool isSmall = isSmallSubgraphForInline(candidate.bodyGraph, config);
+        if (!shouldInlineByStrategy(candidate, config, isSmall)) {
+            continue;
+        }
+        targets.push_back(candidate);
     }
     return targets;
 }
@@ -562,12 +685,48 @@ size_t pruneUnreachableSlotSafe(GraphRewriteSession &session, const graph_ptr_t 
 graph_ptr_t ensureEditableGraph(
     GraphRewriteSession &session, const graph_ptr_t &sourceRoot, const graph_ptr_t &sourceGraph,
     std::unordered_map<const Graph *, graph_ptr_t> &cache) {
+    ASSERT(sourceGraph != nullptr, "Cannot ensure editable null graph.");
     if (sourceGraph == sourceRoot) {
-        return cache.at(sourceRoot.get());
+        graph_ptr_t rootCanonical = session.canonicalGraph(sourceRoot);
+        cache[sourceRoot.get()]   = rootCanonical;
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger()
+                .in("InlinePass")
+                .debug(
+                    "ensureEditableGraph root hit: source={} ({:p}) -> draft={} ({:p}).",
+                    sourceGraph->name(),
+                    static_cast<const void *>(sourceGraph.get()),
+                    rootCanonical->name(),
+                    static_cast<const void *>(rootCanonical.get())));
+        return rootCanonical;
     }
     auto existing = cache.find(sourceGraph.get());
     if (existing != cache.end()) {
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger()
+                .in("InlinePass")
+                .debug(
+                    "ensureEditableGraph cache hit: source={} ({:p}) -> draft={} ({:p}).",
+                    sourceGraph->name(),
+                    static_cast<const void *>(sourceGraph.get()),
+                    existing->second->name(),
+                    static_cast<const void *>(existing->second.get())));
         return existing->second;
+    }
+    if (session.hasDraftGraph(sourceGraph.get())) {
+        graph_ptr_t canonical    = session.canonicalGraph(sourceGraph);
+        cache[sourceGraph.get()] = canonical;
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger()
+                .in("InlinePass")
+                .debug(
+                    "ensureEditableGraph session canonical hit: source={} ({:p}) -> draft={} "
+                    "({:p}).",
+                    sourceGraph->name(),
+                    static_cast<const void *>(sourceGraph.get()),
+                    canonical->name(),
+                    static_cast<const void *>(canonical.get())));
+        return canonical;
     }
 
     EXEC_WHEN_DEBUG(
@@ -583,33 +742,122 @@ graph_ptr_t ensureEditableGraph(
     graph_ptr_t imported;
     if (auto sourceOwner = sourceGraph->outer()) {
         graph_ptr_t draftOwner = ensureEditableGraph(session, sourceRoot, sourceOwner, cache);
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger()
+                .in("InlinePass")
+                .debug(
+                    "ensureEditableGraph owner path: sourceOwner={} ({:p}) draftOwner={} ({:p}) "
+                    "sourceGraph={} ({:p}).",
+                    sourceOwner->name(),
+                    static_cast<const void *>(sourceOwner.get()),
+                    draftOwner->name(),
+                    static_cast<const void *>(draftOwner.get()),
+                    sourceGraph->name(),
+                    static_cast<const void *>(sourceGraph.get())));
         if (hasSubGraphRef(draftOwner, sourceGraph)) {
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger()
+                    .in("InlinePass")
+                    .debug(
+                        "ensureEditableGraph erase stale subgraph ref: owner={} ({:p}) subgraph={} "
+                        "({:p}).",
+                        draftOwner->name(),
+                        static_cast<const void *>(draftOwner.get()),
+                        sourceGraph->name(),
+                        static_cast<const void *>(sourceGraph.get())));
             session.eraseSubGraph(draftOwner, sourceGraph);
         }
         if (draftOwner->dependencies().contains(sourceGraph)) {
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger()
+                    .in("InlinePass")
+                    .debug(
+                        "ensureEditableGraph erase stale dependency ref: owner={} ({:p}) dep={} "
+                        "({:p}).",
+                        draftOwner->name(),
+                        static_cast<const void *>(draftOwner.get()),
+                        sourceGraph->name(),
+                        static_cast<const void *>(sourceGraph.get())));
             session.eraseDependency(draftOwner, sourceGraph);
         }
         imported = session.importSubGraph(draftOwner, sourceGraph, GraphImportMode::CloneIntoDraft);
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger()
+                .in("InlinePass")
+                .debug(
+                    "ensureEditableGraph import subgraph: owner={} ({:p}) source={} ({:p}) "
+                    "imported={} ({:p}).",
+                    draftOwner->name(),
+                    static_cast<const void *>(draftOwner.get()),
+                    sourceGraph->name(),
+                    static_cast<const void *>(sourceGraph.get()),
+                    imported->name(),
+                    static_cast<const void *>(imported.get())));
         if (sourceOwner->dependencies().contains(sourceGraph)) {
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger()
+                    .in("InlinePass")
+                    .debug(
+                        "ensureEditableGraph mirror owner dependency: owner={} ({:p}) dep={} "
+                        "({:p}).",
+                        draftOwner->name(),
+                        static_cast<const void *>(draftOwner.get()),
+                        imported->name(),
+                        static_cast<const void *>(imported.get())));
             session.importDependency(draftOwner, imported);
         }
     } else {
         graph_ptr_t draftRoot = cache.at(sourceRoot.get());
         if (draftRoot->dependencies().contains(sourceGraph)) {
+            EXEC_WHEN_DEBUG(
+                GetDefaultLogger()
+                    .in("InlinePass")
+                    .debug(
+                        "ensureEditableGraph erase stale root dependency ref: root={} ({:p}) "
+                        "dep={} ({:p}).",
+                        draftRoot->name(),
+                        static_cast<const void *>(draftRoot.get()),
+                        sourceGraph->name(),
+                        static_cast<const void *>(sourceGraph.get())));
             session.eraseDependency(draftRoot, sourceGraph);
         }
         imported =
             session.importDependency(draftRoot, sourceGraph, GraphImportMode::CloneIntoDraft);
+        EXEC_WHEN_DEBUG(
+            GetDefaultLogger()
+                .in("InlinePass")
+                .debug(
+                    "ensureEditableGraph import dependency: root={} ({:p}) source={} ({:p}) "
+                    "imported={} ({:p}).",
+                    draftRoot->name(),
+                    static_cast<const void *>(draftRoot.get()),
+                    sourceGraph->name(),
+                    static_cast<const void *>(sourceGraph.get()),
+                    imported->name(),
+                    static_cast<const void *>(imported.get())));
     }
 
+    graph_ptr_t canonical = session.canonicalGraph(imported);
     ASSERT(
-        imported->hasOutput(),
+        canonical->hasOutput(),
         std::format(
-            "Imported draft graph '{}' cloned from '{}' has no output.",
-            imported->name(),
+            "Draft graph '{}' cloned from '{}' has no output.",
+            canonical->name(),
             sourceGraph->name()));
-    cache[sourceGraph.get()] = imported;
-    return imported;
+    cache[sourceGraph.get()] = canonical;
+    EXEC_WHEN_DEBUG(
+        GetDefaultLogger()
+            .in("InlinePass")
+            .debug(
+                "ensureEditableGraph finalized: source={} ({:p}) imported={} ({:p}) "
+                "canonical={} ({:p}).",
+                sourceGraph->name(),
+                static_cast<const void *>(sourceGraph.get()),
+                imported->name(),
+                static_cast<const void *>(imported.get()),
+                canonical->name(),
+                static_cast<const void *>(canonical.get())));
+    return canonical;
 }
 
 } // namespace
@@ -639,14 +887,14 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
         (void)ensureEditableGraph(session, sourceRoot, sourceGraph, editableGraphsBySource);
     }
 
-    // uses 驱动重定向：把 draft 图里残留的 legacy 图引用统一重写为 draft 映射，并同步 dependency。
+    // 约定：GraphDraft 在 import/clone 阶段已完成 source->draft 的引用规范化，
+    // 这里仅构建 use-index 并做一致性断言。
     std::vector<graph_ptr_t> draftGraphs;
     draftGraphs.reserve(sourceGraphs.size());
     for (const auto &sourceGraph : sourceGraphs) {
         draftGraphs.push_back(editableGraphsBySource.at(sourceGraph.get()));
     }
     GraphUseIndex useIndex = buildUseIndex(draftGraphs);
-    retargetLegacyRefsByUseIndex(session, sourceRoot, useIndex, editableGraphsBySource);
     std::unordered_set<const Graph *> legacySources;
     legacySources.reserve(sourceGraphs.size());
     for (const auto &sourceGraph : sourceGraphs) {
@@ -656,10 +904,17 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
 
     // SCC 缩点 + 逆拓扑顺序：先处理最深层被引用图，再逐层向上。
     // 这样可以避免“先改上层导致下层反复重扫”的多轮展开抖动。
-    SccGraphPlan sccPlan = buildSccGraphPlan(sourceGraphs);
+    SccGraphPlan sccPlan  = buildSccGraphPlan(sourceGraphs);
+    bool anyInlineApplied = false;
     for (size_t sccId : sccPlan.processOrder) {
-        std::vector<InlineTarget> targets =
-            collectInitialInlineTargetsForScc(sccId, sccPlan, editableGraphsBySource);
+        const SccEntryGuard sccEntryGuard =
+            buildSccEntryGuard(sccId, sccPlan, useIndex, editableGraphsBySource);
+        std::vector<InlineTarget> targets = collectInitialInlineTargetsForScc(
+            sccId,
+            sccPlan,
+            editableGraphsBySource,
+            config_,
+            sccEntryGuard);
         if (targets.empty()) {
             continue;
         }
@@ -690,24 +945,22 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
         std::vector<graph_ptr_t> changedGraphs;
         size_t appliedCount = 0;
         for (const auto &target : targets) {
-            Node *brch = target.branch;
             Node *path = target.path;
-            if (!brch || !path || path->type() != NodeType::FUNC) {
+            if (!path || path->type() != NodeType::FUNC) {
                 continue;
             }
-            if (path->graph().shared_from_this() != target.owner) {
+            if (&path->graph() != target.owner.get()) {
                 continue;
             }
             auto *funcPath = tt::as_ptr<FuncNode>(path);
             if (!funcPath->bodyGraph()) {
                 continue;
             }
-            const auto &pathGraph =
-                target.bodyGraph ? target.bodyGraph : funcPath->bodyGraph()->shared_from_this();
+            const Graph *pathGraph = target.bodyGraph ? target.bodyGraph : funcPath->bodyGraph();
+            node_vec_t ctrlPreds(path->ctrlInputs().begin(), path->ctrlInputs().end());
 
             InlineOptions inlineOptions;
-            inlineOptions.syncPolicy = InlineSyncPolicy::Force;
-            InlineResult inlined     = session.inlineCallable(path, inlineOptions);
+            InlineResult inlined = session.inlineCallable(path, inlineOptions);
             if (!inlined || !inlined.valueExit || !inlined.ctrlEntry) {
                 continue;
             }
@@ -715,41 +968,22 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
                 GetDefaultLogger()
                     .in("InlinePass")
                     .debug(
-                        "Inline result in graph {}: path={}, valueExit={}, ctrlEntry={}, "
-                        "ctrlExit={}.",
+                        "Inline result in graph {}: path={}, valueExit={}, ctrlEntry={}.",
                         target.owner->name(),
                         path->toString(),
                         inlined.valueExit ? inlined.valueExit->toString() : "<null>",
-                        inlined.ctrlEntry ? inlined.ctrlEntry->toString() : "<null>",
-                        inlined.ctrlExit ? inlined.ctrlExit->toString() : "<null>"));
-
-            // BRCH/JOIN arm 语义要求“控制路径 + 值产出”整体可达。
-            // 不能直接给 DATA 等值节点挂 ctrl 边（会污染调度语义），
-            // 因此使用 NRef 作为受控值代理：ctrlExit -> NRef, valueExit -> NRef。
-            Node *ctrlAnchor = inlined.ctrlExit ? inlined.ctrlExit : inlined.ctrlEntry;
-            if (ctrlAnchor && ctrlAnchor != inlined.valueExit && target.join &&
-                target.join->graph().shared_from_this() == target.owner) {
-                auto *gatedValue = NRefNode::create(*target.owner);
-                gatedValue->setDataType(target.join->dataType());
-                session.link(LinkType::Ctrl, ctrlAnchor, gatedValue);
-                session.link(LinkType::Norm, inlined.valueExit, gatedValue);
-                session.replaceInput(LinkType::With, target.join, inlined.valueExit, gatedValue);
-                inlined.valueExit = gatedValue;
-                EXEC_WHEN_DEBUG(
-                    GetDefaultLogger()
-                        .in("InlinePass")
-                        .debug(
-                            "Inserted NRef gate {} for inlined path {} in graph {}.",
-                            gatedValue->toString(),
-                            path->toString(),
-                            target.owner->name()));
-            }
+                        inlined.ctrlEntry ? inlined.ctrlEntry->toString() : "<null>"));
 
             if (inlined.ctrlEntry == path) {
                 continue;
             }
-            while (std::ranges::find(brch->ctrlOutputs(), path) != brch->ctrlOutputs().end()) {
-                session.replaceOutput(LinkType::Ctrl, brch, path, inlined.ctrlEntry);
+            for (Node *pred : ctrlPreds) {
+                if (!pred) {
+                    continue;
+                }
+                while (std::ranges::find(pred->ctrlOutputs(), path) != pred->ctrlOutputs().end()) {
+                    session.replaceOutput(LinkType::Ctrl, pred, path, inlined.ctrlEntry);
+                }
             }
             session.eraseNode(path);
             auto sameGraph = [&](const graph_ptr_t &g) { return g.get() == target.owner.get(); };
@@ -757,6 +991,7 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
                 changedGraphs.push_back(target.owner);
             }
             appliedCount++;
+            anyInlineApplied = true;
             if (appliedCount > kInlineApplyBudgetPerScc) {
                 EXEC_WHEN_DEBUG(ASSERT(
                     false,
@@ -779,11 +1014,11 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
             GetDefaultLogger()
                 .in("InlinePass")
                 .info(
-                    "Inlined FUNC node {} (graph {}) between BRCH and JOIN node {} in graph {}.",
+                    "Inlined FUNC node {} (graph {}) in graph {}, armHead={}.",
                     path->toString(),
-                    pathGraph->name(),
-                    brch->toString(),
-                    target.owner->name());
+                    pathGraph ? pathGraph->name() : "<null>",
+                    target.owner->name(),
+                    target.isBranchArmHead ? "true" : "false");
         }
 
         size_t nodeDelta = 0;
@@ -831,6 +1066,10 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
             (void)pruned;
             GraphBuilder::validateGraph(*changedGraph);
         }
+    }
+
+    if (anyInlineApplied) {
+        sweepUnreferencedGraphRegistries(session, draftGraphs);
     }
 
     EXEC_WHEN_DEBUG(

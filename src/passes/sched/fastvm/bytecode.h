@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -281,6 +281,8 @@ inline GIR::Graph *getFuncExtraGraph(const BytecodeHeader *bc) { return bc->extr
 constexpr uint64_t kFuncExtraJitFnMask     = (1ull << 48) - 1;
 constexpr uint64_t kFuncExtraTargetPcShift = 48;
 constexpr uint64_t kFuncExtraTargetPcMask  = 0xFFFFull;
+constexpr data_idx_t kFuncJitFastopSentinel =
+    std::numeric_limits<data_idx_t>::lowest(); // negative sentinel; target pc may be 0
 
 inline uint32_t getFuncExtraCount(BytecodeHeader *bc) {
     return static_cast<uint32_t>(*bc->extra2());
@@ -301,7 +303,7 @@ inline void setFuncExtraFn(BytecodeHeader *bc, void *fn) {
         (fnBits & ~kFuncExtraJitFnMask) == 0,
         "JIT entry pointer exceeds packed FuncExtra range.");
     *bc->extra2() = (targetPc << kFuncExtraTargetPcShift) | (fnBits & kFuncExtraJitFnMask);
-    bc->fastop[1] = 0;
+    bc->fastop[1] = kFuncJitFastopSentinel;
 }
 inline uint32_t incFuncExtraCount(BytecodeHeader *bc) {
     uint64_t *p = bc->extra2();

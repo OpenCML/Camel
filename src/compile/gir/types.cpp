@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 28, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,8 +60,8 @@ std::string to_string(NodeType type) {
         return "DREF";
     case NodeType::SYNC:
         return "SYNC";
-    case NodeType::NREF:
-        return "NREF";
+    case NodeType::GATE:
+        return "GATE";
     }
     ASSERT(false, "Unknown NodeType");
     return "Unknown";

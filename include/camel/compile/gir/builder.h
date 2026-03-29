@@ -21,6 +21,7 @@
 
 #include "nodes.h"
 
+#include <unordered_map>
 #include <unordered_set>
 
 namespace camel::compile::gir {
@@ -47,12 +48,9 @@ struct InlineResult {
     Node *callNode  = nullptr;
     Node *valueExit = nullptr;
     Node *ctrlEntry = nullptr;
-    Node *ctrlExit  = nullptr;
-    node_vec_t ctrlLeaves;
     std::vector<graph_ptr_t> importedSubgraphs;
     std::vector<graph_ptr_t> importedDependencies;
     bool insertedEntrySync = false;
-    bool insertedExitSync  = false;
 
     explicit operator bool() const { return valueExit != nullptr; }
 };
@@ -187,10 +185,26 @@ class GraphDraft {
     explicit GraphDraft(const graph_ptr_t &source)
         : sourceRoot_(source), root_(GraphBuilder::cloneGraph(source)) {
         registerOwnedGraphs(root_);
+        if (sourceRoot_) {
+            draftBySource_[sourceRoot_.get()] = root_;
+        }
     }
 
     graph_ptr_t sourceRoot() const { return sourceRoot_; }
     graph_ptr_t root() const { return root_; }
+    graph_ptr_t canonicalGraph(const graph_ptr_t &graph) const {
+        if (!graph) {
+            return nullptr;
+        }
+        auto it = draftBySource_.find(graph.get());
+        if (it != draftBySource_.end()) {
+            return it->second;
+        }
+        return graph;
+    }
+    bool hasDraftFor(const Graph *graph) const {
+        return graph != nullptr && draftBySource_.contains(graph);
+    }
 
     bool owns(const Graph *graph) const {
         return graph != nullptr && ownedGraphs_.contains(const_cast<Graph *>(graph));
@@ -198,8 +212,17 @@ class GraphDraft {
 
     graph_ptr_t cloneIntoDraft(const graph_ptr_t &graph) {
         ASSERT(graph != nullptr, "Cannot clone null graph into draft.");
+        auto existing = draftBySource_.find(graph.get());
+        if (existing != draftBySource_.end()) {
+            return existing->second;
+        }
         graph_ptr_t cloned = GraphBuilder::cloneGraph(graph);
         registerOwnedGraphs(cloned);
+        draftBySource_[graph.get()] = cloned;
+        // 先修正“新克隆图内部”对已知 draft 的引用，再做“全 owned 图域”的 source->draft 替换。
+        // 这个顺序保证不会遗漏类似 A(新克隆) -> B(已克隆) 的跨图边。
+        retargetKnownDraftRefsInOwner(cloned.get());
+        retargetOwnedGraphRefs(graph, cloned);
         return cloned;
     }
     graph_ptr_t importSubGraph(
@@ -207,8 +230,7 @@ class GraphDraft {
         GraphImportMode mode = GraphImportMode::ReferenceOnly) {
         ASSERT(owner != nullptr && subGraph != nullptr, "Cannot import null subgraph.");
         assertDraftOwned(owner.get(), "import subgraph into");
-        graph_ptr_t imported =
-            mode == GraphImportMode::CloneIntoDraft ? cloneIntoDraft(subGraph) : subGraph;
+        graph_ptr_t imported = resolveImportTarget(subGraph, mode);
         GraphBuilder(owner).addSubGraph(imported);
         markDirty(owner.get());
         return imported;
@@ -218,7 +240,7 @@ class GraphDraft {
         GraphImportMode mode = GraphImportMode::ReferenceOnly) {
         ASSERT(owner != nullptr && dep != nullptr, "Cannot import null dependency.");
         assertDraftOwned(owner.get(), "import dependency into");
-        graph_ptr_t imported = mode == GraphImportMode::CloneIntoDraft ? cloneIntoDraft(dep) : dep;
+        graph_ptr_t imported = resolveImportTarget(dep, mode);
         GraphBuilder(owner).addDependency(imported);
         markDirty(owner.get());
         return imported;
@@ -327,6 +349,209 @@ class GraphDraft {
         }
         ownedGraphs_.insert(graph.get());
     }
+    graph_ptr_t resolveImportTarget(const graph_ptr_t &graph, GraphImportMode mode) {
+        if (mode == GraphImportMode::CloneIntoDraft) {
+            return cloneIntoDraft(graph);
+        }
+        auto existing = draftBySource_.find(graph.get());
+        if (existing != draftBySource_.end()) {
+            return existing->second;
+        }
+        return graph;
+    }
+    void retargetOwnedGraphRefs(const graph_ptr_t &sourceGraph, const graph_ptr_t &draftGraph) {
+        ASSERT(sourceGraph != nullptr && draftGraph != nullptr, "Cannot retarget null graph refs.");
+        Graph *sourceRaw = sourceGraph.get();
+        Graph *draftRaw  = draftGraph.get();
+        if (sourceRaw == draftRaw) {
+            return;
+        }
+
+        for (Graph *ownerRaw : ownedGraphs_) {
+            if (!ownerRaw) {
+                continue;
+            }
+            bool changed = false;
+
+            std::vector<graph_ptr_t> staleDeps;
+            for (const auto &dep : ownerRaw->dependencies()) {
+                if (dep.get() == sourceRaw) {
+                    staleDeps.push_back(dep);
+                }
+            }
+            if (!staleDeps.empty()) {
+                GraphBuilder ownerBuilder(ownerRaw);
+                for (const auto &dep : staleDeps) {
+                    ownerBuilder.eraseDependency(dep);
+                    changed = true;
+                }
+                if (!ownerRaw->dependencies().contains(draftGraph)) {
+                    ownerBuilder.addDependency(draftGraph);
+                    changed = true;
+                }
+            }
+
+            bool subGraphReferenced = false;
+            for (const auto &[_, subGraphs] : ownerRaw->subGraphs()) {
+                if (subGraphs.contains(sourceGraph)) {
+                    subGraphReferenced = true;
+                    break;
+                }
+            }
+            if (subGraphReferenced) {
+                GraphBuilder ownerBuilder(ownerRaw);
+                ownerBuilder.eraseSubGraph(sourceGraph);
+                // `addSubGraph()` 会写入 graph->outer。仅当 owner 确实是 source 的词法外层时
+                // 才允许重建子图关系，避免把“别名注册”误升级为真实嵌套关系。
+                const auto sourceOuter         = sourceGraph->outer();
+                const bool ownerIsLexicalOuter = sourceOuter && sourceOuter.get() == ownerRaw;
+                if (ownerIsLexicalOuter && !draftGraph->name().empty()) {
+                    ownerBuilder.addSubGraph(draftGraph);
+                }
+                changed = true;
+            }
+
+            for (Node *node : ownerRaw->nodes()) {
+                if (node->type() == NodeType::FUNC) {
+                    auto *func = tt::as_ptr<FuncNode>(node);
+                    if (func && func->bodyGraph() == sourceRaw) {
+                        func->setBodyGraph(draftRaw);
+                        GraphBuilder ownerBuilder(ownerRaw);
+                        ensureDependencyRegistration(ownerRaw, draftGraph, ownerBuilder);
+                        changed = true;
+                    }
+                } else if (node->type() == NodeType::DATA) {
+                    auto *dataNode = tt::as_ptr<DataNode>(node);
+                    if (!dataNode ||
+                        dataNode->dataType()->code() != camel::core::type::TypeCode::Function) {
+                        continue;
+                    }
+                    auto *funcObj =
+                        camel::core::rtdata::fromSlot<::Function *>(dataNode->dataSlot());
+                    if (funcObj && funcObj->graph() == sourceRaw) {
+                        funcObj->setGraph(draftRaw);
+                        GraphBuilder ownerBuilder(ownerRaw);
+                        ensureDependencyRegistration(ownerRaw, draftGraph, ownerBuilder);
+                        changed = true;
+                    }
+                }
+            }
+
+            if (changed) {
+                markDirty(ownerRaw);
+            }
+        }
+    }
+    void retargetKnownDraftRefsInOwner(Graph *ownerRaw) {
+        if (!ownerRaw) {
+            return;
+        }
+        bool changed = false;
+        GraphBuilder ownerBuilder(ownerRaw);
+
+        std::vector<std::pair<graph_ptr_t, graph_ptr_t>> depRetargets;
+        for (const auto &dep : ownerRaw->dependencies()) {
+            auto it = draftBySource_.find(dep.get());
+            if (it == draftBySource_.end()) {
+                continue;
+            }
+            const graph_ptr_t &draftDep = it->second;
+            if (draftDep.get() == dep.get()) {
+                continue;
+            }
+            depRetargets.emplace_back(dep, draftDep);
+        }
+        for (const auto &[oldDep, newDep] : depRetargets) {
+            ownerBuilder.eraseDependency(oldDep);
+            if (!ownerRaw->dependencies().contains(newDep)) {
+                ownerBuilder.addDependency(newDep);
+            }
+            changed = true;
+        }
+
+        std::vector<std::pair<graph_ptr_t, graph_ptr_t>> subRetargets;
+        for (const auto &[_, subGraphs] : ownerRaw->subGraphs()) {
+            for (const auto &sub : subGraphs) {
+                auto it = draftBySource_.find(sub.get());
+                if (it == draftBySource_.end()) {
+                    continue;
+                }
+                const graph_ptr_t &draftSub = it->second;
+                if (draftSub.get() == sub.get()) {
+                    continue;
+                }
+                subRetargets.emplace_back(sub, draftSub);
+            }
+        }
+        for (const auto &[oldSub, newSub] : subRetargets) {
+            ownerBuilder.eraseSubGraph(oldSub);
+            const auto oldOuter            = oldSub->outer();
+            const bool ownerIsLexicalOuter = oldOuter && oldOuter.get() == ownerRaw;
+            if (ownerIsLexicalOuter && !newSub->name().empty()) {
+                ownerBuilder.addSubGraph(newSub);
+            }
+            changed = true;
+        }
+
+        for (Node *node : ownerRaw->nodes()) {
+            if (node->type() == NodeType::FUNC) {
+                auto *func = tt::as_ptr<FuncNode>(node);
+                if (!func || !func->bodyGraph()) {
+                    continue;
+                }
+                auto it = draftBySource_.find(func->bodyGraph());
+                if (it == draftBySource_.end()) {
+                    continue;
+                }
+                if (it->second.get() != func->bodyGraph()) {
+                    func->setBodyGraph(it->second.get());
+                    ensureDependencyRegistration(ownerRaw, it->second, ownerBuilder);
+                    changed = true;
+                }
+                continue;
+            }
+            if (node->type() != NodeType::DATA) {
+                continue;
+            }
+            auto *dataNode = tt::as_ptr<DataNode>(node);
+            if (!dataNode ||
+                dataNode->dataType()->code() != camel::core::type::TypeCode::Function) {
+                continue;
+            }
+            auto *funcObj = camel::core::rtdata::fromSlot<::Function *>(dataNode->dataSlot());
+            if (!funcObj || !funcObj->graph()) {
+                continue;
+            }
+            auto it = draftBySource_.find(funcObj->graph());
+            if (it == draftBySource_.end()) {
+                continue;
+            }
+            if (it->second.get() != funcObj->graph()) {
+                funcObj->setGraph(it->second.get());
+                ensureDependencyRegistration(ownerRaw, it->second, ownerBuilder);
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            markDirty(ownerRaw);
+        }
+    }
+    static void ensureDependencyRegistration(
+        Graph *ownerRaw, const graph_ptr_t &dep, GraphBuilder &ownerBuilder) {
+        if (!ownerRaw || !dep) {
+            return;
+        }
+        if (ownerRaw == dep.get()) {
+            // self dependency 在 GraphBuilder 里不会进入 dependencies 集合，
+            // 但会设置 looped=true（递归图语义），这里必须显式触发一次。
+            ownerBuilder.addDependency(dep);
+            return;
+        }
+        if (!ownerRaw->dependencies().contains(dep)) {
+            ownerBuilder.addDependency(dep);
+        }
+    }
     void assertDraftOwned(const Graph *graph, const char *action) const {
         ASSERT(
             owns(graph),
@@ -341,6 +566,7 @@ class GraphDraft {
     graph_ptr_t root_;
     std::unordered_set<Graph *> ownedGraphs_;
     std::unordered_set<Graph *> dirtyGraphs_;
+    std::unordered_map<const Graph *, graph_ptr_t> draftBySource_;
 };
 
 } // namespace camel::compile::gir

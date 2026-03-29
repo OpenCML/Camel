@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 28, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,7 +48,7 @@ enum class NodeType {
     OPER,
     EXIT,
     SYNC,
-    NREF,
+    GATE,
     DREF,
 };
 

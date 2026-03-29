@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 15, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -169,7 +169,31 @@ PassScopePtr initPassScope() {
                                        })},
                                   })},
                          })},
-                    {"inline", def(PASS(InlineRewritePass))},
+                    {"inline",
+                     def(PASS1(InlineRewritePass, InlineRewriteConfig{}),
+                         {
+                             {"small", def([](const context_ptr_t &ctx) {
+                                  return std::make_unique<InlineRewritePass>(
+                                      ctx,
+                                      InlineRewriteConfig{
+                                          .strategy = InlineTargetStrategy::Small,
+                                      });
+                              })},
+                             {"arm", def([](const context_ptr_t &ctx) {
+                                  return std::make_unique<InlineRewritePass>(
+                                      ctx,
+                                      InlineRewriteConfig{
+                                          .strategy = InlineTargetStrategy::Arm,
+                                      });
+                              })},
+                             {"hybrid", def([](const context_ptr_t &ctx) {
+                                  return std::make_unique<InlineRewritePass>(
+                                      ctx,
+                                      InlineRewriteConfig{
+                                          .strategy = InlineTargetStrategy::Hybrid,
+                                      });
+                              })},
+                         })},
                     {"taskflow", def(PASS(TaskflowExecSchedPass))},
                     {"tfdump", def(PASS(TfDumpPass))},
                 }),

@@ -184,43 +184,95 @@ void appendMappedOutputsPreservingOrder(
     }
 }
 
-bool isControlExecutableNodeType(NodeType type) {
-    switch (type) {
-    case NodeType::DATA:
-    case NodeType::PORT:
-    case NodeType::FUNC:
-    case NodeType::SYNC:
-    case NodeType::NREF:
-    case NodeType::DREF:
-    case NodeType::EXIT:
-        return false;
-    default:
-        return true;
-    }
-}
-
 node_vec_t
-collectControlRoots(const Graph &graph, const std::unordered_map<Node *, Node *> &nodeMap) {
-    node_vec_t roots;
-    for (Node *oldNode : graph.nodes()) {
-        if (!isControlExecutableNodeType(oldNode->type()) || !oldNode->ctrlInputs().empty()) {
+collectEntryRootsFromExit(const Graph &graph, const std::unordered_map<Node *, Node *> &nodeMap) {
+    auto isEntryExecutable = [](NodeType type) {
+        switch (type) {
+        case NodeType::DATA:
+        case NodeType::PORT:
+        case NodeType::SYNC:
+        case NodeType::GATE:
+        case NodeType::DREF:
+        case NodeType::EXIT:
+            return false;
+        default:
+            return true;
+        }
+    };
+
+    std::unordered_set<Node *> reachable;
+    std::vector<Node *> stack;
+    if (graph.hasOutput()) {
+        stack.push_back(graph.exitNode());
+    }
+    while (!stack.empty()) {
+        Node *curr = stack.back();
+        stack.pop_back();
+        if (!curr || !reachable.insert(curr).second) {
             continue;
         }
-        roots.push_back(requireMappedNode(oldNode, nodeMap, "Missing mapped control root."));
+        for (Node *in : curr->normInputs()) {
+            if (in && &in->graph() == &graph) {
+                stack.push_back(in);
+            }
+        }
+        for (Node *in : curr->withInputs()) {
+            if (in && &in->graph() == &graph) {
+                stack.push_back(in);
+            }
+        }
+        for (Node *in : curr->ctrlInputs()) {
+            if (in && &in->graph() == &graph) {
+                stack.push_back(in);
+            }
+        }
+    }
+
+    node_vec_t roots;
+    for (Node *oldNode : graph.nodes()) {
+        if (!reachable.contains(oldNode) || !isEntryExecutable(oldNode->type())) {
+            continue;
+        }
+        bool hasNonDataPortInput = false;
+        auto scan                = [&](const auto &inputs) {
+            for (Node *in : inputs) {
+                if (!in || &in->graph() != &graph) {
+                    continue;
+                }
+                if (in->type() != NodeType::DATA && in->type() != NodeType::PORT) {
+                    hasNonDataPortInput = true;
+                    break;
+                }
+            }
+        };
+        scan(oldNode->normInputs());
+        if (!hasNonDataPortInput) {
+            scan(oldNode->withInputs());
+        }
+        if (!hasNonDataPortInput) {
+            scan(oldNode->ctrlInputs());
+        }
+        if (hasNonDataPortInput) {
+            continue;
+        }
+        roots.push_back(requireMappedNode(oldNode, nodeMap, "Missing mapped entry root."));
     }
     return roots;
 }
 
-node_vec_t
-collectControlLeaves(const Graph &graph, const std::unordered_map<Node *, Node *> &nodeMap) {
-    node_vec_t leaves;
-    for (Node *oldNode : graph.nodes()) {
-        if (!isControlExecutableNodeType(oldNode->type()) || !oldNode->ctrlOutputs().empty()) {
-            continue;
-        }
-        leaves.push_back(requireMappedNode(oldNode, nodeMap, "Missing mapped control leaf."));
+void validateSingleControlCompletionLeaf(const Graph &graph) {
+    Node *exitNode  = graph.exitNode();
+    Node *valueExit = exitNode->normInputs().front();
+    if (!valueExit) {
+        ASSERT(false, std::format("Graph '{}' has null value-exit input.", graph.name()));
     }
-    return leaves;
+    ASSERT(
+        exitNode->ctrlInputs().size() <= 1,
+        std::format(
+            "Graph '{}' violates control completion contract: EXIT has {} ctrl inputs (expected <= "
+            "1).",
+            graph.name(),
+            exitNode->ctrlInputs().size()));
 }
 
 node_vec_t collectConsumersByInput(const Graph &graph, Node *needle, LinkType type) {
@@ -261,18 +313,6 @@ bool hasSubgraphReference(const Graph &graph, const graph_ptr_t &subGraph) {
         if (subGraphs.contains(subGraph)) {
             return true;
         }
-    }
-    return false;
-}
-
-bool shouldInsertEntrySync(InlineSyncPolicy policy, const node_vec_t &ctrlRoots) {
-    switch (policy) {
-    case InlineSyncPolicy::Force:
-        return true;
-    case InlineSyncPolicy::Never:
-        return false;
-    case InlineSyncPolicy::Auto:
-        return ctrlRoots.size() > 1;
     }
     return false;
 }
@@ -523,7 +563,7 @@ Graph::computeNodeDebugFingerprintForNode(Node *node, uint64_t tieBreaker) const
         break;
     }
     case NodeType::SYNC:
-    case NodeType::NREF:
+    case NodeType::GATE:
         // 此类节点在 layout 里常无独立 dataIndex 语义，用地址打破对称、避免误合并。
         w0 = debugMix64(
             w0,
@@ -1150,7 +1190,25 @@ graph_ptr_t GraphBuilder::cloneGraph(const graph_ptr_t &graph) {
     }
 
     // 浅拷贝策略：共享依赖与子图引用，不递归克隆。
-    newGraph->subGraphs_    = src->subGraphs();
+    // 但子图仅保留“真实词法拥有”关系（sub->outer == src）。
+    // 某些历史图可能在 subGraphs 中混入别名引用；若直接复制会污染 outer 层级，
+    // 导致重写后出现错误嵌套（如全局函数被挂到分支 arm 子图下）。
+    newGraph->subGraphs_.clear();
+    for (const auto &[name, subGraphs] : src->subGraphs()) {
+        std::unordered_set<graph_ptr_t> lexicalOwned;
+        for (const auto &subGraph : subGraphs) {
+            if (!subGraph) {
+                continue;
+            }
+            const auto outer = subGraph->outer();
+            if (outer && outer.get() == src) {
+                lexicalOwned.insert(subGraph);
+            }
+        }
+        if (!lexicalOwned.empty()) {
+            newGraph->subGraphs_[name] = std::move(lexicalOwned);
+        }
+    }
     newGraph->dependencies_ = src->dependencies();
     for (const auto &dep : newGraph->dependencies_) {
         dep->dependents_.insert(newGraph);
@@ -1280,28 +1338,14 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
     auto *sourceContext =
         graph_->getExtra<camel::source::SourceContext, kSourceContextExtraIndex>();
     std::unordered_map<Node *, Node *> nodeMap;
-    const node_vec_t ctrlRootsBeforeClone = [&]() -> node_vec_t {
+    const node_vec_t entryRootsBeforeClone = [&]() -> node_vec_t {
         std::unordered_map<Node *, Node *> identity;
         for (Node *n : targetGraph.nodes()) {
             identity.emplace(n, n);
         }
-        return collectControlRoots(targetGraph, identity);
+        return collectEntryRootsFromExit(targetGraph, identity);
     }();
-    const bool insertEntrySync = shouldInsertEntrySync(options.syncPolicy, ctrlRootsBeforeClone);
-    Node *entrySync            = insertEntrySync ? SyncNode::create(*graph_) : nullptr;
-    result.insertedEntrySync   = entrySync != nullptr;
-
-    auto bindPortToInput = [&](Node *port, Node *input) {
-        if (entrySync) {
-            Node *nrefNode = NRefNode::create(*graph_);
-            nrefNode->setDataType(input->dataType());
-            Node::link(LinkType::Ctrl, entrySync, nrefNode);
-            Node::link(LinkType::Norm, input, nrefNode);
-            nodeMap[port] = nrefNode;
-        } else {
-            nodeMap[port] = input;
-        }
-    };
+    std::vector<std::pair<Node *, Node *>> portBindings;
 
     const auto &normPorts  = targetGraph.normPorts();
     const auto &withPorts  = targetGraph.withPorts();
@@ -1356,16 +1400,18 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
     if (normPorts.size() == normInputs.size() &&
         (withPorts.size() + closure.size() + freeInputs.size()) == withInputs.size()) {
         for (size_t i = 0; i < normPorts.size(); ++i) {
-            bindPortToInput(normPorts[i], normInputs[i]);
+            portBindings.emplace_back(normPorts[i], normInputs[i]);
         }
         for (size_t i = 0; i < withPorts.size(); ++i) {
-            bindPortToInput(withPorts[i], withInputs[i]);
+            portBindings.emplace_back(withPorts[i], withInputs[i]);
         }
         for (size_t i = 0; i < closure.size(); ++i) {
-            bindPortToInput(closure[i], withInputs[withPorts.size() + i]);
+            portBindings.emplace_back(closure[i], withInputs[withPorts.size() + i]);
         }
         for (size_t i = 0; i < freeInputs.size(); ++i) {
-            bindPortToInput(freeInputs[i], withInputs[withPorts.size() + closure.size() + i]);
+            portBindings.emplace_back(
+                freeInputs[i],
+                withInputs[withPorts.size() + closure.size() + i]);
         }
     } else {
         // 兼容旧 API 迁移期：当 norm/with 分桶不一致时，退化为按参数总序绑定。
@@ -1389,8 +1435,34 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
             return InlineResult{};
         }
         for (size_t i = 0; i < allPorts.size(); ++i) {
-            bindPortToInput(allPorts[i], allInputs[i]);
+            portBindings.emplace_back(allPorts[i], allInputs[i]);
         }
+    }
+
+    const bool needParameterGates = !node->ctrlInputs().empty() || !node->ctrlOutputs().empty();
+    std::unordered_map<Node *, Node *> gateByInput;
+    node_vec_t parameterGateTargets;
+    if (needParameterGates) {
+        parameterGateTargets.reserve(portBindings.size());
+    }
+    for (const auto &[port, input] : portBindings) {
+        if (!needParameterGates) {
+            nodeMap[port] = input;
+            continue;
+        }
+        auto gateIt = gateByInput.find(input);
+        Node *gatedInput;
+        if (gateIt == gateByInput.end()) {
+            auto *nrefNode = GateNode::create(*graph_);
+            nrefNode->setDataType(input->dataType());
+            Node::link(LinkType::Norm, input, nrefNode);
+            gateByInput.emplace(input, nrefNode);
+            parameterGateTargets.push_back(nrefNode);
+            gatedInput = nrefNode;
+        } else {
+            gatedInput = gateIt->second;
+        }
+        nodeMap[port] = gatedInput;
     }
 
     if (!targetGraph.hasOutput()) {
@@ -1424,26 +1496,65 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
             requireMappedNode(port, nodeMap, "With port not found in node map during inlining."),
             nodeMap);
     }
-    if (entrySync) {
-        for (Node *oldRoot : ctrlRootsBeforeClone) {
-            auto originalIt = std::ranges::find(targetGraph.nodes(), oldRoot);
-            ASSERT(
-                originalIt != targetGraph.nodes().end(),
-                "Control root must belong to target graph.");
-            Node *newNode = requireMappedNode(
-                *originalIt,
-                nodeMap,
-                "Mapped node not found when wiring inline control entry.");
-            Node::link(LinkType::Ctrl, entrySync, newNode);
-        }
-    }
-
     Node *targetOutput = targetGraph.exitNode()->normInputs().front();
     result.valueExit =
         requireMappedNode(targetOutput, nodeMap, "Target output node not found during inlining.");
     const node_vec_t normConsumers = collectConsumersByInput(*graph_, node, LinkType::Norm);
     const node_vec_t withConsumers = collectConsumersByInput(*graph_, node, LinkType::With);
     const node_vec_t ctrlConsumers = collectConsumersByInput(*graph_, node, LinkType::Ctrl);
+    node_vec_t entryTargets;
+    if (!parameterGateTargets.empty()) {
+        entryTargets = parameterGateTargets;
+    } else {
+        entryTargets.reserve(entryRootsBeforeClone.size());
+        for (Node *oldRoot : entryRootsBeforeClone) {
+            Node *mapped =
+                requireMappedNode(oldRoot, nodeMap, "Mapped entry root not found after inlining.");
+            if (std::ranges::find(entryTargets, mapped) == entryTargets.end()) {
+                entryTargets.push_back(mapped);
+            }
+        }
+    }
+    if (entryTargets.empty()) {
+        // 当子图仅由 DATA/PORT 直达 EXIT 时，反向推导可能得不到可执行入口根。
+        // 此时将 valueExit 作为隐式入口目标，再按统一收敛逻辑求 ctrlEntry。
+        entryTargets.push_back(result.valueExit);
+    }
+    if (entryTargets.size() > 1) {
+        auto *entrySync          = SyncNode::create(*graph_);
+        result.insertedEntrySync = true;
+        for (Node *targetEntry : entryTargets) {
+            Node::link(LinkType::Ctrl, entrySync, targetEntry);
+        }
+        result.ctrlEntry = entrySync;
+    }
+    if (entryTargets.size() == 1) {
+        result.ctrlEntry = entryTargets.front();
+    }
+
+    Node *completionCtrl      = result.valueExit;
+    const auto exitCtrlInputs = targetGraph.exitNode()->ctrlInputs();
+    ASSERT(
+        exitCtrlInputs.size() <= 1,
+        std::format(
+            "Target graph '{}' has {} EXIT ctrl inputs during inlining (expected <= 1).",
+            targetGraph.name(),
+            exitCtrlInputs.size()));
+    if (!exitCtrlInputs.empty()) {
+        completionCtrl = requireMappedNode(
+            exitCtrlInputs.front(),
+            nodeMap,
+            "Mapped EXIT ctrl completion node not found during inlining.");
+    }
+    ASSERT(completionCtrl != nullptr, "Inlined callable has no control completion anchor.");
+
+    if (completionCtrl != result.valueExit) {
+        auto *gatedValue = GateNode::create(*graph_);
+        gatedValue->setDataType(result.valueExit->dataType());
+        Node::link(LinkType::Ctrl, completionCtrl, gatedValue);
+        Node::link(LinkType::Norm, result.valueExit, gatedValue);
+        result.valueExit = gatedValue;
+    }
 
     for (auto *out : normConsumers) {
         Node::replaceInput(LinkType::Norm, out, node, result.valueExit);
@@ -1452,41 +1563,12 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
         Node::replaceInput(LinkType::With, out, node, result.valueExit);
     }
 
-    result.ctrlLeaves = collectControlLeaves(targetGraph, nodeMap);
-    if (entrySync) {
-        result.ctrlEntry = entrySync;
-    } else if (ctrlRootsBeforeClone.size() == 1) {
-        result.ctrlEntry = requireMappedNode(
-            ctrlRootsBeforeClone.front(),
-            nodeMap,
-            "Mapped control root not found after inlining.");
-    } else if (ctrlRootsBeforeClone.empty()) {
-        result.ctrlEntry = result.valueExit;
-    }
-
-    if (result.ctrlLeaves.size() == 1) {
-        result.ctrlExit = result.ctrlLeaves.front();
-    } else if (result.ctrlLeaves.empty()) {
-        result.ctrlExit = result.valueExit;
-    }
-
     if (!ctrlConsumers.empty()) {
-        if (!result.ctrlExit && !result.ctrlLeaves.empty()) {
-            Node *exitSync          = SyncNode::create(*graph_);
-            result.ctrlExit         = exitSync;
-            result.insertedExitSync = true;
-            for (Node *leaf : result.ctrlLeaves) {
-                Node::link(LinkType::Ctrl, leaf, exitSync);
-            }
-        }
-        if (!result.ctrlExit) {
-            result.ctrlExit = result.ctrlEntry;
-        }
         ASSERT(
-            result.ctrlExit != nullptr,
+            completionCtrl != nullptr,
             "Inlined callable with control consumers has no control exit.");
         for (auto *out : ctrlConsumers) {
-            Node::replaceInput(LinkType::Ctrl, out, node, result.ctrlExit);
+            Node::replaceInput(LinkType::Ctrl, out, node, completionCtrl);
         }
     }
 
@@ -1561,7 +1643,7 @@ LayoutResult GraphBuilder::computeLayout(const Graph &graph) {
             assignIndex(dataNode, stcIdx--);
             staticDataTypes.push_back(dataNode->dataType());
         } else {
-            if (type == NodeType::SYNC || type == NodeType::NREF) {
+            if (type == NodeType::SYNC || type == NodeType::GATE) {
                 continue;
             }
             assignIndex(node, rtmIdx++);
@@ -1639,8 +1721,23 @@ void GraphBuilder::validateGraph(const Graph &graph) {
                         tt::as_ptr<JoinNode>(node)->matchedBranch()->armCount(),
                 std::format("JOIN/BRCH arm count mismatch in graph '{}'.", graph.name()));
         }
+        if (node->type() == NodeType::GATE) {
+            ASSERT(
+                !node->normInputs().empty(),
+                std::format(
+                    "GATE node '{}' in graph '{}' must have at least one Norm input.",
+                    node->toString(),
+                    graph.name()));
+            ASSERT(
+                !node->ctrlInputs().empty(),
+                std::format(
+                    "GATE node '{}' in graph '{}' must have at least one Ctrl input.",
+                    node->toString(),
+                    graph.name()));
+        }
     }
     validateNodeAdjacency(graph.exitNode());
+    validateSingleControlCompletionLeaf(graph);
 
     for (const auto &[name, subGraphs] : graph.subGraphs()) {
         for (const auto &subGraph : subGraphs) {

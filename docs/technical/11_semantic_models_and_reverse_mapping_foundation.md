@@ -215,7 +215,7 @@ GIR 是最终执行图，不再保留树结构。其主要抽象是：
 | `FUNC` | 可调用图值 |
 | `OPER` | 已解析算子 |
 | `EXIT` | 图输出 |
-| `DREF / NREF / SYNC` | 构图辅助或过渡节点 |
+| `DREF / GATE / SYNC` | 构图辅助或过渡节点 |
 
 ### 4.3 GCT -> GIR 的主要 lowering 模式
 

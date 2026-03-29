@@ -31,7 +31,8 @@ namespace camel::compile::gir {
 
 namespace {
 
-TupleType *currentClosureTupleType(const graph_ptr_t &graph) {
+TupleType *currentClosureTupleType(const Graph *graph) {
+    ASSERT(graph != nullptr, "Closure tuple type source graph is null.");
     type_vec_t closureTypes;
     closureTypes.reserve(graph->closure().size());
     for (Node *node : graph->closure()) {
@@ -97,8 +98,8 @@ void Node::freezeAdjacency(GraphArena &arena) {
 data_idx_t Node::index() const {
     ASSERT(nodeType_ != NodeType::SYNC, "SYNC node has no data index.");
     ASSERT(nodeType_ != NodeType::DREF, "DREF node has no data index.");
-    if (nodeType_ == NodeType::NREF) {
-        ASSERT(!normInputs().empty(), "NREF node must have one norm input before reading index.");
+    if (nodeType_ == NodeType::GATE) {
+        ASSERT(!normInputs().empty(), "GATE node must have one norm input before reading index.");
         return normInputs().front()->index();
     }
     return dataIndex_;
@@ -820,11 +821,24 @@ Node *FuncNode::create(Graph &graph, const graph_ptr_t &bodyGraph) {
     ASSERT(bodyGraph != nullptr, "Function graph is null for FunctionNode.");
     auto *rtFunc = ::Function::create(
         bodyGraph.get(),
-        currentClosureTupleType(bodyGraph),
+        currentClosureTupleType(bodyGraph.get()),
         graph.arena()->allocator());
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
     Node *node       = makeOwnedNode<FuncNode>(graph, graph, index, bodyGraph.get(), rtFunc);
+    builder.addNode(node);
+    return node;
+}
+
+Node *FuncNode::create(Graph &graph, Graph *bodyGraph) {
+    ASSERT(bodyGraph != nullptr, "Function graph is null for FunctionNode.");
+    auto *rtFunc = ::Function::create(
+        bodyGraph,
+        currentClosureTupleType(bodyGraph),
+        graph.arena()->allocator());
+    GraphBuilder builder(graph);
+    data_idx_t index = builder.addRuntimeData();
+    Node *node       = makeOwnedNode<FuncNode>(graph, graph, index, bodyGraph, rtFunc);
     builder.addNode(node);
     return node;
 }
@@ -848,9 +862,7 @@ std::string FuncNode::toString() const {
         dataType()->toString());
 }
 
-Node *FuncNode::clone(Graph &graph) const {
-    return FuncNode::create(graph, graph_->shared_from_this());
-}
+Node *FuncNode::clone(Graph &graph) const { return FuncNode::create(graph, graph_); }
 
 Node *OperNode::create(Graph &graph, oper_idx_ptr_t op) {
     auto *raw = graph.registerOperIndex(op);
@@ -882,7 +894,7 @@ Node *OperNode::clone(Graph &graph) const {
 }
 
 // =============================================================================
-// ExitNode, DrefNode, SyncNode, NRefNode
+// ExitNode, DrefNode, SyncNode, GateNode
 // =============================================================================
 
 Node *ExitNode::create(Graph &graph, Type *type, data_idx_t index) {
@@ -921,17 +933,21 @@ std::string SyncNode::toString() const {
 
 Node *SyncNode::clone(Graph &graph) const { return SyncNode::create(graph); }
 
-Node *NRefNode::create(Graph &graph) {
+Node *GateNode::create(Graph &graph) {
     GraphBuilder builder(graph);
-    Node *node = makeOwnedNode<NRefNode>(graph, graph);
+    Node *node = makeOwnedNode<GateNode>(graph, graph);
     builder.addNode(node);
     return node;
 }
 
-std::string NRefNode::toString() const {
-    return std::format("NREF({}): {}", dataIndex_, dataType()->toString());
+std::string GateNode::toString() const {
+    return std::format("GATE({}): {}", dataIndex_, dataType()->toString());
 }
 
-Node *NRefNode::clone(Graph &graph) const { return NRefNode::create(graph); }
+Node *GateNode::clone(Graph &graph) const {
+    Node *node = GateNode::create(graph);
+    node->setDataType(dataType());
+    return node;
+}
 
 } // namespace camel::compile::gir

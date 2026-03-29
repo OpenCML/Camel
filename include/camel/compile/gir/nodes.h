@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 28, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -444,6 +444,7 @@ class FuncNode : public Node {
     ~FuncNode() = default;
 
     static Node *create(Graph &graph, const graph_ptr_t &bodyGraph);
+    static Node *create(Graph &graph, Graph *bodyGraph);
 
     ::Function *rtFunc() const { return rtFunc_; }
     Graph *bodyGraph() const { return graph_; }
@@ -535,10 +536,10 @@ class SyncNode : public Node {
     Node *clone(Graph &graph) const override;
 };
 
-class NRefNode : public Node {
+class GateNode : public Node {
   public:
-    NRefNode(Graph &graph) : Node(graph, NodeType::NREF, Type::Void(), 0) {}
-    ~NRefNode() = default;
+    GateNode(Graph &graph) : Node(graph, NodeType::GATE, Type::Void(), 0) {}
+    ~GateNode() = default;
 
     static Node *create(Graph &graph);
 

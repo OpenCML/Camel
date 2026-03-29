@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 28, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -262,7 +262,7 @@ GraphLoweringPlan analyzeGraphForCpp(Graph *graph) {
         case NodeType::CALL:
         case NodeType::BIND:
         case NodeType::SYNC:
-        case NodeType::NREF:
+        case NodeType::GATE:
         case NodeType::DREF:
             addIssue(plan, node, "node type is not supported by the direct C++ path yet");
             break;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 28, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -597,7 +597,7 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                 [[fallthrough]];
             case NodeType::SYNC:
                 [[fallthrough]];
-            case NodeType::NREF:
+            case NodeType::GATE:
                 break;
 
             default: {

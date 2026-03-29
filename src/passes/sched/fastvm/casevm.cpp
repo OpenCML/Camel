@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Mar. 13, 2026
+ * Updated: Mar. 29, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -80,7 +80,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 tag = context_->execMgr().getNameOfAnOperator(bc.extra()->func);
             } else if (bc.opcode == OpCode::FUNC) {
 #if ENABLE_FASTVM_JIT
-                if (bc.fastop[1] != 0)
+                if (bc.fastop[1] >= 0)
                     tag = getFuncExtraGraph(&bc)->name();
                 else
                     tag = jitFnToGraph_[reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc))]->name();
@@ -327,7 +327,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             case OpCode::FUNC: {
 #if ENABLE_FASTVM_JIT
                 const Bytecode *callBc = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
-                if (callBc->fastop[1] == 0) {
+                if (callBc->fastop[1] < 0) {
                     GIR::Graph *g          = getFuncExtraGraph(callBc);
                     JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(callBc));
                     size_t argsCnt         = callBc->normCnt();
@@ -372,7 +372,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 const Bytecode *tailBc = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
                 GIR::Graph *tailTargetGraph = getFuncExtraGraph(tailBc);
                 framePool_.release(currFrame);
-                if (tailBc->fastop[1] == 0) {
+                if (tailBc->fastop[1] < 0) {
                     size_t argsCnt         = tailBc->normCnt();
                     const data_idx_t *args = tailBc->operands();
                     Frame *newFrame        = acquireTailFrameWithArgs(
