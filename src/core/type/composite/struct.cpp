@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -86,10 +86,10 @@ StructType::StructType(
 
 StructType *StructType::create() {
     StructTypeLayout layout = computeLayout(0, 0, 0);
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("StructType")
-            .debug("Allocating StructType: (), size: {} bytes", layout.totalSize));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "StructType",
+        "Allocating StructType: (), size: {} bytes",
+        layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
     ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
     return new (mem) StructType(layout, nullptr, nullptr, nullptr, nullptr, nullptr);
@@ -135,14 +135,12 @@ StructType *StructType::fromFactoryData(
     }
 
     StructTypeLayout layout = computeLayout(size, refCount, fieldNamesData.size());
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("StructType")
-            .debug(
-                "Allocating StructType: size={}, refCount={}, totalSize: {} bytes",
-                size,
-                refCount,
-                layout.totalSize));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "StructType",
+        "Allocating StructType: size={}, refCount={}, totalSize: {} bytes",
+        size,
+        refCount,
+        layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
     ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
     return new (mem) StructType(

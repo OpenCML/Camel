@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,6 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/debug.h"
 #include "camel/utils/exstore.h"
-#include "camel/utils/log.h"
 #include "camel/utils/type.h"
 #include "types.h"
 

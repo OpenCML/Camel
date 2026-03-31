@@ -13,11 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 09, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include <iostream>
+
+#include <algorithm>
+#include <atomic>
+#include <cctype>
+#include <string_view>
+#include <vector>
 
 #include "build_config.h"
 #include "camel/utils/log.h"
@@ -36,12 +42,129 @@ using namespace clipp;
 using namespace std;
 namespace fs = std::filesystem;
 
+namespace {
+
+LogLevel parseLogLevelToken(std::string_view s) {
+    std::string t(strutil::trim(s));
+    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) {
+        return static_cast<char>(::tolower(c));
+    });
+    if (t == "trace")
+        return LogLevel::Trace;
+    if (t == "debug")
+        return LogLevel::Debug;
+    if (t == "info")
+        return LogLevel::Info;
+    if (t == "warn" || t == "warning")
+        return LogLevel::Warn;
+    if (t == "fatal")
+        return LogLevel::Fatal;
+    if (t == "off")
+        return LogLevel::Off;
+    std::cerr << "Unknown log level: '" << s << "'" << std::endl;
+    std::exit(1);
+}
+
+LogCategoryPreset parseLogPresetToken(std::string_view s) {
+    std::string t(strutil::trim(s));
+    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) {
+        return static_cast<char>(::tolower(c));
+    });
+    if (t.empty() || t == "none")
+        return LogCategoryPreset::None;
+    if (t == "wall")
+        return LogCategoryPreset::Wall;
+    if (t == "extra")
+        return LogCategoryPreset::Extra;
+    std::cerr << "Unknown --log-preset: '" << s << "'" << std::endl;
+    std::exit(1);
+}
+
+std::vector<std::string> splitCommaScopes(std::string_view s) {
+    std::vector<std::string> out;
+    std::string acc;
+    for (char c : s) {
+        if (c == ',') {
+            std::string p(strutil::trim(acc));
+            if (!p.empty())
+                out.push_back(std::move(p));
+            acc.clear();
+        } else {
+            acc += c;
+        }
+    }
+    std::string p(strutil::trim(acc));
+    if (!p.empty())
+        out.push_back(std::move(p));
+    return out;
+}
+
+/// Left-to-right over argv: last `--log-level` / `-v*` wins; then applies preset/include and stderr
+/// sink.
+void applyCamelCliLogging(int argc, char **argv) {
+    static std::atomic<bool> stderrSinkRegistered{false};
+
+    LogLevel lastLevel      = LogLevel::Fatal;
+    std::string lastPreset  = "none";
+    std::string lastInclude = "";
+
+    for (int i = 1; i < argc; ++i) {
+        std::string_view a = argv[i];
+        if (a == "-l" || a == "--log-level") {
+            if (i + 1 < argc)
+                lastLevel = parseLogLevelToken(argv[++i]);
+            continue;
+        }
+        if (a == "--log-preset") {
+            if (i + 1 < argc)
+                lastPreset = argv[++i];
+            continue;
+        }
+        if (a == "--log-include") {
+            if (i + 1 < argc)
+                lastInclude = argv[++i];
+            continue;
+        }
+        if (a == "-vvvv") {
+            lastLevel = LogLevel::Trace;
+            continue;
+        }
+        if (a == "-vvv") {
+            lastLevel = LogLevel::Debug;
+            continue;
+        }
+        if (a == "-vv") {
+            lastLevel = LogLevel::Info;
+            continue;
+        }
+        if (a == "-v" || a == "--verbose") {
+            lastLevel = LogLevel::Warn;
+            continue;
+        }
+    }
+
+    Logger::SetGlobalLogThreshold(lastLevel);
+    Logger::SetLogCategoryPreset(parseLogPresetToken(lastPreset));
+    if (!lastInclude.empty())
+        Logger::SetScopeAllowPrefixes(splitCommaScopes(lastInclude));
+    else
+        Logger::SetScopeAllowPrefixes({});
+
+    if (lastLevel != LogLevel::Off) {
+        Logger::SetColorEnabled(true);
+        bool expected = false;
+        if (stderrSinkRegistered.compare_exchange_strong(expected, true))
+            Logger::AddOutputStream(&std::cerr);
+    }
+}
+
+} // namespace
+
 namespace CmdLineArgs {
 Command selectedCommand = Command::Run;
 
 namespace Global {
-bool verbose    = false;
-string logLevel = "off";
+string logLevelArg;
 } // namespace Global
 
 namespace Run {
@@ -143,10 +266,20 @@ bool parseArgs(int argc, char *argv[]) {
     bool showAbout   = false; // About information
     bool showZen     = false; // Show Zen of Camel
 
+    std::string logPresetConsumed;
+    std::string logIncludeConsumed;
+
     auto globalOps =
-        ((option("-v", "--verbose").set(Global::verbose) % "enable verbose output"),
-         ((option("-l", "--log-level") & value("level", Global::logLevel)) %
-          "set log level: debug, info, warn, error, off (default to info)"));
+        (option("-vvvv") % "log threshold: trace (shortcut)",
+         option("-vvv") % "log threshold: debug (shortcut)",
+         option("-vv") % "log threshold: info (shortcut)",
+         (option("-v", "--verbose") % "log threshold: warn (shortcut)"),
+         ((option("-l", "--log-level") & value("level", Global::logLevelArg)) %
+          "fatal|warn|info|debug|trace|off (default: fatal)"),
+         ((option("--log-preset") & value("preset", logPresetConsumed)) %
+          "scope filter preset: none|wall|extra"),
+         ((option("--log-include") & value("scopes", logIncludeConsumed)) %
+          "comma-separated scope prefixes (overrides preset list)"));
 
     auto run =
         (option("-P", "--profile").set(profile) % "profile the perf",
@@ -221,33 +354,7 @@ bool parseArgs(int argc, char *argv[]) {
         return false;
     }
 
-    if (Global::verbose) {
-        Logger::SetVerbose(true);
-        Logger::SetColorEnabled(true);
-        Logger::AddOutputStream(&std::cout);
-
-        if (!Global::logLevel.empty()) {
-            std::string level{strutil::trim(Global::logLevel)};
-            std::transform(level.begin(), level.end(), level.begin(), ::tolower);
-
-            if (level == "debug")
-                Logger::SetLogLevel(Logger::Level::Debug);
-            else if (level == "info")
-                Logger::SetLogLevel(Logger::Level::Info);
-            else if (level == "warn")
-                Logger::SetLogLevel(Logger::Level::Warn);
-            else if (level == "error")
-                Logger::SetLogLevel(Logger::Level::Error);
-            else if (level == "off")
-                Logger::SetLogLevel(Logger::Level::Off);
-            else {
-                std::cerr << "Unknown log level: '" << level << "'" << std::endl;
-                std::exit(1);
-            }
-        } else {
-            Logger::SetLogLevel(Logger::Level::Info);
-        }
-    }
+    applyCamelCliLogging(argc, argv);
 
     if (showVersion) {
 #ifdef NDEBUG

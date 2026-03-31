@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -82,11 +82,11 @@ inline bool linkCheek(Node *from, Node *to) {
     // which may cause cycles in the graph
     // note: this check can be expensive
     if (to->hasDeepLinkedTo(from)) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("GIR").warn(
-                "Prevent linking deeply linked nodes: {} -> {}",
-                from->toString(),
-                to->toString()));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+            "GIR",
+            "Prevent linking deeply linked nodes: {} -> {}",
+            from->toString(),
+            to->toString()));
         return false;
     }
     return true;

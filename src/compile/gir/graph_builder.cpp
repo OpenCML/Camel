@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 29, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 /*
@@ -566,7 +566,8 @@ void GraphBuilder::addSubGraph(const graph_ptr_t &graph) const {
             existing.find(graph) == existing.end(),
             std::format("Subgraph with name '{}' already exists.", graph->mangledName()));
         existing.insert(graph);
-        GetDefaultLogger().in("GIR").debug(
+        CAMEL_LOG_DEBUG_S(
+            "GIR",
             "Added subgraph '{}' to graph '{}'.",
             graph->mangledName(),
             graph_->name_);
@@ -583,7 +584,8 @@ void GraphBuilder::eraseSubGraph(const graph_ptr_t &graph) const {
     if (st.subGraphs.find(graph->name()) != st.subGraphs.end()) {
         auto &existing = st.subGraphs[graph->name()];
         existing.erase(graph);
-        GetDefaultLogger().in("GIR").debug(
+        CAMEL_LOG_DEBUG_S(
+            "GIR",
             "Removed subgraph '{}' from graph '{}'.",
             graph->mangledName(),
             graph_->name_);
@@ -603,7 +605,8 @@ void GraphBuilder::addDependency(const graph_ptr_t &graph) const {
     }
     state().dependencies.insert(graph);
     graph->dependents_.insert(graph_->shared_from_this());
-    GetDefaultLogger().in("GIR").debug(
+    CAMEL_LOG_DEBUG_S(
+        "GIR",
         "Added dependency: Graph '{}' depends on graph '{}'.",
         graph_->name_,
         graph->name());
@@ -614,7 +617,8 @@ void GraphBuilder::eraseDependency(const graph_ptr_t &graph) const {
     assertBuildable("remove dependency from");
     state().dependencies.erase(graph);
     graph->dependents_.erase(graph_->shared_from_this());
-    GetDefaultLogger().in("GIR").debug(
+    CAMEL_LOG_DEBUG_S(
+        "GIR",
         "Removed dependency: Graph '{}' no longer depends on graph '{}'.",
         graph_->name_,
         graph->name());
@@ -788,7 +792,8 @@ void GraphBuilder::finalize() const {
     graph_->sealState_ = SealState::Sealed;
     graph_->builderState_.reset();
     EXEC_WHEN_DEBUG(
-        const auto &m = graph_->arena_->metrics(); GetDefaultLogger().in("GIR").debug(
+        const auto &m = graph_->arena_->metrics(); CAMEL_LOG_DEBUG_S(
+            "GIR",
             "Seal graph '{}': peak={}B waste={}B blocks={} draftFreed={}B allocFail={}.",
             graph_->name(),
             m.peakBytes,
@@ -835,37 +840,34 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
     result.callNode = node;
 
     if (node->graph() != *graph_) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("GIR").debug(
-                "Cannot inline node {} from different graph {} into graph {}.",
-                node->toString(),
-                node->graph().name(),
-                graph_->name_));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "GIR",
+            "Cannot inline node {} from different graph {} into graph {}.",
+            node->toString(),
+            node->graph().name(),
+            graph_->name_));
         return result;
     }
 
     if (node->type() != NodeType::FUNC) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("GIR").debug(
-                "Cannot inline non-FUNC node {} in graph {}.",
-                node->toString(),
-                graph_->name_));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "GIR",
+            "Cannot inline non-FUNC node {} in graph {}.",
+            node->toString(),
+            graph_->name_));
         return result;
     }
 
     EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("GIR").debug(
-            "Inlining node {} in graph {}.",
-            node->toString(),
-            graph_->name_));
+        CAMEL_LOG_DEBUG_S("GIR", "Inlining node {} in graph {}.", node->toString(), graph_->name_));
 
     auto *funcNode = tt::as_ptr<FuncNode>(node);
     if (!funcNode->bodyGraph()) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("GIR").warn(
-                "Cannot inline FUNC node {} in graph {}: bodyGraph is null.",
-                node->toString(),
-                graph_->name_));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+            "GIR",
+            "Cannot inline FUNC node {} in graph {}: bodyGraph is null.",
+            node->toString(),
+            graph_->name_));
         return result;
     }
     auto &targetGraph = *funcNode->bodyGraph();
@@ -960,15 +962,15 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
         allInputs.insert(allInputs.end(), normInputs.begin(), normInputs.end());
         allInputs.insert(allInputs.end(), withInputs.begin(), withInputs.end());
         if (allPorts.size() != allInputs.size()) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("GIR").warn(
-                    "Cannot inline FUNC node {} in graph {}: port/input count mismatch (ports={}, "
-                    "norm={}, with={}).",
-                    node->toString(),
-                    graph_->name_,
-                    allPorts.size(),
-                    normInputs.size(),
-                    withInputs.size()));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+                "GIR",
+                "Cannot inline FUNC node {} in graph {}: port/input count mismatch (ports={}, "
+                "norm={}, with={}).",
+                node->toString(),
+                graph_->name_,
+                allPorts.size(),
+                normInputs.size(),
+                withInputs.size()));
             return InlineResult{};
         }
         for (size_t i = 0; i < allPorts.size(); ++i) {
@@ -1027,11 +1029,11 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
     if (auto outIt = nodeMap.find(targetOutput); outIt != nodeMap.end()) {
         result.valueExit = outIt->second;
     } else {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("GIR").warn(
-                "Cannot inline FUNC node {} in graph {}: target output anchor is not mapped.",
-                node->toString(),
-                graph_->name_));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+            "GIR",
+            "Cannot inline FUNC node {} in graph {}: target output anchor is not mapped.",
+            node->toString(),
+            graph_->name_));
         return InlineResult{};
     }
     const node_vec_t normConsumers = collectConsumersByInput(*graph_, node, LinkType::Norm);
@@ -1186,7 +1188,7 @@ void GraphBuilder::applyLayout(Graph &graph, const LayoutResult &layout) {
 }
 
 void GraphBuilder::rearrange() const {
-    GetDefaultLogger().in("GIR").debug("Rearranging graph {}.", graph_->name_);
+    CAMEL_LOG_DEBUG_S("GIR", "Rearranging graph {}.", graph_->name_);
     auto layout = computeLayout(*graph_);
     applyLayout(*graph_, layout);
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -160,10 +160,10 @@ bool Node::hasDeepLinkedTo(Node *node, size_t maxJumps) const {
     dfs = [&](Node *current, size_t jumpsLeft) -> bool {
         ASSERT(current, "Current node is null in DFS.");
         if (jumpsLeft == 0) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("GIR").warn(
-                    "Deep link check reached max jumps at node: {}.",
-                    node->toString()));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+                "GIR",
+                "Deep link check reached max jumps at node: {}.",
+                node->toString()));
             return false;
         }
 
@@ -253,12 +253,12 @@ void Node::link(LinkType type, Node *from, Node *to) {
             (type == LinkType::With ? "W" : (type == LinkType::Norm ? "N" : "C")),
             to->toString()));
 
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("GIR").debug(
-            "Linking nodes: {} -{}-> {}",
-            from->toString(),
-            (type == LinkType::With ? "W" : (type == LinkType::Norm ? "N" : "C")),
-            to->toString()));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "GIR",
+        "Linking nodes: {} -{}-> {}",
+        from->toString(),
+        (type == LinkType::With ? "W" : (type == LinkType::Norm ? "N" : "C")),
+        to->toString()));
 
     switch (type) {
     case LinkType::With:
@@ -293,10 +293,7 @@ bool Node::unlink(Node *from, Node *to) {
             to->toString()));
 
     EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("GIR").debug(
-            "Unlinking nodes: {} -X- {}",
-            from->toString(),
-            to->toString()));
+        CAMEL_LOG_DEBUG_S("GIR", "Unlinking nodes: {} -X- {}", from->toString(), to->toString()));
 
     auto &toNormInputs = to->normInputs_;
     if (std::find(toNormInputs.begin(), toNormInputs.end(), from) != toNormInputs.end()) {
@@ -490,11 +487,11 @@ bool Node::replace(Node *oldNode, Node *newNode) {
     assertDraftMutable(newNode, "replace node");
     ASSERT(oldNode && newNode, "Cannot replace null nodes.");
     ASSERT(oldNode != newNode, "Cannot replace a node with itself.");
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("GIR").debug(
-            "Replacing node: {} -> {}",
-            oldNode->toString(),
-            newNode->toString()));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "GIR",
+        "Replacing node: {} -> {}",
+        oldNode->toString(),
+        newNode->toString()));
 
     const node_vec_t withInputs(oldNode->withInputs().begin(), oldNode->withInputs().end());
     const node_vec_t normInputs(oldNode->normInputs().begin(), oldNode->normInputs().end());
@@ -560,11 +557,11 @@ bool Node::replaceUses(Node *oldNode, Node *newNode) {
     assertDraftMutable(newNode, "replace node uses");
     ASSERT(oldNode && newNode, "Cannot replace null nodes.");
     ASSERT(oldNode != newNode, "Cannot replace a node with itself.");
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("GIR").debug(
-            "Replacing node uses: {} -> {}",
-            oldNode->toString(),
-            newNode->toString()));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "GIR",
+        "Replacing node uses: {} -> {}",
+        oldNode->toString(),
+        newNode->toString()));
 
     const node_vec_t withOutputs(oldNode->withOutputs().begin(), oldNode->withOutputs().end());
     const node_vec_t normOutputs(oldNode->normOutputs().begin(), oldNode->normOutputs().end());

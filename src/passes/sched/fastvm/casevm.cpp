@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,10 +69,10 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 }
             }
             const Bytecode &bc = bytecodes_[pc];
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("FastVM").debug(
-                    "Executing bytecode: {}",
-                    opCodeToString(bc, context_)));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "FastVM",
+                "Executing bytecode: {}",
+                opCodeToString(bc, context_)));
 
 #ifdef OPPERF_ENABLED
             std::string tag;
@@ -416,10 +416,10 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 const data_arr_t nargs = bc->nargs();
                 const data_arr_t wargs = bc->wargs();
                 auto func              = bc->extra()->func;
-                EXEC_WHEN_DEBUG(
-                    GetDefaultLogger().in("FastVM").debug(
-                        "Executing operator {}.",
-                        context_->execMgr().getNameOfAnOperator(func)));
+                EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                    "FastVM",
+                    "Executing operator {}.",
+                    context_->execMgr().getNameOfAnOperator(func)));
                 FrameArgsView withView(*currFrame, wargs);
                 FrameArgsView normView(*currFrame, nargs);
                 slot_t result;

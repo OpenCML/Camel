@@ -38,7 +38,7 @@ cmake --build . --config Release --target camel-debugger
 | `--serve [port]` | `-s` | 启动时即开启 API 服务（默认 8765）。 |
 | `--file <path>` | `-f` | 启动时加载要调试的文件。 |
 | `--run` | `-r` | 启动后自动 run 一次（需已通过 `-f` 或位置参数加载文件）。 |
-| `--verbose` | `-V` | 启动即开启详细输出。 |
+| `--verbose` | `-V` | 启动即开启详细输出（内部将 `libcamel` 日志阈值设为 **info**；关闭详细时回到 **fatal**）。 |
 | `--logfile <path>` | | 启动即把程序输出写入指定文件。 |
 | `--run-worker <path>` | | 子进程入口：启动后在本机端口（由环境变量 `CAMEL_DB_WORKER_PORT` 指定）起 HTTP 服务，执行脚本后退出；供父进程 spawn 使用，用户一般不直接调用。 |
 | `--help` | `-h` | 显示帮助并退出。 |
@@ -60,7 +60,7 @@ camel-db -f script.cml --serve --logfile debug.log
 | `serve [port]` | `s` | 启动 API 服务（默认 8765）。**需先执行 serve，Web UI 和 API 才能用**。 |
 | `file <path>` | `f` | 加载要调试的 .cml 文件。 |
 | `run` | `r` | 运行已加载的文件；内存扫描与断点（GIR 节点、alloc 空间）由统一断点机制控制。 |
-| `verbose [on\|off]` | | 开启/关闭详细输出。 |
+| `verbose [on\|off]` | | 开启/关闭详细输出（同上：对应库内 **info** / **fatal** 阈值；与 `camel` CLI 的 `-v`/`-l` 语义一致，均为 `Logger` 全局阈值）。 |
 | `logfile [path]` | | 将程序输出写入文件（path 为空或 off 则关闭）；与 Logger 共用，可动态追加。 |
 | `help` | `h` / `?` | 显示帮助。 |
 | `version` | `v` | 显示版本。 |

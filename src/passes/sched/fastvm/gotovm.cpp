@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -217,9 +217,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     label_RETN: {
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("FastVM").debug(
-                "Executing bytecode: {}",
-                opCodeToString(*bc, context_)));
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
         slot_t result = currFrame->get<slot_t>(bc->fastop[0]);
@@ -242,9 +240,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     label_CAST: {
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("FastVM").debug(
-                "Executing bytecode: {}",
-                opCodeToString(*bc, context_)));
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
         Type *targetType  = bc->extra()->pType;
@@ -259,9 +255,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     label_COPY: {
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("FastVM").debug(
-                "Executing bytecode: {}",
-                opCodeToString(*bc, context_)));
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
         TypeCode srcCode = currFrame->codeAt(bc->fastop[0]);
@@ -279,9 +273,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     label_ACCS: {
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("FastVM").debug(
-                "Executing bytecode: {}",
-                opCodeToString(*bc, context_)));
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
         TypeCode srcType = currFrame->codeAt(bc->fastop[0]);
@@ -306,9 +298,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     label_JUMP: {
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("FastVM").debug(
-                "Executing bytecode: {}",
-                opCodeToString(*bc, context_)));
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
         pc = static_cast<arr_size_t>(bc->fastop[0]);
@@ -318,9 +308,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     label_BRCH: {
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("FastVM").debug(
-                "Executing bytecode: {}",
-                opCodeToString(*bc, context_)));
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
         const data_arr_t nargs = bc->nargs();
@@ -375,9 +363,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     label_JOIN: {
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("FastVM").debug(
-                "Executing bytecode: {}",
-                opCodeToString(*bc, context_)));
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
         const data_arr_t nargs = bc->nargs();
@@ -393,9 +379,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     label_FILL: {
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("FastVM").debug(
-                "Executing bytecode: {}",
-                opCodeToString(*bc, context_)));
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
         const data_arr_t nargs = bc->nargs();
@@ -476,9 +460,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     label_CALL: {
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("FastVM").debug(
-                "Executing bytecode: {}",
-                opCodeToString(*bc, context_)));
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
         const data_arr_t nargs = bc->nargs();
@@ -509,9 +491,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     label_FUNC: {
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("FastVM").debug(
-                "Executing bytecode: {}",
-                opCodeToString(*bc, context_)));
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
 #if ENABLE_FASTVM_JIT
@@ -531,7 +511,8 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 for (size_t i = 0; i < argsCnt; ++i) {
                     argsStr += std::format("{} ", currFrame->get<slot_t>(args[i]));
                 }
-                GetDefaultLogger().in("FastVM").debug(
+                CAMEL_LOG_DEBUG_S(
+                    "FastVM",
                     "Calling JIT function of graph <{}> with args: {}",
                     targetGraph->name(),
                     argsStr);
@@ -539,10 +520,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             slot_t result;
             result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
             JIT_RESTORE_PC_BC();
-            GetDefaultLogger().in("FastVM").debug(
-                "JIT function at pc={} returned result={}.",
-                pc,
-                result);
+            CAMEL_LOG_DEBUG_S("FastVM", "JIT function at pc={} returned result={}.", pc, result);
             currFrame->set(bc->result, result);
             NEXT();
         } else {
@@ -575,9 +553,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     label_TAIL: {
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("FastVM").debug(
-                "Executing bytecode: {}",
-                opCodeToString(*bc, context_)));
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
 #if ENABLE_FASTVM_JIT
@@ -629,19 +605,17 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     label_OPER: {
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("FastVM").debug(
-                "Executing bytecode: {}",
-                opCodeToString(*bc, context_)));
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
         {
             const data_arr_t nargs = bc->nargs();
             const data_arr_t wargs = bc->wargs();
             auto func              = bc->extra()->func;
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("FastVM").debug(
-                    "Executing operator {}.",
-                    context_->execMgr().getNameOfAnOperator(func)));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "FastVM",
+                "Executing operator {}.",
+                context_->execMgr().getNameOfAnOperator(func)));
             FrameArgsView withView(*currFrame, wargs);
             FrameArgsView normView(*currFrame, nargs);
             slot_t result;
@@ -661,9 +635,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     label_SCHD: {
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("FastVM").debug(
-                "Executing bytecode: {}",
-                opCodeToString(*bc, context_)));
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
         const data_arr_t nargs = bc->nargs();

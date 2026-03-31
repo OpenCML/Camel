@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -246,13 +246,11 @@ void sweepUnreferencedGraphRegistries(
         }
         for (const auto &dep : staleDeps) {
             session.eraseDependency(owner, dep);
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger()
-                    .in("InlinePass")
-                    .debug(
-                        "Pruned stale dependency '{}' from owner '{}'.",
-                        dep->name(),
-                        owner->name()));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "InlinePass",
+                "Pruned stale dependency '{}' from owner '{}'.",
+                dep->name(),
+                owner->name()));
         }
 
         std::vector<graph_ptr_t> staleSubGraphs;
@@ -273,13 +271,11 @@ void sweepUnreferencedGraphRegistries(
             if (owner->dependencies().contains(sub)) {
                 session.eraseDependency(owner, sub);
             }
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger()
-                    .in("InlinePass")
-                    .debug(
-                        "Pruned stale subgraph '{}' from owner '{}'.",
-                        sub->name(),
-                        owner->name()));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "InlinePass",
+                "Pruned stale subgraph '{}' from owner '{}'.",
+                sub->name(),
+                owner->name()));
         }
     }
 }
@@ -723,169 +719,145 @@ graph_ptr_t ensureEditableGraph(
     if (sourceGraph == sourceRoot) {
         graph_ptr_t rootCanonical = session.canonicalGraph(sourceRoot);
         cache[sourceRoot.get()]   = rootCanonical;
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger()
-                .in("InlinePass")
-                .debug(
-                    "ensureEditableGraph root hit: source={} ({:p}) -> draft={} ({:p}).",
-                    sourceGraph->name(),
-                    static_cast<const void *>(sourceGraph.get()),
-                    rootCanonical->name(),
-                    static_cast<const void *>(rootCanonical.get())));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "InlinePass",
+            "ensureEditableGraph root hit: source={} ({:p}) -> draft={} ({:p}).",
+            sourceGraph->name(),
+            static_cast<const void *>(sourceGraph.get()),
+            rootCanonical->name(),
+            static_cast<const void *>(rootCanonical.get())));
         return rootCanonical;
     }
     auto existing = cache.find(sourceGraph.get());
     if (existing != cache.end()) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger()
-                .in("InlinePass")
-                .debug(
-                    "ensureEditableGraph cache hit: source={} ({:p}) -> draft={} ({:p}).",
-                    sourceGraph->name(),
-                    static_cast<const void *>(sourceGraph.get()),
-                    existing->second->name(),
-                    static_cast<const void *>(existing->second.get())));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "InlinePass",
+            "ensureEditableGraph cache hit: source={} ({:p}) -> draft={} ({:p}).",
+            sourceGraph->name(),
+            static_cast<const void *>(sourceGraph.get()),
+            existing->second->name(),
+            static_cast<const void *>(existing->second.get())));
         return existing->second;
     }
     if (session.hasDraftGraph(sourceGraph.get())) {
         graph_ptr_t canonical    = session.canonicalGraph(sourceGraph);
         cache[sourceGraph.get()] = canonical;
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger()
-                .in("InlinePass")
-                .debug(
-                    "ensureEditableGraph session canonical hit: source={} ({:p}) -> draft={} "
-                    "({:p}).",
-                    sourceGraph->name(),
-                    static_cast<const void *>(sourceGraph.get()),
-                    canonical->name(),
-                    static_cast<const void *>(canonical.get())));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "InlinePass",
+            "ensureEditableGraph session canonical hit: source={} ({:p}) -> draft={} "
+            "({:p}).",
+            sourceGraph->name(),
+            static_cast<const void *>(sourceGraph.get()),
+            canonical->name(),
+            static_cast<const void *>(canonical.get())));
         return canonical;
     }
 
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("InlinePass")
-            .debug(
-                "Materializing graph {} ({:p}) under source root {} ({:p}).",
-                sourceGraph->name(),
-                static_cast<const void *>(sourceGraph.get()),
-                sourceRoot->name(),
-                static_cast<const void *>(sourceRoot.get())));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "InlinePass",
+        "Materializing graph {} ({:p}) under source root {} ({:p}).",
+        sourceGraph->name(),
+        static_cast<const void *>(sourceGraph.get()),
+        sourceRoot->name(),
+        static_cast<const void *>(sourceRoot.get())));
 
     graph_ptr_t imported;
     if (auto sourceOwner = sourceGraph->outer()) {
         graph_ptr_t draftOwner = ensureEditableGraph(session, sourceRoot, sourceOwner, cache);
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger()
-                .in("InlinePass")
-                .debug(
-                    "ensureEditableGraph owner path: sourceOwner={} ({:p}) draftOwner={} ({:p}) "
-                    "sourceGraph={} ({:p}).",
-                    sourceOwner->name(),
-                    static_cast<const void *>(sourceOwner.get()),
-                    draftOwner->name(),
-                    static_cast<const void *>(draftOwner.get()),
-                    sourceGraph->name(),
-                    static_cast<const void *>(sourceGraph.get())));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "InlinePass",
+            "ensureEditableGraph owner path: sourceOwner={} ({:p}) draftOwner={} ({:p}) "
+            "sourceGraph={} ({:p}).",
+            sourceOwner->name(),
+            static_cast<const void *>(sourceOwner.get()),
+            draftOwner->name(),
+            static_cast<const void *>(draftOwner.get()),
+            sourceGraph->name(),
+            static_cast<const void *>(sourceGraph.get())));
         if (hasSubGraphRef(draftOwner, sourceGraph)) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger()
-                    .in("InlinePass")
-                    .debug(
-                        "ensureEditableGraph erase stale subgraph ref: owner={} ({:p}) subgraph={} "
-                        "({:p}).",
-                        draftOwner->name(),
-                        static_cast<const void *>(draftOwner.get()),
-                        sourceGraph->name(),
-                        static_cast<const void *>(sourceGraph.get())));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "InlinePass",
+                "ensureEditableGraph erase stale subgraph ref: owner={} ({:p}) subgraph={} "
+                "({:p}).",
+                draftOwner->name(),
+                static_cast<const void *>(draftOwner.get()),
+                sourceGraph->name(),
+                static_cast<const void *>(sourceGraph.get())));
             session.eraseSubGraph(draftOwner, sourceGraph);
         }
         if (draftOwner->dependencies().contains(sourceGraph)) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger()
-                    .in("InlinePass")
-                    .debug(
-                        "ensureEditableGraph erase stale dependency ref: owner={} ({:p}) dep={} "
-                        "({:p}).",
-                        draftOwner->name(),
-                        static_cast<const void *>(draftOwner.get()),
-                        sourceGraph->name(),
-                        static_cast<const void *>(sourceGraph.get())));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "InlinePass",
+                "ensureEditableGraph erase stale dependency ref: owner={} ({:p}) dep={} "
+                "({:p}).",
+                draftOwner->name(),
+                static_cast<const void *>(draftOwner.get()),
+                sourceGraph->name(),
+                static_cast<const void *>(sourceGraph.get())));
             session.eraseDependency(draftOwner, sourceGraph);
         }
         imported = session.importSubGraph(draftOwner, sourceGraph, GraphImportMode::CloneIntoDraft);
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger()
-                .in("InlinePass")
-                .debug(
-                    "ensureEditableGraph import subgraph: owner={} ({:p}) source={} ({:p}) "
-                    "imported={} ({:p}).",
-                    draftOwner->name(),
-                    static_cast<const void *>(draftOwner.get()),
-                    sourceGraph->name(),
-                    static_cast<const void *>(sourceGraph.get()),
-                    imported->name(),
-                    static_cast<const void *>(imported.get())));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "InlinePass",
+            "ensureEditableGraph import subgraph: owner={} ({:p}) source={} ({:p}) "
+            "imported={} ({:p}).",
+            draftOwner->name(),
+            static_cast<const void *>(draftOwner.get()),
+            sourceGraph->name(),
+            static_cast<const void *>(sourceGraph.get()),
+            imported->name(),
+            static_cast<const void *>(imported.get())));
         if (sourceOwner->dependencies().contains(sourceGraph)) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger()
-                    .in("InlinePass")
-                    .debug(
-                        "ensureEditableGraph mirror owner dependency: owner={} ({:p}) dep={} "
-                        "({:p}).",
-                        draftOwner->name(),
-                        static_cast<const void *>(draftOwner.get()),
-                        imported->name(),
-                        static_cast<const void *>(imported.get())));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "InlinePass",
+                "ensureEditableGraph mirror owner dependency: owner={} ({:p}) dep={} "
+                "({:p}).",
+                draftOwner->name(),
+                static_cast<const void *>(draftOwner.get()),
+                imported->name(),
+                static_cast<const void *>(imported.get())));
             session.importDependency(draftOwner, imported);
         }
     } else {
         graph_ptr_t draftRoot = cache.at(sourceRoot.get());
         if (draftRoot->dependencies().contains(sourceGraph)) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger()
-                    .in("InlinePass")
-                    .debug(
-                        "ensureEditableGraph erase stale root dependency ref: root={} ({:p}) "
-                        "dep={} ({:p}).",
-                        draftRoot->name(),
-                        static_cast<const void *>(draftRoot.get()),
-                        sourceGraph->name(),
-                        static_cast<const void *>(sourceGraph.get())));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "InlinePass",
+                "ensureEditableGraph erase stale root dependency ref: root={} ({:p}) "
+                "dep={} ({:p}).",
+                draftRoot->name(),
+                static_cast<const void *>(draftRoot.get()),
+                sourceGraph->name(),
+                static_cast<const void *>(sourceGraph.get())));
             session.eraseDependency(draftRoot, sourceGraph);
         }
         imported =
             session.importDependency(draftRoot, sourceGraph, GraphImportMode::CloneIntoDraft);
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger()
-                .in("InlinePass")
-                .debug(
-                    "ensureEditableGraph import dependency: root={} ({:p}) source={} ({:p}) "
-                    "imported={} ({:p}).",
-                    draftRoot->name(),
-                    static_cast<const void *>(draftRoot.get()),
-                    sourceGraph->name(),
-                    static_cast<const void *>(sourceGraph.get()),
-                    imported->name(),
-                    static_cast<const void *>(imported.get())));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "InlinePass",
+            "ensureEditableGraph import dependency: root={} ({:p}) source={} ({:p}) "
+            "imported={} ({:p}).",
+            draftRoot->name(),
+            static_cast<const void *>(draftRoot.get()),
+            sourceGraph->name(),
+            static_cast<const void *>(sourceGraph.get()),
+            imported->name(),
+            static_cast<const void *>(imported.get())));
     }
 
     graph_ptr_t canonical = session.canonicalGraph(imported);
     (void)canonical->exitNode();
     cache[sourceGraph.get()] = canonical;
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("InlinePass")
-            .debug(
-                "ensureEditableGraph finalized: source={} ({:p}) imported={} ({:p}) "
-                "canonical={} ({:p}).",
-                sourceGraph->name(),
-                static_cast<const void *>(sourceGraph.get()),
-                imported->name(),
-                static_cast<const void *>(imported.get()),
-                canonical->name(),
-                static_cast<const void *>(canonical.get())));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "InlinePass",
+        "ensureEditableGraph finalized: source={} ({:p}) imported={} ({:p}) "
+        "canonical={} ({:p}).",
+        sourceGraph->name(),
+        static_cast<const void *>(sourceGraph.get()),
+        imported->name(),
+        static_cast<const void *>(imported.get()),
+        canonical->name(),
+        static_cast<const void *>(canonical.get())));
     return canonical;
 }
 
@@ -893,10 +865,10 @@ graph_ptr_t ensureEditableGraph(
 
 graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
     (void)os;
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("InlinePass")
-            .debug("Start inline pass from root graph {}.", graph ? graph->name() : "<null>"));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "InlinePass",
+        "Start inline pass from root graph {}.",
+        graph ? graph->name() : "<null>"));
     if (!graph) {
         return graph;
     }
@@ -956,13 +928,12 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
                     sccId,
                     targets.size(),
                     kInlineTargetBudgetPerScc)));
-            GetDefaultLogger()
-                .in("InlinePass")
-                .warn(
-                    "Skip SCC {} due to target budget exceeded in release: targets={}, limit={}.",
-                    sccId,
-                    targets.size(),
-                    kInlineTargetBudgetPerScc);
+            CAMEL_LOG_WARN_S(
+                "InlinePass",
+                "Skip SCC {} due to target budget exceeded in release: targets={}, limit={}.",
+                sccId,
+                targets.size(),
+                kInlineTargetBudgetPerScc);
             continue;
         }
 
@@ -993,15 +964,13 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
             if (!inlined || !inlined.valueExit || !inlined.ctrlEntry) {
                 continue;
             }
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger()
-                    .in("InlinePass")
-                    .debug(
-                        "Inline result in graph {}: path={}, valueExit={}, ctrlEntry={}.",
-                        target.owner->name(),
-                        path->toString(),
-                        inlined.valueExit ? inlined.valueExit->toString() : "<null>",
-                        inlined.ctrlEntry ? inlined.ctrlEntry->toString() : "<null>"));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "InlinePass",
+                "Inline result in graph {}: path={}, valueExit={}, ctrlEntry={}.",
+                target.owner->name(),
+                path->toString(),
+                inlined.valueExit ? inlined.valueExit->toString() : "<null>",
+                inlined.ctrlEntry ? inlined.ctrlEntry->toString() : "<null>"));
 
             if (inlined.ctrlEntry == path) {
                 continue;
@@ -1029,25 +998,23 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
                         sccId,
                         appliedCount,
                         kInlineApplyBudgetPerScc)));
-                GetDefaultLogger()
-                    .in("InlinePass")
-                    .warn(
-                        "Stop applying inline targets in SCC {} due to apply budget exceeded in "
-                        "release: applied={}, limit={}.",
-                        sccId,
-                        appliedCount,
-                        kInlineApplyBudgetPerScc);
+                CAMEL_LOG_WARN_S(
+                    "InlinePass",
+                    "Stop applying inline targets in SCC {} due to apply budget exceeded in "
+                    "release: applied={}, limit={}.",
+                    sccId,
+                    appliedCount,
+                    kInlineApplyBudgetPerScc);
                 break;
             }
 
-            GetDefaultLogger()
-                .in("InlinePass")
-                .info(
-                    "Inlined FUNC node {} (graph {}) in graph {}, armHead={}.",
-                    path->toString(),
-                    pathGraph ? pathGraph->name() : "<null>",
-                    target.owner->name(),
-                    target.isBranchArmHead ? "true" : "false");
+            CAMEL_LOG_INFO_S(
+                "InlinePass",
+                "Inlined FUNC node {} (graph {}) in graph {}, armHead={}.",
+                path->toString(),
+                pathGraph ? pathGraph->name() : "<null>",
+                target.owner->name(),
+                target.isBranchArmHead ? "true" : "false");
         }
 
         size_t nodeDelta = 0;
@@ -1059,10 +1026,11 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
                 nodeDelta += (after - before);
             }
         }
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger()
-                .in("InlinePass")
-                .debug("Node delta computed for SCC {}: {}.", sccId, nodeDelta));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "InlinePass",
+            "Node delta computed for SCC {}: {}.",
+            sccId,
+            nodeDelta));
         if (nodeDelta > kNodeDeltaBudgetPerScc) {
             EXEC_WHEN_DEBUG(ASSERT(
                 false,
@@ -1071,25 +1039,22 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
                     sccId,
                     nodeDelta,
                     kNodeDeltaBudgetPerScc)));
-            GetDefaultLogger()
-                .in("InlinePass")
-                .warn(
-                    "Node delta budget exceeded in SCC {} (release): delta={}, limit={}.",
-                    sccId,
-                    nodeDelta,
-                    kNodeDeltaBudgetPerScc);
+            CAMEL_LOG_WARN_S(
+                "InlinePass",
+                "Node delta budget exceeded in SCC {} (release): delta={}, limit={}.",
+                sccId,
+                nodeDelta,
+                kNodeDeltaBudgetPerScc);
         }
 
         for (const auto &changedGraph : changedGraphs) {
             (void)changedGraph->exitNode();
             const size_t pruned = pruneUnreachableSlotSafe(session, changedGraph);
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger()
-                    .in("InlinePass")
-                    .debug(
-                        "Slot-safe prune in graph {} removed {} unreachable nodes.",
-                        changedGraph->name(),
-                        pruned));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "InlinePass",
+                "Slot-safe prune in graph {} removed {} unreachable nodes.",
+                changedGraph->name(),
+                pruned));
             (void)pruned;
             GraphBuilder::validateGraph(*changedGraph);
         }
@@ -1099,30 +1064,25 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
         sweepUnreferencedGraphRegistries(session, draftGraphs);
     }
 
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("InlinePass")
-            .debug(
-                "Running adjacency ownership checks for {} draft graphs.",
-                editableGraphsBySource.size()));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "InlinePass",
+        "Running adjacency ownership checks for {} draft graphs.",
+        editableGraphsBySource.size()));
     for (const auto &[_, g] : editableGraphsBySource) {
         assertAdjacencyPointersBelongToGraph(g);
     }
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("InlinePass").debug("Adjacency ownership checks passed."));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("InlinePass", "Adjacency ownership checks passed."));
 
     auto result = session.finish();
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("InlinePass")
-            .debug(
-                "Inline session finished: changed={}, resultRoot={}.",
-                result.changed,
-                result.graph ? result.graph->name() : "<null>"));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "InlinePass",
+        "Inline session finished: changed={}, resultRoot={}.",
+        result.changed,
+        result.graph ? result.graph->name() : "<null>"));
     graph = result.graph;
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("InlinePass")
-            .debug("Inline pass apply returns root {}.", graph ? graph->name() : "<null>"));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "InlinePass",
+        "Inline pass apply returns root {}.",
+        graph ? graph->name() : "<null>"));
     return graph;
 }

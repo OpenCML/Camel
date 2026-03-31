@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -129,7 +129,8 @@ class Frame : public rtdata::Object {
         EXEC_WHEN_DEBUG({
             std::ostringstream oss;
             rtdata::printSlot(oss, rtdata::toSlot(res), typeAt<type::Type>(index));
-            GetDefaultLogger().in("Frame").info(
+            CAMEL_LOG_INFO_S(
+                "Frame",
                 "[{}] Getting data of graph <{}> at index {} ({}): {}",
                 mm::formatAddress(const_cast<Frame *>(this), true),
                 graph_->name(),
@@ -145,7 +146,8 @@ class Frame : public rtdata::Object {
         EXEC_WHEN_DEBUG({
             std::ostringstream oss;
             rtdata::printSlot(oss, rtdata::toSlot(value), typeAt<type::Type>(index));
-            GetDefaultLogger().in("Frame").info(
+            CAMEL_LOG_INFO_S(
+                "Frame",
                 "[{}] Setting data of graph <{}> at index {} ({}): {}",
                 mm::formatAddress(this, true),
                 graph_->name(),
@@ -319,27 +321,25 @@ class FramePool {
 
     inline Frame *_acquire(GIR::Graph *graph) {
         EXEC_WHEN_DEBUG({
-            GetDefaultLogger()
-                .in("FramePool")
-                .info(
-                    "[{}] Acquire request for graph <{}>, top = {}, end = {}",
-                    mm::formatAddress(this, true),
-                    graph ? graph->name() : "(null)",
-                    mm::formatAddress(top_, true),
-                    mm::formatAddress(end_, true));
+            CAMEL_LOG_INFO_S(
+                "FramePool",
+                "[{}] Acquire request for graph <{}>, top = {}, end = {}",
+                mm::formatAddress(this, true),
+                graph ? graph->name() : "(null)",
+                mm::formatAddress(top_, true),
+                mm::formatAddress(end_, true));
         });
 
         // 尝试复用
         Frame *lastFrame = reinterpret_cast<Frame *>(top_);
         if (LIKELY(lastFrame->graph_ == graph)) {
             EXEC_WHEN_DEBUG({
-                GetDefaultLogger()
-                    .in("FramePool")
-                    .info(
-                        "[{}] Reusing existing frame of graph <{}> at {}",
-                        mm::formatAddress(this, true),
-                        graph ? graph->name() : "(null)",
-                        mm::formatAddress(lastFrame, true));
+                CAMEL_LOG_INFO_S(
+                    "FramePool",
+                    "[{}] Reusing existing frame of graph <{}> at {}",
+                    mm::formatAddress(this, true),
+                    graph ? graph->name() : "(null)",
+                    mm::formatAddress(lastFrame, true));
                 frames_.push_back(lastFrame);
             });
 
@@ -353,29 +353,25 @@ class FramePool {
             std::format("Graph '{}' has no finalized frame layout.", graph->name()));
         size_t frameSize = graph->frameSize();
         if (top_ + frameSize > end_) {
-            EXEC_WHEN_DEBUG({
-                GetDefaultLogger()
-                    .in("FramePool")
-                    .error(
-                        "[{}] Out of memory: top = {}, need = {}, end = {}",
-                        mm::formatAddress(this, true),
-                        mm::formatAddress(top_, true),
-                        frameSize,
-                        mm::formatAddress(end_, true));
-            });
+            CAMEL_LOG_FATAL_S(
+                "FramePool",
+                "[{}] Out of memory: top = {}, need = {}, end = {}",
+                mm::formatAddress(this, true),
+                mm::formatAddress(top_, true),
+                frameSize,
+                mm::formatAddress(end_, true));
             throw std::bad_alloc{};
         }
         Frame *frame = new (top_) Frame(graph, graph->staticArea(), graph->runtimeDataType());
 
         EXEC_WHEN_DEBUG({
-            GetDefaultLogger()
-                .in("FramePool")
-                .info(
-                    "[{}] Allocated new Frame for graph <{}> at {}, size = {}",
-                    mm::formatAddress(this, true),
-                    graph->name(),
-                    mm::formatAddress(frame, true),
-                    frameSize);
+            CAMEL_LOG_INFO_S(
+                "FramePool",
+                "[{}] Allocated new Frame for graph <{}> at {}, size = {}",
+                mm::formatAddress(this, true),
+                graph->name(),
+                mm::formatAddress(frame, true),
+                frameSize);
         });
 
         top_ += frameSize;
@@ -395,13 +391,12 @@ class FramePool {
 
     inline void release(Frame *frame) {
         EXEC_WHEN_DEBUG({
-            GetDefaultLogger()
-                .in("FramePool")
-                .info(
-                    "[{}] Releasing frame of graph <{}> at {}",
-                    mm::formatAddress(this, true),
-                    frame->graph_ ? frame->graph_->name() : "(null)",
-                    mm::formatAddress(frame, true));
+            CAMEL_LOG_INFO_S(
+                "FramePool",
+                "[{}] Releasing frame of graph <{}> at {}",
+                mm::formatAddress(this, true),
+                frame->graph_ ? frame->graph_->name() : "(null)",
+                mm::formatAddress(frame, true));
             ASSERT(
                 reinterpret_cast<std::byte *>(frame) < top_,
                 "Trying to release a frame that is already released.");
@@ -420,12 +415,11 @@ class FramePool {
 
         EXEC_WHEN_DEBUG({
             frames_.pop_back();
-            GetDefaultLogger()
-                .in("FramePool")
-                .info(
-                    "[{}] Frame released. New top = {}",
-                    mm::formatAddress(this, true),
-                    mm::formatAddress(top_, true));
+            CAMEL_LOG_INFO_S(
+                "FramePool",
+                "[{}] Frame released. New top = {}",
+                mm::formatAddress(this, true),
+                mm::formatAddress(top_, true));
         });
     }
 

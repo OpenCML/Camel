@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -99,11 +99,9 @@ bytecode_vec_t compile(
 
     // Debug 模式下打印拓扑排序结果并检查不可达节点
     EXEC_WHEN_DEBUG({
-        GetDefaultLogger().in("Topo").debug(
-            "Topologically sorted nodes for graph {}:",
-            graph->name());
+        CAMEL_LOG_DEBUG_S("Topo", "Topologically sorted nodes for graph {}:", graph->name());
         for (const auto &node : topoSortedNodes) {
-            GetDefaultLogger().in("Topo").debug("  {}", node->toString());
+            CAMEL_LOG_DEBUG_S("Topo", "  {}", node->toString());
         }
 
         size_t totalNodeCount =
@@ -132,7 +130,8 @@ bytecode_vec_t compile(
                 unreachableInfo += node->toString();
             }
 
-            GetDefaultLogger().in("Topo").warn(
+            CAMEL_LOG_WARN_S(
+                "Topo",
                 "Unreachable nodes in graph {} detected: {}",
                 graph->name(),
                 unreachableInfo);

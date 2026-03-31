@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -95,8 +95,7 @@ inline bool fileExists(const std::string &path) {
 }
 
 std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("Context").debug("Looking for built-in module: <{}>", name));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Looking for built-in module: <{}>", name));
     auto it = builtinModules_.find(name);
     if (it != builtinModules_.end()) {
         return it->second;
@@ -104,8 +103,7 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 
     auto factoryIt = builtinModuleFactories.find(name);
     if (factoryIt != builtinModuleFactories.end()) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("Context").debug("Loading built-in module: <{}>", name));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Loading built-in module: <{}>", name));
         module_ptr_t module = factoryIt->second(shared_from_this());
         module->load(); // instantly load the builtin module
         builtinModules_[name] = module;
@@ -124,10 +122,10 @@ context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &d
     ctx->runtimeErrorReporter_ =
         std::make_shared<RuntimeErrorReporter>(ctx->runtimeDiagSink_, ctx->sourceContext_);
     ctx->modules_[""] = ctx->getBuiltinModule("").value();
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("Context").info(
-            "Context initialized using entry config {}",
-            entryConf.toString()));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
+        "Context",
+        "Context initialized using entry config {}",
+        entryConf.toString()));
     return ctx;
 }
 
@@ -208,29 +206,28 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         return modules_[""]; // builtin module already loaded
     }
 
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("Context").info(
-            "Importing module '{}' from current module '{}'.",
-            rawModuleName,
-            currentModuleName));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
+        "Context",
+        "Importing module '{}' from current module '{}'.",
+        rawModuleName,
+        currentModuleName));
     lastCmoLoadError_.clear();
     auto candidates = getModuleNameCandidates(currentModuleName, rawModuleName);
 
     for (const auto &name : candidates) {
         auto it = modules_.find(name);
         if (it != modules_.end()) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("Context").debug("Module '{}' found in cache.", name));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Module '{}' found in cache.", name));
             return it->second;
         }
 
         module_ptr_t module = tryLoadModule(name);
         if (module) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("Context").debug(
-                    "Module '{}' loaded from file '{}'.",
-                    name,
-                    module->path()));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "Context",
+                "Module '{}' loaded from file '{}'.",
+                name,
+                module->path()));
             if (!module->loaded()) {
                 module->load();
             }
@@ -241,9 +238,7 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         auto builtin = getBuiltinModule(name);
         if (builtin.has_value()) {
             EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("Context").debug(
-                    "Module '{}' found in built-in modules.",
-                    name));
+                CAMEL_LOG_DEBUG_S("Context", "Module '{}' found in built-in modules.", name));
             modules_[name] = builtin.value();
             return builtin.value();
         }

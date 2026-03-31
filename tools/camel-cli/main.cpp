@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -87,7 +87,7 @@ int main(int argc, char *argv[]) {
     if (Run::resolvedInputPath.empty()) {
         input      = std::make_unique<istream>(std::cin.rdbuf());
         targetFile = "stdin"; // for error reporting
-        EXEC_WHEN_DEBUG(GetDefaultLogger().in("Main").info("Reading from standard input."));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S("Main", "Reading from standard input."));
     } else {
         targetFile = Run::resolvedInputPath;
         auto file  = std::make_unique<std::ifstream>(targetFile);
@@ -96,7 +96,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         input = std::move(file);
-        EXEC_WHEN_DEBUG(GetDefaultLogger().in("Main").info("Reading from file '{}'.", targetFile));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S("Main", "Reading from file '{}'.", targetFile));
     }
     diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
     if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {

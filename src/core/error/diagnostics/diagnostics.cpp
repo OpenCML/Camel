@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Mar. 10, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -76,8 +76,7 @@ std::string Diagnostic::toText() const {
     std::string diagName   = name;
 
     if (std::holds_alternative<TokenRange>(range)) {
-        GetDefaultLogger().in("Diag").warn(
-            "TokenRange should be converted to CharRange before toText()");
+        CAMEL_LOG_WARN_S("Diag", "TokenRange should be converted to CharRange before toText()");
     } else if (std::holds_alternative<camel::source::span_id_t>(range) && sourceContext) {
         CharRange r = sourceContext->resolveSpan(std::get<camel::source::span_id_t>(range));
         ln          = static_cast<int>(r.start.line + 1);
@@ -120,8 +119,7 @@ std::string Diagnostic::toJson() const {
     } else if (std::holds_alternative<camel::source::origin_id_t>(range) && sourceContext) {
         r = sourceContext->resolveOrigin(std::get<camel::source::origin_id_t>(range));
     } else if (std::holds_alternative<TokenRange>(range)) {
-        GetDefaultLogger().in("Diag").warn(
-            "TokenRange should be converted to CharRange before toJson()");
+        CAMEL_LOG_WARN_S("Diag", "TokenRange should be converted to CharRange before toJson()");
     }
     oss << "{"
         << "\"range\":{\"start\":{\"line\":" << r.start.line

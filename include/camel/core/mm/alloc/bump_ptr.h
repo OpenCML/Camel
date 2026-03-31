@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 09, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -90,7 +90,8 @@ class BumpPointerAllocator : public IAllocator {
         std::byte *result = currentTop + sizeof(ObjectHeader);
 
         EXEC_WHEN_DEBUG({
-            GetDefaultLogger().in("BumpPtr").debug(
+            CAMEL_LOG_DEBUG_S(
+                "BumpPtr",
                 "[{}] Allocated {} bytes ({}) from {}, obj size {}, now top at {}",
                 formatAddress(start_, true),
                 total_size,
@@ -132,7 +133,8 @@ class BumpPointerAllocator : public IAllocator {
 
             EXEC_WHEN_DEBUG({
                 auto *oldTop = top_.load(std::memory_order_relaxed);
-                GetDefaultLogger().in("BumpPtr").debug(
+                CAMEL_LOG_DEBUG_S(
+                    "BumpPtr",
                     "[{}] Freeing object at {}, now top at {}",
                     formatAddress(start_, true),
                     formatAddress(ptr, true),

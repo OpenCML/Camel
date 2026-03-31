@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 30, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
@@ -151,7 +151,7 @@ extern "C" void jitDebugTraceBody(const void *ctx) {
 #ifdef NDEBUG
     std::cerr << os.str() << std::flush;
 #else
-    EXEC_WHEN_DEBUG(GetDefaultLogger().in("JIT.Debug").debug("{}", os.str()));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("JIT.Debug", "{}", os.str()));
 #endif
 }
 
@@ -194,14 +194,12 @@ void jitDebugTrace(const void *ctx) { jitDebugTraceBody(ctx); }
 #endif
 
 slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("JIT.Trampoline")
-            .info(
-                "trampolineFunc ENTER callerSlots={} ctx={} pc={}",
-                static_cast<void *>(callerSlots),
-                ctx,
-                pc));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
+        "JIT.Trampoline",
+        "trampolineFunc ENTER callerSlots={} ctx={} pc={}",
+        static_cast<void *>(callerSlots),
+        ctx,
+        pc));
     auto *jc     = static_cast<JitContext *>(ctx);
     auto *vm     = jc->vm;
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
@@ -210,26 +208,24 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
     const data_idx_t targetSlot = bc.fastop[1];
     size_t targetPc             = targetSlot < 0 ? 0 : static_cast<size_t>(targetSlot);
     size_t argsCnt              = bc.normCnt();
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("JIT.Trampoline")
-            .info("trampolineFunc bc: targetPc={} argsCnt={}", targetPc, argsCnt));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
+        "JIT.Trampoline",
+        "trampolineFunc bc: targetPc={} argsCnt={}",
+        targetPc,
+        argsCnt));
     uint32_t count = 0;
     if (targetSlot >= 0)
         count = incFuncExtraCount(&bc);
 
     if (targetSlot < 0) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc path: JIT->JIT"));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S("JIT.Trampoline", "trampolineFunc path: JIT->JIT"));
         GIR::Graph *g = getFuncExtraGraph(&bc);
         JitEntryFn fn = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc));
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger()
-                .in("JIT.Trampoline")
-                .info(
-                    "trampolineFunc JIT->JIT graph='{}' fn={}",
-                    g->name(),
-                    static_cast<void *>(reinterpret_cast<void *>(fn))));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
+            "JIT.Trampoline",
+            "trampolineFunc JIT->JIT graph='{}' fn={}",
+            g->name(),
+            static_cast<void *>(reinterpret_cast<void *>(fn))));
         Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]); // slot[0] = Frame*
         Frame *newFrame    = vm->acquireFrameForCall(g);
         for (size_t i = 0; i < argsCnt; ++i) {
@@ -242,15 +238,13 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
             std::ostringstream os;
             os << "trampolineFunc callee frame <" << g->name() << "> (after copy):\n";
             newFrame->printSlotsTo(os);
-            GetDefaultLogger().in("JIT.Trampoline").info("{}", os.str());
+            CAMEL_LOG_INFO_S("JIT.Trampoline", "{}", os.str());
         });
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("JIT.Trampoline").info("trampolineFunc about to call JIT entry"));
+            CAMEL_LOG_INFO_S("JIT.Trampoline", "trampolineFunc about to call JIT entry"));
         slot_t result = vm->invokeOwnedJitFrame(fn, newFrame, ctx);
         EXEC_WHEN_DEBUG(
-            GetDefaultLogger()
-                .in("JIT.Trampoline")
-                .info("trampolineFunc JIT->JIT return result={}", result));
+            CAMEL_LOG_INFO_S("JIT.Trampoline", "trampolineFunc JIT->JIT return result={}", result));
         return result;
     }
 
@@ -261,10 +255,11 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
         newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
     }
     (void)count;
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("JIT.Trampoline")
-            .info("trampolineFunc target='{}' targetPc={}", targetGraph->name(), targetPc));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
+        "JIT.Trampoline",
+        "trampolineFunc target='{}' targetPc={}",
+        targetGraph->name(),
+        targetPc));
     return vm->invokeCallOrJit(targetPc, targetGraph, newFrame, ctx, count);
 }
 
@@ -289,12 +284,10 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
         vm->releaseFrameForTail(callerFrame);
         Frame *newFrame = vm->acquireFrameForTail(g);
         writeCallArgsToFrame(newFrame, args.data(), argsCnt);
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger()
-                .in("JIT.Trampoline")
-                .debug(
-                    "trampolineTail: JIT->interpreter(target already compiled) target='{}'",
-                    g->name()));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "JIT.Trampoline",
+            "trampolineTail: JIT->interpreter(target already compiled) target='{}'",
+            g->name()));
         // For non-self tail calls, prefer the interpreter entry even if the
         // callee has compiled code. This keeps mutual-tail recursion semantics
         // stable across graph boundaries while self-tail recursion still uses
@@ -303,10 +296,10 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     }
 
     GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("JIT.Trampoline")
-            .debug("trampolineTail: JIT->interpreter target='{}'", targetGraph->name()));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "JIT.Trampoline",
+        "trampolineTail: JIT->interpreter target='{}'",
+        targetGraph->name()));
 
     Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
     TailArgStorage args(argsCnt);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -201,10 +201,11 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
     // Recursively dump subgraphs first
     for (auto &[_, subGraphs] : graph->subGraphs()) {
         for (const auto &subGraph : subGraphs) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger()
-                    .in("GraphViz")
-                    .debug("Dumping subgraph '{}' of graph '{}'", subGraph->name(), graph->name()));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "GraphViz",
+                "Dumping subgraph '{}' of graph '{}'",
+                subGraph->name(),
+                graph->name()));
             pushIndent();
             res += dumpGraph(subGraph);
             popIndent();
@@ -213,10 +214,11 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
 
     // Dump dependency graphs if any
     for (const auto &dep : graph->dependencies()) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger()
-                .in("GraphViz")
-                .debug("Dumping dependency graph '{}' of graph '{}'", dep->name(), graph->name()));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "GraphViz",
+            "Dumping dependency graph '{}' of graph '{}'",
+            dep->name(),
+            graph->name()));
         pushIndent();
         res += dumpGraph(dep);
         popIndent();
