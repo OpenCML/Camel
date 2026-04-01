@@ -49,6 +49,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <format>
 #include <iomanip>
 #include <iostream>
 #include <queue>
@@ -87,7 +88,7 @@ int main(int argc, char *argv[]) {
     if (Run::resolvedInputPath.empty()) {
         input      = std::make_unique<istream>(std::cin.rdbuf());
         targetFile = "stdin"; // for error reporting
-        EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S("Main", "Reading from standard input."));
+        CAMEL_LOG_INFO_S("Main", "Reading from standard input.");
     } else {
         targetFile = Run::resolvedInputPath;
         auto file  = std::make_unique<std::ifstream>(targetFile);
@@ -96,7 +97,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         input = std::move(file);
-        EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S("Main", "Reading from file '{}'.", targetFile));
+        CAMEL_LOG_INFO_S("Main", "Reading from file '{}'.", targetFile);
     }
     diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
     if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
@@ -118,20 +119,24 @@ int main(int argc, char *argv[]) {
         camel::utils::ModuleSearchPathOptions{.stdlibOverride = Run::stdLibPath});
     {
         auto installRoot = camel::utils::resolveInstallRoot();
-        std::ostringstream ss;
-        for (size_t i = 0; i < searchPaths.size(); ++i) {
-            if (i > 0)
-                ss << "; ";
-            ss << searchPaths[i];
+        std::size_t n    = 0;
+        for (const auto &p : searchPaths) {
+            if (!p.empty())
+                ++n;
         }
-        CAMEL_LOG_INFO_S(
+        const std::string stdlibNote =
+            Run::stdLibPath.empty() ? "(CAMEL_STD_LIB unset, use default)" : Run::stdLibPath;
+        LogInfoPathList(
             "Main",
-            "route init: install_root='{}', entry_dir='{}', stdlib_override='{}', "
-            "search_paths=[{}]",
-            installRoot.string(),
-            entryDir,
-            Run::stdLibPath.empty() ? "<env:CAMEL_STD_LIB or default>" : Run::stdLibPath,
-            ss.str());
+            [&] {
+                return std::format(
+                    "run | module paths | {} entries | CAMEL_HOME={} | entry_dir={} | stdlib={}",
+                    n,
+                    installRoot.string(),
+                    entryDir,
+                    stdlibNote);
+            },
+            searchPaths);
     }
 
     context_ptr_t ctx = Context::create(
@@ -158,6 +163,7 @@ int main(int argc, char *argv[]) {
     while (Run::repeat--) {
         try {
             parser->parse(*input);
+            CAMEL_LOG_INFO_S("Main", "run | parse | done | {}", targetFile);
 
             if (selectedCommand == Command::Inspect) {
                 if (Inspect::dumpTokens) {
@@ -219,6 +225,15 @@ int main(int argc, char *argv[]) {
             if (!mainModule->loaded()) {
                 ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
                 return selectedCommand == Command::Check ? 0 : 1;
+            }
+
+            {
+                auto rg = ctx->rootGraph();
+                CAMEL_LOG_INFO_S(
+                    "Main",
+                    "run | compile | graph={} | user_modules={}",
+                    rg ? rg->name() : std::string{"<none>"},
+                    ctx->allUserModules().size());
             }
 
             if (selectedCommand == Command::Run) {

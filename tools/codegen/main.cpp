@@ -26,10 +26,13 @@
 #include "camel/init.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/install_layout.h"
+#include "camel/utils/log.h"
 #include "service/codegen/source/generator.h"
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
 namespace mm = camel::core::mm;
 using namespace camel::core::error;
@@ -64,7 +67,25 @@ int main(int argc, char *argv[]) {
 
     std::string entryDir = fs::absolute(fs::path(inputPath)).parent_path().string();
     auto searchPaths     = camel::utils::buildModuleSearchPaths(entryDir);
-    auto ctx             = Context::create(
+    {
+        auto installRoot = camel::utils::resolveInstallRoot();
+        std::size_t n    = 0;
+        for (const auto &p : searchPaths) {
+            if (!p.empty())
+                ++n;
+        }
+        LogInfoPathList(
+            "codegen",
+            [&] {
+                return std::format(
+                    "run | module paths | {} entries | CAMEL_HOME={} | entry_dir={}",
+                    n,
+                    installRoot.string(),
+                    entryDir);
+            },
+            searchPaths);
+    }
+    auto ctx = Context::create(
         EntryConfig{
             .entryDir    = entryDir,
             .entryFile   = inputPath,
@@ -88,11 +109,20 @@ int main(int argc, char *argv[]) {
     }
     parser->parse(file);
     file.close();
+    CAMEL_LOG_INFO_S("codegen", "run | parse | done | {}", inputPath);
 
     mainModule->compile(CompileStage::Done);
     if (!mainModule->loaded()) {
         mainModule->diagnostics()->dump(std::cerr, false);
         return 1;
+    }
+    {
+        auto rg = ctx->rootGraph();
+        CAMEL_LOG_INFO_S(
+            "codegen",
+            "run | compile | graph={} | user_modules={}",
+            rg ? rg->name() : std::string{"<none>"},
+            ctx->allUserModules().size());
     }
 
     auto ast = parser->ast();

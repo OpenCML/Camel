@@ -525,19 +525,20 @@ bool PythonModule::load() {
                 envTag  = "conda";
                 envPath = conda;
             }
+            std::string verLine = version;
+            if (const auto nl = verLine.find('\n'); nl != std::string::npos) {
+                verLine.resize(nl);
+            }
+            CAMEL_LOG_INFO_S("PythonModule", "run | python | {}", verLine);
+            CAMEL_LOG_INFO_S("PythonModule", "run | python | executable {}", exe);
             CAMEL_LOG_INFO_S(
                 "PythonModule",
-                "python.cmo runtime bound: version='{}', executable='{}', prefix='{}', env='{}', "
-                "env_path='{}'",
-                version,
-                exe,
+                "run | python | prefix {} | env={} | {}",
                 prefix,
                 envTag,
                 envPath);
         } catch (...) {
-            CAMEL_LOG_WARN_S(
-                "PythonModule",
-                "python.cmo runtime bound: failed to query sys metadata");
+            CAMEL_LOG_WARN_S("PythonModule", "run | python | could not read sys metadata");
         }
     } catch (const std::exception &e) {
         throwRuntimeFault(

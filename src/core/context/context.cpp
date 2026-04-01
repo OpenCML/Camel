@@ -122,10 +122,19 @@ context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &d
     ctx->runtimeErrorReporter_ =
         std::make_shared<RuntimeErrorReporter>(ctx->runtimeDiagSink_, ctx->sourceContext_);
     ctx->modules_[""] = ctx->getBuiltinModule("").value();
-    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
-        "Context",
-        "Context initialized using entry config {}",
-        entryConf.toString()));
+    {
+        size_t nPaths = 0;
+        for (const auto &sp : entryConf.searchPaths) {
+            if (!sp.empty())
+                ++nPaths;
+        }
+        CAMEL_LOG_INFO_S(
+            "Context",
+            "run | context | entry={} | cwd={} | module_path_slots={}",
+            entryConf.entryFile,
+            entryConf.entryDir,
+            nPaths);
+    }
     return ctx;
 }
 
@@ -216,11 +225,11 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         return modules_[""]; // builtin module already loaded
     }
 
-    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
+    CAMEL_LOG_INFO_S(
         "Context",
         "Importing module '{}' from current module '{}'.",
         rawModuleName,
-        currentModuleName));
+        currentModuleName);
     lastCmoLoadError_.clear();
     auto candidates = getModuleNameCandidates(currentModuleName, rawModuleName);
 

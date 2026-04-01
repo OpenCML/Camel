@@ -1617,7 +1617,7 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
 }
 
 bool GlobalsBuiltinModule::load() {
-    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S("GlobalsBuiltinModule", "Loading basic built-in module."));
+    CAMEL_LOG_INFO_S("GlobalsBuiltinModule", "Loading basic built-in module.");
     if (loaded_) {
         return true;
     }

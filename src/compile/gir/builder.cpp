@@ -82,11 +82,11 @@ inline bool linkCheek(Node *from, Node *to) {
     // which may cause cycles in the graph
     // note: this check can be expensive
     if (to->hasDeepLinkedTo(from)) {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+        CAMEL_LOG_WARN_S(
             "GIR",
             "Prevent linking deeply linked nodes: {} -> {}",
             from->toString(),
-            to->toString()));
+            to->toString());
         return false;
     }
     return true;

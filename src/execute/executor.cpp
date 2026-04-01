@@ -68,7 +68,7 @@ void ExecutorManager::eval(std::string uri, GIR::Node *self, Frame &frame) const
     if (itFact == executorFactories.end()) {
         throw DiagnosticBuilder::of(SemanticDiag::UnrecognizedExecutorProtocol).commit(protocol);
     }
-    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S("ExecMgr", "Loading executor for protocol <{}>", protocol));
+    CAMEL_LOG_INFO_S("ExecMgr", "Loading executor for protocol <{}>", protocol);
     auto executor = itFact->second();
     loadedExecutors.emplace(protocol, executor);
     executor->eval(uri.substr(pos + 1), self, frame);
@@ -88,7 +88,7 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
     if (itFact == executorFactories.end()) {
         return std::nullopt;
     }
-    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S("ExecMgr", "Loading executor for protocol <{}>", protocol));
+    CAMEL_LOG_INFO_S("ExecMgr", "Loading executor for protocol <{}>", protocol);
     auto executor = itFact->second();
     loadedExecutors.emplace(protocol, executor);
     return executor->find(uri.substr(pos + 1));

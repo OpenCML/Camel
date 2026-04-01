@@ -20,6 +20,7 @@
 #pragma once
 
 #include <algorithm>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -178,10 +179,9 @@ class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<lo
                         visible.push_back(true);
                     if (depth > 0) {
                         if (node.parent_ == nullptr) {
-                            EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
-                                "Tree.dumpTree",
-                                "Node <{}> has no parent!",
-                                node.toString()));
+                            camel::log::warn_lazy("Tree.dumpTree", [&] {
+                                return std::format("Node <{}> has no parent!", node.toString());
+                            });
                         } else if (index == node.parent_->size() - 1) {
                             isLast                = true;
                             visible.at(depth - 1) = false;

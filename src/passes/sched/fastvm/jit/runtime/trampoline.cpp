@@ -194,7 +194,7 @@ void jitDebugTrace(const void *ctx) { jitDebugTraceBody(ctx); }
 #endif
 
 slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
-    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "JIT.Trampoline",
         "trampolineFunc ENTER callerSlots={} ctx={} pc={}",
         static_cast<void *>(callerSlots),
@@ -208,7 +208,7 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
     const data_idx_t targetSlot = bc.fastop[1];
     size_t targetPc             = targetSlot < 0 ? 0 : static_cast<size_t>(targetSlot);
     size_t argsCnt              = bc.normCnt();
-    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "JIT.Trampoline",
         "trampolineFunc bc: targetPc={} argsCnt={}",
         targetPc,
@@ -218,10 +218,10 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
         count = incFuncExtraCount(&bc);
 
     if (targetSlot < 0) {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S("JIT.Trampoline", "trampolineFunc path: JIT->JIT"));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("JIT.Trampoline", "trampolineFunc path: JIT->JIT"));
         GIR::Graph *g = getFuncExtraGraph(&bc);
         JitEntryFn fn = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc));
-        EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
             "JIT.Trampoline",
             "trampolineFunc JIT->JIT graph='{}' fn={}",
             g->name(),
@@ -238,13 +238,15 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
             std::ostringstream os;
             os << "trampolineFunc callee frame <" << g->name() << "> (after copy):\n";
             newFrame->printSlotsTo(os);
-            CAMEL_LOG_INFO_S("JIT.Trampoline", "{}", os.str());
+            CAMEL_LOG_DEBUG_S("JIT.Trampoline", "{}", os.str());
         });
         EXEC_WHEN_DEBUG(
-            CAMEL_LOG_INFO_S("JIT.Trampoline", "trampolineFunc about to call JIT entry"));
+            CAMEL_LOG_DEBUG_S("JIT.Trampoline", "trampolineFunc about to call JIT entry"));
         slot_t result = vm->invokeOwnedJitFrame(fn, newFrame, ctx);
-        EXEC_WHEN_DEBUG(
-            CAMEL_LOG_INFO_S("JIT.Trampoline", "trampolineFunc JIT->JIT return result={}", result));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "JIT.Trampoline",
+            "trampolineFunc JIT->JIT return result={}",
+            result));
         return result;
     }
 
@@ -255,7 +257,7 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
         newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
     }
     (void)count;
-    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "JIT.Trampoline",
         "trampolineFunc target='{}' targetPc={}",
         targetGraph->name(),

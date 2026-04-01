@@ -129,21 +129,18 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
             : (jitConfig_.policy == JitPolicy::Always ? "Always" : "OnDemand")));
     GIR::Graph *entryGraph = graph.get();
     if (jitConfig_.policy == JitPolicy::Always) {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
+        CAMEL_LOG_INFO_S(
             "JIT",
-            "JIT Always: switched to lazy compile-by-touch (no startup full-graph compile)"));
+            "JIT Always: switched to lazy compile-by-touch (no startup full-graph compile)");
         // Always 模式仍保持“能编就编”的策略，但触发时机改为首次触达目标图，
         // 避免启动期对整张图集做全量编译引入的失败放大与开销抖动。
         compileAndCacheGraph(entryGraph, offsetMap_.at(entryGraph));
     } else if (jitConfig_.policy == JitPolicy::OnDemand) {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
-            "JIT",
-            "JIT OnDemand: start with interpreter, compile on hot threshold"));
+        CAMEL_LOG_INFO_S("JIT", "JIT OnDemand: start with interpreter, compile on hot threshold");
     }
     JitEntryFn entryJitFn = getGraphJitFn(entryGraph);
     if (jitBackend_ && entryJitFn) {
-        EXEC_WHEN_DEBUG(
-            CAMEL_LOG_INFO_S("JIT", "Executing entry graph '{}' via JIT", entryGraph->name()));
+        CAMEL_LOG_INFO_S("JIT", "Executing entry graph '{}' via JIT", entryGraph->name());
         Frame *frame = framePool_.acquire(entryGraph);
         opperf::start();
         slot_t result = invokeOwnedJitFrame(entryJitFn, frame, &jitCtx);
@@ -152,10 +149,10 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
         context_->captureProcessExitCode(entryGraph, result);
         return Graph::null();
     }
-    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
+    CAMEL_LOG_INFO_S(
         "JIT",
         "Entry graph '{}' not in JIT cache, falling back to interpreter",
-        entryGraph->name()));
+        entryGraph->name());
 #endif
 
     opperf::start();
@@ -411,17 +408,18 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
     if (!compiled) {
         setGraphJitCompileFailed(graph, true);
         if (!getGraphJitFailureReported(graph)) {
-            EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+            CAMEL_LOG_WARN_S(
                 "JIT",
                 "OnDemand compile skipped for graph '{}': {}",
                 graph->name(),
-                failureReason.empty() ? "unknown failure" : failureReason));
+                failureReason.empty() ? "unknown failure" : failureReason);
             setGraphJitFailureReported(graph, true);
         }
         return;
     }
-    // Debug 模式下将实际执行的 code 按 16 进制打印到日志，便于与 bindump 对比
-    EXEC_WHEN_DEBUG({
+    // Hex dump of generated machine code (only when Info for "JIT" would emit; avoids work when
+    // off)
+    if (Logger::ShouldEmit(LogLevel::Info, "JIT")) {
         if (!compiled->code.empty()) {
             const uint8_t *p              = compiled->code.data();
             const size_t size             = compiled->code.size();
@@ -441,7 +439,7 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
                 CAMEL_LOG_INFO_S("JIT", "  [{:4}] {}", static_cast<unsigned>(i), line);
             }
         }
-    });
+    }
     auto fn = jitBackend_->load(std::move(compiled));
     if (fn) {
         setGraphJitFn(graph, fn);
@@ -456,15 +454,11 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
             }
             pc += bc.opsize;
         }
-        EXEC_WHEN_DEBUG(
-            CAMEL_LOG_INFO_S("JIT", "OnDemand: compiled & cached graph '{}'", graph->name()));
+        CAMEL_LOG_INFO_S("JIT", "OnDemand: compiled & cached graph '{}'", graph->name());
     } else {
         setGraphJitCompileFailed(graph, true);
         if (!getGraphJitFailureReported(graph)) {
-            EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
-                "JIT",
-                "OnDemand compile load failed for graph '{}'.",
-                graph->name()));
+            CAMEL_LOG_WARN_S("JIT", "OnDemand compile load failed for graph '{}'.", graph->name());
             setGraphJitFailureReported(graph, true);
         }
     }

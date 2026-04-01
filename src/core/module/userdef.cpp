@@ -76,15 +76,11 @@ bool UserDefinedModule::compile(CompileStage till) {
         return true;
     }
     if (stage_ == CompileStage::Done) {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S("Module", "Module '{}' already built", name_));
+        CAMEL_LOG_WARN_S("Module", "Module '{}' already built", name_);
         return true;
     }
     if (stage_ == CompileStage::None) {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S(
-            "Module",
-            "Start compiling module '{}' from file '{}'.",
-            name_,
-            path_));
+        CAMEL_LOG_INFO_S("Module", "Start compiling module '{}' from file '{}'.", name_, path_);
     }
 
     if (stage_ == CompileStage::None && till > CompileStage::None) {
@@ -104,7 +100,7 @@ bool UserDefinedModule::compile(CompileStage till) {
         }
         if (till == CompileStage::AST) {
             stage_ = CompileStage::AST;
-            EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_));
+            CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_);
             return true;
         }
     }
@@ -122,7 +118,7 @@ bool UserDefinedModule::compile(CompileStage till) {
         }
         if (till == CompileStage::GCT) {
             stage_ = CompileStage::GCT;
-            EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_));
+            CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_);
             return true;
         }
     }
@@ -138,12 +134,12 @@ bool UserDefinedModule::compile(CompileStage till) {
         }
         if (till == CompileStage::GIR) {
             stage_ = CompileStage::GIR;
-            EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_));
+            CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_);
             return true;
         }
     }
 
     stage_ = CompileStage::Done;
-    EXEC_WHEN_DEBUG(CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_));
+    CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_);
     return true;
 }

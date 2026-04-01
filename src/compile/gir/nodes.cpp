@@ -160,10 +160,10 @@ bool Node::hasDeepLinkedTo(Node *node, size_t maxJumps) const {
     dfs = [&](Node *current, size_t jumpsLeft) -> bool {
         ASSERT(current, "Current node is null in DFS.");
         if (jumpsLeft == 0) {
-            EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+            CAMEL_LOG_WARN_S(
                 "GIR",
                 "Deep link check reached max jumps at node: {}.",
-                node->toString()));
+                node->toString());
             return false;
         }
 

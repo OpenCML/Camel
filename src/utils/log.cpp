@@ -80,8 +80,22 @@ void Logger::SetColorEnabled(bool enable) { colorEnabled_ = enable; }
 bool Logger::IsColorEnabled() { return colorEnabled_; }
 
 static const std::vector<std::string> &wallScopePrefixes() {
-    static const std::vector<std::string>
-        k{"GIR", "Context", "Module", "Diag", "Main", "Frame", "FramePool", "ExecMgr"};
+    static const std::vector<std::string> k{
+        "GIR",
+        "Context",
+        "Module",
+        "Diag",
+        "Main",
+        "Frame",
+        "FramePool",
+        "ExecMgr",
+        "Pass",
+        "PythonModule",
+        "codegen",
+        "camel-cpp",
+        "GlobalsBuiltinModule",
+        "JIT.Trampoline",
+    };
     return k;
 }
 
@@ -116,7 +130,14 @@ static const std::vector<std::string> &extraScopePrefixes() {
         "BasicExec",
         "IOExec",
         "JIT.Debug",
-        "JIT.Trampoline"};
+        "JIT.Trampoline",
+        "Pass",
+        "PythonModule",
+        "codegen",
+        "camel-cpp",
+        "GlobalsBuiltinModule",
+        "JIT.Trampoline",
+    };
     return k;
 }
 

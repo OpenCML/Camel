@@ -289,11 +289,11 @@ class GraphArena {
             auto &meta             = camel::core::mm::metaSpace();
             const bool metaHealthy = meta.validate();
             if (!metaHealthy) {
-                EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+                CAMEL_LOG_WARN_S(
                     "GIR",
                     "Skip GraphArena {:p} block recycle because metaSpace is already "
                     "corrupted.",
-                    static_cast<void *>(this)));
+                    static_cast<void *>(this));
                 heads.clear();
                 blocks.clear();
                 return;

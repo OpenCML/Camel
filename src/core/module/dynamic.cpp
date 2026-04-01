@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <memory>
 #include <optional>
@@ -293,33 +294,36 @@ bool tryLoadPythonBridgeForActiveEnv(
     if (!activeTag.has_value()) {
         CAMEL_LOG_INFO_S(
             "Context",
-            "python bridge route: no active env version detected, keep legacy python.cmo loading.");
+            "run | python bridge | no env tag (venv/conda/python) -> legacy .cmo load");
         return true; // No active env info; keep legacy behavior.
     }
     fs::path installRoot = camel::utils::resolveInstallRoot();
     fs::path libsDir     = installRoot / "libs";
     fs::path bridgePath  = libsDir / bridgeFileNameForTag(activeTag.value());
-    CAMEL_LOG_INFO_S(
-        "Context",
-        "python bridge route: detected active tag='{}', candidate='{}'",
-        activeTag.value(),
-        bridgePath.string());
     if (!fs::exists(bridgePath)) {
-        std::ostringstream os;
-        os << "python bridge for active environment not found: " << bridgePath.string();
-        auto avail = listAvailableBridgeTags(libsDir);
-        CAMEL_LOG_INFO_S(
-            "Context",
-            "python bridge route miss: active_tag='{}', available_count={}",
-            activeTag.value(),
-            avail.size());
-        if (!avail.empty()) {
-            os << ". Available bridge tag(s): ";
-            for (size_t i = 0; i < avail.size(); ++i) {
-                os << (i == 0 ? "" : ", ") << avail[i];
+        std::vector<std::string> avail;
+        camel::log::info_lazy("Context", [&] {
+            if (avail.empty()) {
+                avail = listAvailableBridgeTags(libsDir);
             }
-        }
+            return std::format(
+                "run | python bridge | tag {} | missing {} | other bridge tags under libs: {}",
+                activeTag.value(),
+                bridgePath.string(),
+                avail.size());
+        });
         if (outError) {
+            if (avail.empty()) {
+                avail = listAvailableBridgeTags(libsDir);
+            }
+            std::ostringstream os;
+            os << "python bridge for active environment not found: " << bridgePath.string();
+            if (!avail.empty()) {
+                os << ". Available bridge tag(s): ";
+                for (size_t i = 0; i < avail.size(); ++i) {
+                    os << (i == 0 ? "" : ", ") << avail[i];
+                }
+            }
             *outError = os.str();
         }
         return false;
@@ -332,7 +336,11 @@ bool tryLoadPythonBridgeForActiveEnv(
         }
         return false;
     }
-    CAMEL_LOG_INFO_S("Context", "python bridge route hit: loaded bridge='{}'", bridgePath.string());
+    CAMEL_LOG_INFO_S(
+        "Context",
+        "run | python bridge | tag {} | loaded {}",
+        activeTag.value(),
+        bridgePath.string());
     ctx->addLoadedDll(bridgePath.string(), bridge);
     return true;
 }
@@ -401,7 +409,7 @@ module_ptr_t loadCmoModule(
     }
     void *handle = openDll(path);
     if (!handle) {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S("Context", "Failed to load .cmo: {}", path));
+        CAMEL_LOG_WARN_S("Context", "Failed to load .cmo: {}", path);
         setErr(
             "failed to load DLL: " + path + " (" + lastDlErrorString() +
             "). Check dependent runtime DLLs (e.g. python3xx.dll) and search paths.");
@@ -411,10 +419,10 @@ module_ptr_t loadCmoModule(
     using AbiVersionFn = int (*)();
     auto abiVersionFn  = getSymbol<AbiVersionFn>(handle, "camel_module_abi_version");
     if (!abiVersionFn) {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+        CAMEL_LOG_WARN_S(
             "Context",
             "camel_module_abi_version not found in: {} (rebuild .cmo with current SDK)",
-            path));
+            path);
         closeDll(handle);
         setErr(
             "camel_module_abi_version not found in " + path + " (rebuild .cmo with current SDK)");
@@ -422,12 +430,12 @@ module_ptr_t loadCmoModule(
     }
     int moduleAbi = abiVersionFn();
     if (moduleAbi != CAMEL_MODULE_ABI_VERSION) {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+        CAMEL_LOG_WARN_S(
             "Context",
             "Module ABI version mismatch: {} has version {}, host expects {}; skip loading",
             path,
             moduleAbi,
-            CAMEL_MODULE_ABI_VERSION));
+            CAMEL_MODULE_ABI_VERSION);
         closeDll(handle);
         setErr(
             "ABI version mismatch: .cmo has version " + std::to_string(moduleAbi) +
@@ -437,7 +445,7 @@ module_ptr_t loadCmoModule(
 
     auto factory = getSymbol<CamelModuleFactory>(handle, "camel_module_create");
     if (!factory) {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S("Context", "camel_module_create not found in: {}", path));
+        CAMEL_LOG_WARN_S("Context", "camel_module_create not found in: {}", path);
         closeDll(handle);
         setErr("camel_module_create not found in " + path);
         return nullptr;

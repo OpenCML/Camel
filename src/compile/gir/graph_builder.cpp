@@ -863,11 +863,11 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
 
     auto *funcNode = tt::as_ptr<FuncNode>(node);
     if (!funcNode->bodyGraph()) {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+        CAMEL_LOG_WARN_S(
             "GIR",
             "Cannot inline FUNC node {} in graph {}: bodyGraph is null.",
             node->toString(),
-            graph_->name_));
+            graph_->name_);
         return result;
     }
     auto &targetGraph = *funcNode->bodyGraph();
@@ -962,7 +962,7 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
         allInputs.insert(allInputs.end(), normInputs.begin(), normInputs.end());
         allInputs.insert(allInputs.end(), withInputs.begin(), withInputs.end());
         if (allPorts.size() != allInputs.size()) {
-            EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+            CAMEL_LOG_WARN_S(
                 "GIR",
                 "Cannot inline FUNC node {} in graph {}: port/input count mismatch (ports={}, "
                 "norm={}, with={}).",
@@ -970,7 +970,7 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
                 graph_->name_,
                 allPorts.size(),
                 normInputs.size(),
-                withInputs.size()));
+                withInputs.size());
             return InlineResult{};
         }
         for (size_t i = 0; i < allPorts.size(); ++i) {
@@ -1029,11 +1029,11 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
     if (auto outIt = nodeMap.find(targetOutput); outIt != nodeMap.end()) {
         result.valueExit = outIt->second;
     } else {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_WARN_S(
+        CAMEL_LOG_WARN_S(
             "GIR",
             "Cannot inline FUNC node {} in graph {}: target output anchor is not mapped.",
             node->toString(),
-            graph_->name_));
+            graph_->name_);
         return InlineResult{};
     }
     const node_vec_t normConsumers = collectConsumersByInput(*graph_, node, LinkType::Norm);

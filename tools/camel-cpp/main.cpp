@@ -31,6 +31,7 @@
 #include "camel/parse/cst_dumper.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/install_layout.h"
+#include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
 #include "camel/utils/windows_parser_guard.h"
 #include "passes/trans/dot/graphviz.h"
@@ -39,6 +40,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -142,6 +144,24 @@ int main(int argc, char *argv[]) {
     auto projRoot    = findProjectRoot();
     auto searchPaths = camel::utils::buildModuleSearchPaths(entryDir);
     searchPaths.push_back(fs::absolute(projRoot / "stdlib").string());
+    {
+        auto installRoot = camel::utils::resolveInstallRoot();
+        std::size_t n    = 0;
+        for (const auto &p : searchPaths) {
+            if (!p.empty())
+                ++n;
+        }
+        LogInfoPathList(
+            "camel-cpp",
+            [&] {
+                return std::format(
+                    "run | module paths | {} entries | CAMEL_HOME={} | entry_dir={}",
+                    n,
+                    installRoot.string(),
+                    entryDir);
+            },
+            searchPaths);
+    }
 
     auto ctx = Context::create(
         EntryConfig{

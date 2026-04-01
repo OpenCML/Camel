@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,10 @@
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/tns/topo_node_seq.h"
 
+#include "camel/utils/log.h"
+
 #include <format>
+#include <sstream>
 
 using namespace GIR;
 using namespace camel::core::error;
@@ -288,6 +291,18 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
 PassApplyResult applyPassesDetailed(
     GIR::graph_ptr_t graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
     std::ostream &os) {
+    if (!passes.empty() && Logger::ShouldEmit(LogLevel::Info, "Pass")) {
+        std::ostringstream seq;
+        for (size_t i = 0; i < passes.size(); ++i) {
+            if (i > 0)
+                seq << " -> ";
+            seq << passes[i];
+        }
+        Logger::EmitLine(
+            LogLevel::Info,
+            "Pass",
+            std::format("run | passes | plan ({}): {}", passes.size(), seq.str()));
+    }
     for (const auto &p : passes) {
         if (graph == nullptr || graph == Graph::null()) {
             return {Graph::null(), PassApplyStatus::Consumed};
@@ -302,10 +317,14 @@ PassApplyResult applyPassesDetailed(
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
+                CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (see diagnostics)", p);
                 return {nullptr, PassApplyStatus::Failed};
             }
-            if (graph == Graph::null())
+            if (!graph || graph == Graph::null()) {
+                CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> consumed", p);
                 return {Graph::null(), PassApplyStatus::Consumed};
+            }
+            CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> next graph '{}'", p, graph->name());
         } else {
             throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(p);
         }
