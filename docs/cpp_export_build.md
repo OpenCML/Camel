@@ -164,7 +164,7 @@ build\cpp_gen\Release\cpp_gen.exe
   - 或将 `libcamel.dll` 与 exe 放在同一目录。
 - **`python.cmo` 已找到但 failed to load DLL**：
   - 这是 Python 运行时依赖缺失，不是模块搜索失败。
-  - 优先将 `python3xx.dll` 放到 `modules/python/dlls/`（gitignored），构建收集会复制到 `out/latest/libs/`。
+  - `collect-out` 从 `modules/python/sdks/python3xx/` 收集 `python3xx.dll`、`python3.dll`、`vcruntime140*.dll` 到 `out/latest/libs/`；若 sdks 中缺少解释器 DLL，再回退到当前 venv/conda/ PATH 上的 Python。
   - 也可激活目标 venv（`VIRTUAL_ENV`/`CONDA_PREFIX`），运行时会把其常见 DLL 目录加入搜索路径。
 - **Python SDK 准备（用于编译 python.cmo/bridge）**：
   - 手动同步 SDK 到 `modules/python/sdks/`（gitignored）：

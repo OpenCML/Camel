@@ -20,11 +20,10 @@
   - `CAMEL_STD_LIB`: override stdlib location.
   - `CAMEL_PACKAGES`: extra module search roots (`;` separated on Windows).
 - Python module runtime (Windows):
-  - Preferred runtime DLL drop-in path: `modules/python/dlls/` (gitignored).
-  - Fallback runtime discovery uses active `VIRTUAL_ENV` / `CONDA_PREFIX`.
-  - Python SDK root for build: `modules/python/sdks/` (gitignored).
+  - Runtime DLLs for `out/.../libs/` come from `modules/python/sdks/python3xx/` (gitignored) after `collect-out`; `sync-python-sdks` copies `python3xx.dll`, `python3.dll`, and `vcruntime140*.dll` there.
+  - If sdks have no interpreter DLL, collection falls back to `VIRTUAL_ENV` / `CONDA_PREFIX` / `python` on PATH.
   - SDK sync is manual: `node scripts/sync-python-sdks.js <python-archive-root>`.
-  - Build uses SDKs first; if SDK root is missing, falls back to active virtual environment.
+  - CMake build uses SDKs first; if SDK root is missing, falls back to active virtual environment.
 
 **PowerShell example:**
 ```
