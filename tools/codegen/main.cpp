@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,7 @@
 #include "camel/core/module/userdef.h"
 #include "camel/init.h"
 #include "camel/parse/parse.h"
-#include "camel/utils/env.h"
+#include "camel/utils/install_layout.h"
 #include "service/codegen/source/generator.h"
 #include <filesystem>
 #include <fstream>
@@ -63,17 +63,12 @@ int main(int argc, char *argv[]) {
     }
 
     std::string entryDir = fs::absolute(fs::path(inputPath)).parent_path().string();
+    auto searchPaths     = camel::utils::buildModuleSearchPaths(entryDir);
     auto ctx             = Context::create(
         EntryConfig{
-            .entryDir  = entryDir,
-            .entryFile = inputPath,
-            .searchPaths =
-                {
-                    entryDir,
-                    fs::absolute(fs::path(getEnv("CAMEL_STD_LIB", "./stdlib"))).string(),
-                    getEnv("CAMEL_PACKAGES"),
-                    getEnv("CAMEL_HOME", fs::current_path().string()),
-                },
+            .entryDir    = entryDir,
+            .entryFile   = inputPath,
+            .searchPaths = std::move(searchPaths),
         },
         DiagsConfig{.total_limit = -1, .per_severity_limits = {{Severity::Error, 0}}});
 

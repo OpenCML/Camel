@@ -15,6 +15,16 @@
 ## 3. Runtime Prerequisites
 - Required dynamic library: `libcamel.dll`
 - `CAMEL_HOME` must point to the installation root (including `bin`, `lib`, etc.).
+- Environment variable roles:
+  - `CAMEL_HOME`: install root (used by module and DLL search fallback).
+  - `CAMEL_STD_LIB`: override stdlib location.
+  - `CAMEL_PACKAGES`: extra module search roots (`;` separated on Windows).
+- Python module runtime (Windows):
+  - Preferred runtime DLL drop-in path: `modules/python/dlls/` (gitignored).
+  - Fallback runtime discovery uses active `VIRTUAL_ENV` / `CONDA_PREFIX`.
+  - Python SDK root for build: `modules/python/sdks/` (gitignored).
+  - SDK sync is manual: `node scripts/sync-python-sdks.js <python-archive-root>`.
+  - Build uses SDKs first; if SDK root is missing, falls back to active virtual environment.
 
 **PowerShell example:**
 ```

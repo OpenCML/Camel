@@ -199,9 +199,9 @@ Diagnostic &Diagnostics::add(Diagnostic &&d) {
     }
     d.persisted = true;
     std::lock_guard<std::mutex> lk(mtx_);
-    // Check limits before adding
     storage_.push_back(std::move(d));
-    checkLimits(d);
+    // Limits apply to the element now at the back; do not read the moved-from `d` (UB).
+    checkLimits();
     return storage_.back();
 }
 
@@ -321,18 +321,24 @@ bool Diagnostics::hasErrors() const {
 }
 
 // ---- Helper implementations ----
-void Diagnostics::checkLimits(const Diagnostic &d) {
-    // Check total limit
-    if (config_.hasTotalLimit() && static_cast<int>(storage_.size()) >= config_.total_limit) {
+void Diagnostics::checkLimits() {
+    if (storage_.empty()) {
+        return;
+    }
+    const Diagnostic &ref = storage_.back();
+
+    // Total cap: after push, size must not exceed total_limit (when configured).
+    if (config_.hasTotalLimit() && static_cast<int>(storage_.size()) > config_.total_limit) {
         throw DiagnosticsTotalLimitExceededException(config_.total_limit);
     }
 
-    // Check per-severity limit
-    if (config_.hasSeverityLimit(d.severity)) {
-        size_t currentCount = countBySeverityInternal(d.severity) + 1;
-        int limit           = config_.getSeverityLimit(d.severity);
-        if (static_cast<int>(currentCount) >= limit) {
-            throw DiagnosticsLimitExceededException(d.severity, limit);
+    // Per-severity cap: count already includes the diagnostic just pushed (no +1).
+    // limit == 0 means "allow zero stored diagnostics of this severity" -> throw on first.
+    if (config_.hasSeverityLimit(ref.severity)) {
+        const int limit = config_.getSeverityLimit(ref.severity);
+        const size_t n  = countBySeverityInternal(ref.severity);
+        if (static_cast<int>(n) > limit) {
+            throw DiagnosticsLimitExceededException(ref.severity, static_cast<size_t>(limit));
         }
     }
 }

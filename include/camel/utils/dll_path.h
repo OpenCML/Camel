@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 23, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "camel/utils/env.h"
+#include "camel/utils/install_layout.h"
 
 #include <filesystem>
 #include <string>
@@ -72,128 +72,52 @@ inline std::filesystem::path getExecutableDirectory() {
 #endif
 }
 
-/// SDK 工具专用：以 exe 所在目录为 base 设置库搜索路径，并 fallback 到 CAMEL_HOME。
-/// 适用于 camel、camel-cpp、format 等运行在 SDK 内的可执行文件，旁边通常有 libs。
-/// 搜索顺序：exe 所在目录、exe/libs、exe/../libs；若设置 CAMEL_HOME 则追加
-/// CAMEL_HOME/libs、CAMEL_HOME/bin、CAMEL_HOME。
-inline void setupLibrarySearchPathForHost() {
-    namespace fs        = std::filesystem;
-    std::string sdkRoot = getEnv("CAMEL_HOME", fs::current_path().string());
-    fs::path camelHome(sdkRoot);
-
+inline void addLibrarySearchPath(const std::filesystem::path &dir) {
+    namespace fs = std::filesystem;
+    if (dir.empty()) {
+        return;
+    }
+    fs::path abs = fs::absolute(dir).lexically_normal();
 #ifdef _WIN32
-    wchar_t path[MAX_PATH];
-    if (!GetModuleFileNameW(nullptr, path, MAX_PATH))
-        return;
-
-    std::wstring exePath(path);
-    size_t last = exePath.find_last_of(L"\\/");
-    if (last == std::wstring::npos)
-        return;
-
-    std::wstring base    = exePath.substr(0, last + 1);
-    std::wstring libsDir = base + L"libs";
-    std::wstring parentLibs;
-    size_t sep = base.find_last_of(L"\\/", base.length() > 1 ? base.length() - 2 : 0);
-    if (sep != std::wstring::npos)
-        parentLibs = base.substr(0, sep + 1) + L"libs";
-
     if (SetDefaultDllDirectories(
             LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS)) {
-        AddDllDirectory(base.c_str());
-        AddDllDirectory(libsDir.c_str());
-        if (!parentLibs.empty())
-            AddDllDirectory(parentLibs.c_str());
-        if (!sdkRoot.empty()) {
-            std::wstring ch = camelHome.wstring();
-            if (!ch.empty() && ch.back() != L'/' && ch.back() != L'\\')
-                ch += L'\\';
-            AddDllDirectory(ch.c_str());
-            AddDllDirectory((ch + L"libs").c_str());
-            AddDllDirectory((ch + L"bin").c_str());
+        std::wstring ws = abs.wstring();
+        if (!ws.empty() && ws.back() != L'/' && ws.back() != L'\\') {
+            ws += L'\\';
         }
-    } else {
-        SetDllDirectoryW(libsDir.c_str());
+        AddDllDirectory(ws.c_str());
     }
-
 #elif defined(__linux__)
-    char buf[PATH_MAX];
-    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-    if (len <= 0)
-        return;
-    buf[len] = '\0';
-
-    std::string exePath(buf);
-    size_t last = exePath.find_last_of("/");
-    if (last == std::string::npos)
-        return;
-
-    std::string base      = exePath.substr(0, last + 1);
-    std::string localLibs = base + "libs";
-    std::string parentLibs;
-    size_t sep = base.rfind('/', base.length() > 1 ? base.length() - 2 : 0);
-    if (sep != std::string::npos)
-        parentLibs = base.substr(0, sep + 1) + "libs";
-
-    std::string newPath = base + ":" + localLibs;
-    if (!parentLibs.empty())
-        newPath += ":" + parentLibs;
-    if (!sdkRoot.empty()) {
-        std::string ch = camelHome.string();
-        if (!ch.empty() && ch.back() != '/')
-            ch += '/';
-        newPath += ":" + ch + ":" + ch + "libs:" + ch + "bin";
-    }
-    const char *existing = std::getenv("LD_LIBRARY_PATH");
-    if (existing && existing[0])
-        newPath += ":";
-    if (existing)
-        newPath += existing;
-
-    setenv("LD_LIBRARY_PATH", newPath.c_str(), 1);
-
+    std::string key = "LD_LIBRARY_PATH";
 #elif defined(__APPLE__)
-    char buf[PATH_MAX];
-    uint32_t size = sizeof(buf);
-    if (_NSGetExecutablePath(buf, &size) != 0)
-        return;
-
-    char resolved[PATH_MAX];
-    if (realpath(buf, resolved) == nullptr)
-        return;
-
-    std::string exePath(resolved);
-    size_t last = exePath.find_last_of("/");
-    if (last == std::string::npos)
-        return;
-
-    std::string base      = exePath.substr(0, last + 1);
-    std::string localLibs = base + "libs";
-    std::string parentLibs;
-    size_t sep = base.rfind('/', base.length() > 1 ? base.length() - 2 : 0);
-    if (sep != std::string::npos)
-        parentLibs = base.substr(0, sep + 1) + "libs";
-
-    std::string newPath = base + ":" + localLibs;
-    if (!parentLibs.empty())
-        newPath += ":" + parentLibs;
-    if (!sdkRoot.empty()) {
-        std::string ch = camelHome.string();
-        if (!ch.empty() && ch.back() != '/')
-            ch += '/';
-        newPath += ":" + ch + ":" + ch + "libs:" + ch + "bin";
-    }
-    const char *existing = std::getenv("DYLD_LIBRARY_PATH");
-    if (existing && existing[0])
-        newPath += ":";
-    if (existing)
-        newPath += existing;
-
-    setenv("DYLD_LIBRARY_PATH", newPath.c_str(), 1);
-
-#else
-    (void)camelHome;
+    std::string key = "DYLD_LIBRARY_PATH";
 #endif
+#if defined(__linux__) || defined(__APPLE__)
+    std::string append   = abs.string();
+    const char *existing = std::getenv(key.c_str());
+    if (existing && existing[0]) {
+        append += ":";
+        append += existing;
+    }
+    setenv(key.c_str(), append.c_str(), 1);
+#endif
+}
+
+/// SDK 工具专用：使用统一 InstallRoot 推导库搜索路径。
+inline void setupLibrarySearchPathForHost() {
+#ifdef _WIN32
+    if (!SetDefaultDllDirectories(
+            LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS)) {
+        auto dirs = buildHostLibrarySearchDirs();
+        if (dirs.size() > 1) {
+            SetDllDirectoryW(dirs[1].wstring().c_str());
+        }
+        return;
+    }
+#endif
+    for (const auto &dir : buildHostLibrarySearchDirs()) {
+        addLibrarySearchPath(dir);
+    }
 }
 
 /// 导出应用专用：以 CAMEL_HOME 为 base 设置库搜索路径。
@@ -202,73 +126,19 @@ inline void setupLibrarySearchPathForHost() {
 /// 若未设置 CAMEL_HOME，则 fallback 为 current_path()。
 /// 搜索顺序：exe 所在目录（优先）、CAMEL_HOME/libs、CAMEL_HOME/bin、CAMEL_HOME。
 inline void setupLibrarySearchPathForApp() {
-    namespace fs        = std::filesystem;
-    auto exeDir         = getExecutableDirectory();
-    std::string sdkRoot = getEnv("CAMEL_HOME", fs::current_path().string());
-    if (sdkRoot.empty())
-        return;
-    fs::path root(sdkRoot);
 #ifdef _WIN32
-    std::wstring exeBase;
-    if (!exeDir.empty()) {
-        exeBase = exeDir.wstring();
-        if (!exeBase.empty() && exeBase.back() != L'/' && exeBase.back() != L'\\')
-            exeBase += L'\\';
-    }
-    std::wstring base(root.wstring());
-    if (base.empty() || (base.back() != L'/' && base.back() != L'\\'))
-        base += L'\\';
-    std::wstring libs = base + L"libs";
-    std::wstring bin  = base + L"bin";
-    if (SetDefaultDllDirectories(
+    if (!SetDefaultDllDirectories(
             LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS)) {
-        if (!exeBase.empty())
-            AddDllDirectory(exeBase.c_str());
-        AddDllDirectory(base.c_str());
-        AddDllDirectory(libs.c_str());
-        AddDllDirectory(bin.c_str());
-    } else {
-        SetDllDirectoryW(libs.c_str());
+        auto dirs = buildAppLibrarySearchDirs();
+        if (dirs.size() > 1) {
+            SetDllDirectoryW(dirs[1].wstring().c_str());
+        }
+        return;
     }
-#elif defined(__linux__)
-    std::string exeBase =
-        exeDir.empty() ? ""
-                       : (exeDir.string() +
-                          (exeDir.string().empty() || exeDir.string().back() == '/' ? "" : "/"));
-    std::string base = root.string();
-    if (!base.empty() && base.back() != '/')
-        base += '/';
-    std::string libs     = base + "libs";
-    std::string bin      = base + "bin";
-    const char *existing = std::getenv("LD_LIBRARY_PATH");
-    std::string newPath  = exeBase.empty() ? "" : (exeBase + ":");
-    newPath += base + ":" + libs + ":" + bin;
-    if (existing && existing[0])
-        newPath += ":";
-    if (existing)
-        newPath += existing;
-    setenv("LD_LIBRARY_PATH", newPath.c_str(), 1);
-#elif defined(__APPLE__)
-    std::string exeBase =
-        exeDir.empty() ? ""
-                       : (exeDir.string() +
-                          (exeDir.string().empty() || exeDir.string().back() == '/' ? "" : "/"));
-    std::string base = root.string();
-    if (!base.empty() && base.back() != '/')
-        base += '/';
-    std::string libs     = base + "libs";
-    std::string bin      = base + "bin";
-    const char *existing = std::getenv("DYLD_LIBRARY_PATH");
-    std::string newPath  = exeBase.empty() ? "" : (exeBase + ":");
-    newPath += base + ":" + libs + ":" + bin;
-    if (existing && existing[0])
-        newPath += ":";
-    if (existing)
-        newPath += existing;
-    setenv("DYLD_LIBRARY_PATH", newPath.c_str(), 1);
-#else
-    (void)root;
 #endif
+    for (const auto &dir : buildAppLibrarySearchDirs()) {
+        addLibrarySearchPath(dir);
+    }
 }
 
 } // namespace utils

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,7 +30,7 @@
 #include "camel/parse/ast/builder.h"
 #include "camel/parse/cst_dumper.h"
 #include "camel/parse/parse.h"
-#include "camel/utils/env.h"
+#include "camel/utils/install_layout.h"
 #include "camel/utils/memperf.h"
 #include "camel/utils/windows_parser_guard.h"
 #include "passes/trans/dot/graphviz.h"
@@ -136,25 +136,12 @@ int main(int argc, char *argv[]) {
     diagnostics->setConfig(
         DiagsConfig{.total_limit = -1, .per_severity_limits = {{Severity::Error, 0}}});
 
-    fs::path camelPath = camel::utils::getExecutableDirectory();
-    if (camelPath.empty())
-        camelPath = fs::current_path();
     fs::path entryPath(targetFile);
     std::string entryDir = fs::absolute(entryPath).parent_path().string();
 
-    auto projRoot      = findProjectRoot();
-    auto addIfNonEmpty = [](std::vector<std::string> &v, const std::string &s) {
-        if (!s.empty())
-            v.push_back(fs::absolute(fs::path(s)).string());
-    };
-    std::vector<std::string> searchPaths;
-    searchPaths.push_back(entryDir);
-    addIfNonEmpty(searchPaths, getEnv("CAMEL_PACKAGES"));
-    addIfNonEmpty(searchPaths, getEnv("CAMEL_STD_LIB"));
-    addIfNonEmpty(searchPaths, camelPath.string());
-    addIfNonEmpty(searchPaths, (camelPath / "stdlib").string());
-    addIfNonEmpty(searchPaths, (camelPath.parent_path() / "stdlib").string());
-    searchPaths.push_back((projRoot / "stdlib").string());
+    auto projRoot    = findProjectRoot();
+    auto searchPaths = camel::utils::buildModuleSearchPaths(entryDir);
+    searchPaths.push_back(fs::absolute(projRoot / "stdlib").string());
 
     auto ctx = Context::create(
         EntryConfig{

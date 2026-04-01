@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Mar. 10, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -178,8 +178,9 @@ class Diagnostics {
     std::deque<Diagnostic> storage_;
     DiagsConfig config_;
 
-    // Helper methods for limit checking
-    void checkLimits(const Diagnostic &d);
+    // Helper methods for limit checking (uses storage_.back() after push_back; never the moved-from
+    // arg)
+    void checkLimits();
     size_t countBySeverityInternal(Severity severity) const; // No lock version
 };
 

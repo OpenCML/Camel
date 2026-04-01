@@ -138,19 +138,23 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
             modsErr.push_back(mod);
         }
     }
-    if (json && !modsErr.empty()) {
-        os << "[\n";
-        bool first = true;
-        for (const auto &mod : modsErr) {
-            auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
-            if (!ud || !ud->diagnostics())
-                continue;
-            if (!first)
-                os << ",\n";
-            ud->diagnostics()->dump(os, true, false);
-            first = false;
+    if (json) {
+        if (modsErr.empty()) {
+            os << "[]\n" << std::flush;
+        } else {
+            os << "[\n";
+            bool first = true;
+            for (const auto &mod : modsErr) {
+                auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
+                if (!ud || !ud->diagnostics())
+                    continue;
+                if (!first)
+                    os << ",\n";
+                ud->diagnostics()->dump(os, true, false);
+                first = false;
+            }
+            os << "\n]\n" << std::flush;
         }
-        os << "\n]\n" << std::flush;
     } else {
         for (const auto &mod : modsErr) {
             auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
@@ -168,6 +172,12 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
                 }
             }
             ud->diagnostics()->dump(os, false);
+        }
+        if (modsErr.empty()) {
+            os << "[camel] Compilation failed but no diagnostics were collected. Try `npm run "
+                  "debug` for assertions, or verify camel.exe and libcamel.dll are the same build "
+                  "flavor (Release vs Debug).\n"
+               << std::flush;
         }
     }
 }
@@ -228,10 +238,14 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
                 "Module '{}' loaded from file '{}'.",
                 name,
                 module->path()));
-            if (!module->loaded()) {
-                module->load();
-            }
+            // Register before load so compile failures remain visible to dumpAllModuleDiagnostics.
             modules_[name] = module;
+            if (!module->loaded()) {
+                if (!module->load()) {
+                    throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound)
+                        .commit(name, "failed to compile or load module from " + module->path());
+                }
+            }
             return module;
         }
 

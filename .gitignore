@@ -25,6 +25,8 @@ build/
 dist/
 out/
 tmp/
+modules/python/dlls/
+modules/python/sdks/
 
 *.cmo
 ./camel

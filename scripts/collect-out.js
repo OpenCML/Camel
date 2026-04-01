@@ -26,6 +26,53 @@ function ensureDir(dir) {
 
 const isWindows = process.platform === 'win32'
 
+function collectPythonRuntimeDlls(BASEDIR) {
+    const candidates = []
+    // Preferred repo-local DLL store (gitignored): modules/python/dlls/
+    candidates.push(path.join(BASEDIR, 'modules', 'python', 'dlls'))
+    if (process.env.VIRTUAL_ENV) {
+        candidates.push(process.env.VIRTUAL_ENV)
+        candidates.push(path.join(process.env.VIRTUAL_ENV, 'Scripts'))
+        candidates.push(path.join(process.env.VIRTUAL_ENV, 'DLLs'))
+    }
+    if (process.env.CONDA_PREFIX) {
+        candidates.push(process.env.CONDA_PREFIX)
+        candidates.push(path.join(process.env.CONDA_PREFIX, 'Library', 'bin'))
+    }
+
+    const files = []
+    for (const dir of candidates) {
+        if (!dir || !fs.existsSync(dir)) continue
+        const entries = fs.readdirSync(dir, { withFileTypes: true })
+        for (const ent of entries) {
+            if (!ent.isFile()) continue
+            const name = ent.name.toLowerCase()
+            if (
+                name.startsWith('python3') && name.endsWith('.dll') ||
+                name === 'python.dll'
+            ) {
+                files.push(path.join(dir, ent.name))
+            }
+        }
+    }
+
+    // Optional system-python fallback for convenience.
+    if (files.length === 0) {
+        try {
+            const pyDllPath = execSync(
+                'python -c "import sys, pathlib; p=pathlib.Path(sys.base_prefix); print(p / (\'python\' + str(sys.version_info.major) + str(sys.version_info.minor) + \'.dll\'))"',
+                { encoding: 'utf-8', cwd: BASEDIR }
+            ).trim()
+            if (pyDllPath && fs.existsSync(pyDllPath)) {
+                files.push(pyDllPath)
+            }
+        } catch {
+            // ignore
+        }
+    }
+    return [...new Set(files)]
+}
+
 function collect(config) {
     const tag = getTag()
     const outRoot = path.join(BASEDIR, 'out', tag)
@@ -84,19 +131,17 @@ function collect(config) {
         logWarn(`Library not found: ${libPath}`)
     }
 
-    // Python DLL：python/pyplot 模块共享，复制到 libs 便于 .cmo 加载
+    // Python runtime DLLs: prefer modules/python/dlls, fallback to current venv.
     if (process.platform === 'win32') {
-        try {
-            const pyDllPath = execSync(
-                'python -c "import sys, pathlib; p=pathlib.Path(sys.base_prefix); print(p / (\'python\' + str(sys.version_info.major) + str(sys.version_info.minor) + \'.dll\'))"',
-                { encoding: 'utf-8', cwd: BASEDIR }
-            ).trim()
-            if (pyDllPath && fs.existsSync(pyDllPath)) {
-                const pyDllName = path.basename(pyDllPath)
-                fs.copyFileSync(pyDllPath, path.join(libsDir, pyDllName))
-            }
-        } catch {
-            // 忽略，Python 可能未安装或不在 PATH
+        const dlls = collectPythonRuntimeDlls(BASEDIR)
+        if (dlls.length === 0) {
+            logWarn(
+                'No Python runtime DLL found. Put python3xx.dll into modules/python/dlls/ or activate a venv.'
+            )
+        }
+        for (const dllPath of dlls) {
+            const dllName = path.basename(dllPath)
+            fs.copyFileSync(dllPath, path.join(libsDir, dllName))
         }
     }
 
@@ -123,6 +168,18 @@ function collect(config) {
                 if (f.endsWith('.cmo') || f.endsWith('.pdb')) {
                     fs.copyFileSync(path.join(configDir, f), path.join(stdlibDir, f))
                 }
+            }
+        }
+    }
+
+    // Copy Python bridge DLLs to out/<tag>/libs for runtime routing.
+    const bridgeDir = path.join(BASEDIR, 'build', 'modules', 'python', config)
+    if (fs.existsSync(bridgeDir)) {
+        const files = fs.readdirSync(bridgeDir)
+        for (const f of files) {
+            const lower = f.toLowerCase()
+            if (lower.startsWith('py_bridge') && (lower.endsWith('.dll') || lower.endsWith('.pdb'))) {
+                fs.copyFileSync(path.join(bridgeDir, f), path.join(libsDir, f))
             }
         }
     }

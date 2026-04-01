@@ -37,7 +37,7 @@
 #include "camel/parse/ast/builder.h"
 #include "camel/parse/cst_dumper.h"
 #include "camel/parse/parse.h"
-#include "camel/utils/env.h"
+#include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
 #include "config.h"
@@ -109,26 +109,30 @@ int main(int argc, char *argv[]) {
 
     bool useJsonFormat = (errorFormat == "json");
 
-    fs::path camelPath = camel::utils::getExecutableDirectory();
-    if (camelPath.empty())
-        camelPath = fs::current_path();
     fs::path entryPath(targetFile);
     // if targetFile is relative (or "stdin"), the entryDir is the current working directory
     // if targetFile is absolute, the entryDir is the parent directory of targetFile
     std::string entryDir = fs::absolute(entryPath).parent_path().string();
-
-    auto addIfNonEmpty = [](std::vector<std::string> &v, const std::string &s) {
-        if (!s.empty())
-            v.push_back(fs::absolute(fs::path(s)).string());
-    };
-    std::vector<std::string> searchPaths;
-
-    searchPaths.push_back(entryDir);
-    addIfNonEmpty(searchPaths, getEnv("CAMEL_PACKAGES"));
-    addIfNonEmpty(searchPaths, Run::stdLibPath.empty() ? getEnv("CAMEL_STD_LIB") : Run::stdLibPath);
-    addIfNonEmpty(searchPaths, camelPath.string());
-    addIfNonEmpty(searchPaths, (camelPath / "stdlib").string());
-    addIfNonEmpty(searchPaths, (camelPath.parent_path() / "stdlib").string());
+    auto searchPaths     = camel::utils::buildModuleSearchPaths(
+        entryDir,
+        camel::utils::ModuleSearchPathOptions{.stdlibOverride = Run::stdLibPath});
+    {
+        auto installRoot = camel::utils::resolveInstallRoot();
+        std::ostringstream ss;
+        for (size_t i = 0; i < searchPaths.size(); ++i) {
+            if (i > 0)
+                ss << "; ";
+            ss << searchPaths[i];
+        }
+        CAMEL_LOG_INFO_S(
+            "Main",
+            "route init: install_root='{}', entry_dir='{}', stdlib_override='{}', "
+            "search_paths=[{}]",
+            installRoot.string(),
+            entryDir,
+            Run::stdLibPath.empty() ? "<env:CAMEL_STD_LIB or default>" : Run::stdLibPath,
+            ss.str());
+    }
 
     context_ptr_t ctx = Context::create(
         EntryConfig{

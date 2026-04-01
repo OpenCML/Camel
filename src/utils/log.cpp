@@ -164,9 +164,9 @@ static std::string levelToTag(LogLevel level) {
     case LogLevel::Debug:
         return "\033[1;36mDEBUG\033[0m";
     case LogLevel::Warn:
-        return "\033[1;33mWARN \033[0m";
+        return "\033[1;33mWARN\033[0m";
     case LogLevel::Info:
-        return "\033[1;32mINFO \033[0m";
+        return "\033[1;32mINFO\033[0m";
     case LogLevel::Fatal:
         return "\033[1;31mFATAL\033[0m";
     default:
