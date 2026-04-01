@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 27, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,7 +57,7 @@ void PerfettoIntegration::startTracing(const std::string &output_file) {
 
 void PerfettoIntegration::stopAndOpenPerfetto() {
     if (!tracingEnabled_) {
-        GetDefaultLogger().in("Profiler").warn("Tracing was not started, nothing to stop.");
+        CAMEL_LOG_WARN_S("Profiler", "Tracing was not started, nothing to stop.");
         return;
     }
 
@@ -194,11 +194,10 @@ void PerfettoIntegration::generatePerfettoFile() {
 }
 
 void PerfettoIntegration::openPerfettoInBrowser(bool auto_open) {
-    GetDefaultLogger()
-        .in("Profiler")
-        .info(
-            "To view trace results, manually open https://ui.perfetto.dev/ and load the trace "
-            "file.");
+    CAMEL_LOG_INFO_S(
+        "Profiler",
+        "To view trace results, manually open https://ui.perfetto.dev/ and load the trace "
+        "file.");
 }
 
 } // namespace profiler

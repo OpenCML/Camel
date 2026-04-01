@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -270,8 +270,7 @@ executor_ptr_t BasicBuiltinExecutor::create(context_ptr_t ctx) {
 
 void BasicBuiltinExecutor::eval(
     std::string uri, GIR::Node *self, camel::core::context::Frame &frame) {
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("BasicExec").debug("Evaluating operator of URI: {}", uri));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("BasicExec", "Evaluating operator of URI: {}", uri));
     auto it = opsMap_.find(uri);
     if (it == opsMap_.end()) {
         throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);

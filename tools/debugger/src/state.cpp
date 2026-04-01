@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 12, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -153,8 +153,12 @@ std::string getStateJson() {
 
 void setSettings(bool verbose, const std::string &logFile) {
     g_verbose = verbose;
-    Logger::SetVerbose(verbose);
+    Logger::SetGlobalLogThreshold(verbose ? LogLevel::Info : LogLevel::Fatal);
     setLogFilePath(logFile);
+    if (verbose && logFile.empty()) {
+        static std::once_flag attachStderrOnce;
+        std::call_once(attachStderrOnce, [] { Logger::AddOutputStream(&std::cerr); });
+    }
 }
 
 bool isInterrupted() { return g_interrupted.load(); }

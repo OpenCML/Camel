@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 12, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -289,11 +289,11 @@ class GraphArena {
             auto &meta             = camel::core::mm::metaSpace();
             const bool metaHealthy = meta.validate();
             if (!metaHealthy) {
-                EXEC_WHEN_DEBUG(
-                    GetDefaultLogger().in("GIR").warn(
-                        "Skip GraphArena {:p} block recycle because metaSpace is already "
-                        "corrupted.",
-                        static_cast<void *>(this)));
+                CAMEL_LOG_WARN_S(
+                    "GIR",
+                    "Skip GraphArena {:p} block recycle because metaSpace is already "
+                    "corrupted.",
+                    static_cast<void *>(this));
                 heads.clear();
                 blocks.clear();
                 return;

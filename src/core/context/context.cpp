@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -95,8 +95,7 @@ inline bool fileExists(const std::string &path) {
 }
 
 std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("Context").debug("Looking for built-in module: <{}>", name));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Looking for built-in module: <{}>", name));
     auto it = builtinModules_.find(name);
     if (it != builtinModules_.end()) {
         return it->second;
@@ -104,8 +103,7 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 
     auto factoryIt = builtinModuleFactories.find(name);
     if (factoryIt != builtinModuleFactories.end()) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("Context").debug("Loading built-in module: <{}>", name));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Loading built-in module: <{}>", name));
         module_ptr_t module = factoryIt->second(shared_from_this());
         module->load(); // instantly load the builtin module
         builtinModules_[name] = module;
@@ -124,10 +122,19 @@ context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &d
     ctx->runtimeErrorReporter_ =
         std::make_shared<RuntimeErrorReporter>(ctx->runtimeDiagSink_, ctx->sourceContext_);
     ctx->modules_[""] = ctx->getBuiltinModule("").value();
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("Context").info(
-            "Context initialized using entry config {}",
-            entryConf.toString()));
+    {
+        size_t nPaths = 0;
+        for (const auto &sp : entryConf.searchPaths) {
+            if (!sp.empty())
+                ++nPaths;
+        }
+        CAMEL_LOG_INFO_S(
+            "Context",
+            "run | context | entry={} | cwd={} | module_path_slots={}",
+            entryConf.entryFile,
+            entryConf.entryDir,
+            nPaths);
+    }
     return ctx;
 }
 
@@ -140,19 +147,23 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
             modsErr.push_back(mod);
         }
     }
-    if (json && !modsErr.empty()) {
-        os << "[\n";
-        bool first = true;
-        for (const auto &mod : modsErr) {
-            auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
-            if (!ud || !ud->diagnostics())
-                continue;
-            if (!first)
-                os << ",\n";
-            ud->diagnostics()->dump(os, true, false);
-            first = false;
+    if (json) {
+        if (modsErr.empty()) {
+            os << "[]\n" << std::flush;
+        } else {
+            os << "[\n";
+            bool first = true;
+            for (const auto &mod : modsErr) {
+                auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
+                if (!ud || !ud->diagnostics())
+                    continue;
+                if (!first)
+                    os << ",\n";
+                ud->diagnostics()->dump(os, true, false);
+                first = false;
+            }
+            os << "\n]\n" << std::flush;
         }
-        os << "\n]\n" << std::flush;
     } else {
         for (const auto &mod : modsErr) {
             auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
@@ -170,6 +181,12 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
                 }
             }
             ud->diagnostics()->dump(os, false);
+        }
+        if (modsErr.empty()) {
+            os << "[camel] Compilation failed but no diagnostics were collected. Try `npm run "
+                  "debug` for assertions, or verify camel.exe and libcamel.dll are the same build "
+                  "flavor (Release vs Debug).\n"
+               << std::flush;
         }
     }
 }
@@ -208,42 +225,43 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         return modules_[""]; // builtin module already loaded
     }
 
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("Context").info(
-            "Importing module '{}' from current module '{}'.",
-            rawModuleName,
-            currentModuleName));
+    CAMEL_LOG_INFO_S(
+        "Context",
+        "Importing module '{}' from current module '{}'.",
+        rawModuleName,
+        currentModuleName);
     lastCmoLoadError_.clear();
     auto candidates = getModuleNameCandidates(currentModuleName, rawModuleName);
 
     for (const auto &name : candidates) {
         auto it = modules_.find(name);
         if (it != modules_.end()) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("Context").debug("Module '{}' found in cache.", name));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Module '{}' found in cache.", name));
             return it->second;
         }
 
         module_ptr_t module = tryLoadModule(name);
         if (module) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("Context").debug(
-                    "Module '{}' loaded from file '{}'.",
-                    name,
-                    module->path()));
-            if (!module->loaded()) {
-                module->load();
-            }
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "Context",
+                "Module '{}' loaded from file '{}'.",
+                name,
+                module->path()));
+            // Register before load so compile failures remain visible to dumpAllModuleDiagnostics.
             modules_[name] = module;
+            if (!module->loaded()) {
+                if (!module->load()) {
+                    throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound)
+                        .commit(name, "failed to compile or load module from " + module->path());
+                }
+            }
             return module;
         }
 
         auto builtin = getBuiltinModule(name);
         if (builtin.has_value()) {
             EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("Context").debug(
-                    "Module '{}' found in built-in modules.",
-                    name));
+                CAMEL_LOG_DEBUG_S("Context", "Module '{}' found in built-in modules.", name));
             modules_[name] = builtin.value();
             return builtin.value();
         }

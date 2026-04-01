@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 30, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -121,31 +121,26 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     }
     JitContext jitCtx{this, bytecodes_.data()};
     currentJitCtx_ = &jitCtx;
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("JIT").debug(
-            "JIT policy: {}",
-            jitConfig_.policy == JitPolicy::Disabled
-                ? "Disabled"
-                : (jitConfig_.policy == JitPolicy::Always ? "Always" : "OnDemand")));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "JIT",
+        "JIT policy: {}",
+        jitConfig_.policy == JitPolicy::Disabled
+            ? "Disabled"
+            : (jitConfig_.policy == JitPolicy::Always ? "Always" : "OnDemand")));
     GIR::Graph *entryGraph = graph.get();
     if (jitConfig_.policy == JitPolicy::Always) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("JIT").info(
-                "JIT Always: switched to lazy compile-by-touch (no startup full-graph compile)"));
+        CAMEL_LOG_INFO_S(
+            "JIT",
+            "JIT Always: switched to lazy compile-by-touch (no startup full-graph compile)");
         // Always 模式仍保持“能编就编”的策略，但触发时机改为首次触达目标图，
         // 避免启动期对整张图集做全量编译引入的失败放大与开销抖动。
         compileAndCacheGraph(entryGraph, offsetMap_.at(entryGraph));
     } else if (jitConfig_.policy == JitPolicy::OnDemand) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("JIT").info(
-                "JIT OnDemand: start with interpreter, compile on hot threshold"));
+        CAMEL_LOG_INFO_S("JIT", "JIT OnDemand: start with interpreter, compile on hot threshold");
     }
     JitEntryFn entryJitFn = getGraphJitFn(entryGraph);
     if (jitBackend_ && entryJitFn) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("JIT").info(
-                "Executing entry graph '{}' via JIT",
-                entryGraph->name()));
+        CAMEL_LOG_INFO_S("JIT", "Executing entry graph '{}' via JIT", entryGraph->name());
         Frame *frame = framePool_.acquire(entryGraph);
         opperf::start();
         slot_t result = invokeOwnedJitFrame(entryJitFn, frame, &jitCtx);
@@ -154,10 +149,10 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
         context_->captureProcessExitCode(entryGraph, result);
         return Graph::null();
     }
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("JIT").info(
-            "Entry graph '{}' not in JIT cache, falling back to interpreter",
-            entryGraph->name()));
+    CAMEL_LOG_INFO_S(
+        "JIT",
+        "Entry graph '{}' not in JIT cache, falling back to interpreter",
+        entryGraph->name());
 #endif
 
     opperf::start();
@@ -413,22 +408,24 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
     if (!compiled) {
         setGraphJitCompileFailed(graph, true);
         if (!getGraphJitFailureReported(graph)) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("JIT").warn(
-                    "OnDemand compile skipped for graph '{}': {}",
-                    graph->name(),
-                    failureReason.empty() ? "unknown failure" : failureReason));
+            CAMEL_LOG_WARN_S(
+                "JIT",
+                "OnDemand compile skipped for graph '{}': {}",
+                graph->name(),
+                failureReason.empty() ? "unknown failure" : failureReason);
             setGraphJitFailureReported(graph, true);
         }
         return;
     }
-    // Debug 模式下将实际执行的 code 按 16 进制打印到日志，便于与 bindump 对比
-    EXEC_WHEN_DEBUG({
+    // Hex dump of generated machine code (only when Info for "JIT" would emit; avoids work when
+    // off)
+    if (Logger::ShouldEmit(LogLevel::Info, "JIT")) {
         if (!compiled->code.empty()) {
             const uint8_t *p              = compiled->code.data();
             const size_t size             = compiled->code.size();
             constexpr size_t bytesPerLine = 16;
-            GetDefaultLogger().in("JIT").info(
+            CAMEL_LOG_INFO_S(
+                "JIT",
                 "JIT executed code for graph '{}' ({} bytes):",
                 graph->name(),
                 size);
@@ -439,10 +436,10 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
                     snprintf(buf, sizeof(buf), "%02x ", p[i + j]);
                     line += buf;
                 }
-                GetDefaultLogger().in("JIT").info("  [{:4}] {}", static_cast<unsigned>(i), line);
+                CAMEL_LOG_INFO_S("JIT", "  [{:4}] {}", static_cast<unsigned>(i), line);
             }
         }
-    });
+    }
     auto fn = jitBackend_->load(std::move(compiled));
     if (fn) {
         setGraphJitFn(graph, fn);
@@ -457,17 +454,11 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
             }
             pc += bc.opsize;
         }
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("JIT").info(
-                "OnDemand: compiled & cached graph '{}'",
-                graph->name()));
+        CAMEL_LOG_INFO_S("JIT", "OnDemand: compiled & cached graph '{}'", graph->name());
     } else {
         setGraphJitCompileFailed(graph, true);
         if (!getGraphJitFailureReported(graph)) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("JIT").warn(
-                    "OnDemand compile load failed for graph '{}'.",
-                    graph->name()));
+            CAMEL_LOG_WARN_S("JIT", "OnDemand compile load failed for graph '{}'.", graph->name());
             setGraphJitFailureReported(graph, true);
         }
     }
@@ -504,30 +495,30 @@ slot_t FastVMSchedPass::invokeCallOrJit(
     currentJitCtx_ = jitCtx;
     JitEntryFn fn  = getGraphJitFn(graph);
     if (fn) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("JIT").debug(
-                "invokeCallOrJit: graph '{}' pc={} -> JIT",
-                graph->name(),
-                pc));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "JIT",
+            "invokeCallOrJit: graph '{}' pc={} -> JIT",
+            graph->name(),
+            pc));
         return invokeOwnedJitFrame(fn, frame, jitCtx);
     }
     if (!getGraphJitCompileFailed(graph) && tierPolicy_.shouldJit(callCount)) {
         compileAndCacheGraph(graph, pc);
         fn = getGraphJitFn(graph);
         if (fn) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("JIT").debug(
-                    "invokeCallOrJit: graph '{}' pc={} -> JIT (after compile)",
-                    graph->name(),
-                    pc));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "JIT",
+                "invokeCallOrJit: graph '{}' pc={} -> JIT (after compile)",
+                graph->name(),
+                pc));
             return invokeOwnedJitFrame(fn, frame, jitCtx);
         }
     }
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("JIT").debug(
-            "invokeCallOrJit: graph '{}' pc={} -> interpreter",
-            graph->name(),
-            pc));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "JIT",
+        "invokeCallOrJit: graph '{}' pc={} -> interpreter",
+        graph->name(),
+        pc));
     return call(pc, frame);
 }
 #endif

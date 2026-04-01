@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,10 +51,11 @@ ArrayType *ArrayType::create(Type *elemType) {
     size_t baseSize  = sizeof(ArrayType);
     size_t totalSize = baseSize; // 无 refs 时，refCount_ = 0
 
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("ArrayType")
-            .debug("Allocating ArrayType: {}[], size: {} bytes", elemType->toString(), totalSize));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "ArrayType",
+        "Allocating ArrayType: {}[], size: {} bytes",
+        elemType->toString(),
+        totalSize));
 
     void *mem = mm::permSpace().alloc(totalSize, alignof(ArrayType));
     ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
@@ -78,10 +79,11 @@ ArrayType *ArrayType::fromData(Type *elemType, size_t refCount, const size_t *re
     size_t refsSize  = refCount * sizeof(size_t);
     size_t totalSize = baseSize + refsSize;
 
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("ArrayType")
-            .debug("Allocating ArrayType: {}[], size: {} bytes", elemType->toString(), totalSize));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "ArrayType",
+        "Allocating ArrayType: {}[], size: {} bytes",
+        elemType->toString(),
+        totalSize));
 
     void *mem = mm::permSpace().alloc(totalSize, alignof(ArrayType));
     ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");

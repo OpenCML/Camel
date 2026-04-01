@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -129,17 +129,15 @@ Graph::Graph(FunctionType *funcType, const graph_ptr_t &graph, const std::string
     signature_.runtimeDataType = TupleType::create();
     signature_.closureType     = TupleType::create();
     EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("GIR").debug(
-            "Created Graph: {}",
-            name_.empty() ? "<anonymous>" : name_));
+        CAMEL_LOG_DEBUG_S("GIR", "Created Graph: {}", name_.empty() ? "<anonymous>" : name_));
 }
 
 Graph::~Graph() {
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("GIR").debug(
-            "Destroying Graph at {:p} (name='{}').",
-            static_cast<const void *>(this),
-            name_.empty() ? "<anonymous>" : name_));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "GIR",
+        "Destroying Graph at {:p} (name='{}').",
+        static_cast<const void *>(this),
+        name_.empty() ? "<anonymous>" : name_));
 }
 
 // -----------------------------------------------------------------------------

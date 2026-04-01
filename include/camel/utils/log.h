@@ -13,16 +13,24 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Mar. 04, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include <concepts>
+#include <cstdint>
 #include <format>
-#include <memory>
-#include <optional>
+#include <functional>
+#include <mutex>
+#include <ostream>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "camel/utils/debug.h"
 
 #if defined(_WIN32) && !defined(CAMEL_DLL_EXPORTS)
 #define CAMEL_LOG_API __declspec(dllimport)
@@ -32,207 +40,199 @@
 #define CAMEL_LOG_API
 #endif
 
-#ifdef NDEBUG
-
-class Logger {
-  public:
-    enum class Level { Debug = 0, Info = 1, Warn = 2, Error = 3, Off = 4 };
-
-    static void SetLogLevel(Level) {}
-    /// Add an output stream; returns a handle for removal. Caller keeps stream valid.
-    static size_t AddOutputStream(std::ostream *) { return 0; }
-    /// Remove a stream by handle returned from AddOutputStream.
-    static void RemoveOutputStream(size_t) {}
-    /// Write a raw line to all registered streams (e.g. for debugger messages).
-    static void WriteToAllStreams(const std::string &) {}
-    static void SetVerbose(bool) {}
-    static void SetColorEnabled(bool) {}
-
-    Logger(
-        const std::string & = "", std::shared_ptr<Logger> parent = nullptr,
-        std::optional<Level> localLevel = std::nullopt) {}
-
-    Logger in(const std::string &, std::optional<Level> = std::nullopt) const { return Logger{}; }
-
-    template <typename... Args> void info(std::format_string<Args...>, Args &&...) const {}
-
-    template <typename... Args> void warn(std::format_string<Args...>, Args &&...) const {}
-
-    template <typename... Args> void debug(std::format_string<Args...>, Args &&...) const {}
-
-    template <typename... Args> void error(std::format_string<Args...>, Args &&...) const {}
+/// Numeric order defines severity for threshold checks: emit when
+/// \c static_cast<int>(messageLevel) >= static_cast<int>(globalThreshold)
+/// (with \c Off handled separately).
+enum class LogLevel : int {
+    Trace = 0,
+    Debug = 1,
+    Info  = 2,
+    Warn  = 3,
+    Fatal = 4,
+    Off   = 5,
 };
 
-/** Returns the default logger instance. Exported as function for delay-load compatibility. */
-CAMEL_LOG_API Logger &GetDefaultLogger();
-
-#else
-
-#include <algorithm>
-#include <chrono>
-#include <ctime>
-#include <iostream>
-#include <mutex>
-#include <vector>
-
-// Forward declarations and function API (must appear before Logger for delay-load compatibility)
-class Logger;
-enum class LogLevel : int { Debug = 0, Info = 1, Warn = 2, Error = 3, Off = 4 };
-CAMEL_LOG_API const std::string &GetFilteredLoggerScope();
-CAMEL_LOG_API LogLevel GetGlobalLogLevel();
-CAMEL_LOG_API void SetGlobalLogLevel(LogLevel level);
-CAMEL_LOG_API bool IsVerboseEnabled();
-CAMEL_LOG_API bool IsColorEnabled();
-CAMEL_LOG_API void SetColorEnabled(bool enable);
-CAMEL_LOG_API void Logger_DoLog(
-    const std::string &scope, LogLevel effectiveLevel, LogLevel level, const std::string &message);
-CAMEL_LOG_API Logger &GetDefaultLogger();
+enum class LogCategoryPreset : std::uint8_t { None = 0, Wall = 1, Extra = 2 };
 
 class Logger {
   public:
     using Level = LogLevel;
 
-    friend CAMEL_LOG_API const std::string &GetFilteredLoggerScope();
-    friend CAMEL_LOG_API LogLevel GetGlobalLogLevel();
-    friend CAMEL_LOG_API void SetGlobalLogLevel(LogLevel level);
-    friend CAMEL_LOG_API bool IsVerboseEnabled();
-    friend CAMEL_LOG_API bool IsColorEnabled();
-    friend CAMEL_LOG_API void SetColorEnabled(bool);
-    friend CAMEL_LOG_API void Logger_DoLog(
-        const std::string &scope, LogLevel effectiveLevel, LogLevel level,
-        const std::string &message);
-    friend CAMEL_LOG_API Logger &GetDefaultLogger();
+    static CAMEL_LOG_API void SetGlobalLogThreshold(LogLevel t);
+    static CAMEL_LOG_API LogLevel GetGlobalLogThreshold();
 
-    static void SetLogLevel(Level level) { SetGlobalLogLevel(level); }
+    static void SetLogLevel(Level t) { SetGlobalLogThreshold(t); }
+    static Level GetLogLevel() { return GetGlobalLogThreshold(); }
 
-    /// Add an output stream; returns a handle for removal. Caller keeps stream valid.
+    static CAMEL_LOG_API void SetLogCategoryPreset(LogCategoryPreset p);
+    static CAMEL_LOG_API LogCategoryPreset GetLogCategoryPreset();
+
+    /// Non-empty: scope must match one entry by equality or as a dotted prefix (entry followed by
+    /// '.').
+    static CAMEL_LOG_API void SetScopeAllowPrefixes(std::vector<std::string> prefixes);
+    static CAMEL_LOG_API const std::vector<std::string> &GetScopeAllowPrefixes();
+
     static CAMEL_LOG_API size_t AddOutputStream(std::ostream *os);
-    /// Remove a stream by handle returned from AddOutputStream.
     static CAMEL_LOG_API void RemoveOutputStream(size_t handle);
-    /// Write a raw line to all registered streams (no level/scope).
     static CAMEL_LOG_API void WriteToAllStreams(const std::string &message);
+    static CAMEL_LOG_API void SetColorEnabled(bool enable);
+    static CAMEL_LOG_API bool IsColorEnabled();
 
-    static CAMEL_LOG_API void SetVerbose(bool enable);
-    static void SetColorEnabled(bool enable) { ::SetColorEnabled(enable); }
-
-    Logger(
-        const std::string &scope = "", std::shared_ptr<Logger> parent = nullptr,
-        std::optional<Level> localLevel = std::nullopt)
-        : scope_(scope), parent_(std::move(parent)), localLogLevel_(localLevel) {
-        if (localLogLevel_) {
-            if (parent_) {
-                effectiveLogLevel_ = std::min(*localLogLevel_, parent_->effectiveLogLevel_);
-            } else {
-                effectiveLogLevel_ = std::min(*localLogLevel_, GetGlobalLogLevel());
-            }
-        } else {
-            if (parent_) {
-                effectiveLogLevel_ = parent_->effectiveLogLevel_;
-            } else {
-                effectiveLogLevel_ = GetGlobalLogLevel();
-            }
-        }
-    }
-
-    Logger in(const std::string &subScope, std::optional<Level> localLevel = std::nullopt) const {
-        return Logger(
-            scope_.empty() ? subScope : (scope_ + "." + subScope),
-            std::make_shared<Logger>(*this),
-            localLevel);
-    }
-
-    bool filtered() const {
-#ifndef NDEBUG
-        const std::string &scope = GetFilteredLoggerScope();
-        return scope.empty() || this->scope_ == scope;
-#else
-        return true;
-#endif
-    }
-
-    template <typename... Args> void info(std::format_string<Args...> fmt, Args &&...args) const {
-        if (IsVerboseEnabled() && filtered()) {
-            Logger_DoLog(
-                scope_,
-                effectiveLogLevel_,
-                Level::Info,
-                std::format(fmt, std::forward<Args>(args)...));
-        }
-    }
-
-    template <typename... Args> void warn(std::format_string<Args...> fmt, Args &&...args) const {
-        if (IsVerboseEnabled() && filtered()) {
-            Logger_DoLog(
-                scope_,
-                effectiveLogLevel_,
-                Level::Warn,
-                std::format(fmt, std::forward<Args>(args)...));
-        }
-    }
-
-    template <typename... Args> void debug(std::format_string<Args...> fmt, Args &&...args) const {
-        if (IsVerboseEnabled() && filtered()) {
-            Logger_DoLog(
-                scope_,
-                effectiveLogLevel_,
-                Level::Debug,
-                std::format(fmt, std::forward<Args>(args)...));
-        }
-    }
-
-    template <typename... Args> void error(std::format_string<Args...> fmt, Args &&...args) const {
-        if (IsVerboseEnabled() && filtered()) {
-            Logger_DoLog(
-                scope_,
-                effectiveLogLevel_,
-                Level::Error,
-                std::format(fmt, std::forward<Args>(args)...));
-        }
-    }
+    static CAMEL_LOG_API bool ShouldEmit(LogLevel level, std::string_view scope);
+    static CAMEL_LOG_API void
+    EmitLine(LogLevel level, std::string_view scope, const std::string &message);
 
   private:
-    std::string scope_;
-    std::shared_ptr<Logger> parent_;
-    std::optional<Level> localLogLevel_;
-    Level effectiveLogLevel_;
-
-    static Level globalLogLevel_;
-    static bool verboseEnabled_;
+    static LogLevel globalThreshold_;
+    static LogCategoryPreset categoryPreset_;
+    static std::vector<std::string> scopeAllowPrefixes_;
     static bool colorEnabled_;
     static std::mutex logMutex_;
     using StreamEntry = std::pair<size_t, std::ostream *>;
     static std::vector<StreamEntry> outputStreams_;
     static size_t nextStreamHandle_;
-
-    static std::string levelToTag(Level level) {
-        switch (level) {
-        case Level::Info:
-            return "\033[1;32mINFO \033[0m";
-        case Level::Warn:
-            return "\033[1;33mWARN \033[0m";
-        case Level::Debug:
-            return "\033[1;36mDEBUG\033[0m";
-        case Level::Error:
-            return "\033[1;31mERROR\033[0m";
-        default:
-            return "UNKNOWN";
-        }
-    }
-
-    static std::string levelToPlain(Level level) {
-        switch (level) {
-        case Level::Info:
-            return "INFO";
-        case Level::Warn:
-            return "WARN";
-        case Level::Debug:
-            return "DEBUG";
-        case Level::Error:
-            return "ERROR";
-        default:
-            return "UNKNOWN";
-        }
-    }
 };
 
-#endif // NDEBUG
+namespace camel::log {
+
+/// Runs \p fn only if a line at \p level would be emitted for \p scope. Use when the message is
+/// expensive to build (directory scans, large graphs). \p fn must return \c std::string (e.g.
+/// \c std::format inside the lambda). For plain \c std::format with cheap arguments, prefer
+/// \c CAMEL_LOG_*_S (those skip \c std::format until after \c ShouldEmit).
+template <typename F>
+    requires std::invocable<F> && std::same_as<std::invoke_result_t<F>, std::string>
+inline void emit_lazy(LogLevel level, std::string_view scope, F &&fn) {
+    if (!Logger::ShouldEmit(level, scope))
+        return;
+    Logger::EmitLine(level, scope, std::invoke(std::forward<F>(fn)));
+}
+
+template <typename F>
+    requires std::invocable<F> && std::same_as<std::invoke_result_t<F>, std::string>
+inline void fatal_lazy(std::string_view scope, F &&fn) {
+    emit_lazy(LogLevel::Fatal, scope, std::forward<F>(fn));
+}
+
+template <typename F>
+    requires std::invocable<F> && std::same_as<std::invoke_result_t<F>, std::string>
+inline void warn_lazy(std::string_view scope, F &&fn) {
+    emit_lazy(LogLevel::Warn, scope, std::forward<F>(fn));
+}
+
+template <typename F>
+    requires std::invocable<F> && std::same_as<std::invoke_result_t<F>, std::string>
+inline void info_lazy(std::string_view scope, F &&fn) {
+    emit_lazy(LogLevel::Info, scope, std::forward<F>(fn));
+}
+
+#ifndef NDEBUG
+template <typename F>
+    requires std::invocable<F> && std::same_as<std::invoke_result_t<F>, std::string>
+inline void debug_lazy(std::string_view scope, F &&fn) {
+    emit_lazy(LogLevel::Debug, scope, std::forward<F>(fn));
+}
+
+template <typename F>
+    requires std::invocable<F> && std::same_as<std::invoke_result_t<F>, std::string>
+inline void trace_lazy(std::string_view scope, F &&fn) {
+    emit_lazy(LogLevel::Trace, scope, std::forward<F>(fn));
+}
+#endif
+
+} // namespace camel::log
+
+/// Emits one headline (from \p headline_fn) at Info, then numbered non-empty \p paths.
+/// \p headline_fn runs only when Info is enabled for \p scope (cheap when logging is off).
+template <typename F>
+    requires std::invocable<F> && std::same_as<std::invoke_result_t<F>, std::string>
+inline void
+LogInfoPathList(std::string_view scope, F &&headline_fn, const std::vector<std::string> &paths) {
+    if (!Logger::ShouldEmit(LogLevel::Info, scope))
+        return;
+    Logger::EmitLine(LogLevel::Info, scope, std::forward<F>(headline_fn)());
+    std::size_t idx = 0;
+    for (const auto &p : paths) {
+        if (p.empty())
+            continue;
+        ++idx;
+        Logger::EmitLine(LogLevel::Info, scope, std::format("{:>4}. {}", idx, p));
+    }
+}
+
+/// Place once per .cpp that uses \c CAMEL_LOG_* without the \c _S suffix (before first use).
+#define CAMEL_LOG_SCOPE(SCOPE_STR)                                                                 \
+    namespace {                                                                                    \
+    static constexpr const char *kCamelLogScope = (SCOPE_STR);                                     \
+    }
+
+/// \c ShouldEmit is checked before \c std::format so format arguments are not evaluated when
+/// logging is disabled (or scope-filtered).
+#define CAMEL_LOG_FATAL(...)                                                                       \
+    do {                                                                                           \
+        if (!::Logger::ShouldEmit(::LogLevel::Fatal, kCamelLogScope))                              \
+            break;                                                                                 \
+        ::Logger::EmitLine(::LogLevel::Fatal, kCamelLogScope, std::format(__VA_ARGS__));           \
+    } while (0)
+#define CAMEL_LOG_WARN(...)                                                                        \
+    do {                                                                                           \
+        if (!::Logger::ShouldEmit(::LogLevel::Warn, kCamelLogScope))                               \
+            break;                                                                                 \
+        ::Logger::EmitLine(::LogLevel::Warn, kCamelLogScope, std::format(__VA_ARGS__));            \
+    } while (0)
+#define CAMEL_LOG_INFO(...)                                                                        \
+    do {                                                                                           \
+        if (!::Logger::ShouldEmit(::LogLevel::Info, kCamelLogScope))                               \
+            break;                                                                                 \
+        ::Logger::EmitLine(::LogLevel::Info, kCamelLogScope, std::format(__VA_ARGS__));            \
+    } while (0)
+
+#define CAMEL_LOG_FATAL_S(SCOPE, ...)                                                              \
+    do {                                                                                           \
+        if (!::Logger::ShouldEmit(::LogLevel::Fatal, (SCOPE)))                                     \
+            break;                                                                                 \
+        ::Logger::EmitLine(::LogLevel::Fatal, (SCOPE), std::format(__VA_ARGS__));                  \
+    } while (0)
+#define CAMEL_LOG_WARN_S(SCOPE, ...)                                                               \
+    do {                                                                                           \
+        if (!::Logger::ShouldEmit(::LogLevel::Warn, (SCOPE)))                                      \
+            break;                                                                                 \
+        ::Logger::EmitLine(::LogLevel::Warn, (SCOPE), std::format(__VA_ARGS__));                   \
+    } while (0)
+#define CAMEL_LOG_INFO_S(SCOPE, ...)                                                               \
+    do {                                                                                           \
+        if (!::Logger::ShouldEmit(::LogLevel::Info, (SCOPE)))                                      \
+            break;                                                                                 \
+        ::Logger::EmitLine(::LogLevel::Info, (SCOPE), std::format(__VA_ARGS__));                   \
+    } while (0)
+
+#ifndef NDEBUG
+#define CAMEL_LOG_DEBUG(...)                                                                       \
+    do {                                                                                           \
+        if (!::Logger::ShouldEmit(::LogLevel::Debug, kCamelLogScope))                              \
+            break;                                                                                 \
+        ::Logger::EmitLine(::LogLevel::Debug, kCamelLogScope, std::format(__VA_ARGS__));           \
+    } while (0)
+#define CAMEL_LOG_TRACE(...)                                                                       \
+    do {                                                                                           \
+        if (!::Logger::ShouldEmit(::LogLevel::Trace, kCamelLogScope))                              \
+            break;                                                                                 \
+        ::Logger::EmitLine(::LogLevel::Trace, kCamelLogScope, std::format(__VA_ARGS__));           \
+    } while (0)
+#define CAMEL_LOG_DEBUG_S(SCOPE, ...)                                                              \
+    do {                                                                                           \
+        if (!::Logger::ShouldEmit(::LogLevel::Debug, (SCOPE)))                                     \
+            break;                                                                                 \
+        ::Logger::EmitLine(::LogLevel::Debug, (SCOPE), std::format(__VA_ARGS__));                  \
+    } while (0)
+#define CAMEL_LOG_TRACE_S(SCOPE, ...)                                                              \
+    do {                                                                                           \
+        if (!::Logger::ShouldEmit(::LogLevel::Trace, (SCOPE)))                                     \
+            break;                                                                                 \
+        ::Logger::EmitLine(::LogLevel::Trace, (SCOPE), std::format(__VA_ARGS__));                  \
+    } while (0)
+#else
+#define CAMEL_LOG_DEBUG(...) ((void)0)
+#define CAMEL_LOG_TRACE(...) ((void)0)
+#define CAMEL_LOG_DEBUG_S(SCOPE, ...) ((void)0)
+#define CAMEL_LOG_TRACE_S(SCOPE, ...) ((void)0)
+#endif

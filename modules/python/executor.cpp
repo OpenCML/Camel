@@ -10,7 +10,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 21, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,8 +38,7 @@ class PythonExecutor : public Executor {
         : Executor(ctx, std::move(ops)) {}
 
     void eval(std::string uri, GIR::Node *self, Frame &frame) override {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("PythonExec").debug("Evaluating operator of URI: {}", uri));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("PythonExec", "Evaluating operator of URI: {}", uri));
         auto it = opsMap_.find(uri);
         if (it == opsMap_.end()) {
             throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);

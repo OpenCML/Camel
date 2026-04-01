@@ -148,18 +148,29 @@ build\cpp_gen\Release\cpp_gen.exe
 算子访问通过 `bridge()` 获取全局 bridge，未初始化时由 libcamel 抛出明确错误。
 
 模块搜索路径与 camel-cli 一致，支持环境变量：
-- `CAMEL_PACKAGES`、`CAMEL_STD_LIB`：附加搜索路径
-- `CAMEL_MODULE_PATH`：`.cmo` 所在目录（如 `build/modules/time/Release`）
+- `CAMEL_HOME`：安装根（用于推导 `bin/`、`libs/`、`stdlib/`）
+- `CAMEL_PACKAGES`：附加模块根路径（Windows 下用 `;` 分隔）
+- `CAMEL_STD_LIB`：覆盖 stdlib 路径
+- `CAMEL_MODULE_PATH`：额外 `.cmo` 路径（如 `build/modules/time/Release`）
 
 ---
 
 ## 6. 常见问题
 
 - **找不到 libcamel.dll**：
-  - 生成 exe 通过 `setupLibrarySearchPathForApp` 搜索，优先：exe 所在目录、`CAMEL_HOME/libs`、`CAMEL_HOME/bin`、`CAMEL_HOME`。
+  - 生成 exe 通过 `setupLibrarySearchPathForApp` 搜索，优先：exe 所在目录、`CAMEL_HOME`、`CAMEL_HOME/libs`、`CAMEL_HOME/bin`。
   - `CAMEL_HOME` 指向 SDK 根目录（如 `out/latest`），其下应有 `bin/`、`libs/` 等子目录。
   - 若 exe 部署到其他位置，设置环境变量 `CAMEL_HOME` 指向 SDK 根目录即可。
   - 或将 `libcamel.dll` 与 exe 放在同一目录。
+- **`python.cmo` 已找到但 failed to load DLL**：
+  - 这是 Python 运行时依赖缺失，不是模块搜索失败。
+  - `collect-out` 从 `modules/python/sdks/python3xx/` 收集 `python3xx.dll`、`python3.dll`、`vcruntime140*.dll` 到 `out/latest/libs/`；若 sdks 中缺少解释器 DLL，再回退到当前 venv/conda/ PATH 上的 Python。
+  - 也可激活目标 venv（`VIRTUAL_ENV`/`CONDA_PREFIX`），运行时会把其常见 DLL 目录加入搜索路径。
+- **Python SDK 准备（用于编译 python.cmo/bridge）**：
+  - 手动同步 SDK 到 `modules/python/sdks/`（gitignored）：
+    - `node scripts/sync-python-sdks.js <python-archive-root>`
+  - 构建优先从 `modules/python/sdks/` 查找；若不存在则回退当前激活 venv。
+  - 若两者都缺失，仅跳过 `python.cmo` 编译，不影响其它模块。
 - **链接错误**：检查 Conan 依赖和 CMake 配置是否与主工程一致
 - **模块未找到**：`-L` 指向的目录需包含对应 `.cmo` 文件（如 `time.cmo`）
 - **UTF-16 BOM 错误**：PowerShell 重定向默认 UTF-16，Clang 会报错，请用文档中的 UTF-8 写入方式

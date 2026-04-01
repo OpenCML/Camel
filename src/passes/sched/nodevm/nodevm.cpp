@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,11 +70,9 @@ std::span<Node *> NodeVMSchedPass::buildTopoNodes(Graph *graph) {
     );
 
     EXEC_WHEN_DEBUG({
-        GetDefaultLogger().in("Topo").debug(
-            "Topologically sorted nodes for graph {}:",
-            graph->name());
+        CAMEL_LOG_DEBUG_S("Topo", "Topologically sorted nodes for graph {}:", graph->name());
         for (const auto &n : sortedNodes) {
-            GetDefaultLogger().in("Topo").debug("  {}", n->toString());
+            CAMEL_LOG_DEBUG_S("Topo", "  {}", n->toString());
         }
         size_t totalNodeCnt =
             graph->nodes().size() + graph->ports().size() + graph->closure().size();
@@ -100,7 +98,8 @@ std::span<Node *> NodeVMSchedPass::buildTopoNodes(Graph *graph) {
                 }
                 nodeStrs += node->toString();
             }
-            GetDefaultLogger().in("Topo").warn(
+            CAMEL_LOG_WARN_S(
+                "Topo",
                 "Unreachable nodes in graph {} detected: {}",
                 graph->name(),
                 nodeStrs);
@@ -203,9 +202,16 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
     loop_start: {
         const size_t nodesSize = currNodes.size();
         Node *lastNode         = currGraph->exitNode();
-        if (lastNode->type() == NodeType::GATE && !lastNode->ctrlInputs().empty()) {
-            // 返回锚点为 GATE 时，以其控制输入作为控制完成路径的最后执行节点。
-            lastNode = lastNode->ctrlInputs().back();
+        if (lastNode->type() == NodeType::GATE) {
+            // 对尾调用判定来说，应当优先以返回值路径（Norm 输入）作为“最后节点”。
+            // 在 sync 场景里，GATE 常会挂载额外的 Ctrl 输入表示副作用顺序；
+            // 若把 Ctrl 输入当作 lastNode，会把并非返回值的 FUNC 误判为尾调用。
+            if (!lastNode->normInputs().empty()) {
+                lastNode = lastNode->normInputs().back();
+            } else if (!lastNode->ctrlInputs().empty()) {
+                // 无值返回图（如 void）退回到控制完成路径，保持原有行为。
+                lastNode = lastNode->ctrlInputs().back();
+            }
         }
         bool lastNodeIsJoin = lastNode->type() == NodeType::JOIN;
 
@@ -221,39 +227,40 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
 
             if (tillNode) {
                 if (tillNode == n) {
-                    EXEC_WHEN_DEBUG(
-                        GetDefaultLogger().in("NodeVM").debug(
-                            "Reached tillNode [{}/{}] graph={}: {}",
-                            i + 1,
-                            currNodes.size(),
-                            currGraph->name(),
-                            n->toString()));
-                    tillNode = nullptr;
-                } else {
-                    EXEC_WHEN_DEBUG(
-                        GetDefaultLogger().in("NodeVM").debug(
-                            "Skipping node [{}/{}] graph={}: {}",
-                            i + 1,
-                            currNodes.size(),
-                            currGraph->name(),
-                            n->toString()));
-                    continue;
-                }
-            }
-            if (skipNode && skipNode == n) {
-                EXEC_WHEN_DEBUG(
-                    GetDefaultLogger().in("NodeVM").debug(
-                        "Reached skipNode [{}/{}] graph={}: {}",
+                    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                        "NodeVM",
+                        "Reached tillNode [{}/{}] graph={}: {}",
                         i + 1,
                         currNodes.size(),
                         currGraph->name(),
                         n->toString()));
+                    tillNode = nullptr;
+                } else {
+                    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                        "NodeVM",
+                        "Skipping node [{}/{}] graph={}: {}",
+                        i + 1,
+                        currNodes.size(),
+                        currGraph->name(),
+                        n->toString()));
+                    continue;
+                }
+            }
+            if (skipNode && skipNode == n) {
+                EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                    "NodeVM",
+                    "Reached skipNode [{}/{}] graph={}: {}",
+                    i + 1,
+                    currNodes.size(),
+                    currGraph->name(),
+                    n->toString()));
                 skipNode = nullptr;
                 tillNode = joinNode;
             }
 
             EXEC_WHEN_DEBUG({
-                GetDefaultLogger().in("NodeVM").debug(
+                CAMEL_LOG_DEBUG_S(
+                    "NodeVM",
                     "Executing node [{}/{}] graph={}: {}",
                     i + 1,
                     currNodes.size(),
@@ -402,16 +409,16 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                     targetJoin->armTail(jumpIdx); // 选中分支的尾节点（连到 JOIN 的 with 输入）
                 joinNode = targetJoin;
 
-                EXEC_WHEN_DEBUG(
-                    GetDefaultLogger().in("NodeVM").debug(
-                        "BRCH node {}: jumpIdx={}, branches={}, tillNode={}, skipNode={}, "
-                        "joinNode={}",
-                        n->toString(),
-                        jumpIdx,
-                        brchNode->armCount(),
-                        tillNode->toString(),
-                        skipNode->toString(),
-                        joinNode->toString()));
+                EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                    "NodeVM",
+                    "BRCH node {}: jumpIdx={}, branches={}, tillNode={}, skipNode={}, "
+                    "joinNode={}",
+                    n->toString(),
+                    jumpIdx,
+                    brchNode->armCount(),
+                    tillNode->toString(),
+                    skipNode->toString(),
+                    joinNode->toString()));
             } break;
 
             case NodeType::JOIN: {
@@ -473,13 +480,13 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                     n == lastNode || (lastNodeIsJoin && tt::as_ptr<FuncNode>(n)->hasMatchedJoin() &&
                                       tt::as_ptr<FuncNode>(n)->matchedJoin() == lastNode);
                 if (isTailCall) {
-                    EXEC_WHEN_DEBUG(
-                        GetDefaultLogger().in("NodeVM").debug(
-                            "Optimizing tail-call for node [{}/{}] graph={}: {}",
-                            i + 1,
-                            currNodes.size(),
-                            currGraph->name(),
-                            n->toString()));
+                    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                        "NodeVM",
+                        "Optimizing tail-call for node [{}/{}] graph={}: {}",
+                        i + 1,
+                        currNodes.size(),
+                        currGraph->name(),
+                        n->toString()));
                     // enable tail-call optimization
                     // 当前拓扑节点序列执行子循环结束后不会退出大循环
                     // 这样可以复用当前 C++ 栈帧，避免 C++ 栈溢出
@@ -493,10 +500,10 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                     if (funcGraph == currGraph) {
                         // 如果目标图就是当前帧的图，说明在进行自递归尾调用
                         // 此时可以复用当前栈帧和字节码，无需修改栈帧指向
-                        EXEC_WHEN_DEBUG(
-                            GetDefaultLogger().in("NodeVM").debug(
-                                "Optimizing self-recursion for graph: {}",
-                                currFrame->graph()->name()));
+                        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                            "NodeVM",
+                            "Optimizing self-recursion for graph: {}",
+                            currFrame->graph()->name()));
                     } else {
                         // 否则需要切换到目标图的节点序列，并修改 currGraph 指向
                         nodesVec  = funcGraph->getExtra<node_vec_t, kTopoNodesExtraIndex>();
@@ -511,10 +518,10 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
                         // 复用 C++ 的栈帧和循环，但在 A/B 两个栈帧中切换
                         if (twinFrame && twinFrame->graph() == funcGraph) {
                             // 如果缓存的孪生栈帧刚好是目标栈帧，则复用
-                            EXEC_WHEN_DEBUG(
-                                GetDefaultLogger().in("NodeVM").debug(
-                                    "Optimizing mutual-tail-recursion for graph: {}",
-                                    currFrame->graph()->name()));
+                            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                                "NodeVM",
+                                "Optimizing mutual-tail-recursion for graph: {}",
+                                currFrame->graph()->name()));
                             // 交换孪生帧
                             currFrame = twinFrame;
                             twinFrame = lastFrame;
@@ -608,10 +615,12 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             } break;
             }
 
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger()
-                    .in("NodeVM")
-                    .debug("Executed node [{}/{}]: {}", i + 1, currNodes.size(), n->toString()));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "NodeVM",
+                "Executed node [{}/{}]: {}",
+                i + 1,
+                currNodes.size(),
+                n->toString()));
         }
     }
 

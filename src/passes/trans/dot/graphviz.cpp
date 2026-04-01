@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/type.h"
+#include <format>
 #include <ranges>
 #include <sstream>
 
@@ -176,6 +177,7 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
     }
 
     string funcId   = pointerToIdent(graph.get(), "F");
+    string exitId   = pointerToIdent(graph.get(), "O");
     string funcName = graph->name();
     string res;
 
@@ -201,10 +203,11 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
     // Recursively dump subgraphs first
     for (auto &[_, subGraphs] : graph->subGraphs()) {
         for (const auto &subGraph : subGraphs) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger()
-                    .in("GraphViz")
-                    .debug("Dumping subgraph '{}' of graph '{}'", subGraph->name(), graph->name()));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "GraphViz",
+                "Dumping subgraph '{}' of graph '{}'",
+                subGraph->name(),
+                graph->name()));
             pushIndent();
             res += dumpGraph(subGraph);
             popIndent();
@@ -213,10 +216,11 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
 
     // Dump dependency graphs if any
     for (const auto &dep : graph->dependencies()) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger()
-                .in("GraphViz")
-                .debug("Dumping dependency graph '{}' of graph '{}'", dep->name(), graph->name()));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "GraphViz",
+            "Dumping dependency graph '{}' of graph '{}'",
+            dep->name(),
+            graph->name()));
         pushIndent();
         res += dumpGraph(dep);
         popIndent();
@@ -230,6 +234,12 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
             indent_,
             funcId);
     }
+    // Draw EXIT node
+    res += std::format(
+        "{}{}{} [label=\"EXIT\", style=dashed, shape=circle];\r\n",
+        baseIndent_,
+        indent_,
+        exitId);
 
     // Draw ports of the graph
     for (const auto &port : graph->ports()) {
@@ -344,8 +354,10 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
             style = "dashed";
             break;
         }
+        case NodeType::PORT:
+            break;
         default:
-            ASSERT(false, "Unknown node type encountered during GraphViz generation.");
+            ASSERT(false, std::format("Unsupported node type: {}", node->toString()));
             throw runtime_error("Unknown node type encountered during GraphViz generation.");
         }
 
@@ -384,6 +396,15 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
             pointerToIdent(portNode),
             i);
     }
+
+    // Connect Value Exit Node to Exit
+    res += std::format(
+        "{}{}{} -> {} [label=\"{}\", style=solid];\r\n",
+        baseIndent_,
+        indent_,
+        pointerToIdent(graph->exitNode()),
+        exitId,
+        0);
 
     // Connect nodes via input edges
     for (const auto &node : nodes) {

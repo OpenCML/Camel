@@ -5,7 +5,6 @@
 #include "camel/core/rtdata/string.h"
 #include "camel/execute/executor.h"
 #include "camel/utils/dll_path.h"
-#include "camel/utils/env.h"
 
 #include <filesystem>
 #include <initializer_list>
@@ -114,36 +113,19 @@ inline RuntimeBridge &bridge() {
 /// 此处的「可执行文件」指生成并编译后的程序本身，而非 camel 解释器。
 /// entryDir 为空时使用可执行文件所在目录，若获取失败则用 current_path()。
 inline std::vector<std::string> getStandardModuleSearchPaths(const std::string &entryDir = "") {
-    namespace fs = std::filesystem;
-    std::vector<std::string> searchPaths;
-
+    namespace fs        = std::filesystem;
     std::string baseDir = entryDir;
     if (baseDir.empty()) {
         auto exeDir = camel::utils::getExecutableDirectory();
         baseDir     = exeDir.empty() ? fs::current_path().string() : exeDir.string();
     }
-    searchPaths.push_back(fs::path(baseDir).string());
-
-    auto addIfNonEmpty = [&](const std::string &s) {
-        if (!s.empty())
-            searchPaths.push_back(fs::absolute(fs::path(s)).string());
-    };
-    addIfNonEmpty(::getEnv("CAMEL_PACKAGES"));
-    addIfNonEmpty(::getEnv("CAMEL_STD_LIB"));
-
-    // 可执行文件（如 cpp_gen.exe）所在目录及其相对 stdlib 路径
+    auto searchPaths = camel::utils::buildModuleSearchPaths(baseDir);
+    // 可执行文件在 build/Release 等子目录时，补一条项目根 stdlib 兼容路径。
     auto exeDir = camel::utils::getExecutableDirectory();
-    if (exeDir.empty())
+    if (exeDir.empty()) {
         exeDir = fs::current_path();
-    auto absExe = fs::absolute(exeDir);
-    searchPaths.push_back(absExe.string());
-    searchPaths.push_back((absExe / "stdlib").string());
-    searchPaths.push_back((absExe.parent_path() / "stdlib").string());
-    // 可执行文件在 build/Release 等子目录时，需包含项目根下的 stdlib
-    searchPaths.push_back((absExe.parent_path().parent_path() / "stdlib").string());
-
-    addIfNonEmpty(::getEnv("CAMEL_MODULE_PATH"));
-
+    }
+    searchPaths.push_back(fs::absolute(exeDir.parent_path().parent_path() / "stdlib").string());
     return searchPaths;
 }
 

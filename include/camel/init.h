@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,8 @@
 #include "camel/utils/dll_path.h"
 
 #include <atomic>
+#include <filesystem>
+#include <iostream>
 #include <mutex>
 
 namespace camel {
@@ -36,7 +38,17 @@ inline std::atomic<bool> &runtimeInitialized() {
 inline void initialize() {
     runtimeInitialized().store(true, std::memory_order_release);
     static std::once_flag once;
-    std::call_once(once, []() { camel::utils::setupLibrarySearchPathForHost(); });
+    std::call_once(once, []() {
+        camel::utils::setupLibrarySearchPathForHost();
+        auto installRoot = camel::utils::resolveInstallRoot();
+        namespace fs     = std::filesystem;
+        if (!fs::exists(installRoot / "bin") || !fs::exists(installRoot / "libs") ||
+            !fs::exists(installRoot / "stdlib")) {
+            std::cerr << "[camel] Warning: detected install root '" << installRoot.string()
+                      << "' misses one or more standard directories (bin/libs/stdlib)."
+                      << " Set CAMEL_HOME to a valid SDK root if runtime loading fails.\n";
+        }
+    });
 }
 
 /// 主机端收尾：释放 initialize() 注册的全局资源；幂等。

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,11 +93,9 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             },
             false);
         EXEC_WHEN_DEBUG({
-            GetDefaultLogger().in("Topo").debug(
-                "Topologically sorted nodes for graph {}:",
-                graph->name());
+            CAMEL_LOG_DEBUG_S("Topo", "Topologically sorted nodes for graph {}:", graph->name());
             for (const auto &n : sortedNodes) {
-                GetDefaultLogger().in("Topo").debug("  {}", n->toString());
+                CAMEL_LOG_DEBUG_S("Topo", "  {}", n->toString());
             }
             size_t totalNodeCnt = g->nodes().size() + g->ports().size() + g->closure().size();
             auto contains       = [](node_span_t nodes, Node *target) {
@@ -122,7 +120,8 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
                     }
                     nodeStrs += node->toString();
                 }
-                GetDefaultLogger().in("Topo").warn(
+                CAMEL_LOG_WARN_S(
+                    "Topo",
                     "Unreachable nodes in graph {} detected: {}",
                     g->name(),
                     nodeStrs);

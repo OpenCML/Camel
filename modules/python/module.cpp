@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,8 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/resolver.h"
+#include "camel/utils/env.h"
+#include "camel/utils/log.h"
 #include "executor.h"
 #include "operators.h"
 
@@ -33,6 +35,7 @@
 #include <optional>
 #include <pybind11/embed.h>
 #include <pybind11/pybind11.h>
+#include <sstream>
 #include <string>
 
 using namespace camel::core::error;
@@ -47,49 +50,110 @@ using namespace camel::core::type;
 namespace py = pybind11;
 namespace fs = std::filesystem;
 
+namespace {
+
+struct PyMajorMinor {
+    int major = -1;
+    int minor = -1;
+    bool valid() const { return major >= 0 && minor >= 0; }
+};
+
+PyMajorMinor compiledPythonVersion() { return PyMajorMinor{PY_MAJOR_VERSION, PY_MINOR_VERSION}; }
+
+std::optional<std::string> readPyVenvCfgValue(const std::string &venvPath, const std::string &key) {
+    if (venvPath.empty()) {
+        return std::nullopt;
+    }
+#ifdef _WIN32
+    std::string cfgPath = venvPath + "\\pyvenv.cfg";
+#else
+    std::string cfgPath = venvPath + "/pyvenv.cfg";
+#endif
+    std::ifstream f(cfgPath);
+    if (!f) {
+        return std::nullopt;
+    }
+    std::string line;
+    while (std::getline(f, line)) {
+        if (line.rfind(key, 0) != 0) {
+            continue;
+        }
+        size_t eq = line.find('=');
+        if (eq == std::string::npos) {
+            continue;
+        }
+        std::string value = line.substr(eq + 1);
+        size_t start      = value.find_first_not_of(" \t");
+        if (start != std::string::npos) {
+            value = value.substr(start);
+        }
+        size_t end = value.find_last_not_of(" \t");
+        if (end != std::string::npos) {
+            value = value.substr(0, end + 1);
+        }
+        if (!value.empty()) {
+            return value;
+        }
+    }
+    return std::nullopt;
+}
+
+PyMajorMinor parseVersion(const std::string &text) {
+    PyMajorMinor out;
+    if (text.empty()) {
+        return out;
+    }
+    char dot = 0;
+    std::stringstream ss(text);
+    if ((ss >> out.major) && (ss >> dot) && dot == '.' && (ss >> out.minor)) {
+        return out;
+    }
+    out.major = -1;
+    out.minor = -1;
+    return out;
+}
+
+std::optional<std::string> activeVenvPath() {
+    std::string venv = getEnv("VIRTUAL_ENV");
+    if (!venv.empty()) {
+        return venv;
+    }
+    std::string conda = getEnv("CONDA_PREFIX");
+    if (!conda.empty()) {
+        return conda;
+    }
+    return std::nullopt;
+}
+
+bool isVenvVersionCompatible(const std::string &venvPath) {
+    auto expected = compiledPythonVersion();
+    auto rawVer   = readPyVenvCfgValue(venvPath, "version");
+    if (!rawVer.has_value()) {
+        // Cannot prove mismatch; keep previous behavior.
+        return true;
+    }
+    auto parsed = parseVersion(rawVer.value());
+    if (!parsed.valid()) {
+        return true;
+    }
+    return parsed.major == expected.major && parsed.minor == expected.minor;
+}
+
+} // namespace
+
 // 在 Py_Initialize 之前设置 Python Home 为 venv 的 base Python（来自 pyvenv.cfg）。
 // 指向 venv 本身会触发 codec 错误，指向 base Python 可消除 "Could not find platform independent
 // libraries" 警告。
 static void set_python_home_from_venv() {
-    std::string venv_path;
-#ifdef _WIN32
-    char *venv_env = nullptr;
-    size_t len     = 0;
-    if (_dupenv_s(&venv_env, &len, "VIRTUAL_ENV") == 0 && venv_env != nullptr) {
-        venv_path = std::string(venv_env);
-        free(venv_env);
-    }
-#else
-    const char *venv_env = std::getenv("VIRTUAL_ENV");
-    if (venv_env)
-        venv_path = std::string(venv_env);
-#endif
-    if (venv_path.empty())
+    auto venv = activeVenvPath();
+    if (!venv.has_value())
         return;
-#ifdef _WIN32
-    std::string cfg_path = venv_path + "\\pyvenv.cfg";
-#else
-    std::string cfg_path = venv_path + "/pyvenv.cfg";
-#endif
-    std::ifstream f(cfg_path);
-    if (!f)
+    if (!isVenvVersionCompatible(venv.value()))
         return;
-    std::string line, home_path;
-    while (std::getline(f, line)) {
-        if (line.find("home") == 0) {
-            size_t eq = line.find('=');
-            if (eq != std::string::npos) {
-                home_path = line.substr(eq + 1);
-                size_t s  = home_path.find_first_not_of(" \t");
-                if (s != std::string::npos)
-                    home_path = home_path.substr(s);
-                break;
-            }
-        }
-    }
-    if (home_path.empty())
+    auto home = readPyVenvCfgValue(venv.value(), "home");
+    if (!home.has_value())
         return;
-    wchar_t *whome = Py_DecodeLocale(home_path.c_str(), nullptr);
+    wchar_t *whome = Py_DecodeLocale(home.value().c_str(), nullptr);
     if (!whome)
         return;
     static std::wstring python_home_storage;
@@ -109,21 +173,14 @@ static void set_python_home_from_venv() {
 static void ensure_site_packages_in_path() {
     if (!Py_IsInitialized())
         return;
-    std::string venv_path;
-#ifdef _WIN32
-    char *venv_env = nullptr;
-    size_t len     = 0;
-    if (_dupenv_s(&venv_env, &len, "VIRTUAL_ENV") == 0 && venv_env != nullptr) {
-        venv_path = std::string(venv_env);
-        free(venv_env);
-    }
-#else
-    const char *venv_env = std::getenv("VIRTUAL_ENV");
-    if (venv_env)
-        venv_path = std::string(venv_env);
-#endif
-    if (venv_path.empty())
+    auto venv = activeVenvPath();
+    if (!venv.has_value())
         return;
+    if (!isVenvVersionCompatible(venv.value())) {
+        // Prevent hard-to-debug cross-minor contamination (e.g. SRE module mismatch).
+        return;
+    }
+    const std::string &venv_path = venv.value();
     std::string site_packages_path;
 #ifdef _WIN32
     site_packages_path = venv_path + "\\Lib\\site-packages";
@@ -434,6 +491,17 @@ bool PythonModule::load() {
         return true;
     // 在模块加载时完成 Python 初始化，后续 python 协议算子无需再检查
     try {
+        if (auto venv = activeVenvPath();
+            venv.has_value() && !isVenvVersionCompatible(venv.value())) {
+            auto expected   = compiledPythonVersion();
+            std::string got = readPyVenvCfgValue(venv.value(), "version").value_or("unknown");
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                "python module version mismatch: current build binds Python " +
+                    std::to_string(expected.major) + "." + std::to_string(expected.minor) +
+                    ", but active environment reports " + got +
+                    ". Use a matching venv, or provide routed multi-version bridges.");
+        }
         if (!Py_IsInitialized()) {
             set_python_home_from_venv();
             py::initialize_interpreter();
@@ -441,6 +509,37 @@ bool PythonModule::load() {
         }
         // Python 解释器可能早于当前脚本上下文初始化，因此每次加载模块时都重新同步入口目录。
         ensure_context_paths_in_path(context_);
+        try {
+            py::module_ sys     = py::module_::import("sys");
+            std::string version = py::str(sys.attr("version")).cast<std::string>();
+            std::string exe     = py::str(sys.attr("executable")).cast<std::string>();
+            std::string prefix  = py::str(sys.attr("prefix")).cast<std::string>();
+            std::string venv    = getEnv("VIRTUAL_ENV");
+            std::string conda   = getEnv("CONDA_PREFIX");
+            std::string envTag  = "none";
+            std::string envPath = "-";
+            if (!venv.empty()) {
+                envTag  = "venv";
+                envPath = venv;
+            } else if (!conda.empty()) {
+                envTag  = "conda";
+                envPath = conda;
+            }
+            std::string verLine = version;
+            if (const auto nl = verLine.find('\n'); nl != std::string::npos) {
+                verLine.resize(nl);
+            }
+            CAMEL_LOG_INFO_S("PythonModule", "run | python | {}", verLine);
+            CAMEL_LOG_INFO_S("PythonModule", "run | python | executable {}", exe);
+            CAMEL_LOG_INFO_S(
+                "PythonModule",
+                "run | python | prefix {} | env={} | {}",
+                prefix,
+                envTag,
+                envPath);
+        } catch (...) {
+            CAMEL_LOG_WARN_S("PythonModule", "run | python | could not read sys metadata");
+        }
     } catch (const std::exception &e) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,

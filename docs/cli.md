@@ -7,10 +7,28 @@
 
 For the default run command, the input file may be given as a positional argument or via `--input <file>`. At least one is required.
 
-## Global Options
+## Global Options (logging)
 
-- `-v`, `--verbose`: Enable verbose output  
-- `-l`, `--log-level <level>`: Set log level. Options: `debug`, `info` (default), `warn`, `error`, `off`
+Logging is configured via a **global severity threshold** and optional **scope filters**. Output is written to **stderr** when logging is active (threshold not `off`). If nothing is set, the default threshold is **`fatal`** (only fatal-level lines).
+
+### Threshold
+
+- `-l`, `--log-level <level>`: `fatal` | `warn` | `info` | `debug` | `trace` | `off`  
+  Messages at or above the chosen level are eligible to print (e.g. `warn` allows `warn` and `fatal`).
+- Shortcuts (same as setting `--log-level`):
+  - `-v`, `--verbose` → `warn`
+  - `-vv` → `info`
+  - `-vvv` → `debug`
+  - `-vvvv` → `trace`
+
+If both `--log-level` and `-v*` appear, the **last** one on the command line wins.
+
+### Scope filter (after threshold)
+
+- `--log-preset <none|wall|extra>`: Restrict logs to documented scope prefix sets (`none` = no preset filter).
+- `--log-include <scopes>`: Comma-separated scope prefixes; when set, **overrides** the preset list for filtering. A log line’s scope must equal a prefix or start with `prefix.` .
+
+**Note:** In **release** builds of `libcamel`, `debug` and `trace` **macros** are stripped at compile time, so `-vvv` / `-vvvv` / `--log-level debug|trace` will not show those lines even though the CLI accepts them. Use a **debug** build to see them.
 
 ---
 
@@ -52,7 +70,7 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `-c`, `--config <file>`: Path to rule definition file  
 - `-e`, `--ignore`: Ignore definition files  
 - `-o`, `--output <file>`: Output file (default: console)  
-- Available global options: `--verbose`, `--log-level`
+- Available global options: `-v` / `-vv` / `-vvv` / `-vvvv`, `--verbose`, `--log-level`, `--log-preset`, `--log-include`
 
 ---
 
@@ -68,7 +86,7 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `--tns`, `--topo-node-seq`: Print topologically sorted node sequence  
 - `--gen`, `--gene-code`: Generate code from AST  
 - `-p`, `-P`, `--pass-until <n>`: Execute up to a specified graph optimization stage  
-- Available global options: `--verbose`, `--log-level`
+- Available global options: `-v` / `-vv` / `-vvv` / `-vvvv`, `--verbose`, `--log-level`, `--log-preset`, `--log-include`
 
 ---
 

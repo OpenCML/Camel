@@ -15,6 +15,15 @@
 ## 3. Runtime Prerequisites
 - Required dynamic library: `libcamel.dll`
 - `CAMEL_HOME` must point to the installation root (including `bin`, `lib`, etc.).
+- Environment variable roles:
+  - `CAMEL_HOME`: install root (used by module and DLL search fallback).
+  - `CAMEL_STD_LIB`: override stdlib location.
+  - `CAMEL_PACKAGES`: extra module search roots (`;` separated on Windows).
+- Python module runtime (Windows):
+  - Runtime DLLs for `out/.../libs/` come from `modules/python/sdks/python3xx/` (gitignored) after `collect-out`; `sync-python-sdks` copies `python3xx.dll`, `python3.dll`, and `vcruntime140*.dll` there.
+  - If sdks have no interpreter DLL, collection falls back to `VIRTUAL_ENV` / `CONDA_PREFIX` / `python` on PATH.
+  - SDK sync is manual: `node scripts/sync-python-sdks.js <python-archive-root>`.
+  - CMake build uses SDKs first; if SDK root is missing, falls back to active virtual environment.
 
 **PowerShell example:**
 ```
@@ -22,15 +31,18 @@ $env:CAMEL_HOME = "project-root\out\latest"
 $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 ```
 
-### Debug Logging
-- In a **debug build**, `-v` or `--log-level debug` enables verbose logs.
-- For high-call-volume workloads (for example, `fib 30`), verbose logging can become prohibitively large and may stall execution or overflow output.
+### Logging (CLI and builds)
+- **Default**: no `-l` / `-v*` flags → library global threshold is **`fatal`**; logs go to **stderr** when enabled.
+- **Levels** (CLI `--log-level`): `fatal`, `warn`, `info`, `debug`, `trace`, `off`. Shortcuts: `-v` → `warn`, `-vv` → `info`, `-vvv` → `debug`, `-vvvv` → `trace`.
+- **Scope filtering**: `--log-preset none|wall|extra` and `--log-include a,b,c` (comma-separated scope prefixes). See [`docs/cli.md`](docs/cli.md).
+- **Release vs debug build**: in **`npm run build` (NDEBUG)**, `CAMEL_LOG_DEBUG` / `CAMEL_LOG_TRACE` (and `_S` variants) are compiled out—no formatting, no runtime cost. Use **`npm run debug`** to exercise those sites.
+- For high-call-volume workloads (for example, `fib 30`), low thresholds (`trace` / `debug`) can produce huge output and may stall execution or overflow the console.
 - Logging flags must appear **before** the target file. Arguments after the target file are interpreted as passes.
   - Invalid: `camel fib.cml -v`
-  - Valid: `camel -v --log-level debug std::gir fib.cml`
+  - Valid: `camel -vv std::gir fib.cml`
 
 **Recommended practice:**
-- Prefer `build` mode for routine verification (`-v` is inactive there).
+- Prefer `build` mode for routine verification; raise threshold only when diagnosing (`-vv`, `--log-include`, etc.).
 - During debugging, start with small inputs (for example, `fib 3`, `fib 4`) and scale incrementally.
 - Use `Select-Object` when output throttling is required.
 

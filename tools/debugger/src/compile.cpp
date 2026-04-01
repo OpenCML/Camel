@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 12, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 #include "camel/core/global_config.h"
 #include "camel/core/module/userdef.h"
 #include "camel/parse/parse.h"
-#include "camel/utils/env.h"
+#include "camel/utils/install_layout.h"
 #include "camel/utils/windows_parser_guard.h"
 #include "gir_json.h"
 
@@ -42,18 +42,9 @@ using namespace camel::core::module;
 namespace debugger {
 
 CompilationState createCompilationStateForPath(const std::string &path) {
-    fs::path camelPath = fs::current_path();
     fs::path entryPath(path);
     std::string entryDir = fs::absolute(entryPath).parent_path().string();
-    auto addIfNonEmpty   = [](std::vector<std::string> &v, const std::string &s) {
-        if (!s.empty())
-            v.push_back(fs::absolute(fs::path(s)).string());
-    };
-    std::vector<std::string> searchPaths;
-    searchPaths.push_back(entryDir);
-    addIfNonEmpty(searchPaths, getEnv("CAMEL_PACKAGES"));
-    addIfNonEmpty(searchPaths, getEnv("CAMEL_STD_LIB"));
-    addIfNonEmpty(searchPaths, (camelPath / "stdlib").string());
+    auto searchPaths     = camel::utils::buildModuleSearchPaths(entryDir);
 
     auto ctx = Context::create(
         EntryConfig{.entryDir = entryDir, .entryFile = path, .searchPaths = std::move(searchPaths)},

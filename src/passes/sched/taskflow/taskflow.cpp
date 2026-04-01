@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,8 +31,10 @@
 #include "camel/utils/log.h"
 
 #include <array>
+#include <format>
 #include <queue>
 #include <regex>
+#include <string>
 #include <unordered_set>
 
 using namespace std;
@@ -66,12 +68,12 @@ graph_ptr_t TaskflowExecSchedPass::apply(graph_ptr_t &graph, std::ostream & /*os
 }
 
 slot_t TaskflowExecSchedPass::evalGraphTF(Graph *graph, Frame *frame) {
-    EXEC_WHEN_DEBUG(GetDefaultLogger().in("Taskflow").debug("Evaluating graph: {}", graph->name()));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Taskflow", "Evaluating graph: {}", graph->name()));
     mainFlow_.clear();
     instantiate_graph_instance_generic(mainFlow_, graph, frame);
     executor_.run(mainFlow_).wait();
     slot_t ret = get_graph_return(graph, frame);
-    EXEC_WHEN_DEBUG(GetDefaultLogger().in("Taskflow").debug("Graph {} finished.", graph->name()));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Taskflow", "Graph {} finished.", graph->name()));
     return ret;
 }
 
@@ -269,13 +271,11 @@ void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
 template <typename FlowT>
 void TaskflowExecSchedPass::instantiate_graph_instance_generic(
     FlowT &flowLike, Graph *graph, Frame *frame) {
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("Taskflow")
-            .debug(
-                "Instantiating graph instance: {} (nodes={})",
-                graph->name(),
-                graph->nodes().size()));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "Taskflow",
+        "Instantiating graph instance: {} (nodes={})",
+        graph->name(),
+        graph->nodes().size()));
     std::unordered_map<Node *, tf::Task> taskMap;
     buildNormalNodeTasks(flowLike, graph, frame, taskMap);
     connectDependencies(flowLike, graph, taskMap);
@@ -300,9 +300,11 @@ tf::Task TaskflowExecSchedPass::buildCopyTask(FlowT &flowLike, Node *n, Frame *f
     return flowLike
         .emplace([n, frame]() {
             EXEC_WHEN_DEBUG({
-                GetDefaultLogger()
-                    .in("Taskflow")
-                    .debug("Executing COPY graph={}: {}", n->graph().name(), n->toString());
+                CAMEL_LOG_DEBUG_S(
+                    "Taskflow",
+                    "Executing COPY graph={}: {}",
+                    n->graph().name(),
+                    n->toString());
                 if (camel::DebugBreakpoint::IsEnabled("gir_node"))
                     camel::DebugBreakpoint::Hit("gir_node", n);
             });
@@ -325,9 +327,11 @@ tf::Task TaskflowExecSchedPass::buildCastTask(FlowT &flowLike, Node *n, Frame *f
     return flowLike
         .emplace([n, frame]() {
             EXEC_WHEN_DEBUG({
-                GetDefaultLogger()
-                    .in("Taskflow")
-                    .debug("Executing CAST graph={}: {}", n->graph().name(), n->toString());
+                CAMEL_LOG_DEBUG_S(
+                    "Taskflow",
+                    "Executing CAST graph={}: {}",
+                    n->graph().name(),
+                    n->toString());
                 if (camel::DebugBreakpoint::IsEnabled("gir_node"))
                     camel::DebugBreakpoint::Hit("gir_node", n);
             });
@@ -346,9 +350,11 @@ tf::Task TaskflowExecSchedPass::buildFillTask(FlowT &flowLike, Node *n, Frame *f
     return flowLike
         .emplace([n, frame]() {
             EXEC_WHEN_DEBUG({
-                GetDefaultLogger()
-                    .in("Taskflow")
-                    .debug("Executing FILL graph={}: {}", n->graph().name(), n->toString());
+                CAMEL_LOG_DEBUG_S(
+                    "Taskflow",
+                    "Executing FILL graph={}: {}",
+                    n->graph().name(),
+                    n->toString());
                 if (camel::DebugBreakpoint::IsEnabled("gir_node"))
                     camel::DebugBreakpoint::Hit("gir_node", n);
             });
@@ -403,9 +409,11 @@ tf::Task TaskflowExecSchedPass::buildAccsTask(FlowT &flowLike, Node *n, Frame *f
     return flowLike
         .emplace([n, frame]() {
             EXEC_WHEN_DEBUG({
-                GetDefaultLogger()
-                    .in("Taskflow")
-                    .debug("Executing ACCS graph={}: {}", n->graph().name(), n->toString());
+                CAMEL_LOG_DEBUG_S(
+                    "Taskflow",
+                    "Executing ACCS graph={}: {}",
+                    n->graph().name(),
+                    n->toString());
                 if (camel::DebugBreakpoint::IsEnabled("gir_node"))
                     camel::DebugBreakpoint::Hit("gir_node", n);
             });
@@ -431,13 +439,12 @@ tf::Task TaskflowExecSchedPass::buildFuncTask(FlowT &flowLike, Node *n, Frame *f
     return flowLike
         .emplace([n, frame, this](tf::Subflow &sf) {
             EXEC_WHEN_DEBUG({
-                GetDefaultLogger()
-                    .in("Taskflow")
-                    .debug(
-                        "Executing FUNC (entering subgraph) graph={} node={} -> subgraph={}",
-                        n->graph().name(),
-                        n->toString(),
-                        tt::as_ptr<FuncNode>(n)->bodyGraph()->name());
+                CAMEL_LOG_DEBUG_S(
+                    "Taskflow",
+                    "Executing FUNC (entering subgraph) graph={} node={} -> subgraph={}",
+                    n->graph().name(),
+                    n->toString(),
+                    tt::as_ptr<FuncNode>(n)->bodyGraph()->name());
                 if (camel::DebugBreakpoint::IsEnabled("gir_node"))
                     camel::DebugBreakpoint::Hit("gir_node", n);
             });
@@ -454,13 +461,12 @@ tf::Task TaskflowExecSchedPass::buildCallTask(FlowT &flowLike, Node *n, Frame *f
         .emplace([n, frame, this](tf::Subflow &sf) {
             Graph *tgtGraph = frame->get<Function *>(n->withInputs().front()->index())->graph();
             EXEC_WHEN_DEBUG({
-                GetDefaultLogger()
-                    .in("Taskflow")
-                    .debug(
-                        "Executing CALL graph={} node={} -> subgraph={}",
-                        n->graph().name(),
-                        n->toString(),
-                        tgtGraph->name());
+                CAMEL_LOG_DEBUG_S(
+                    "Taskflow",
+                    "Executing CALL graph={} node={} -> subgraph={}",
+                    n->graph().name(),
+                    n->toString(),
+                    tgtGraph->name());
                 if (camel::DebugBreakpoint::IsEnabled("gir_node"))
                     camel::DebugBreakpoint::Hit("gir_node", n);
             });
@@ -475,13 +481,12 @@ tf::Task TaskflowExecSchedPass::buildOperTask(FlowT &flowLike, Node *n, Frame *f
     return flowLike
         .emplace([n, frame, this](tf::Subflow &sf) {
             EXEC_WHEN_DEBUG({
-                GetDefaultLogger()
-                    .in("Taskflow")
-                    .debug(
-                        "Executing OPER graph={}: {} uri={}",
-                        n->graph().name(),
-                        n->toString(),
-                        tt::as_ptr<OperNode>(n)->oper()->uri());
+                CAMEL_LOG_DEBUG_S(
+                    "Taskflow",
+                    "Executing OPER graph={}: {} uri={}",
+                    n->graph().name(),
+                    n->toString(),
+                    tt::as_ptr<OperNode>(n)->oper()->uri());
                 if (camel::DebugBreakpoint::IsEnabled("gir_node"))
                     camel::DebugBreakpoint::Hit("gir_node", n);
             });
@@ -557,27 +562,25 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
                         jumpIdx = withIns.size();
                 }
                 frame->set(brch->index(), static_cast<Int32>(jumpIdx));
-                EXEC_WHEN_DEBUG(
-                    GetDefaultLogger()
-                        .in("Taskflow")
-                        .debug(
-                            "BRCH_SEL graph={} brch={} selected branch index {}",
-                            brch->graph().name(),
-                            brch->toString(),
-                            jumpIdx));
+                EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                    "Taskflow",
+                    "BRCH_SEL graph={} brch={} selected branch index {}",
+                    brch->graph().name(),
+                    brch->toString(),
+                    jumpIdx));
             })
             .name("BRCH_SEL");
 
-    auto joiner =
-        flowLike
-            .emplace([join, frame]() {
-                (void)frame->get<slot_t>(join->index());
-                EXEC_WHEN_DEBUG(
-                    GetDefaultLogger()
-                        .in("Taskflow")
-                        .debug("JOIN graph={}: {}", join->graph().name(), join->toString()));
-            })
-            .name("JOIN");
+    auto joiner = flowLike
+                      .emplace([join, frame]() {
+                          (void)frame->get<slot_t>(join->index());
+                          EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                              "Taskflow",
+                              "JOIN graph={}: {}",
+                              join->graph().name(),
+                              join->toString()));
+                      })
+                      .name("JOIN");
 
     auto precede_from_inputs = [&](node_span_t inputs, tf::Task tsk) {
         for (const auto &in : inputs) {
@@ -603,24 +606,20 @@ void TaskflowExecSchedPass::buildBranchJoinRegion(
                 .emplace([i, candidate, brch, join, frame, this](tf::Subflow &csf) {
                     int32_t tarIdx = frame->get<int32_t>(brch->index());
                     if (static_cast<size_t>(tarIdx) != i) {
-                        EXEC_WHEN_DEBUG(
-                            GetDefaultLogger()
-                                .in("Taskflow")
-                                .debug(
-                                    "BRCH_CAND_EXEC graph={} branch [{}] skipped (selected={})",
-                                    candidate->graph().name(),
-                                    i,
-                                    tarIdx));
+                        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                            "Taskflow",
+                            "BRCH_CAND_EXEC graph={} branch [{}] skipped (selected={})",
+                            candidate->graph().name(),
+                            i,
+                            tarIdx));
                         return;
                     }
-                    EXEC_WHEN_DEBUG(
-                        GetDefaultLogger()
-                            .in("Taskflow")
-                            .debug(
-                                "BRCH_CAND_EXEC graph={} executing branch [{}] candidate={}",
-                                candidate->graph().name(),
-                                i,
-                                candidate->toString()));
+                    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                        "Taskflow",
+                        "BRCH_CAND_EXEC graph={} executing branch [{}] candidate={}",
+                        candidate->graph().name(),
+                        i,
+                        candidate->toString()));
 
                     slot_t out = NullSlot;
                     if (candidate->type() == NodeType::FUNC) {
@@ -659,13 +658,11 @@ void TaskflowExecSchedPass::buildNormalNodeTasks(
     std::unordered_set<Node *> &skipNodes = globalBuildCtx_.skipNodes;
     for (Node *n : graph->nodes()) {
         if (skipNodes.count(n) && n->type() != NodeType::BRCH) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger()
-                    .in("Taskflow")
-                    .debug(
-                        "Skipping node (BRCH region) graph={}: {}",
-                        graph->name(),
-                        n->toString()));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "Taskflow",
+                "Skipping node (BRCH region) graph={}: {}",
+                graph->name(),
+                n->toString()));
             continue;
         }
         tf::Task t;
@@ -697,11 +694,18 @@ void TaskflowExecSchedPass::buildNormalNodeTasks(
         case NodeType::OPER:
             t = buildOperTask(flowLike, n, frame);
             break;
+        case NodeType::SYNC:
+            [[fallthrough]];
+        case NodeType::GATE:
+            // 与 NodeVM 一致：无运行时副作用；槽位由 GIR 约定（GATE 的 index 即其 norm 输入槽）。
+            // 仍需要 Taskflow 任务以串起前驱/后继依赖。
+            t = flowLike.emplace([]() {}).name(n->type() == NodeType::GATE ? "GATE" : "SYNC");
+            break;
         case NodeType::BRCH:
             buildBranchJoinRegion(flowLike, graph, frame, taskMap, n);
             continue;
         default:
-            ASSERT(false, "Unsupported node type.");
+            ASSERT(false, std::format("Unsupported node type: {}", n->toString()));
         }
         taskMap[n] = t;
     }
