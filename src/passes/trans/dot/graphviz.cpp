@@ -21,6 +21,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/type.h"
+#include <format>
 #include <ranges>
 #include <sstream>
 
@@ -353,8 +354,10 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
             style = "dashed";
             break;
         }
+        case NodeType::PORT:
+            break;
         default:
-            ASSERT(false, "Unknown node type encountered during GraphViz generation.");
+            ASSERT(false, std::format("Unsupported node type: {}", node->toString()));
             throw runtime_error("Unknown node type encountered during GraphViz generation.");
         }
 
