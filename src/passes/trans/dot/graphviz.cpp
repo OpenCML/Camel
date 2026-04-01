@@ -176,6 +176,7 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
     }
 
     string funcId   = pointerToIdent(graph.get(), "F");
+    string exitId   = pointerToIdent(graph.get(), "O");
     string funcName = graph->name();
     string res;
 
@@ -232,6 +233,12 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
             indent_,
             funcId);
     }
+    // Draw EXIT node
+    res += std::format(
+        "{}{}{} [label=\"EXIT\", style=dashed, shape=circle];\r\n",
+        baseIndent_,
+        indent_,
+        exitId);
 
     // Draw ports of the graph
     for (const auto &port : graph->ports()) {
@@ -386,6 +393,15 @@ std::string GraphVizDumpPass::dumpGraph(const GIR::graph_ptr_t &graph) {
             pointerToIdent(portNode),
             i);
     }
+
+    // Connect Value Exit Node to Exit
+    res += std::format(
+        "{}{}{} -> {} [label=\"{}\", style=solid];\r\n",
+        baseIndent_,
+        indent_,
+        pointerToIdent(graph->exitNode()),
+        exitId,
+        0);
 
     // Connect nodes via input edges
     for (const auto &node : nodes) {

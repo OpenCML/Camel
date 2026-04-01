@@ -202,9 +202,16 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
     loop_start: {
         const size_t nodesSize = currNodes.size();
         Node *lastNode         = currGraph->exitNode();
-        if (lastNode->type() == NodeType::GATE && !lastNode->ctrlInputs().empty()) {
-            // 返回锚点为 GATE 时，以其控制输入作为控制完成路径的最后执行节点。
-            lastNode = lastNode->ctrlInputs().back();
+        if (lastNode->type() == NodeType::GATE) {
+            // 对尾调用判定来说，应当优先以返回值路径（Norm 输入）作为“最后节点”。
+            // 在 sync 场景里，GATE 常会挂载额外的 Ctrl 输入表示副作用顺序；
+            // 若把 Ctrl 输入当作 lastNode，会把并非返回值的 FUNC 误判为尾调用。
+            if (!lastNode->normInputs().empty()) {
+                lastNode = lastNode->normInputs().back();
+            } else if (!lastNode->ctrlInputs().empty()) {
+                // 无值返回图（如 void）退回到控制完成路径，保持原有行为。
+                lastNode = lastNode->ctrlInputs().back();
+            }
         }
         bool lastNodeIsJoin = lastNode->type() == NodeType::JOIN;
 

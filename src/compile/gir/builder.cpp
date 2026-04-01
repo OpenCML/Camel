@@ -1415,13 +1415,17 @@ Node *Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     node_vec_t pendingCtrlInputs;
     if (nodeModifierMap_.count(resNode)) {
         Node *modifier = nodeModifierMap_[resNode];
-        if (modifier && linkCheek(modifier, resNode)) {
+        if (modifier) {
             pendingCtrlInputs.push_back(modifier);
         }
     }
-    if (synced_ && lastSyncedNode_ && linkCheek(lastSyncedNode_, resNode)) {
+    if (synced_ && lastSyncedNode_) {
         pendingCtrlInputs.push_back(lastSyncedNode_);
     }
+
+    // Decide output anchor first, then validate Ctrl links against that anchor.
+    // This avoids false negatives such as `tail -> JOIN` (cycle-prone) where
+    // the correct lowering should be `tail -> GATE`, with EXIT anchored on GATE.
     if (!pendingCtrlInputs.empty() && resNode->type() != NodeType::GATE) {
         auto *gatedValue = GateNode::create(*currGraph_);
         detail::NodeMutation::setDataType(gatedValue, resNode->dataType());

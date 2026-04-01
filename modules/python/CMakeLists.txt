@@ -65,6 +65,11 @@ if(EXISTS "${CAMEL_PYTHON_SDKS_ROOT}")
 
     if(WIN32)
       target_compile_definitions(${_bridge_target} PRIVATE NOMINMAX)
+      # Official Windows SDK trees ship release import libs (pythonXY.lib) only; pyconfig.h
+      # uses #pragma comment(lib, "pythonXY_d.lib") when _DEBUG is set, which then fails
+      # to link under Debug. Drop _DEBUG for this TU so the pragma matches the .lib we link.
+      target_compile_options(${_bridge_target} PRIVATE
+        $<$<CONFIG:Debug>:$<IF:$<BOOL:${MSVC}>,/U_DEBUG,-U_DEBUG>>)
       set_target_properties(${_bridge_target} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
     endif()
     set_target_properties(${_bridge_target} PROPERTIES OUTPUT_NAME "${_bridge_target}")

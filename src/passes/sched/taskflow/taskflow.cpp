@@ -31,8 +31,10 @@
 #include "camel/utils/log.h"
 
 #include <array>
+#include <format>
 #include <queue>
 #include <regex>
+#include <string>
 #include <unordered_set>
 
 using namespace std;
@@ -692,11 +694,18 @@ void TaskflowExecSchedPass::buildNormalNodeTasks(
         case NodeType::OPER:
             t = buildOperTask(flowLike, n, frame);
             break;
+        case NodeType::SYNC:
+            [[fallthrough]];
+        case NodeType::GATE:
+            // 与 NodeVM 一致：无运行时副作用；槽位由 GIR 约定（GATE 的 index 即其 norm 输入槽）。
+            // 仍需要 Taskflow 任务以串起前驱/后继依赖。
+            t = flowLike.emplace([]() {}).name(n->type() == NodeType::GATE ? "GATE" : "SYNC");
+            break;
         case NodeType::BRCH:
             buildBranchJoinRegion(flowLike, graph, frame, taskMap, n);
             continue;
         default:
-            ASSERT(false, "Unsupported node type.");
+            ASSERT(false, std::format("Unsupported node type: {}", n->toString()));
         }
         taskMap[n] = t;
     }

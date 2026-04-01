@@ -33,6 +33,22 @@ using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::type;
 
+static Node *resolveTailValueNode(Graph *graph) {
+    Node *outputNode = graph->outputNode();
+    if (!outputNode) {
+        return nullptr;
+    }
+    if (outputNode->type() != NodeType::GATE) {
+        return outputNode;
+    }
+    // sync 场景下 EXIT 常被 GATE 包装：Norm 输入承载返回值，Ctrl 输入仅承载副作用顺序。
+    // 尾调用判定应优先参考值路径，避免把控制路径误当作返回值来源。
+    if (!outputNode->normInputs().empty()) {
+        return outputNode->normInputs().back();
+    }
+    return nullptr;
+}
+
 const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() {
     static const std::unordered_map<std::string, OpCode> supportedInlineOperators = {
         {":op/add_i", OpCode::IADD}, {":op/add_l", OpCode::LADD},
@@ -141,6 +157,16 @@ bytecode_vec_t compile(
     auto bytecodes = bytecode_vec_t();
     bytecodes.reserve(topoSortedNodes.size() * 3); // 预估容量
     std::unordered_set<Node *> topoNodeSet(topoSortedNodes.begin(), topoSortedNodes.end());
+    Node *tailValueNode            = resolveTailValueNode(graph);
+    auto hasOnlyTrivialSuffixAfter = [&](size_t index) {
+        for (size_t j = index + 1; j < topoSortedNodes.size(); ++j) {
+            Node *suffixNode = topoSortedNodes[j];
+            if (suffixNode->type() != NodeType::GATE) {
+                return false;
+            }
+        }
+        return true;
+    };
 
     // 用于回填跳转地址的映射表。
     //
@@ -338,11 +364,11 @@ bytecode_vec_t compile(
         }
 
         case NodeType::JOIN: {
-            // 注意，这里除了要求 JOIN 节点是执行序列的最后一个节点之外
-            // 还必须保证 JOIN 节点的返回值就是 Graph 的返回值
-            // 如果 Graph 选择返回的值不是 JOIN 节点的产生值，不能做尾调用优化
-            // 因为尾调用优化之后，原 Frame 就会被释放，这样 Graph 无法返回正确的值
-            bool isTail = i == topoSortedNodes.size() - 1 && graph->outputNode() == node;
+            // JOIN 尾调判定：
+            // 1) JOIN 必须是图返回值路径上的最终值节点（tailValueNode）；
+            // 2) 其后只允许存在无执行语义的 GATE 后缀节点。
+            // 这样可覆盖 sync 包装图（output=GATE）下的尾调机会，同时避免越过真实可执行节点。
+            bool isTail = node == tailValueNode && hasOnlyTrivialSuffixAfter(i);
 
             if (joinTargetMap.find(node) != joinTargetMap.end()) {
                 for (const auto &[jumpIdx, fromIdx] : joinTargetMap[node]) {
@@ -370,7 +396,7 @@ bytecode_vec_t compile(
             break;
 
         case NodeType::FUNC: {
-            bool isTail    = i == topoSortedNodes.size() - 1 && graph->outputNode() == node;
+            bool isTail    = node == tailValueNode && hasOnlyTrivialSuffixAfter(i);
             auto *funcNode = tt::as_ptr<FuncNode>(node);
             // 将上下文参数合并到普通参数中，因为函数调用不区分参数类型
             // 这样还可以把 fastop[1] 留空，以便放其他内容
