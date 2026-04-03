@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,12 +31,30 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/error/runtime.h"
 
+#include <span>
+
 using namespace std;
 using namespace GIR;
 using namespace camel::core::context;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
 using namespace camel::core::error;
+
+namespace {
+
+// 与 FastVM `compile.cpp` 中 `hasOnlyTrivialSuffixAfter` 对齐：尾调发生后，静态拓扑序列中
+// 锚点之后仅允许 GATE（无执行语义，仅承载出口槽位）。用于避免 sync 图在 JOIN 之后仍有
+// println 等 OPER 时被错误尾调，从而跳过副作用与错误结果。
+bool hasOnlyTrivialTailSuffixAfter(std::span<Node *const> nodes, size_t anchorIndex) {
+    for (size_t j = anchorIndex + 1; j < nodes.size(); ++j) {
+        if (nodes[j]->type() != NodeType::GATE) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
 
 NodeVMSchedPass::~NodeVMSchedPass() {
     for (Graph *g : graphsWithTopoCache_) {
@@ -475,10 +493,21 @@ slot_t NodeVMSchedPass::call(Graph *rootGraph, Frame *rootFrame) {
             case NodeType::FUNC: {
                 Graph *funcGraph = tt::as_ptr<FuncNode>(n)->bodyGraph();
 
-                // 尾调用优化
-                bool isTailCall =
-                    n == lastNode || (lastNodeIsJoin && tt::as_ptr<FuncNode>(n)->hasMatchedJoin() &&
-                                      tt::as_ptr<FuncNode>(n)->matchedJoin() == lastNode);
+                // 尾调用优化（见 docs/technical/19_tail_call_optimization.md）
+                size_t anchorIdx = nodesSize;
+                for (size_t k = 0; k < nodesSize; ++k) {
+                    if (currNodes[k] == lastNode) {
+                        anchorIdx = k;
+                        break;
+                    }
+                }
+                auto *funcNode = tt::as_ptr<FuncNode>(n);
+                const bool anchorOk =
+                    anchorIdx < nodesSize && hasOnlyTrivialTailSuffixAfter(currNodes, anchorIdx);
+                const bool tailShape =
+                    (n == lastNode) || (lastNodeIsJoin && funcNode->hasMatchedJoin() &&
+                                        funcNode->matchedJoin() == lastNode);
+                bool isTailCall = anchorOk && tailShape;
                 if (isTailCall) {
                     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                         "NodeVM",
