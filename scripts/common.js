@@ -91,21 +91,54 @@ export function copyDir(src, dest) {
     })
 }
 
-/** 当前 commit 若有 git tag 则返回该 tag，否则 "latest"。供 collect-out、pypi_rollup 等使用 */
+/**
+ * collect-out 主写入 `out/latest/`；若有 tag 则另镜像 `out/<tag>/`。与 pypi-rollup 读取路径须一致。
+ * @param {string} tag - 通常为 "latest"（collect-out 主输出）或 CAMEL_PYPI_TAG 指定的镜像目录名
+ */
+export function outArtifactRoot(tag) {
+    return path.join(BASEDIR, 'out', tag)
+}
+
+export function outArtifactBin(tag) {
+    return path.join(outArtifactRoot(tag), 'bin')
+}
+
+export function outArtifactLibs(tag) {
+    return path.join(outArtifactRoot(tag), 'libs')
+}
+
+export function outArtifactStdlib(tag) {
+    return path.join(outArtifactRoot(tag), 'stdlib')
+}
+
+export function outArtifactInclude(tag) {
+    return path.join(outArtifactRoot(tag), 'include')
+}
+
+/**
+ * 当前 commit 若有 git tag 则返回其中一个，否则 "latest"。
+ * 注意：collect-out 主写入固定为 out/latest/；本函数仍可用于其它需「取一个代表 tag」的场景。
+ */
 export function getTag() {
+    const tags = getGitTagsAtHead()
+    if (tags.length > 0) return tags[0]
+    return 'latest'
+}
+
+/** 指向当前 HEAD 的所有 git tag（可能为空、可能多个），顺序与 `git tag` 一致 */
+export function getGitTagsAtHead() {
     try {
-        const tags = execSync('git tag -l --points-at HEAD', {
+        const out = execSync('git tag -l --points-at HEAD', {
             cwd: BASEDIR,
             encoding: 'utf-8'
         })
             .trim()
             .split(/\s+/)
             .filter(Boolean)
-        if (tags.length > 0) return tags[0]
+        return out
     } catch {
-        /* ignore */
+        return []
     }
-    return 'latest'
 }
 
 /** 供 build/debug/profile 使用：git describe 生成版本后缀 */

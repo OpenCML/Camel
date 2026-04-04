@@ -1,4 +1,6 @@
 import { execSync } from 'child_process'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { runCmakeBuild, copyBuildArtifacts, logDone, BASEDIR } from './common.js'
 import { getCmakeOptionFlags } from './cmake-opts.js'
 
@@ -11,4 +13,7 @@ export default function main() {
     logDone('Release build completed')
 }
 
-main()
+const thisFile = fileURLToPath(import.meta.url)
+if (path.resolve(process.argv[1] || '') === thisFile) {
+    main()
+}
