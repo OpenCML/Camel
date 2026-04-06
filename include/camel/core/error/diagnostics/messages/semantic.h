@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -55,6 +55,7 @@ enum class SemanticDiag : uint32_t {
     ModuleParseFailed            = 0x000018,
     InvalidOperatorURI           = 0x000019,
     UnrecognizedExecutorProtocol = 0x00001A,
+    EntryModuleMissingMain = 0x00001B,
 
     // Warnings
     FeatureNotSupported     = 0x100000,

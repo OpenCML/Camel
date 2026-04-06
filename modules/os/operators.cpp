@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 09, 2026
+ * Updated: Apr. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,7 +38,7 @@ using namespace camel::core::rtdata;
 #include <windows.h>
 #else
 #include <fcntl.h>
-#include <passwd.h>
+#include <pwd.h>
 #include <sys/select.h>
 #include <termios.h>
 #include <unistd.h>

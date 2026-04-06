@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 29, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "camel/compile/gir/builder.h"
 
 #include <format>
+#include <stdexcept>
 #include <functional>
 #include <ranges>
 #include <unordered_set>
@@ -31,7 +32,9 @@ namespace {
 
 void validateExitAnchor(const Graph &graph) {
     Node *exitNode = graph.exitNode();
-    ASSERT(exitNode != nullptr, std::format("Graph '{}' has no output anchor.", graph.name()));
+    if (exitNode == nullptr) {
+        return;
+    }
     if (exitNode->type() != NodeType::GATE) {
         return;
     }
@@ -128,10 +131,11 @@ void validateFuncGraphReference(const Graph &graph, Node *node) {
 namespace validate {
 
 void assertGraphSealingPreconditions(const Graph &graph) {
-    // 完整性硬约束：进入 seal 的图必须先有 output（值出口锚点）。
-    ASSERT(
-        graph.exitNode() != nullptr,
-        std::format("Graph '{}' has no output anchor.", graph.name()));
+    // 每张图封印前须有 output；库模块 __root__ 无 main 时由 Builder::build 写入占位 DATA。
+    if (graph.exitNode() == nullptr) {
+        throw std::runtime_error(
+            std::format("Graph '{}' has no output anchor.", graph.name()));
+    }
 
     for (Node *node : graph.normPorts()) {
         validateNodeAdjacency(node);
@@ -182,8 +186,10 @@ void assertGraphSealingPreconditions(const Graph &graph) {
                     graph.name()));
         }
     }
-    validateNodeAdjacency(graph.exitNode());
-    validateExitAnchor(graph);
+    if (graph.exitNode() != nullptr) {
+        validateNodeAdjacency(graph.exitNode());
+        validateExitAnchor(graph);
+    }
 
     for (const auto &[name, subGraphs] : graph.subGraphs()) {
         for (const auto &subGraph : subGraphs) {

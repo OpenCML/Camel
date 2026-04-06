@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -260,19 +260,38 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     try {
         visit(gct);
 
-        auto optMainGraph = currGraph_->getSubGraphsByName("main");
+        auto optMainGraph = rootGraph_->getSubGraphsByName("main");
+        graph_ptr_t entryGraph = nullptr;
         if (optMainGraph.has_value()) {
             auto mainGraphSet = optMainGraph.value();
             ASSERT(!mainGraphSet.empty(), "Main graph set is empty.");
             ASSERT(mainGraphSet.size() == 1, "Multiple main graphs found.");
-            auto mainGraph = *mainGraphSet.begin();
-            auto funcNode  = createFuncDataNode(mainGraph, false, false);
-            GraphBuilder(currGraph_).setOutput(funcNode);
+            entryGraph = *mainGraphSet.begin();
+        } else if (auto decoratedMain = decoratedGraphAt("main")) {
+            entryGraph = *decoratedMain;
+        } else if (auto gv = graphsAt("main"); gv.has_value() && !gv.value()->empty()) {
+            entryGraph = gv.value()->front();
+        }
+        const bool entryModule =
+            context_ && module_ && context_->mainModule() && context_->mainModule() == module_;
+        if (entryGraph) {
+            auto funcNode = createFuncDataNode(entryGraph, false, false);
+            GraphBuilder(rootGraph_).setOutput(funcNode);
+        } else if (entryModule) {
+            diags_->of(SemanticDiag::EntryModuleMissingMain).commit(module_->name());
+            throw BuildAbortException();
+        } else {
+            // 非入口库模块可无 main：占位 output 以满足封印不变量。
+            auto zero = std::make_shared<LongData>(static_cast<int64_t>(0));
+            Node *const placeholder = DataNode::create(*rootGraph_, zero);
+            GraphBuilder(rootGraph_).setOutput(placeholder);
         }
 
         GraphBuilder::sealGraphRecursively(rootGraph_);
     } catch (Diagnostic &d) {
         diags_->add(std::move(d));
+        rootGraph_ = nullptr;
+    } catch (const BuildAbortException &) {
         rootGraph_ = nullptr;
     }
 
@@ -454,24 +473,32 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     Type *type               = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
     FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
     graph_ptr_t graph        = enterScope(funcType, name);
-    registerGraphOrigin(context_, graph, gct, "gir.func.graph");
-    for (const auto &port : graph->withPorts()) {
-        const auto &portNode = tt::as_ptr<PortNode>(port);
-        insertNode(portNode->name(), port);
-    }
-    for (const auto &port : graph->normPorts()) {
-        const auto &portNode = tt::as_ptr<PortNode>(port);
-        insertNode(portNode->name(), port);
-    }
-    Node *res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
-    if (graph->exitNode_ == nullptr) {
-        if (res) {
-            GraphBuilder(graph).setOutput(res);
-        } else {
-            // function with no return value, setting null by default
-            Node *resNode = DataNode::create(*graph, Data::null());
-            GraphBuilder(graph).setOutput(resNode);
+    // 模块顶层 visitExecNode 会吞掉 BuildAbortException 并 continue；若函数体在 leaveScope
+    // 之前抛错，currGraph_ 会卡在子图，后续函数（如 main）被挂到错误外层，root 上无 "main"、
+    // __root__ 无 exit。必须在任何异常路径上配对 leaveScope。
+    try {
+        registerGraphOrigin(context_, graph, gct, "gir.func.graph");
+        for (const auto &port : graph->withPorts()) {
+            const auto &portNode = tt::as_ptr<PortNode>(port);
+            insertNode(portNode->name(), port);
         }
+        for (const auto &port : graph->normPorts()) {
+            const auto &portNode = tt::as_ptr<PortNode>(port);
+            insertNode(portNode->name(), port);
+        }
+        Node *res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
+        if (graph->exitNode_ == nullptr) {
+            if (res) {
+                GraphBuilder(graph).setOutput(res);
+            } else {
+                // function with no return value, setting null by default
+                Node *resNode = DataNode::create(*graph, Data::null());
+                GraphBuilder(graph).setOutput(resNode);
+            }
+        }
+    } catch (...) {
+        leaveScope();
+        throw;
     }
     leaveScope();
 

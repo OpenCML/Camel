@@ -18,7 +18,7 @@
         "test:all": "node ./scripts/test-all.js",
         "test:modules": "node ./scripts/test-all.js --modules",
         "test:run": "node ./scripts/test-all.js --run",
-        "test:run:ln": "node ./scripts/test-all.js --run --suite linear",
+        "test:run:ln": "node ./scripts/test-all.js --run --suite ln",
         "test:run:nn": "node ./scripts/test-all.js --run --suite nn",
         "test:run:pr": "node ./scripts/test-all.js --run --suite para",
         "config": "node ./scripts/config.js",

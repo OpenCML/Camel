@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -254,6 +254,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Executor protocol '{0}' not found.",
                 "Check that the protocol is registered or refer to the documentation for supported "
                 "operator protocols.",
+            },
+        },
+        {
+            SemanticDiag::EntryModuleMissingMain,
+            {
+                "EntryModuleMissingMain",
+                "Entry module '{0}' must define a resolvable 'main' on the module root (__root__).",
+                "Add a top-level main function or ensure it is registered as a direct root subgraph.",
             },
         },
 

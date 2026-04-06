@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 29, 2026
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 /*
@@ -714,18 +714,40 @@ graph_ptr_t GraphBuilder::cloneGraph(const graph_ptr_t &graph) {
         }
     }
 
+    // Output/exit 锚点可能不在 nodes()/ports/closure 的枚举里（与 inline 里 collectUseCarrierNodes
+    // 额外纳入 exitNode 的约定一致）。若遗漏，nodeMap 在 requireMappedNode 会缺失键；Release 下
+    // ASSERT 被编译掉，对 end() 解引用表现为平台相关的崩溃（Linux Clang 上易复现）。
+    if (Node *exitAnchor = src->exitNode();
+        exitAnchor && nodeMap.find(exitAnchor) == nodeMap.end()) {
+        Node *clonedExit = exitAnchor->clone(*newGraph);
+        detail::NodeMutation::setDataType(clonedExit, exitAnchor->dataType());
+        nodeMap[exitAnchor] = clonedExit;
+        if (auto *sourceContext =
+                src->getExtra<camel::source::SourceContext, kSourceContextExtraIndex>()) {
+            sourceContext->cloneGirNodeDebugBinding(exitAnchor, clonedExit);
+        }
+    }
+
     overwriteFreshNodeAdjacencyPreservingOrder(src->withPorts(), nodeMap, true);
     overwriteFreshNodeAdjacencyPreservingOrder(src->normPorts(), nodeMap, true);
     overwriteFreshNodeAdjacencyPreservingOrder(src->closure(), nodeMap, true);
     overwriteFreshNodeAdjacencyPreservingOrder(src->nodes(), nodeMap, true);
-    Node *srcExit   = src->exitNode();
-    Node *newOutput = requireMappedNode(
-        srcExit,
-        nodeMap,
-        "Output node not found in node map during graph cloning.");
-    newGraph->exitNode_ = newOutput;
+    Node *srcExit = src->exitNode();
+    if (!srcExit) {
+        throw std::runtime_error(std::format(
+            "cloneGraph('{}'): source graph has no output anchor.", src->name()));
+    }
+    auto exitIt = nodeMap.find(srcExit);
+    if (exitIt == nodeMap.end()) {
+        throw std::runtime_error(std::format(
+            "cloneGraph('{}'): exit node {:p} not in nodeMap (map size {}).",
+            src->name(),
+            static_cast<void *>(srcExit),
+            nodeMap.size()));
+    }
+    newGraph->exitNode_ = exitIt->second;
     if (newGraph->builderState_) {
-        newGraph->builderState_->exitNode = newOutput;
+        newGraph->builderState_->exitNode = exitIt->second;
     }
 
     // 浅拷贝策略：共享依赖与子图引用，不递归克隆。
@@ -755,7 +777,7 @@ graph_ptr_t GraphBuilder::cloneGraph(const graph_ptr_t &graph) {
     ASSERT(
         newGraph->exitNode_ != nullptr,
         std::format(
-            "cloneGraph produced graph '{}' without output (source='{}').",
+            "cloneGraph output anchor missing for '{}' (source='{}').",
             newGraph->name_,
             src->name()));
     return newGraph;
@@ -816,6 +838,9 @@ void GraphBuilder::sealGraphRecursively(const graph_ptr_t &graph) {
     if (!graph) {
         return;
     }
+    // 与 GraphDraft::seal 对齐：封印前校验。assertGraphSealingPreconditions 对 __root__ 无 exit
+    // 的情况豁免（模块容器），其余图在 Release 下用 throw 保证不可静默通过。
+    GraphBuilder::validateGraphRecursively(graph);
     std::unordered_set<Graph *> visited;
     std::function<void(Graph *)> sealDfs = [&](Graph *curr) {
         if (curr == nullptr || !visited.insert(curr).second) {

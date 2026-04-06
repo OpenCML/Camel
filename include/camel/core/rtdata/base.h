@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 10, 2026
+ * Updated: Apr. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,8 +24,11 @@
 #include "camel/core/type.h"
 #include "camel/utils/brpred.h"
 
+#include <bit>
 #include <cstring> // for std::memcpy
+#include <format>
 #include <functional>
+#include <ostream>
 
 namespace camel::core::rtdata {
 

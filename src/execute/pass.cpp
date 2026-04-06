@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,6 +37,7 @@
 #include "camel/utils/log.h"
 
 #include <format>
+#include <memory>
 #include <sstream>
 
 using namespace GIR;
@@ -102,7 +103,9 @@ void collectPassPaths(
 // 嵌套初始化列表：def(factory) 叶子节点，def(factory, {...}) 带子域，scope({...}) 纯子域
 struct PassDef {
     std::optional<PassFactory> value;
-    std::vector<std::pair<std::string, PassDef>> children;
+    // shared_ptr: vector<pair<..., PassDef>> would instantiate vector while PassDef is still
+    // incomplete; Clang + libstdc++ reject that ([vector] requires a complete element type).
+    std::vector<std::pair<std::string, std::shared_ptr<PassDef>>> children;
 };
 
 PassDef def(PassFactory f) { return PassDef{.value = std::move(f), .children = {}}; }
@@ -110,19 +113,20 @@ PassDef def(PassFactory f) { return PassDef{.value = std::move(f), .children = {
 PassDef def(PassFactory f, std::initializer_list<std::pair<const char *, PassDef>> list) {
     PassDef r{.value = std::move(f), .children = {}};
     for (const auto &[k, v] : list)
-        r.children.emplace_back(k, v);
+        r.children.emplace_back(k, std::make_shared<PassDef>(v));
     return r;
 }
 
 PassDef scope(std::initializer_list<std::pair<const char *, PassDef>> list) {
     PassDef r;
     for (const auto &[k, v] : list)
-        r.children.emplace_back(k, v);
+        r.children.emplace_back(k, std::make_shared<PassDef>(v));
     return r;
 }
 
 void buildPassScope(PassScopePtr s, const PassDef &def) {
-    for (const auto &[name, child] : def.children) {
+    for (const auto &[name, childPtr] : def.children) {
+        const PassDef &child = *childPtr;
         if (child.value)
             s->insert(name, *child.value);
         if (!child.children.empty()) {
