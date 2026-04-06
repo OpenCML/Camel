@@ -11,25 +11,24 @@
 
 Camel是一个图原生的、多阶段的、类型驱动的特定领域语言（DSL），旨在弥合AI研究与生产部署之间的差距。它结合了函数式编程的优雅和声明式编程的表达力。它提供了天生的异步语义和高度可定制的图操作，使开发者能够编写高级代码，该代码编译后具有接近原生的性能。
 
-## 🚀 为什么选择Camel？
+## 🚀 为什么选择 Camel？
 
-现代AI开发面临的困境：
+AI 社区早已知道计算图才是正确的计算模型。PyTorch 在运行时动态构建它；TensorFlow 将其静态编译；JAX 通过追踪 Python 函数来重建它。每一个主流框架最终都有一套图——因为这正是硬件和数学所需要的结构。
 
-1. **语义碎片化**
-   JIT追踪（例如TensorFlow）在代码意图和执行图之间产生了差距，迫使开发者进行调试和控制流程的妥协。
-2. **认知负荷**
-   特定框架的概念（梯度带，图阶段，分阶段执行）要求与ML理论正交的专业知识。
-3. **原型-部署鸿沟**
-   Python的动态性限制了深度优化，而静态语言则失去了高级ML抽象。
+问题在于，这些图都是**在一门对图一无所知的语言之上，用库手工搭建出来的产物**。Python 依然是宿主语言：动态类型、受 GIL 限制、按语句顺序执行——而这些特性恰恰与框架试图表达的结构背道而驰。由此产生了永久性的张力：`torch.compile`、`@tf.function`、`jax.jit` 这些逃逸口的存在，本质上是在弥合 Python 语义与运行时实际需求之间的裂缝。
 
-Camel通过以下方式解决这些问题：
+Camel 采取了一种不同的思路：**让图成为程序本身**。每个函数都被编译为一张图中间表示（GIR），节点是操作，边是数据依赖。语言与执行模型从一开始就说同一种语言，没有任何需要弥合的裂缝。
 
-1. **一流的计算图**
-   原生图形原语取代了脆弱的追踪——代码直接定义了编译器优化的DAG。
-2. **阶段多态语义**
-   单一代码库可以交互执行（类Python的即时性）或编译成优化的二进制文件（具有C++级别的性能）。
-3. **类型驱动的自动化**
-   张量形状/类型在编译时静态指导内存规划、算子融合和并行化——零手动调整。
+这对以下三个 Python 生态在语言层面无法彻底解决的问题，产生了切实的影响：
+
+1. **顺序问题**
+   在 Python 中，每条语句都隐含着顺序——即使两条语句之间毫无依赖关系。框架只能在事后通过追踪或图构建 API 来恢复并行性。在 Camel 中，顺序由依赖产生：没有依赖关系的语句可以同时执行，调度器自动发现并行机会。只有在显式需要顺序语义时，你才需要写 `sync`。
+
+2. **执行耦合问题**
+   在 Python 中，从 eager 模式切换到编译执行，需要标注函数、管理追踪缓存，并理解追踪器能捕获什么、不能捕获什么。在 Camel 中，同一份源程序可以运行在字节码解释器（FastVM）上、以图节点直接遍历（NodeVM）、通过 JIT 编译为原生机器码，或作为并行 DAG 分发到线程池（Taskflow）——无需修改任何一行源代码。
+
+3. **变换局限问题**
+   想要重写计算图的框架，不得不在 Python 之上自建 IR 和变换 Pass——`torch.fx`、XLA HLO、StableHLO 皆是如此。在 Camel 中，图 IR 本身就是程序。编译器 Pass 原生地跨越函数边界进行检查与重写，宏在编译期直接操作图，使得自动微分、算子融合等变换可以作为语言的第一公民来表达，而不再是框架层的特殊魔法。
 
 ## ✨ 关键特性
 
@@ -154,16 +153,16 @@ func main(): int sync {
 
 ### Python 集成
 
-使用 `python` 模块嵌入 Python。支持 `py_call`、`py_eval`、`py_run`、`wrap`/`unwrap` 等。详见 [libs/python/README.md](../modules/python/README.md) 的 API 参考。
+使用 `python` 模块嵌入 Python。支持 `py_call`、`py_eval`、`py_run`、`py_wrap`/`py_unwrap` 等。详见 [modules/python/README.md](../modules/python/README.md) 的 API 参考。
 
-**类型转换** — `unwrap` 将 Python 对象转换回 Camel。因为 `py_eval`/`py_call` 返回裸的 `PyObject`，你必须在 `unwrap` 之前使用 `as PyObject<T>` 指定目标类型：
+**类型转换** — `py_unwrap` 将 Python 对象转换回 Camel。因为 `py_eval`/`py_call` 返回裸的 `PyObject`，你必须在 `py_unwrap` 之前使用 `as PyObject<T>` 指定目标类型：
 
 ```camel
-import { PyObject, py_eval, unwrap } from python
+import { PyObject, py_eval, py_unwrap } from python
 
 func main(): int sync {
     let res = py_eval("1 + 1") as PyObject<int>
-    print(unwrap(res))
+    println(py_unwrap(res))
     return 0
 }
 ```

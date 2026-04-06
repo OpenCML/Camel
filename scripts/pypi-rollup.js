@@ -10,13 +10,30 @@ import {
     logStep,
     logDone,
     logFail,
+    logWarn,
     outArtifactRoot,
     outArtifactBin
 } from './common.js'
 import { ensureDirSync } from 'fs-extra/esm'
-import build from './build.js'
-import { execSync } from 'child_process'
-import os from 'os'
+import build, {
+    findInterpreterDevelopmentLayout,
+    probeCompilePythonInterpreter,
+    readSdkPythonVersionFromHeaders,
+    resolveRollupPythonExecutable,
+    rollupMmFromVersion
+} from './build.js'
+import { spawnSync } from 'child_process'
+
+/**
+ * PyPI packaging: for each SDK under modules/python/sdks/, calls build({ rollupMm, ... }) so CMake sees
+ * CAMEL_PYPI_SINGLE_SDK_MM and emits only that py_bridge + matching python.cmo for one wheel.
+ *
+ * Default: one wheel for the **current compile-time** `python` (or `CAMEL_PYPI_PYTHON`), matching an SDK by
+ * `include/patchlevel.h`. Set `CAMEL_PYPI_ALL_SDKS=1` to build one wheel per SDK folder (needs each runtime).
+ *
+ * Normal development: use `npm run build` only — never sets CAMEL_PYPI_SINGLE_SDK_MM, so every SDK folder
+ * gets its own py_bridge* and the usual multi-bridge layout.
+ */
 
 const isWin = process.platform === 'win32'
 
@@ -91,55 +108,124 @@ exit 1
     }
 }
 
-function getPythonPlatformTag() {
-    const platform = os.platform()
-    const arch = os.arch()
-
-    const archMap = {
-        x64: platform === 'win32' ? 'amd64' : 'x86_64',
-        arm64: 'arm64'
+/**
+ * PEP 425 tags for native code linked against the given interpreter (same rules as pip).
+ * @param {string} pyExe - absolute path or `python` / `python3`
+ */
+function getWheelTagsFromPythonExe(pyExe) {
+    const snippet = `from packaging.tags import sys_tags
+_t = next(iter(sys_tags()))
+print(_t.interpreter)
+print(_t.abi)
+print(_t.platform)
+`
+    const shell = !path.isAbsolute(pyExe) && (pyExe === 'python' || pyExe === 'python3') && isWin
+    const r = spawnSync(pyExe, ['-c', snippet], {
+        encoding: 'utf-8',
+        shell,
+        stdio: ['ignore', 'pipe', 'pipe']
+    })
+    if (r.error || r.status !== 0) {
+        logFail(
+            `Could not resolve wheel tags via packaging.tags (${pyExe}): ${r.stderr || r.error?.message || 'non-zero exit'}`
+        )
+        process.exit(1)
     }
-
-    const normalizedArch = archMap[arch] || arch
-
-    switch (platform) {
-        case 'win32':
-            return `win_${normalizedArch}`
-
-        case 'darwin': {
-            const ver = execSync('sw_vers -productVersion').toString().trim()
-            const [major, minor] = ver.split('.').slice(0, 2)
-            const macosVersion = `${major}_${minor}`
-
-            let realArch = normalizedArch
-            try {
-                const proc = execSync('sysctl -n machdep.cpu.brand_string').toString()
-                realArch = proc.includes('Apple') ? 'arm64' : normalizedArch
-            } catch {}
-
-            return `macosx_${macosVersion}_${realArch}`
-        }
-
-        case 'linux':
-            return `linux_${normalizedArch}`
-
-        default:
-            throw new Error(`Unsupported platform: ${platform}`)
+    const lines = r.stdout
+        .trim()
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean)
+    if (lines.length < 3) {
+        logFail(`Unexpected packaging.tags output:\n${r.stdout}`)
+        process.exit(1)
     }
+    return { pythonTag: lines[0], abiTag: lines[1], platformTag: lines[2] }
 }
 
-function main() {
-    logStep('Building project')
-    process.chdir(BASEDIR)
-    build()
-    // runCmakeBuild leaves cwd at build/; restore so relative paths (e.g. future runCommand) resolve from repo root
-    process.chdir(BASEDIR)
-    logDone('Project built')
+/**
+ * Pick one `sdks/python*` tree whose patchlevel.h matches the compile-time interpreter.
+ * @param {{ name: string, root: string, mm: string }[]} sdks
+ * @param {number} major
+ * @param {number} minor
+ */
+function findSdkMatchingCompilePython(sdks, major, minor) {
+    const matches = []
+    for (const s of sdks) {
+        const h = readSdkPythonVersionFromHeaders(s.root)
+        if (h && h[0] === major && h[1] === minor) {
+            matches.push(s)
+        }
+    }
+    if (matches.length === 0) {
+        return null
+    }
+    matches.sort((a, b) => a.mm.localeCompare(b.mm, undefined, { numeric: true }))
+    if (matches.length > 1) {
+        logWarn(
+            `Multiple SDK trees match Python ${major}.${minor}; using ${matches[0].name} (folder suffix "${matches[0].mm}")`
+        )
+    }
+    return matches[0]
+}
 
-    // Default out/latest: always the tree produced by the last collect-out (see collect-out.js)
-    const outTag = process.env.CAMEL_PYPI_TAG || 'latest'
-    logDone(`Using out/${outTag}/`)
+const SDKS_ROOT = path.join(BASEDIR, 'modules', 'python', 'sdks')
 
+/** @returns {{ name: string, root: string, mm: string }[]} */
+function listValidPythonSdks() {
+    if (!fs.existsSync(SDKS_ROOT)) {
+        return []
+    }
+    const out = []
+    for (const name of fs.readdirSync(SDKS_ROOT)) {
+        if (!/^python3\d+$/.test(name)) {
+            continue
+        }
+        const root = path.join(SDKS_ROOT, name)
+        const inc = path.join(root, 'include', 'Python.h')
+        const libs = path.join(root, 'libs')
+        if (!fs.existsSync(inc) || !fs.existsSync(libs)) {
+            continue
+        }
+        const mm = name.replace(/^python/, '')
+        out.push({ name, root, mm })
+    }
+    return out.sort((a, b) => a.mm.localeCompare(b.mm, undefined, { numeric: true }))
+}
+
+function sdkPythonExecutable(sdkRoot) {
+    const cands = [
+        path.join(sdkRoot, 'python.exe'),
+        path.join(sdkRoot, 'bin', 'python3'),
+        path.join(sdkRoot, 'bin', 'python')
+    ]
+    for (const p of cands) {
+        if (fs.existsSync(p)) {
+            return p
+        }
+    }
+    return ''
+}
+
+/** Quote for shell if path is not a bare `python` / `python3`. */
+function pyCmd(exe) {
+    if (exe === 'python' || exe === 'python3') {
+        return exe
+    }
+    return `"${exe.replace(/"/g, '\\"')}"`
+}
+
+/**
+ * Copy out/<tag>/ into the package, run setuptools + wheel tags, append wheels to dist/pypi/.
+ */
+function packageWheelBundle({
+    outTag,
+    pythonTag,
+    abiTag,
+    platformTag,
+    buildPythonExe,
+    pypiDist
+}) {
     const OUT_ROOT = outArtifactRoot(outTag)
     if (!fs.existsSync(OUT_ROOT)) {
         logFail(`Collect-out directory not found: ${OUT_ROOT}`)
@@ -158,11 +244,11 @@ function main() {
         process.exit(1)
     }
 
-    logStep('Copying files to pypi directory')
     const PYPI_BASE = path.join(BASEDIR, 'pypi', 'camel-lang')
     const CAMEL_BASE = path.join(PYPI_BASE, 'src', 'camel')
     const CMLENV = path.join(CAMEL_BASE, '.cmlenv')
 
+    logStep('Copying files to pypi directory')
     removeDir(CMLENV)
     copyDir(OUT_ROOT, CMLENV)
 
@@ -180,8 +266,6 @@ function main() {
         writeUnixWrappers(WRAPPER_DIR, toolBinaries)
     }
 
-    logDone('Files copied')
-
     const scriptFiles = fs
         .readdirSync(WRAPPER_DIR)
         .sort()
@@ -196,44 +280,206 @@ function main() {
     )
     logStep(`Configured script-files: [${scriptFiles.join(', ')}]`)
 
-    logStep('Building wheel')
+    const py = pyCmd(buildPythonExe)
+    logStep('Building wheel (stub py3-none-any, then retag)')
     process.chdir(PYPI_BASE)
-    // PEP 517 frontend; not always present in minimal venvs
-    runCommand('python -m pip install -q build wheel')
-    runCommand('python -m build --wheel')
-    logDone('Wheel built (initial py3-none-any from setuptools)')
+    runCommand(`${py} -m pip install -q build wheel packaging`)
+    runCommand(`${py} -m build --wheel`)
 
-    // Native binaries live under package-data; setuptools still emits a "universal" wheel unless we retag.
-    // `wheel tags` fixes both the filename and .dist-info/WHEEL (Tag: py3-none-<platform>), which pip/PyPI use.
-    const platformTag = getPythonPlatformTag()
     const distDir = path.join(PYPI_BASE, 'dist')
     const anyWheels = fs.readdirSync(distDir).filter((f) => f.endsWith('-any.whl'))
     if (anyWheels.length === 0) {
         logFail(`No *-any.whl found in ${distDir} after build`)
         process.exit(1)
     }
-    logStep(`Retagging wheel(s) for platform: ${platformTag}`)
+    logStep(`Retagging wheel(s): ${pythonTag}-${abiTag}-${platformTag}`)
     for (const w of anyWheels) {
-        const wheelPath = path.join('dist', w)
-        runCommand(`python -m wheel tags --platform-tag ${platformTag} --remove "${wheelPath}"`)
+        const wheelPath = path.join('dist', w).split(path.sep).join('/')
+        runCommand(
+            `${py} -m wheel tags --python-tag ${pythonTag} --abi-tag ${abiTag} --platform-tag ${platformTag} --remove "${wheelPath}"`
+        )
     }
-    logDone(`Platform wheel tag: py3-none-${platformTag}`)
 
-    logStep('Move wheel to project dist')
-    const PYPI_DIST = path.join(BASEDIR, 'dist', 'pypi')
-    ensureDirSync(PYPI_DIST)
-    copyDir(path.join(PYPI_BASE, 'dist'), PYPI_DIST)
-    logDone('Wheel moved')
+    ensureDirSync(pypiDist)
+    for (const f of fs.readdirSync(distDir)) {
+        if (f.endsWith('.whl')) {
+            fs.copyFileSync(path.join(distDir, f), path.join(pypiDist, f))
+        }
+    }
 
-    logStep('Cleaning up')
     fs.writeFileSync(pyprojectPath, pyprojectOriginal)
     removeDir(path.join(PYPI_BASE, 'dist'))
     removeDir(path.join(PYPI_BASE, 'build'))
     removeDir(CMLENV)
     removeDir(WRAPPER_DIR)
     removeDir(path.join(PYPI_BASE, 'src', 'camel_lang.egg-info'))
-    logDone('Cleaned up')
     process.chdir(BASEDIR)
+}
+
+function main() {
+    process.chdir(BASEDIR)
+    const PYPI_DIST = path.join(BASEDIR, 'dist', 'pypi')
+    ensureDirSync(PYPI_DIST)
+    for (const f of fs.readdirSync(PYPI_DIST)) {
+        if (f.endsWith('.whl')) {
+            fs.unlinkSync(path.join(PYPI_DIST, f))
+        }
+    }
+
+    const outTag = process.env.CAMEL_PYPI_TAG || 'latest'
+    const sdks = listValidPythonSdks()
+    const allSdksRollup =
+        process.env.CAMEL_PYPI_ALL_SDKS === '1' ||
+        process.env.CAMEL_PYPI_ALL_SDKS === 'true' ||
+        process.env.CAMEL_PYPI_ALL_SDKS === 'yes'
+
+    if (sdks.length > 0 && allSdksRollup) {
+        logStep(`PyPI rollup: CAMEL_PYPI_ALL_SDKS — ${sdks.length} SDK folder(s), one wheel each`)
+        for (const sdk of sdks) {
+            logStep(`--- Build + wheel for SDK python${sdk.mm} (${sdk.root}) ---`)
+            const sdkExe = sdkPythonExecutable(sdk.root)
+            let pyExe
+            try {
+                pyExe = resolveRollupPythonExecutable(sdk.root, sdk.mm, sdkExe || undefined)
+            } catch (e) {
+                logFail(e instanceof Error ? e.message : String(e))
+                process.exit(1)
+            }
+            const tags = getWheelTagsFromPythonExe(pyExe)
+            build({
+                rollupMm: sdk.mm,
+                pythonRootDir: sdk.root,
+                pythonExecutable: pyExe,
+                cleanBuildDir: true
+            })
+            process.chdir(BASEDIR)
+            packageWheelBundle({
+                outTag,
+                pythonTag: tags.pythonTag,
+                abiTag: tags.abiTag,
+                platformTag: tags.platformTag,
+                buildPythonExe: pyExe,
+                pypiDist: PYPI_DIST
+            })
+        }
+        const finals = fs.readdirSync(PYPI_DIST).filter((f) => f.endsWith('.whl'))
+        logDone(`Final wheel(s) in dist/pypi/: ${finals.join(', ')}`)
+        return
+    }
+
+    if (sdks.length > 0) {
+        let compile
+        try {
+            compile = probeCompilePythonInterpreter()
+        } catch (e) {
+            logFail(e instanceof Error ? e.message : String(e))
+            process.exit(1)
+        }
+        const sdk = findSdkMatchingCompilePython(sdks, compile.major, compile.minor)
+        const rollupMm = sdk ? sdk.mm : rollupMmFromVersion(compile.major, compile.minor)
+        let pyExe
+        let tags
+        if (sdk) {
+            logStep(
+                `PyPI rollup: Python ${compile.major}.${compile.minor} (${compile.executable}) → ` +
+                    `py_bridge from ${sdk.name}`
+            )
+            try {
+                pyExe = resolveRollupPythonExecutable(sdk.root, sdk.mm, compile.executable)
+            } catch (e) {
+                logFail(e instanceof Error ? e.message : String(e))
+                process.exit(1)
+            }
+            tags = getWheelTagsFromPythonExe(pyExe)
+            build({
+                rollupMm: sdk.mm,
+                pythonRootDir: sdk.root,
+                pythonExecutable: pyExe,
+                cleanBuildDir: true
+            })
+        } else {
+            const layout = findInterpreterDevelopmentLayout(compile.executable)
+            if (!layout) {
+                logFail(
+                    `Compile-time Python is ${compile.major}.${compile.minor} (${compile.executable}), but no ` +
+                        `matching modules/python/sdks/python* and no full interpreter dev tree (headers/libs under ` +
+                        `sys.base_prefix / sysconfig). Install CPython with dev files, run sync-python-sdks, or ` +
+                        `set CAMEL_PYPI_ALL_SDKS=1.`
+                )
+                process.exit(1)
+            }
+            logStep(
+                `PyPI rollup: Python ${compile.major}.${compile.minor} — using interpreter install at ${layout.root} ` +
+                    `(no matching sdks/python*; venv/base_prefix headers+libs)`
+            )
+            try {
+                pyExe = resolveRollupPythonExecutable(layout.root, rollupMm, compile.executable)
+            } catch (e) {
+                logFail(e instanceof Error ? e.message : String(e))
+                process.exit(1)
+            }
+            tags = getWheelTagsFromPythonExe(pyExe)
+            build({
+                rollupMm,
+                pythonRootDir: layout.root,
+                pythonExecutable: pyExe,
+                cleanBuildDir: true
+            })
+        }
+        process.chdir(BASEDIR)
+        packageWheelBundle({
+            outTag,
+            pythonTag: tags.pythonTag,
+            abiTag: tags.abiTag,
+            platformTag: tags.platformTag,
+            buildPythonExe: pyExe,
+            pypiDist: PYPI_DIST
+        })
+        const finals = fs.readdirSync(PYPI_DIST).filter((f) => f.endsWith('.whl'))
+        logDone(`Final wheel(s) in dist/pypi/: ${finals.join(', ')}`)
+        return
+    }
+
+    logWarn('No modules/python/sdks/python* trees — linking py_bridge from current interpreter (sys.base_prefix)')
+    let compile
+    try {
+        compile = probeCompilePythonInterpreter()
+    } catch (e) {
+        logFail(e instanceof Error ? e.message : String(e))
+        process.exit(1)
+    }
+    const layout = findInterpreterDevelopmentLayout(compile.executable)
+    let pyExe = compile.executable
+    let tags = getWheelTagsFromPythonExe(pyExe)
+    if (layout) {
+        const rollupMm = rollupMmFromVersion(compile.major, compile.minor)
+        try {
+            pyExe = resolveRollupPythonExecutable(layout.root, rollupMm, compile.executable)
+        } catch (e) {
+            logFail(e instanceof Error ? e.message : String(e))
+            process.exit(1)
+        }
+        tags = getWheelTagsFromPythonExe(pyExe)
+        build({
+            rollupMm,
+            pythonRootDir: layout.root,
+            pythonExecutable: pyExe,
+            cleanBuildDir: true
+        })
+    } else {
+        build({ cleanBuildDir: false })
+    }
+    process.chdir(BASEDIR)
+    packageWheelBundle({
+        outTag,
+        pythonTag: tags.pythonTag,
+        abiTag: tags.abiTag,
+        platformTag: tags.platformTag,
+        buildPythonExe: pyExe,
+        pypiDist: PYPI_DIST
+    })
+    const finals = fs.readdirSync(PYPI_DIST).filter((f) => f.endsWith('.whl'))
+    logDone(`Final wheel(s) in dist/pypi/: ${finals.join(', ')}`)
 }
 
 main()

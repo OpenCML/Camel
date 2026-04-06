@@ -12,6 +12,7 @@
 | `npm run check` | 代码健康检查（`camel check`） |
 | `npm run format` | 使用 clang-format 格式化 `src/` 和 `include/` 下的 C++ 源文件 |
 | `npm run clean` | 清理构建产物 |
+| `npm run pypi:rollup` | 生成 **camel-lang** 的 PyPI wheel（`dist/pypi/*.whl`）；与 `build` 在 Python SDK / bridge 策略上不同，详见 [PyPI 打包说明](pypi-packaging.md) |
 
 ## 构建产物路径
 

@@ -1,0 +1,236 @@
+# Multi-arch native build + camel-lang wheel (one wheel per matrix cell; PEP 425 tags from job Python).
+#
+# Runners (edit matrix.cfg if labels change): https://github.com/actions/runner-images
+#
+# --- Trusted Publishing (OIDC, no long-lived PyPI tokens in GitHub) ---
+# 1) GitHub: Settings → Environments → create "pypi" and "testpypi" (optional: required reviewers).
+# 2) PyPI: Project → Manage → Publishing → add pending trusted publisher:
+#    - PyPI:   owner/repo = this repository, workflow = build-pypi.yml, environment = pypi
+#    - Test:   same on https://test.pypi.org with environment = testpypi
+#    Docs: https://docs.pypi.org/trusted-publishers/adding-a-publisher/
+# 3) Actions → Run workflow → publish_to = pypi | testpypi (builds matrix, then OIDC upload).
+#    "none" = build only; artifacts on the run.
+# 4) Triggers: v* tags + workflow_dispatch (see below).
+#
+# Matrix: (OS/arch cfg × python-version). Each job runs `npm run pypi:rollup` with that interpreter only
+# (no modules/python/sdks on CI — rollup uses sys.base_prefix / sysconfig). Wheel tags from packaging.tags.
+
+name: Build and package (PyPI wheel)
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "V*"
+  workflow_dispatch:
+    inputs:
+      publish_to:
+        description: "none = build only; pypi / testpypi = trusted publishing upload (OIDC)"
+        type: choice
+        options:
+          - none
+          - pypi
+          - testpypi
+        default: none
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # upload-artifact in build-wheel needs write; publish jobs set their own permissions block.
+  actions: write
+
+jobs:
+  build-wheel:
+    strategy:
+      fail-fast: false
+      matrix:
+        cfg:
+          - runner: ubuntu-latest
+            slug: linux-x64
+          # - runner: ubuntu-24.04-arm
+          #   slug: linux-arm64
+          - runner: windows-latest
+            slug: win-x64
+          # - runner: windows-11-arm
+          #   slug: win-arm64
+          # - runner: macos-latest
+          #   slug: macos-arm64
+          # - runner: macos-15-intel
+          #   slug: macos-x64
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.cfg.runner }}
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enable long paths (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: git config --global core.longpaths true
+
+      - name: Set up Java (ANTLR)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install toolchain (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build
+
+      - name: Install LLVM, Ninja, CMake (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install llvm ninja cmake -y --no-progress
+          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify Clang (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          clang --version
+          ninja --version
+          cmake --version
+
+      - name: Install toolchain (macOS)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
+        run: |
+          brew install ninja cmake
+
+      - name: Verify toolchain (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cc --version
+          ninja --version
+          cmake --version
+
+      - name: Install Conan
+        run: python -m pip install --upgrade pip "conan>=2.10"
+
+      - name: Conan default profile
+        run: conan profile detect --force
+
+      - name: Ensure ANTLR jar
+        run: |
+          mkdir -p antlr
+          if [ ! -f antlr/antlr-4.13.1-complete.jar ]; then
+            curl -fsSL -o antlr/antlr-4.13.1-complete.jar \
+              https://www.antlr.org/download/antlr-4.13.1-complete.jar
+          fi
+
+      - name: Install npm dependencies (skip husky / postinstall conan wipe)
+        run: npm ci --ignore-scripts
+        env:
+          HUSKY: "0"
+
+      - name: Generate ANTLR C++ sources
+        run: npm run psrgen
+
+      - name: Native Release build + wheel
+        run: npm run pypi:rollup
+
+      - name: Smoke-install wheel (same interpreter as build)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --force-reinstall dist/pypi/*.whl
+          python -c "import camel; import pathlib; print('ok', pathlib.Path(camel.__file__).resolve())"
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: camel-lang-wheel-${{ matrix.cfg.slug }}-py${{ matrix.python-version }}
+          path: dist/pypi/*.whl
+          if-no-files-found: error
+
+  # One publish job per index (gh-action-pypi-publish: multiple invocations per job are unsupported).
+  publish-pypi:
+    name: Publish to PyPI (trusted publishing)
+    needs: build-wheel
+    runs-on: ubuntu-latest
+    if: success() && github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to == 'pypi'
+    environment:
+      name: pypi
+      url: https://pypi.org/p/camel-lang
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: wheels-merged
+          pattern: camel-lang-wheel-*
+          merge-multiple: true
+
+      - name: Flatten wheels for upload
+        run: |
+          mkdir -p upload
+          find wheels-merged -name '*.whl' -print0 | xargs -0 -I{} cp -f {} upload/
+          ls -la upload/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload/
+
+  publish-testpypi:
+    name: Publish to TestPyPI (trusted publishing)
+    needs: build-wheel
+    runs-on: ubuntu-latest
+    if: success() && github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to == 'testpypi'
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/camel-lang/
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: wheels-merged
+          pattern: camel-lang-wheel-*
+          merge-multiple: true
+
+      - name: Flatten wheels for upload
+        run: |
+          mkdir -p upload
+          find wheels-merged -name '*.whl' -print0 | xargs -0 -I{} cp -f {} upload/
+          ls -la upload/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: upload/

@@ -13,23 +13,22 @@ Camel is a **graph-native**, **multi-stage**, and **type-driven** domain-specifi
 
 ## 🚀 Why Camel?
 
-Modern AI development faces a dilemma:
+The AI community already knows that computation graphs are the right model. PyTorch builds them dynamically at runtime; TensorFlow compiles them statically; JAX traces Python functions to reconstruct them. Every major framework ends up with a graph—because that's what the hardware and the math actually need.
 
-1. **Semantic Fragmentation**
-   JIT tracing (e.g., TensorFlow) creates gaps between code intent and execution graphs, forcing debug workarounds and control-flow compromises.
-2. **Cognitive Overload**
-   Framework-specific concepts (gradient tapes, graph phases, staged execution) demand expertise orthogonal to ML theory.
-3. **Prototype-Deployment Divide**
-   Python's dynamism prohibits deep optimization, while static languages lose high-level ML abstractions.
+The problem is that these graphs are **library artifacts built on top of a language that knows nothing about them**. Python remains the host: a dynamically typed, GIL-bound, sequentially-ordered language whose semantics work against the very structure these frameworks are trying to express. The result is a permanent tension—escape hatches like `torch.compile`, `@tf.function`, and `jax.jit` exist precisely to paper over the mismatch between what Python says and what the runtime needs to do.
 
-Camel solves this by:
+Camel takes a different approach: **make the graph the program**. Every function compiles to a Graph IR whose nodes are operations and whose edges are data dependencies. There is no mismatch to paper over, because the language and the execution model speak the same language from the start.
 
-1. **First-Class Computation Graphs**
-   Native graph primitives replace fragile tracing—code directly defines compiler-optimized DAGs.
-2. **Phase-Polymorphic Semantics**
-   Single codebase executes interactively (Python-like immediacy) or compiles to optimized binaries (C++-level performance).
-3. **Type-Driven Automation**
-   Tensor shapes/types statically guide memory planning, operator fusion, and parallelization—zero manual tuning.
+This has concrete consequences for three problems that Python-based frameworks cannot fully solve at the language level:
+
+1. **The Ordering Problem**
+   In Python, every statement implies an order—even when no dependency exists. Frameworks recover parallelism after the fact, through tracing or graph construction APIs. In Camel, order emerges from dependencies: statements without a dependency between them can execute simultaneously, and the scheduler discovers parallelism automatically. You write `sync` only when you explicitly need sequential behavior.
+
+2. **The Execution Coupling Problem**
+   In Python, switching from eager to compiled execution requires annotating functions, managing trace caches, and reasoning about what the tracer can and cannot capture. In Camel, the same source program can run on the bytecode interpreter (FastVM), be traversed directly as a graph (NodeVM), compiled to native code via JIT, or dispatched to a thread pool as a parallel DAG (Taskflow)—without changing a line of source code.
+
+3. **The Transformation Problem**
+   Frameworks that want to rewrite computation graphs must build their own IR and transformation passes on top of Python—`torch.fx`, XLA HLO, StableHLO. In Camel, the Graph IR *is* the program. Compiler passes inspect and rewrite across function boundaries natively, and macros operate on graphs at compile time, making transformations like automatic differentiation or operator fusion expressible as first-class language constructs.
 
 ## ✨ Key Features
 
@@ -156,23 +155,23 @@ func main(): int sync {
 
 ### Python Integration
 
-Use the `python` module to embed Python. Supports `py_call`, `py_eval`, `py_run`, `wrap`/`unwrap`, and more. See [libs/python/README.md](libs/python/README.md) for API reference.
+Use the `python` module to embed Python. Supports `py_call`, `py_eval`, `py_run`, `py_wrap`/`py_unwrap`, and more. See [modules/python/README.md](modules/python/README.md) for API reference.
 
-**Type conversion** — `unwrap` converts Python objects back to Camel. Because `py_eval`/`py_call` return bare `PyObject`, you must use `as PyObject<T>` to specify the target type before `unwrap`:
+**Type conversion** — `py_unwrap` converts Python objects back to Camel. Because `py_eval`/`py_call` return bare `PyObject`, you must use `as PyObject<T>` to specify the target type before `py_unwrap`:
 
 ```camel
-import { PyObject, py_eval, unwrap } from python
+import { PyObject, py_eval, py_unwrap } from python
 
 func main(): int sync {
     let res = py_eval("1 + 1") as PyObject<int>
-    print(unwrap(res))
+    println(py_unwrap(res))
     return 0
 }
 ```
 
 ## 📚 Learn More
 
-- [Build Yourself](docs/setup.md) - Environment setup and installation guide
+- [Build Yourself](docs/setup.en.md) - Environment setup and installation guide
 - [WIP] [Documentation](https://docs.opencml.com/) - Language specs and API reference
 - [WIP] [Examples](examples/) - From MNIST training to distributed pipelines
 - [WIP] [Whitepaper](https://arxiv.org/abs/xxxx.xxxx) - Deep dive into the compiler architecture
