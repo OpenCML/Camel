@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -529,6 +529,17 @@ void encodeMirBuffer(
             if (debugTraceFn)
                 enc.emitDebugTraceCall(m.pc, debugTraceFn);
             break;
+        case MirOp::MovRsiR13:
+#if !defined(_WIN32) && !defined(_WIN64)
+            // mov rsi, r13 — 从 callee-saved r13 恢复 jitCtx
+            // REX.W=1,REX.R=1(r13 in reg): 0x4C; opcode MOV r/m64,r64: 0x89;
+            // ModRM mod=11,reg=r13(5),rm=rsi(6): 0xEE
+            enc.emitBytes({0x4C, 0x89, 0xEE});
+            enc.asmLine("mov rsi, r13  ; jitCtx");
+#else
+            enc.nop(); // Win64: rsi is callee-saved, no refresh needed
+#endif
+            break;
         case MirOp::NativeJitFuncCall: {
             auto *p = reinterpret_cast<const NativeJitCallParams *>(m.imm64);
 
@@ -560,6 +571,12 @@ void encodeMirBuffer(
                 for (uint8_t ai = 0; ai < nArgs; ++ai)
                     enc.movToFrame(static_cast<int>((ai + 1) * sizeof(slot_t)), actualArgRegs[ai]);
 
+#if !defined(_WIN32) && !defined(_WIN64)
+                // SysV: 直接跳入 JIT body（绕过 wrapper），需手动恢复 rsi=jitCtx
+                // r13 由 wrapper 初始化并在递归过程中保持不变
+                enc.emitBytes({0x4C, 0x89, 0xEE});
+                enc.asmLine("mov rsi, r13  ; jitCtx (frameless recursive entry)");
+#endif
                 patches.push_back({enc.here(), 0, 5, 0, 0});
                 enc.callRel32(0);
                 patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
@@ -622,18 +639,32 @@ void encodeMirBuffer(
             enc.movRdiR11();
 
             if (p->isSameGraph) {
+#if !defined(_WIN32) && !defined(_WIN64)
+                // SysV: 跳入同图 JIT body 前恢复 rsi=jitCtx（绕过 wrapper）
+                enc.emitBytes({0x4C, 0x89, 0xEE});
+                enc.asmLine("mov rsi, r13  ; jitCtx (same-graph frame-based entry)");
+#endif
                 patches.push_back({enc.here(), 0, 5, 0, 0});
                 enc.callRel32(0);
                 patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
                 patches.back().jumpEndPos   = enc.here();
             } else {
-                enc.popRax();
+                enc.popRax(); // 恢复跨图目标函数指针（之前 push 的 extra2 fn ptr）
+#if defined(_WIN32) || defined(_WIN64)
+                // Win64: 参数 1=rcx(callee slots), 2=rdx(ctx)，需 32 字节影子空间
                 enc.movRcxRdi();
                 enc.movRdxRsi();
                 enc.subRspShadow();
                 enc.emitBytes({0xff, 0xd0});
                 enc.asmLine("call rax  ; cross-graph C++ entry");
                 enc.addRspShadow();
+#else
+                // SysV: rdi=callee slots（已由 movRdiR11 设置），rsi=jitCtx（从 r13 恢复）
+                // 目标函数为 JitEntryFn wrapper，它会自行设置 rbx/r12/r13
+                enc.emitBytes({0x4C, 0x89, 0xEE});
+                enc.asmLine("mov rsi, r13  ; jitCtx (cross-graph entry)");
+                enc.callRax();
+#endif
             }
 
             // ═══ Release frame + store result ═══
@@ -663,13 +694,29 @@ void encodeMirBuffer(
             }
 
             if (p->isSameGraph) {
-                enc.movRcxRdi();
-                enc.movRdxRsi();
-                enc.movR8Imm64(p->slowPathBcAddr);
+                // 同图 slow path: directSelfFuncInvoke(callerSlots, ctx, bc)
+#if defined(_WIN32) || defined(_WIN64)
+                enc.movRcxRdi();              // Win64 arg1 = rcx = callerSlots
+                enc.movRdxRsi();              // Win64 arg2 = rdx = ctx
+                enc.movR8Imm64(p->slowPathBcAddr); // Win64 arg3 = r8 = bc
+#else
+                // SysV: rdi=callerSlots（已正确），恢复 rsi=jitCtx，rdx=bc
+                enc.emitBytes({0x4C, 0x89, 0xEE});
+                enc.asmLine("mov rsi, r13  ; jitCtx (same-graph slow path)");
+                enc.emitMovRegImm64(kRegRdx, p->slowPathBcAddr); // SysV arg3 = rdx = bc
+#endif
             } else {
-                enc.movRcxRdi();
-                enc.movRdxRsi();
-                enc.emitMovRegImm32(4, p->slowPathPc);
+                // 跨图 slow path: trampolineFunc(callerSlots, ctx, pc)
+#if defined(_WIN32) || defined(_WIN64)
+                enc.movRcxRdi();                    // Win64 arg1 = rcx = callerSlots
+                enc.movRdxRsi();                    // Win64 arg2 = rdx = ctx
+                enc.emitMovRegImm32(4, p->slowPathPc); // Win64 arg3 = r8 = pc
+#else
+                // SysV: rdi=callerSlots（已正确），恢复 rsi=jitCtx，rdx=pc
+                enc.emitBytes({0x4C, 0x89, 0xEE});
+                enc.asmLine("mov rsi, r13  ; jitCtx (cross-graph slow path)");
+                enc.emitMovRegImm32(kRegRdx, p->slowPathPc); // SysV arg3 = rdx = pc
+#endif
             }
             enc.movRaxImm64(p->slowPathFnAddr);
             enc.callRax();

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -683,10 +683,16 @@ class MirBuilder {
         emitPopRdi();
     }
 
+    // SysV AMD64 only: mov rsi, r13 — 从被调用者保存寄存器 r13 恢复 jitCtx。
+    // rsi 为 caller-saved，trampoline 可能破坏它；r13 由 JIT wrapper 初始化并跨调用持久。
+    // Win64 上此指令编码为单字节 nop（rsi 为 callee-saved，无需恢复）。
+    void emitMovRsiR13() { push(MirOp::MovRsiR13, 0, 0); }
+
     // SysV：rdi/rsi 已是 slots/ctx，设 rdx=pc、rax=addr 后 call
     // trampoline 会调用 fn(callee_slots) 覆盖 rdi，故需 push/pop 保存 caller 的 slot base
     void emitCallTrampolineSysV(uint32_t pc, uint64_t trampolineAddr) {
         emitPushRdi();
+        emitMovRsiR13(); // rsi (jitCtx) 可能已被上一次 trampoline 破坏，从 r13 恢复
         emitMovRegImm32(kRegRdx, pc);
         emitMovRegImm64(kRegRax, trampolineAddr);
         emitCallRax();
@@ -695,6 +701,7 @@ class MirBuilder {
     // SysV：第 3 参 pc→rdx，rax=addr，call（graph 从 slots[0] 即 Frame* 获取）
     void emitCallTrampolineOperSysV(uint32_t pc, uint64_t trampolineAddr) {
         emitPushRdi();
+        emitMovRsiR13(); // 从 r13 恢复 jitCtx
         emitMovRegImm32(kRegRdx, pc);
         emitMovRegImm64(kRegRax, trampolineAddr);
         emitCallRax();

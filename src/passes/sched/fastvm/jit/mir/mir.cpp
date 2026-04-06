@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -369,6 +369,9 @@ std::string mirToString(const Mir &m) {
            << " args=" << static_cast<int>(p->argsCnt) << " resultDisp=" << p->resultDisp;
         break;
     }
+    case MirOp::MovRsiR13:
+        os << "mov rsi, r13  ; jitCtx";
+        break;
     case MirOp::Nop:
         os << "nop";
         break;
@@ -658,6 +661,8 @@ size_t mirSizeBytes(const Mir &m) {
         return 80;
     case MirOp::NativeJitFuncCall:
         return 250;
+    case MirOp::MovRsiR13:
+        return 3; // 0x4C 0x89 0xEE on SysV; single-byte NOP on Win64
     case MirOp::Nop:
         return 1;
     }

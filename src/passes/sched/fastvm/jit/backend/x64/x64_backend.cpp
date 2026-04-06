@@ -735,7 +735,8 @@ bool X64Backend::compileBytecode(
             break;
         }
         case OpCode::FUNC: {
-#if defined(_WIN32) || defined(_WIN64)
+            // NativeJitFuncCall 同时支持 Win64 和 SysV AMD64；两者共享帧池管理逻辑，
+            // ABI 差异（调用约定、影子空间）均在 mir_encode.cpp 中通过 #if 分支处理。
             if (unit.poolTopAddr) {
                 GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
                 bool sameGraph          = (targetGraph == unit.graph);
@@ -799,7 +800,6 @@ bool X64Backend::compileBytecode(
                 slotCache.clear();
                 break;
             }
-#endif
             if (!unit.trampolineFunc)
                 return fail("pc=" + std::to_string(pc) + " no FUNC trampoline");
             uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineFunc);
@@ -1068,25 +1068,39 @@ bool X64Backend::compileBytecode(
         code[callPatchPos + 3] = static_cast<uint8_t>((callRel >> 24) & 0xFF);
     }
 #else
-    // System V AMD64: slot_t * in rdi, void *ctx in rsi (same as JIT body convention).
+    // System V AMD64: slot_t* in rdi, void* ctx in rsi (same as JIT body convention).
+    // 使用 3 个 callee-saved push (rbx/r12/r13)，确保调用 JIT body 时 RSP%16==0（满足 SysV
+    // 要求，call 指令压栈后 body 入口 RSP%16==8）。r13 作为 jitCtx 的稳定副本，防止
+    // trampoline 调用破坏 rsi 后无法传递正确 ctx（rsi 在 SysV 中是 caller-saved）。
     {
         uint64_t poolAddr  = unit.poolTopAddr ? reinterpret_cast<uint64_t>(unit.poolTopAddr) : 0;
         uint64_t graphAddr = reinterpret_cast<uint64_t>(unit.graph);
-        code.push_back(0x53);                  // push rbx (callee-saved)
+        // 3 pushes: rbx(callee-saved, holds &FramePool::top_),
+        //           r12(callee-saved, holds Graph*),
+        //           r13(callee-saved, holds jitCtx copy)
+        code.push_back(0x53);                  // push rbx
         code.insert(code.end(), {0x41, 0x54}); // push r12
-        // mov rbx, imm64(poolTopAddr)
+        code.insert(code.end(), {0x41, 0x55}); // push r13
+        // mov r13, rsi  — 将 jitCtx 存入 callee-saved r13，跨 trampoline 调用保持有效
+        // REX.W=1,REX.B=1(r13 in rm field), opcode=0x89(MOV r/m64,r64),
+        // ModRM=0xF5(mod=11,reg=rsi=6,rm=r13=5)
+        code.insert(code.end(), {0x49, 0x89, 0xF5}); // mov r13, rsi
+        // mov rbx, imm64(poolTopAddr)  — JIT 内部约定：rbx 缓存 &FramePool::top_
         code.push_back(0x48);
         code.push_back(0xBB);
         for (int b = 0; b < 8; ++b)
             code.push_back(static_cast<uint8_t>((poolAddr >> (b * 8)) & 0xFF));
-        // mov r12, imm64(graphAddr)
+        // mov r12, imm64(graphAddr)  — JIT 内部约定：r12 缓存当前 Graph*
         code.push_back(0x49);
         code.push_back(0xBC);
         for (int b = 0; b < 8; ++b)
             code.push_back(static_cast<uint8_t>((graphAddr >> (b * 8)) & 0xFF));
+        // call rel32(jitBody)
         code.push_back(0xE8);
         size_t callPatchPos = code.size();
         code.insert(code.end(), {0, 0, 0, 0});
+        // pop r13; pop r12; pop rbx; ret
+        code.insert(code.end(), {0x41, 0x5D}); // pop r13
         code.insert(code.end(), {0x41, 0x5C}); // pop r12
         code.push_back(0x5B);                  // pop rbx
         code.push_back(0xC3);                  // ret

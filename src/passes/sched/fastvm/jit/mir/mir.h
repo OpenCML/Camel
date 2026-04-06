@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -153,6 +153,10 @@ enum class MirOp : uint8_t {
     VXmm32CmpSetNZ,
     DebugTrace,        // 调试用：调用 jitDebugTrace(ctx)，打印 GPR + pc；仅 Debug 构建插入
     NativeJitFuncCall, // FUNC 内联帧管理 + call rel32/rax；imm64 = NativeJitCallParams*
+    // SysV AMD64 专用：将 jitCtx 从被调用者保存寄存器 r13 恢复到 rsi，以便跨 trampoline 调用后
+    // jitCtx 仍然有效（rsi 在 SysV 中为 caller-saved，可能被 trampoline 破坏）。
+    // Win64 上此指令为 nop（rsi 是 callee-saved，trampoline 不会破坏它）。
+    MovRsiR13,
     Nop,
 };
 
