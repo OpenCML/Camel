@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 30, 2026
+ * Updated: Apr. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1019,9 +1019,12 @@ bool X64Backend::compileBytecode(
         nullptr;
 #endif
 
-    // Generate C++ ABI wrapper: converts Win64 ABI to JIT internal convention, then calls body.
-    // Layout: [C++ wrapper | JIT body ...]. C++ callers enter at offset 0 (wrapper).
-    // JIT-to-JIT calls enter at jitEntryOffset_ (body start), bypassing wrapper overhead.
+    // Generate C++ ABI wrapper, then call MIR body. C++ enters at offset 0; JIT-to-JIT uses
+    // jitEntryOffset_ (body start) so rbx/r12 pool+graph cache is already live.
+    //
+    // Windows: rcx/rdx → rdi/rsi + load rbx/r12 (MIR/regalloc assume these on body entry).
+    // Linux SysV: rdi/rsi already hold slots/ctx; historically only Windows emitted this prologue,
+    // so Linux ran the body with garbage rbx/r12 and mis-compared / mis-loaded frame slots.
     size_t wrapperSize = 0;
 #if defined(_WIN32) || defined(_WIN64)
     {
@@ -1058,6 +1061,36 @@ bool X64Backend::compileBytecode(
         code.push_back(0x5F);                  // pop rdi
         code.push_back(0xC3);                  // ret
         wrapperSize            = code.size();  // = 42 bytes
+        int32_t callRel        = static_cast<int32_t>(wrapperSize - (callPatchPos + 4));
+        code[callPatchPos]     = static_cast<uint8_t>(callRel & 0xFF);
+        code[callPatchPos + 1] = static_cast<uint8_t>((callRel >> 8) & 0xFF);
+        code[callPatchPos + 2] = static_cast<uint8_t>((callRel >> 16) & 0xFF);
+        code[callPatchPos + 3] = static_cast<uint8_t>((callRel >> 24) & 0xFF);
+    }
+#else
+    // System V AMD64: slot_t * in rdi, void *ctx in rsi (same as JIT body convention).
+    {
+        uint64_t poolAddr  = unit.poolTopAddr ? reinterpret_cast<uint64_t>(unit.poolTopAddr) : 0;
+        uint64_t graphAddr = reinterpret_cast<uint64_t>(unit.graph);
+        code.push_back(0x53);                  // push rbx (callee-saved)
+        code.insert(code.end(), {0x41, 0x54}); // push r12
+        // mov rbx, imm64(poolTopAddr)
+        code.push_back(0x48);
+        code.push_back(0xBB);
+        for (int b = 0; b < 8; ++b)
+            code.push_back(static_cast<uint8_t>((poolAddr >> (b * 8)) & 0xFF));
+        // mov r12, imm64(graphAddr)
+        code.push_back(0x49);
+        code.push_back(0xBC);
+        for (int b = 0; b < 8; ++b)
+            code.push_back(static_cast<uint8_t>((graphAddr >> (b * 8)) & 0xFF));
+        code.push_back(0xE8);
+        size_t callPatchPos = code.size();
+        code.insert(code.end(), {0, 0, 0, 0});
+        code.insert(code.end(), {0x41, 0x5C}); // pop r12
+        code.push_back(0x5B);                  // pop rbx
+        code.push_back(0xC3);                  // ret
+        wrapperSize            = code.size();
         int32_t callRel        = static_cast<int32_t>(wrapperSize - (callPatchPos + 4));
         code[callPatchPos]     = static_cast<uint8_t>(callRel & 0xFF);
         code[callPatchPos + 1] = static_cast<uint8_t>((callRel >> 8) & 0xFF);

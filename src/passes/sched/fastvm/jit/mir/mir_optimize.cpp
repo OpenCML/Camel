@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -197,6 +197,14 @@ void eliminateDeadFrameStores(MirBuffer &buf) {
     // Save liveSlots snapshot at each jump target so forward jumps can merge.
     std::unordered_map<uint32_t, std::unordered_set<int32_t>> targetLiveness;
 
+    // Sentinel value inserted into liveSlots to mean "all frame slots are live".
+    // This is used when we encounter an opaque call (CallRax/CallRel32) that
+    // receives rdi=slot_base and can therefore read any slot implicitly (e.g.,
+    // trampolineFunc resolves argument slots by bytecode operand index at
+    // runtime). Valid frame disps are always positive multiples of 8, so
+    // INT32_MIN is a safe sentinel that never collides with a real disp.
+    constexpr int32_t kAllSlotsLive = INT32_MIN;
+
     for (size_t i = n; i > 0; --i) {
         Mir &m = buf[i - 1];
 
@@ -243,16 +251,29 @@ void eliminateDeadFrameStores(MirBuffer &buf) {
             continue;
         }
 
+        // Opaque calls through rax or a relative target: the callee receives
+        // rdi=slot_base and may implicitly read any frame slot (e.g., trampoline
+        // functions resolve argument slots via bytecode operand indices at
+        // runtime). We cannot statically enumerate which slots are accessed, so
+        // we insert the sentinel kAllSlotsLive to prevent any preceding
+        // VStoreToFrame from being declared dead.
+        if (m.op == MirOp::CallRax || m.op == MirOp::CallRel32) {
+            liveSlots.insert(kAllSlotsLive);
+            continue;
+        }
+
         if (readsFrameSlot(m.op)) {
             liveSlots.insert(m.disp);
             continue;
         }
 
         if (writesFrameSlot(m.op)) {
-            if (liveSlots.find(m.disp) == liveSlots.end())
+            // A store is dead only if neither its specific slot nor the
+            // all-slots-live sentinel is present in liveSlots.
+            if (liveSlots.count(m.disp) == 0 && liveSlots.count(kAllSlotsLive) == 0)
                 m.op = MirOp::Nop;
             else
-                liveSlots.erase(m.disp);
+                liveSlots.erase(m.disp); // sentinel is never erased (disp != INT32_MIN)
             continue;
         }
     }
