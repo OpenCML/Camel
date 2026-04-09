@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 23, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,25 +25,34 @@
 
 namespace camel::core::module {
 
-/** 宿主与 .cmo 的 ABI 版本号；不匹配时拒绝加载以避免解释器/模块版本不一致导致的崩溃。 */
+/** ABI version between the host and a .cmo module; reject mismatches to avoid crashes from
+ *
+ * interpreter/module version drift. */
 #define CAMEL_MODULE_ABI_VERSION 1
 
-/** .cmo 动态库需实现的工厂：根据上下文创建并返回模块实例（调用方取得所有权）。 */
+/** Factory that a .cmo dynamic library must implement: create and return a module instance from
+ *
+ * context (caller takes ownership). */
 using CamelModuleFactory = Module *(*)(camel::core::context::Context *);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-/** .cmo 必须导出：返回 CAMEL_MODULE_ABI_VERSION，用于加载前版本校验。 */
+/** The .cmo must export this: returns CAMEL_MODULE_ABI_VERSION for pre-load version checks. */
 int camel_module_abi_version(void);
-/** 第三方 .cmo 必须实现的符号：返回由 new 分配的 Module*，由运行时用 shared_ptr 接管。 */
+/** Symbol required by third-party .cmo modules: returns a new-allocated Module* that the runtime
+ *
+ * will take over via shared_ptr. */
 Module *camel_module_create(camel::core::context::Context *ctx);
 #ifdef __cplusplus
 }
 #endif
 
-/** 从 .cmo 路径加载动态库并调用 camel_module_create，返回模块；DLL 句柄由 ctx 持有。失败返回
- * nullptr；若 outError 非空则写入失败原因（如 DLL 加载失败、ABI 版本不匹配等）。 */
+/** Load a dynamic library from a .cmo path and call camel_module_create; return the module. The
+ *
+ * DLL handle is owned by ctx. Returns nullptr on failure; if outError is non-null, write the
+ *
+ * failure reason (e.g. DLL load failure or ABI mismatch). */
 module_ptr_t loadCmoModule(
     const std::string &moduleName, const std::string &path,
     const camel::core::context::context_ptr_t &ctx, std::string *outError = nullptr);

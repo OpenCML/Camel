@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -67,8 +67,8 @@ class Builder {
     bool synced_;
     bool varied_;
 
-    // 记录该 Graph 是否被已经被调用过（通过 createFuncDataNode 被使用）
-    // 已经被调用过的 Graph 不能再追加闭包捕获
+    // Track whether this Graph has already been used (via createFuncDataNode).
+    // A used Graph can no longer accept additional closure captures.
     std::unordered_set<Graph *> usedGraphs_;
     std::unordered_map<Node *, Node *> nodeModifierMap_;
     Node *lastSyncedNode_     = nullptr;

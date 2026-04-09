@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 10, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,30 +21,36 @@
 
 namespace camel::core::mm {
 
-// 由 GC 系统自动管理，需要从根对象可达
+// Managed automatically by the GC system and must remain reachable from roots.
 GenerationalAllocatorWithGC &autoSpace() {
     static auto *allocator = new GenerationalAllocatorWithGC(
         GenerationalAllocatorWithGC::Config{
             .birthSize             = 32 * MB, // 32 MB
             .havenSize             = 4 * MB,  // 4 MB
             .elderGenSize          = 64 * MB, // 64 MB
-            .promotionAgeThreshold = 4,       // 晋升阈值
-            .largeObjThreshold     = 4 * KB,  // 大对象阈值
-            .minorGCTriggerRatio   = 0.9f,    // 小垃圾回收触发比例
-            .majorGCTriggerRatio   = 0.8f     // 大垃圾回收触发比例
+            .promotionAgeThreshold = 4,       // Promotion threshold.
+            .largeObjThreshold     = 4 * KB,  // Large-object threshold.
+            .minorGCTriggerRatio   = 0.9f,    // Minor GC trigger ratio.
+            .majorGCTriggerRatio   = 0.8f     // Major GC trigger ratio.
         });
     return *allocator;
 }
 
-// 元数据区，手动管理分配和释放
+// Metadata space: manually managed allocation and release.
 FreeListAllocator &metaSpace() {
-    // 进程级元空间采用“有意泄漏”单例，规避静态析构顺序问题：
-    // 某些全局对象在进程退出阶段才释放，仍可能调用 metaSpace().free()。
+    // The process-level meta space uses an intentionally-leaked singleton to avoid static
+    // destruction order problems: some global objects may still call metaSpace().free() during
+    // shutdown.
     static auto *allocator = new FreeListAllocator(16 * MB, "meta"); // 16 MB
     return *allocator;
 }
 
-// 永久代，只分配，不释放
+// Permanent generation: allocate only, never free.
+
+FreeListAllocator &graphSpace() {
+    static auto *allocator = new FreeListAllocator(64 * MB, "graph"); // 64 MB
+    return *allocator;
+}
 BumpPointerAllocator &permSpace() {
     static auto *allocator = new BumpPointerAllocator(32 * MB, "perm"); // 32 MB
     return *allocator;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -99,7 +99,8 @@ void debugHashSortedInputIndices(const Node *n, uint64_t laneTag, uint64_t &w0, 
 
 } // namespace
 
-// 不能放在匿名命名空间内：Graph::makeStableId 定义在块外，需在本翻译单元内可见。
+// Must stay out of the anonymous namespace: Graph::makeStableId is defined
+// outside the block and must remain visible in this translation unit.
 static std::string makeGraphStableId(const std::string &name) {
     // DebugMap / debugger / runtime diagnostics all key graph origins by stableId.
     // So this id must remain invariant across rearrange(), bytecode lowering, and
@@ -109,10 +110,11 @@ static std::string makeGraphStableId(const std::string &name) {
     return std::format("graph:{}#{}", name.empty() ? "<anonymous>" : name, id);
 }
 
-// GraphBuilder 的实现已拆至 graph_builder.cpp（含 seal/clone/inline 与 staging 同步）。
+// GraphBuilder has been split into graph_builder.cpp, including seal/clone/
+// inline and staging synchronization.
 
 // =============================================================================
-// Graph 创建与节点管理
+// Graph creation and node management.
 // =============================================================================
 
 std::string Graph::makeStableId(const std::string &name) { return makeGraphStableId(name); }
@@ -141,17 +143,21 @@ Graph::~Graph() {
 }
 
 // -----------------------------------------------------------------------------
-// 节点「调试实体 id」两阶段
+// Two phases of node debug entity IDs.
 //
-// 1) 构造时（draft）：只有占位串 draft:{序号}，供 Node::debugEntityId() 在任意时刻可查询；
-//    与 SourceContext 的草稿绑定（bindGirNodeDraftDebug）按 Node* 关联，不依赖此字符串。
-// 2) finalize/rearrange 之后：布局与 dataIndex 已确定，再计算内容寻址指纹并写入
-//    nodeStableIds_（形如 gnode:{032x}），同时 sealPromoteGirNodeDebug 把 DebugMap 等
-//    键从草稿迁到该实体 id。
+// 1) Construction time (draft): only a placeholder draft:{seq} string exists
+//    so Node::debugEntityId() can be queried at any time; the SourceContext
+//    draft binding (bindGirNodeDraftDebug) is keyed by Node* and does not rely
+//    on this string.
+// 2) After finalize/rearrange: layout and dataIndex are fixed, then we compute
+//    a content-addressed fingerprint and store it in nodeStableIds_ (like
+//    gnode:{032x}); sealPromoteGirNodeDebug moves DebugMap keys from draft to
+//    that entity ID.
 // -----------------------------------------------------------------------------
 
 void Graph::installProvisionalNodeStableId(Graph &graph, const Node *node) {
-    // 草稿期仅需要“图内可区分”的临时实体 id；最终会在 seal 阶段统一提升为 gnode: 指纹。
+    // During the draft phase we only need a temporary in-graph entity ID; it
+    // will be promoted to a gnode: fingerprint during sealing.
     const uint64_t seq = graph.provisionalDebugIdSeed_++;
     graph.nodeStableIds_[node] =
         std::format("draft:{}:{}", graph.stableId_, static_cast<unsigned long long>(seq));
@@ -159,8 +165,9 @@ void Graph::installProvisionalNodeStableId(Graph &graph, const Node *node) {
 
 NodeDebugFingerprint
 Graph::computeNodeDebugFingerprintForNode(Node *node, uint64_t tieBreaker) const {
-    // 128-bit 分成 word0/word1；混合 FNV 风格哈希，目标是「同图、同布局、同结构」则指纹稳定，
-    // 不因遍历哈希表顺序而飘（邻接侧已排序槽位索引）。
+    // Split the 128-bit fingerprint into word0/word1; mix with an FNV-style
+    // hash so the fingerprint stays stable for the same graph, layout, and
+    // structure, independent of hash-table traversal order.
     uint64_t w0          = debugHashString(stableId_);
     uint64_t w1          = debugMix64(0, static_cast<uint64_t>(static_cast<int>(node->type())));
     data_idx_t stableIdx = 0;
@@ -170,16 +177,17 @@ Graph::computeNodeDebugFingerprintForNode(Node *node, uint64_t tieBreaker) const
     w1 = debugMix64(
         w1,
         static_cast<uint64_t>(static_cast<uint32_t>(static_cast<int32_t>(stableIdx))));
-    // 把所有 LinkType 上的邻居 runtime/static 槽位拉平、排序后混入，体现「连了谁」。
+    // Flatten and sort all neighboring runtime/static slots on LinkType edges
+    // before mixing them in, so the fingerprint captures who is connected.
     debugHashSortedInputIndices(node, 0xA5A5A5A5A5A5A5A5ULL, w0, w1);
 
     switch (node->type()) {
     case NodeType::PORT:
-        // 同名端口在不同图中应对应不同指纹。
+        // Ports with the same name in different graphs must still hash differently.
         w0 = debugMix64(w0, debugHashString(nodePortName(node)));
         break;
     case NodeType::ACCS: {
-        // 数字下标无 Graph 侧字符串；仅有字符串 key 时才参与哈希。
+        // Numeric indices have no Graph-side string; only string keys participate in hashing.
         auto it = nodeAccsKeys_.find(node);
         if (it != nodeAccsKeys_.end()) {
             w0 = debugMix64(w0, debugHashString(it->second));
@@ -187,25 +195,26 @@ Graph::computeNodeDebugFingerprintForNode(Node *node, uint64_t tieBreaker) const
         break;
     }
     case NodeType::OPER:
-        // 用算子身份区分不同 OPER（槽位与边可能相似）。
+        // Use the operator identity to distinguish different OPER nodes.
         w0 = debugMix64(
             w0,
             reinterpret_cast<uint64_t>(
                 reinterpret_cast<uintptr_t>(tt::as_ptr<OperNode>(node)->oper())));
         break;
     case NodeType::FUNC:
-        // 子图 stableId 区分指向不同函数体的 FUNC 节点。
+        // Use the subgraph stableId to distinguish FUNC nodes pointing at different bodies.
         w0 = debugMix64(w0, debugHashString(tt::as_ptr<FuncNode>(node)->bodyGraph()->stableId()));
         break;
     case NodeType::DATA: {
-        // 静态槽位内容身份（与常量/函数值等绑定相关）。
+        // Static slot content identity, tied to constants, function values, and similar bindings.
         slot_t sl = tt::as_ptr<DataNode>(node)->dataSlot();
         w0        = debugMix64(w0, debugHashBytes(&sl, sizeof(sl)));
         break;
     }
     case NodeType::SYNC:
     case NodeType::GATE:
-        // 此类节点在 layout 里常无独立 dataIndex 语义，用地址打破对称、避免误合并。
+        // These nodes often have no standalone dataIndex semantics in the layout,
+        // so use the address to break symmetry and avoid accidental merging.
         w0 = debugMix64(
             w0,
             reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(const_cast<Node *>(node))));
@@ -214,7 +223,8 @@ Graph::computeNodeDebugFingerprintForNode(Node *node, uint64_t tieBreaker) const
         break;
     }
 
-    // 同图内按固定遍历序递增，进一步降低不同节点 128-bit 偶然碰撞的概率。
+    // Increment in a fixed traversal order within the graph to further reduce
+    // the chance of accidental 128-bit collisions between nodes.
     w1 = debugMix64(w1, tieBreaker);
     return {w0, w1};
 }
@@ -235,12 +245,14 @@ void Graph::promoteNodeDebugIds(camel::source::SourceContext *sourceContext) {
         if (sourceContext == nullptr) {
             return;
         }
-        // 仅当该节点在 GCT 阶段登记过草稿绑定时，sealPromote 才会写入 DebugMap / 语义表。
+        // Only nodes that were registered with a draft binding during the GCT
+        // phase will be written into the DebugMap / semantic table here.
         const std::string &id = nodeStableIds_[n];
         sourceContext->sealPromoteGirNodeDebug(n, id);
     };
 
-    // 顺序与 computeLayout 中端口/闭包/主体节点的大致层次一致，保证 tieBreaker 可复现。
+    // The order matches the rough hierarchy used by computeLayout for ports,
+    // closures, and body nodes so the tie breaker stays reproducible.
     for (Node *n : normPorts_) {
         promoteOne(n);
     }
@@ -264,7 +276,7 @@ Node *Graph::exitNode() const {
 Node *Graph::outputNode() const { return exitNode(); }
 
 // =============================================================================
-// Graph 查询与数据段
+// Graph queries and data segments
 // =============================================================================
 
 const std::string &Graph::nodeDebugEntityId(const Node *node) const {
@@ -335,7 +347,8 @@ void Graph::packStaticSlotsToFrozen() {
         arena_->allocFrozen(sizeof(slot_t) * packedStaticDataSize_, alignof(slot_t)));
     std::memcpy(packedStaticData_, staticDataArr_.data(), sizeof(slot_t) * packedStaticDataSize_);
     hasPackedStaticData_ = true;
-    // seal 后释放构图期容器容量；运行时改走 packedStaticData_。
+    // Release build-time container capacity after sealing; runtime uses
+    // packedStaticData_ instead.
     staticDataArr_.clear();
     staticDataArr_.shrink_to_fit();
 }
@@ -347,7 +360,8 @@ void Graph::installFinalFrameLayout() {
     const TupleType *runtimeDataTy = runtimeDataType();
     const TupleType *staticDataTy  = staticDataType();
     ASSERT(runtimeDataTy != nullptr && staticDataTy != nullptr, "Graph layout is incomplete.");
-    // 按用户约束：静态区统一落在 autoSpace（GC）里；Graph 仅持有 Tuple*。
+    // Per the user constraint, the static area lives in autoSpace (GC), and the
+    // Graph only holds the Tuple*.
     auto &allocator = camel::core::mm::autoSpace();
     ::Tuple *area   = ::Tuple::create(staticDataTy->size(), allocator);
     for (size_t i = 1; i < staticDataTy->size(); ++i) {
@@ -385,7 +399,7 @@ slot_t Graph::getStaticDataSlot(data_idx_t index) const {
 }
 
 // =============================================================================
-// Graph 子图与依赖
+// Graph subgraphs and dependencies.
 // =============================================================================
 
 std::optional<std::unordered_set<graph_ptr_t>>

@@ -77,8 +77,12 @@ camel fib.cml std::inline std::fvm   # Inline first, then execute on high-perfor
 
 ## 6. Development Preferences and Quality Bar
 - Target language standard: C++23. Prefer modern C++ idioms and features where appropriate.
-- Maintain strong commentary (in English) and documentation discipline. Aim for approximately 30% comment density in new code; do not mirror legacy under-commented areas.
+- Maintain strong commentary and documentation discipline in English. New code should be commented intentionally and sufficiently, especially for non-trivial logic, implicit assumptions, edge cases, and design decisions; do not mirror legacy under-commented areas, and do not trade clarity for minimal code churn.
 - Favor elegant, correctness-first designs. Avoid short-term bypasses introduced solely to minimize code churn.
+- The project is in an early, heavy-refactor stage. Prefer large, structural, end-state-oriented redesigns over incremental compatibility-preserving migration when a subsystem boundary is fundamentally wrong.
+- Do not optimize for short-term safety or staged coexistence if that leaves behind temporary scaffolding, bridge layers, or cleanup debt. When a runtime/compile-time boundary or ownership model is being redesigned, favor replacing the old path outright.
+- Treat transitional adapters, compatibility shims, dual-track APIs, and “temporary” fallback code as a last resort. If they are introduced unavoidably, they must be minimal, explicitly documented, and scheduled for deletion in the same refactor stream.
+- During major refactors, prioritize architectural completeness and conceptual cleanliness first; use the generous follow-up window for regression testing and bug fixing after the new structure is in place.
 - Follow industrial-grade best practices with a long-term perspective; refactor proactively and frequently to prevent technical debt accumulation.
 - This project is currently internal-only. Unless explicitly required, do not optimize for forward compatibility. Prioritize cleanliness and correctness; avoid dual-track APIs.
 - Escalate fundamental design conflicts or ambiguous trade-offs early. Record decisions and rationale in both documentation and code comments.

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,7 +43,8 @@ class Struct : public rtdata::Object {
 
         Struct *s = new (memory) Struct(fieldCount);
 
-        // 标准槽容器：全部初始化为 NullSlot（引用即 null，值类型由 set 覆盖）
+        // Standard slot container: initialize everything to NullSlot (references are null;
+        // value types are overwritten by set).
         std::fill(s->data_, s->data_ + fieldCount, NullSlot);
 
         return s;
@@ -98,7 +99,7 @@ class Struct : public rtdata::Object {
         const type::StructType *structType = static_cast<const type::StructType *>(type);
         const Struct *otherStruct          = reinterpret_cast<const Struct *>(other);
 
-        // 字段数量不同则不相等
+        // Different field counts mean inequality.
         if (size_ != otherStruct->size_ || size_ != structType->size())
             return false;
 
@@ -107,11 +108,12 @@ class Struct : public rtdata::Object {
         const slot_t *dataB = otherStruct->data_;
 
         if (!deep) {
-            // 浅比较：直接比较整个内存块（引用字段只比较指针）
+            // Shallow compare: compare the entire memory block directly (reference fields
+            // compare pointers only).
             return std::memcmp(dataA, dataB, size_ * sizeof(slot_t)) == 0;
         }
 
-        // 深比较：逐字段递归比较
+        // Deep compare: recurse field by field.
         for (size_t i = 0; i < size_; ++i) {
             type::TypeCode typeCode = codes[i];
             if (type::isGCTraced(typeCode)) {
@@ -151,17 +153,17 @@ class Struct : public rtdata::Object {
 
                 if (oriRef) {
                     if (deep) {
-                        // 递归克隆引用对象
+                        // Recursively clone the referenced object.
                         newRef = oriRef->clone(allocator, structType->typeAt(i), true);
                     } else {
-                        // 浅拷贝：直接引用原指针
+                        // Shallow copy: keep the original pointer.
                         newRef = const_cast<rtdata::Object *>(oriRef);
                     }
                 }
 
                 reinterpret_cast<rtdata::Object **>(dst)[i] = newRef;
             } else {
-                // 非引用类型：直接复制 slot 数据
+                // Non-reference types: copy the slot data directly.
                 dst[i] = src[i];
             }
         }
@@ -194,7 +196,7 @@ class Struct : public rtdata::Object {
     }
 
     virtual void onMoved() override {
-        // 不需要调整
+        // No adjustment is needed.
     }
 
     virtual void updateRefs(
@@ -218,5 +220,5 @@ class Struct : public rtdata::Object {
     explicit Struct(size_t fieldCount) : size_(static_cast<uint32_t>(fieldCount)) {}
 
     uint32_t size_;
-    slot_t data_[]; // 灵活数组成员
+    slot_t data_[]; // Flexible array member.
 };

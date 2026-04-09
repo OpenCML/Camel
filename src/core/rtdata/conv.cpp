@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -157,8 +157,8 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
             return gcFunc;
         }
 
-        // 说明函数包含闭包
-        // 下面填充已捕获的闭包值
+        // The function carries closure data.
+        // Fill in the captured closure values below.
         const auto &closureData = funcData->closure();
 
         if (closureData.size() > 0) {
@@ -181,7 +181,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
                 }
             }
         } else {
-            // 没有已捕获的闭包值，则填充空值
+            // No closure values were captured, so fill with nulls.
             for (size_t i = 0; i < gcTuple->size(); ++i) {
                 gcTuple->set<slot_t>(i, NullSlot);
             }

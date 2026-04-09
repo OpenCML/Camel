@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,12 +42,13 @@ struct ObjectHeader {
     union {
         size_t raw_;
         struct {
-            size_t total_ : 48;   // 正常模式存总大小（header+payload），GC模式存转发地址
-            size_t age_ : 4;      // 年龄 (0-15)
-            size_t marked_ : 1;   // GC标志
-            size_t state_ : 1;    // 0=Normal, 1=Forwarded
-            size_t region_ : 4;   // 所在区域
-            size_t reserved_ : 6; // 预留位
+            size_t total_ : 48; // Normal mode stores total size (header + payload); GC mode stores
+                                // the forwarded address.
+            size_t age_ : 4;    // Age (0-15)
+            size_t marked_ : 1; // GC mark flag
+            size_t state_ : 1;  // 0=Normal, 1=Forwarded
+            size_t region_ : 4; // Region ID
+            size_t reserved_ : 6; // Reserved bits
         };
     };
 
@@ -101,7 +102,7 @@ struct ObjectHeader {
 
         size_t addrValue = reinterpret_cast<size_t>(addr);
 
-        // 确保是规范的 48 位地址（x86-64）
+        // Ensure the address is a canonical 48-bit x86-64 address.
         ASSERT(
             (addrValue & 0xFFFF000000000000ULL) == 0 ||
                 (addrValue & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL,
@@ -118,7 +119,7 @@ struct ObjectHeader {
 
     void *forwardedAddr() const {
         ASSERT(state_ == 1, "Object is not forwarded");
-        // 符号扩展恢复完整地址
+        // Restore the full address via sign extension.
         size_t addrValue = total_;
         if (addrValue & 0x0000800000000000ULL) {
             addrValue |= 0xFFFF000000000000ULL;
@@ -149,7 +150,7 @@ struct ObjectHeader {
     }
 };
 
-// 静态断言确保大小
+// Static assertions to ensure the expected size.
 #ifndef NDEBUG
 static_assert(sizeof(ObjectHeader) == 16, "ObjectHeader must be 16 bytes");
 #else

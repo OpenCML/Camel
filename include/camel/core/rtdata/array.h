@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,14 +27,14 @@
 namespace rtdata = camel::core::rtdata;
 namespace type   = camel::core::type;
 
-// FixedArray: 固定大小的数组，对象体和数据区在一块连续内存中
+// FixedArray: fixed-size array with object body and data area in one contiguous block.
 class FixedArray : public rtdata::Object {
   public:
-    // 禁止直接构造
+    // Direct construction is forbidden.
     FixedArray(const FixedArray &)            = delete;
     FixedArray &operator=(const FixedArray &) = delete;
 
-    // 静态创建方法
+    // Static creation method.
     static FixedArray *create(size_t size, camel::core::mm::IAllocator &allocator) {
         size_t headerSize = sizeof(FixedArray);
         size_t dataSize   = size * sizeof(slot_t);
@@ -87,7 +87,7 @@ class FixedArray : public rtdata::Object {
 
         if (type::isGCTraced(elemTypeCode)) {
             if (deep) {
-                // 深比较引用对象
+                // Deep compare reference objects.
                 const type::Type *elemType = arrayType->elemType();
                 for (size_t i = 0; i < size_; ++i) {
                     const rtdata::Object *refA = arrA[i];
@@ -99,7 +99,7 @@ class FixedArray : public rtdata::Object {
                 }
                 return true;
             } else {
-                // 浅比较引用指针地址
+                // Shallow compare reference pointer addresses.
                 return std::memcmp(arrA, arrB, size_ * sizeof(rtdata::Object *)) == 0;
             }
         } else {
@@ -124,12 +124,12 @@ class FixedArray : public rtdata::Object {
                 const rtdata::Object *oriRef = srcArr[i];
                 if (oriRef) {
                     if (deep) {
-                        // 深拷贝：递归克隆引用对象
+                        // Deep copy: recursively clone referenced objects.
                         rtdata::Object *clonedRef =
                             oriRef->clone(allocator, arrayType->elemType(), true);
                         dstArr[i] = clonedRef;
                     } else {
-                        // 浅拷贝：直接复制引用
+                        // Shallow copy: copy the reference directly.
                         dstArr[i] = const_cast<rtdata::Object *>(oriRef);
                     }
                 } else {
@@ -137,7 +137,7 @@ class FixedArray : public rtdata::Object {
                 }
             }
         } else {
-            // 非引用类型，直接复制数据
+            // Non-reference types: copy data directly.
             std::memcpy(dstArr, srcArr, size_ * sizeof(slot_t));
         }
 
@@ -163,8 +163,9 @@ class FixedArray : public rtdata::Object {
     }
 
     virtual void onMoved() override {
-        // 这里不需要更新 data_，因为它指向的是对象内部的灵活数组成员
-        // 灵活数组不是指针，不占用内存空间，在访问时通过偏移量动态计算得到
+        // There is no need to update data_ here, because it points to the object's internal
+        // flexible array member. The flexible array is not a pointer and occupies no extra memory;
+        // its address is computed by offset at access time.
     }
 
     virtual void updateRefs(
@@ -192,16 +193,16 @@ class FixedArray : public rtdata::Object {
 
     size_t size_;
 
-    // 灵活数组成员 (Flexible Array Member)
-    // 必须是最后一个成员
-    // alignas 确保正确对齐
+    // Flexible array member (Flexible Array Member)
+    // Must be the last member.
+    // alignas ensures correct alignment.
     slot_t data_[];
 };
 
-// Array: 动态数组，支持小数组内联优化
+// Array: dynamic array with small-array inline optimization.
 class Array : public rtdata::Object {
   public:
-    // 禁止直接构造
+    // Direct construction is forbidden.
     Array(const Array &)            = delete;
     Array &operator=(const Array &) = delete;
 
@@ -257,12 +258,12 @@ class Array : public rtdata::Object {
     void pop() {
         ASSERT(size_ > 0, "Cannot pop from empty array");
         size_--;
-        // 不需要立即缩容，保持capacity不变
+        // No immediate shrink is needed; keep capacity unchanged.
     }
 
     void clear() {
         size_ = 0;
-        // 保留capacity，不释放fixedArray_
+        // Preserve capacity and do not release fixedArray_.
     }
 
     void shrinkToFit() {
@@ -291,7 +292,7 @@ class Array : public rtdata::Object {
 
         if (type::isGCTraced(elemTypeCode)) {
             if (deep) {
-                // 深比较引用对象
+                // Deep compare referenced objects.
                 for (size_t i = 0; i < size_; ++i) {
                     const rtdata::Object *refA = arrA[i];
                     const rtdata::Object *refB = arrB[i];
@@ -302,11 +303,11 @@ class Array : public rtdata::Object {
                 }
                 return true;
             } else {
-                // 浅比较引用地址
+                // Shallow compare reference addresses.
                 return std::memcmp(arrA, arrB, size_ * sizeof(rtdata::Object *)) == 0;
             }
         } else {
-            // 基本类型比较
+            // Compare primitive values.
             return std::memcmp(arrA, arrB, size_ * sizeof(slot_t)) == 0;
         }
     }
@@ -323,12 +324,12 @@ class Array : public rtdata::Object {
         newArray->capacity_ = capacity_;
 
         if (fixedArray_) {
-            // 外部存储：直接克隆 FixedArray
+            // External storage: clone FixedArray directly.
             newArray->fixedArray_ =
                 reinterpret_cast<FixedArray *>(fixedArray_->clone(allocator, type, deep));
             newArray->dataPtr_ = newArray->fixedArray_->data();
         } else {
-            // 内联存储：需要自己复制数据
+            // Inline storage: copy the data ourselves.
             newArray->fixedArray_ = nullptr;
             newArray->dataPtr_    = newArray->inlineData_;
 
@@ -385,7 +386,7 @@ class Array : public rtdata::Object {
         const type::Type *type) override {
         if (!type || type->code() != type::TypeCode::Array)
             return;
-        // 更新对FixedArray的引用
+        // Update the reference to FixedArray.
         if (fixedArray_) {
             rtdata::Object *newPtr = relocate(fixedArray_);
             fixedArray_            = static_cast<FixedArray *>(newPtr);
@@ -429,17 +430,17 @@ class Array : public rtdata::Object {
     }
 
     camel::core::mm::IAllocator *allocator_;
-    FixedArray *fixedArray_; // 底层固定数组，nullptr表示使用内联存储（8字节）
+    FixedArray *fixedArray_; // Backing fixed array; nullptr means inline storage (8 bytes).
 
-    uint32_t size_;     // 逻辑元素个数（4字节）
-    uint32_t capacity_; // 缓存的容量信息（4字节）
+    uint32_t size_;     // Logical element count (4 bytes).
+    uint32_t capacity_; // Cached capacity (4 bytes).
 
-    // 关键字段：数据指针，始终指向当前使用的数据区
-    // - 当使用内联存储时：dataPtr_ == inlineData_
-    // - 当使用外部数组时：dataPtr_ == fixedArray_->data()
-    // 这使得随机访问（operator[]）可以零开销地直接解引用
-    slot_t *dataPtr_; // 当前数据区指针（8字节）
+    // Key field: data pointer, always points to the active data region.
+    // - When inline storage is active: dataPtr_ == inlineData_
+    // - When using external storage: dataPtr_ == fixedArray_->data()
+    // This makes random access (operator[]) zero-overhead direct dereference.
+    slot_t *dataPtr_; // Pointer to the current data region (8 bytes).
 
-    // 小数组优化：内联存储
-    slot_t inlineData_[SMALL_ARRAY_SIZE]; // 内联数据区
+    // Small-array optimization: inline storage.
+    slot_t inlineData_[SMALL_ARRAY_SIZE]; // Inline data region.
 };

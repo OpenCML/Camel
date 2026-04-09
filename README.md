@@ -172,6 +172,7 @@ func main(): int sync {
 ## 📚 Learn More
 
 - [Build Yourself](docs/setup.en.md) - Environment setup and installation guide
+- [CMake build options](docs/build-options.en.md) - FastVM, Python embedding, `npm run config`, `CAMEL_SKIP_PYTHON`
 - [WIP] [Documentation](https://docs.opencml.com/) - Language specs and API reference
 - [WIP] [Examples](examples/) - From MNIST training to distributed pipelines
 - [WIP] [Whitepaper](https://arxiv.org/abs/xxxx.xxxx) - Deep dive into the compiler architecture

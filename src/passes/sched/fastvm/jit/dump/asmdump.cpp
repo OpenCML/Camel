@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 07, 2026
- * Updated: Mar. 30, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,11 +34,11 @@ using namespace camel::core::context;
 using namespace camel::jit;
 #endif
 
-graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+graph_ptr_t JitAsmDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
-    const auto &[bytecodes, _, offsetMap] = compileAndLink(
+    auto linked = compileAndLink(
         context_,
-        graph.get(),
+        graph,
         {
             .enableTailCallDetection = true,
             .enableInlineOperators   = true,
@@ -54,9 +54,10 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     os << "[JIT Assembly] [offset]  instruction\n";
     os << "---\n";
 
-    std::span<const Bytecode> bcSpan(bytecodes.data(), bytecodes.size());
+    std::span<const Bytecode> bcSpan(linked.codes.data(), linked.codes.size());
 
-    for (const auto &[g, entryPc] : offsetMap) {
+    for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
+        GIR::Graph *g = runtimeGraph ? runtimeGraph->compileGraphMetadata().get() : nullptr;
         ASSERT(
             g->finalized(),
             std::format("Graph '{}' must be sealed before JIT assembly dump.", g->name()));

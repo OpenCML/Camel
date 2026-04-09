@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 13, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -473,7 +473,7 @@ string Generator::generateFuncDeclLoad(const AST::node_ptr_t &node) {
 
     string code     = "";
     string funcName = funcDeclLoad->geneCode();
-    // cout << "[generateFuncDeclLoad]原始funcName: " << funcName << endl;
+    // cout << "[generateFuncDeclLoad] original funcName: " << funcName << endl;
     string withParamsCode, paramsCode, returnTypeCode, bodyCode;
     bool hasWithParams = false;
     bool isMacro = false, isAtomic = false, isShared = false, isSync = false;

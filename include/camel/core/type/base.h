@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,31 +31,31 @@ namespace camel::core::type {
 namespace type_impl = ::camel::core::type;
 
 /*
- TypeCode (32 bits) 编码结构:
+ TypeCode (32 bits) encoding layout:
 
  bit31      bit30      bit29      bit28      bit27 ............... bit0
  +----------+----------+----------+----------+------------------------+
  |OtherType |Composite |GC_Traced |Auxiliary |      ID (28 bits)      |
  +----------+----------+----------+----------+------------------------+
  ^          ^          ^          ^          ^
- |          |          |          |          └─ 类内唯一编号 (0x0000000 ~ 0x0FFFFFFF)
- |          |          |          └─ bit28: 辅助类型（无实际数据存储）
- |          |          └─ bit29: 是否为 GC 跟踪类型
- |          └─ bit30: 是否为组合类型（Struct / Array / Tuple / ...）
- └─ bit31: 是否为第三方类型（非内置类型）
+ |          |          |          |          └─ Class-unique ID (0x0000000 ~ 0x0FFFFFFF)
+ |          |          |          └─ bit28: auxiliary type (no actual data storage)
+ |          |          └─ bit29: GC-traced type flag
+ |          └─ bit30: composite type flag (Struct / Array / Tuple / ...)
+ └─ bit31: third-party type flag (non-built-in type)
 
- 说明:
- - 高位标志位可组合使用，例如 Composite | GC_Traced
- - ID 用于区分具体类型编号，低 28 位有效
+ Notes:
+ - High-bit flags can be combined, e.g. Composite | GC_Traced
+ - ID distinguishes concrete type numbers; only the low 28 bits are used
 */
 
 enum class TypeFlag : uint32_t {
-    Primitive = 0,        // 内置原始类型，既非组合类型，也非 GC 跟踪类型
-    OtherType = 1u << 31, // 第三方类型，由第三方库在运行时注册实际id
-    Composite = 1u << 30, // 组合类型，由多个类型组合而成
-    GC_Traced = 1u << 29, // GC 跟踪类型，其数据对象会持有由 GC 管理的内存块引用
-    Auxiliary = 1u << 28, // 辅助类型，参与类型解算但无实际数据对象
-    // Reference = 1u << 27  // 待补全的引用类型
+    Primitive = 0,        // Built-in primitive type: neither composite nor GC-traced.
+    OtherType = 1u << 31, // Third-party type; actual IDs are registered at runtime.
+    Composite = 1u << 30, // Composite type made from multiple types.
+    GC_Traced = 1u << 29, // GC-traced type whose data object holds GC-managed references.
+    Auxiliary = 1u << 28, // Auxiliary type used for resolution but with no data object.
+    // Reference = 1u << 27  // Reserved reference type.
 };
 
 constexpr TypeFlag operator|(TypeFlag a, TypeFlag b) {
@@ -63,7 +63,7 @@ constexpr TypeFlag operator|(TypeFlag a, TypeFlag b) {
 }
 
 constexpr uint32_t makeTypeCode(TypeFlag flags, uint32_t id) {
-    return static_cast<uint32_t>(flags) | (id & 0x0FFFFFFF); // 低 28 位存 id
+    return static_cast<uint32_t>(flags) | (id & 0x0FFFFFFF); // Store the ID in the low 28 bits.
 }
 
 enum class TypeCode : uint32_t {
@@ -89,10 +89,10 @@ inline constexpr bool hasFlag(uint32_t code, TypeFlag flag) {
     return (code & static_cast<uint32_t>(flag)) != 0;
 }
 
-// !注意，isPrimitive 意味着
+// Note: isPrimitive means
 // !isComposite && !isOtherType && !isAuxiliary
 template <typename T> inline constexpr bool isPrimitive(T code) {
-    // Primitive 类型没有任何标志位，即前四位均为 0
+    // Primitive types have no flags set, i.e. the upper four bits are all 0.
     return (static_cast<uint32_t>(code) & 0xF0000000) == 0;
 }
 
@@ -129,7 +129,7 @@ class Type {
   protected:
     TypeCode code_;
 
-    /** Any 类型 cast 规则：任何类型与 Any 互相转换均为 Safe，供子类 castSafetyFrom 复用 */
+    /** Any-cast rule: converting between Any and any other type is always Safe. */
     static std::optional<CastSafety> checkCastSafetyWithAny(TypeCode targetCode, Type *sourceType);
 
   public:

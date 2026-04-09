@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -292,7 +292,7 @@ void collectDefUse(
     // It mirrors bytecode semantics directly, so uses/defs are expressed in
     // frame-slot indices instead of virtual registers.
     switch (bc.opcode) {
-    // 定长：RETN, CAST, COPY, ACCS, JUMP
+    // Fixed-length: RETN, CAST, COPY, ACCS, JUMP
     case OpCode::RETN:
         useSlot(bc.fastop[0]);
         break;
@@ -311,8 +311,7 @@ void collectDefUse(
         break;
     case OpCode::JUMP:
         break;
-
-    // 变长：BRCH, JOIN, FILL, CALL, FUNC, TAIL, OPER, SCHD
+    // Variable-length: BRCH, JOIN, FILL, CALL, FUNC, TAIL, OPER, SCHD
     case OpCode::BRCH:
         for (size_t i = 0; i < bc.normCnt(); ++i)
             useSlot(bc.nargs()[i]);
@@ -348,8 +347,7 @@ void collectDefUse(
             useSlot(bc.operands()[i]);
         defSlot(bc.result);
         break;
-
-    // 二元算术：use fastop[0], fastop[1]; def result
+    // Binary comparison: use fastop[0], fastop[1]; def result
     case OpCode::IADD:
     case OpCode::LADD:
     case OpCode::FADD:
@@ -370,8 +368,7 @@ void collectDefUse(
         useSlot(bc.fastop[1]);
         defSlot(bc.result);
         break;
-
-    // 二元比较：use fastop[0], fastop[1]; def result
+    // Binary arithmetic: use fastop[0], fastop[1]; def result
     case OpCode::ILT:
     case OpCode::LLT:
     case OpCode::FLT:
@@ -440,7 +437,8 @@ linearScanAllocate(std::span<const Bytecode> bytecodes, size_t entryPc, size_t p
     std::vector<LiveInterval> intervals;
     for (size_t i = 1; i < firstDef.size(); ++i) {
         if (firstDef[i] != static_cast<size_t>(-1) && lastUse[i] >= firstDef[i]) {
-            // 跨越 call 或 在 call 处定义：caller-saved 会被破坏，且 FUNC 结果总是存到内存
+            // Spans a call or is defined at a call: caller-saved regs are clobbered, and FUNC
+            // results are always stored in memory.
             bool spans = intervalSpansCall(firstDef[i], lastUse[i]) || defAtCall(firstDef[i]);
             intervals.push_back({static_cast<int>(i), firstDef[i], lastUse[i], spans});
         }
@@ -493,7 +491,7 @@ linearScanAllocate(std::span<const Bytecode> bytecodes, size_t entryPc, size_t p
                 reg                                                      = spill->second;
                 active.erase(spill);
             } else {
-                reg = kSpilled; // 当前区间溢出，不分配寄存器
+                reg = kSpilled; // Current interval spills; do not allocate a register.
             }
         }
         if (reg >= 0) {
@@ -522,7 +520,7 @@ makeAllSpilledAlloc(std::span<const Bytecode> bytecodes, size_t entryPc, size_t 
 }
 
 // -----------------------------------------------------------------------------
-// 虚拟寄存器线性扫描分配
+// Virtual register linear-scan allocation
 // -----------------------------------------------------------------------------
 
 struct VLiveInterval {

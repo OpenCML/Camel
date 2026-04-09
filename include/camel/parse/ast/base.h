@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Mar. 10, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -66,13 +66,15 @@ class Load {
     Load(LoadType type) : type_(type) {}
     virtual ~Load() = default;
 
-    // tokenRange_ 目前仍保留给前端邻域和旧接口使用，但跨阶段传播以 origin_ 为准。
+    // tokenRange_ is still kept for frontend adjacency and legacy interfaces,
+    // but cross-stage propagation uses origin_.
     void setTokenRange(size_t start, size_t end) {
         tokenRange_.start = start;
         tokenRange_.end   = end;
     }
     void setTokenRange(camel::core::error::TokenRange range) { tokenRange_ = range; }
-    // origin_ 指向 SourceContext::OriginTable 中的记录，是 AST 向后续阶段传播位置的主键。
+    // origin_ points to a record in SourceContext::OriginTable and is the key
+    // used to propagate location information to later stages.
     void setOrigin(camel::source::origin_id_t origin) { origin_ = origin; }
 
     LoadType type() const { return type_; }
@@ -86,8 +88,9 @@ class Load {
 
   protected:
     LoadType type_;
-    camel::core::error::TokenRange tokenRange_ = {0, 0}; // 仅保留前端 token 级信息。
-    camel::source::origin_id_t origin_ = camel::source::kInvalidOriginId; // 跨阶段统一位置标识。
+    camel::core::error::TokenRange tokenRange_ = {0, 0}; // Frontend token-level info only.
+    camel::source::origin_id_t origin_ =
+        camel::source::kInvalidOriginId; // Unified cross-stage location ID.
 };
 
 class Node : public AbstractTreeNode<load_ptr_t, Node> {

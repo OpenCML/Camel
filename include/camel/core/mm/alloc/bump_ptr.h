@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,22 +45,22 @@ class BumpPointerAllocator : public IAllocator {
   public:
     BumpPointerAllocator(size_t capacity, const char *debugRegion = nullptr)
         : capacity_(capacity), debugRegion_(debugRegion) {
-        // capacity 是字节数，向上对齐
+        // Capacity is measured in bytes and rounded up.
         size_t aligned_capacity = alignUp(capacity, alignof(slot_t));
         size_t num_units        = aligned_capacity / sizeof(slot_t);
 
         buffer_ = std::make_unique<slot_t[]>(num_units);
         start_  = reinterpret_cast<std::byte *>(buffer_.get());
         top_.store(start_, std::memory_order_relaxed);
-        end_ = start_ + aligned_capacity; // 实际可用字节数
+        end_ = start_ + aligned_capacity; // Actual usable byte count.
     }
 
     void *alloc(size_t size, size_t align = alignof(slot_t)) override {
         ASSERT(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
         SharedOperationGuard guard(*this);
 
-        // total_size 向上对齐
-        // 这保证了 top_ 始终对齐，无需每次都 alignPointer
+        // Round total_size up.
+        // This keeps top_ aligned at all times, so we never need to call alignPointer.
         size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
         EXEC_WHEN_DEBUG({
             invokePreAllocHook(PreAllocEvent{total_size, debugRegion_ ? debugRegion_ : "bump"});
@@ -84,7 +84,7 @@ class BumpPointerAllocator : public IAllocator {
             }
         }
 
-        // 安装对象头，记录的是对齐后的 total_size
+        // Install the object header and store the aligned total size.
         installHeader(currentTop, total_size);
 
         std::byte *result = currentTop + sizeof(ObjectHeader);
@@ -100,7 +100,8 @@ class BumpPointerAllocator : public IAllocator {
                 size,
                 formatAddress(newTop, true));
 
-            // 调试时：只把对象 payload (result 到 newTop) 填充为 0xDEADBEAF，不覆盖 header
+            // In debug builds, fill only the payload (result to newTop) with
+            // 0xDEADBEAF and leave the header untouched.
             std::size_t bytes_to_fill = static_cast<std::size_t>(newTop - result);
             std::size_t words         = bytes_to_fill / sizeof(uint32_t);
             uint32_t *p               = reinterpret_cast<uint32_t *>(result);
@@ -108,7 +109,7 @@ class BumpPointerAllocator : public IAllocator {
                 p[i] = 0xDEADBEAF;
             }
 
-            // 若末尾不是 4 字节对齐，处理残余字节
+            // Handle any trailing bytes if the end is not 4-byte aligned.
             std::size_t remain = bytes_to_fill % sizeof(uint32_t);
             if (remain > 0) {
                 std::byte *byteTail = reinterpret_cast<std::byte *>(p + words);
@@ -117,7 +118,8 @@ class BumpPointerAllocator : public IAllocator {
         });
 
         EXEC_WHEN_DEBUG({
-            // 所有 Bump 分配均触发调试断点（含 perm/meta 等），便于 alloc-step 在任意区域生效
+            // All bump allocations trigger the debug breakpoint, including
+            // perm/meta, so alloc-step works in every region.
             invokePostAllocHook(
                 AllocEvent{result, total_size, debugRegion_ ? debugRegion_ : "bump"});
         });
@@ -128,7 +130,7 @@ class BumpPointerAllocator : public IAllocator {
         withExclusiveAccess([&] {
             ASSERT(containsUnlocked(ptr), "Pointer does not belong to this allocator");
 
-            // 将 top_ 回退到对象头部位置
+            // Roll top_ back to the object header position.
             auto *newTop = reinterpret_cast<std::byte *>(ptr) - sizeof(ObjectHeader);
 
             EXEC_WHEN_DEBUG({
@@ -140,7 +142,8 @@ class BumpPointerAllocator : public IAllocator {
                     formatAddress(ptr, true),
                     formatAddress(newTop, true));
 
-                // 调试时：把释放掉的空间 (newTop 到 oldTop) 填充为 0xDEADBEEF
+                // In debug builds, fill the released space (newTop to oldTop)
+                // with 0xDEADBEEF.
                 std::size_t bytes_to_fill = static_cast<std::size_t>(oldTop - newTop);
                 std::size_t words         = bytes_to_fill / sizeof(uint32_t);
 
@@ -149,7 +152,7 @@ class BumpPointerAllocator : public IAllocator {
                     p[i] = 0xDEADBEEF;
                 }
 
-                // 若末尾不是 4 字节对齐，处理残余字节
+                // Handle any trailing bytes if the end is not 4-byte aligned.
                 std::size_t remain = bytes_to_fill % sizeof(uint32_t);
                 if (remain > 0) {
                     std::byte *byteTail = reinterpret_cast<std::byte *>(p + words);
@@ -183,7 +186,7 @@ class BumpPointerAllocator : public IAllocator {
             while (current < topSnapshot) {
                 ObjectHeader *header = reinterpret_cast<ObjectHeader *>(current);
 
-                // 验证 header 的合法性
+                // Validate the header.
                 size_t obj_size = header->size();
                 ASSERT(obj_size >= sizeof(ObjectHeader), "Invalid object size");
                 ASSERT(obj_size % alignof(slot_t) == 0, "Object size not aligned");
@@ -227,7 +230,7 @@ class BumpPointerAllocator : public IAllocator {
 
   private:
     size_t capacity_;
-    const char *debugRegion_{nullptr}; // Debug 模式下用于 hook，nullptr 表示不 hook
+    const char *debugRegion_{nullptr}; // Used for debug hooks; nullptr means no hook.
     std::unique_ptr<slot_t[]> buffer_;
     std::byte *start_;
     std::atomic<std::byte *> top_;

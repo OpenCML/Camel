@@ -13,15 +13,19 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "inline.h"
 
-#include "camel/compile/gir/rewrite.h"
+#include "camel/compile/gir/reachable.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tuple.h"
+#include "camel/runtime/rewrite.h"
 #include "camel/utils/log.h"
 
 using namespace std;
@@ -33,44 +37,21 @@ namespace {
 constexpr size_t kInlineTargetBudgetPerScc = 20000;
 constexpr size_t kInlineApplyBudgetPerScc  = 20000;
 constexpr size_t kNodeDeltaBudgetPerScc    = 50000;
-// 预算语义：
-// - Debug: 触发预算即 ASSERT，作为正确性哨兵，强制暴露潜在失控路径。
-// - Release: 仅保护性告警并中止当前 SCC，避免线上无限膨胀。
-
-graph_ptr_t ensureEditableGraph(
-    GraphRewriteSession &session, const graph_ptr_t &sourceRoot, const graph_ptr_t &sourceGraph,
-    std::unordered_map<const Graph *, graph_ptr_t> &cache);
-
-bool hasSubGraphRef(const graph_ptr_t &owner, const graph_ptr_t &candidate) {
-    for (const auto &[_, subGraphs] : owner->subGraphs()) {
-        if (subGraphs.contains(candidate)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-void collectReachableGraphs(
-    const graph_ptr_t &graph, std::vector<graph_ptr_t> &out,
-    std::unordered_set<const Graph *> &visited) {
-    if (!graph || !visited.insert(graph.get()).second) {
-        return;
-    }
-    out.push_back(graph);
-    for (const auto &[_, subGraphs] : graph->subGraphs()) {
-        for (const auto &subGraph : subGraphs) {
-            collectReachableGraphs(subGraph, out, visited);
-        }
-    }
-    for (const auto &dep : graph->dependencies()) {
-        collectReachableGraphs(dep, out, visited);
-    }
-}
+// Inline budgets are correctness tripwires in debug builds and safety valves in release
+// builds. Debug should fail fast when the rewrite unexpectedly explodes, while release should
+// stop expanding the current SCC instead of running into pathological compile time or IR growth.
 
 enum class UseKind {
     FuncBody,
     DataFunction,
 };
+
+struct StaticFunctionValueInfo {
+    graph_ptr_t bodyGraph;
+    std::vector<Node *> closureArgs;
+};
+
+using SpecializationCache = std::unordered_map<std::string, graph_ptr_t>;
 
 struct GraphUseSite {
     graph_ptr_t owner;
@@ -85,6 +66,13 @@ struct InlineTarget {
     Node *path             = nullptr;
     const Graph *bodyGraph = nullptr;
     bool isBranchArmHead   = false;
+};
+
+struct AppliedInlineRecord {
+    graph_ptr_t owner;
+    const Graph *targetBodyGraph = nullptr;
+    std::string erasedPathText;
+    bool isBranchArmHead = false;
 };
 
 struct SccGraphPlan {
@@ -134,17 +122,527 @@ std::vector<const Graph *> collectReferencedGraphs(const graph_ptr_t &graph) {
             continue;
         }
         auto *funcObj = camel::core::rtdata::fromSlot<::Function *>(dataNode->dataSlot());
-        if (funcObj && funcObj->graph()) {
-            refs.push_back(funcObj->graph());
+        if (funcObj && funcObj->sourceGraph()) {
+            refs.push_back(funcObj->sourceGraph());
         }
     }
     return refs;
 }
 
+graph_ptr_t findGraphHandleInOwnerRegistry(const graph_ptr_t &owner, const Graph *graph) {
+    if (!owner || !graph) {
+        return nullptr;
+    }
+    if (owner.get() == graph) {
+        return owner;
+    }
+    if (auto outer = owner->outer(); outer && outer.get() == graph) {
+        return outer;
+    }
+    for (const auto &dep : owner->dependencies()) {
+        if (dep.get() == graph) {
+            return dep;
+        }
+    }
+    for (const auto &[_, subGraphs] : owner->subGraphs()) {
+        for (const auto &sub : subGraphs) {
+            if (sub.get() == graph) {
+                return sub;
+            }
+        }
+    }
+    return nullptr;
+}
+
+graph_ptr_t resolveGraphHandle(
+    camel::runtime::RuntimeSourceGraphEditSession &session, const graph_ptr_t &owner,
+    const Graph *graph) {
+    if (!graph) {
+        return nullptr;
+    }
+    if (graph_ptr_t local = findGraphHandleInOwnerRegistry(owner, graph)) {
+        return local;
+    }
+    try {
+        graph_ptr_t sourceGraph = std::const_pointer_cast<Graph>(graph->shared_from_this());
+        return session.ownsGraph(graph) ? session.canonicalGraph(sourceGraph) : sourceGraph;
+    } catch (const std::bad_weak_ptr &) {
+        return nullptr;
+    }
+}
+
+Node *cloneStaticValueNodeIntoGraph(
+    camel::runtime::RuntimeSourceGraphEditSession &session, const graph_ptr_t &owner, Node *node,
+    std::unordered_map<const Node *, Node *> &cache);
+
+std::optional<StaticFunctionValueInfo> tryResolveStaticFunctionValue(
+    camel::runtime::RuntimeSourceGraphEditSession &session, const graph_ptr_t &owner, Node *node,
+    std::unordered_map<const Node *, Node *> &cache) {
+    if (!node || node->dataType()->code() != camel::core::type::TypeCode::Function) {
+        return std::nullopt;
+    }
+
+    auto resolveFromFunctionObject =
+        [&](::Function *funcObj) -> std::optional<StaticFunctionValueInfo> {
+        if (!funcObj || !funcObj->sourceGraph()) {
+            return std::nullopt;
+        }
+        graph_ptr_t sourceGraphPtr = resolveGraphHandle(session, owner, funcObj->sourceGraph());
+        if (!sourceGraphPtr) {
+            return std::nullopt;
+        }
+        graph_ptr_t canonicalGraph = session.ownsGraph(sourceGraphPtr.get())
+                                         ? sourceGraphPtr
+                                         : (session.hasDraftGraph(funcObj->sourceGraph())
+                                                ? sourceGraphPtr
+                                                : session.importDependency(
+                                                      owner,
+                                                      sourceGraphPtr,
+                                                      GraphImportMode::CloneIntoDraft));
+
+        StaticFunctionValueInfo info{.bodyGraph = canonicalGraph, .closureArgs = {}};
+        if (auto *closure = funcObj->tuple()) {
+            const auto *closureType = funcObj->tupleType();
+            info.closureArgs.reserve(closureType->size());
+            for (size_t i = 0; i < closureType->size(); ++i) {
+                info.closureArgs.push_back(session.materializeStaticValue(
+                    owner,
+                    closure->get<slot_t>(i),
+                    closureType->typeAt(i)));
+            }
+        }
+        return info;
+    };
+
+    if (node->type() == NodeType::DATA) {
+        auto *dataNode = tt::as_ptr<DataNode>(node);
+        return resolveFromFunctionObject(
+            camel::core::rtdata::fromSlot<::Function *>(dataNode->dataSlot()));
+    }
+
+    if (node->type() != NodeType::FILL) {
+        return std::nullopt;
+    }
+
+    auto normInputs = node->normInputs();
+    if (normInputs.empty()) {
+        return std::nullopt;
+    }
+    auto baseInfo = tryResolveStaticFunctionValue(session, owner, normInputs.front(), cache);
+    if (!baseInfo.has_value()) {
+        return std::nullopt;
+    }
+
+    StaticFunctionValueInfo info = std::move(*baseInfo);
+    auto withInputs              = node->withInputs();
+    if (withInputs.size() > info.closureArgs.size()) {
+        return std::nullopt;
+    }
+    for (size_t i = 0; i < withInputs.size(); ++i) {
+        Node *clonedArg = cloneStaticValueNodeIntoGraph(session, owner, withInputs[i], cache);
+        if (!clonedArg) {
+            return std::nullopt;
+        }
+        info.closureArgs[i] = clonedArg;
+    }
+    return info;
+}
+
+Node *cloneStaticValueNodeIntoGraph(
+    camel::runtime::RuntimeSourceGraphEditSession &session, const graph_ptr_t &owner, Node *node,
+    std::unordered_map<const Node *, Node *> &cache) {
+    if (!node) {
+        return nullptr;
+    }
+    if (&node->graph() == owner.get()) {
+        return node;
+    }
+    if (auto it = cache.find(node); it != cache.end()) {
+        return it->second;
+    }
+
+    if (node->type() == NodeType::DATA) {
+        auto *dataNode = tt::as_ptr<DataNode>(node);
+        Node *materialized =
+            session.materializeStaticValue(owner, dataNode->dataSlot(), dataNode->dataType());
+        cache.emplace(node, materialized);
+        return materialized;
+    }
+
+    if (node->type() != NodeType::FILL) {
+        return nullptr;
+    }
+
+    auto normInputs = node->normInputs();
+    if (normInputs.empty()) {
+        return nullptr;
+    }
+    Node *base = cloneStaticValueNodeIntoGraph(session, owner, normInputs.front(), cache);
+    if (!base) {
+        return nullptr;
+    }
+    auto *fill = FillNode::create(*owner, node->dataType());
+    session.link(LinkType::Norm, base, fill);
+    for (Node *with : node->withInputs()) {
+        Node *cloned = cloneStaticValueNodeIntoGraph(session, owner, with, cache);
+        if (!cloned) {
+            return nullptr;
+        }
+        session.link(LinkType::With, cloned, fill);
+    }
+    cache.emplace(node, fill);
+    return fill;
+}
+
+std::vector<Node *> orderedCallableInputs(Node *callable) {
+    std::vector<Node *> inputs;
+    inputs.reserve(callable->normInputs().size() + callable->withInputs().size());
+    inputs.insert(inputs.end(), callable->normInputs().begin(), callable->normInputs().end());
+    inputs.insert(inputs.end(), callable->withInputs().begin(), callable->withInputs().end());
+    return inputs;
+}
+
+bool hasObservableUses(Node *node) {
+    return node && (!node->normOutputs().empty() || !node->withOutputs().empty() ||
+                    !node->ctrlOutputs().empty());
+}
+
+bool drivesIndirectCallCallee(Node *root) {
+    if (!root || root->dataType()->code() != camel::core::type::TypeCode::Function) {
+        return false;
+    }
+    std::vector<Node *> stack{root};
+    std::unordered_set<Node *> visited;
+    while (!stack.empty()) {
+        Node *curr = stack.back();
+        stack.pop_back();
+        if (!curr || !visited.insert(curr).second) {
+            continue;
+        }
+        for (Node *user : curr->withOutputs()) {
+            if (!user) {
+                continue;
+            }
+            if (user->type() == NodeType::CALL &&
+                tt::as_ptr<CallNode>(user)->calleeInput() == curr) {
+                return true;
+            }
+            if (user->type() == NodeType::FILL) {
+                stack.push_back(user);
+            }
+        }
+        for (Node *user : curr->normOutputs()) {
+            if (!user) {
+                continue;
+            }
+            if (user->type() == NodeType::FUNC) {
+                // Forwarding a static function through a direct FUNC boundary is already enough
+                // to justify specialization. The callee graph may not issue CALL directly at this
+                // graph level, but once specialized the static function can continue propagating
+                // and eventually devirtualize deeper indirect calls.
+                return true;
+            }
+            if (user->type() == NodeType::FILL) {
+                auto normInputs = user->normInputs();
+                if (!normInputs.empty() && normInputs.front() == curr) {
+                    stack.push_back(user);
+                }
+            }
+        }
+    }
+    return false;
+}
+
+std::string encodeStaticSlotKey(slot_t slot, Type *type);
+
+std::string encodeStaticFunctionNodeKey(Node *node) {
+    if (!node) {
+        return "null";
+    }
+    if (node->type() == NodeType::DATA) {
+        auto *dataNode = tt::as_ptr<DataNode>(node);
+        return encodeStaticSlotKey(dataNode->dataSlot(), dataNode->dataType());
+    }
+    if (node->type() == NodeType::FILL) {
+        std::string key = "fill(";
+        auto normInputs = node->normInputs();
+        key += normInputs.empty() ? "null" : encodeStaticFunctionNodeKey(normInputs.front());
+        for (Node *with : node->withInputs()) {
+            key += ",";
+            key += encodeStaticFunctionNodeKey(with);
+        }
+        key += ")";
+        return key;
+    }
+    return std::format("node:{:p}", static_cast<void *>(node));
+}
+
+std::string encodeFunctionObjectKey(::Function *funcObj) {
+    if (!funcObj || !funcObj->sourceGraph()) {
+        return "func:null";
+    }
+    std::string key = std::format("func:{}(", funcObj->sourceGraph()->stableId());
+    if (auto *closure = funcObj->tuple()) {
+        const auto *tupleType = funcObj->tupleType();
+        for (size_t i = 0; i < tupleType->size(); ++i) {
+            if (i != 0) {
+                key += ",";
+            }
+            key += encodeStaticSlotKey(closure->get<slot_t>(i), tupleType->typeAt(i));
+        }
+    }
+    key += ")";
+    return key;
+}
+
+std::string encodeStaticSlotKey(slot_t slot, Type *type) {
+    if (!type) {
+        return std::format("slot:{}:null", slot);
+    }
+    if (type->code() == camel::core::type::TypeCode::Function) {
+        return encodeFunctionObjectKey(camel::core::rtdata::fromSlot<::Function *>(slot));
+    }
+    return std::format("slot:{}:{}", static_cast<int>(type->code()), slot);
+}
+
+std::string buildSpecializationKey(
+    const Graph *targetGraph, const std::vector<std::pair<size_t, Node *>> &bindings) {
+    std::string key = std::format("graph:{:p}", static_cast<const void *>(targetGraph));
+    for (const auto &[index, arg] : bindings) {
+        key += std::format("|{}={}", index, encodeStaticFunctionNodeKey(arg));
+    }
+    return key;
+}
+
+bool specializeDirectFuncTargets(
+    camel::runtime::RuntimeSourceGraphEditSession &session, std::vector<graph_ptr_t> &workGraphs) {
+    bool changed = false;
+    SpecializationCache specializationCache;
+    std::unordered_set<const Graph *> knownGraphs;
+    for (const auto &graph : workGraphs) {
+        knownGraphs.insert(graph.get());
+    }
+
+    bool localChanged = true;
+    while (localChanged) {
+        localChanged        = false;
+        const auto snapshot = workGraphs;
+        for (const auto &owner : snapshot) {
+            std::vector<Node *> funcNodes;
+            for (Node *node : owner->nodes()) {
+                if (node && node->type() == NodeType::FUNC) {
+                    funcNodes.push_back(node);
+                }
+            }
+            for (Node *node : funcNodes) {
+                auto *funcNode = tt::as_ptr<FuncNode>(node);
+                if (!funcNode || !funcNode->bodyGraph()) {
+                    continue;
+                }
+
+                graph_ptr_t targetSource =
+                    resolveGraphHandle(session, owner, funcNode->bodyGraph());
+                if (!targetSource) {
+                    continue;
+                }
+                graph_ptr_t targetDraft = session.ownsGraph(targetSource.get())
+                                              ? targetSource
+                                              : (session.hasDraftGraph(funcNode->bodyGraph())
+                                                     ? targetSource
+                                                     : session.importDependency(
+                                                           owner,
+                                                           targetSource,
+                                                           GraphImportMode::CloneIntoDraft));
+
+                std::vector<Node *> allArgs     = orderedCallableInputs(funcNode);
+                std::vector<Node *> targetPorts = targetDraft->ports();
+                targetPorts.insert(
+                    targetPorts.end(),
+                    targetDraft->closure().begin(),
+                    targetDraft->closure().end());
+                if (allArgs.size() < targetPorts.size()) {
+                    continue;
+                }
+
+                std::unordered_map<const Node *, Node *> resolveCache;
+                std::vector<std::pair<size_t, Node *>> staticBindings;
+                for (size_t i = 0; i < targetPorts.size(); ++i) {
+                    if (!hasObservableUses(targetPorts[i]) ||
+                        !drivesIndirectCallCallee(targetPorts[i])) {
+                        continue;
+                    }
+                    auto binding =
+                        tryResolveStaticFunctionValue(session, owner, allArgs[i], resolveCache);
+                    if (!binding.has_value()) {
+                        continue;
+                    }
+                    staticBindings.emplace_back(i, allArgs[i]);
+                }
+                if (staticBindings.empty()) {
+                    continue;
+                }
+
+                const std::string specializationKey =
+                    buildSpecializationKey(targetDraft.get(), staticBindings);
+                if (auto cachedIt = specializationCache.find(specializationKey);
+                    cachedIt != specializationCache.end()) {
+                    if (funcNode->bodyGraph() != cachedIt->second.get()) {
+                        session.addDependency(owner, cachedIt->second);
+                        detail::NodeMutation::setBodyGraph(funcNode, cachedIt->second.get());
+                        session.markChanged();
+                        changed      = true;
+                        localChanged = true;
+                    }
+                    continue;
+                }
+
+                std::unordered_map<const Node *, Node *> nodeMap;
+                graph_ptr_t specialized = GraphBuilder::cloneGraph(targetDraft, &nodeMap);
+                session.adoptOwnedGraph(specialized);
+                std::unordered_map<const Node *, Node *> staticCloneCache;
+                for (const auto &[portIndex, staticArg] : staticBindings) {
+                    Node *targetPort = targetPorts[portIndex];
+                    auto it          = nodeMap.find(targetPort);
+                    if (it == nodeMap.end()) {
+                        continue;
+                    }
+                    Node *clonedPort   = it->second;
+                    Node *clonedStatic = cloneStaticValueNodeIntoGraph(
+                        session,
+                        specialized,
+                        staticArg,
+                        staticCloneCache);
+                    if (!clonedStatic) {
+                        continue;
+                    }
+                    session.replaceAllUses(clonedPort, clonedStatic);
+                }
+
+                GraphBuilder::validateGraph(*specialized);
+                specializationCache.emplace(specializationKey, specialized);
+                session.addDependency(owner, specialized);
+                detail::NodeMutation::setBodyGraph(funcNode, specialized.get());
+                session.markChanged();
+                if (knownGraphs.insert(specialized.get()).second) {
+                    workGraphs.push_back(specialized);
+                }
+                changed      = true;
+                localChanged = true;
+            }
+        }
+    }
+
+    return changed;
+}
+
+bool devirtualizeStaticCalls(
+    camel::runtime::RuntimeSourceGraphEditSession &session,
+    const std::vector<graph_ptr_t> &workGraphs) {
+    bool changed = false;
+    std::unordered_map<const Graph *, graph_ptr_t> parameterizedClosureGraphs;
+    for (const auto &owner : workGraphs) {
+        std::vector<Node *> callNodes;
+        for (Node *node : owner->nodes()) {
+            if (node && node->type() == NodeType::CALL) {
+                callNodes.push_back(node);
+            }
+        }
+
+        for (Node *node : callNodes) {
+            auto *callNode = tt::as_ptr<CallNode>(node);
+            if (!callNode || !callNode->hasCallee()) {
+                continue;
+            }
+
+            std::unordered_map<const Node *, Node *> staticCloneCache;
+            auto calleeInfo = tryResolveStaticFunctionValue(
+                session,
+                owner,
+                callNode->calleeInput(),
+                staticCloneCache);
+            if (!calleeInfo.has_value() || !calleeInfo->bodyGraph) {
+                continue;
+            }
+
+            graph_ptr_t directBody = calleeInfo->bodyGraph;
+            if (!calleeInfo->closureArgs.empty()) {
+                auto cacheIt = parameterizedClosureGraphs.find(directBody.get());
+                if (cacheIt != parameterizedClosureGraphs.end()) {
+                    directBody = cacheIt->second;
+                } else {
+                    graph_ptr_t parameterized = GraphBuilder::cloneGraph(directBody);
+                    session.adoptOwnedGraph(parameterized);
+                    GraphBuilder(parameterized).parametrizeClosure();
+                    GraphBuilder::validateGraph(*parameterized);
+                    parameterizedClosureGraphs.emplace(directBody.get(), parameterized);
+                    if (std::ranges::find_if(workGraphs, [&](const graph_ptr_t &g) {
+                            return g.get() == parameterized.get();
+                        }) == workGraphs.end()) {
+                        // no-op: caller-owned vector is const here; the clone is still reachable
+                        // via the rewritten callsite dependency and session graph registry
+                    }
+                    directBody = parameterized;
+                }
+            }
+
+            session.addDependency(owner, directBody);
+            auto *funcNode = tt::as_ptr<FuncNode>(FuncNode::create(*owner, directBody));
+            for (Node *pred : callNode->ctrlInputs()) {
+                session.link(LinkType::Ctrl, pred, funcNode);
+            }
+            for (Node *arg : callNode->normArgs()) {
+                session.link(LinkType::Norm, arg, funcNode);
+            }
+            for (size_t i = 0; i < callNode->withArgCount(); ++i) {
+                session.link(LinkType::With, callNode->withArg(i), funcNode);
+            }
+            for (Node *closureArg : calleeInfo->closureArgs) {
+                session.link(LinkType::With, closureArg, funcNode);
+            }
+            session.replaceAllUses(callNode, funcNode);
+            session.eraseNode(callNode);
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+bool ensureFuncBodyDependencies(
+    camel::runtime::RuntimeSourceGraphEditSession &session,
+    const std::vector<graph_ptr_t> &workGraphs) {
+    bool changed = false;
+    for (const auto &owner : workGraphs) {
+        for (Node *node : collectUseCarrierNodes(owner)) {
+            if (!node || node->type() != NodeType::FUNC) {
+                continue;
+            }
+            auto *funcNode = tt::as_ptr<FuncNode>(node);
+            if (!funcNode || !funcNode->bodyGraph() || funcNode->bodyGraph() == owner.get()) {
+                continue;
+            }
+            graph_ptr_t target = findGraphHandleInOwnerRegistry(owner, funcNode->bodyGraph());
+            if (!target) {
+                try {
+                    target = funcNode->bodyGraph()->shared_from_this();
+                } catch (const std::bad_weak_ptr &) {
+                    continue;
+                }
+            }
+            if (!target || owner->dependencies().contains(target)) {
+                continue;
+            }
+            session.addDependency(owner, target);
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 GraphUseIndex buildUseIndex(const std::vector<graph_ptr_t> &draftGraphs) {
-    // 会话级 use-site 索引：
-    // calleeGraph -> [(ownerGraph, useNode, kind)]。
-    // 作为 legacy->draft 重定向与 dependency 同步的唯一批处理入口。
+    // Session-level use-site index:
+    // calleeGraph -> [(ownerGraph, useNode, kind)].
+    // This is the only batch entry point for legacy->draft redirection and
+    // dependency synchronization.
     GraphUseIndex index;
     for (const auto &owner : draftGraphs) {
         for (Node *node : collectUseCarrierNodes(owner)) {
@@ -168,10 +666,10 @@ GraphUseIndex buildUseIndex(const std::vector<graph_ptr_t> &draftGraphs) {
                 continue;
             }
             auto *funcObj = camel::core::rtdata::fromSlot<::Function *>(dataNode->dataSlot());
-            if (!funcObj || !funcObj->graph()) {
+            if (!funcObj || !funcObj->sourceGraph()) {
                 continue;
             }
-            index[funcObj->graph()].push_back(
+            index[funcObj->sourceGraph()].push_back(
                 GraphUseSite{
                     .owner = owner,
                     .node  = node,
@@ -204,22 +702,288 @@ void assertNoLegacyGraphRefs(
                     continue;
                 }
                 auto *funcObj = camel::core::rtdata::fromSlot<::Function *>(data->dataSlot());
-                if (!funcObj || !funcObj->graph()) {
+                if (!funcObj || !funcObj->sourceGraph()) {
                     continue;
                 }
                 ASSERT(
-                    !legacySources.contains(funcObj->graph()),
+                    !legacySources.contains(funcObj->sourceGraph()),
                     std::format(
                         "Legacy DATA(Function).graph '{}' still referenced in draft graph '{}'.",
-                        funcObj->graph()->name(),
+                        funcObj->sourceGraph()->name(),
                         owner->name()));
             }
         }
     }
 }
 
+void assertNoAnonymousFuncTargets(const std::vector<graph_ptr_t> &draftGraphs) {
+    for (const auto &owner : draftGraphs) {
+        for (Node *node : collectUseCarrierNodes(owner)) {
+            if (!node || node->type() != NodeType::FUNC) {
+                continue;
+            }
+            auto *func       = tt::as_ptr<FuncNode>(node);
+            Graph *bodyGraph = func ? func->bodyGraph() : nullptr;
+            if (!bodyGraph) {
+                throw std::runtime_error(
+                    std::format(
+                        "FUNC node '{}' in graph '{}' refers to a null body graph.",
+                        node->toString(),
+                        owner->name()));
+            }
+            if (bodyGraph != owner.get() && bodyGraph->name().empty()) {
+                throw std::runtime_error(
+                    std::format(
+                        "FUNC node '{}' in graph '{}' refers to anonymous body graph {:p}.",
+                        node->toString(),
+                        owner->name(),
+                        static_cast<void *>(bodyGraph)));
+            }
+        }
+    }
+}
+
+void assertStaticValueGraphsWellOwned(
+    const graph_ptr_t &owner, slot_t slot, Type *type,
+    std::unordered_set<const camel::core::rtdata::Object *> &visited) {
+    if (!type || !type->isGCTraced() || slot == NullSlot) {
+        return;
+    }
+
+    camel::core::rtdata::Object *object =
+        camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(slot);
+    if (!object || !visited.insert(object).second) {
+        return;
+    }
+
+    switch (type->code()) {
+    case camel::core::type::TypeCode::Function: {
+        auto *funcObj      = camel::core::rtdata::fromSlot<::Function *>(slot);
+        Graph *sourceGraph = funcObj ? funcObj->sourceGraph() : nullptr;
+        if (!sourceGraph) {
+            throw std::runtime_error(
+                std::format(
+                    "Static function value in graph '{}' refers to a null source graph.",
+                    owner ? owner->name() : "<null>"));
+        }
+        if (sourceGraph->name().empty()) {
+            throw std::runtime_error(
+                std::format(
+                    "Static function value in graph '{}' refers to anonymous source graph {:p}.",
+                    owner ? owner->name() : "<null>",
+                    static_cast<void *>(sourceGraph)));
+        }
+        try {
+            (void)sourceGraph->shared_from_this();
+        } catch (const std::bad_weak_ptr &) {
+            throw std::runtime_error(
+                std::format(
+                    "Static function value in graph '{}' refers to non-owned source graph '{}' "
+                    "({:p}).",
+                    owner ? owner->name() : "<null>",
+                    sourceGraph->name(),
+                    static_cast<void *>(sourceGraph)));
+        }
+
+        if (::Tuple *closure = funcObj->tuple()) {
+            TupleType *closureType = const_cast<TupleType *>(funcObj->tupleType());
+            for (size_t i = 0; i < closureType->size(); ++i) {
+                if (!camel::core::type::isGCTraced(closureType->codeAt(i))) {
+                    continue;
+                }
+                assertStaticValueGraphsWellOwned(
+                    owner,
+                    closure->get<slot_t>(i),
+                    closureType->typeAt(i),
+                    visited);
+            }
+        }
+        return;
+    }
+    case camel::core::type::TypeCode::Tuple: {
+        auto *tuple     = camel::core::rtdata::fromSlot<::Tuple *>(slot);
+        auto *tupleType = static_cast<TupleType *>(type);
+        if (!tuple) {
+            return;
+        }
+        for (size_t i = 0; i < tupleType->size(); ++i) {
+            if (!camel::core::type::isGCTraced(tupleType->codeAt(i))) {
+                continue;
+            }
+            assertStaticValueGraphsWellOwned(
+                owner,
+                tuple->get<slot_t>(i),
+                tupleType->typeAt(i),
+                visited);
+        }
+        return;
+    }
+    case camel::core::type::TypeCode::Array: {
+        auto *array     = camel::core::rtdata::fromSlot<::Array *>(slot);
+        auto *arrayType = static_cast<camel::core::type::ArrayType *>(type);
+        if (!array) {
+            return;
+        }
+        for (size_t i = 0; i < array->size(); ++i) {
+            if (!camel::core::type::isGCTraced(arrayType->elemTypeCode())) {
+                continue;
+            }
+            assertStaticValueGraphsWellOwned(
+                owner,
+                array->get<slot_t>(i),
+                arrayType->elemType(),
+                visited);
+        }
+        return;
+    }
+    case camel::core::type::TypeCode::Struct: {
+        auto *st         = camel::core::rtdata::fromSlot<::Struct *>(slot);
+        auto *structType = static_cast<camel::core::type::StructType *>(type);
+        if (!st) {
+            return;
+        }
+        for (size_t i = 0; i < structType->size(); ++i) {
+            if (!camel::core::type::isGCTraced(structType->codeAt(i))) {
+                continue;
+            }
+            assertStaticValueGraphsWellOwned(
+                owner,
+                st->get<slot_t>(i),
+                structType->typeAt(i),
+                visited);
+        }
+        return;
+    }
+    default:
+        return;
+    }
+}
+
+void assertNoInvalidStaticFunctionGraphs(const std::vector<graph_ptr_t> &draftGraphs) {
+    for (const auto &owner : draftGraphs) {
+        const TupleType *staticType = owner ? owner->staticDataType() : nullptr;
+        if (!owner || !staticType) {
+            continue;
+        }
+        std::unordered_set<const camel::core::rtdata::Object *> visited;
+        for (size_t i = 1; i < owner->staticDataSize() && i < staticType->size(); ++i) {
+            assertStaticValueGraphsWellOwned(
+                owner,
+                owner->getStaticDataSlot(-static_cast<data_idx_t>(i)),
+                staticType->typeAt(i),
+                visited);
+        }
+    }
+}
+
+void assertNoDanglingFuncTargetsAfterFinish(const graph_ptr_t &root) {
+    if (!root) {
+        return;
+    }
+
+    std::unordered_set<const Graph *> reachable;
+    std::vector<const Graph *> stack{root.get()};
+    while (!stack.empty()) {
+        const Graph *curr = stack.back();
+        stack.pop_back();
+        if (!curr || !reachable.insert(curr).second) {
+            continue;
+        }
+        if (curr != root.get() && curr->name().empty()) {
+            throw std::runtime_error(
+                std::format(
+                    "Final reachable graph tree rooted at '{}' contains anonymous graph {:p} "
+                    "(stableId='{}').",
+                    root->name(),
+                    static_cast<const void *>(curr),
+                    curr->stableId()));
+        }
+        for (const auto &[_, subGraphs] : curr->subGraphs()) {
+            for (const auto &sub : subGraphs) {
+                stack.push_back(sub.get());
+            }
+        }
+        for (const auto &dep : curr->dependencies()) {
+            stack.push_back(dep.get());
+        }
+    }
+
+    for (const Graph *ownerRaw : reachable) {
+        std::vector<Node *> carriers;
+        carriers.reserve(ownerRaw->nodes().size() + 1);
+        for (Node *node : ownerRaw->nodes()) {
+            carriers.push_back(node);
+        }
+        if (Node *exitAnchor = ownerRaw->exitNode();
+            std::ranges::find(carriers, exitAnchor) == carriers.end()) {
+            carriers.push_back(exitAnchor);
+        }
+        for (Node *node : carriers) {
+            if (!node || node->type() != NodeType::FUNC) {
+                continue;
+            }
+            auto *func       = tt::as_ptr<FuncNode>(node);
+            Graph *bodyGraph = func ? func->bodyGraph() : nullptr;
+            if (!bodyGraph) {
+                throw std::runtime_error(
+                    std::format(
+                        "Final FUNC node '{}' in graph '{}' refers to a null body graph.",
+                        node->toString(),
+                        ownerRaw->name()));
+            }
+            if (!reachable.contains(bodyGraph)) {
+                std::string refs;
+                for (const auto &[name, subGraphs] : ownerRaw->subGraphs()) {
+                    for (const auto &sub : subGraphs) {
+                        refs += std::format("[sub:{} {:p}] ", name, static_cast<void *>(sub.get()));
+                    }
+                }
+                for (const auto &dep : ownerRaw->dependencies()) {
+                    refs +=
+                        std::format("[dep:{} {:p}] ", dep->name(), static_cast<void *>(dep.get()));
+                }
+                throw std::runtime_error(
+                    std::format(
+                        "Final FUNC node '{}' in graph '{}' refers to unreachable graph {:p} "
+                        "('{}'). refs={}",
+                        node->toString(),
+                        ownerRaw->name(),
+                        static_cast<void *>(bodyGraph),
+                        bodyGraph->name(),
+                        refs));
+            }
+        }
+    }
+}
+
+void assertFuncTargetsRegistered(const std::vector<graph_ptr_t> &draftGraphs) {
+    for (const auto &owner : draftGraphs) {
+        for (Node *node : collectUseCarrierNodes(owner)) {
+            if (!node || node->type() != NodeType::FUNC) {
+                continue;
+            }
+            auto *func       = tt::as_ptr<FuncNode>(node);
+            Graph *bodyGraph = func ? func->bodyGraph() : nullptr;
+            if (!bodyGraph || bodyGraph == owner.get()) {
+                continue;
+            }
+            if (findGraphHandleInOwnerRegistry(owner, bodyGraph)) {
+                continue;
+            }
+            throw std::runtime_error(
+                std::format(
+                    "FUNC node '{}' in graph '{}' targets unregistered graph {:p} ('{}').",
+                    node->toString(),
+                    owner->name(),
+                    static_cast<void *>(bodyGraph),
+                    bodyGraph->name()));
+        }
+    }
+}
+
 void sweepUnreferencedGraphRegistries(
-    GraphRewriteSession &session, const std::vector<graph_ptr_t> &draftGraphs) {
+    camel::runtime::RuntimeSourceGraphEditSession &session,
+    const std::vector<graph_ptr_t> &draftGraphs) {
     GraphUseIndex useIndex = buildUseIndex(draftGraphs);
     std::unordered_map<const Graph *, std::unordered_set<const Graph *>> referencedByOwner;
     referencedByOwner.reserve(draftGraphs.size());
@@ -387,8 +1151,9 @@ SccGraphPlan buildSccGraphPlan(const std::vector<graph_ptr_t> &sourceGraphs) {
     ASSERT(
         topo.size() == plan.components.size(),
         "SCC condensed graph must be a DAG for topological ordering.");
-    // 注意：边方向定义为 caller -> callee。
-    // 因此逆拓扑序即 “callee-first / bottom-up”，可保证先处理最深层被引用图。
+    // Note: edges are defined as caller -> callee.
+    // Therefore reverse topological order is callee-first / bottom-up, which
+    // ensures the deepest referenced graphs are processed first.
     plan.processOrder = std::vector<size_t>(topo.rbegin(), topo.rend());
     return plan;
 }
@@ -412,16 +1177,16 @@ bool isSmallSubgraphForInline(const Graph *bodyGraph, const InlineRewriteConfig 
 
 bool shouldInlineByStrategy(
     const InlineTarget &target, const InlineRewriteConfig &config, const bool isSmallSubgraph) {
-    const bool isArmSmall    = target.isBranchArmHead && isSmallSubgraph;
-    const bool isNonArmSmall = !target.isBranchArmHead && isSmallSubgraph;
+    const bool isArmCandidate = target.isBranchArmHead;
+    const bool isNonArmSmall  = !target.isBranchArmHead && isSmallSubgraph;
     switch (config.strategy) {
     case InlineTargetStrategy::Small:
         // Small strategy intentionally excludes BRCH arm-head calls.
         return isNonArmSmall;
     case InlineTargetStrategy::Arm:
-        return isArmSmall;
+        return isArmCandidate;
     case InlineTargetStrategy::Hybrid:
-        return isNonArmSmall || isArmSmall;
+        return isNonArmSmall || isArmCandidate;
     default:
         return false;
     }
@@ -463,15 +1228,17 @@ SccEntryGuard buildSccEntryGuard(
             }
             auto ownerCompIt = plan.componentOf.find(sourceOwnerIt->second);
             if (ownerCompIt == plan.componentOf.end() || ownerCompIt->second != sccId) {
-                // 入口定义（SCC 维度）：callee 被 SCC 外 caller 调用。
-                // 不做传播推断，避免把 arm 包装图误判为“入口”并误伤合法内联。
+                // Entry definition (SCC scope): the callee is called by a caller
+                // outside the SCC.
+                // We do not infer transitively to avoid misclassifying arm wrapper
+                // graphs as entries and breaking valid inlining.
                 guard.entryRootDraftGraphs.insert(draftCallee);
                 continue;
             }
         }
     }
-    // 仅保护“入口 callee 自身”：
-    // 在 SCC 内，凡是目标命中入口 callee 的调用都不再内联。
+    // Protect only the entry callee itself:
+    // within the SCC, any call targeting the entry callee is no longer inlined.
     guard.protectedCalleeDraftGraphs = guard.entryRootDraftGraphs;
     return guard;
 }
@@ -480,14 +1247,15 @@ std::vector<InlineTarget> collectInitialInlineTargetsForScc(
     size_t sccId, const SccGraphPlan &plan,
     const std::unordered_map<const Graph *, graph_ptr_t> &editableBySource,
     const InlineRewriteConfig &config, const SccEntryGuard &entryGuard) {
-    // SCC 内“初始目标冻结”：
-    // 本轮只处理进入 SCC 时已存在的 FUNC 目标；
-    // 内联过程中新增的 FUNC 留给后续 pass 轮次，避免单轮振荡/爆炸。
+    // Freeze the initial targets inside the SCC:
+    // this round only handles FUNC targets that already existed when entering
+    // the SCC; FUNC targets introduced during inlining are deferred to later
+    // passes to avoid single-round oscillation or blow-up.
     std::vector<InlineTarget> candidates;
     for (const Graph *sourceGraph : plan.components[sccId]) {
         graph_ptr_t g = editableBySource.at(sourceGraph);
         std::unordered_set<Node *> seenPaths;
-        for (Node *node : g->nodes()) {
+        for (Node *node : collectUseCarrierNodes(g)) {
             if (node->type() != NodeType::FUNC) {
                 continue;
             }
@@ -504,7 +1272,7 @@ std::vector<InlineTarget> collectInitialInlineTargetsForScc(
                 });
             seenPaths.insert(node);
         }
-        for (Node *brch : g->nodes()) {
+        for (Node *brch : collectUseCarrierNodes(g)) {
             if (brch->type() != NodeType::BRCH) {
                 continue;
             }
@@ -540,7 +1308,8 @@ std::vector<InlineTarget> collectInitialInlineTargetsForScc(
     std::vector<InlineTarget> targets;
     targets.reserve(candidates.size());
     for (const auto &candidate : candidates) {
-        if (config.blockCallsToSccEntryCallees && candidate.bodyGraph &&
+        if (config.blockCallsToSccEntryCallees && !candidate.isBranchArmHead &&
+            candidate.bodyGraph &&
             entryGuard.protectedCalleeDraftGraphs.contains(candidate.bodyGraph)) {
             continue;
         }
@@ -626,6 +1395,33 @@ std::unordered_set<Node *> collectLiveNodesFromExit(const graph_ptr_t &graph) {
     return live;
 }
 
+void assertAppliedInlineTargetsGone(const std::vector<AppliedInlineRecord> &applied) {
+    for (const auto &record : applied) {
+        if (!record.owner || !record.targetBodyGraph) {
+            continue;
+        }
+        for (Node *node : record.owner->nodes()) {
+            if (!node || node->type() != NodeType::FUNC) {
+                continue;
+            }
+            auto *func = tt::as_ptr<FuncNode>(node);
+            if (!func || func->bodyGraph() != record.targetBodyGraph) {
+                continue;
+            }
+            throw std::runtime_error(
+                std::format(
+                    "Inline target survived in owner '{}' after applying {} inline: "
+                    "erasedPath='{}', "
+                    "survivingNode='{}', targetGraph='{}'.",
+                    record.owner->name(),
+                    record.isBranchArmHead ? "arm-head" : "regular",
+                    record.erasedPathText,
+                    node->toString(),
+                    record.targetBodyGraph->name()));
+        }
+    }
+}
+
 std::unordered_set<Node *> collectBranchSlotPinnedNodes(const graph_ptr_t &graph) {
     std::unordered_set<Node *> pinned;
     if (!graph) {
@@ -663,7 +1459,8 @@ std::unordered_set<Node *> collectBranchSlotPinnedNodes(const graph_ptr_t &graph
     return pinned;
 }
 
-size_t pruneUnreachableSlotSafe(GraphRewriteSession &session, const graph_ptr_t &graph) {
+size_t pruneUnreachableSlotSafe(
+    camel::runtime::RuntimeSourceGraphEditSession &session, const graph_ptr_t &graph) {
     if (!graph) {
         return 0;
     }
@@ -699,8 +1496,10 @@ size_t pruneUnreachableSlotSafe(GraphRewriteSession &session, const graph_ptr_t 
         if (live.contains(node)) {
             continue;
         }
-        // BRCH/JOIN arm 槽位由边序定义语义。若对应节点在 rewrite 中已退化为不可达，
-        // 也先保留骨架节点，避免 detach/unlink 对输入输出向量重排而打乱 slot 对齐。
+        // BRCH/JOIN arm slots are semantically defined by edge order. If a
+        // corresponding node has become unreachable during rewrite, keep the
+        // skeleton node for now to avoid slot misalignment from detach/unlink
+        // reordering the input/output vectors.
         if (pinned.contains(node)) {
             continue;
         }
@@ -712,189 +1511,47 @@ size_t pruneUnreachableSlotSafe(GraphRewriteSession &session, const graph_ptr_t 
     return toErase.size();
 }
 
-graph_ptr_t ensureEditableGraph(
-    GraphRewriteSession &session, const graph_ptr_t &sourceRoot, const graph_ptr_t &sourceGraph,
-    std::unordered_map<const Graph *, graph_ptr_t> &cache) {
-    ASSERT(sourceGraph != nullptr, "Cannot ensure editable null graph.");
-    if (sourceGraph == sourceRoot) {
-        graph_ptr_t rootCanonical = session.canonicalGraph(sourceRoot);
-        cache[sourceRoot.get()]   = rootCanonical;
-        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-            "InlinePass",
-            "ensureEditableGraph root hit: source={} ({:p}) -> draft={} ({:p}).",
-            sourceGraph->name(),
-            static_cast<const void *>(sourceGraph.get()),
-            rootCanonical->name(),
-            static_cast<const void *>(rootCanonical.get())));
-        return rootCanonical;
-    }
-    auto existing = cache.find(sourceGraph.get());
-    if (existing != cache.end()) {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-            "InlinePass",
-            "ensureEditableGraph cache hit: source={} ({:p}) -> draft={} ({:p}).",
-            sourceGraph->name(),
-            static_cast<const void *>(sourceGraph.get()),
-            existing->second->name(),
-            static_cast<const void *>(existing->second.get())));
-        return existing->second;
-    }
-    if (session.hasDraftGraph(sourceGraph.get())) {
-        graph_ptr_t canonical    = session.canonicalGraph(sourceGraph);
-        cache[sourceGraph.get()] = canonical;
-        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-            "InlinePass",
-            "ensureEditableGraph session canonical hit: source={} ({:p}) -> draft={} "
-            "({:p}).",
-            sourceGraph->name(),
-            static_cast<const void *>(sourceGraph.get()),
-            canonical->name(),
-            static_cast<const void *>(canonical.get())));
-        return canonical;
-    }
-
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "InlinePass",
-        "Materializing graph {} ({:p}) under source root {} ({:p}).",
-        sourceGraph->name(),
-        static_cast<const void *>(sourceGraph.get()),
-        sourceRoot->name(),
-        static_cast<const void *>(sourceRoot.get())));
-
-    graph_ptr_t imported;
-    if (auto sourceOwner = sourceGraph->outer()) {
-        graph_ptr_t draftOwner = ensureEditableGraph(session, sourceRoot, sourceOwner, cache);
-        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-            "InlinePass",
-            "ensureEditableGraph owner path: sourceOwner={} ({:p}) draftOwner={} ({:p}) "
-            "sourceGraph={} ({:p}).",
-            sourceOwner->name(),
-            static_cast<const void *>(sourceOwner.get()),
-            draftOwner->name(),
-            static_cast<const void *>(draftOwner.get()),
-            sourceGraph->name(),
-            static_cast<const void *>(sourceGraph.get())));
-        if (hasSubGraphRef(draftOwner, sourceGraph)) {
-            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                "InlinePass",
-                "ensureEditableGraph erase stale subgraph ref: owner={} ({:p}) subgraph={} "
-                "({:p}).",
-                draftOwner->name(),
-                static_cast<const void *>(draftOwner.get()),
-                sourceGraph->name(),
-                static_cast<const void *>(sourceGraph.get())));
-            session.eraseSubGraph(draftOwner, sourceGraph);
-        }
-        if (draftOwner->dependencies().contains(sourceGraph)) {
-            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                "InlinePass",
-                "ensureEditableGraph erase stale dependency ref: owner={} ({:p}) dep={} "
-                "({:p}).",
-                draftOwner->name(),
-                static_cast<const void *>(draftOwner.get()),
-                sourceGraph->name(),
-                static_cast<const void *>(sourceGraph.get())));
-            session.eraseDependency(draftOwner, sourceGraph);
-        }
-        imported = session.importSubGraph(draftOwner, sourceGraph, GraphImportMode::CloneIntoDraft);
-        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-            "InlinePass",
-            "ensureEditableGraph import subgraph: owner={} ({:p}) source={} ({:p}) "
-            "imported={} ({:p}).",
-            draftOwner->name(),
-            static_cast<const void *>(draftOwner.get()),
-            sourceGraph->name(),
-            static_cast<const void *>(sourceGraph.get()),
-            imported->name(),
-            static_cast<const void *>(imported.get())));
-        if (sourceOwner->dependencies().contains(sourceGraph)) {
-            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                "InlinePass",
-                "ensureEditableGraph mirror owner dependency: owner={} ({:p}) dep={} "
-                "({:p}).",
-                draftOwner->name(),
-                static_cast<const void *>(draftOwner.get()),
-                imported->name(),
-                static_cast<const void *>(imported.get())));
-            session.importDependency(draftOwner, imported);
-        }
-    } else {
-        graph_ptr_t draftRoot = cache.at(sourceRoot.get());
-        if (draftRoot->dependencies().contains(sourceGraph)) {
-            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                "InlinePass",
-                "ensureEditableGraph erase stale root dependency ref: root={} ({:p}) "
-                "dep={} ({:p}).",
-                draftRoot->name(),
-                static_cast<const void *>(draftRoot.get()),
-                sourceGraph->name(),
-                static_cast<const void *>(sourceGraph.get())));
-            session.eraseDependency(draftRoot, sourceGraph);
-        }
-        imported =
-            session.importDependency(draftRoot, sourceGraph, GraphImportMode::CloneIntoDraft);
-        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-            "InlinePass",
-            "ensureEditableGraph import dependency: root={} ({:p}) source={} ({:p}) "
-            "imported={} ({:p}).",
-            draftRoot->name(),
-            static_cast<const void *>(draftRoot.get()),
-            sourceGraph->name(),
-            static_cast<const void *>(sourceGraph.get()),
-            imported->name(),
-            static_cast<const void *>(imported.get())));
-    }
-
-    graph_ptr_t canonical = session.canonicalGraph(imported);
-    (void)canonical->exitNode();
-    cache[sourceGraph.get()] = canonical;
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "InlinePass",
-        "ensureEditableGraph finalized: source={} ({:p}) imported={} ({:p}) "
-        "canonical={} ({:p}).",
-        sourceGraph->name(),
-        static_cast<const void *>(sourceGraph.get()),
-        imported->name(),
-        static_cast<const void *>(imported.get()),
-        canonical->name(),
-        static_cast<const void *>(canonical.get())));
-    return canonical;
-}
-
 } // namespace
 
-graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
+graph_ptr_t InlineRewritePass::apply(camel::runtime::GCGraph *graph, ostream &os) {
     (void)os;
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "InlinePass",
-        "Start inline pass from root graph {}.",
+        "Start inline pass from runtime root {}.",
         graph ? graph->name() : "<null>"));
     if (!graph) {
-        return graph;
+        return Graph::null();
     }
 
-    GraphRewriteSession session(graph);
-    graph_ptr_t sourceRoot  = graph;
-    graph_ptr_t workingRoot = session.root();
-
-    std::unordered_map<const Graph *, graph_ptr_t> editableGraphsBySource{
-        {sourceRoot.get(), workingRoot}};
-    std::vector<graph_ptr_t> sourceGraphs;
-    std::unordered_set<const Graph *> visited;
-    collectReachableGraphs(sourceRoot, sourceGraphs, visited);
-
-    // 先为整棵图树建立 draft 映射（浅克隆语义下，子图/依赖在此阶段按需 materialize）。
+    camel::runtime::RuntimeGraphRewriteSession runtimeSession(context_, graph);
+    auto session                                 = runtimeSession.createSourceEditSession();
+    graph_ptr_t sourceRoot                       = session.sourceRoot();
+    const std::vector<graph_ptr_t> &sourceGraphs = session.reachableSourceGraphs();
+    std::unordered_map<const Graph *, graph_ptr_t> editableGraphsBySource;
+    editableGraphsBySource.reserve(sourceGraphs.size());
     for (const auto &sourceGraph : sourceGraphs) {
-        (void)ensureEditableGraph(session, sourceRoot, sourceGraph, editableGraphsBySource);
+        editableGraphsBySource.emplace(sourceGraph.get(), session.canonicalGraph(sourceGraph));
     }
 
-    // 约定：GraphDraft 在 import/clone 阶段已完成 source->draft 的引用规范化，
-    // 这里仅构建 use-index 并做一致性断言。
-    std::vector<graph_ptr_t> draftGraphs;
-    draftGraphs.reserve(sourceGraphs.size());
-    for (const auto &sourceGraph : sourceGraphs) {
-        draftGraphs.push_back(editableGraphsBySource.at(sourceGraph.get()));
+    // The runtime-side source edit session has already normalized the cloned
+    // source closure, so the inline pass can build its use index directly on
+    // top of the editable cloned graphs.
+    std::vector<graph_ptr_t> draftGraphs = session.editableGraphs();
+    bool structuralRewriteChanged        = false;
+    while (true) {
+        bool iterationChanged = false;
+        iterationChanged |= specializeDirectFuncTargets(session, draftGraphs);
+        iterationChanged |= devirtualizeStaticCalls(session, draftGraphs);
+        iterationChanged |= ensureFuncBodyDependencies(session, draftGraphs);
+        if (!iterationChanged) {
+            break;
+        }
+        structuralRewriteChanged = true;
+        for (const auto &draftGraph : draftGraphs) {
+            GraphBuilder::validateGraph(*draftGraph);
+        }
     }
+
     GraphUseIndex useIndex = buildUseIndex(draftGraphs);
     std::unordered_set<const Graph *> legacySources;
     legacySources.reserve(sourceGraphs.size());
@@ -902,11 +1559,15 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
         legacySources.insert(sourceGraph.get());
     }
     assertNoLegacyGraphRefs(draftGraphs, legacySources);
+    assertNoAnonymousFuncTargets(draftGraphs);
+    assertNoInvalidStaticFunctionGraphs(draftGraphs);
 
-    // SCC 缩点 + 逆拓扑顺序：先处理最深层被引用图，再逐层向上。
-    // 这样可以避免“先改上层导致下层反复重扫”的多轮展开抖动。
+    // Process SCCs in reverse topological order so deeper callees stabilize before their callers.
+    // This reduces repeated re-scans where an upper layer changes first and invalidates lower-layer
+    // opportunities.
     SccGraphPlan sccPlan  = buildSccGraphPlan(sourceGraphs);
     bool anyInlineApplied = false;
+    std::vector<AppliedInlineRecord> appliedInlineRecords;
     for (size_t sccId : sccPlan.processOrder) {
         const SccEntryGuard sccEntryGuard =
             buildSccEntryGuard(sccId, sccPlan, useIndex, editableGraphsBySource);
@@ -957,8 +1618,7 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
                 continue;
             }
             const Graph *pathGraph = target.bodyGraph ? target.bodyGraph : funcPath->bodyGraph();
-            node_vec_t ctrlPreds(path->ctrlInputs().begin(), path->ctrlInputs().end());
-
+            const std::string pathText = path->toString();
             InlineOptions inlineOptions;
             InlineResult inlined = session.inlineCallable(path, inlineOptions);
             if (!inlined || !inlined.valueExit || !inlined.ctrlEntry) {
@@ -975,21 +1635,30 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
             if (inlined.ctrlEntry == path) {
                 continue;
             }
-            for (Node *pred : ctrlPreds) {
-                if (!pred) {
-                    continue;
-                }
-                while (std::ranges::find(pred->ctrlOutputs(), path) != pred->ctrlOutputs().end()) {
-                    session.replaceOutput(LinkType::Ctrl, pred, path, inlined.ctrlEntry);
-                }
-            }
             session.eraseNode(path);
+            if (std::ranges::find(target.owner->nodes(), path) != target.owner->nodes().end()) {
+                throw std::runtime_error(
+                    std::format(
+                        "Inline pass erased FUNC '{}' in graph '{}' but node pointer {:p} is still "
+                        "present in owner node list.",
+                        pathText,
+                        target.owner->name(),
+                        static_cast<void *>(path)));
+            }
             auto sameGraph = [&](const graph_ptr_t &g) { return g.get() == target.owner.get(); };
-            if (std::ranges::find_if(changedGraphs, sameGraph) == changedGraphs.end()) {
+            if (std::find_if(changedGraphs.begin(), changedGraphs.end(), sameGraph) ==
+                changedGraphs.end()) {
                 changedGraphs.push_back(target.owner);
             }
             appliedCount++;
             anyInlineApplied = true;
+            appliedInlineRecords.push_back(
+                AppliedInlineRecord{
+                    .owner           = target.owner,
+                    .targetBodyGraph = pathGraph,
+                    .erasedPathText  = pathText,
+                    .isBranchArmHead = target.isBranchArmHead,
+                });
             if (appliedCount > kInlineApplyBudgetPerScc) {
                 EXEC_WHEN_DEBUG(ASSERT(
                     false,
@@ -1011,7 +1680,7 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
             CAMEL_LOG_INFO_S(
                 "InlinePass",
                 "Inlined FUNC node {} (graph {}) in graph {}, armHead={}.",
-                path->toString(),
+                pathText,
                 pathGraph ? pathGraph->name() : "<null>",
                 target.owner->name(),
                 target.isBranchArmHead ? "true" : "false");
@@ -1048,6 +1717,7 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
         }
 
         for (const auto &changedGraph : changedGraphs) {
+            (void)ensureFuncBodyDependencies(session, {changedGraph});
             (void)changedGraph->exitNode();
             const size_t pruned = pruneUnreachableSlotSafe(session, changedGraph);
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
@@ -1058,10 +1728,14 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
             (void)pruned;
             GraphBuilder::validateGraph(*changedGraph);
         }
+        assertNoLegacyGraphRefs(draftGraphs, legacySources);
+        assertNoAnonymousFuncTargets(draftGraphs);
+        assertAppliedInlineTargetsGone(appliedInlineRecords);
     }
 
-    if (anyInlineApplied) {
+    if (anyInlineApplied || structuralRewriteChanged) {
         sweepUnreferencedGraphRegistries(session, draftGraphs);
+        assertNoLegacyGraphRefs(draftGraphs, legacySources);
     }
 
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
@@ -1073,16 +1747,30 @@ graph_ptr_t InlineRewritePass::apply(graph_ptr_t &graph, ostream &os) {
     }
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("InlinePass", "Adjacency ownership checks passed."));
 
+    assertFuncTargetsRegistered(draftGraphs);
+    assertNoAnonymousFuncTargets(draftGraphs);
+
     auto result = session.finish();
+    if ((anyInlineApplied || structuralRewriteChanged) && result &&
+        result.get() == sourceRoot.get()) {
+        throw std::runtime_error(
+            std::format(
+                "InlinePass reported changes but finish() returned original root {:p} ('{}').",
+                static_cast<void *>(sourceRoot.get()),
+                sourceRoot ? sourceRoot->name() : "<null>"));
+    }
+    assertNoDanglingFuncTargetsAfterFinish(result);
+    if (result) {
+        assertNoInvalidStaticFunctionGraphs(camel::compile::gir::collectReachableGraphs(result));
+    }
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "InlinePass",
         "Inline session finished: changed={}, resultRoot={}.",
-        result.changed,
-        result.graph ? result.graph->name() : "<null>"));
-    graph = result.graph;
+        anyInlineApplied || structuralRewriteChanged,
+        result ? result->name() : "<null>"));
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "InlinePass",
         "Inline pass apply returns root {}.",
-        graph ? graph->name() : "<null>"));
-    return graph;
+        result ? result->name() : "<null>"));
+    return runtimeSession.finish(result);
 }

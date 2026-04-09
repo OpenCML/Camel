@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Feb. 19, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,5 +21,7 @@
 
 #include "pass/base.h"
 #include "pass/opt.h"
+#include "pass/runtime_sched.h"
+#include "pass/runtime_trans.h"
 #include "pass/sched.h"
 #include "pass/trans.h"

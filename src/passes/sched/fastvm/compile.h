@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "bytecode.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/runtime/graph.h"
 #include "optimize.h"
 
 namespace ctx = camel::core::context;
@@ -37,14 +38,24 @@ struct CompileStrategy {
 struct BytecodeIndex {
     size_t offset;
     size_t length;
-    GIR::Graph *graph;
+    camel::runtime::GCGraph *runtimeGraph;
+};
+
+struct LinkedBytecodeResult {
+    bytecode_vec_t codes;
+    std::vector<BytecodeIndex> graphs;
+    std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap;
 };
 
 bytecode_vec_t compile(
     const ctx::context_ptr_t &ctx, GIR::Graph *graph, const CompileStrategy &opt = {},
     std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins = nullptr);
 
-std::tuple<bytecode_vec_t, std::vector<BytecodeIndex>, std::unordered_map<GIR::Graph *, size_t>>
-compileAndLink(ctx::context_ptr_t ctx, GIR::Graph *entry, const CompileStrategy &opt);
+bytecode_vec_t compile(
+    const ctx::context_ptr_t &ctx, camel::runtime::GCGraph *graph, const CompileStrategy &opt = {},
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins = nullptr);
+
+LinkedBytecodeResult
+compileAndLink(ctx::context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileStrategy &opt);
 
 std::string opCodeToString(const Bytecode &bc, const ctx::context_ptr_t &context);

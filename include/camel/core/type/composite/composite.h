@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,7 @@ class CompositeType : public Type {
     CompositeType(TypeCode code) : Type(code) {}
     virtual ~CompositeType() noexcept = default;
 
-    // 不修改原类型，返回新的类型
+    // Do not mutate the original type; return a new type instead.
     virtual Type *resolve(const type_vec_t &typeList) const = 0;
     virtual bool resolved() const                           = 0;
 

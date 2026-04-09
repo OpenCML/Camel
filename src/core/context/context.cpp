@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,10 +22,13 @@
 
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/mm.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/module/dynamic.h"
 #include "camel/core/module/userdef.h"
 #include "camel/execute/executor.h"
+#include "camel/runtime/graph.h"
+#include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
 #include "camel/utils/str.h"
 
@@ -40,6 +43,26 @@ namespace camel::core::context {
 namespace {
 
 int deriveProcessExitCode(GIR::Graph *graph, slot_t result) {
+    if (!graph || !graph->funcType() || !graph->funcType()->hasExitType())
+        return 0;
+
+    switch (graph->funcType()->exitType()->code()) {
+    case TypeCode::Int32:
+        return static_cast<int>(static_cast<int32_t>(result));
+    case TypeCode::Int64:
+        return static_cast<int>(static_cast<int64_t>(result));
+    case TypeCode::Bool:
+        return result != 0 ? 1 : 0;
+    case TypeCode::Byte:
+        return static_cast<int>(static_cast<uint8_t>(result));
+    case TypeCode::Void:
+        return 0;
+    default:
+        return 0;
+    }
+}
+
+int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result) {
     if (!graph || !graph->funcType() || !graph->funcType()->hasExitType())
         return 0;
 
@@ -116,6 +139,8 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &diagConf) {
     context_ptr_t ctx     = std::shared_ptr<Context>(new Context(entryConf, diagConf));
     ctx->exeMgr_          = std::make_unique<ExecutorManager>(ctx);
+    ctx->runtimeGraphMgr_ = std::make_unique<camel::runtime::GCGraphManager>();
+    camel::core::mm::autoSpace().setObjectRootSet(&ctx->runtimeGraphMgr_->gcRoots());
     ctx->sourceContext_   = std::make_shared<camel::source::SourceContext>();
     ctx->runtimeDiagSink_ = std::make_shared<DiagnosticSink>("", "", ctx->sourceContext_);
     ctx->runtimeDiagSink_->setConfig(diagConf);
@@ -192,6 +217,10 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
 }
 
 void Context::captureProcessExitCode(GIR::Graph *graph, slot_t result) {
+    processExitCode_ = deriveProcessExitCode(graph, result);
+}
+
+void Context::captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t result) {
     processExitCode_ = deriveProcessExitCode(graph, result);
 }
 
@@ -369,8 +398,9 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
     if (stem.empty())
         stem = relPath.string();
 
-    /// 在给定目录 D 中的查找顺序：1) D/xx.cmo  2) D/xx.*（任意同名文本/源文件）
-    /// 若 D/xx 为目录，则再查：3) D/xx/xx.cmo  4) D/xx/xx.*
+    /// Lookup order within directory D: 1) D/xx.cmo  2) D/xx.* (any text/source file with the
+    /// same name)
+    /// If D/xx is a directory, also search: 3) D/xx/xx.cmo  4) D/xx/xx.*
     auto findModuleInDir = [&](const fs::path &dir) -> std::pair<std::string, bool> {
         if (!fs::exists(dir) || !fs::is_directory(dir))
             return {"", false};
@@ -525,12 +555,53 @@ GIR::graph_ptr_t Context::mainGraph() const {
     return *optMainGraphSet.value().begin();
 }
 
+camel::runtime::GCGraph *Context::runtimeRootGraph() {
+    return runtimeGraphManager().find(rootGraph().get()) ? runtimeGraphManager().root()
+                                                         : materializeRuntimeRoot(rootGraph());
+}
+
+camel::runtime::GCGraph *Context::materializeRuntimeRoot(const GIR::graph_ptr_t &rootGraph) {
+    camel::runtime::GCGraph *runtimeRoot = runtimeGraphManager().materializeRoot(rootGraph);
+    registerRuntimeGraphDebugInfo(runtimeRoot);
+    return runtimeRoot;
+}
+
+camel::runtime::GCGraphManager &Context::runtimeGraphManager() {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    return *runtimeGraphMgr_;
+}
+
+const camel::runtime::GCGraphManager &Context::runtimeGraphManager() const {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    return *runtimeGraphMgr_;
+}
+
 void Context::registerExecutorFactory(std::string name, executor_factory_t fact) {
     exeMgr_->registerExecutorFactory(name, fact);
 }
 
 void Context::eval(std::string uri, GIR::Node *self, Frame &frame) {
     return exeMgr_->eval(uri, self, frame);
+}
+
+void Context::registerRuntimeGraphDebugInfo(camel::runtime::GCGraph *runtimeRoot) {
+    if (!runtimeRoot || !sourceContext_) {
+        return;
+    }
+    auto &debugMap = sourceContext_->debugMap();
+    camel::runtime::forEachReachableGraph(runtimeRoot, [&](camel::runtime::GCGraph *graph) {
+        if (!graph) {
+            return;
+        }
+        GIR::Graph *sourceGraph = graph->compileGraphMetadata().get();
+        if (!sourceGraph) {
+            return;
+        }
+        camel::source::origin_id_t origin = debugMap.graphOrigin(sourceGraph->stableId());
+        if (origin != camel::source::kInvalidOriginId) {
+            debugMap.registerRuntimeGraphOrigin(reinterpret_cast<uintptr_t>(graph), origin);
+        }
+    });
 }
 
 } // namespace camel::core::context

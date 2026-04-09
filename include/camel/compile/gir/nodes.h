@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,7 +36,7 @@ class NodeMutation;
 }
 
 // =============================================================================
-// Node：图节点基类，持有类型、数据槽索引、入边/出边
+// Node: graph node base class holding type, data-slot index, and in/out edges
 // =============================================================================
 
 class Node {
@@ -145,8 +145,8 @@ class Node {
     Type *dataType_;
     data_idx_t dataIndex_;
 
-    // --- Draft 模式邻接表 ---
-    // 仅 draft 节点（frozen_==false）使用，支持动态增删。
+    // --- Draft adjacency lists ---
+    // Used only by draft nodes (frozen_ == false) and supports dynamic edits.
     node_vec_t normInputs_;
     node_vec_t withInputs_;
     node_vec_t ctrlInputs_;
@@ -155,9 +155,10 @@ class Node {
     node_vec_t withOutputs_;
     node_vec_t ctrlOutputs_;
 
-    // --- Frozen 模式邻接表 ---
-    // 仅 frozen 节点（frozen_==true）使用，指向 arena 上的定长数组。
-    // Frozen 节点的 draft vectors 保持空（默认构造态），不占 heap 内存。
+    // --- Frozen adjacency lists ---
+    // Used only by frozen nodes (frozen_ == true) and points at arena-backed fixed arrays.
+    // Frozen nodes keep their draft vectors empty (default construction state) and do not
+    // consume heap memory.
     struct FrzAdj {
         Node **p   = nullptr;
         uint16_t n = 0;
@@ -196,8 +197,8 @@ class Node {
         return ctrlOutputs_;
     }
 
-    /// 将 draft 邻接 vectors 搬迁到 arena 定长数组，然后清空 vectors 并置 frozen_=true。
-    /// 由 GraphBuilder::sealGraph() 在 freeze 阶段调用。
+    /// Move draft adjacency vectors into arena-backed fixed arrays, then clear the vectors
+    /// and set frozen_ = true. Called by GraphBuilder::sealGraph() during freezing.
     void freezeAdjacency(GraphArena &arena);
 
     static void link(LinkType type, Node *from, Node *to);
@@ -210,8 +211,8 @@ class Node {
 };
 
 namespace detail {
-// 内部节点改写桥接：仅供 GraphBuilder/GraphDraft/rewrite 通道使用，
-// 不作为对外稳定 API。
+// Internal node-rewrite bridge: only for GraphBuilder / GraphDraft / rewrite
+// paths, not a stable external API.
 class NodeMutation {
   public:
     static void setDataType(Node *node, Type *type) { node->setDataType(type); }
@@ -237,7 +238,7 @@ class NodeMutation {
 };
 } // namespace detail
 
-// 数据与端口类节点
+// Data and port nodes
 class DataNode : public Node {
   public:
     DataNode(Graph &graph, Type *type, data_idx_t index)
@@ -345,7 +346,7 @@ class AccsNode : public Node {
     size_t numIndex_;
 };
 
-// 控制流节点
+// Control-flow nodes
 class BrchNode : public Node {
   public:
     BrchNode(Graph &graph, Type *type, data_idx_t index)
@@ -407,7 +408,7 @@ class JoinNode : public Node {
     Node *clone(Graph &graph) const override;
 };
 
-// 调用与函数/算子节点
+// Call and function/operator nodes
 class CallNode : public Node {
   public:
     CallNode(Graph &graph, Type *type, data_idx_t index)
@@ -506,7 +507,7 @@ class OperNode : public Node {
     Node *clone(Graph &graph) const override;
 };
 
-// 辅助节点
+// Helper nodes
 class DrefNode : public Node {
   public:
     // FUNC overload set / OPERATOR group / pre-built inlined graph.

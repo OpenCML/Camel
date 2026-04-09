@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 18, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,10 +29,11 @@ using resolver_ptr_t = camel::core::type::resolver_ptr_t;
 
 namespace {
 
-/// 将多个模块导出的同名 entity 合并为一个，用于支持多模块下的函数/算子重载。
-/// - graph_vec_ptr_t: 合并所有图的向量
-/// - oper_group_ptr_t: 合并所有算子组的 resolvers（按同名 group 合并）
-/// - node_ptr_t: 仅取第一个
+/// Merge identically named entities exported by multiple modules so function
+/// and operator overloading work across module boundaries.
+/// - graph_vec_ptr_t: merge all graphs into one vector
+/// - oper_group_ptr_t: merge all operator resolvers by name
+/// - node_ptr_t: keep the first one only
 std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities) {
     if (entities.empty()) {
         return std::nullopt;
@@ -81,7 +82,7 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
         }
         return std::nullopt;
     }
-    // node_ptr_t 或其它：返回第一个
+    // node_ptr_t or anything else: return the first one.
     return first;
 }
 
@@ -163,7 +164,7 @@ std::optional<Type *> Module::getImportedType(const Reference &ref) const {
     if (it == importedRefModMap_.end() || it->second.empty()) {
         return std::nullopt;
     }
-    // Type 无重载语义，取第一个提供该 ref 的模块即可
+    // Types are not overloaded; the first module providing this ref wins.
     auto &mod = it->second.front();
     if (!mod->loaded()) {
         mod->load();
@@ -176,7 +177,7 @@ std::optional<entity> Module::getImportedEntity(const Reference &ref) const {
     if (it == importedRefModMap_.end() || it->second.empty()) {
         return std::nullopt;
     }
-    // 命中缓存则直接返回，避免重复合并
+    // Return the cached result directly to avoid repeated merges.
     auto cacheIt = importedEntityCache_.find(ref);
     if (cacheIt != importedEntityCache_.end()) {
         return cacheIt->second;

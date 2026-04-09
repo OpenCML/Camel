@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Apr. 04, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -62,7 +62,7 @@ class Object {
     //     if (newValue) {
     //         ObjectHeader *newHeader = headerOf(newValue);
 
-    //         // 写屏障：如果老年代对象引用年轻代对象
+    //         // Write barrier: if an old-generation object references a young-generation object.
     //         if (gc->inElderGenSpace(thisHeader) && gc->inYoungGenSpace(newHeader)) {
     //             gc->recordOldToYoungRef(this, newValue);
     //         }
@@ -75,7 +75,7 @@ class Object {
 template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b) noexcept {
     if (!a || !b)
         return false;
-    // 借助 vtable 指针判断是否为同一对象
+    // Use the vtable pointer to determine whether the objects are of the same class.
     auto vptrA = *reinterpret_cast<void *const *>(a);
     auto vptrB = *reinterpret_cast<void *const *>(b);
     return vptrA == vptrB;
@@ -94,13 +94,13 @@ template <typename T> constexpr slot_t toSlot(const T &value) noexcept {
     if constexpr (std::is_same_v<T, slot_t>) {
         return value;
     } else if constexpr (std::is_pointer_v<T>) {
-        // 指针 -> 整数再放入 slot_t
+        // Convert pointer -> integer before storing into slot_t.
         return static_cast<slot_t>(reinterpret_cast<std::uintptr_t>(value));
     } else {
         if constexpr (sizeof(T) == sizeof(slot_t)) {
             return std::bit_cast<slot_t>(value);
         } else {
-            // 小于 slot_t 的情况：低位保存，其他位补零
+            // For values smaller than slot_t: keep the low bytes and zero the rest.
             slot_t tmp{};
             std::memcpy(&tmp, &value, sizeof(T));
             return tmp;
@@ -138,7 +138,9 @@ using Float   = Float64;
 using Bool    = bool;
 using Byte    = std::byte;
 
-/** 安全打印 slot，不访问 Object* 指针，用于 debug_trace 等可能读到未初始化值的场景 */
+/** Safe slot printing without dereferencing Object*; used by debug_trace and similar paths that
+ * may
+ * observe uninitialized values. */
 inline void printSlotSafe(std::ostream &os, const slot_t data, camel::core::type::Type *t) {
     if (t->isGCTraced()) {
         if (data == NullSlot) {
@@ -148,7 +150,7 @@ inline void printSlotSafe(std::ostream &os, const slot_t data, camel::core::type
         os << "<" << t->toString() << " at 0x" << std::hex << data << std::dec << ">";
         return;
     }
-    // 非引用类型与 printSlot 一致
+    // Non-reference types follow printSlot.
     switch (t->code()) {
     case camel::core::type::TypeCode::Int32:
         os << fromSlot<Int32>(data);
@@ -195,7 +197,7 @@ inline void printSlot(std::ostream &os, const slot_t data, camel::core::type::Ty
     } else if (t->isOtherType()) {
         os << "<" << t->toString() << ">";
     } else {
-        // 非引用类型，根据 type code 输出
+        // Non-reference types: print according to the type code.
         switch (t->code()) {
         case camel::core::type::TypeCode::Int32:
             os << fromSlot<Int32>(data);

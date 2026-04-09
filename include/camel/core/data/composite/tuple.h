@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,7 @@ class TupleData : public CompositeData {
     std::vector<size_t> refIndices_;
     std::vector<data_ptr_t> data_;
 
-    // 仅由 TupleDataFactory::build() 使用，避免重复计算 Type
+    // Used only by TupleDataFactory::build() to avoid recomputing Type.
     TupleData(type::Type *type, data_vec_t &&data, std::vector<size_t> &&refIndices);
 
   public:
@@ -59,7 +59,7 @@ class TupleData : public CompositeData {
     virtual data_ptr_t convertTo(type::Type *type) override;
 };
 
-// 工厂：收集元素后一次构建 Type 与 TupleData，避免重复计算
+// Factory: collect elements and build Type and TupleData once to avoid recomputing Type.
 class TupleDataFactory {
   public:
     TupleDataFactory();

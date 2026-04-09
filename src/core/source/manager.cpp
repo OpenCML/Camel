@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 07, 2026
- * Updated: Mar. 28, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,7 @@ namespace camel::source {
 
 namespace {
 
-// 预计算每一行的起始偏移，后续把任意 offset 转回 line/column 时只需要做一次 upper_bound。
+// Precompute each line's start offset so offset -> line/column only needs one upper_bound later.
 std::vector<size_t> buildLineStarts(const std::string &content) {
     std::vector<size_t> lineStarts = {0};
     for (size_t i = 0; i < content.size(); ++i) {
@@ -42,8 +42,9 @@ std::vector<size_t> buildLineStarts(const std::string &content) {
     return lineStarts;
 }
 
-// 这里把 token 半开区间转换成源码字节区间。
-// GCT/GIR 不再直接依赖 token，因此 token 只在前端边界被消费一次。
+// Convert a token half-open interval into a source byte interval.
+// GCT/GIR no longer depend on tokens directly, so tokens are consumed only once at the frontend
+// boundary.
 std::pair<size_t, size_t>
 tokenOffsets(const std::vector<antlr4::Token *> &tokens, const TokenRange &range) {
     if (tokens.empty() || range.start >= range.end) {
@@ -262,8 +263,8 @@ origin_id_t OriginTable::create(
 origin_id_t OriginTable::derive(
     origin_id_t parent, OriginStage stage, OriginKind kind, std::string label,
     span_id_t primarySpan, bool synthetic, std::vector<origin_id_t> inputs) {
-    // 若派生节点未显式指定 span，则沿主派生链继承父节点的主区间。
-    // 这就是当前 GCT/GIR 在“有损 lowering”下仍能回到源码的大前提。
+    // If the derived node does not specify a span, inherit the parent's primary span along the
+    // main derivation chain. This is the basis for source recovery after lossy GCT/GIR lowering.
     if (primarySpan == kInvalidSpanId) {
         if (const OriginRecord *parentOrigin = origin(parent)) {
             primarySpan = parentOrigin->primarySpan;
@@ -300,6 +301,12 @@ void DebugMap::registerPcOrigin(size_t pc, origin_id_t origin) {
     }
 }
 
+void DebugMap::registerRuntimeGraphOrigin(uintptr_t runtimeGraphKey, origin_id_t origin) {
+    if (runtimeGraphKey != 0 && origin != kInvalidOriginId) {
+        runtimeGraphOrigins_[runtimeGraphKey] = origin;
+    }
+}
+
 origin_id_t DebugMap::graphOrigin(const std::string &graphId) const {
     auto it = graphOrigins_.find(graphId);
     return it == graphOrigins_.end() ? kInvalidOriginId : it->second;
@@ -313,6 +320,11 @@ origin_id_t DebugMap::nodeOrigin(const std::string &nodeId) const {
 origin_id_t DebugMap::pcOrigin(size_t pc) const {
     auto it = pcOrigins_.find(pc);
     return it == pcOrigins_.end() ? kInvalidOriginId : it->second;
+}
+
+origin_id_t DebugMap::runtimeGraphOrigin(uintptr_t runtimeGraphKey) const {
+    auto it = runtimeGraphOrigins_.find(runtimeGraphKey);
+    return it == runtimeGraphOrigins_.end() ? kInvalidOriginId : it->second;
 }
 
 void OriginSemanticMap::registerBundle(origin_id_t origin, SemanticBundle bundle) {
@@ -393,8 +405,9 @@ CharRange SourceContext::resolveOrigin(origin_id_t originId) const {
     if (!rec) {
         return {};
     }
-    // 当前实现把 origin 的“实际源码区间”定义为 primarySpan。
-    // 即使 inputs 中有多源输入，对外展示仍优先返回主区间。
+    // The current implementation defines an origin's effective source range as primarySpan.
+    // Even when inputs contain multiple sources, external presentation still prefers the primary
+    // span.
     return resolveSpan(rec->primarySpan);
 }
 

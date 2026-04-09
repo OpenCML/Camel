@@ -7,13 +7,13 @@
  *
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
  * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
  *
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,10 +22,14 @@
 #include "camel/core/type/composite/tuple.h"
 #include "tuple.h"
 
-// 前向声明
+// Forward declarations.
 namespace camel::compile::gir {
 class Graph;
 } // namespace camel::compile::gir
+
+namespace camel::runtime {
+class GCGraph;
+} // namespace camel::runtime
 
 namespace GIR = camel::compile::gir;
 
@@ -39,16 +43,31 @@ class Function : public rtdata::Object {
 
     static Function *
     create(GIR::Graph *graph, const type::Type *tupleType, camel::core::mm::IAllocator &allocator);
+    static Function *create(
+        camel::runtime::GCGraph *graph, const type::Type *tupleType,
+        camel::core::mm::IAllocator &allocator);
 
-    GIR::Graph *graph() const { return graph_; }
+    // Runtime identity always flows through the materialized GCGraph carrier.
+    camel::runtime::GCGraph *graph() const { return runtimeGraph_; }
+    camel::runtime::GCGraph *runtimeGraph() const { return runtimeGraph_; }
+    bool hasRuntimeGraph() const { return runtimeGraph_ != nullptr; }
+    // Compile GIR access is a metadata bridge kept for cold paths such as
+    // rewriting, diagnostics, and transitional compile-time utilities.
+    GIR::Graph *sourceGraph() const;
     void setGraph(GIR::Graph *graph) {
         ASSERT(graph != nullptr, "Function graph cannot be null.");
-        graph_ = graph;
+        graph_        = graph;
+        runtimeGraph_ = nullptr;
+    }
+    void setRuntimeGraph(camel::runtime::GCGraph *graph) {
+        ASSERT(graph != nullptr, "Runtime Function graph cannot be null.");
+        graph_        = nullptr;
+        runtimeGraph_ = graph;
     }
     Tuple *tuple() { return closure_; }
     const Tuple *tuple() const { return closure_; }
 
-    // 获取 tuple 的类型（从 graph 获取，实现在 .cpp 中）
+    // Resolve the closure tuple layout from the active graph carrier.
     const type::TupleType *tupleType() const;
 
     virtual bool
@@ -60,7 +79,9 @@ class Function : public rtdata::Object {
 
         const Function *fnOther = reinterpret_cast<const Function *>(other);
 
-        if (graph_ != fnOther->graph_)
+        if (runtimeGraph_ != fnOther->runtimeGraph_)
+            return false;
+        if (runtimeGraph_ == nullptr && graph_ != fnOther->graph_)
             return false;
 
         const type::TupleType *tupleTypePtr = tupleType();
@@ -79,7 +100,7 @@ class Function : public rtdata::Object {
         if (!mem)
             throw std::bad_alloc();
 
-        Function *fnNew = new (mem) Function(graph_);
+        Function *fnNew = new (mem) Function(graph_, runtimeGraph_);
 
         if (closure_) {
             const type::TupleType *tupleTypePtr = tupleType();
@@ -94,8 +115,8 @@ class Function : public rtdata::Object {
     virtual void print(std::ostream &os, const type::Type *type) const override;
 
     virtual void onMoved() override {
-        // graph_ 是外部引用，不需要改动
-        // tuple_ 指向的对象可能被 GC 移动，需要由 GC 更新
+        // Graph pointers are non-owning metadata references. Closure objects are
+        // updated through updateRefs when the GC relocates traced objects.
     }
 
     virtual void updateRefs(
@@ -108,11 +129,13 @@ class Function : public rtdata::Object {
     }
 
   private:
-    explicit Function(GIR::Graph *g) : graph_(g), closure_(nullptr) {}
+    explicit Function(GIR::Graph *g, camel::runtime::GCGraph *runtimeGraph = nullptr)
+        : graph_(g), runtimeGraph_(runtimeGraph), closure_(nullptr) {}
 
-    // graph_ 逃逸路径：运行时 Function 持有 Graph 裸指针。
-    // 存活约束：Function 在 VM 栈帧中被创建，其生命周期不超过执行期间。
-    // 图的 shared_ptr 由调度遍根持有，保证执行期间 Graph 不被销毁。
+    // Runtime functions should point at GCGraph. The raw GIR pointer remains
+    // only for compile-side static values that have not yet been materialized
+    // into runtime graphs.
     GIR::Graph *graph_;
+    camel::runtime::GCGraph *runtimeGraph_;
     Tuple *closure_;
 };

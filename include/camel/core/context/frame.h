@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include "camel/compile/gir.h"
 #include "camel/core/rtdata.h"
+#include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 
 namespace camel::core::context {
@@ -35,8 +36,37 @@ class FrameView;
 
 class Frame : public rtdata::Object {
   public:
-    GIR::Graph *graph() { return graph_; }
-    const GIR::Graph *graph() const { return graph_; }
+    // Runtime graph identity is the primary execution carrier.
+    camel::runtime::GCGraph *graph() { return runtimeGraph_; }
+    const camel::runtime::GCGraph *graph() const { return runtimeGraph_; }
+    // Source GIR exposure is a cold-path metadata bridge only.
+    GIR::Graph *sourceGraph() { return sourceGraphImpl(); }
+    const GIR::Graph *sourceGraph() const { return sourceGraphImpl(); }
+    camel::runtime::GCGraph *runtimeGraph() { return runtimeGraph_; }
+    const camel::runtime::GCGraph *runtimeGraph() const { return runtimeGraph_; }
+    bool hasRuntimeGraph() const { return runtimeGraph_ != nullptr; }
+    bool hasSourceGraph() const { return sourceGraphImpl() != nullptr; }
+    const type::TupleType *runtimeDataLayout() const {
+        if (runtimeGraph_) {
+            return runtimeGraph_->runtimeDataType();
+        }
+        ASSERT(sourceGraph_ != nullptr, "Frame has no source graph for runtime data layout.");
+        return sourceGraph_->runtimeDataType();
+    }
+    const type::TupleType *staticDataLayout() const {
+        if (runtimeGraph_) {
+            return runtimeGraph_->staticDataType();
+        }
+        ASSERT(sourceGraph_ != nullptr, "Frame has no source graph for static data layout.");
+        return sourceGraph_->staticDataType();
+    }
+    const std::string &graphName() const {
+        if (runtimeGraph_) {
+            return runtimeGraph_->name();
+        }
+        ASSERT(sourceGraph_ != nullptr, "Frame has no source graph name.");
+        return sourceGraph_->name();
+    }
 
     type::TypeCode codeAt(GIR::data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
@@ -59,7 +89,7 @@ class Frame : public rtdata::Object {
                     mm::formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     staticArea_->size()));
-            return graph_->staticDataType()->codeAt(idx);
+            return staticDataLayout()->codeAt(idx);
         }
     }
 
@@ -74,7 +104,7 @@ class Frame : public rtdata::Object {
                     mm::formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     dynamicAreaType_->size()));
-            type::Type *res = graph_->runtimeDataType()->typeAt(idx);
+            type::Type *res = runtimeDataLayout()->typeAt(idx);
             ASSERT(res != nullptr, std::format("Type at index {} is null.", idx));
             return tt::as_ptr<T>(res);
         } else {
@@ -86,7 +116,7 @@ class Frame : public rtdata::Object {
                     mm::formatAddress(const_cast<Frame *>(this), true),
                     idx,
                     staticArea_->size()));
-            type::Type *res = graph_->staticDataType()->typeAt(idx);
+            type::Type *res = staticDataLayout()->typeAt(idx);
             ASSERT(res != nullptr, std::format("Type at index {} is null.", idx));
             return tt::as_ptr<T>(res);
         }
@@ -133,7 +163,7 @@ class Frame : public rtdata::Object {
                 "Frame",
                 "[{}] Getting data of graph <{}> at index {} ({}): {}",
                 mm::formatAddress(const_cast<Frame *>(this), true),
-                graph_->name(),
+                graphName(),
                 index,
                 typeCodeToString(codeAt(index)),
                 oss.str());
@@ -150,7 +180,7 @@ class Frame : public rtdata::Object {
                 "Frame",
                 "[{}] Setting data of graph <{}> at index {} ({}): {}",
                 mm::formatAddress(this, true),
-                graph_->name(),
+                graphName(),
                 index,
                 typeCodeToString(codeAt(index)),
                 oss.str());
@@ -182,12 +212,12 @@ class Frame : public rtdata::Object {
 
     virtual bool
     equals(const rtdata::Object *other, const type::Type *type, bool deep = false) const override {
-        return false; // Frame 没有实际意义的比较
+        return false; // Frames are execution carriers and have no value semantics.
     }
 
     virtual rtdata::Object *
     clone(mm::IAllocator &allocator, const type::Type *type, bool deep = false) const override {
-        return nullptr; // 不支持克隆
+        return nullptr; // Frames are pool-managed and intentionally non-cloneable.
     }
 
     virtual void print(std::ostream &os, const type::Type *type) const override {
@@ -202,11 +232,11 @@ class Frame : public rtdata::Object {
     const slot_t *slotBase() const { return dynamicArea_; }
 
     void printSlotsTo(std::ostream &os) const {
-        os << "frame <" << (graph_ ? graph_->name() : "(null)") << "> at "
+        os << "frame <" << ((sourceGraph() || runtimeGraph_) ? graphName() : "(null)") << "> at "
            << mm::formatAddress(this, true) << ":\n";
         for (size_t i = 1; i < dynamicAreaType_->size(); ++i) {
             slot_t s      = dynamicArea_[i];
-            type::Type *t = graph_->runtimeDataType()->typeAt(i);
+            type::Type *t = runtimeDataLayout()->typeAt(i);
             os << "  [" << i << "] ";
             rtdata::printSlotSafe(os, s, t);
             os << "\n";
@@ -233,20 +263,30 @@ class Frame : public rtdata::Object {
     friend class TaskflowFramePool;
     friend class FrameView;
 
-    // 这个构造函数由栈帧池调用
-    Frame(GIR::Graph *graph, ::Tuple *staticArea, const type::TupleType *dynamicAreaType)
-        : graph_(graph), staticArea_(staticArea), dynamicAreaType_(dynamicAreaType) {
-        // 注意，这里不能在构造函数中初始化 dynamicArea_
-        // FastVM 的优化依赖于复用刚刚释放的栈帧数据
-        // 所以这里要尽量不去动 dynamicArea_，即便在 DEBUG 模式下
-        // 这会给 DEBUG 下脏读检测带来一定难度，不过总体来说还是利大于弊的
+    GIR::Graph *sourceGraphImpl() const {
+        return sourceGraph_
+                   ? sourceGraph_
+                   : (runtimeGraph_ ? runtimeGraph_->compileGraphMetadata().get() : nullptr);
     }
 
-    GIR::Graph *graph_;
+    // Only frame pools construct frames directly.
+    Frame(
+        GIR::Graph *graph, ::Tuple *staticArea, const type::TupleType *dynamicAreaType,
+        camel::runtime::GCGraph *runtimeGraph = nullptr)
+        : sourceGraph_(graph), runtimeGraph_(runtimeGraph), staticArea_(staticArea),
+          dynamicAreaType_(dynamicAreaType) {
+        // Do not eagerly initialize the dynamic area here. FastVM relies on
+        // reusing freshly released frame memory on the hot path, and forcing
+        // constructor-time initialization would add avoidable churn. Debug-mode
+        // uninitialized-slot diagnostics therefore happen at access sites.
+    }
+
+    GIR::Graph *sourceGraph_;
+    camel::runtime::GCGraph *runtimeGraph_;
     Frame *next_;
-    ::Tuple *staticArea_; // 外部提供的静态区
+    ::Tuple *staticArea_; // Borrowed static area owned by the graph carrier.
     const type::TupleType *dynamicAreaType_;
-    slot_t dynamicArea_[]; // 紧跟对象后存放动态区
+    slot_t dynamicArea_[]; // Flexible tail storage for dynamic slots.
 };
 
 class FrameView {
@@ -266,7 +306,7 @@ class FrameView {
                     std::format("Accessing uninitialized slot: idx = {}", index));
             });
             res = rtdata::fromSlot<T>(dynamicArea_[idx]);
-        } else { // 静态区：index < 0
+        } else { // Static area
             size_t idx = static_cast<size_t>(-index);
             EXEC_WHEN_DEBUG({
                 ASSERT(
@@ -286,7 +326,7 @@ class FrameView {
         if (index > 0) {
             size_t idx        = static_cast<size_t>(index);
             dynamicArea_[idx] = rtdata::toSlot(value);
-        } else { // 静态区
+        } else { // Static area
             size_t idx = static_cast<size_t>(-index);
             EXEC_WHEN_DEBUG({
                 ASSERT(
@@ -313,8 +353,9 @@ class FramePool {
             throw std::bad_alloc();
         end_ = base_ + totalSize;
         top_ = base_;
-        // 初始时该位置无有效 Frame
-        reinterpret_cast<Frame *>(top_)->graph_ = nullptr;
+        // Initialize the sentinel frame slot.
+        reinterpret_cast<Frame *>(top_)->sourceGraph_  = nullptr;
+        reinterpret_cast<Frame *>(top_)->runtimeGraph_ = nullptr;
     }
 
     ~FramePool() { std::free(base_); }
@@ -330,9 +371,9 @@ class FramePool {
                 mm::formatAddress(end_, true));
         });
 
-        // 尝试复用
+        // Try to reuse the current frame.
         Frame *lastFrame = reinterpret_cast<Frame *>(top_);
-        if (LIKELY(lastFrame->graph_ == graph)) {
+        if (LIKELY(lastFrame->sourceGraph_ == graph)) {
             EXEC_WHEN_DEBUG({
                 CAMEL_LOG_INFO_S(
                     "FramePool",
@@ -347,7 +388,7 @@ class FramePool {
             return lastFrame;
         }
 
-        // 分配新 Frame 并初始化
+        // Allocate a new Frame when reuse is not possible.
         ASSERT(
             graph->hasFrameLayout(),
             std::format("Graph '{}' has no finalized frame layout.", graph->name()));
@@ -381,9 +422,79 @@ class FramePool {
         return frame;
     }
 
-    inline void _resetTop() { reinterpret_cast<Frame *>(top_)->graph_ = nullptr; }
+    inline void _resetTop() {
+        reinterpret_cast<Frame *>(top_)->sourceGraph_  = nullptr;
+        reinterpret_cast<Frame *>(top_)->runtimeGraph_ = nullptr;
+    }
 
     inline Frame *acquire(GIR::Graph *graph) {
+        Frame *frame = _acquire(graph);
+        _resetTop();
+        return frame;
+    }
+
+    inline Frame *_acquire(camel::runtime::GCGraph *graph) {
+        EXEC_WHEN_DEBUG({
+            CAMEL_LOG_INFO_S(
+                "FramePool",
+                "[{}] Acquire request for runtime graph <{}>, top = {}, end = {}",
+                mm::formatAddress(this, true),
+                graph ? graph->name() : "(null)",
+                mm::formatAddress(top_, true),
+                mm::formatAddress(end_, true));
+        });
+
+        Frame *lastFrame = reinterpret_cast<Frame *>(top_);
+        if (LIKELY(lastFrame->runtimeGraph_ == graph)) {
+            EXEC_WHEN_DEBUG({
+                CAMEL_LOG_INFO_S(
+                    "FramePool",
+                    "[{}] Reusing existing frame of runtime graph <{}> at {}",
+                    mm::formatAddress(this, true),
+                    graph ? graph->name() : "(null)",
+                    mm::formatAddress(lastFrame, true));
+                frames_.push_back(lastFrame);
+            });
+
+            top_ = reinterpret_cast<std::byte *>(lastFrame->next_);
+            return lastFrame;
+        }
+
+        ASSERT(
+            graph->hasFrameLayout(),
+            std::format("Runtime graph '{}' has no finalized frame layout.", graph->name()));
+        size_t frameSize = graph->frameSize();
+        if (top_ + frameSize > end_) {
+            CAMEL_LOG_FATAL_S(
+                "FramePool",
+                "[{}] Out of memory: top = {}, need = {}, end = {}",
+                mm::formatAddress(this, true),
+                mm::formatAddress(top_, true),
+                frameSize,
+                mm::formatAddress(end_, true));
+            throw std::bad_alloc{};
+        }
+        Frame *frame =
+            new (top_) Frame(nullptr, graph->staticArea(), graph->runtimeDataType(), graph);
+
+        EXEC_WHEN_DEBUG({
+            CAMEL_LOG_INFO_S(
+                "FramePool",
+                "[{}] Allocated new Frame for runtime graph <{}> at {}, size = {}",
+                mm::formatAddress(this, true),
+                graph->name(),
+                mm::formatAddress(frame, true),
+                frameSize);
+        });
+
+        top_ += frameSize;
+
+        EXEC_WHEN_DEBUG({ frames_.push_back(frame); });
+
+        return frame;
+    }
+
+    inline Frame *acquire(camel::runtime::GCGraph *graph) {
         Frame *frame = _acquire(graph);
         _resetTop();
         return frame;
@@ -395,7 +506,9 @@ class FramePool {
                 "FramePool",
                 "[{}] Releasing frame of graph <{}> at {}",
                 mm::formatAddress(this, true),
-                frame->graph_ ? frame->graph_->name() : "(null)",
+                frame->runtimeGraph_
+                    ? frame->runtimeGraph_->name()
+                    : (frame->sourceGraph_ ? frame->sourceGraph_->name() : "(null)"),
                 mm::formatAddress(frame, true));
             ASSERT(
                 reinterpret_cast<std::byte *>(frame) < top_,
@@ -406,7 +519,9 @@ class FramePool {
                 std::format(
                     "Trying to release a frame that is not on top, top frame of graph <{}> is at "
                     "{}.",
-                    last->graph_->name(),
+                    last->runtimeGraph_
+                        ? last->runtimeGraph_->name()
+                        : (last->sourceGraph_ ? last->sourceGraph_->name() : "(null)"),
                     mm::formatAddress(last, true)));
         });
 
@@ -425,12 +540,11 @@ class FramePool {
 
     void *topAddr() { return &top_; }
 
-    inline bool isActive(Frame *frame, GIR::Graph *graph = nullptr) const {
+    inline bool isActive(Frame *frame) const {
         if (!frame)
             return false;
         if (reinterpret_cast<const std::byte *>(frame) >= top_)
             return false;
-        (void)graph;
         return true;
     }
 
@@ -486,7 +600,7 @@ class FrameArgsView : public ArgsView {
 };
 
 /**
- * 基于 slot_t* 的 ArgsView，用于 JIT 调用 OPER 时在 C++ 栈上构造，无需 Frame
+ * ArgsView backed by slot_t*. Used by JIT call sites to build OPER arguments on the C++ stack
  */
 class SlotArgsView : public ArgsView {
   private:

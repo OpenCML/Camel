@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,9 +44,10 @@ struct Diagnostic {
     std::string message;
     std::string suggestion;
 
-    // range 现在既可以是传统 CharRange/TokenRange，也可以是延迟解析的 SpanId/OriginId。
+    // range can be a traditional CharRange/TokenRange or a lazily resolved SpanId/OriginId.
     SourceRange range{};
-    camel::source::source_context_ptr_t sourceContext; // 用于把 SpanId/OriginId 解析成最终行列。
+    camel::source::source_context_ptr_t
+        sourceContext; // Resolves SpanId/OriginId into final line/column positions.
 
     Diagnostic &fetchRange(const RangeConverter &conv);
     std::string toText() const;
@@ -94,7 +95,7 @@ struct DiagsConfig {
     int total_limit                                       = -1; // -1 means no limit
     std::unordered_map<Severity, int> per_severity_limits = {};
 
-    // Helper methods
+    // Helper methods.
     bool hasTotalLimit() const { return total_limit > 0; }
     bool hasSeverityLimit(Severity sev) const {
         return per_severity_limits.find(sev) != per_severity_limits.end() &&
@@ -115,13 +116,13 @@ class Diagnostics {
         : moduleName_(std::move(modName)), modulePath_(std::move(modPath)),
           sourceContext_(std::move(sourceContext)) {}
 
-    // Configuration
+    // Configuration.
     void setConfig(const DiagsConfig &config) { config_ = config; }
     const DiagsConfig &getConfig() const { return config_; }
 
     Diagnostic &add(Diagnostic &&d);
     void fetchAll(const std::vector<antlr4::Token *> &tokens);
-    /// When wrapInArray=false, outputs only the joined items (no brackets) for merging
+    /// When wrapInArray is false, emit only the joined items (no brackets) for merging.
     void dump(std::ostream &os, bool json = false, bool wrapInArray = true) const;
     void clear();
 
@@ -133,21 +134,21 @@ class Diagnostics {
         sourceContext_ = std::move(sourceContext);
     }
 
-    // Return a builder + Set the diagCode for builder (could infer severity from diagCode)
+    // Return a builder and set its diagCode (severity can be inferred from the code).
     template <typename DiagEnum> DiagnosticBuilder of(DiagEnum err);
 
-    // Query functions
+    // Query functions.
     std::vector<const Diagnostic *> findByType(DiagType type) const;
     std::vector<const Diagnostic *> findBySeverity(Severity severity) const;
     std::vector<const Diagnostic *> findByTypeAndSeverity(DiagType type, Severity severity) const;
 
-    // Severity shortcut functions
+    // Severity shortcut functions.
     std::vector<const Diagnostic *> errors() const { return findBySeverity(Severity::Error); }
     std::vector<const Diagnostic *> warnings() const { return findBySeverity(Severity::Warn); }
     std::vector<const Diagnostic *> infos() const { return findBySeverity(Severity::Info); }
     std::vector<const Diagnostic *> hints() const { return findBySeverity(Severity::Hint); }
 
-    // Type + Severity shortcuts
+    // Type + severity shortcuts.
     std::vector<const Diagnostic *> errors(DiagType type) const {
         return findByTypeAndSeverity(type, Severity::Error);
     }
@@ -161,7 +162,7 @@ class Diagnostics {
         return findByTypeAndSeverity(type, Severity::Hint);
     }
 
-    // Statistics
+    // Statistics.
     size_t count() const;
     size_t count(Severity severity) const;
     size_t count(DiagType type) const;
@@ -172,14 +173,14 @@ class Diagnostics {
   private:
     std::string moduleName_;
     std::string modulePath_;
-    // 所有挂在这个容器上的诊断默认共享同一个 SourceContext。
+    // All diagnostics attached to this container share the same SourceContext.
     camel::source::source_context_ptr_t sourceContext_;
     mutable std::mutex mtx_;
     std::deque<Diagnostic> storage_;
     DiagsConfig config_;
 
-    // Helper methods for limit checking (uses storage_.back() after push_back; never the moved-from
-    // arg)
+    // Helper methods for limit checking (use storage_.back() after push_back; never the moved-from
+    // argument).
     void checkLimits();
     size_t countBySeverityInternal(Severity severity) const; // No lock version
 };

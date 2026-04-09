@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 15, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,7 +41,7 @@ namespace opperf {
 inline uint64_t rdtsc() noexcept {
     unsigned lo, hi;
     __asm__ __volatile__("rdtscp" : "=a"(lo), "=d"(hi)::"%rcx");
-    __asm__ __volatile__("lfence"); // 确保后续指令不乱序
+    __asm__ __volatile__("lfence"); // Ensure later instructions do not reorder.
     return ((uint64_t)hi << 32) | lo;
 }
 
@@ -97,7 +97,7 @@ class PerfMonitor {
         double cycles_per_ns = total_cycles_sum / (elapsed_sec * 1e9);
         double ns_per_cycle  = 1.0 / cycles_per_ns;
 
-        // 累计统计到的总时间
+        // Accumulated total time.
         double total_ns_all_stats = 0.0;
         for (auto &kv : opstats_) {
             total_ns_all_stats += kv.second.total_cycles * ns_per_cycle;
@@ -140,7 +140,7 @@ class PerfMonitor {
                << fmt_time_ns(total_ns) << std::setw(10) << std::fixed << std::setprecision(2)
                << pct_total << "\n";
 
-            // 子标签部分保留原有逻辑，不变
+            // Keep the original logic for sub-tags unchanged.
             std::vector<std::pair<const std::string *, const OpcodeStat *>> sorted_sub;
             sorted_sub.reserve(stat.substats.size());
             for (auto &kv : stat.substats) {
@@ -217,7 +217,7 @@ class PerfMonitor {
     }
 };
 
-// === 外部接口 ===
+// === Public API ===
 
 inline void start() { PerfMonitor::instance().start(); }
 inline void stop() { PerfMonitor::instance().stop(); }

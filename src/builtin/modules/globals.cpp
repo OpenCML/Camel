@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,7 +36,7 @@ module_ptr_t GlobalsBuiltinModule::create(context_ptr_t ctx) {
 
 const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
-        // ======= 类型转换 =======
+        // ======= Type conversions =======
         OperatorGroup::create(
             "i32",
             {
@@ -210,7 +210,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
 
-        // ======= 赋值运算符 =======
+        // ======= Assignment operators =======
         OperatorGroup::create(
             "__assn__",
             {
@@ -544,7 +544,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         Type::Bool()),
                 },
             }),
-        // ======= 逻辑运算符 =======
+        // ======= Logical operators =======
         OperatorGroup::create(
             "__and__",
             {
@@ -567,7 +567,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         Type::Bool()),
                 },
             }),
-        // ======= 比较运算符 =======
+        // ======= Comparison operators =======
         OperatorGroup::create(
             "__eq__",
             {
@@ -852,7 +852,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         Type::Bool()),
                 },
             }),
-        // ======= 算术运算符 =======
+        // ======= Arithmetic operators =======
         OperatorGroup::create(
             "__add__",
             {
@@ -1069,7 +1069,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // ======= 一元运算符 =======
+        // ======= Unary operators =======
         OperatorGroup::create(
             "__not__",
             {
@@ -1126,7 +1126,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<Type *> { return norm[0]; }),
                 },
             }),
-        // ======= IO（内置 input/print/println）======
+        // ======= IO (built-in input/print/println) ======
         OperatorGroup::create(
             "input",
             {
@@ -1183,7 +1183,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // ======= OS（实现位于 os.cmo）======
+        // ======= OS (implemented in os.cmo) ======
         OperatorGroup::create(
             "sleep",
             {

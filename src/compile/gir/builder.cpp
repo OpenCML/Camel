@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Apr. 06, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -114,9 +114,10 @@ gctSemantic(const context_ptr_t &context, const GCT::node_ptr_t &gct) {
 inline camel::source::origin_id_t deriveGirOrigin(
     const context_ptr_t &context, const GCT::node_ptr_t &gct, camel::source::OriginKind kind,
     const std::string &label, std::vector<camel::source::origin_id_t> inputs = {}) {
-    // GIR 是比 GCT 更“执行导向”的 lowering。
-    // 当前策略不尝试为每个 GIR 节点重建全新的源码区间，而是沿 GCT 的主 origin 继续派生，
-    // 因而一个 GCT 节点展开出的多个 GIR 节点通常共享同一个 primarySpan。
+    // GIR is a more execution-oriented lowering than GCT.
+    // We do not rebuild fresh source spans for every GIR node; instead, we keep
+    // deriving from the GCT primary origin, so multiple GIR nodes expanded from
+    // one GCT node usually share the same primarySpan.
     if (!context || !gct) {
         return camel::source::kInvalidOriginId;
     }
@@ -233,12 +234,14 @@ inline void bindGraphScopedFuncNodeDebug(
     }
 }
 
-// 从 GCT 构建 GIR 图。全过程分为两个阶段：
-// 1. 构造阶段：visit(gct) 遍历 GCT，通过 GraphBuilder 增量创建图和节点。
-//    此阶段所有图均为 non-finalized，可自由编辑（含闭包捕获、参数化等结构变形）。
-// 2. 封印阶段：sealGraphRecursively() 一次性为所有图计算 slot 编号、layout 与 finalized frame
-// layout。
-//    封印后所有图标记为 finalized，不再允许直接编辑。
+// Build GIR graphs from GCT. The full flow has two stages:
+// 1. Construction: visit(gct) walks the GCT and uses GraphBuilder to create
+//    graphs and nodes incrementally. All graphs are non-finalized here and may
+//    be edited freely, including closure capture and parameterization.
+// 2. Sealing: sealGraphRecursively() computes slot numbers, layout, and the
+//    finalized frame layout for all graphs in one pass.
+//    After sealing, every graph is marked finalized and can no longer be edited
+//    directly.
 graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     waited_ = false;
     synced_ = false;
@@ -260,7 +263,7 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     try {
         visit(gct);
 
-        auto optMainGraph = rootGraph_->getSubGraphsByName("main");
+        auto optMainGraph      = rootGraph_->getSubGraphsByName("main");
         graph_ptr_t entryGraph = nullptr;
         if (optMainGraph.has_value()) {
             auto mainGraphSet = optMainGraph.value();
@@ -281,8 +284,9 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
             diags_->of(SemanticDiag::EntryModuleMissingMain).commit(module_->name());
             throw BuildAbortException();
         } else {
-            // 非入口库模块可无 main：占位 output 以满足封印不变量。
-            auto zero = std::make_shared<LongData>(static_cast<int64_t>(0));
+            // Non-entry library modules may omit main: keep a placeholder output
+            // to satisfy sealing invariants.
+            auto zero               = std::make_shared<LongData>(static_cast<int64_t>(0));
             Node *const placeholder = DataNode::create(*rootGraph_, zero);
             GraphBuilder(rootGraph_).setOutput(placeholder);
         }
@@ -353,33 +357,35 @@ bool Builder::insertDecoratedGraph(const std::string &name, const graph_ptr_t &g
     return true;
 }
 
-// 跨图引用解析：当前函数图引用了外层图的节点时，
-// 沿外层图链逐层插入 PortNode 作为闭包捕获端口。
-// 这里直接修改沿途图的 closure 集合，但因为是在初始编译阶段（finalize 之前），
-// 所有图尚未 finalized，这些修改通过 GraphBuilder::addClosure 受 assertBuildable 保护。
+// Cross-graph reference resolution: when the current function graph references
+// nodes from an outer graph, insert PortNode hop by hop along the outer graph
+// chain as closure capture ports.
+// This mutates the closure sets on the path, but it happens during initial
+// compilation (before finalize), so GraphBuilder::addClosure is protected by
+// assertBuildable.
 Node *Builder::resolveCrossGraphRef(Node *node, const std::string &name) {
     Graph *curr            = currGraph_.get();
     node_scope_ptr_t scope = nodeScope_;
 
     while (curr != &node->graph()) {
-        // 在沿途经过的所有中间图添加 Port 节点
+        // Add Port nodes to every intermediate graph on the path.
         if (usedGraphs_.find(curr) != usedGraphs_.end()) {
-            // 不能对已经使用过的图添加闭包捕获
+            // Do not add closure captures to a graph that has already been used.
             diags_->of(SemanticDiag::ClosureCaptureAfterSelfCall).commit(name, curr->name());
             throw BuildAbortException();
         }
 
-        // 插入一个 Port 节点
+        // Insert a Port node.
         Node *port = PortNode::create(*curr, node->dataType(), name, false);
         GraphBuilder(curr).addClosure(port);
         scope->insert(name, port);
 
-        // 向外层图和作用域继续遍历
+        // Continue walking toward the outer graph and scope.
         curr  = curr->outer().get();
         scope = scope->outer();
     }
 
-    // 再次获取新的节点引用
+    // Reacquire the updated node reference.
     return *nodeScope_->get(name);
 }
 
@@ -396,7 +402,7 @@ Node *Builder::resolveNodeByRef(const std::string &name) {
     }
     Node *node = optSrcNode.value();
 
-    // 如果是跨图节点引用，处理闭包捕获
+    // Handle closure capture for cross-graph references.
     if (node->graph() != *currGraph_) {
         node = resolveCrossGraphRef(node, name);
         ASSERT(node->graph() == *currGraph_, "Failed to resolve cross-graph reference.");
@@ -473,9 +479,11 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     Type *type               = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
     FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
     graph_ptr_t graph        = enterScope(funcType, name);
-    // 模块顶层 visitExecNode 会吞掉 BuildAbortException 并 continue；若函数体在 leaveScope
-    // 之前抛错，currGraph_ 会卡在子图，后续函数（如 main）被挂到错误外层，root 上无 "main"、
-    // __root__ 无 exit。必须在任何异常路径上配对 leaveScope。
+    // Module-level visitExecNode swallows BuildAbortException and continues.
+    // If the function body throws before leaveScope, currGraph_ stays stuck on a
+    // subgraph and later functions (such as main) get attached to the wrong
+    // outer graph, leaving root without "main" and __root__ without exit. Pair
+    // leaveScope on every exception path.
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         for (const auto &port : graph->withPorts()) {
@@ -574,9 +582,9 @@ Node *Builder::visitDataNode(const GCT::node_ptr_t &gct) {
 
     node = DataNode::create(*currGraph_, data);
     if (varied_ && currGraph_->outer() != nullptr) {
-        // If it is a global variable, no longer maintain a copy
-        // For local variables, still need to create a new copy for each call
-        // The mechanism of local shared variables is yet to be designed
+        // Global variables stop using copy maintenance here.
+        // Local variables still need a fresh copy for each call.
+        // The mechanism for locally shared variables is not designed yet.
         Node *copyNode = CopyNode::create(*currGraph_, data->type());
         Node::link(LinkType::Norm, node, copyNode);
         node = copyNode;
@@ -644,9 +652,9 @@ Node *Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
     }
     if (module_->hasImportedRef(name)) {
-        // hasImportedRef 为 true 只说明用户声明了导入这个名字
-        // 但并不意味着被导入的模块中导出了这个名字
-        // 所以这里仍然要做一次检测
+        // hasImportedRef only means the user declared an import for this name.
+        // It does not imply the imported module exported that name, so we still
+        // need to check here.
         const auto &opt = module_->getImportedEntity(name);
         if (!opt.has_value()) {
             diags_->of(SemanticDiag::ImportNameNotExported)
@@ -733,15 +741,33 @@ Node *Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
     return node;
 }
 
-// 为一个子图创建函数值节点。当 allowParameterization=true 时，
-// 可能会调用 parametrizeClosure() 将子图的闭包捕获转为 with 参数，
-// 这会直接修改子图的端口结构。此操作只在初始编译阶段（finalize 之前）发生，
-// 所有图尚未 finalized，由 assertBuildable 保护。
+// Create a function-value node for a subgraph. When allowParameterization is
+// true, parametrizeClosure() may convert the subgraph's closure captures into
+// with parameters, which directly changes the subgraph's port structure. This
+// only happens during initial compilation (before finalize), and all graphs
+// are still unfinalized and protected by assertBuildable.
+// Create a function-producing node for `graph` in the current owner graph.
+//
+// This helper is the canonical point where compile-time graph references become IR-level
+// dependencies. Every emitted FUNC node or static Function object must be backed by an explicit
+// dependency edge, except the self-recursive case which is encoded by GraphBuilder as the owner's
+// `looped` bit.
+//
+// When `allowParameterization=true`, unresolved closure captures may be rewritten into explicit
+// with-ports on the target graph. That mutation is only valid during the build phase before any
+// graph is sealed.
 Node *Builder::createFuncDataNode(
     const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
     ASSERT(
         !(callableAsResult && allowParameterization),
         "Cannot enable both callableAsResult and allowParameterization options.");
+    ASSERT(currGraph_ != nullptr, "Current owner graph is null when creating a function node.");
+    ASSERT(graph != nullptr, "Target graph is null when creating a function node.");
+
+    // Centralize dependency bookkeeping here so every FUNC node and static Function value obeys
+    // the same graph-reference invariant. Self-dependency is intentional: GraphBuilder encodes it
+    // as the owner's `looped` flag for recursive graphs.
+    GraphBuilder(currGraph_).addDependency(graph);
 
     bool graphUsedBefore = usedGraphs_.find(graph.get()) != usedGraphs_.end();
     bool resolved        = graph->closure().empty();
@@ -838,10 +864,10 @@ Node *Builder::createFuncDataNode(
     }
     bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, resultNode);
 
-    // 保证在最后再更新 usedGraphs_
-    // 因为在构造过程中可能会更新图的闭包捕获
-    // 而在更新闭包捕获前会检查被更新的图是否已经被使用过
-    // 所以要等所有的更新完成再将此图设置为被使用过
+    // Update usedGraphs_ last.
+    // Closure captures may be updated during construction, and capture updates
+    // check whether the target graph has already been used. Mark the graph as
+    // used only after all updates finish.
     usedGraphs_.insert(graph.get());
     return resultNode;
 }
@@ -1022,10 +1048,11 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
             GraphBuilder(currGraph_).addDependency(targetGraph);
-            // 如果目标图是当前图的子图，说明其是在当前图作用域中定义的
-            // 这意味这它的闭包捕获在当前图中都能找到对应节点
-            // 因而可以允许将闭包捕获优化成参数传递
-            // 这样可以减少运行时对闭包捕获数据的维护开销
+            // If the target graph is a subgraph of the current graph, it was
+            // defined in the current graph scope.
+            // That means every closure capture can be resolved in the current
+            // graph, so we can optimize the capture into parameter passing and
+            // reduce runtime maintenance overhead.
             targetNode     = createFuncDataNode(targetGraph, false, true);
             targetFuncType = targetGraph->funcType();
         } else if (std::holds_alternative<oper_group_ptr_t>(drefNode->target())) {
@@ -1222,7 +1249,7 @@ Node *Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         tryRemoveCtrlLink(inputNode, targetNode);
         Node::link(LinkType::With, inputNode, targetNode);
     }
-    // with 操作不属于调用，所以这里不处理synced_和lastCalledFuncNode_
+    // With is not a call, so synced_ and lastCalledFuncNode_ are left alone.
     LEAVE("WITH");
     return targetNode;
 }
@@ -1354,11 +1381,12 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         GraphBuilder(currGraph_).addDependency(subGraph);
         Type *exitType = subGraph->funcType()->exitType();
 
-        // 保证所有捕获的变量都在 BRCH 节点执行之前准备好
-        // 这样的好处是，保证 BRCH 节点到 JOIN 节点之间的各条分支路径上
-        // 所有的节点在拓扑排序时会被紧密地排列在一起
-        // 而不会有其他外部节点插入到中间
-        // 进而便于图调度算法的实现（可以直接跳转而不需要频繁判断）
+        // Ensure all captured variables are ready before the BRCH node runs.
+        // This keeps the nodes on every branch path between BRCH and JOIN
+        // tightly grouped in topological order, with no unrelated external
+        // nodes inserted in between.
+        // That makes the graph scheduler easier to implement because it can
+        // jump directly without frequent checks.
         for (const auto &port : subGraph->closure()) {
             const auto &portNode = tt::as_ptr<PortNode>(port);
             const auto &refNode  = resolveNodeByRef(portNode->name());
@@ -1367,7 +1395,7 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
             }
         }
 
-        // 在分支中，默认允许闭包参数化
+        // Closure parameterization is allowed by default in branches.
         auto funcNode = createFuncDataNode(subGraph, false, true);
 
         if (joinType == nullptr) {

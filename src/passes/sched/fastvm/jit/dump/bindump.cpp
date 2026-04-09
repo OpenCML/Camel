@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 30, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -80,11 +80,11 @@ static void dumpMachineCodeByInstruction(
 }
 #endif
 
-graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+graph_ptr_t JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
-    const auto &[bytecodes, _, offsetMap] = compileAndLink(
+    auto linked = compileAndLink(
         context_,
-        graph.get(),
+        graph,
         {
             .enableTailCallDetection = true,
             .enableInlineOperators   = true,
@@ -100,9 +100,10 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     os << "[JIT Machine Code] offset (hex bytes) ; entry @ entryOffset\n";
     os << "---\n";
 
-    std::span<const Bytecode> bcSpan(bytecodes.data(), bytecodes.size());
+    std::span<const Bytecode> bcSpan(linked.codes.data(), linked.codes.size());
 
-    for (const auto &[g, entryPc] : offsetMap) {
+    for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
+        GIR::Graph *g = runtimeGraph ? runtimeGraph->compileGraphMetadata().get() : nullptr;
         ASSERT(
             g->finalized(),
             std::format("Graph '{}' must be sealed before JIT machine-code dump.", g->name()));
@@ -136,7 +137,8 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         }
 
         size_t codeSize = compiled->code.size();
-        // 偏移为十进制，宽度按最大偏移的十进制位数计算
+        // Offset is decimal, and the width is computed from the largest offset's decimal digit
+        // count.
         size_t maxOffset = codeSize > 0 ? codeSize - 1 : 0;
         int idxWidth     = 1;
         for (size_t v = maxOffset; v; v /= 10)

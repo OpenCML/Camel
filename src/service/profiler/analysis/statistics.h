@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 27, 2025
- * Updated: Oct. 04, 2025
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,43 +35,43 @@ class Statistics {
   public:
     struct FunctionStats {
         std::string function_name;
-        uint64_t callCount = 0;
+        uint64_t callCount   = 0;
         uint64_t totalTimeUs = 0;
-        uint64_t minTime = UINT64_MAX;
-        uint64_t maxTime = 0;
+        uint64_t minTime     = UINT64_MAX;
+        uint64_t maxTime     = 0;
     };
 
     struct MemoryStats {
-        size_t allocations = 0;
-        size_t deallocations = 0;
-        size_t totalAllocated = 0;
+        size_t allocations      = 0;
+        size_t deallocations    = 0;
+        size_t totalAllocated   = 0;
         size_t totalDeallocated = 0;
-        size_t maxAllocation = 0;
-        size_t currentUsage = 0;
-        size_t peakUsage = 0;
+        size_t maxAllocation    = 0;
+        size_t currentUsage     = 0;
+        size_t peakUsage        = 0;
     };
 
     struct MemoryTypeStats {
-        size_t count = 0;
+        size_t count     = 0;
         size_t totalSize = 0;
     };
 
     struct IOStats {
         std::string filename;
         std::unordered_map<std::string, size_t> operations;
-        size_t totalBytes = 0;
+        size_t totalBytes    = 0;
         uint64_t totalTimeUs = 0;
-        uint64_t minTime = UINT64_MAX;
-        uint64_t maxTime = 0;
+        uint64_t minTime     = UINT64_MAX;
+        uint64_t maxTime     = 0;
     };
 
     struct NetworkStats {
         std::string endpoint;
         std::unordered_map<std::string, size_t> operations;
-        size_t totalBytes = 0;
+        size_t totalBytes    = 0;
         uint64_t totalTimeUs = 0;
-        uint64_t minTime = UINT64_MAX;
-        uint64_t maxTime = 0;
+        uint64_t minTime     = UINT64_MAX;
+        uint64_t maxTime     = 0;
     };
 
     struct PerformanceMetric {
@@ -84,49 +84,49 @@ class Statistics {
   public:
     static Statistics &getInstance();
 
-    // 函数调用统计
+    // Function call statistics.
     void recordFunctionCall(const std::string &func_name, uint64_t duration_us);
     void recordFunctionCallWithArgs(
         const std::string &func_name, uint64_t duration_us, const std::vector<std::string> &args);
 
-    // 内存统计
+    // Memory statistics.
     void recordMemoryAllocation(size_t size, const std::string &type = "");
     void recordMemoryDeallocation(size_t size, const std::string &type = "");
     void recordMemoryUsage(size_t current, size_t peak);
 
-    // IO统计
+    // I/O statistics.
     void recordFileOperation(
         const std::string &operation, const std::string &filename, size_t bytes,
         uint64_t duration_us);
 
-    // 网络统计
+    // Network statistics.
     void recordNetworkOperation(
         const std::string &operation, const std::string &endpoint, size_t bytes,
         uint64_t duration_us);
 
-    // 异常统计
+    // Exception statistics.
     void recordException(const std::string &exception_type, const std::string &message);
     void recordExceptionHandled(const std::string &exception_type);
 
-    // 性能指标
+    // Performance metrics.
     void recordPerformanceMetric(const std::string &metric_name, double value);
 
-    // 计数器
+    // Counters.
     void recordCounter(const std::string &counter_name, int64_t value);
 
-    // 报告生成
+    // Report generation.
     void generateSummaryReport(
         const std::string &output_file = "profile_reports/statistics_summary.json");
     void generateDetailedReport(
         const std::string &output_file = "profile_reports/statistics_detailed.json");
     void generateCallGraph(const std::string &output_file = "profile_reports/call_graph.json");
 
-    // 配置
+    // Configuration.
     void setSamplingRate(double rate);
     void setMaxSamples(size_t maxSamples);
     void enableRealTimeAnalysis(bool enable);
 
-    // 获取统计信息
+    // Get statistics.
     const std::unordered_map<std::string, FunctionStats> &getFunctionStats() const;
     const MemoryStats &getMemoryStats() const;
     const std::unordered_map<std::string, IOStats> &getIOStats() const;
@@ -147,7 +147,7 @@ class Statistics {
     size_t getPeakMemoryUsage() const;
 
   private:
-    Statistics() = default;
+    Statistics()  = default;
     ~Statistics() = default;
 
     mutable std::mutex mutex_;
@@ -155,22 +155,22 @@ class Statistics {
     std::unordered_map<std::string, FunctionStats> functionStats_;
     std::unordered_map<std::string, std::vector<std::string>> functionArgs_;
     uint64_t totalFunctionCalls_ = 0;
-    uint64_t totalFunctionTime_ = 0;
+    uint64_t totalFunctionTime_  = 0;
 
     MemoryStats memory_stats_;
     std::unordered_map<std::string, MemoryTypeStats> memoryTypeStats_;
     size_t currentMemoryUsage_ = 0;
-    size_t peakMemoryUsage_ = 0;
+    size_t peakMemoryUsage_    = 0;
 
     std::unordered_map<std::string, IOStats> io_stats_;
     size_t totalIoOperations_ = 0;
-    size_t totalIoBytes_ = 0;
-    uint64_t totalIoTimeUs_ = 0;
+    size_t totalIoBytes_      = 0;
+    uint64_t totalIoTimeUs_   = 0;
 
     std::unordered_map<std::string, NetworkStats> networkStats_;
     size_t totalNetworkOperations_ = 0;
-    size_t totalNetworkBytes_ = 0;
-    uint64_t totalNetworkTimeUs_ = 0;
+    size_t totalNetworkBytes_      = 0;
+    uint64_t totalNetworkTimeUs_   = 0;
 
     std::unordered_map<std::string, size_t> exceptionStats_;
     std::unordered_map<std::string, size_t> handledExceptions_;
@@ -181,8 +181,8 @@ class Statistics {
 
     std::unordered_map<std::string, int64_t> counters_;
 
-    double samplingRate_ = 1.0;
-    size_t maxSamples_ = 10000;
+    double samplingRate_   = 1.0;
+    size_t maxSamples_     = 10000;
     bool realTimeAnalysis_ = false;
 };
 

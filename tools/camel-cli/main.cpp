@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 08, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -211,8 +211,8 @@ int main(int argc, char *argv[]) {
                 }
                 if (Inspect::dumpGIR && ctx->rootGraph()) {
                     GraphVizDumpPass pass(ctx);
-                    auto root = ctx->rootGraph();
-                    auto res  = pass.apply(root, os);
+                    auto *root = ctx->runtimeRootGraph();
+                    auto res   = pass.apply(root, os);
                 }
                 if (Inspect::dumpTNS && ctx->rootGraph()) {
                     auto entry = ctx->rootGraph();

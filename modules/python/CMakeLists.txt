@@ -1,6 +1,9 @@
 # python 模块：.cmo 外源动态库示例，import python 加载
 include(${CMAKE_CURRENT_SOURCE_DIR}/../camel_module.cmake)
 
+# Root CMakeLists uses this to decide whether to add_subdirectory(modules/pyplot) (also needs pybind11).
+set(CAMEL_PYTHON_DEV_AVAILABLE FALSE PARENT_SCOPE)
+
 set(CAMEL_PYTHON_SDKS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/sdks")
 
 # Resolve include/ + libs/ (or Include/ + Libs/, or include/pythonX.Y/) for bridge targets.
@@ -99,6 +102,7 @@ if(NOT _has_python_sdk AND NOT _has_active_env AND NOT _has_path_python)
   return()
 endif()
 
+set(CAMEL_PYTHON_DEV_AVAILABLE TRUE PARENT_SCOPE)
 add_camel_module(NAME python SOURCES executor.cpp module.cpp operators.cpp type.cpp USE_PYTHON)
 
 # Multi-target bridge build: one bridge DLL per sdk folder (python3xx), or one from interpreter prefix (PyPI).

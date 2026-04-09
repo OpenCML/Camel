@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,7 +40,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     static const std::unordered_map<std::string, operator_t> map = {
         {"not-impl", __not_implemented__},
 
-        // 类型转换
+        // Type conversions
         {"op/itoi", __itoi__},
         {"op/ltoi", __ltoi__},
         {"op/ftoi", __ftoi__},
@@ -217,7 +217,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/inv_l", __builtin__inv__},
         {"op/inv", __builtin__inv__},
 
-        // io（内置 input/print/println）
+        // IO (built-in input/print/println)
         {"io/input", __op_input__},
         {"io/print", __op_print__},
         {"io/println", __op_println__},

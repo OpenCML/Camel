@@ -13,16 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 10, 2026
- * Updated: Feb. 17, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /**
- * JIT 调试：在 Debug 模式下可在每条指令间插入对 jitDebugTrace 的调用，
- * 打印当前所有 GPR 与 pc，便于单步调试 JIT 执行。
- * Caller 只保存 rax、rcx 和 pc（call 仅改 rax/rcx）；callee 在入口将
- * rdx,r8..r11,rbx,rbp,rdi,rsi,r12..r15 写入 ctx。布局：0=r15..56=r8, 64=rdi,
- * 72=rsi, 80=rbp, 88=rbx, 96=rdx, 104=rcx, 112=rax, 120=pc。
+ * JIT debug: in Debug mode, insert a call to jitDebugTrace between instructions
+ * to print all current GPRs and pc for single-step JIT debugging.
+ * The caller saves only rax, rcx, and pc (call only changes rax/rcx); the callee writes
+ * rdx, r8..r11, rbx, rbp, rdi, rsi, r12..r15 into ctx. Layout: 0=r15..56=r8, 64=rdi,
+ * 72=rsi, 80=rbp, 88=rbx, 96=rdx, 104=rcx, 112=rax, 120=pc.
  */
 
 #pragma once
@@ -41,10 +41,10 @@ struct JitDebugContext {
 
 extern "C" void jitDebugTrace(const void *ctx);
 
-/** 供 JIT 调用：先将 ctx 拷入 thread_local 再调 jitDebugTrace，避免 stub 覆盖调用方栈上的保存区。
- */
+/** For JIT calls: copy ctx into thread_local first, then call jitDebugTrace, so the stub does not
+ * clobber the caller's stack save area. */
 extern "C" void jitDebugTraceWrapper(const void *ctx);
 
-/** Release 用：与 jitDebugTraceWrapper 同签名，空实现；用于保证 Debug/Release 生成相同 JIT 码。
- */
+/** Release build: same signature as jitDebugTraceWrapper, but a no-op. Used to ensure Debug and
+ * Release generate identical JIT code. */
 extern "C" void jitDebugTraceNoOp(const void *ctx);

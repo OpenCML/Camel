@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 09, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,7 +32,7 @@ using namespace camel::core::context;
 
 namespace {
 
-// 从 Taskflow dump 的字符串中提取 subgraph 块（从 "subgraph " 到匹配的 '}'）
+// Extract the first subgraph block from the Taskflow DOT dump.
 std::string extractSubgraphBlock(const std::string &fullDump) {
     size_t sub = fullDump.find("subgraph ");
     if (sub == std::string::npos)
@@ -54,7 +54,7 @@ std::string extractSubgraphBlock(const std::string &fullDump) {
     return fullDump.substr(sub, (i - 1) - sub + 1);
 }
 
-// 将图名转为 DOT cluster id（只保留字母数字下划线）
+// Convert a graph name into a stable DOT cluster identifier.
 std::string sanitizeClusterId(const std::string &name) {
     std::string out;
     for (char c : name) {
@@ -83,7 +83,7 @@ void TaskflowExecSchedPass::buildAndDump(Graph *graph, std::ostream &os) {
         Graph *rootGraph     = graph;
         const auto &graphMap = globalBuildCtx_.graphInfoMap;
 
-        // 先输出根图，再输出其余可达子图，使嵌套关系更清晰
+        // Emit the root graph first so nested subgraphs read naturally in the dump.
         std::vector<Graph *> ordered;
         ordered.push_back(rootGraph);
         for (const auto &[g, _] : graphMap)
@@ -101,10 +101,10 @@ void TaskflowExecSchedPass::buildAndDump(Graph *graph, std::ostream &os) {
             std::string block = extractSubgraphBlock(ss.str());
             if (block.empty())
                 continue;
+            // Rewrite cluster id and label so each graph keeps a readable, stable name.
             std::string clusterId   = sanitizeClusterId(g->name());
             std::string displayName = g->name();
-            // 替换 cluster id 和 label，便于区分各子图
-            size_t labelStart = block.find("label=");
+            size_t labelStart       = block.find("label=");
             if (labelStart != std::string::npos) {
                 size_t labelEnd = block.find(';', labelStart);
                 if (labelEnd != std::string::npos)

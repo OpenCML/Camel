@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 12, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,14 +28,19 @@ struct RewriteResult {
     bool changed;
 };
 
+struct StaticValueMaterializationOptions {
+    bool propagateMacro = false;
+};
+
 // =============================================================================
-// GraphRewriteSession：pass 侧看到的高层 rewrite 接口。
+// GraphRewriteSession: the high-level rewrite interface seen by passes.
 //
-// pass 只描述"删什么、替换什么、内联什么"，不直接操心工作图何时重排、
-// 何时封印。所有实际编辑都落到内部 GraphDraft 上；若整个 session 未产生改写，
-// finish() 会直接返回原始 source graph，避免导出一份只做了浅克隆的伪结果。
+// A pass only describes what to delete, replace, or inline; it does not manage
+// when the working graph is rearranged or sealed. All actual edits go through
+// the internal GraphDraft. If the session performs no rewrite at all, finish()
+// returns the original source graph directly instead of emitting a shallow clone.
 //
-// 典型用法（在 rewrite pass 的 apply 方法中）：
+// Typical usage (inside a rewrite pass's apply method):
 //   GraphRewriteSession session(frozenGraph);
 //   for (Node *n : session.root()->nodes()) {
 //       if (shouldReplace(n)) session.replaceNode(n, makeNew(n));
@@ -47,6 +52,7 @@ class GraphRewriteSession {
     explicit GraphRewriteSession(const graph_ptr_t &graph) : draft_(graph) {}
 
     graph_ptr_t root() const { return draft_.root(); }
+    graph_ptr_t sourceRoot() const { return draft_.sourceRoot(); }
     graph_ptr_t ensureDraftGraph(const graph_ptr_t &graph) {
         ASSERT(graph != nullptr, "Cannot ensure null graph in rewrite session.");
         graph_ptr_t draft = draft_.cloneIntoDraft(graph);
@@ -55,10 +61,41 @@ class GraphRewriteSession {
         }
         return draft;
     }
+    std::vector<graph_ptr_t>
+    collectReachableSourceGraphs(const graph_ptr_t &graph = nullptr) const {
+        const graph_ptr_t &source = graph ? graph : draft_.sourceRoot();
+        std::vector<graph_ptr_t> out;
+        std::unordered_set<const Graph *> visited;
+        collectReachableGraphs(source, out, visited);
+        return out;
+    }
+    std::unordered_map<const Graph *, graph_ptr_t>
+    materializeReachableGraphs(const graph_ptr_t &graph = nullptr) {
+        const graph_ptr_t &source = graph ? graph : draft_.sourceRoot();
+        ASSERT(source != nullptr, "Cannot materialize reachable graphs from null source root.");
+        std::unordered_map<const Graph *, graph_ptr_t> cache{
+            {source.get(), canonicalGraph(source)}};
+        for (const auto &sourceGraph : collectReachableSourceGraphs(source)) {
+            (void)materializeEditableGraph(source, sourceGraph, cache);
+        }
+        draft_.normalizeAllOwnedStaticValues();
+        return cache;
+    }
     graph_ptr_t canonicalGraph(const graph_ptr_t &graph) const {
         return draft_.canonicalGraph(graph);
     }
+    Node *canonicalNode(const Node *node) const { return draft_.canonicalNode(node); }
     bool hasDraftGraph(const Graph *graph) const { return draft_.hasDraftFor(graph); }
+    bool ownsGraph(const Graph *graph) const { return draft_.owns(graph); }
+    bool hasDraftNode(const Node *node) const { return draft_.hasDraftFor(node); }
+    void adoptOwnedGraph(const graph_ptr_t &graph) {
+        ASSERT(graph != nullptr, "Cannot adopt null graph into rewrite session.");
+        draft_.adoptOwnedGraph(graph);
+        changed_ = true;
+    }
+    Node *materializeStaticValue(
+        const graph_ptr_t &owner, slot_t slot, Type *type,
+        const StaticValueMaterializationOptions &options = {});
 
     void markChanged() { changed_ = true; }
 
@@ -154,12 +191,68 @@ class GraphRewriteSession {
             return RewriteResult{draft_.sourceRoot(), false};
         }
         if (draft_.root()) {
+            draft_.normalizeAllOwnedStaticValues();
             draft_.seal();
         }
         return RewriteResult{draft_.root(), changed_};
     }
 
   private:
+    static void collectReachableGraphs(
+        const graph_ptr_t &graph, std::vector<graph_ptr_t> &out,
+        std::unordered_set<const Graph *> &visited);
+    static bool hasSubGraphRef(const graph_ptr_t &owner, const graph_ptr_t &candidate) {
+        for (const auto &[_, subGraphs] : owner->subGraphs()) {
+            if (subGraphs.contains(candidate)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    graph_ptr_t materializeEditableGraph(
+        const graph_ptr_t &sourceRoot, const graph_ptr_t &sourceGraph,
+        std::unordered_map<const Graph *, graph_ptr_t> &cache) {
+        ASSERT(sourceGraph != nullptr, "Cannot materialize null graph into rewrite draft.");
+        if (sourceGraph == sourceRoot) {
+            graph_ptr_t canonical   = canonicalGraph(sourceRoot);
+            cache[sourceRoot.get()] = canonical;
+            return canonical;
+        }
+        if (auto it = cache.find(sourceGraph.get()); it != cache.end()) {
+            return it->second;
+        }
+        if (hasDraftGraph(sourceGraph.get())) {
+            graph_ptr_t canonical    = canonicalGraph(sourceGraph);
+            cache[sourceGraph.get()] = canonical;
+            return canonical;
+        }
+
+        graph_ptr_t imported;
+        if (auto sourceOwner = sourceGraph->outer()) {
+            graph_ptr_t draftOwner = materializeEditableGraph(sourceRoot, sourceOwner, cache);
+            if (hasSubGraphRef(draftOwner, sourceGraph)) {
+                eraseSubGraph(draftOwner, sourceGraph);
+            }
+            if (draftOwner->dependencies().contains(sourceGraph)) {
+                eraseDependency(draftOwner, sourceGraph);
+            }
+            imported = importSubGraph(draftOwner, sourceGraph, GraphImportMode::CloneIntoDraft);
+            if (sourceOwner->dependencies().contains(sourceGraph)) {
+                importDependency(draftOwner, imported);
+            }
+        } else {
+            graph_ptr_t draftRoot = materializeEditableGraph(sourceRoot, sourceRoot, cache);
+            if (draftRoot->dependencies().contains(sourceGraph)) {
+                eraseDependency(draftRoot, sourceGraph);
+            }
+            imported = importDependency(draftRoot, sourceGraph, GraphImportMode::CloneIntoDraft);
+        }
+
+        graph_ptr_t canonical    = canonicalGraph(imported);
+        cache[sourceGraph.get()] = canonical;
+        return canonical;
+    }
+
     GraphDraft draft_;
     bool changed_ = false;
 };

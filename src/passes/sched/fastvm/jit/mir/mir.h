@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
  * You may use this software according to the terms and conditions of the
@@ -13,14 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /**
- * Machine IR (MIR) 层：与 backend 并列的中端结构。当前实现为 x64 的机器级 IR（线性指令序列），
- * 便于优化与可读打印，并为 L3（基本块/def-use）预留扩展。后续可在此层引入与架构无关的抽象 MIR，
- * 或为其它 target 增加对应 MIR 变体。
+ * Machine IR (MIR) layer: the mid-end structure parallel to backend. The current implementation is
+ * a x64 machine-level IR (linear instruction sequence), convenient for optimization and readable
+ * printing, and it leaves room for L3 (basic blocks / def-use) extensions. Later this layer can
+ * host architecture-neutral abstract MIR, or add a corresponding MIR variant for other targets.
  */
 
 #pragma once
@@ -33,15 +34,16 @@
 
 namespace camel::jit::x64 {
 
-// 无效 pc 标记（未绑定到某条字节码）
+// Invalid pc marker (not bound to any bytecode).
 constexpr uint32_t kMirInvalidPc = 0xFFFFFFFFu;
 
-// 寄存器编号：0-7 = rax,rcx,rdx,rbx,r8,r9,r10,r11；8=rdi，9=rsi（ABI 用）
+// Register numbering: 0-7 = rax, rcx, rdx, rbx, r8, r9, r10, r11; 8 = rdi, 9 = rsi (ABI use).
 constexpr uint8_t kRegRax = 0, kRegRcx = 1, kRegRdx = 2, kRegRbx = 3;
 constexpr uint8_t kRegR8 = 4, kRegR9 = 5, kRegR10 = 6, kRegR11 = 7;
 constexpr uint8_t kRegRdi = 8, kRegRsi = 9;
 
-// 虚拟寄存器：在 MIR 中表示“未分配”的值，由统一寄存器分配阶段赋给物理寄存器
+// Virtual register: an "unallocated" value in MIR, assigned a physical register by the unified
+// register allocation stage.
 using VRegId                  = uint16_t;
 constexpr VRegId kInvalidVReg = 0xFFFFu;
 constexpr VRegId kMaxVRegs    = 512;
@@ -51,18 +53,19 @@ inline const char *mirRegName(uint8_t r) {
     return (r <= 9u) ? n[r] : "?";
 }
 
-// L3 扩展：可在此增加 blockId、pred/succ 等
+// L3 extension: blockId, pred/succ, etc. can be added here.
 struct MirBlockInfo {
-    uint32_t blockId{0}; // 0 = 未分配，L3 用于 CFG
+    uint32_t blockId{0}; // 0 = unallocated; used by L3 for CFG.
 };
 
-// 仅保留 ABI/控制流；其余全部为 V*（虚拟寄存器），由 linearScanVReg 统一分配
+// Keep only ABI / control flow; everything else is V* (virtual registers), allocated uniformly by
+// linearScanVReg.
 enum class MirOp : uint8_t {
     MovRegReg,
     MovRegImm32,
     MovRegImm64,
-    PushRdi, // 保存 rdi（slot base）跨越 trampoline 调用；trampoline 会覆盖 rdi
-    PopRdi,  // 恢复 rdi
+    PushRdi, // Save rdi (slot base) across trampoline calls; trampoline will clobber rdi.
+    PopRdi,  // Restore rdi.
     PushRsi,
     PopRsi,
     PushRbx,
@@ -82,9 +85,10 @@ enum class MirOp : uint8_t {
     VCmpRegImm, // cmp vreg(r0), imm32 — sets flags, no result vreg
     JmpRel8,
     JleRel8,
-    Ret, // 无操作数，用于 TAIL 等
+    Ret, // No operands, used by TAIL, etc.
     JmpRax,
-    // --- V*：r0/r1=VRegId，三操作数时右操作数在 imm32（vreg id）---
+    // --- V*: r0/r1 = VRegId; for three-operand forms, the right operand lives in imm32 (vreg id)
+    // ---
     VLoadFromFrame,
     VStoreToFrame,
     VLoadFromMemAt,
@@ -151,8 +155,10 @@ enum class MirOp : uint8_t {
     VXmm32CmpSetA,
     VXmm32CmpSetAE,
     VXmm32CmpSetNZ,
-    DebugTrace,        // 调试用：调用 jitDebugTrace(ctx)，打印 GPR + pc；仅 Debug 构建插入
-    NativeJitFuncCall, // FUNC 内联帧管理 + call rel32/rax；imm64 = NativeJitCallParams*
+    DebugTrace, // Debug use: call jitDebugTrace(ctx) and print GPR + pc; inserted only in Debug
+                // builds
+    NativeJitFuncCall, // FUNC inline frame management + call rel32/rax; imm64 =
+                       // NativeJitCallParams*
     Nop,
 };
 
@@ -163,54 +169,58 @@ struct Mir {
     int32_t disp{0};
     uint32_t imm32{0};
     uint64_t imm64{0};
-    uint32_t pc{kMirInvalidPc}; // 若为首条对应某字节码则设为该 pc，用于 pcToOffset
-    MirBlockInfo block;         // L3 扩展
+    uint32_t pc{
+        kMirInvalidPc}; // If this is the first instruction for a bytecode, set pc for pcToOffset.
+    MirBlockInfo block; // L3 extension
 
     bool hasPc() const { return pc != kMirInvalidPc; }
     void clearPc() { pc = kMirInvalidPc; }
 };
 
 struct NativeJitCallParams {
-    uint64_t poolTopAddr;     // &FramePool::top_
-    uint64_t targetGraphAddr; // 目标 GIR::Graph*（帧复用检查）
-    uint64_t slowPathFnAddr;  // 同图: &directSelfFuncInvoke; 跨图: trampolineFunc
-    uint64_t slowPathBcAddr;  // &bc（同图 slow path 用）
-    uint32_t slowPathPc;      // bytecode pc（跨图 slow path 用）
-    int32_t resultDisp;       // [rdi + resultDisp]
+    uint64_t poolTopAddr;            // &FramePool::top_
+    uint64_t targetRuntimeGraphAddr; // Target GIR::Graph* (frame reuse check).
+    uint64_t slowPathFnAddr; // Same graph: &directSelfFuncInvoke; cross graph: trampolineFunc
+    uint64_t slowPathBcAddr; // &bc (for same-graph slow path)
+    uint32_t slowPathPc;     // Bytecode pc (for cross-graph slow path)
+    int32_t resultDisp;      // [rdi + resultDisp]
     uint8_t argsCnt;
     int32_t argSrcDisps[8];
     uint8_t argVRegs[8]; // VReg IDs for pre-loaded args (frameless path); 0xFF = not pre-loaded
     uint8_t resultVReg = 0xFF; // VReg for call result (frameless); 0xFF = store inside call
-    bool isSameGraph;          // true = call rel32, false = 从 extra2 加载 fn 后 call rax
-    uint64_t extra2Addr;       // &bc->extra2()（跨图时运行时加载 fn 指针）
-    uint64_t fastop1Addr;      // &bc->fastop[1]（跨图运行时检查：0 = 已编译）
-    bool frameless;            // true = 栈分配（无 Frame 池），适用于纯自递归同图调用
-    uint32_t calleeSlotBytes;  // frameless 时被调方栈帧大小（16 字节对齐）
+    bool isSameGraph;          // true = call rel32, false = load fn from extra2 and call rax
+    uint64_t extra2Addr;       // &bc->extra2() (load fn pointer at runtime for cross graph)
+    uint64_t fastop1Addr;      // &bc->fastop[1] (cross-graph runtime check: 0 = already compiled)
+    bool frameless; // true = stack allocation (no Frame pool), suitable for pure self-recursive
+                    // same-graph calls
+    uint32_t calleeSlotBytes; // Callee stack-frame size when frameless (16-byte aligned)
 };
 
 using MirBuffer = std::vector<Mir>;
 
-// 可读字符串，便于 debug 打印（如 "mov rdi, rcx"）
+// Readable string, convenient for debug printing (for example "mov rdi, rcx").
 std::string mirToString(const Mir &m);
 
-// MIR 打印选项：仅首条对应某 pc 的指令显示 pc，其余 pc 列留空；可选符号名与槽位名注释
-// vregAlloc 传 camel::jit::VRegAllocation*（调用方 include regalloc.h），此处用 void* 避免 mir.h
-// 依赖 regalloc
+// MIR print options: show pc only for the first instruction of each pc; leave the rest blank.
+// Optional symbol and slot-name annotations. vregAlloc accepts camel::jit::VRegAllocation* (caller
+// includes regalloc.h); void* is used here to avoid making mir.h depend on regalloc.
 struct MirPrintOptions {
-    const std::unordered_map<size_t, size_t> *pcToOffset         = nullptr;
-    const std::unordered_map<uint64_t, std::string> *symbolNames = nullptr; // 地址 -> 函数/符号名
-    const std::unordered_map<int, std::string> *slotNames = nullptr; // disp(rdi+) -> 槽位名如 "n"
-    const void *vregAlloc                                 = nullptr;
+    const std::unordered_map<size_t, size_t> *pcToOffset = nullptr;
+    const std::unordered_map<uint64_t, std::string> *symbolNames =
+        nullptr; // address -> function / symbol name
+    const std::unordered_map<int, std::string> *slotNames =
+        nullptr; // disp(rdi+) -> slot name such as "n"
+    const void *vregAlloc = nullptr;
 };
 
-// 整段 buffer 打印到 stream，格式 "[pc][idx]  insn  ; 注释"。pc 列仅该 pc 的首条 MIR
-// 有值，其余空白。
+// Print the whole buffer to a stream, format: "[pc][idx]  insn  ; comment". The pc column only
+// shows the first MIR for that pc; the rest stay blank.
 void mirPrint(const MirBuffer &buf, std::ostream &out, const MirPrintOptions &opts = {});
 
-// 单条 MIR 编码后的字节数（用于优化后计算 pcToOffset）
+// Number of bytes encoded by a single MIR (used to compute pcToOffset after optimization)
 size_t mirSizeBytes(const Mir &m);
 
-// 整段 buffer 总字节数
+// Total number of bytes in the whole buffer
 inline size_t mirBufferSizeBytes(const MirBuffer &buf) {
     size_t n = 0;
     for (const auto &m : buf)

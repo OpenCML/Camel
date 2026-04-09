@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,7 @@ class MirBuilder {
   public:
     explicit MirBuilder(MirBuffer &buf) : buf_(buf) {}
 
-    // 下一条 push 的 MIR 将带上此 pc（用于 pcToOffset 与 debug）
+    // The MIR pushed next will carry this pc (used for pcToOffset and debug).
     void setNextPc(uint32_t pc) { nextPc_ = pc; }
 
     // C++ ABI wrapper is now generated as raw bytes; MIR body uses JIT internal convention.
@@ -139,7 +139,8 @@ class MirBuilder {
     void emitAddRsp8() { push(MirOp::AddRsp8, 0, 0); }
     void emitRet() { push(MirOp::Ret, 0, 0); }
     void emitJmpRax() { push(MirOp::JmpRax, 0, 0); }
-    /** Debug 构建下在每两条指令间插入；pc 为当前字节码 pc，供 jitDebugTrace 打印 */
+    /** Inserted between every two instructions in Debug builds; pc is the current bytecode pc, used
+     * by jitDebugTrace for printing. */
     void emitDebugTrace(uint32_t pc) {
         Mir m;
         m.op    = MirOp::DebugTrace;
@@ -374,7 +375,7 @@ class MirBuilder {
         push(m);
     }
 
-    // Double (VXmm*): 槽 8 字节，vreg 存 GPR 中的 double 位模式
+    // Double (VXmm*): one slot is 8 bytes; the vreg stores the double bit pattern in a GPR.
     void emitVXmmLoadFromFrame(VRegId vreg, int disp) {
         Mir m;
         m.op   = MirOp::VXmmLoadFromFrame;
@@ -477,7 +478,7 @@ class MirBuilder {
         push(m);
     }
 
-    // 32 位整型 (I*)
+    // 32-bit integer (I*).
     void emitVAdd32(VRegId dst, VRegId left, VRegId right) {
         Mir m;
         m.op    = MirOp::VAdd32;
@@ -559,7 +560,7 @@ class MirBuilder {
         push(m);
     }
 
-    // 32 位浮点 (VXmm32*)
+    // 32-bit float (VXmm32*).
     void emitVXmm32LoadFromFrame(VRegId vreg, int disp) {
         Mir m;
         m.op   = MirOp::VXmm32LoadFromFrame;
@@ -662,8 +663,9 @@ class MirBuilder {
         push(m);
     }
 
-    // Win64: 准备 trampoline(slots, ctx, pc) 并 call rax。优化 pass 可删前两条 mov。
-    // trampoline 会调用 fn(callee_slots) 覆盖 rdi，故需 push/pop 保存 caller 的 slot base
+    // Win64: prepare trampoline(slots, ctx, pc) and call rax. An optimization pass can remove the
+    // first two movs. The trampoline calls fn(callee_slots) and clobbers rdi, so push/pop must save
+    // the caller's slot base.
     void emitCallTrampolineWin64(uint32_t pc, uint64_t trampolineAddr) {
         emitPushRdi();
         emitMovRegReg(kRegRcx, kRegRdi);
@@ -683,8 +685,9 @@ class MirBuilder {
         emitPopRdi();
     }
 
-    // SysV：rdi/rsi 已是 slots/ctx，设 rdx=pc、rax=addr 后 call
-    // trampoline 会调用 fn(callee_slots) 覆盖 rdi，故需 push/pop 保存 caller 的 slot base
+    // SysV: rdi/rsi already hold slots/ctx, set rdx = pc and rax = addr, then call.
+    // The trampoline calls fn(callee_slots) and clobbers rdi, so push/pop must save the caller's
+    // slot base.
     void emitCallTrampolineSysV(uint32_t pc, uint64_t trampolineAddr) {
         emitPushRdi();
         emitMovRegImm32(kRegRdx, pc);
@@ -692,7 +695,8 @@ class MirBuilder {
         emitCallRax();
         emitPopRdi();
     }
-    // SysV：第 3 参 pc→rdx，rax=addr，call（graph 从 slots[0] 即 Frame* 获取）
+    // SysV: the third arg pc -> rdx, rax = addr, call (graph is obtained from slots[0], i.e.
+    // Frame*).
     void emitCallTrampolineOperSysV(uint32_t pc, uint64_t trampolineAddr) {
         emitPushRdi();
         emitMovRegImm32(kRegRdx, pc);

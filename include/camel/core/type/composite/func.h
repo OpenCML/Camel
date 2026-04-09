@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,14 +29,15 @@
 
 namespace camel::core::type {
 
-using param_t           = std::pair<Type *, bool>; // bool表示是否为可变参数
+using param_t = std::pair<Type *, bool>; // bool indicates whether the parameter is variadic.
 using param_init_list_t = std::initializer_list<param_t>;
 using param_vec_t       = std::vector<param_t>;
 
-// 前向声明
+// Forward declaration.
 class FunctionType;
 
-// 元信息：参数名、闭包参数名等，仅编译期使用，可使用 STL（参数是否可变属于函数签名，在 Type 内）
+// Metadata: parameter names, closure parameter names, etc. Compile-time only; STL is fine here
+// because variadic-ness belongs to the function signature inside Type.
 class FunctionMetaInfo {
   public:
     static FunctionMetaInfo *
@@ -60,7 +61,7 @@ class FunctionMetaInfo {
     std::vector<std::string> closureRefs_;
 };
 
-// 工厂类：用于构造 FunctionType（可以使用 STL）
+// Factory for constructing FunctionType (may use STL).
 class FunctionTypeFactory {
     friend class FunctionType;
 
@@ -93,7 +94,7 @@ class FunctionTypeFactory {
 
     void setHasCompileInfo(bool has) { hasCompileInfo_ = has; }
 
-    // 构建不可变的 FunctionType 对象
+    // Build an immutable FunctionType object.
     FunctionType *build();
 
   private:
@@ -107,7 +108,7 @@ class FunctionTypeFactory {
     std::vector<std::string> closureRefs_;
 };
 
-// 布局信息：仅用于构造时一次计算，避免重复
+// Layout information: computed once during construction to avoid repeated work.
 struct FunctionTypeLayout {
     size_t totalSize;
     size_t alignedWithTypesSize;
@@ -118,7 +119,8 @@ struct FunctionTypeLayout {
     size_t alignedNormTypeCodesSize;
     size_t alignedNormIsVarSize;
 
-    // 由 layout 统一计算 data 区各段指针，避免构造处重复偏移计算
+    // Let layout compute the pointers to each section of the data area, avoiding repeated offset
+    // math.
     struct DataPtrs {
         Type **withTypes;
         TypeCode *withTypeCodes;
@@ -140,16 +142,16 @@ struct FunctionTypeLayout {
     }
 };
 
-// 不可变的 FunctionType：类型信息直接嵌入对象
+// Immutable FunctionType: type information is embedded directly in the object.
 class FunctionType : public CompositeType {
     friend class FunctionTypeFactory;
 
   public:
-    // 禁止直接构造，使用工厂或 create 方法
+    // Direct construction is forbidden; use the factory or create methods.
     FunctionType(const FunctionType &)            = delete;
     FunctionType &operator=(const FunctionType &) = delete;
 
-    // 创建已解析的 FunctionType
+    // Create a resolved FunctionType.
     static FunctionType *create();
     static FunctionType *create(
         const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType,
@@ -161,19 +163,19 @@ class FunctionType : public CompositeType {
         const param_vec_t &&withTypes, const param_vec_t &&normTypes, Type *returnType,
         const ModifierSet &modifiers = Modifier::None);
 
-    // 从工厂构建
+    // Build from a factory.
     static FunctionType *fromFactory(FunctionTypeFactory &factory);
 
-    // 从数据直接构建（内部使用，用于 clone 等场景）
+    // Build directly from data (internal use, e.g. clone).
     static FunctionType *fromData(
         size_t withCount, size_t normCount, const Type *const *withTypes,
         const TypeCode *withTypeCodes, const bool *withIsVar, const Type *const *normTypes,
         const TypeCode *normTypeCodes, const bool *normIsVar, Type *exitType, ImplMark implMark,
         ModifierSet modifiers, const FunctionMetaInfo *metaInfo);
 
-    /** 编译期就地设置返回类型 */
+    /** Set the return type in place at compile time. */
     void setExitType(Type *type) { exitType_ = type; }
-    /** 编译期就地追加闭包引用名 */
+    /** Append a closure reference name in place at compile time. */
     void addClosureRef(const std::string &ref);
 
     ImplMark implMark() const { return implMark_; }
@@ -208,7 +210,7 @@ class FunctionType : public CompositeType {
         return normIsVar_[index] != 0;
     }
 
-    // 批量访问（span），便于范围 for 等
+    // Batch access (span), convenient for range-for and similar use.
     std::span<Type *const> withTypesSpan() const { return withTypes_; }
     std::span<Type *const> normTypesSpan() const { return normTypes_; }
     std::span<const TypeCode> withTypeCodesSpan() const { return withTypeCodes_; }
@@ -217,14 +219,15 @@ class FunctionType : public CompositeType {
     Type *exitType() const;
     bool hasExitType() const { return exitType_ != nullptr; }
 
-    // 元信息访问（如果存在）
+    // Metadata access (if present).
     bool hasMetaInfo() const { return metaInfo_ != nullptr; }
     std::string_view argNameAt(size_t idx) const;
     size_t argNamesCount() const { return metaInfo_ ? metaInfo_->argNamesCount() : 0; }
     size_t closureRefsCount() const { return metaInfo_ ? metaInfo_->closureRefsCount() : 0; }
     std::string_view closureRefAt(size_t idx) const;
 
-    // 兼容性方法：返回编译期信息（按需构造 views，无缓存）
+    // Compatibility helpers: return compile-time info by constructing views on demand, with no
+    // cache.
     std::vector<std::string_view> argNames() const;
     std::vector<std::string_view> closureRefs() const;
 
@@ -238,17 +241,17 @@ class FunctionType : public CompositeType {
     virtual bool assignableFrom(Type *sourceType) const override;
 
   private:
-    // 根据预计算 layout 一次拷贝（用于 fromData / create / clone）
+    // Copy once from the precomputed layout (used by fromData / create / clone).
     FunctionType(
         const FunctionTypeLayout &layout, size_t withCount, size_t normCount,
         const Type *const *withTypes, const TypeCode *withTypeCodes, const bool *withIsVar,
         const Type *const *normTypes, const TypeCode *normTypeCodes, const bool *normIsVar,
         Type *exitType, ImplMark implMark, ModifierSet modifiers, const FunctionMetaInfo *metaInfo);
-    // 从工厂直接填充，无临时 vector（一次性使用）
+    // Fill directly from the factory, with no temporary vector (one-shot use).
     FunctionType(
         FunctionTypeFactory &factory, const FunctionTypeLayout &layout, Type *exitType,
         ImplMark implMark, ModifierSet modifiers, const FunctionMetaInfo *metaInfo);
-    // 从 param_vec 一次遍历填充（用于 create，无临时 vector）
+    // Fill in one pass from param_vec (used by create, with no temporary vector).
     FunctionType(
         const FunctionTypeLayout &layout, const param_vec_t &withTypes,
         const param_vec_t &normTypes, Type *exitType, ImplMark implMark, ModifierSet modifiers);
@@ -257,16 +260,16 @@ class FunctionType : public CompositeType {
     ModifierSet modifiers_;
     mutable Type *exitType_;
     mutable FunctionMetaInfo *metaInfo_ = nullptr;
-    // 运行时类型数据（指向 data_[] 内布局）
+    // Runtime type data (points into the data_[] layout).
     std::span<Type *const> withTypes_;
     std::span<const TypeCode> withTypeCodes_;
     std::span<const uint8_t> withIsVar_;
     std::span<Type *const> normTypes_;
     std::span<const TypeCode> normTypeCodes_;
     std::span<const uint8_t> normIsVar_;
-    // 灵活数组：仅存储运行时类型数据
-    // 内存布局：[withTypes_[count]][withTypeCodes_[count]][withIsVar_[count]]
-    //          [normTypes_[count]][normTypeCodes_[count]][normIsVar_[count]]
+    // Flexible array: stores runtime type data only
+    // Memory layout: [withTypes_[count]][withTypeCodes_[count]][withIsVar_[count]]
+    //           [normTypes_[count]][normTypeCodes_[count]][normIsVar_[count]]
     uint8_t data_[];
 };
 

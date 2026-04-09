@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 07, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,7 +38,7 @@ class Node;
 
 namespace camel::source {
 
-/// 标记一个 origin 来自哪个编译阶段，用于诊断与 debugger 展示派生路径。
+/// Mark which compilation stage an origin came from, for diagnostics and debugger traces.
 enum class OriginStage : uint8_t {
     Parser,
     AST,
@@ -49,7 +49,8 @@ enum class OriginStage : uint8_t {
     Synthetic,
 };
 
-/// 标记 origin 代表的实体类别。一个实体的“位置”与“语义身份”由 stage + kind 共同描述。
+/// Mark the entity kind represented by an origin. An entity's position and semantic identity are
+/// described by stage + kind together.
 enum class OriginKind : uint8_t {
     Source,
     AstNode,
@@ -65,8 +66,9 @@ enum class OriginKind : uint8_t {
 std::string to_string(OriginStage stage);
 std::string to_string(OriginKind kind);
 
-/// 语义部件角色。
-/// 这些角色不替代 primarySpan，而是为“主区间 + 语义部件”逆映射提供统一命名。
+/// Semantic part roles.
+/// These roles do not replace primarySpan; they provide unified names for reverse mapping
+/// from "primary span + semantic part".
 enum class SemanticRole : uint8_t {
     Whole,
     Operator,
@@ -93,48 +95,54 @@ enum class SemanticRole : uint8_t {
 
 std::string to_string(SemanticRole role);
 
-/// 单个源文件的规范化缓存。这里保存完整文本和行起始偏移，供 offset -> line/column 查询。
+/// Canonical cache for a single source file. Stores the full text and line start offsets for
+/// offset -> line/column queries.
 struct SourceFile {
     source_file_id_t id = kInvalidSourceFileId;
-    std::string path;                     // 逻辑路径或绝对路径，作为 debugger/LSP 的文件标识。
-    std::string content;                  // 源文件原文，span 的 offset 一律相对它计算。
-    std::vector<size_t> lineStarts = {0}; // 每行首字符的字节偏移，用于快速定位行列。
+    std::string path;    // Logical or absolute path, used as the debugger/LSP file ID.
+    std::string content; // Original file text; all span offsets are relative to it.
+    std::vector<size_t> lineStarts = {
+        0}; // Byte offset of each line start for fast line/column lookup.
 };
 
-/// 规范化后的源码区间。所有阶段都通过 SpanId 间接引用它，而不是复制 CharRange。
+/// Canonicalized source span. All stages reference it indirectly via SpanId instead of copying
+/// CharRange.
 struct SourceSpan {
     span_id_t id            = kInvalidSpanId;
     source_file_id_t fileId = kInvalidSourceFileId;
-    size_t startOffset      = 0; // 半开区间起点。
-    size_t endOffset        = 0; // 半开区间终点。
+    size_t startOffset      = 0; // Half-open interval start.
+    size_t endOffset        = 0; // Half-open interval end.
 
     bool valid() const { return id != kInvalidSpanId && fileId != kInvalidSourceFileId; }
 };
 
-/// 跨阶段保留“这个实体从哪段源码而来”的统一记录。
-/// parent 表示主派生链；inputs 为可选的多源输入集合。
+/// Unified record for "which source code this entity came from" across stages.
+/// parent is the main derivation chain; inputs is an optional multi-source input set.
 struct OriginRecord {
     origin_id_t id        = kInvalidOriginId;
-    span_id_t primarySpan = kInvalidSpanId;   // 当前实体对外展示的主源码区间。
-    origin_id_t parent    = kInvalidOriginId; // 主派生来源，如 GCT 节点来自某个 AST 节点。
-    OriginStage stage     = OriginStage::Synthetic;
-    OriginKind kind       = OriginKind::Synthetic;
-    bool synthetic        = false;   // true 表示该实体不是源码中直接出现的结构。
-    std::string label;               // 便于调试的阶段标签，如 gct.data / gir.cast。
-    std::vector<origin_id_t> inputs; // 多源降糖或合并场景下的附加来源。
+    span_id_t primarySpan = kInvalidSpanId; // Primary source span shown for this entity.
+    origin_id_t parent =
+        kInvalidOriginId; // Main derivation source, e.g. a GCT node from an AST node.
+    OriginStage stage = OriginStage::Synthetic;
+    OriginKind kind   = OriginKind::Synthetic;
+    bool synthetic    = false;       // True if the entity is not directly present in source code.
+    std::string label;               // Debug-friendly stage label, such as gct.data / gir.cast.
+    std::vector<origin_id_t> inputs; // Extra sources for desugaring or merge scenarios.
 };
 
-/// 某个语义部件的命名来源。
-/// origin 可以指向 token 级锚点、子表达式来源，或更低层的 lowering 产物来源。
+/// Named source for a semantic part.
+/// origin may point to a token-level anchor, an expression source, or a lower-level lowering
+/// product.
 struct SemanticPart {
     SemanticRole role  = SemanticRole::Whole;
     origin_id_t origin = kInvalidOriginId;
-    int32_t slot       = -1; // 参数位、分支位等按序编号；无编号时为 -1。
-    std::string label;       // 例如 "lhs"、"rhs"、"else"、"kwargs"。
+    int32_t slot       = -1; // Ordered index for parameters, branches, etc.; -1 when unnumbered.
+    std::string label;       // For example "lhs", "rhs", "else", or "kwargs".
 };
 
-/// 一个执行实体的语义来源包。
-/// mainOrigin 继续提供稳定 fallback，parts / mergedInputs 则用于更细的调试与逆映射。
+/// Semantic source bundle for an execution entity.
+/// mainOrigin provides a stable fallback; parts / mergedInputs enable finer-grained debugging and
+/// reverse mapping.
 struct SemanticBundle {
     origin_id_t mainOrigin = kInvalidOriginId;
     std::vector<SemanticPart> parts;
@@ -143,7 +151,7 @@ struct SemanticBundle {
     std::string syntheticReason;
 };
 
-/// 源文件注册表与行列查询器。
+/// Source-file registry and line/column lookup service.
 class SourceManager {
   public:
     source_file_id_t registerFile(const std::string &path, const std::string &content);
@@ -156,7 +164,7 @@ class SourceManager {
     std::unordered_map<std::string, source_file_id_t> pathToId_; // path -> SourceFileId
 };
 
-/// Span 的集中存储区。Span 本身不带阶段语义，只表达“哪一段源码”。
+/// Centralized storage for spans. A span has no stage semantics; it only identifies a source range.
 class SpanArena {
   public:
     span_id_t create(source_file_id_t fileId, size_t startOffset, size_t endOffset);
@@ -171,7 +179,8 @@ class SpanArena {
     std::vector<SourceSpan> spans_ = {SourceSpan{}};
 };
 
-/// Origin 的集中存储区。create 用于创建根来源，derive 用于沿编译链派生新实体。
+/// Centralized storage for origins. create creates root origins; derive walks the compilation chain
+/// to create new entities.
 class OriginTable {
   public:
     origin_id_t create(
@@ -187,25 +196,28 @@ class OriginTable {
     std::vector<OriginRecord> origins_ = {OriginRecord{}};
 };
 
-/// debugger 查询用的轻量索引。
-/// 这里不保存 span，只保存稳定执行实体 -> OriginId 的映射。
+/// Lightweight index for debugger queries.
+/// It stores no spans, only stable execution-entity -> OriginId mappings.
 class DebugMap {
   public:
     void registerGraphOrigin(const std::string &graphId, origin_id_t origin);
     void registerNodeOrigin(const std::string &nodeId, origin_id_t origin);
     void registerPcOrigin(size_t pc, origin_id_t origin);
+    void registerRuntimeGraphOrigin(uintptr_t runtimeGraphKey, origin_id_t origin);
 
     origin_id_t graphOrigin(const std::string &graphId) const;
     origin_id_t nodeOrigin(const std::string &nodeId) const;
     origin_id_t pcOrigin(size_t pc) const;
+    origin_id_t runtimeGraphOrigin(uintptr_t runtimeGraphKey) const;
 
   private:
-    std::unordered_map<std::string, origin_id_t> graphOrigins_; // graph stableId -> origin
-    std::unordered_map<std::string, origin_id_t> nodeOrigins_;  // node stableId -> origin
-    std::unordered_map<size_t, origin_id_t> pcOrigins_;         // bytecode pc -> origin
+    std::unordered_map<std::string, origin_id_t> graphOrigins_;      // graph stableId -> origin
+    std::unordered_map<std::string, origin_id_t> nodeOrigins_;       // node stableId -> origin
+    std::unordered_map<size_t, origin_id_t> pcOrigins_;              // bytecode pc -> origin
+    std::unordered_map<uintptr_t, origin_id_t> runtimeGraphOrigins_; // runtime graph ptr -> origin
 };
 
-/// 以 OriginId 为键的语义 side table，主要服务 AST/GCT 这类树阶段。
+/// Semantic side table keyed by OriginId, mainly for tree-like stages such as AST/GCT.
 class OriginSemanticMap {
   public:
     void registerBundle(origin_id_t origin, SemanticBundle bundle);
@@ -215,7 +227,8 @@ class OriginSemanticMap {
     std::unordered_map<origin_id_t, SemanticBundle> bundles_;
 };
 
-/// 以稳定执行实体 id 为键的语义 side table，主要服务 GIR graph/node 与 debugger。
+/// A side table keyed by stable execution entity IDs. It mainly serves GIR graphs/nodes and the
+/// debugger.
 class EntitySemanticMap {
   public:
     void registerBundle(const std::string &entityId, SemanticBundle bundle);
@@ -225,8 +238,9 @@ class EntitySemanticMap {
     std::unordered_map<std::string, SemanticBundle> bundles_;
 };
 
-/// 编译期和运行时共享的源码映射上下文。
-/// 这是整套系统的统一入口：文件、span、origin、debug map 和当前执行点都挂在这里。
+/// Shared source-code mapping context for both compile time and runtime.
+/// This is the single entry point for the whole system: files, spans, origins, debug map, and
+/// the current execution point all live here.
 class SourceContext {
   public:
     source_file_id_t registerFile(const std::string &path, const std::string &content);
@@ -268,21 +282,23 @@ class SourceContext {
     const SemanticBundle *astSemantic(origin_id_t origin) const;
     const SemanticBundle *gctSemantic(origin_id_t origin) const;
     const SemanticBundle *girGraphSemantic(const std::string &graphId) const;
-    /// GIR 节点语义：草稿期走 origin 侧表，seal 后走实体 id 侧表（`Node::debugEntityId()` 即
-    /// `gnode:…`）。
+    /// GIR node semantics: draft-time uses the origin side, while sealed entities use the stable
+    /// entity ID side (`Node::debugEntityId()`, e.g. `gnode:...`).
     const SemanticBundle *girNodeSemantic(const camel::compile::gir::Node *node) const;
 
     void cloneGirGraphDebugInfo(const std::string &fromGraphId, const std::string &toGraphId);
-    /// GIR 克隆/内联时复制调试绑定（源节点可为草稿或已 seal）。
+    /// Copy debug bindings during GIR clone / inline; the source node may be draft or already
+    /// sealed.
     void cloneGirNodeDebugBinding(
         const camel::compile::gir::Node *fromNode, const camel::compile::gir::Node *toNode);
 
-    /// 构图期绑定；seal 前不写入 DebugMap 字符串键。
+    /// Draft-stage binding: do not write string keys into DebugMap before sealing.
     void bindGirNodeDraftDebug(
         const camel::compile::gir::Node *node, origin_id_t origin, SemanticBundle bundle);
     void unbindGirNodeDraftDebug(const camel::compile::gir::Node *node);
 
-    /// 在 rearrange 之后将草稿绑定落到 `entityId`（DebugMap + 已 seal 语义表）。
+    /// After rearrange, bind the draft origin to `entityId` in both DebugMap and the sealed
+    /// semantic table.
     void sealPromoteGirNodeDebug(const camel::compile::gir::Node *node, std::string entityId);
 
     origin_id_t girNodeDraftOrigin(const camel::compile::gir::Node *node) const;
@@ -292,20 +308,23 @@ class SourceContext {
     origin_id_t currentRuntimeOrigin() const;
 
   private:
-    SourceManager manager_;         // 负责源文件与行列换算。
-    SpanArena spans_;               // 负责源码区间存储。
-    OriginTable origins_;           // 负责跨阶段派生关系。
-    DebugMap debugMap_;             // 负责运行时/调试器快速反查。
-    OriginSemanticMap astSemantic_; // AST 语义锚点 side table。
-    OriginSemanticMap gctSemantic_; // GCT lowering 语义来源 side table。
-    EntitySemanticMap girGraphs_;   // GIR graph 级语义来源 side table。
-    EntitySemanticMap girNodes_;    // GIR node 级语义来源 side table（seal 后实体 id 键）。
-    /// GIR 节点语义按 origin 索引（与草稿 Node* 映射配合，避免依赖构造期字符串 id）。
+    SourceManager manager_;         // Owns source files and line/column lookup.
+    SpanArena spans_;               // Stores source spans.
+    OriginTable origins_;           // Stores derivation relationships across stages.
+    DebugMap debugMap_;             // Fast lookup table for runtime/debugger queries.
+    OriginSemanticMap astSemantic_; // AST semantic anchor side table.
+    OriginSemanticMap gctSemantic_; // GCT lowering semantic source side table.
+    EntitySemanticMap girGraphs_;   // GIR graph-level semantic source side table.
+    EntitySemanticMap
+        girNodes_; // GIR node-level semantic source side table (stable ID after sealing).
+    /// GIR node semantics indexed by origin, matching the draft Node* mapping to avoid depending on
+    /// constructor-time string IDs.
     OriginSemanticMap girNodeByOrigin_;
     std::unordered_map<const camel::compile::gir::Node *, origin_id_t> girDraftNodeOrigins_;
 
     mutable std::mutex runtimeOriginMutex_;
-    origin_id_t currentRuntimeOrigin_ = kInvalidOriginId; // 当前线程最近一次执行到的源码来源。
+    origin_id_t currentRuntimeOrigin_ =
+        kInvalidOriginId; // Most recent source origin executed by the current thread.
 };
 
 using source_context_ptr_t = std::shared_ptr<SourceContext>;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 09, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,34 +36,71 @@ TaskflowFramePool::~TaskflowFramePool() {
     }
 }
 
+uintptr_t TaskflowFramePool::arenaKey(Graph *graph) { return reinterpret_cast<uintptr_t>(graph); }
+
+uintptr_t TaskflowFramePool::arenaKey(camel::runtime::GCGraph *graph) {
+    return reinterpret_cast<uintptr_t>(graph);
+}
+
 TaskflowFramePool::GraphArena &TaskflowFramePool::getOrCreateArena(Graph *graph) {
     std::scoped_lock lock(arenasMutex_);
-    auto it = arenas_.find(graph);
+    auto it = arenas_.find(arenaKey(graph));
     if (it != arenas_.end())
         return *it->second;
 
-    auto arena     = std::make_unique<GraphArena>();
-    arena->graph   = graph;
-    auto &ref      = *arena;
-    arenas_[graph] = std::move(arena);
+    auto arena               = std::make_unique<GraphArena>();
+    arena->sourceGraph       = graph;
+    arena->runtimeGraph      = nullptr;
+    auto &ref                = *arena;
+    arenas_[arenaKey(graph)] = std::move(arena);
+    return ref;
+}
+
+TaskflowFramePool::GraphArena &TaskflowFramePool::getOrCreateArena(camel::runtime::GCGraph *graph) {
+    ASSERT(graph != nullptr, "Runtime graph is null.");
+    std::scoped_lock lock(arenasMutex_);
+    auto it = arenas_.find(arenaKey(graph));
+    if (it != arenas_.end()) {
+        return *it->second;
+    }
+
+    auto arena               = std::make_unique<GraphArena>();
+    arena->sourceGraph       = nullptr;
+    arena->runtimeGraph      = graph;
+    auto &ref                = *arena;
+    arenas_[arenaKey(graph)] = std::move(arena);
     return ref;
 }
 
 void TaskflowFramePool::allocateChunk(GraphArena &arena, size_t minFrameCount) {
     if (arena.runtimeDataType == nullptr || arena.staticArea == nullptr) {
-        ASSERT(
-            arena.graph->finalized(),
-            std::format(
-                "Graph '{}' must be sealed before taskflow frame allocation.",
-                arena.graph->name()));
-        ASSERT(
-            arena.graph->hasFrameLayout(),
-            std::format("Graph '{}' has no finalized frame layout.", arena.graph->name()));
-        arena.frameSize = arena.graph->frameSize();
+        if (arena.runtimeGraph != nullptr) {
+            ASSERT(
+                arena.runtimeGraph->hasFrameLayout(),
+                std::format(
+                    "Runtime graph '{}' has no finalized frame layout.",
+                    arena.runtimeGraph->name()));
+            arena.frameSize       = arena.runtimeGraph->frameSize();
+            arena.runtimeDataType = arena.runtimeGraph->runtimeDataType();
+            arena.staticArea      = arena.runtimeGraph->staticArea();
+        } else {
+            ASSERT(arena.sourceGraph != nullptr, "Taskflow compile-graph arena has null graph.");
+            ASSERT(
+                arena.sourceGraph->finalized(),
+                std::format(
+                    "Graph '{}' must be sealed before taskflow frame allocation.",
+                    arena.sourceGraph->name()));
+            ASSERT(
+                arena.sourceGraph->hasFrameLayout(),
+                std::format(
+                    "Graph '{}' has no finalized frame layout.",
+                    arena.sourceGraph->name()));
+            arena.frameSize       = arena.sourceGraph->frameSize();
+            arena.runtimeDataType = arena.sourceGraph->runtimeDataType();
+            arena.staticArea      = arena.sourceGraph->staticArea();
+        }
         ASSERT(arena.frameSize > 0, "Frame size must be positive.");
-        arena.runtimeDataType = arena.graph->runtimeDataType();
-        arena.staticArea      = arena.graph->staticArea();
-        arena.chunkFrames     = std::max(minChunkFrames_, chunkBytes_ / arena.frameSize);
+        arena.chunkFrames = std::max(minChunkFrames_, chunkBytes_ / arena.frameSize);
         if (arena.chunkFrames == 0)
             arena.chunkFrames = 1;
     }
@@ -78,7 +115,8 @@ void TaskflowFramePool::allocateChunk(GraphArena &arena, size_t minFrameCount) {
     arena.freeFrames.reserve(arena.freeFrames.size() + frameCount);
     for (size_t i = 0; i < frameCount; ++i) {
         std::byte *slot = chunk + i * arena.frameSize;
-        auto *frame     = new (slot) Frame(arena.graph, arena.staticArea, arena.runtimeDataType);
+        auto *frame     = new (slot)
+            Frame(arena.sourceGraph, arena.staticArea, arena.runtimeDataType, arena.runtimeGraph);
 #ifndef NDEBUG
         std::fill_n(
             frame->slotBase(),
@@ -105,14 +143,42 @@ Frame *TaskflowFramePool::acquire(Graph *graph) {
     return frame;
 }
 
+Frame *TaskflowFramePool::acquire(camel::runtime::GCGraph *graph) {
+    GraphArena &arena = getOrCreateArena(graph);
+    std::scoped_lock lock(arena.mutex);
+    if (arena.freeFrames.empty())
+        allocateChunk(arena, 1);
+    Frame *frame = arena.freeFrames.back();
+    arena.freeFrames.pop_back();
+#ifndef NDEBUG
+    std::fill_n(
+        frame->slotBase(),
+        arena.runtimeDataType->size(),
+        camel::core::mm::kDebugUninitializedSlot);
+#endif
+    return frame;
+}
+
 void TaskflowFramePool::release(Frame *frame) {
     ASSERT(frame != nullptr, "Frame is null.");
-    GraphArena &arena = getOrCreateArena(frame->graph());
+    GraphArena &arena = frame->runtimeGraph()
+                            ? getOrCreateArena(frame->runtimeGraph())
+                            : getOrCreateArena(const_cast<Graph *>(frame->sourceGraph()));
     std::scoped_lock lock(arena.mutex);
     arena.freeFrames.push_back(frame);
 }
 
 void TaskflowFramePool::warmup(Graph *graph, size_t count) {
+    if (count == 0)
+        return;
+    GraphArena &arena = getOrCreateArena(graph);
+    std::scoped_lock lock(arena.mutex);
+    if (arena.freeFrames.size() >= count)
+        return;
+    allocateChunk(arena, count - arena.freeFrames.size());
+}
+
+void TaskflowFramePool::warmup(camel::runtime::GCGraph *graph, size_t count) {
     if (count == 0)
         return;
     GraphArena &arena = getOrCreateArena(graph);

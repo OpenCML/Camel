@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,20 +23,21 @@
 
 namespace camel::jit::x64 {
 
-// Win64：删除 prologue 后紧跟的「mov rcx, rdi; mov rdx, rsi」（此时 rcx/rdx 未改，冗余）
+// Win64: remove the `mov rcx, rdi; mov rdx, rsi` pair right after the prologue (rcx/rdx are still
+// unchanged there, so the moves are redundant).
 void optimizeWin64RedundantArgSetup(MirBuffer &buf);
 
-// 删除 no-op：mov rax, rax（MovRegFromRax(0)）
+// Remove no-op: mov rax, rax (MovRegFromRax(0)).
 void optimizeRemoveNoopMovRaxRax(MirBuffer &buf);
 
-// Peephole: store-reload 消除、死 store 消除
+// Peephole: eliminate store-reload and dead stores.
 void optimizePeephole(MirBuffer &buf);
 
 // Dead frame store elimination: backward liveness analysis removes VStoreToFrame
 // whose slot is never read again before function exit.
 void eliminateDeadFrameStores(MirBuffer &buf);
 
-// 多遍优化入口
+// Multi-pass optimization entry point.
 inline void runMirOptimizationPasses(MirBuffer &buf) {
     optimizeWin64RedundantArgSetup(buf);
     optimizeRemoveNoopMovRaxRax(buf);

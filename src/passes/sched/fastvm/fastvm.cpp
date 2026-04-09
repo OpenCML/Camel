@@ -13,20 +13,24 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "fastvm.h"
 #include "camel/core/module/module.h"
+#include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "opperf.h"
+
+#include <limits>
 
 #if ENABLE_FASTVM_JIT
 #include "jit/backend/backend.h"
 #include "jit/runtime/trampoline.h"
 
 #include <cstdio>
+#include <optional>
 #endif
 
 using namespace std;
@@ -42,22 +46,128 @@ using namespace camel::jit;
 
 namespace {
 
+constexpr size_t kFastVmEntryPcSlot            = 1;
+constexpr size_t kFastVmJitEntrySlot           = 2;
+constexpr size_t kFastVmFlagsSlot              = 3;
+constexpr size_t kFastVmRootCacheSlot          = 4;
+constexpr size_t kFastVmIndirectCallCountSlot  = 5;
+constexpr size_t kFastVmGraphLengthSlot        = 6;
+constexpr uintptr_t kFastVmFlagCompileFailed   = 1u << 0;
+constexpr uintptr_t kFastVmFlagFailureReported = 1u << 1;
+
+inline std::optional<size_t> fastVmEntryPcOf(camel::runtime::GCGraph *graph) {
+    if (!graph)
+        return std::nullopt;
+    uintptr_t raw = graph->extraSlot(kFastVmEntryPcSlot);
+    if (raw == 0)
+        return std::nullopt;
+    return static_cast<size_t>(raw - 1);
+}
+
+inline void setFastVmEntryPcOf(camel::runtime::GCGraph *graph, size_t pc) {
+    if (graph)
+        graph->setExtraSlot(kFastVmEntryPcSlot, static_cast<uintptr_t>(pc) + 1);
+}
+
+inline std::optional<size_t> fastVmGraphLengthOf(camel::runtime::GCGraph *graph) {
+    if (!graph)
+        return std::nullopt;
+    uintptr_t raw = graph->extraSlot(kFastVmGraphLengthSlot);
+    if (raw == 0)
+        return std::nullopt;
+    return static_cast<size_t>(raw - 1);
+}
+
+inline void setFastVmGraphLengthOf(camel::runtime::GCGraph *graph, size_t length) {
+    if (graph)
+        graph->setExtraSlot(kFastVmGraphLengthSlot, static_cast<uintptr_t>(length) + 1);
+}
+
+inline jit::JitEntryFn fastVmJitEntryOf(camel::runtime::GCGraph *graph) {
+    return graph ? reinterpret_cast<jit::JitEntryFn>(graph->extraSlot(kFastVmJitEntrySlot))
+                 : nullptr;
+}
+
+inline void setFastVmJitEntryOf(camel::runtime::GCGraph *graph, jit::JitEntryFn fn) {
+    if (graph)
+        graph->setExtraSlot(kFastVmJitEntrySlot, reinterpret_cast<uintptr_t>(fn));
+}
+
+inline uintptr_t fastVmFlagsOf(camel::runtime::GCGraph *graph) {
+    return graph ? graph->extraSlot(kFastVmFlagsSlot) : 0;
+}
+
+inline bool fastVmJitCompileFailedOf(camel::runtime::GCGraph *graph) {
+    return (fastVmFlagsOf(graph) & kFastVmFlagCompileFailed) != 0;
+}
+
+inline void setFastVmJitCompileFailedOf(camel::runtime::GCGraph *graph, bool failed) {
+    if (!graph)
+        return;
+    uintptr_t flags = fastVmFlagsOf(graph);
+    flags = failed ? (flags | kFastVmFlagCompileFailed) : (flags & ~kFastVmFlagCompileFailed);
+    graph->setExtraSlot(kFastVmFlagsSlot, flags);
+}
+
+inline bool fastVmJitFailureReportedOf(camel::runtime::GCGraph *graph) {
+    return (fastVmFlagsOf(graph) & kFastVmFlagFailureReported) != 0;
+}
+
+inline void setFastVmJitFailureReportedOf(camel::runtime::GCGraph *graph, bool reported) {
+    if (!graph)
+        return;
+    uintptr_t flags = fastVmFlagsOf(graph);
+    flags = reported ? (flags | kFastVmFlagFailureReported) : (flags & ~kFastVmFlagFailureReported);
+    graph->setExtraSlot(kFastVmFlagsSlot, flags);
+}
+
+inline FastVMRuntimeRootCache *fastVmRootCacheOf(camel::runtime::GCGraph *graph) {
+    return graph
+               ? reinterpret_cast<FastVMRuntimeRootCache *>(graph->extraSlot(kFastVmRootCacheSlot))
+               : nullptr;
+}
+
+inline uint32_t incFastVmIndirectCallCountOf(camel::runtime::GCGraph *graph) {
+    if (!graph) {
+        return 0;
+    }
+    const uintptr_t raw = graph->extraSlot(kFastVmIndirectCallCountSlot);
+    const uint32_t next = raw >= static_cast<uintptr_t>(std::numeric_limits<uint32_t>::max())
+                              ? std::numeric_limits<uint32_t>::max()
+                              : static_cast<uint32_t>(raw) + 1;
+    graph->setExtraSlot(kFastVmIndirectCallCountSlot, static_cast<uintptr_t>(next));
+    return next;
+}
+
+inline void setFastVmRootCacheOf(camel::runtime::GCGraph *graph, FastVMRuntimeRootCache *cache) {
+    if (graph)
+        graph->setExtraSlot(kFastVmRootCacheSlot, reinterpret_cast<uintptr_t>(cache));
+}
+
 struct HigherOrderCallSite {
-    GIR::Graph *graph     = nullptr;
-    size_t entryPc        = 0;
-    const slot_t *closure = nullptr;
-    size_t closureSize    = 0;
+    camel::runtime::GCGraph *runtimeGraph = nullptr;
+    size_t entryPc                        = 0;
+    const slot_t *closure                 = nullptr;
+    size_t closureSize                    = 0;
 };
 
-inline HigherOrderCallSite
-makeHigherOrderCallSite(Function *func, const std::unordered_map<GIR::Graph *, size_t> &offsetMap) {
-    Tuple *closure           = func->tuple();
-    const size_t closureSize = closure ? closure->size() : 0;
+inline HigherOrderCallSite makeHigherOrderCallSite(Function *func) {
+    ASSERT(func != nullptr, "Higher-order call target function is null.");
+    Tuple *closure                        = func->tuple();
+    const size_t closureSize              = closure ? closure->size() : 0;
+    camel::runtime::GCGraph *runtimeGraph = func->graph();
+    ASSERT(
+        runtimeGraph != nullptr,
+        "FastVM higher-order runtime call requires a materialized runtime graph.");
+    const auto entryPc = fastVmEntryPcOf(runtimeGraph);
+    ASSERT(
+        entryPc.has_value(),
+        std::format("Runtime graph '{}' has no FastVM entry pc.", runtimeGraph->name()));
     return {
-        .graph       = func->graph(),
-        .entryPc     = offsetMap.at(func->graph()),
-        .closure     = closureSize == 0 ? nullptr : closure->data(),
-        .closureSize = closureSize,
+        .runtimeGraph = runtimeGraph,
+        .entryPc      = *entryPc,
+        .closure      = closureSize == 0 ? nullptr : closure->data(),
+        .closureSize  = closureSize,
     };
 }
 
@@ -69,17 +179,40 @@ inline void seedClosureSlots(Frame *frame, const HigherOrderCallSite &site, size
 
 } // namespace
 
-void FastVMSchedPass::precompile(GIR::Graph *graph) {
-    auto [bytecodes, _, offsetMap] = compileAndLink(
+FastVMSchedPass::~FastVMSchedPass() = default;
+
+void FastVMSchedPass::precompile(camel::runtime::GCGraph *runtimeRoot) {
+    ASSERT(runtimeRoot != nullptr, "Runtime root graph is null.");
+    runtimeRoot_ = runtimeRoot;
+    auto linked  = compileAndLink(
         context_,
-        graph,
+        runtimeRoot,
         {
             .enableTailCallDetection = true,
             .enableInlineOperators   = true,
             .optimizationStrategies  = OptimizationStrategyCode::All,
         });
-    bytecodes_ = std::move(bytecodes);
-    offsetMap_ = std::move(offsetMap);
+    bytecodes_ = std::move(linked.codes);
+    offsetMap_ = std::move(linked.offsetMap);
+    for (const auto &[offset, length, runtimeGraph] : linked.graphs) {
+        if (!runtimeGraph) {
+            continue;
+        }
+        setFastVmEntryPcOf(runtimeGraph, offset);
+        setFastVmGraphLengthOf(runtimeGraph, length);
+    }
+    auto rootCache = std::make_unique<FastVMRuntimeRootCache>();
+    rootCache->callTargetsByPc.resize(bytecodes_.size(), nullptr);
+    for (size_t pc = 0; pc < bytecodes_.size();) {
+        const Bytecode &bc = bytecodes_[pc];
+        if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
+            rootCache->callTargetsByPc[pc] = getFuncExtraRuntimeGraph(&bc);
+        }
+        pc += bc.opsize;
+    }
+    FastVMRuntimeRootCache *rootCacheRaw = rootCache.get();
+    runtimeRootCaches_.push_back(std::move(rootCache));
+    setFastVmRootCacheOf(runtimeRoot_, rootCacheRaw);
 }
 
 void FastVMSchedPass::push(size_t pc, Frame *frame) {
@@ -88,7 +221,7 @@ void FastVMSchedPass::push(size_t pc, Frame *frame) {
     if (frameStack_.size() >= maxRecursionDepth_) {
         throwRuntimeFault(
             RuntimeDiag::MaxRecursionDepthExceeded,
-            frame->graph()->name(),
+            frame->graphName(),
             maxRecursionDepth_);
     }
 }
@@ -101,10 +234,13 @@ std::pair<size_t, Frame *> FastVMSchedPass::pop() {
     return {pc, frame};
 }
 
-graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    (void)graph->exitNode();
+graph_ptr_t FastVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+    (void)os;
+    ASSERT(graph != nullptr, "FastVM requires a non-null runtime root graph.");
 
-    precompile(graph.get());
+    camel::runtime::GCGraph *runtimeRoot = graph;
+    runtimeRootCaches_.clear();
+    precompile(runtimeRoot);
 
     pcStack_.clear();
     frameStack_.clear();
@@ -113,10 +249,9 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
     if (jitConfig_.policy != JitPolicy::Disabled && !jitBackend_) {
         jitBackend_ = createBackend();
     }
-    // 每轮 apply 重置“本轮可重试”状态，避免旧轮次失败状态污染新字节码。
     for (const auto &[g, _] : offsetMap_) {
         if (g) {
-            setGraphJitCompileFailed(g, false, true);
+            setJitCompileFailedOf(g, false, true);
         }
     }
     JitContext jitCtx{this, bytecodes_.data()};
@@ -127,40 +262,37 @@ graph_ptr_t FastVMSchedPass::apply(graph_ptr_t &graph, std::ostream &os) {
         jitConfig_.policy == JitPolicy::Disabled
             ? "Disabled"
             : (jitConfig_.policy == JitPolicy::Always ? "Always" : "OnDemand")));
-    GIR::Graph *entryGraph = graph.get();
     if (jitConfig_.policy == JitPolicy::Always) {
         CAMEL_LOG_INFO_S(
             "JIT",
             "JIT Always: switched to lazy compile-by-touch (no startup full-graph compile)");
-        // Always 模式仍保持“能编就编”的策略，但触发时机改为首次触达目标图，
-        // 避免启动期对整张图集做全量编译引入的失败放大与开销抖动。
-        compileAndCacheGraph(entryGraph, offsetMap_.at(entryGraph));
+        compileAndCacheGraph(runtimeRoot, offsetMap_.at(runtimeRoot));
     } else if (jitConfig_.policy == JitPolicy::OnDemand) {
         CAMEL_LOG_INFO_S("JIT", "JIT OnDemand: start with interpreter, compile on hot threshold");
     }
-    JitEntryFn entryJitFn = getGraphJitFn(entryGraph);
+    JitEntryFn entryJitFn = jitFnOf(runtimeRoot);
     if (jitBackend_ && entryJitFn) {
-        CAMEL_LOG_INFO_S("JIT", "Executing entry graph '{}' via JIT", entryGraph->name());
-        Frame *frame = framePool_.acquire(entryGraph);
+        CAMEL_LOG_INFO_S("JIT", "Executing entry graph '{}' via JIT", runtimeRoot->name());
+        Frame *frame = framePool_.acquire(runtimeRoot);
         opperf::start();
         slot_t result = invokeOwnedJitFrame(entryJitFn, frame, &jitCtx);
         opperf::stop();
         opperf::report(std::cout);
-        context_->captureProcessExitCode(entryGraph, result);
+        context_->captureProcessExitCode(runtimeRoot, result);
         return Graph::null();
     }
     CAMEL_LOG_INFO_S(
         "JIT",
         "Entry graph '{}' not in JIT cache, falling back to interpreter",
-        entryGraph->name());
+        runtimeRoot->name());
 #endif
 
     opperf::start();
-    size_t pc    = offsetMap_.at(graph.get());
-    Frame *frame = framePool_.acquire(graph.get());
+    size_t pc    = graphEntryPc(runtimeRoot);
+    Frame *frame = framePool_.acquire(runtimeRoot);
     try {
         slot_t result = call(pc, frame);
-        context_->captureProcessExitCode(graph.get(), result);
+        context_->captureProcessExitCode(runtimeRoot, result);
     } catch (...) {
         pcStack_.clear();
         frameStack_.clear();
@@ -198,22 +330,22 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
     Array *arr                     = currFrame.get<Array *>(nargs[0]);
     Function *func                 = currFrame.get<Function *>(wargs[0]);
-    const HigherOrderCallSite site = makeHigherOrderCallSite(func, offsetMap_);
+    const HigherOrderCallSite site = makeHigherOrderCallSite(func);
 
     Array *res = Array::create(mm::autoSpace(), arr->size());
 
     slot_t *from = arr->data();
     slot_t *to   = res->data();
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(site.graph);
+        Frame *frame = framePool_.acquire(site.runtimeGraph);
 
-        frame->set(1, from[i]); // 设置第一个参数
+        frame->set(1, from[i]); // Bind the current element to the callee's first argument slot.
         if (site.closureSize != 0) {
             seedClosureSlots(frame, site, 2);
         }
 
 #if ENABLE_FASTVM_JIT
-        to[i] = invokeCallOrJit(site.entryPc, site.graph, frame, currentJitCtx_);
+        to[i] = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
 #else
         to[i] = call(site.entryPc, frame);
 #endif
@@ -226,12 +358,12 @@ void FastVMSchedPass::evalMarkedOperator_apply_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
     Array *arr                     = currFrame.get<Array *>(nargs[0]);
     Function *func                 = currFrame.get<Function *>(wargs[0]);
-    const HigherOrderCallSite site = makeHigherOrderCallSite(func, offsetMap_);
+    const HigherOrderCallSite site = makeHigherOrderCallSite(func);
 
     slot_t *data = arr->data();
 
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(site.graph);
+        Frame *frame = framePool_.acquire(site.runtimeGraph);
 
         frame->set(1, data[i]);
         if (site.closureSize != 0) {
@@ -239,7 +371,7 @@ void FastVMSchedPass::evalMarkedOperator_apply_arr(
         }
 
 #if ENABLE_FASTVM_JIT
-        data[i] = invokeCallOrJit(site.entryPc, site.graph, frame, currentJitCtx_);
+        data[i] = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
 #else
         data[i] = call(site.entryPc, frame);
 #endif
@@ -252,13 +384,13 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
     Array *arr                     = currFrame.get<Array *>(nargs[0]);
     Function *func                 = currFrame.get<Function *>(wargs[0]);
-    const HigherOrderCallSite site = makeHigherOrderCallSite(func, offsetMap_);
+    const HigherOrderCallSite site = makeHigherOrderCallSite(func);
 
     Array *filtered = Array::create(mm::autoSpace(), arr->size());
 
     slot_t *from = arr->data();
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(site.graph);
+        Frame *frame = framePool_.acquire(site.runtimeGraph);
 
         frame->set(1, from[i]);
         if (site.closureSize != 0) {
@@ -266,7 +398,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
         }
 
 #if ENABLE_FASTVM_JIT
-        slot_t result = invokeCallOrJit(site.entryPc, site.graph, frame, currentJitCtx_);
+        slot_t result = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
 #else
         slot_t result = call(site.entryPc, frame);
 #endif
@@ -286,9 +418,9 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     Array *arr                     = currFrame.get<Array *>(nargs[0]);
     Function *func                 = currFrame.get<Function *>(wargs[0]);
     slot_t init                    = currFrame.get<slot_t>(wargs[1]);
-    const HigherOrderCallSite site = makeHigherOrderCallSite(func, offsetMap_);
+    const HigherOrderCallSite site = makeHigherOrderCallSite(func);
 
-    // 空数组直接返回初始值
+    // Preserve left-fold semantics: an empty array returns the initial value immediately.
     if (arr->size() == 0) {
         currFrame.set(self, init);
         return;
@@ -298,7 +430,7 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     slot_t *from = arr->data();
 
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(site.graph);
+        Frame *frame = framePool_.acquire(site.runtimeGraph);
 
         // reduce(acc, cur)
         frame->set(1, acc);
@@ -309,7 +441,7 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
         }
 
 #if ENABLE_FASTVM_JIT
-        acc = invokeCallOrJit(site.entryPc, site.graph, frame, currentJitCtx_);
+        acc = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
 #else
         acc = call(site.entryPc, frame);
 #endif
@@ -322,12 +454,12 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
     Array *arr                     = currFrame.get<Array *>(nargs[0]);
     Function *func                 = currFrame.get<Function *>(wargs[0]);
-    const HigherOrderCallSite site = makeHigherOrderCallSite(func, offsetMap_);
+    const HigherOrderCallSite site = makeHigherOrderCallSite(func);
 
     slot_t *from = arr->data();
 
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(site.graph);
+        Frame *frame = framePool_.acquire(site.runtimeGraph);
 
         frame->set(1, from[i]);
 
@@ -336,13 +468,13 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
         }
 
 #if ENABLE_FASTVM_JIT
-        invokeCallOrJit(site.entryPc, site.graph, frame, currentJitCtx_);
+        invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
 #else
         call(site.entryPc, frame);
 #endif
     }
 
-    // foreach 无返回值
+    // foreach has no aggregate return value.
     currFrame.set(self, NullSlot);
 }
 
@@ -368,32 +500,72 @@ slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *j
     }
 }
 
-GIR::Graph *FastVMSchedPass::jitFnToGraph(JitEntryFn fn) const {
+camel::runtime::GCGraph *FastVMSchedPass::jitFnToGraph(JitEntryFn fn) const {
     auto it = jitFnToGraph_.find(fn);
     return it != jitFnToGraph_.end() ? it->second : nullptr;
 }
 
-void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
+JitEntryFn FastVMSchedPass::jitFnOf(camel::runtime::GCGraph *graph) const {
+    return graph ? fastVmJitEntryOf(graph) : nullptr;
+}
+
+void FastVMSchedPass::setJitFnOf(camel::runtime::GCGraph *graph, JitEntryFn fn) {
+    if (graph) {
+        setFastVmJitEntryOf(graph, fn);
+    }
+}
+
+bool FastVMSchedPass::jitCompileFailedOf(camel::runtime::GCGraph *graph) const {
+    return graph ? fastVmJitCompileFailedOf(graph) : false;
+}
+
+void FastVMSchedPass::setJitCompileFailedOf(
+    camel::runtime::GCGraph *graph, bool failed, bool resetReport) {
+    if (!graph) {
+        return;
+    }
+    setFastVmJitCompileFailedOf(graph, failed);
+    if (resetReport) {
+        setFastVmJitFailureReportedOf(graph, false);
+    }
+}
+
+bool FastVMSchedPass::jitFailureReportedOf(camel::runtime::GCGraph *graph) const {
+    return graph ? fastVmJitFailureReportedOf(graph) : false;
+}
+
+void FastVMSchedPass::setJitFailureReportedOf(camel::runtime::GCGraph *graph, bool reported) {
+    if (graph) {
+        setFastVmJitFailureReportedOf(graph, reported);
+    }
+}
+
+void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_t entryPc) {
     if (!graph) {
         return;
     }
     std::lock_guard lock(jitCacheMutex_);
-    if (getGraphJitFn(graph) || getGraphJitCompileFailed(graph))
+    if (jitFnOf(graph) || jitCompileFailedOf(graph)) {
         return;
+    }
+    GIR::Graph *sourceGraph = graph->compileGraphMetadata().get();
+    ASSERT(sourceGraph != nullptr, "FastVM runtime graph is missing compile graph metadata.");
     ASSERT(
-        graph->finalized(),
+        sourceGraph->finalized(),
         std::format("Graph '{}' must be sealed before JIT compilation.", graph->name()));
     ASSERT(
-        graph->hasFrameLayout(),
+        sourceGraph->hasFrameLayout(),
         std::format("Graph '{}' has no finalized frame layout.", graph->name()));
 
     CompilationDebugOptions debugOptions{
         .enableDebugTrace = enableJitTraceMir_,
     };
     CompilationUnit unit{
-        .graph                    = graph,
+        .graph                    = sourceGraph,
+        .runtimeGraph             = graph,
         .bytecodes                = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
         .entryPc                  = entryPc,
+        .graphLength              = fastVmGraphLengthOf(graph).value_or(0),
         .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
         .trampolineTail           = reinterpret_cast<void *>(&trampolineTail),
         .trampolineOper           = reinterpret_cast<void *>(&trampolineOper),
@@ -406,14 +578,14 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
     std::string failureReason;
     auto compiled = jitBackend_->compile(unit, &failureReason);
     if (!compiled) {
-        setGraphJitCompileFailed(graph, true);
-        if (!getGraphJitFailureReported(graph)) {
+        setJitCompileFailedOf(graph, true);
+        if (!jitFailureReportedOf(graph)) {
             CAMEL_LOG_WARN_S(
                 "JIT",
                 "OnDemand compile skipped for graph '{}': {}",
                 graph->name(),
                 failureReason.empty() ? "unknown failure" : failureReason);
-            setGraphJitFailureReported(graph, true);
+            setJitFailureReportedOf(graph, true);
         }
         return;
     }
@@ -442,24 +614,24 @@ void FastVMSchedPass::compileAndCacheGraph(GIR::Graph *graph, size_t entryPc) {
     }
     auto fn = jitBackend_->load(std::move(compiled));
     if (fn) {
-        setGraphJitFn(graph, fn);
+        setJitFnOf(graph, fn);
         jitFnToGraph_[fn] = graph;
-        setGraphJitCompileFailed(graph, false);
-        setGraphJitFailureReported(graph, false);
+        setJitCompileFailedOf(graph, false);
+        setJitFailureReportedOf(graph, false);
         for (size_t pc = 0; pc < bytecodes_.size();) {
             Bytecode &bc = bytecodes_[pc];
             if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
-                if (bc.fastop[1] >= 0 && getFuncExtraGraph(&bc) == graph)
+                if (bc.fastop[1] >= 0 && runtimeCallTarget(pc) == graph)
                     setFuncExtraFn(&bc, reinterpret_cast<void *>(fn));
             }
             pc += bc.opsize;
         }
         CAMEL_LOG_INFO_S("JIT", "OnDemand: compiled & cached graph '{}'", graph->name());
     } else {
-        setGraphJitCompileFailed(graph, true);
-        if (!getGraphJitFailureReported(graph)) {
+        setJitCompileFailedOf(graph, true);
+        if (!jitFailureReportedOf(graph)) {
             CAMEL_LOG_WARN_S("JIT", "OnDemand compile load failed for graph '{}'.", graph->name());
-            setGraphJitFailureReported(graph, true);
+            setJitFailureReportedOf(graph, true);
         }
     }
 }
@@ -468,14 +640,18 @@ Bytecode *FastVMSchedPass::materializeCallTarget(size_t pc, Bytecode *bc) {
     if (!bc || bc->fastop[1] < 0) {
         return bc;
     }
-    GIR::Graph *targetGraph = getFuncExtraGraph(bc);
-    if (targetGraph && getGraphJitCompileFailed(targetGraph)) {
+    if (!jitEnabled()) {
+        return bc;
+    }
+    auto *runtimeTarget = runtimeCallTarget(pc);
+    ASSERT(runtimeTarget != nullptr, "FastVM direct call target is not materialized.");
+    if (jitCompileFailedOf(runtimeTarget)) {
         return bc;
     }
     size_t targetPc = static_cast<size_t>(bc->fastop[1]);
     uint32_t count  = incFuncExtraCount(bc);
     if (tierPolicy_.shouldJit(count)) {
-        compileAndCacheGraph(targetGraph, targetPc);
+        compileAndCacheGraph(runtimeTarget, targetPc);
         return &bytecodes_[pc];
     }
     return bc;
@@ -488,28 +664,49 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
     return result.result;
 }
 
-size_t FastVMSchedPass::graphEntryPc(GIR::Graph *graph) const { return offsetMap_.at(graph); }
+size_t FastVMSchedPass::graphEntryPc(camel::runtime::GCGraph *graph) const {
+    ASSERT(graph != nullptr, "Runtime graph is null.");
+    auto pc = fastVmEntryPcOf(graph);
+    ASSERT(
+        pc.has_value(),
+        std::format("Runtime graph '{}' has no FastVM entry pc.", graph->name()));
+    return *pc;
+}
+
+camel::runtime::GCGraph *FastVMSchedPass::runtimeCallTarget(size_t pc) const {
+    if (auto *cache = fastVmRootCacheOf(runtimeRoot_)) {
+        return pc < cache->callTargetsByPc.size() ? cache->callTargetsByPc[pc] : nullptr;
+    }
+    return nullptr;
+}
+
+uint32_t FastVMSchedPass::noteIndirectCall(camel::runtime::GCGraph *graph) const {
+    return incFastVmIndirectCallCountOf(graph);
+}
 
 slot_t FastVMSchedPass::invokeCallOrJit(
-    size_t pc, GIR::Graph *graph, Frame *frame, void *jitCtx, uint32_t callCount) {
+    size_t pc, camel::runtime::GCGraph *runtimeGraph, Frame *frame, void *jitCtx,
+    uint32_t callCount) {
+    ASSERT(runtimeGraph != nullptr, "FastVM JIT/invoke target runtime graph is null.");
     currentJitCtx_ = jitCtx;
-    JitEntryFn fn  = getGraphJitFn(graph);
+    JitEntryFn fn  = jitFnOf(runtimeGraph);
     if (fn) {
         EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
             "JIT",
             "invokeCallOrJit: graph '{}' pc={} -> JIT",
-            graph->name(),
+            runtimeGraph->name(),
             pc));
         return invokeOwnedJitFrame(fn, frame, jitCtx);
     }
-    if (!getGraphJitCompileFailed(graph) && tierPolicy_.shouldJit(callCount)) {
-        compileAndCacheGraph(graph, pc);
-        fn = getGraphJitFn(graph);
+    const bool compileFailed = jitCompileFailedOf(runtimeGraph);
+    if (!compileFailed && tierPolicy_.shouldJit(callCount)) {
+        compileAndCacheGraph(runtimeGraph, pc);
+        fn = jitFnOf(runtimeGraph);
         if (fn) {
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                 "JIT",
                 "invokeCallOrJit: graph '{}' pc={} -> JIT (after compile)",
-                graph->name(),
+                runtimeGraph->name(),
                 pc));
             return invokeOwnedJitFrame(fn, frame, jitCtx);
         }
@@ -517,7 +714,7 @@ slot_t FastVMSchedPass::invokeCallOrJit(
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "JIT",
         "invokeCallOrJit: graph '{}' pc={} -> interpreter",
-        graph->name(),
+        runtimeGraph->name(),
         pc));
     return call(pc, frame);
 }

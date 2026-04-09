@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,11 +28,12 @@ using ::camel::jit::kSpilled;
 using ::camel::jit::VRegAllocation;
 
 struct JumpPatch {
-    size_t jumpPos;        // 跳转指令起始偏移
-    size_t targetMirIndex; // 目标 MIR 下标（唯一对应 startOffset[targetMirIndex]）
-    int instrLen;          // 跳转指令长度（用于定位 rel32 写入位置：jmp=1, jz/jle=2）
-    size_t asmLineIndex;   // 对应 asm 行下标，修补后更新 rel 显示
-    size_t jumpEndPos;     // 编码后“下一条指令”偏移，rel = targetOffset - jumpEndPos
+    size_t jumpPos;        // Jump instruction start offset
+    size_t targetMirIndex; // Target MIR index (uniquely corresponds to startOffset[targetMirIndex])
+    int instrLen; // Jump instruction length (used to locate rel32 write position: jmp=1, jz/jle=2)
+    size_t asmLineIndex; // Corresponding asm line index; rel display is updated after patching
+    size_t jumpEndPos;   // Offset of the "next instruction" after encoding; rel = targetOffset -
+                         // jumpEndPos
 };
 
 void encodeMirBuffer(
@@ -122,7 +123,8 @@ void encodeMirBuffer(
                 enc.movToFrame(m.disp, static_cast<uint8_t>(r));
                 spillState.clearSpilledDest();
             } else if (spillState.matchesSpilledDest(static_cast<int>(m.r0))) {
-                // BRCH 的 vRes 被 spill：VCmovnz 已把 0/1 物化到 rbx，这里写回 frame 并恢复 rbx
+                // BRCH vRes is spilled: VCmovnz has materialized 0/1 into rbx; write it back to the
+                // frame and restore rbx here.
                 enc.movToFrame(m.disp, kRegRbx);
                 enc.popRbx();
                 spillState.clearSpilledDest();
@@ -144,7 +146,8 @@ void encodeMirBuffer(
                 enc.emitMovRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(sr));
                 spillState.clearSpilledDest();
             } else if (dr >= 0 && sr < 0) {
-                // 源被 spill：从 frame 加载到目标 reg（JOIN 的 w0 物化到 v3），避免 v3 沿用残留值
+                // Source is spilled: load into the target reg from the frame (JOIN's w0
+                // materialized to v3) to avoid reusing a stale v3 value.
                 if (spillState.hasCopiedValue(static_cast<int>(m.r1))) {
                     enc.movRegFromFrame(static_cast<uint8_t>(dr), spillState.copyDisp);
                     spillState.clearCopiedValue();
@@ -160,8 +163,8 @@ void encodeMirBuffer(
             // synthetic branch index. Passing an optional frame displacement lets
             // us recover the tested value even when the source vreg never got a
             // physical register.
-            // JOIN 传入 m.disp（dIdx）时从 frame 加载并 test，不依赖 v2 的 reg，避免 VCopy(v3,v0)
-            // 与 v2 同 reg 时覆盖 idx
+            // When JOIN receives m.disp (dIdx), load from the frame and test it; do not depend on
+            // v2's reg, to avoid VCopy(v3, v0) overwriting idx when v2 shares the same reg.
             int disp = -1;
             if (m.disp != 0) {
                 disp = m.disp;
@@ -204,14 +207,15 @@ void encodeMirBuffer(
                     enc.emitMovRegReg(kRegRbx, static_cast<uint8_t>(defReg));
                     enc.cmovnzRegFromReg(kRegRbx, static_cast<uint8_t>(sr));
                 } else {
-                    spillState.clearSpilledDest(); // 无法物化，避免 VStoreToFrame 误用 rbx
+                    spillState.clearSpilledDest(); // Cannot materialize; avoid VStoreToFrame
+                                                   // accidentally using rbx.
                 }
             }
             break;
         }
         case MirOp::VMovFromRax:
         case MirOp::VMovToRax:
-            // 暂未在 JOIN 等路径使用，编码为 mov reg, rax / mov rax, reg
+            // Not used on JOIN and similar paths yet; encode as mov reg, rax / mov rax, reg.
             if (vregAlloc) {
                 int r = pregFor(static_cast<VRegId>(m.r0));
                 if (r >= 0) {
@@ -555,6 +559,16 @@ void encodeMirBuffer(
                 enc.subRspImm(p->calleeSlotBytes);
                 enc.movRdiRsp();
 
+                // Recover the caller slot base from the stack slot above the
+                // stack-allocated callee frame, then forward caller slot[0]
+                // into callee slot[0] so runtime trampolines still see the
+                // active Frame* through the normal slot convention.
+                enc.movRegFromFrame(kRegR11, static_cast<int>(p->calleeSlotBytes));
+                enc.emitMovRegReg(kRegRdi, kRegR11);
+                enc.movRegFromFrame(kRegR11, 0);
+                enc.movRdiRsp();
+                enc.movToFrame(0, kRegR11);
+
                 // The callee frame uses the same slot layout as the current
                 // graph, so arguments can be copied into slots 1..N directly.
                 for (uint8_t ai = 0; ai < nArgs; ++ai)
@@ -604,7 +618,7 @@ void encodeMirBuffer(
             if (p->isSameGraph) {
                 enc.cmpR11R12();
             } else {
-                enc.movRaxImm64(p->targetGraphAddr);
+                enc.movRaxImm64(p->targetRuntimeGraphAddr);
                 enc.cmpR11Rax();
             }
             size_t jneRelPos = enc.jneRel32(0);
@@ -613,6 +627,11 @@ void encodeMirBuffer(
             // ═══ FAST PATH: acquire frame from pool and enter compiled callee ═══
             enc.movR11FromR10Disp8(16);
             enc.movRbxFromR11();
+            // Match FramePool::acquire(): once the freelist head moves to the
+            // next slot, clear the new sentinel/free-head graph identity so
+            // later reuse checks never observe stale graph metadata.
+            enc.movR11Disp8Imm0(0);
+            enc.movR11Disp8Imm0(8);
             enc.leaR11R10Disp8(40);
             enc.movR11FromR10Store();
             for (uint8_t ai = 0; ai < p->argsCnt; ++ai) {
@@ -988,8 +1007,8 @@ void encodeMirBuffer(
         }
         }
     }
-    // 修补 rel32：目标 = startOffset[targetMirIndex]，nextIp = jumpPos + instrLen（x86：rel32
-    // 相对指令结束后的下一字节）
+    // Patch rel32: target = startOffset[targetMirIndex], nextIp = jumpPos + instrLen (x86: rel32
+    // is relative to the next byte after the instruction).
     for (const auto &p : patches) {
         if (p.targetMirIndex >= buf.size())
             continue;

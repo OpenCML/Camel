@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -75,18 +75,20 @@ enum class SealState {
 };
 
 // =============================================================================
-// Graph：GIR 函数/子图的最终只读产物。
+// Graph: the final read-only product for a GIR function/subgraph.
 //
-// Graph 一旦由 GraphBuilder::sealGraph() 封印后即视为不可变。
-// 所有结构编辑（增删节点、改边、重排布局）都在 GraphDraft / GraphBuilder 的
-// draft 工作态上完成，最终通过 sealGraph 一次性导出封印图。
+// Once GraphBuilder::sealGraph() seals a Graph, it becomes immutable.
+// All structural edits (node add/remove, edge rewiring, layout rearrangement)
+// happen in the GraphDraft / GraphBuilder draft state and are exported as a
+// sealed graph only once through sealGraph().
 //
-// 封印后，所有节点的邻接 vectors 被搬迁到 arena 上的定长数组（frozen 模式），
-// draft vectors 被释放，节点不再允许结构编辑。
+// After sealing, each node's adjacency vectors are moved to fixed-size arrays
+// in the arena (frozen mode), draft vectors are released, and structural edits
+// are no longer allowed.
 //
-// extras_ 提供 O(1) 图级缓存槽位（JIT entry、topo cache 等），
-// 由各后端/工具自行约定 index 并维护失效协议，Graph 本身只提供通用
-// getExtra / setExtra 泛型接口。
+// extras_ provides O(1) graph-level cache slots (JIT entry, topo cache, etc.).
+// Each backend/tool defines its own index and invalidation protocol; Graph only
+// offers the generic getExtra / setExtra interface.
 // =============================================================================
 
 class Graph : public std::enable_shared_from_this<Graph> {
@@ -123,14 +125,16 @@ class Graph : public std::enable_shared_from_this<Graph> {
 
     std::string toString() const;
 
-    /// Sealed 表示此图已经历 sealGraph 封印，拥有完整的 slot 编号、layout 与执行期静态区，
-    /// 且所有节点邻接已冻结到 FrozenRegion。状态机是单向的：
-    /// Draft -> Sealing -> Sealed。
+    /// Sealed means this graph has passed sealGraph, has complete slot numbering,
+    /// layout, and runtime static data, and all node adjacency has been frozen
+    /// into FrozenRegion. The state machine is one-way:
+    /// Draft -> Sealing -> Sealed.
     ///
-    /// 约束：
-    /// - sealed 图只读；
-    /// - draft 可变视图仅存在于 builderState_（staging）；
-    /// - Graph 的“_ 字段”在 draft 期是 staging 的镜像缓存，仅用于兼容只读访问。
+    /// Constraints:
+    /// - sealed graphs are read-only;
+    /// - the mutable draft view exists only in builderState_ (staging);
+    /// - Graph's "_" fields are mirrored caches in the draft phase, kept only
+    ///   for read-only compatibility.
     bool finalized() const { return sealState_ == SealState::Sealed; }
     bool hasDraftStaging() const { return builderState_ != nullptr; }
     bool hasMutableDraftView() const { return hasDraftStaging() && !finalized(); }
@@ -210,19 +214,23 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const std::string &nodePortName(const Node *node) const;
     const std::string &nodeAccsKey(const Node *node) const;
 
-    /// 将 OperatorIndex shared_ptr 注册到本图，返回裸指针供 OperNode 持有。
+    /// Register an OperatorIndex shared_ptr in this graph and return the raw
+    /// pointer for OperNode to hold.
     ::OperatorIndex *registerOperIndex(std::shared_ptr<::OperatorIndex> idx);
-    /// 从注册表查找裸指针对应的 shared_ptr（用于 clone 时传递所有权到新图）。
+    /// Look up the shared_ptr for a raw pointer in the registry (used during
+    /// clone to transfer ownership to the new graph).
     std::shared_ptr<::OperatorIndex> lookupOperIndex(const ::OperatorIndex *raw) const;
 
-    /// 通用 extra 缓存槽位。index 由各后端/工具自行约定，Graph 不感知具体用途。
+    /// Generic extra cache slots. Each backend/tool defines its own index;
+    /// Graph does not know the specific purpose.
     template <typename T, std::size_t Index> T *getExtra() const { return extras_.get<T, Index>(); }
     template <typename T, std::size_t Index> void setExtra(T *ptr) const {
         extras_.set<T, Index>(ptr);
     }
 
   private:
-    // draft 期读取统一经 staging；sealed 后 staging 被消费，读取落回只读固化字段。
+    // Draft-phase reads go through staging; after sealing, staging is consumed
+    // and reads fall back to read-only frozen fields.
     const GraphBuilderState *activeState() const { return builderState_.get(); }
     friend class Node;
     friend class PortNode;
@@ -232,10 +240,12 @@ class Graph : public std::enable_shared_from_this<Graph> {
     friend class Builder;
     friend class GraphBuilder;
 
-    /// rearrange 之后、安装执行期布局之前：写入 gnode: 实体 id 并 promote SourceContext 调试映射。
+    /// After rearrange and before installing the runtime layout: write the
+    /// gnode: entity ID and promote the SourceContext debug mapping.
     void promoteNodeDebugIds(camel::source::SourceContext *sourceContext);
     NodeDebugFingerprint computeNodeDebugFingerprintForNode(Node *node, uint64_t tieBreaker) const;
-    /// 草稿节点占位 id（指针十六进制），seal 时会替换为内容寻址实体 id。
+    /// Placeholder ID for draft nodes (pointer hex); replaced with a
+    /// content-addressed entity ID during sealing.
     static void installProvisionalNodeStableId(Graph &graph, const Node *node);
     void packStaticSlotsToFrozen();
     void installFinalFrameLayout();
@@ -263,30 +273,31 @@ class Graph : public std::enable_shared_from_this<Graph> {
     size_t frameSize_                = 0;
     ::Tuple *staticArea_             = nullptr;
 
-    // --- 节点所有权 ---
-    // Node 对象在 GraphArena 中构造；arena 通过 tracked dtor 在 Graph 销毁时统一析构节点对象。
-    // Graph 仅记录节点集合用于遍历、freeze 及调试映射维护。
+    // --- Node ownership ---
+    // Node objects are constructed in GraphArena; tracked destructors let the
+    // arena destroy all node objects together when Graph is destroyed.
+    // Graph only records the node set for traversal, freezing, and debug-map maintenance.
     std::vector<Node *> ownedNodes_;
 
-    // --- 节点属性集中存储 ---
-    // stableId 和 portName 不存于 Node 自身，由 Graph 集中管理。
-    // 使 Node 更接近平凡析构（无 std::string 成员），
-    // 同时避免 frozen arena node 需要存储动态字符串。
+    // --- Centralized node attributes ---
+    // stableId and portName are not stored on Node itself; Graph manages them centrally.
+    // This keeps Node closer to trivial destruction (no std::string members)
+    // and avoids dynamic strings in frozen arena nodes.
     std::unordered_map<const Node *, std::string> nodeStableIds_;
     std::unordered_map<const Node *, std::string> nodePortNames_;
     std::unordered_map<const Node *, std::string> nodeAccsKeys_;
 
-    // --- 非平凡数据集中持有 ---
-    // OperNode 持有裸指针，实际 shared_ptr 所有权由 Graph 集中管理。
-    // 这使 Node 本身更接近平凡析构，为 arena 化分配铺路。
+    // --- Centralized non-trivial data ownership ---
+    // OperNode holds a raw pointer; the actual shared_ptr ownership is managed by Graph.
+    // This keeps Node closer to trivial destruction and paves the way for arena-based allocation.
     std::unordered_map<const ::OperatorIndex *, std::shared_ptr<::OperatorIndex>>
         operIndexRegistry_;
     node_vec_t normPorts_, withPorts_, closure_;
     node_vec_t nodes_;
     Node *exitNode_ = nullptr;
 
-    /// 单向终结标记。sealGraph() 设为 true 后永不回退。
-    /// 要修改已封印的图，必须克隆出 draft 副本再操作。
+    /// One-way terminal flag. Once sealGraph() sets it to true, it never goes back.
+    /// To modify a sealed graph, clone a draft copy first.
     SealState sealState_ = SealState::Draft;
 
     bool looped_                     = false;

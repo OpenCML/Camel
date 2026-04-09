@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 08, 2026
- * Updated: Mar. 30, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,10 +37,10 @@ using namespace camel::jit;
 
 #if ENABLE_FASTVM_JIT
 static graph_ptr_t applyMirDump(
-    const context_ptr_t &context, GIR::graph_ptr_t &graph, std::ostream &os, bool slotOnly) {
-    const auto &[bytecodes, _, offsetMap] = compileAndLink(
+    const context_ptr_t &context, camel::runtime::GCGraph *graph, std::ostream &os, bool slotOnly) {
+    auto linked = compileAndLink(
         context,
-        graph.get(),
+        graph,
         {
             .enableTailCallDetection = true,
             .enableInlineOperators   = true,
@@ -56,10 +56,11 @@ static graph_ptr_t applyMirDump(
     os << "[JIT MIR]  [pc][idx]  instruction  ; symbol/slot\n";
     os << "---\n";
 
-    std::span<const Bytecode> bcSpan(bytecodes.data(), bytecodes.size());
+    std::span<const Bytecode> bcSpan(linked.codes.data(), linked.codes.size());
     std::unordered_map<uint64_t, std::string> mirSymbolNames;
 
-    for (const auto &[g, entryPc] : offsetMap) {
+    for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
+        GIR::Graph *g = runtimeGraph ? runtimeGraph->compileGraphMetadata().get() : nullptr;
         ASSERT(
             g->finalized(),
             std::format("Graph '{}' must be sealed before JIT MIR dump.", g->name()));
@@ -109,7 +110,7 @@ static graph_ptr_t applyMirDump(
 }
 #endif
 
-graph_ptr_t JitRmirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+graph_ptr_t JitRmirDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
     return applyMirDump(context_, graph, os, true);
 #else
@@ -119,7 +120,7 @@ graph_ptr_t JitRmirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
 #endif
 }
 
-graph_ptr_t JitMirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+graph_ptr_t JitMirDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
     return applyMirDump(context_, graph, os, false);
 #else

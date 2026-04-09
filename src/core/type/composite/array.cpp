@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,7 +37,7 @@ ArrayType *ArrayTypeFactory::build() {
 ArrayType::ArrayType(Type *elemType, size_t refCount, const size_t *refs)
     : CompositeType(TypeCode::Array), elemType_(elemType), elemTypeCode_(elemType->code()),
       refCount_(refCount) {
-    // 复制 refs 到灵活数组
+    // Copy refs into the flexible array.
     for (size_t i = 0; i < refCount; ++i) {
         refs_[i] = refs[i];
     }
@@ -47,9 +47,9 @@ ArrayType *ArrayType::create(Type *elemType) {
     if (!elemType) {
         elemType = Type::Void();
     }
-    // 计算所需内存大小
+    // Compute the required memory size.
     size_t baseSize  = sizeof(ArrayType);
-    size_t totalSize = baseSize; // 无 refs 时，refCount_ = 0
+    size_t totalSize = baseSize; // With no refs, refCount_ = 0.
 
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "ArrayType",
@@ -74,7 +74,7 @@ ArrayType *ArrayType::fromData(Type *elemType, size_t refCount, const size_t *re
         elemType = Type::Void();
     }
 
-    // 计算所需内存大小：基础大小 + refs 数组
+    // Compute the required memory size: base size + refs array.
     size_t baseSize  = sizeof(ArrayType);
     size_t refsSize  = refCount * sizeof(size_t);
     size_t totalSize = baseSize + refsSize;
@@ -127,7 +127,7 @@ std::string ArrayType::mangle() const {
 
 Type *ArrayType::clone(bool deep /* = false */) const {
     Type *newElemType = deep ? elemType_->clone(true) : elemType_;
-    // 所有信息已知，直接使用 fromData 构建
+    // All information is known, so build directly from fromData.
     return fromData(newElemType, refCount_, refs_);
 }
 

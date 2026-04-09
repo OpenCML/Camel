@@ -13,28 +13,28 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "camel/execute/pass/trans.h"
+#include "camel/execute/pass/runtime_trans.h"
 
 namespace ctx = camel::core::context;
 
-class BytecodeDumpPass : public GraphTranslatePass {
+class BytecodeDumpPass : public RuntimeGraphTranslatePass {
   public:
-    BytecodeDumpPass(const ctx::context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
+    BytecodeDumpPass(const ctx::context_ptr_t &ctx) : RuntimeGraphTranslatePass(ctx) {}
     virtual ~BytecodeDumpPass() = default;
 
-    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 };
 
-class LinkedBytecodeDumpPass : public GraphTranslatePass {
+class LinkedBytecodeDumpPass : public RuntimeGraphTranslatePass {
   public:
-    LinkedBytecodeDumpPass(const ctx::context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
+    LinkedBytecodeDumpPass(const ctx::context_ptr_t &ctx) : RuntimeGraphTranslatePass(ctx) {}
     virtual ~LinkedBytecodeDumpPass() = default;
 
-    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 };

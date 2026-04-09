@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 09, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,49 +30,42 @@
 #include <mutex>
 
 // ============================================================================
-// 分代GC内存布局总览
+// Generational GC memory layout overview
 // ============================================================================
 //
 //  ┌────────────────────────────────────────────────────┐
-//  │                 Young Generation                   │  ← 新对象诞生地，采用复制收集
-//  ├────────────────────────────────────────────────────┤
-//  │  ┌──────────────────────────────────────────────┐  │
-//  │  │  birthSpace_ (Birth Space / Eden)            │  │  ← 新生对象快速分配区
-//  │  │  ████████████████████████████████████████    │  │     [Minor GC 源]
-//  │  │  (Larger, e.g., 8MB)                         │  │
-//  │  └──────────────────────────────────────────────┘  │
-//  │                                                    │
-//  │  ┌────────────────────────────┐                    │
-//  │  │ havenSpace_ (To Space)     │                    │  ← 幸存者区 To
-//  │  │  ████████████████          │                    │     [Minor GC 目标]
-//  │  │  (Smaller, e.g., 1MB)      │                    │
-//  │  └────────────────────────────┘                    │
-//  │           ⇅ (Swap during Minor GC)                │
-//  │  ┌────────────────────────────┐                    │
-//  │  │ cacheSpace_ (From Space)   │                    │  ← 幸存者区 From
-//  │  │  ████████████████          │                    │     [Minor GC 源]
-//  │  │  (Equal to havenSpace_)    │                    │
-//  │  └────────────────────────────┘                    │
+//  │                 Young Generation                   │  ← Where new objects live; copying
+//  collection ├────────────────────────────────────────────────────┤ │
+//  ┌──────────────────────────────────────────────┐  │ │  │  birthSpace_ (Birth Space / Eden) │  │
+//  ← Fast allocation for new objects │  │  ████████████████████████████████████████    │  │ [Minor
+//  GC source] │  │  (Larger, e.g., 8MB)                         │  │ │
+//  └──────────────────────────────────────────────┘  │ │ │ │  ┌────────────────────────────┐ │ │  │
+//  havenSpace_ (To Space)     │                    │  ← Survivor To │  │  ████████████████ │ │
+//  [Minor GC destination] │  │  (Smaller, e.g., 1MB)      │                    │ │
+//  └────────────────────────────┘                    │ │           ⇅ (Swap during Minor GC) │ │
+//  ┌────────────────────────────┐                    │ │  │ cacheSpace_ (From Space)   │ │  ←
+//  Survivor From │  │  ████████████████          │                    │     [Minor GC source] │  │
+//  (Equal to havenSpace_)    │                    │ │  └────────────────────────────┘ │
 //  └────────────────────────────────────────────────────┘
 //           │ (age >= threshold)
-//           │ 晋升 (Promotion)
+//           │ Promotion
 //           ↓
 //  ┌────────────────────────────────────┐
-//  │          Elder Generation          │  ← 长寿对象存储区
+//  │          Elder Generation          │  ← Long-lived object storage
 //  ├────────────────────────────────────┤
-//  │  elderGenSpace_                    │  ← FreeList 分配器
-//  │  ┌─────┐ ┌────┐ ┌──────┐ ┌─────┐   │     [标记-清除算法]
+//  │  elderGenSpace_                    │  ← FreeList allocator
+//  │  ┌─────┐ ┌────┐ ┌──────┐ ┌─────┐   │     [Mark-sweep]
 //  │  │ Obj │ │Free│ │ Obj  │ │ Obj │   │
-//  │  └─────┘ └────┘ └──────┘ └─────┘   │     碎片化管理
-//  │  ████████████████████████████████  │     (Free List 链表)
+//  │  └─────┘ └────┘ └──────┘ └─────┘   │     Fragmentation via free list
+//  │  ████████████████████████████████  │     (linked free list)
 //  │  (Dynamic sizing)                  │
 //  └────────────────────────────────────┘
 //
 //  ┌────────────────────────────────────┐
-//  │         Large Object Space         │  ← 超大对象专用区
+//  │         Large Object Space         │  ← Dedicated region for very large objects
 //  ├────────────────────────────────────┤
-//  │  largeObjSpace_                    │  ← 独立分配器
-//  │  ┌────────────────────────────┐    │     [避免复制开销]
+//  │  largeObjSpace_                    │  ← Separate allocator
+//  │  ┌────────────────────────────┐    │     [Avoids copy cost]
 //  │  │   Large Object 1           │    │
 //  │  │   (size > threshold)       │    │
 //  │  └────────────────────────────┘    │
@@ -84,23 +77,24 @@
 //  └────────────────────────────────────┘
 //
 // ============================================================================
-// 新生代各子空间大小对比（典型配置）
+// Young-generation subspace size comparison (typical configuration)
 // ============================================================================
 //
-//    birthSpace_:    ████████████████████████ (8MB)              ← Birth区最大
-//    havenSpace_:    ███ (1MB)                                   ← Haven较小
-//    cacheSpace_:    ███ (1MB)                                   ← 与Haven相同
+//    birthSpace_:    ████████████████████████ (8MB)              ← Largest Birth region
+//    havenSpace_:    ███ (1MB)                                   ← Smaller Haven
+//    cacheSpace_:    ███ (1MB)                                   ← Same as Haven
 //    elderGenSpace_: ██████████████████████████████████████████████████ (16MB)
 //
-//  设计理念：
-//  - birthSpace_ 大：大部分对象"朝生夕死"，需要足够空间容纳大量短命对象，以减少GC频率
-//  - havenSpace/cacheSpace 小：每次GC只有少量对象（一般不足10%）存活，不需要太大空间
-//  - 典型比例：Birth : Haven : Haven = 8 : 1 : 1 (可调)
+//  Design rationale:
+//  - Large birthSpace_: most objects die young; ample room reduces GC frequency
+//  - Small havenSpace_/cacheSpace_: few survivors per GC (often under 10%); no need for huge
+//  To/From
+//  - Typical ratio Birth : Haven : Haven = 8 : 1 : 1 (tunable)
 //
 // ============================================================================
 
 // ============================================================================
-// 对象生命周期流程图
+// Object lifetime flow
 // ============================================================================
 //
 //   [new Object]
@@ -108,19 +102,19 @@
 //        ├─→ (size > largeObjThreshold_) ──→ largeObjSpace_
 //        │                                      │
 //        │                                      ↓
-//        │                                  [Major GC 清理]
+//        │                                  [Major GC sweep]
 //        │
-//        └─→ (小对象) ──→ birthSpace_
+//        └─→ (small object) ──→ birthSpace_
 //                           │
 //                           ↓
 //                      [Minor GC]
 //                           │
 //              ┌────────────┴────────────┐
 //              │                         │
-//       (对象存活/可达)           (对象死亡/不可达)
+//       (live / reachable)         (dead / unreachable)
 //              │                         │
 //              ↓                         ↓
-//         forward() (age+=1)        [被自动回收]
+//         forward() (age+=1)        [reclaimed automatically]
 //              │
 //    ┌─────────┴─────────┐
 //    │                   │
@@ -128,60 +122,60 @@
 //    │                   │
 //    ↓                   ↓
 // havenSpace_      elderGenSpace_
-//  (继续在年轻代)    (晋升到老年代)
+//  (stay in young gen) (promote to old gen)
 //    │                   │
 //    └────────┬──────────┘
 //             ↓
-//        [Major GC 清理]
+//        [Major GC sweep]
 //
 // ============================================================================
 
 // ============================================================================
-// Minor GC 详细流程
+// Minor GC detailed flow
 // ============================================================================
 //
-//  GC 前状态：
+//  State before GC:
 //  ┌─────────────────┐
-//  │  birthSpace_    │  [████████████████████████████] ← 满了，触发 Minor GC
+//  │  birthSpace_    │  [████████████████████████████] ← full; triggers Minor GC
 //  └─────────────────┘
 //  ┌─────────────────┐
-//  │  havenSpace_    │  [███░░░] ← To 空间（有存活对象）
+//  │  havenSpace_    │  [███░░░] ← To space (live objects)
 //  └─────────────────┘
 //  ┌─────────────────┐
-//  │  cacheSpace_    │  [░░░░░░] ← From 空间（空闲）
+//  │  cacheSpace_    │  [░░░░░░] ← From space (empty)
 //  └─────────────────┘
 //
-//  步骤 1: 交换 havenSpace_ ↔ cacheSpace_
+//  Step 1: swap havenSpace_ ↔ cacheSpace_
 //  ┌─────────────────┐
 //  │  birthSpace_    │  [████████████████████████████]
 //  └─────────────────┘
 //  ┌─────────────────┐
-//  │  havenSpace_    │  [░░░░░░] ← 新 To（原 From）
+//  │  havenSpace_    │  [░░░░░░] ← new To (was From)
 //  └─────────────────┘
 //  ┌─────────────────┐
-//  │  cacheSpace_    │  [███░░░] ← 新 From（原 To）
+//  │  cacheSpace_    │  [███░░░] ← new From (was To)
 //  └─────────────────┘
 //
-//  步骤 2: 复制存活/可达对象（从根对象集合开始遍历以标记可达对象）
+//  Step 2: copy live/reachable objects (roots drive traversal; reachability implied)
 //  ┌─────────────────┐
-//  │  birthSpace_    │  [████████████████████████████] → 扫描存活对象
+//  │  birthSpace_    │  [████████████████████████████] → scan live objects
 //  └─────────────────┘       ↓
 //  ┌─────────────────┐       ↓ (copy move, age+=1)
-//  │  havenSpace_    │  [██░░░░] ← 存活对象被复制到这里
+//  │  havenSpace_    │  [██░░░░] ← survivors copied here
 //  └─────────────────┘       ↑ (copy move, age+=1)
 //  ┌─────────────────┐       ↑
-//  │  cacheSpace_    │  [███░░░] → 扫描存活对象
+//  │  cacheSpace_    │  [███░░░] → scan live objects
 //  └─────────────────┘
 //
-//  步骤 3: 批量清空 birthSpace_ 和 cacheSpace_
+//  Step 3: bulk-reset birthSpace_ and cacheSpace_
 //  ┌─────────────────┐
-//  │  birthSpace_    │  [░░░░░░░░░░░░░░░░░░░░░░░░░░░░] ← 已清空
+//  │  birthSpace_    │  [░░░░░░░░░░░░░░░░░░░░░░░░░░░░] ← cleared
 //  └─────────────────┘
 //  ┌─────────────────┐
-//  │  havenSpace_    │  [██░░░░] ← 只保留存活对象
+//  │  havenSpace_    │  [██░░░░] ← only survivors remain
 //  └─────────────────┘
 //  ┌─────────────────┐
-//  │  cacheSpace_    │  [░░░░░░] ← 已清空
+//  │  cacheSpace_    │  [░░░░░░] ← cleared
 //  └─────────────────┘
 //
 // ============================================================================
@@ -233,20 +227,20 @@ class GenerationalAllocatorWithGC : public IAllocator {
         rememberedSet_.insert(header);
     }
 
-    // Minor GC：清理年轻代（Birth + From）
+    // Minor GC: collect the young generation (Birth + From).
     void minorGC() {
         std::lock_guard<std::mutex> lock(mutex_);
         minorGCUnlocked();
     }
 
-    // 调试器/Profiler：获取各子区域（用于内存可视化）
+    // Debugger / profiler: expose sub-regions (e.g. memory visualization).
     const BumpPointerAllocator &birthSpace() const { return birthSpace_; }
     const BumpPointerAllocator &havenSpace() const { return havenSpace_; }
     const BumpPointerAllocator &cacheSpace() const { return cacheSpace_; }
     const FreeListAllocator &elderGenSpace() const { return elderGenSpace_; }
     const LargeObjectAllocator &largeObjSpace() const { return largeObjSpace_; }
 
-    // Major GC：清理整个堆
+    // Major GC: collect the entire heap.
     void majorGC() {
         std::lock_guard<std::mutex> lock(mutex_);
         majorGCUnlocked();
@@ -256,7 +250,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     void *allocUnlocked(size_t payloadSize, size_t align = alignof(slot_t)) {
         ASSERT(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
 
-        // 大对象直接走大对象分配器
+        // Large objects use the large-object allocator directly.
         if (UNLIKELY(payloadSize > largeObjThreshold_)) {
             void *ptr = largeObjSpace_.alloc(payloadSize, align);
             if (UNLIKELY(!ptr)) {
@@ -270,7 +264,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
             return ptr;
         }
 
-        // 尝试在 birth 分配
+        // Try allocating in the birth space first.
         void *ptr = birthSpace_.alloc(payloadSize, align);
         if (UNLIKELY(!ptr)) {
             minorGCUnlocked();
@@ -290,35 +284,36 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     void minorGCUnlocked() {
         if (inGC_)
-            return; // 防止重入
+            return; // Reentrancy guard
         inGC_ = true;
 
         try {
-            // 1. 交换 Cache 和 Haven 空间
+            // 1. Swap Cache and Haven
             cacheSpace_.swap(havenSpace_);
-            havenSpace_.reset(); // 清空新的 Haven 空间
+            havenSpace_.reset(); // Clear the new Haven (To) space
 
-            // 2. 处理根集合中的年轻代对象
+            // 2. Forward young-gen objects referenced from roots
             for (rtdata::Object *&rootObj : *rootObjectSet_) {
                 if (!rootObj)
                     continue;
 
                 ObjectHeader *header = headerOf(rootObj);
 
-                // 只处理年轻代对象
+                // Only young-gen objects need forwarding here
                 if (inYoungGenSpace(header)) {
                     rootObj = forward(rootObj);
                 }
             }
 
-            // 3. 扫描老年代中指向年轻代的引用（记忆集优化）
+            // 3. Process old-to-young references (remembered set)
             for (ObjectHeader *oldHeader : rememberedSet_) {
                 if (!oldHeader->isValid())
                     continue;
 
                 rtdata::Object *oldObj = payloadOf<rtdata::Object>(oldHeader);
 
-                // 遍历更新老年代对象的引用（type 由各 Object 在创建时与 allocator 约定，此处暂无）
+                // Walk and update refs in old-gen objects (layout is per Object / allocator
+                // contract)
                 oldObj->updateRefs(
                     [this](rtdata::Object *ref) -> rtdata::Object * {
                         if (!ref)
@@ -326,7 +321,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
                         ObjectHeader *refHeader = headerOf(ref);
 
-                        // 如果引用的是年轻代对象，需要复制
+                        // Young-gen targets must be forwarded (copied)
                         if (inYoungGenSpace(refHeader)) {
                             return forward(ref);
                         }
@@ -336,13 +331,13 @@ class GenerationalAllocatorWithGC : public IAllocator {
                     nullptr);
             }
 
-            // 清空记忆集（因为年轻代已被清空）
+            // Remembered set is stale after the young-gen collection
             rememberedSet_.clear();
 
-            // 4. 使用 Cheney 算法扫描 To 空间
+            // 4. Cheney scan over To (haven) space
             cheneyScavenge();
 
-            // 5. 清空 Birth 和 Cache
+            // 5. Reset Birth and Cache
             birthSpace_.reset();
             cacheSpace_.reset();
 
@@ -354,77 +349,76 @@ class GenerationalAllocatorWithGC : public IAllocator {
     }
 
     void majorGCUnlocked() {
-        // 1. 标记阶段：标记所有可达对象
+        // 1. Mark phase: mark all reachable objects
         markPhase();
 
-        // 2. 清理年轻代
+        // 2. Collect the young generation
         minorGCUnlocked();
 
-        // 3. 压缩老年代（可选，这里使用标记-清除）
+        // 3. Sweep old generation (mark-sweep; no compaction here)
         sweepOldGen();
 
-        // 4. 清理大对象空间
+        // 4. Sweep large-object space
         sweepLargeObjects();
     }
 
     // ============================================================================
-    // 区域标识枚举
+    // Allocation region tag
     // ============================================================================
     enum AllocRegion {
-        YoungGen, // 年轻代：存放新创建的对象
-        ElderGen, // 老年代：存放长期存活的对象
-        LargeObj, // 大对象区：存放超过阈值的大对象
+        YoungGen, // Young gen: newly created small objects
+        ElderGen, // Old gen: long-lived objects after promotion
+        LargeObj, // Large-object space: payloads above the threshold
     };
 
     // ============================================================================
-    // 年轻代（Young Generation）- 三空间复制收集器
+    // Young generation — three-space copying collector
     // ============================================================================
-    // 工作机制：采用"三色标记 + 复制收集"策略
-    // - birthSpace_：对象诞生地，所有小对象首次在此分配
-    // - havenSpace_：当前幸存者空间（To-space），存放上次 GC 幸存的对象
-    // - cacheSpace_：备用幸存者空间（From-space），与 havenSpace_ 角色交换
+    // Model: tri-color style bookkeeping with copying collection.
+    // - birthSpace_: allocation nursery; first placement for small objects
+    // - havenSpace_: current survivor To-space; holds survivors from the last cycle
+    // - cacheSpace_: survivor From-space; swaps roles with havenSpace_
     //
-    // Minor GC 流程：
-    //   1. 交换 havenSpace_ ↔ cacheSpace_（角色互换）
-    //   2. 从 birthSpace_ + cacheSpace_(旧 To) 复制存活对象到 havenSpace_(新 To)
-    //   3. 清空 birthSpace_ 和 cacheSpace_
+    // Minor GC:
+    //   1. Swap havenSpace_ ↔ cacheSpace_
+    //   2. Copy live objects from birthSpace_ + cacheSpace_ (old To) into havenSpace_ (new To)
+    //   3. Reset birthSpace_ and cacheSpace_
     // ============================================================================
     BumpPointerAllocator birthSpace_;
     BumpPointerAllocator havenSpace_;
     BumpPointerAllocator cacheSpace_;
 
     // ============================================================================
-    // 老年代（Elder Generation）- 标记-清除收集器
+    // Old generation (Elder) — mark-sweep collector
     // ============================================================================
-    // 作用：存放"晋升"的长寿对象（age >= promotionAgeThreshold_）
-    // 特点：使用 FreeList 管理碎片，空间利用率高但分配稍慢
-    // GC 策略：Major GC 时执行标记-清除（Mark-Sweep）
+    // Holds promoted long-lived objects (age >= promotionAgeThreshold_).
+    // FreeList manages fragmentation; good density, slower allocation than bump.
+    // Major GC runs mark-sweep over this region.
     // ============================================================================
     FreeListAllocator elderGenSpace_;
 
     // ============================================================================
-    // 大对象空间（Large Object Space）- 独立管理
+    // Large object space — separate region
     // ============================================================================
-    // 作用：直接分配超过 largeObjThreshold_ 的大对象
-    // 优势：避免复制开销，直接在独立区域管理
-    // GC 策略：Major GC 时执行标记-清除
+    // Allocates payloads larger than largeObjThreshold_ directly.
+    // Avoids copying cost; managed in its own area; mark-sweep on major GC.
     // ============================================================================
     LargeObjectAllocator largeObjSpace_;
 
     // ============================================================================
-    // GC 参数配置
+    // GC tuning parameters
     // ============================================================================
-    size_t promotionAgeThreshold_; // 晋升年龄阈值：对象经历多少次 Minor GC 后晋升到老年代
-    size_t largeObjThreshold_;     // 大对象阈值：超过此大小直接进入大对象空间
-    float minorGCTriggerRatio_;    // Minor GC 触发比例（预留，birthSpace_ 满时触发）
-    float majorGCTriggerRatio_;    // Major GC 触发比例（老年代空间使用率）
+    size_t promotionAgeThreshold_; // Promote after this many minor GC survivals
+    size_t largeObjThreshold_;     // Objects larger than this go to large-object space
+    float minorGCTriggerRatio_;    // Reserved: minor GC trigger ratio (e.g. when birth is full)
+    float majorGCTriggerRatio_;    // Major GC trigger ratio (old-gen utilization)
 
     // ============================================================================
-    // GC 状态与根集合
+    // GC state and roots
     // ============================================================================
-    bool inGC_ = false;                                // GC 重入保护标志
-    std::vector<rtdata::Object *> *rootObjectSet_{};   // 根对象集合：栈、全局变量等直接可达对象
-    std::unordered_set<ObjectHeader *> rememberedSet_; // 记忆集：记录老年代→年轻代的跨代引用
+    bool inGC_ = false;                                // Reentrancy guard for nested GC
+    std::vector<rtdata::Object *> *rootObjectSet_{};   // Roots: stack, globals, etc.
+    std::unordered_set<ObjectHeader *> rememberedSet_; // Remembered set: old→young edges
     mutable std::mutex mutex_;
 
     bool inYoungGenSpace(ObjectHeader *header) const {
@@ -441,26 +435,26 @@ class GenerationalAllocatorWithGC : public IAllocator {
         ObjectHeader *header = headerOf(obj);
         ASSERT(header->isValid(), "Invalid ObjectHeader encountered during forwarding");
 
-        // 如果已经转发过，直接返回新地址
+        // Already forwarded: return the forwardee
         if (header->forwarded()) {
             return static_cast<rtdata::Object *>(header->forwardedAddr());
         }
 
         size_t objSize = header->objSize();
 
-        // 增加年龄
+        // Bump survival age
         header->incAge();
         uint64_t age = header->age();
 
         void *newObj            = nullptr;
         ObjectHeader *newHeader = nullptr;
 
-        // 判断是否晋升
+        // Promotion vs. copy to survivor To
         if (UNLIKELY(age >= promotionAgeThreshold_)) {
-            // 晋升到老年代
+            // Promote to old generation
             newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
             if (!newObj) {
-                // 老年代空间不足，触发 Full GC
+                // Old gen full: run full collection
                 majorGCUnlocked();
                 newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
                 if (!newObj)
@@ -471,18 +465,18 @@ class GenerationalAllocatorWithGC : public IAllocator {
             newHeader->setAge(age);
             newHeader->setRegion(AllocRegion::ElderGen);
         } else {
-            // 复制到 Survivor To
+            // Copy into survivor To
             newObj = havenSpace_.alloc(objSize, alignof(slot_t));
             if (UNLIKELY(!newObj)) {
-                // To 空间不足，直接晋升
+                // To space full: promote instead
                 newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
                 if (UNLIKELY(!newObj)) {
                     if (inGC_) {
-                        // 已经在 GC 中，无法再次触发
+                        // Already in GC; cannot recurse into another major pass here
                         throw std::bad_alloc();
                     }
 
-                    // 标记 GC 状态
+                    // Run major GC from nested forward path
                     inGC_ = true;
                     try {
                         majorGCUnlocked();
@@ -507,34 +501,33 @@ class GenerationalAllocatorWithGC : public IAllocator {
             }
         }
 
-        // 复制 payload 数据
+        // Copy payload bytes
         std::memcpy(newObj, (void *)obj, objSize);
 
-        // 通知复制后的obj已经被移动
+        // Notify the moved object (fix interior pointers, etc.)
         rtdata::Object *gcObj = reinterpret_cast<rtdata::Object *>(newObj);
         gcObj->onMoved();
 
-        // 设置转发地址
+        // Install forwarding pointer in the old header
         header->forward(newObj);
 
         return static_cast<rtdata::Object *>(newObj);
     }
 
-    // Cheney 算法：使用 BFS 方式扫描和复制对象
+    // Cheney scan: BFS over copied objects in To space
     void cheneyScavenge() {
-        std::byte *scan = havenSpace_.start(); // 扫描指针，从 To 空间开始
-        std::byte *free = havenSpace_.top();   // 空闲指针，指向下一个可分配位置
+        std::byte *scan = havenSpace_.start(); // Scan cursor in To space
+        std::byte *free = havenSpace_.top();   // Allocation frontier
 
-        // BFS 遍历：scan 追赶 free
+        // BFS: scan catches up to free as copies append
         while (scan < free) {
             ObjectHeader *header = reinterpret_cast<ObjectHeader *>(scan);
             void *payload        = scan + sizeof(ObjectHeader);
 
-            // 获取实际对象
+            // Actual heap object
             rtdata::Object *ref = reinterpret_cast<rtdata::Object *>(payload);
 
-            // 遍历对象的所有引用字段，并转发它们（type 由各 Object 在创建时与 allocator
-            // 约定，此处暂无）
+            // Forward all reference fields (layout per Object / allocator contract)
             ref->updateRefs(
                 [this](rtdata::Object *ref) -> rtdata::Object * {
                     if (!ref)
@@ -542,29 +535,29 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
                     ObjectHeader *refHeader = headerOf(ref);
 
-                    // 老年代对象不需要移动
+                    // Old-gen targets are not moved by minor GC
                     if (!inYoungGenSpace(refHeader)) {
                         return ref;
                     }
 
-                    // 复制或获取转发地址
+                    // Copy or follow existing forward
                     return forward(ref);
                 },
                 nullptr);
 
-            // 移动到下一个对象
+            // Advance to next object in To space
             scan += header->size();
-            // 更新 free 指针（可能在 traverse 中有新对象被复制）
+            // free may move when forward() copies more young objects
             free = havenSpace_.top();
         }
     }
 
-    // 标记阶段：深度优先标记所有可达对象
+    // Mark phase: depth-first mark all reachable objects.
     void markPhase() {
-        // 清除所有标记
+        // Clear all marks.
         clearMarks();
 
-        // 从根集合开始标记
+        // Start marking from the root set.
         for (rtdata::Object *root : *rootObjectSet_) {
             if (root) {
                 markObject(root);
@@ -573,11 +566,24 @@ class GenerationalAllocatorWithGC : public IAllocator {
     }
 
     void clearMarks() {
-        // 清除老年代标记
+        // Clear old-generation marks.
         elderGenSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
 
-        // 清除大对象空间标记
+        // Clear large-object-space marks.
         largeObjSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
+
+        if (rootObjectSet_) {
+            for (rtdata::Object *root : *rootObjectSet_) {
+                if (!root) {
+                    continue;
+                }
+                ObjectHeader *header = headerOf(root);
+                if (!inYoungGenSpace(header) && !inElderGenSpace(header) &&
+                    !inLargeObjSpace(header)) {
+                    header->unmark();
+                }
+            }
+        }
     }
 
     void markObject(rtdata::Object *obj) {
@@ -597,14 +603,16 @@ class GenerationalAllocatorWithGC : public IAllocator {
             void *payload        = reinterpret_cast<void *>(current);
             ObjectHeader *header = headerOf(payload);
 
-            // 如果已标记，跳过
+            // Skip if already marked.
             if (header->marked_)
                 continue;
 
-            // 标记当前对象
+            // Mark the current object.
             header->mark();
 
-            // 收集所有引用的对象到栈中（type 由各 Object 在创建时与 allocator 约定，此处暂无）
+            // Collect all referenced objects onto the stack (the type is
+            // agreed between each Object and the allocator at creation time;
+            // none is available here yet).
             current->updateRefs(
                 [&markStack](rtdata::Object *ref) -> rtdata::Object * {
                     if (ref) {
@@ -616,7 +624,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         }
     }
 
-    // 清除老年代中未标记的对象
+    // Sweep unmarked objects from the old generation.
     void sweepOldGen() {
         std::vector<ObjectHeader *> unreachable;
 
@@ -626,11 +634,11 @@ class GenerationalAllocatorWithGC : public IAllocator {
             }
         });
 
-        // 批量释放
+        // Bulk free.
         elderGenSpace_.freeBulk(unreachable);
     }
 
-    // 清除大对象空间中未标记的对象
+    // Sweep unmarked objects from the large-object space.
     void sweepLargeObjects() {
         std::vector<ObjectHeader *> unreachable;
 
@@ -640,7 +648,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
             }
         });
 
-        // 批量释放
+        // Bulk free.
         largeObjSpace_.freeBulk(unreachable);
     }
 };

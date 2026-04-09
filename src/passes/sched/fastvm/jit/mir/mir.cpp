@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -376,7 +376,7 @@ std::string mirToString(const Mir &m) {
     return os.str();
 }
 
-// 使用 imm64 作为静态地址的 op，可带符号/static slot 注释
+// Use imm64 as a static address operand; symbol/static-slot comments are allowed.
 static bool mirOpUsesImm64AsAddr(MirOp op) {
     switch (op) {
     case MirOp::MovRegImm64:
@@ -389,7 +389,7 @@ static bool mirOpUsesImm64AsAddr(MirOp op) {
     }
 }
 
-// 仅用于帧访问的 op 才带 [rdi+disp]，需槽位注释
+// Only ops that access the frame use [rdi+disp], so they need slot comments.
 static bool mirOpUsesFrameDisp(MirOp op) {
     switch (op) {
     case MirOp::VLoadFromFrame:
@@ -404,7 +404,7 @@ static bool mirOpUsesFrameDisp(MirOp op) {
     }
 }
 
-// 注释内容由 MIR 层决定，格式：frame slot[N]、static slot[-N] 或符号名由 opts 提供
+// Comment text is determined by the MIR layer: frame slot[N], static slot[-N], or a symbol name
 static std::string
 formatFrameSlotComment(int disp, const std::unordered_map<int, std::string> *slotNames) {
     if (slotNames) {
@@ -425,11 +425,13 @@ formatSymbolComment(uint64_t imm64, const std::unordered_map<uint64_t, std::stri
     return std::string("  ; ") + it->second;
 }
 
-// 返回 (行号, 注释) 列表，注释可挂在任意行；行号与 mirToString 展开行一致（0 起）
+// Return a list of (line number, comment) pairs; comments may be attached to any line, and line
+// numbers match the expanded lines produced by mirToString (starting at 0).
 static std::vector<std::pair<size_t, std::string>>
 mirCommentAssignments(const Mir &m, const MirPrintOptions &opts) {
     std::vector<std::pair<size_t, std::string>> out;
-    const size_t commentLine = 0u; // 当前所有带注释的 op 其操作数均在首行
+    const size_t commentLine =
+        0u; // All currently commented ops place their operands on the first line.
     if (mirOpUsesFrameDisp(m.op)) {
         std::string c = formatFrameSlotComment(m.disp, opts.slotNames);
         if (!c.empty())
@@ -445,7 +447,7 @@ mirCommentAssignments(const Mir &m, const MirPrintOptions &opts) {
 
 void mirPrint(const MirBuffer &buf, std::ostream &out, const MirPrintOptions &opts) {
     const size_t n = buf.size();
-    // 该 pc 对应的首条 MIR 才在 [pc] 列显示数值
+    // Only the first MIR for a given pc is shown in the [pc] column.
     std::vector<bool> firstPc(n, false);
     for (size_t i = 0; i < n; ++i) {
         if (!buf[i].hasPc())
@@ -468,7 +470,7 @@ void mirPrint(const MirBuffer &buf, std::ostream &out, const MirPrintOptions &op
     for (uint32_t k = maxPc; k >= 10; k /= 10)
         ++pcWidth;
     if (pcWidth < 2)
-        pcWidth = 2; // 至少两位，与 idx 对齐
+        pcWidth = 2; // At least two digits, to align with idx.
     int idxWidth = 1;
     for (size_t k = (n <= 1u) ? 0u : n - 1; k >= 10; k /= 10)
         ++idxWidth;
@@ -479,7 +481,7 @@ void mirPrint(const MirBuffer &buf, std::ostream &out, const MirPrintOptions &op
         std::string linePrefixCont = std::string(pcWidth + idxWidth + 6, ' ') + "  ";
         std::string text           = mirToString(m);
         std::vector<std::pair<size_t, std::string>> assignments = mirCommentAssignments(m, opts);
-        // 按行收集注释（支持多行时注释在任意行）
+        // Collect comments by line (supports comments on any line for multi-line output).
         std::vector<std::string> lineComments;
         {
             size_t numLines = 1u;

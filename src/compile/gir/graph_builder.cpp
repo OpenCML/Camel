@@ -13,12 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 29, 2026
- * Updated: Apr. 04, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
+
 /*
- * GraphBuilder 的实现与仅被其使用的文件内辅助函数（clone/inline/finalize/layout 等）。
- * Graph 类型自身的生命周期、调试指纹与 arena 冻结逻辑见 graph.cpp。
+ * GraphBuilder implementation and file-local helpers used only by it
+ * (clone/inline/finalize/layout, etc.).
+ * Graph's own lifecycle, debug fingerprint, and arena freezing logic live in graph.cpp.
  */
 
 #include "camel/compile/gir.h"
@@ -83,8 +85,9 @@ void overwriteFreshNodeAdjacencyPreservingOrder(
     for (Node *oldNode : nodes) {
         Node *newNode =
             requireMappedNode(oldNode, nodeMap, "Mapped node not found when copying edges.");
-        // BRCH/JOIN 等控制流节点把边序当作分支槽位语义，因此 fresh clone 需要按源图顺序
-        // 直接覆写邻接表，不能依赖 unordered_map 迭代后的 link 副作用去“碰运气”恢复顺序。
+        // Control-flow nodes such as BRCH/JOIN treat edge order as branch-slot semantics, so a
+        // fresh clone must overwrite adjacency lists in source order. Do not rely on unordered_map
+        // iteration side effects from link calls to recover order by chance.
         detail::NodeMutation::withInputs(newNode) = mapNodeVecPreservingOrder(
             oldNode->withInputs(),
             nodeMap,
@@ -308,7 +311,8 @@ size_t estimateFrozenBytesForFinalize(const Graph &graph) {
             node->normOutputs().size() + node->withOutputs().size() + node->ctrlOutputs().size();
     }
     edgeCount += graph.normPorts().size() + graph.withPorts().size() + graph.closure().size();
-    // 经验模型：邻接数组 + static slots + 元数据冗余，避免 finalize 期间频繁扩块。
+    // Heuristic model: adjacency arrays + static slots + metadata overhead, to avoid frequent
+    // growth during finalize.
     const size_t adjacencyBytes = edgeCount * kPtrBytes;
     const size_t staticBytes    = graph.staticDataSize() * sizeof(slot_t);
     const size_t nodeBytes      = graph.nodes().size() * 16;
@@ -408,13 +412,14 @@ void GraphBuilder::assertBuildable(const char *action) const {
 }
 
 void GraphBuilder::markMutated() const {
-    // mutation 仅允许发生在 draft 工作态：
-    // - sealed 图会在 assertBuildable() 提前失败；
-    // - staging 是唯一可变源，Graph 字段只作为兼容镜像。
+    // Mutation is only allowed while the graph is in Draft state:
+    // - sealed graphs fail early in assertBuildable();
+    // - staging is the only mutable source, and Graph fields are just a compatibility mirror.
     graph_->sealState_  = SealState::Draft;
     graph_->frameSize_  = 0;
     graph_->staticArea_ = nullptr;
-    // 保持 draft 期 Graph 视图与 staging 同步，避免旧读路径读取到过期字段。
+    // Keep the Draft Graph view synchronized with staging so old read paths do not observe stale
+    // fields.
     syncStateToGraph();
 }
 
@@ -526,7 +531,8 @@ void GraphBuilder::parametrizeClosure() const {
     st.withPorts.insert(st.withPorts.begin(), st.closure.begin(), st.closure.end());
     st.closure.clear();
     st.parameterized = true;
-    // 不再立即 rearrange：slot 编号和 layout 统一在 finalize 时一次性导出。
+    // Do not rearrange immediately: slot numbering and layout are exported in one shot during
+    // finalize.
     markMutated();
 }
 void GraphBuilder::setOutput(Node *node) const {
@@ -572,7 +578,14 @@ void GraphBuilder::addSubGraph(const graph_ptr_t &graph) const {
             graph->mangledName(),
             graph_->name_);
     }
-    graph->outer_ = graph_->shared_from_this();
+    try {
+        graph->outer_ = graph_->shared_from_this();
+    } catch (const std::bad_weak_ptr &) {
+        throw std::runtime_error(
+            std::format(
+                "GraphBuilder::addSubGraph owner '{}' is not managed by shared_ptr.",
+                graph_->name_));
+    }
     markMutated();
 }
 
@@ -592,7 +605,10 @@ void GraphBuilder::eraseSubGraph(const graph_ptr_t &graph) const {
         if (existing.empty()) {
             st.subGraphs.erase(graph->name());
         }
-        graph->outer_.reset();
+        if (const auto currentOuter = graph->outer();
+            currentOuter && currentOuter.get() == graph_) {
+            graph->outer_.reset();
+        }
     }
     markMutated();
 }
@@ -604,7 +620,14 @@ void GraphBuilder::addDependency(const graph_ptr_t &graph) const {
         return;
     }
     state().dependencies.insert(graph);
-    graph->dependents_.insert(graph_->shared_from_this());
+    try {
+        graph->dependents_.insert(graph_->shared_from_this());
+    } catch (const std::bad_weak_ptr &) {
+        throw std::runtime_error(
+            std::format(
+                "GraphBuilder::addDependency owner '{}' is not managed by shared_ptr.",
+                graph_->name_));
+    }
     CAMEL_LOG_DEBUG_S(
         "GIR",
         "Added dependency: Graph '{}' depends on graph '{}'.",
@@ -616,7 +639,14 @@ void GraphBuilder::addDependency(const graph_ptr_t &graph) const {
 void GraphBuilder::eraseDependency(const graph_ptr_t &graph) const {
     assertBuildable("remove dependency from");
     state().dependencies.erase(graph);
-    graph->dependents_.erase(graph_->shared_from_this());
+    try {
+        graph->dependents_.erase(graph_->shared_from_this());
+    } catch (const std::bad_weak_ptr &) {
+        throw std::runtime_error(
+            std::format(
+                "GraphBuilder::eraseDependency owner '{}' is not managed by shared_ptr.",
+                graph_->name_));
+    }
     CAMEL_LOG_DEBUG_S(
         "GIR",
         "Removed dependency: Graph '{}' no longer depends on graph '{}'.",
@@ -626,10 +656,11 @@ void GraphBuilder::eraseDependency(const graph_ptr_t &graph) const {
 }
 
 // =============================================================================
-// Graph 克隆与内联
+// Graph cloning and inlining
 // =============================================================================
 
-graph_ptr_t GraphBuilder::cloneGraph(const graph_ptr_t &graph) {
+graph_ptr_t GraphBuilder::cloneGraph(
+    const graph_ptr_t &graph, std::unordered_map<const Node *, Node *> *nodeMapOut) {
     if (!graph) {
         return nullptr;
     }
@@ -648,7 +679,7 @@ graph_ptr_t GraphBuilder::cloneGraph(const graph_ptr_t &graph) {
     newGraph->signature_.staticDataType  = const_cast<TupleType *>(src->staticDataType());
     newGraph->signature_.runtimeDataType = const_cast<TupleType *>(src->runtimeDataType());
     newGraph->signature_.closureType     = const_cast<TupleType *>(src->closureType());
-    // clone 后总是回到 Draft 状态，可继续编辑并重新 seal。
+    // After cloning, the graph always returns to Draft state and can be edited and sealed again.
     newGraph->frameSize_  = 0;
     newGraph->staticArea_ = nullptr;
 
@@ -734,26 +765,28 @@ graph_ptr_t GraphBuilder::cloneGraph(const graph_ptr_t &graph) {
     overwriteFreshNodeAdjacencyPreservingOrder(src->nodes(), nodeMap, true);
     Node *srcExit = src->exitNode();
     if (!srcExit) {
-        throw std::runtime_error(std::format(
-            "cloneGraph('{}'): source graph has no output anchor.", src->name()));
+        throw std::runtime_error(
+            std::format("cloneGraph('{}'): source graph has no output anchor.", src->name()));
     }
     auto exitIt = nodeMap.find(srcExit);
     if (exitIt == nodeMap.end()) {
-        throw std::runtime_error(std::format(
-            "cloneGraph('{}'): exit node {:p} not in nodeMap (map size {}).",
-            src->name(),
-            static_cast<void *>(srcExit),
-            nodeMap.size()));
+        throw std::runtime_error(
+            std::format(
+                "cloneGraph('{}'): exit node {:p} not in nodeMap (map size {}).",
+                src->name(),
+                static_cast<void *>(srcExit),
+                nodeMap.size()));
     }
     newGraph->exitNode_ = exitIt->second;
     if (newGraph->builderState_) {
         newGraph->builderState_->exitNode = exitIt->second;
     }
 
-    // 浅拷贝策略：共享依赖与子图引用，不递归克隆。
-    // 但子图仅保留“真实词法拥有”关系（sub->outer == src）。
-    // 某些历史图可能在 subGraphs 中混入别名引用；若直接复制会污染 outer 层级，
-    // 导致重写后出现错误嵌套（如全局函数被挂到分支 arm 子图下）。
+    // Shallow-copy strategy: share dependencies and subgraph references without recursive
+    // cloning. Subgraphs retain only the real lexical ownership relation (sub->outer == src).
+    // Some legacy graphs may contain alias references in subGraphs; copying them directly would
+    // pollute the outer hierarchy and produce incorrect nesting after rewriting (for example,
+    // a global function ending up under a branch arm subgraph).
     newGraph->subGraphs_.clear();
     for (const auto &[name, subGraphs] : src->subGraphs()) {
         std::unordered_set<graph_ptr_t> lexicalOwned;
@@ -780,6 +813,13 @@ graph_ptr_t GraphBuilder::cloneGraph(const graph_ptr_t &graph) {
             "cloneGraph output anchor missing for '{}' (source='{}').",
             newGraph->name_,
             src->name()));
+    if (nodeMapOut != nullptr) {
+        nodeMapOut->clear();
+        nodeMapOut->reserve(nodeMap.size());
+        for (const auto &[srcNode, clonedNode] : nodeMap) {
+            nodeMapOut->emplace(srcNode, clonedNode);
+        }
+    }
     return newGraph;
 }
 
@@ -787,10 +827,154 @@ void GraphBuilder::finalize() const {
     if (graph_->sealState_ == SealState::Sealed) {
         return;
     }
+    auto canonicalizeFuncTargetRegistrations = [&](Graph &g) {
+        auto findRegisteredHandle = [&](Graph *target) -> graph_ptr_t {
+            if (!target || target == &g) {
+                return nullptr;
+            }
+            for (const auto &[_, subGraphs] : g.subGraphs()) {
+                for (const auto &sub : subGraphs) {
+                    if (sub.get() == target) {
+                        return sub;
+                    }
+                }
+            }
+            for (const auto &dep : g.dependencies()) {
+                if (dep.get() == target) {
+                    return dep;
+                }
+            }
+            graph_ptr_t byName = nullptr;
+            if (!target->name().empty()) {
+                for (const auto &[_, subGraphs] : g.subGraphs()) {
+                    for (const auto &sub : subGraphs) {
+                        if (sub->name() == target->name() &&
+                            sub->funcType() == target->funcType()) {
+                            if (byName && byName.get() != sub.get()) {
+                                return nullptr;
+                            }
+                            byName = sub;
+                        }
+                    }
+                }
+                for (const auto &dep : g.dependencies()) {
+                    if (dep->name() == target->name() && dep->funcType() == target->funcType()) {
+                        if (byName && byName.get() != dep.get()) {
+                            return nullptr;
+                        }
+                        byName = dep;
+                    }
+                }
+            }
+            return byName;
+        };
+
+        std::vector<Node *> carriers;
+        carriers.reserve(g.nodes().size() + 1);
+        for (Node *node : g.nodes()) {
+            carriers.push_back(node);
+        }
+        if (Node *exitAnchor = g.exitNode();
+            std::ranges::find(carriers, exitAnchor) == carriers.end()) {
+            carriers.push_back(exitAnchor);
+        }
+
+        for (Node *node : carriers) {
+            if (!node || node->type() != NodeType::FUNC) {
+                continue;
+            }
+            auto *func       = tt::as_ptr<FuncNode>(node);
+            Graph *bodyGraph = func ? func->bodyGraph() : nullptr;
+            if (!bodyGraph || bodyGraph == &g) {
+                continue;
+            }
+
+            if (graph_ptr_t registered = findRegisteredHandle(bodyGraph)) {
+                if (registered.get() != bodyGraph) {
+                    detail::NodeMutation::setBodyGraph(func, registered.get());
+                }
+                continue;
+            }
+
+            graph_ptr_t ownedTarget;
+            try {
+                ownedTarget = bodyGraph->shared_from_this();
+            } catch (const std::bad_weak_ptr &) {
+                throw std::runtime_error(
+                    std::format(
+                        "GraphBuilder::finalize encountered non-owned FUNC target '{}' ({:p}) in "
+                        "graph '{}'.",
+                        bodyGraph->name(),
+                        static_cast<void *>(bodyGraph),
+                        g.name()));
+            }
+            if (auto outer = bodyGraph->outer();
+                outer && outer.get() == &g && !bodyGraph->name().empty()) {
+                g.subGraphs_[bodyGraph->name()].insert(ownedTarget);
+            } else {
+                g.dependencies_.insert(ownedTarget);
+                ownedTarget->dependents_.insert(g.shared_from_this());
+            }
+        }
+    };
+    auto hasRegisteredFuncTargets = [&](const Graph &g) {
+        std::vector<Node *> carriers;
+        carriers.reserve(g.nodes().size() + 1);
+        for (Node *node : g.nodes()) {
+            carriers.push_back(node);
+        }
+        if (Node *exitAnchor = g.exitNode();
+            std::ranges::find(carriers, exitAnchor) == carriers.end()) {
+            carriers.push_back(exitAnchor);
+        }
+        for (Node *node : carriers) {
+            if (!node || node->type() != NodeType::FUNC) {
+                continue;
+            }
+            auto *func       = tt::as_ptr<FuncNode>(node);
+            Graph *bodyGraph = func ? func->bodyGraph() : nullptr;
+            if (!bodyGraph || bodyGraph == &g) {
+                continue;
+            }
+            bool found = false;
+            for (const auto &[_, subGraphs] : g.subGraphs()) {
+                for (const auto &sub : subGraphs) {
+                    if (sub.get() == bodyGraph) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) {
+                    break;
+                }
+            }
+            if (!found) {
+                for (const auto &dep : g.dependencies()) {
+                    if (dep.get() == bodyGraph) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
+    };
+    const bool hadRegisteredTargetsBeforeSync = hasRegisteredFuncTargets(*graph_);
     if (graph_->builderState_) {
         syncStateToGraph();
-        // finalize 阶段仅以 Graph 固化字段为准，避免 staging 旧视图干扰布局与 frame 安装。
+        // During finalize, rely only on the Graph's frozen fields to avoid stale staging views
+        // interfering with layout and frame installation.
         graph_->builderState_.reset();
+    }
+    canonicalizeFuncTargetRegistrations(*graph_);
+    if (hadRegisteredTargetsBeforeSync && !hasRegisteredFuncTargets(*graph_)) {
+        throw std::runtime_error(
+            std::format(
+                "Graph finalize('{}') lost FUNC target registrations during draft->sealed sync.",
+                graph_->name()));
     }
     ASSERT(graph_->sealState_ == SealState::Draft, "Graph seal state is invalid.");
     graph_->sealState_ = SealState::Sealing;
@@ -801,7 +985,8 @@ void GraphBuilder::finalize() const {
     } else {
         graph_->promoteNodeDebugIds(nullptr);
     }
-    // finalize 之后立即冻结邻接，避免出现 finalized=true 但节点仍为 draft 邻接的分裂状态。
+    // Freeze adjacency immediately after finalize to avoid a split state where finalized=true but
+    // nodes still have draft adjacency.
     auto &arena = *graph_->arena_;
     for (Node *owned : graph_->ownedNodes_) {
         if (owned && !owned->isFrozen()) {
@@ -827,7 +1012,7 @@ void GraphBuilder::finalize() const {
 
 void GraphBuilder::sealGraph() {
     finalize();
-    // consume 语义：seal 后 builder 不可再使用。
+    // Consume semantics: the builder cannot be reused after seal.
     if (graph_ != nullptr) {
         graph_->builderState_.reset();
     }
@@ -838,9 +1023,9 @@ void GraphBuilder::sealGraphRecursively(const graph_ptr_t &graph) {
     if (!graph) {
         return;
     }
-    // 与 GraphDraft::seal 对齐：封印前校验。assertGraphSealingPreconditions 对 __root__ 无 exit
-    // 的情况豁免（模块容器），其余图在 Release 下用 throw 保证不可静默通过。
-    GraphBuilder::validateGraphRecursively(graph);
+    // Keep this aligned with GraphDraft::seal: validate before sealing.
+    // assertGraphSealingPreconditions exempts __root__ graphs without an exit (module containers);
+    // all other graphs throw in Release to prevent silent success.
     std::unordered_set<Graph *> visited;
     std::function<void(Graph *)> sealDfs = [&](Graph *curr) {
         if (curr == nullptr || !visited.insert(curr).second) {
@@ -978,7 +1163,8 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
                 withInputs[withPorts.size() + closure.size() + i]);
         }
     } else {
-        // 兼容旧 API 迁移期：当 norm/with 分桶不一致时，退化为按参数总序绑定。
+        // Compatibility for the old API migration period: when norm/with bucket counts disagree,
+        // fall back to binding parameters in overall order.
         node_vec_t allPorts = targetGraph.ports();
         allPorts.insert(allPorts.end(), closure.begin(), closure.end());
         allPorts.insert(allPorts.end(), freeInputs.begin(), freeInputs.end());
@@ -1064,6 +1250,7 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
     const node_vec_t normConsumers = collectConsumersByInput(*graph_, node, LinkType::Norm);
     const node_vec_t withConsumers = collectConsumersByInput(*graph_, node, LinkType::With);
     const node_vec_t ctrlConsumers = collectConsumersByInput(*graph_, node, LinkType::Ctrl);
+    const node_vec_t ctrlPreds(node->ctrlInputs().begin(), node->ctrlInputs().end());
     node_vec_t entryTargets;
     if (!parameterGateTargets.empty()) {
         entryTargets = parameterGateTargets;
@@ -1078,8 +1265,10 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
         }
     }
     if (entryTargets.empty()) {
-        // 当子图仅由 DATA/PORT 直达值出口锚点时，反向推导可能得不到可执行入口根。
-        // 此时将 valueExit 作为隐式入口目标，再按统一收敛逻辑求 ctrlEntry。
+        // When a subgraph reaches the value exit anchor only through DATA/PORT nodes, reverse
+        // inference may not produce an executable entry root.
+        // In that case, treat valueExit as an implicit entry target and compute ctrlEntry via the
+        // shared convergence logic.
         entryTargets.push_back(result.valueExit);
     }
     if (entryTargets.size() > 1) {
@@ -1092,6 +1281,17 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
     }
     if (entryTargets.size() == 1) {
         result.ctrlEntry = entryTargets.front();
+    }
+
+    if (result.ctrlEntry && result.ctrlEntry != node) {
+        for (Node *pred : ctrlPreds) {
+            if (!pred) {
+                continue;
+            }
+            while (std::ranges::find(pred->ctrlOutputs(), node) != pred->ctrlOutputs().end()) {
+                Node::replaceOutput(LinkType::Ctrl, pred, node, result.ctrlEntry);
+            }
+        }
     }
 
     Node *completionCtrl = result.valueExit;
@@ -1114,6 +1314,66 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
     }
 
     if (options.importReferencedGraphs) {
+        std::unordered_set<graph_ptr_t> importedFuncBodies;
+        for (Node *n : targetGraph.nodes()) {
+            if (!n || n->type() != NodeType::FUNC) {
+                continue;
+            }
+            auto *innerFunc = tt::as_ptr<FuncNode>(n);
+            if (!innerFunc || !innerFunc->bodyGraph()) {
+                continue;
+            }
+            Graph *bodyGraph = innerFunc->bodyGraph();
+            if (bodyGraph == graph_) {
+                graph_ptr_t selfHandle;
+                try {
+                    selfHandle = graph().shared_from_this();
+                } catch (const std::bad_weak_ptr &) {
+                    throw std::runtime_error(
+                        std::format(
+                            "inlineCallable('{}' <- '{}') could not acquire shared owner "
+                            "handle.",
+                            graph_->name(),
+                            targetGraph.name()));
+                }
+                GraphBuilder(graph_).addDependency(selfHandle);
+                continue;
+            }
+            graph_ptr_t bodyHandle;
+            for (const auto &[_, subGraphs] : targetGraph.subGraphs()) {
+                for (const auto &subGraph : subGraphs) {
+                    if (subGraph.get() == bodyGraph) {
+                        bodyHandle = subGraph;
+                        break;
+                    }
+                }
+                if (bodyHandle) {
+                    break;
+                }
+            }
+            if (!bodyHandle) {
+                for (const auto &dep : targetGraph.dependencies()) {
+                    if (dep.get() == bodyGraph) {
+                        bodyHandle = dep;
+                        break;
+                    }
+                }
+            }
+            if (!bodyHandle) {
+                try {
+                    bodyHandle = bodyGraph->shared_from_this();
+                } catch (const std::bad_weak_ptr &) {
+                    bodyHandle = nullptr;
+                }
+            }
+            if (!bodyHandle || importedFuncBodies.contains(bodyHandle) ||
+                graph_->dependencies().contains(bodyHandle)) {
+                continue;
+            }
+            GraphBuilder(graph_).addDependency(bodyHandle);
+            importedFuncBodies.insert(bodyHandle);
+            result.importedDependencies.push_back(bodyHandle);
+        }
         for (const auto &[_, subGraphs] : targetGraph.subGraphs()) {
             for (const auto &subGraph : subGraphs) {
                 if (hasSubgraphReference(*graph_, subGraph)) {
@@ -1130,6 +1390,51 @@ InlineResult GraphBuilder::inlineCallable(Node *node, const InlineOptions &optio
             }
             GraphBuilder(graph_).addDependency(dep);
             result.importedDependencies.push_back(dep);
+        }
+    }
+
+    for (const auto &[_, clonedNode] : nodeMap) {
+        auto *clonedFunc = (clonedNode && clonedNode->type() == NodeType::FUNC)
+                               ? tt::as_ptr<FuncNode>(clonedNode)
+                               : nullptr;
+        if (!clonedFunc || !clonedFunc->bodyGraph()) {
+            continue;
+        }
+        Graph *bodyGraph = clonedFunc->bodyGraph();
+        if (bodyGraph->name().empty()) {
+            throw std::runtime_error(
+                std::format(
+                    "inlineCallable('{}' <- '{}') produced FUNC '{}' with anonymous body graph "
+                    "{:p}.",
+                    graph_->name(),
+                    targetGraph.name(),
+                    clonedFunc->toString(),
+                    static_cast<void *>(bodyGraph)));
+        }
+        graph_ptr_t bodyHandle;
+        try {
+            bodyHandle = bodyGraph->shared_from_this();
+        } catch (const std::bad_weak_ptr &) {
+            throw std::runtime_error(
+                std::format(
+                    "inlineCallable('{}' <- '{}') produced FUNC '{}' with non-owned body graph "
+                    "'{}' ({:p}).",
+                    graph_->name(),
+                    targetGraph.name(),
+                    clonedFunc->toString(),
+                    bodyGraph->name(),
+                    static_cast<void *>(bodyGraph)));
+        }
+        if (bodyGraph != graph_ && !graph_->dependencies().contains(bodyHandle)) {
+            throw std::runtime_error(
+                std::format(
+                    "inlineCallable('{}' <- '{}') produced FUNC '{}' targeting '{}' without "
+                    "dependency "
+                    "registration.",
+                    graph_->name(),
+                    targetGraph.name(),
+                    clonedFunc->toString(),
+                    bodyGraph->name()));
         }
     }
 
@@ -1154,7 +1459,7 @@ LayoutResult GraphBuilder::computeLayout(const Graph &graph) {
     result.staticDataArr = {NullSlot};
     type_vec_t staticDataTypes{Type::Void()}, runtimeDataTypes{Type::Void()}, closureTypes;
 
-    // 用于 exitNode 查找其 input 的新 index
+    // New index used by exitNode to look up its input.
     std::unordered_map<Node *, data_idx_t> indexMap;
 
     auto assignIndex = [&](Node *node, data_idx_t idx) {

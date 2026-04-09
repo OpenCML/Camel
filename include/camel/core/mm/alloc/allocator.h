@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,33 +37,33 @@ class IAllocator {
   public:
     virtual ~IAllocator() = default;
 
-    // 分配内存，可指定对齐
+    // Allocate memory with optional alignment.
     virtual void *alloc(size_t size, size_t align = alignof(slot_t)) = 0;
 
-    // 释放单个对象（在 GC 新生代里可能是空实现）
+    // Free a single object (may be a no-op in a GC nursery).
     virtual void free(void *ptr) = 0;
 
-    // 批量清空（适合半空间 / bump pointer 分配器）
+    // Bulk clear (suitable for semispaces / bump-pointer allocators).
     virtual void reset() { ASSERT(false, "reset() not implemented for this allocator"); };
 
-    // 查询剩余可用空间
+    // Query remaining available space.
     virtual size_t available() const {
         ASSERT(false, "available() not implemented for this allocator");
         return 0;
     };
 
-    // 判断指针是否属于该分配器管理的区域
+    // Check whether the pointer belongs to this allocator's managed region.
     virtual bool contains(void *ptr) const {
         ASSERT(false, "contains() not implemented for this allocator");
         return false;
     };
 
-    // 遍历已分配对象（只读，不允许在回调中直接free）
+    // Iterate allocated objects (read-only; do not free directly in the callback).
     virtual void iterateAllocated(const std::function<void(ObjectHeader *)> &visitor) const {
         ASSERT(false, "iterateAllocated() not implemented for this allocator");
     };
 
-    // 批量释放给定对象头列表
+    // Bulk-free the given list of object headers.
     virtual void freeBulk(const std::vector<ObjectHeader *> &objects) {
         for (auto *obj : objects) {
             free(reinterpret_cast<void *>(reinterpret_cast<uint8_t *>(obj) + sizeof(ObjectHeader)));
@@ -73,13 +73,13 @@ class IAllocator {
 
 template <typename T, typename... Args>
 inline T *constructAt(IAllocator &allocator, Args &&...args) {
-    // 分配内存，按 T 的对齐方式对齐
+    // Allocate memory aligned to T.
     void *ptr = allocator.alloc(sizeof(T), alignof(T));
     if (!ptr) {
         throw std::bad_alloc();
     }
 
-    // 用 placement new 在分配的内存地址上构造对象
+    // Construct the object in the allocated memory via placement new.
     return new (ptr) T(std::forward<Args>(args)...);
 }
 

@@ -1,6 +1,6 @@
 # Camel 项目开发环境配置指南
 
-[English](setup.md) | 中文简体
+[English](setup.en.md) | 中文简体
 
 ## 1. 项目简介
 
@@ -234,6 +234,8 @@ tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
    ```bash
    npm run clean
    ```
+
+5. CMake 编译选项（FastVM JIT、computed goto、Python 嵌入模块等）与 `CAMEL_SKIP_PYTHON` 环境变量说明，见 [编译选项说明](build-options.cn.md)。
 
 ---
 

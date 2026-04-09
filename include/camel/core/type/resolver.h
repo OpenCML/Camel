@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -68,8 +68,8 @@ class StaticFuncTypeResolver : public FuncTypeResolver {
 
 class DynamicFuncTypeResolver : public FuncTypeResolver {
   public:
-    // int表示变量个数，vector<bool>表示是否为可变参数
-    // int(-1) 表示不限制变量个数
+    // int denotes parameter count, and vector<bool> indicates whether each parameter is variadic.
+    // int(-1) means the parameter count is unconstrained.
     using var_declare_t = std::pair<int, std::vector<bool>>;
     DynamicFuncTypeResolver(
         const std::pair<var_declare_t, var_declare_t> &&vars, const std::string &&signature,

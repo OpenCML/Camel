@@ -145,4 +145,4 @@ npm run build
 npm run pypi:rollup
 ```
 
-更通用的构建约定见 [`AGENTS.md`](../AGENTS.md)；Python 运行时收集与 `collect-out` 行为见 [`cpp_export_build.md`](cpp_export_build.md) 第 6 节。
+更通用的构建约定见 [`AGENTS.md`](../AGENTS.md)；CMake 可选开关（如 `CAMEL_ENABLE_PYTHON`、`CAMEL_SKIP_PYTHON`）见 [`build-options.cn.md`](build-options.cn.md)；Python 运行时收集与 `collect-out` 行为见 [`cpp_export_build.md`](cpp_export_build.md) 第 6 节。

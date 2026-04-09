@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Mar. 18, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -131,9 +131,10 @@ inline void setOriginFromAst(
     camel::source::OriginKind kind = camel::source::OriginKind::GctNode,
     const std::string &label = "gct", bool synthetic = false,
     std::vector<camel::source::origin_id_t> inputs = {}) {
-    // GCT 是 AST 的有损 lowering：
-    // 一个 AST 节点可能被改写成别的语义形态，但这里仍沿主派生链继承 AST 的 primarySpan，
-    // 从而保证语义诊断与后续 GIR/debugger 至少能回到“最主要的源码责任区间”。
+    // GCT is a lossy lowering of AST:
+    // an AST node may be rewritten into a different semantic shape, but we still inherit the
+    // AST primarySpan along the main derivation chain so diagnostics and later GIR/debugger paths
+    // can recover the main source-responsibility span.
     if (!context || !node || !ast) {
         return;
     }
@@ -505,7 +506,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 if (i < typeNodes->size()) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(i);
                     Type *type              = visitType(typeASTNode);
-                    // 先尝试做静态类型转换
+                    // Try a static type conversion first.
                     if (dataNode->type() == LoadType::DATA) {
                         const auto &dataLoad = dataNode->loadAs<DataLoad>();
                         const auto &data     = dataLoad->data();
@@ -550,7 +551,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 if (typeNodes->size() > 0) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
                     Type *type              = visitType(typeASTNode);
-                    // 先尝试做静态类型转换
+                    // Try a static type conversion first.
                     if (dataNode->type() == LoadType::DATA) {
                         const auto &dataLoad = dataNode->loadAs<DataLoad>();
                         const auto &data     = dataLoad->data();
@@ -735,7 +736,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
             node_ptr_t d         = visitData(dataNode);
             *exitNode << visitData(dataNode);
         } else {
-            // Case 2: Multiple data nodes — 用 Factory 一次构建，避免重复计算 Type
+            // Case 2: Multiple data nodes - build once with Factory to avoid recomputing the type.
             TupleDataFactory tupleFactory;
             bool dangling       = false;
             node_ptr_t execNode = createNodeAs<ExecLoad>();
@@ -1971,7 +1972,7 @@ ArrayType(siz dim) : Type type ;
 Type *Builder::visitArrayType(const AST::node_ptr_t &ast) {
     ENTER("ArrayType");
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ArrayType");
-    // TODO: 这里的dims信息暂时没用到
+    // TODO: The dims information is not used here yet.
     // const auto &arrayTypeLoad = ast->loadAs<AST::ArrayTypeLoad>();
     Type *type            = visitType(ast->atAs<AST::TypeLoad>(0));
     const auto &arrayType = ArrayType::create(type);

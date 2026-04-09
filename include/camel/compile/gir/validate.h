@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 29, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,10 +23,13 @@
 
 namespace camel::compile::gir::validate {
 
-// 在 GraphBuilder::sealGraph() 之前必须满足的结构不变量（ASSERT，失败即中止）。
-// 不做任何图改写；仅用于 draft → sealed 前的自检与 rewrite 会话 seal()。
+// Structural invariants that must hold before GraphBuilder::sealGraph()
+// (ASSERT; failure aborts).
+// No graph rewriting happens here; this is only for pre-seal validation and
+// rewrite-session seal().
 void assertGraphSealingPreconditions(const Graph &graph);
-// 对 root 及其 subGraphs()/dependencies() 做深度优先，逐图执行同上断言。
+// Depth-first over root and its subGraphs()/dependencies(), applying the same
+// assertions graph by graph.
 void assertGraphTreeSealingPreconditions(const graph_ptr_t &graph);
 
 } // namespace camel::compile::gir::validate

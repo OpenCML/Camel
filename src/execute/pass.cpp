@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Apr. 04, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,8 +44,30 @@ using namespace GIR;
 using namespace camel::core::error;
 using namespace camel::core::context;
 
+graph_ptr_t GraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
+    (void)graph;
+    (void)os;
+    ASSERT(false, "Compile-time apply() is not supported by this pass.");
+    return Graph::null();
+}
+
+graph_ptr_t GraphIRPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+    (void)graph;
+    (void)os;
+    ASSERT(false, "Runtime apply() is not supported by this pass.");
+    return Graph::null();
+}
+
+graph_ptr_t RuntimeGraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
+    ASSERT(context_ != nullptr, "Runtime graph pass requires a valid context.");
+    ASSERT(graph != nullptr, "Runtime graph pass requires a non-null compile graph.");
+    auto *runtimeRoot = context_->materializeRuntimeRoot(graph);
+    ASSERT(runtimeRoot != nullptr, "Runtime root graph materialization failed.");
+    return apply(runtimeRoot, os);
+}
+
 graph_ptr_t NullGraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    // Do nothing
+    // No-op.
     return Graph::null();
 }
 
@@ -100,7 +122,9 @@ void collectPassPaths(
     });
 }
 
-// 嵌套初始化列表：def(factory) 叶子节点，def(factory, {...}) 带子域，scope({...}) 纯子域
+// Nested pass registry initializer helpers: `def(factory)` creates a leaf,
+// `def(factory, {...})` creates a node with both a factory and children, and
+// `scope({...})` creates a pure namespace node.
 struct PassDef {
     std::optional<PassFactory> value;
     // shared_ptr: vector<pair<..., PassDef>> would instantiate vector while PassDef is still
@@ -215,12 +239,12 @@ PassScopePtr initPassScope() {
 const PassScopePtr passScope = initPassScope();
 
 std::unordered_map<std::string, std::string> passAliases = {
-    // 标准调度器
+    // Standard scheduler aliases
     {"std::default", "std::nodevm"},
     {"std::linear", "std::nodevm"},
     {"std::parallel", "std::taskflow"},
 
-    // 常用vm缩写
+    // Common VM aliases
     {"std::lnr", "std::fastvm"},
     {"std::prl", "std::taskflow"},
     {"std::fvm", "std::fastvm"},
@@ -228,8 +252,8 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::nvm", "std::nodevm"},
     {"std::svm", "std::stackvm"},
     {"std::tf", "std::taskflow"},
-
-    // 常用转译遍缩写
+    // Common translation and dump aliases
+    // Common translation and dump aliases
     {"std::dot", "std::graphviz"},
     {"std::gir", "std::graphviz"},
     {"std::cxx", "std::cpp"},
@@ -249,14 +273,14 @@ std::unordered_map<std::string, std::string> passAliases = {
 } // namespace
 
 PassFactory findPassFactory(const std::string &name, std::ostream &os) {
-    // 1. 解析别名
+    // 1. Resolve aliases
     std::string resolved = name;
     auto aliasIt         = passAliases.find(name);
     if (aliasIt != passAliases.end()) {
         resolved = aliasIt->second;
     }
 
-    // 2. 含 :: 的完整路径：按域分级查找
+    // 2. Full paths with :: search by scope hierarchy
     if (resolved.find("::") != std::string::npos) {
         auto path = splitPath(resolved);
         if (!path.empty()) {
@@ -265,7 +289,7 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
                 return factory;
         }
     } else {
-        // 3. 无 ::：先查 std::name，再查全局 name
+        // 3. No :: try std::name first, then the global name
         auto stdPath = splitPath("std::" + resolved);
         auto factory = lookupInScope(passScope, stdPath);
         if (factory)
@@ -276,7 +300,7 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
             return factory;
     }
 
-    // 未找到，输出可用 pass 列表
+    // Not found; print the list of available passes
     os << std::format("Pass <{}> not found, available passes are:\n", name);
     std::vector<std::string> allPaths;
     collectPassPaths(passScope, "", allPaths);
@@ -319,7 +343,7 @@ PassApplyResult applyPassesDetailed(
         if (factory) {
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), graph.get()); });
             auto pass = factory(ctx);
-            graph     = pass->apply(graph, os);
+            graph = pass->requiresRuntimeGraph() ? pass->apply(graph, os) : pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (see diagnostics)", p);
                 return {nullptr, PassApplyStatus::Failed};

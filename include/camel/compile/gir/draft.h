@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 29, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,13 +32,14 @@ enum class GraphImportMode {
 };
 
 // =============================================================================
-// GraphDraft：一次 rewrite 的工作态。
+// GraphDraft: working state for one rewrite pass.
 //
-// GraphDraft 持有 source root 的 cloneGraph 工作副本（draft-owned），并负责：
-//   1. 默认只把 root 视为 owned graph；子图/依赖图必须显式 import/clone。
-//   2. 约束所有编辑只能发生在 draft-owned graph 上（assertDraftOwned）。
-//   3. 编辑结束后由 seal() 一次性校验并封印整棵图树。
-//   4. 为 GraphRewriteSession 提供 graph-in / graph-out 的内部编辑原语。
+// GraphDraft holds a draft-owned clone of the source root and is responsible for:
+//   1. Treating only the root as owned by default; subgraphs/dependencies must
+//      be explicitly imported or cloned.
+//   2. Restricting edits to draft-owned graphs only (assertDraftOwned).
+//   3. Validating and sealing the entire graph tree once editing is done.
+//   4. Providing GraphRewriteSession with internal graph-in / graph-out edit primitives.
 // =============================================================================
 class GraphDraft {
   public:
@@ -47,8 +48,11 @@ class GraphDraft {
     graph_ptr_t sourceRoot() const { return sourceRoot_; }
     graph_ptr_t root() const { return root_; }
     graph_ptr_t canonicalGraph(const graph_ptr_t &graph) const;
+    Node *canonicalNode(const Node *node) const;
     bool hasDraftFor(const Graph *graph) const;
+    bool hasDraftFor(const Node *node) const;
     bool owns(const Graph *graph) const;
+    void adoptOwnedGraph(const graph_ptr_t &graph);
 
     graph_ptr_t cloneIntoDraft(const graph_ptr_t &graph);
     graph_ptr_t importSubGraph(
@@ -75,13 +79,17 @@ class GraphDraft {
 
     InlineResult inlineCallable(Node *node, const InlineOptions &options = {});
     void pruneUnreachable(const graph_ptr_t &graph);
+    void normalizeAllOwnedStaticValues();
 
     void validate() const;
     void seal();
 
   private:
-    void registerOwnedGraphs(const graph_ptr_t &graph);
+    void registerOwnedGraph(const graph_ptr_t &sourceGraph, const graph_ptr_t &draftGraph);
+    void registerNodeMap(const std::unordered_map<const Node *, Node *> &nodeMap);
     graph_ptr_t resolveImportTarget(const graph_ptr_t &graph, GraphImportMode mode);
+    graph_ptr_t sourceGraphOfDraft(const Graph *draftGraph) const;
+    void normalizeOwnedStaticValues(Graph *ownerRaw);
     void retargetOwnedGraphRefs(const graph_ptr_t &sourceGraph, const graph_ptr_t &draftGraph);
     void retargetKnownDraftRefsInOwner(Graph *ownerRaw);
     static void ensureDependencyRegistration(
@@ -94,6 +102,8 @@ class GraphDraft {
     std::unordered_set<Graph *> ownedGraphs_;
     std::unordered_set<Graph *> dirtyGraphs_;
     std::unordered_map<const Graph *, graph_ptr_t> draftBySource_;
+    std::unordered_map<const Graph *, graph_ptr_t> sourceByDraft_;
+    std::unordered_map<const Node *, Node *> draftNodeBySource_;
 };
 
 } // namespace camel::compile::gir

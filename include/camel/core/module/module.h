@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 20, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -56,9 +56,10 @@ class Module : public std::enable_shared_from_this<Module> {
     type_ns_ptr_t exportedTypeNS_;
     entity_ns_ptr_t exportedEntityNS_;
     std::vector<Reference> defaultImportedRefs_;
-    /// 同一 ref 可能来自多个模块（同名函数/算子重载），按 ref 聚合模块列表
+    /// A ref may come from multiple modules (same-name function/operator overloads);
+    /// group modules by ref.
     std::unordered_map<Reference, std::vector<std::shared_ptr<Module>>> importedRefModMap_;
-    /// 合并后的导入 entity 缓存，避免每次查询都做多模块合并
+    /// Cache merged imported entities to avoid re-merging on every query.
     mutable std::unordered_map<Reference, entity> importedEntityCache_;
 
   public:
@@ -80,7 +81,7 @@ class Module : public std::enable_shared_from_this<Module> {
     bool exportType(const Reference &ref, Type *type);
     bool exportEntity(const Reference &ref, const entity &ent);
 
-    /// Returns true if this module imports the given module
+    /// Return true if this module imports the given module.
     bool imports(const std::shared_ptr<Module> &mod) const;
 
     std::optional<Type *> getImportedType(const Reference &ref) const;

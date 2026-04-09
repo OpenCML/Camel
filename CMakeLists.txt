@@ -5,7 +5,7 @@ if(NOT DEFINED BUILD_FOOTPRINT)
     string(TIMESTAMP BUILD_FOOTPRINT "%y%m%d_%H%M%S")
 endif()
 
-# CLI 的 config 在 camel-cli 中编译，此处仅用于 BUILD_FOOTPRINT 占位（由 camel-cli 传入）
+# CLI config is compiled in camel-cli; this file only reserves BUILD_FOOTPRINT (passed in by camel-cli).
 if(NOT DEFINED BUILD_FOOTPRINT_FOR_CLI)
     set(BUILD_FOOTPRINT_FOR_CLI "${BUILD_FOOTPRINT}")
 endif()
@@ -16,7 +16,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# 跨平台RPATH设置
+# Cross-platform RPATH settings
 if(APPLE)
     set(CMAKE_MACOSX_RPATH OFF)
     set(CMAKE_INSTALL_RPATH "@loader_path")
@@ -43,10 +43,10 @@ find_package(Taskflow REQUIRED)
 
 add_definitions(-DNOMINMAX)
 
-# 共享库：camel 核心（libcamel）
+# Shared library: Camel core (libcamel)
 add_library(libcamel SHARED ${LIBCAMEL_SRC})
 
-# Windows: 导出所有符号供 camel-cli 和 tools 链接
+# Windows: export all symbols for camel-cli and tools linkage.
 if(WIN32)
     set_target_properties(libcamel PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
 endif()
@@ -62,7 +62,7 @@ if (NOT ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang"))
     message(FATAL_ERROR "This project requires Clang as the C++ compiler. Current compiler is ${CMAKE_CXX_COMPILER_ID}.")
 endif()
 
-# 开启 LTO 支持
+# Enable LTO support
 include(CheckIPOSupported)
 check_ipo_supported(RESULT result OUTPUT output)
 
@@ -71,7 +71,7 @@ if(result)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO FALSE)
 endif()
 
-# 选项通过 interface 库统一应用，便于 libcamel 与 camel-cli 共享
+# Apply options through a shared interface library so libcamel and camel-cli use the same definitions.
 add_library(camel_options INTERFACE)
 set(CAMEL_OPTIONS_TARGET camel_options)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Options.cmake)
@@ -85,7 +85,7 @@ target_compile_options(libcamel PRIVATE
     $<$<CONFIG:Debug>:-g3>
     -Wall -Wextra -Wpedantic
     -Wno-unused-parameter
-    -Wno-c99-extensions # 使用灵活数组
+    -Wno-c99-extensions # Uses flexible array members.
     -Wno-gnu-anonymous-struct
     -Wno-nested-anon-types
     -Wno-unused-private-field
@@ -97,10 +97,10 @@ target_compile_options(libcamel PRIVATE
     -fansi-escape-codes # windows only
     -march=native
     -mfma
-    # -ffast-math # 不要开启这个，在build模式优化下会导致计算结果失真
+    # -ffast-math # Do not enable this; build-mode optimization can make results inaccurate.
 )
 
-# -no-pie 仅用于非 Windows（GCC/Linux）；Windows 上 Clang 会报 unused 警告
+# -no-pie is only for non-Windows (GCC/Linux); Clang on Windows will warn about it being unused.
 target_link_options(libcamel PRIVATE
     $<$<AND:$<CONFIG:RelWithDebInfo>,$<NOT:$<PLATFORM_ID:Windows>>>:-no-pie>
 )
@@ -125,9 +125,23 @@ target_link_libraries(libcamel PRIVATE
     Taskflow::Taskflow
 )
 
-# 外源模块：python / pyplot / io 等编译为 .cmo
-add_subdirectory(modules/python)
-add_subdirectory(modules/pyplot)
+# External modules: compile python / pyplot / io and similar sources into .cmo.
+# Python embedding (python.cmo, pyplot.cmo, py_bridge*) requires Development headers and import libraries.
+# Without a venv/SDK, modules/python/CMakeLists.txt returns early; calling add_subdirectory(pyplot) anyway will fail on find_package(REQUIRED).
+# Set CAMEL_SKIP_PYTHON=1 or -DCAMEL_ENABLE_PYTHON=OFF to skip python + pyplot while building the rest normally (options live in cmake/Options.cmake and options.json).
+set(_camel_skip_python_modules FALSE)
+if(NOT CAMEL_ENABLE_PYTHON)
+    set(_camel_skip_python_modules TRUE)
+    message(STATUS "Skipping modules/python and modules/pyplot.")
+endif()
+if(NOT _camel_skip_python_modules)
+    add_subdirectory(modules/python)
+    if(CAMEL_PYTHON_DEV_AVAILABLE)
+        add_subdirectory(modules/pyplot)
+    else()
+        message(STATUS "Skipping modules/pyplot: no Python development environment (same condition as python.cmo).")
+    endif()
+endif()
 add_subdirectory(modules/io)
 add_subdirectory(modules/os)
 add_subdirectory(modules/math)
@@ -145,5 +159,5 @@ add_subdirectory(modules/para)
 add_subdirectory(modules/sim)
 add_subdirectory(modules/tensor)
 
-# CLI 与工具：链接 libcamel 的 shell（camel-cli 在 tools 下）
+# CLI and tools: link the libcamel shell (camel-cli lives under tools).
 add_subdirectory(tools)

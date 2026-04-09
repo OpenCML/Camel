@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -81,11 +81,11 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             } else if (bc.opcode == OpCode::FUNC) {
 #if ENABLE_FASTVM_JIT
                 if (bc.fastop[1] >= 0)
-                    tag = getFuncExtraGraph(&bc)->name();
+                    tag = getFuncExtraRuntimeGraph(&bc)->name();
                 else
                     tag = jitFnToGraph_[reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc))]->name();
 #else
-                tag = bc.extra()->graph->name();
+                tag = bc.extra()->runtimeGraph->name();
 #endif
             }
             opperf::ScopeTimer _timer(bc.opcode, tag);
@@ -110,7 +110,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 Bytecode &lbc = bytecodes_[pc];
                 currFrame->set(lbc.result, result);
 
-                // 从下一条指令继续执行
+                // Continue execution from the next instruction.
                 pc += lbc.opsize;
                 continue;
             } break;
@@ -166,7 +166,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
                 size_t jumpIdx = 0;
                 if (bc.withCnt() == 0) {
-                    // 普通的 if-else 分支，cond 是 bool 类型
+                    // Ordinary if-else branch; cond is a bool.
                     bool condData = currFrame->get<bool>(nargs[0]);
                     if (condData) {
                         jumpIdx = 0; // jump to true branch
@@ -174,7 +174,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                         jumpIdx = 1; // jump to false branch
                     }
                 } else {
-                    // match-case，依次判断各分支
+                    // match-case; evaluate each branch in order.
                     size_t j          = 0;
                     TypeCode condType = currFrame->typeAt(nargs[0]);
 
@@ -253,7 +253,8 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 case TypeCode::Array: {
                     auto type = tt::as_ptr<ArrayType>(srcType);
                     auto arr  = tt::as_ptr<Array>(srcObj);
-                    // 对于数组，如果 elemType 是 Ref，所有元素都是 Ref，直接使用索引
+                    // For arrays, if elemType is Ref, all elements are Ref and we can use the index
+                    // directly.
                     ASSERT(
                         arr->size() >= bc.withCnt(),
                         std::format(
@@ -303,9 +304,13 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
                 auto function          = currFrame->get<Function *>(wargs[0]);
-                auto targetGraph       = function->graph();
+                auto *runtimeTarget    = function->graph();
+                ASSERT(
+                    runtimeTarget != nullptr,
+                    "FastVM indirect CALL requires a materialized runtime graph target.");
+                const uint32_t callCount = noteIndirectCall(runtimeTarget);
 
-                Frame *funcFrame = framePool_.acquire(targetGraph);
+                Frame *funcFrame = framePool_.acquire(runtimeTarget);
 
                 size_t i = 0;
                 for (; i < nargs.size(); ++i) {
@@ -318,7 +323,13 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 }
 
                 _timer.pause();
-                const auto &result = call(offsetMap_.at(targetGraph), funcFrame);
+                const auto &result = jitEnabled() ? invokeCallOrJit(
+                                                        graphEntryPc(runtimeTarget),
+                                                        runtimeTarget,
+                                                        funcFrame,
+                                                        currentJitCtx_,
+                                                        callCount)
+                                                  : call(graphEntryPc(runtimeTarget), funcFrame);
                 _timer.resume();
 
                 currFrame->set(bc.result, result);
@@ -326,35 +337,60 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
             case OpCode::FUNC: {
 #if ENABLE_FASTVM_JIT
-                const Bytecode *callBc = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
-                if (callBc->fastop[1] < 0) {
-                    GIR::Graph *g          = getFuncExtraGraph(callBc);
-                    JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(callBc));
-                    size_t argsCnt         = callBc->normCnt();
-                    const data_idx_t *args = callBc->operands();
-                    Frame *funcFrame =
-                        acquireCallFrameWithArgs(g, args, argsCnt, [&](data_idx_t idx) {
-                            return currFrame->get<slot_t>(idx);
-                        });
-                    slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
-                    currFrame->set(bc.result, result);
-                } else {
-                    GIR::Graph *targetGraph = getFuncExtraGraph(callBc);
-                    size_t targetPc         = static_cast<size_t>(callBc->fastop[1]);
+                if (!jitEnabled()) {
                     push(pc, currFrame);
-                    size_t argsCnt         = callBc->normCnt();
-                    const data_idx_t *args = callBc->operands();
-                    Frame *funcFrame =
-                        acquireCallFrameWithArgs(targetGraph, args, argsCnt, [&](data_idx_t idx) {
-                            return currFrame->get<slot_t>(idx);
-                        });
-                    pc        = targetPc;
+                    auto *runtimeTarget = runtimeCallTarget(pc);
+                    ASSERT(
+                        runtimeTarget != nullptr,
+                        "FastVM direct FUNC target must have a materialized runtime graph.");
+                    Frame *funcFrame       = acquireFrameForCall(runtimeTarget);
+                    size_t argsCnt         = bc.normCnt();
+                    const data_idx_t *args = bc.operands();
+                    for (size_t i = 0; i < argsCnt; ++i) {
+                        funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
+                    }
+                    pc        = static_cast<size_t>(bc.fastop[1]);
                     currFrame = funcFrame;
                     continue;
                 }
+                const Bytecode *callBc = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
+                auto *runtimeTarget    = runtimeCallTarget(pc);
+                ASSERT(
+                    runtimeTarget != nullptr,
+                    "FastVM direct FUNC target must have a materialized runtime graph.");
+                size_t argsCnt         = callBc->normCnt();
+                const data_idx_t *args = callBc->operands();
+                if (callBc->fastop[1] < 0) {
+                    JitEntryFn fn    = reinterpret_cast<JitEntryFn>(getFuncExtraFn(callBc));
+                    Frame *funcFrame = [&]() {
+                        Frame *frame = framePool_.acquire(runtimeTarget);
+                        populateCallFrame(frame, args, argsCnt, [&](data_idx_t idx) {
+                            return currFrame->get<slot_t>(idx);
+                        });
+                        return frame;
+                    }();
+                    slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
+                    currFrame->set(bc.result, result);
+                    break;
+                }
+                push(pc, currFrame);
+                Frame *funcFrame = [&]() {
+                    Frame *frame = framePool_.acquire(runtimeTarget);
+                    populateCallFrame(frame, args, argsCnt, [&](data_idx_t idx) {
+                        return currFrame->get<slot_t>(idx);
+                    });
+                    return frame;
+                }();
+                pc        = static_cast<size_t>(callBc->fastop[1]);
+                currFrame = funcFrame;
+                continue;
 #else
                 push(pc, currFrame);
-                Frame *funcFrame       = framePool_.acquire(bc.extra()->graph);
+                auto *runtimeTarget = runtimeCallTarget(pc);
+                ASSERT(
+                    runtimeTarget != nullptr,
+                    "FastVM direct FUNC target must have a materialized runtime graph.");
+                Frame *funcFrame       = acquireFrameForCall(runtimeTarget);
                 size_t argsCnt         = bc.normCnt();
                 const data_idx_t *args = bc.operands();
                 for (size_t i = 0; i < argsCnt; ++i) {
@@ -369,17 +405,26 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             case OpCode::TAIL: {
 #if ENABLE_FASTVM_JIT
                 FrameView lastFrame(currFrame);
-                const Bytecode *tailBc = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
-                GIR::Graph *tailTargetGraph = getFuncExtraGraph(tailBc);
+                const Bytecode *tailBc  = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
+                auto *tailTargetGraph   = runtimeCallTarget(pc);
+                auto *runtimeTailTarget = runtimeCallTarget(pc);
+                ASSERT(
+                    runtimeTailTarget != nullptr,
+                    std::format(
+                        "FastVM direct TAIL target '{}' must have a materialized runtime graph.",
+                        tailTargetGraph->name()));
                 framePool_.release(currFrame);
                 if (tailBc->fastop[1] < 0) {
                     size_t argsCnt         = tailBc->normCnt();
                     const data_idx_t *args = tailBc->operands();
-                    Frame *newFrame        = acquireTailFrameWithArgs(
-                        tailTargetGraph,
-                        args,
-                        argsCnt,
-                        [&](data_idx_t idx) { return lastFrame.get<slot_t>(idx); });
+                    Frame *newFrame        = [&]() {
+                        Frame *frame = framePool_._acquire(runtimeTailTarget);
+                        populateCallFrame(frame, args, argsCnt, [&](data_idx_t idx) {
+                            return lastFrame.get<slot_t>(idx);
+                        });
+                        framePool_._resetTop();
+                        return frame;
+                    }();
                     if (currFrame == rootActiveFrame) {
                         rootActiveFrame = newFrame;
                     }
@@ -387,20 +432,28 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                     currFrame = newFrame;
                     continue;
                 }
-                GIR::Graph *targetGraph = tailTargetGraph;
-                size_t targetPc         = static_cast<size_t>(tailBc->fastop[1]);
-                size_t argsCnt          = tailBc->normCnt();
-                const data_idx_t *args  = tailBc->operands();
-                currFrame =
-                    acquireTailFrameWithArgs(targetGraph, args, argsCnt, [&](data_idx_t idx) {
+                auto *targetGraph      = tailTargetGraph;
+                size_t targetPc        = static_cast<size_t>(tailBc->fastop[1]);
+                size_t argsCnt         = tailBc->normCnt();
+                const data_idx_t *args = tailBc->operands();
+                currFrame              = [&]() {
+                    Frame *frame = framePool_._acquire(runtimeTailTarget);
+                    populateCallFrame(frame, args, argsCnt, [&](data_idx_t idx) {
                         return lastFrame.get<slot_t>(idx);
                     });
+                    framePool_._resetTop();
+                    return frame;
+                }();
                 pc = targetPc;
                 continue;
 #else
                 FrameView lastFrame(currFrame);
                 framePool_.release(currFrame);
-                currFrame              = framePool_._acquire(bc.extra()->graph);
+                auto *runtimeTailTarget = runtimeCallTarget(pc);
+                ASSERT(
+                    runtimeTailTarget != nullptr,
+                    "FastVM direct TAIL target must have a materialized runtime graph.");
+                currFrame              = acquireFrameForTail(runtimeTailTarget);
                 size_t argsCnt         = bc.normCnt();
                 const data_idx_t *args = bc.operands();
                 for (size_t i = 0; i < argsCnt; ++i) {
@@ -429,7 +482,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                     throw reportRuntimeFault(
                         *context_,
                         fault,
-                        makePcExecutionSite(context_->sourceContext(), currFrame->graph(), pc));
+                        makePcExecutionSite(context_->sourceContext(), currFrame, pc));
                 }
                 currFrame->set(bc.result, result);
             } break;
@@ -512,8 +565,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             released.insert(frame);
         };
 
-        Graph *siteGraph =
-            currFrame ? currFrame->graph() : (rootActiveFrame ? rootActiveFrame->graph() : nullptr);
+        Frame *siteFrame = currFrame ? currFrame : rootActiveFrame;
         releaseFrame(currFrame);
         if (currFrame != rootActiveFrame) {
             releaseFrame(rootActiveFrame);
@@ -529,7 +581,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         throw reportRuntimeFault(
             *context_,
             fault,
-            makePcExecutionSite(context_->sourceContext(), siteGraph, pc));
+            makePcExecutionSite(context_->sourceContext(), siteFrame, pc));
     } catch (Diagnostic &) {
         std::unordered_set<Frame *> released;
         auto releaseFrame = [&](Frame *frame) {

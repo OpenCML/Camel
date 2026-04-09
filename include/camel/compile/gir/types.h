@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,7 +30,7 @@
 namespace camel::compile::gir {
 
 // =============================================================================
-// 枚举与字符串转换声明
+// Enum and string-conversion declarations
 // =============================================================================
 
 enum class NodeType {
@@ -61,7 +61,7 @@ std::string to_string(NodeType type);
 std::string to_string(LinkType type);
 
 // =============================================================================
-// 前向声明与类型别名
+// Forward declarations and type aliases
 // =============================================================================
 
 class Graph;
@@ -78,7 +78,8 @@ using node_set_t      = std::unordered_set<Node *>;
 
 using data_idx_t = int16_t;
 
-/// Seal 后节点的调试/内容寻址指纹（128-bit），物化为 `gnode:{word0}{word1}` 实体 id。
+/// Debug/content-addressed fingerprint for a sealed node (128-bit), materialized as the
+/// `gnode:{word0}{word1}` entity ID.
 struct NodeDebugFingerprint {
     uint64_t word0 = 0;
     uint64_t word1 = 0;

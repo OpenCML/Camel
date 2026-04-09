@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -66,15 +66,15 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     ASSERT(mainGraphSet.size() == 1, "Multiple main graphs found.");
     auto mainGraph = *mainGraphSet.begin();
 
-    // 收集所有被依赖的子图
+    // Collect all dependent subgraphs.
     auto sortedGraphs =
         findReachable(mainGraph, [](const graph_ptr_t &g) { return g->dependencies(); });
 
     ostringstream oss;
 
-    // 依次打印节点序列
+    // Print node sequences in order.
     for (const auto &g : sortedGraphs) {
-        // 对节点进行拓扑排序
+        // Topologically sort the nodes.
         Node *exitNode   = g->exitNode();
         auto sortedNodes = findReachable(
             exitNode,
@@ -82,11 +82,11 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
                 vector<Node *> ins;
                 ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
                 for (const auto &in : n->ctrlInputs()) {
-                    if (&in->graph() == &n->graph()) // only consider nodes in the same graph
+                    if (&in->graph() == &n->graph()) // Only consider nodes in the same graph.
                         ins.push_back(in);
                 }
                 for (const auto &in : n->dataInputs()) {
-                    if (&in->graph() == &n->graph()) // only consider nodes in the same graph
+                    if (&in->graph() == &n->graph()) // Only consider nodes in the same graph.
                         ins.push_back(in);
                 }
                 return ins;
@@ -127,13 +127,13 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
                     nodeStrs);
             }
         });
-        // 打印函数签名（含参数信息）
+        // Print the function signature, including parameter info.
         oss << "FUNC: " << g->name();
         for (const auto &portNode : g->ports()) {
             oss << ", " << pointerToIdent(portNode);
         }
         oss << "\n";
-        // 打印子图节点信息
+        // Print subgraph node information.
         for (const auto &n : sortedNodes) {
             string res;
             switch (n->type()) {
@@ -177,7 +177,7 @@ graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             }
             oss << "    [" << pointerToIdent(n) << "] " << res << "\n";
         }
-        // 打印返回节点
+        // Print the return node.
         oss << "RETN: " << pointerToIdent(g->exitNode()) << "\n\n";
     }
 

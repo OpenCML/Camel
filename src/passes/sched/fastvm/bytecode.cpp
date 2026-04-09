@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Feb. 17, 2026
+ * Updated: Apr. 09, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -179,7 +179,7 @@ std::string BytecodeExtra::toString(OpCode opcode) const {
     case OpCode::FUNC:
         [[fallthrough]];
     case OpCode::TAIL:
-        return std::format("{}", graph ? graph->mangledName() : "null");
+        return std::format("{}", reinterpret_cast<const void *>(raw));
     case OpCode::OPER:
         return std::format("{}", reinterpret_cast<void *>(func));
     case OpCode::SCHD:
@@ -208,17 +208,17 @@ Bytecode *appendBytecode(
 
     size_t totalUnits = 1 + operandUnits + (hasExtra ? extraUnits : 0);
 
-    // 获取当前 vec 的插入起始位置
+    // Get the insertion start position in the current vector.
     size_t offset = vec.size();
     vec.resize(offset + totalUnits);
 
-    // Step 1: 写入 Header
+    // Step 1: write the header.
     BytecodeHeader *header = reinterpret_cast<BytecodeHeader *>(&vec[offset]);
     header->opcode         = opcode;
     header->opsize         = static_cast<uint8_t>(totalUnits);
     header->result         = result;
 
-    // Step 2: 写入 Operands（如果没有 fastop）
+    // Step 2: write operands (if there are no fastops).
     if (!fastops.empty()) {
         header->fastop[0] = fastops[0];
         if (fastops.size() > 1) {
@@ -238,7 +238,7 @@ Bytecode *appendBytecode(
         }
     }
 
-    // Step 3: 写入 Extra（如果有）
+    // Step 3: write extra data (if present).
     if (hasExtra) {
         BytecodeExtra *ex0 =
             reinterpret_cast<BytecodeExtra *>(&vec[offset + totalUnits - extraUnits]);

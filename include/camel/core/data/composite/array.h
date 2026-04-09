@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,7 @@ class ArrayData : public CompositeData {
     std::vector<size_t> refs_;
     std::vector<data_ptr_t> data_;
 
-    // 仅由 ArrayDataFactory::build() 使用，避免重复计算 Type
+    // Used only by ArrayDataFactory::build() to avoid recomputing Type.
     ArrayData(type::Type *arrayType, data_vec_t &&data);
 
   public:
@@ -57,7 +57,7 @@ class ArrayData : public CompositeData {
     virtual data_ptr_t convertTo(type::Type *type) override;
 };
 
-// 工厂：收集元素后一次构建 Type 与 ArrayData，避免重复计算
+// Factory: collect elements and build Type and ArrayData once to avoid recomputing Type.
 class ArrayDataFactory {
   public:
     ArrayDataFactory();

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -77,7 +77,7 @@ class FreeListAllocator : public IAllocator {
                 size_t remaining      = curr->size - total_size;
 
                 if (LIKELY(remaining >= sizeof(FreeBlock))) {
-                    // 分割块
+                    // Split the block.
                     installHeader(blockStart, total_size);
 
                     FreeBlock *newBlock = reinterpret_cast<FreeBlock *>(blockStart + total_size);
@@ -86,7 +86,7 @@ class FreeListAllocator : public IAllocator {
 
                     *prevPtr = newBlock;
                 } else {
-                    // 整块分配
+                    // Allocate the whole block.
                     installHeader(blockStart, curr->size);
                     *prevPtr = curr->next;
                 }
@@ -128,7 +128,7 @@ class FreeListAllocator : public IAllocator {
         ASSERT(blockData >= start_ && blockData < end_, "Free pointer is out of allocator range.");
         ASSERT(blockData + total_size <= end_, "Free block exceeds allocator range.");
 
-        // 检测重复释放：检查是否与任何空闲块重叠
+        // Detect double frees by checking overlap with any free block.
         EXEC_WHEN_DEBUG({
             FreeBlock *fb = freeList_;
             while (fb) {
@@ -142,7 +142,7 @@ class FreeListAllocator : public IAllocator {
                 std::byte *fb_end    = fb_start + fb->size;
                 std::byte *block_end = blockData + total_size;
 
-                // 检查重叠（不包括相邻情况）
+                // Check for overlap, excluding adjacency.
                 ASSERT(!(blockData < fb_end && block_end > fb_start), "Double free detected");
 
                 fb = fb->next;
@@ -176,12 +176,12 @@ class FreeListAllocator : public IAllocator {
             blocks.emplace_back(addr, obj_size);
         }
 
-        // 按地址排序
+        // Sort by address.
         std::sort(blocks.begin(), blocks.end(), [](const auto &a, const auto &b) {
             return a.first < b.first;
         });
 
-        // 检查重叠和重复
+        // Check for overlap and duplicates.
         for (size_t i = 1; i < blocks.size(); ++i) {
             ASSERT(blocks[i - 1].first != blocks[i].first, "Duplicate blocks in freeBulk");
             ASSERT(
@@ -189,7 +189,7 @@ class FreeListAllocator : public IAllocator {
                 "Overlapping blocks in freeBulk");
         }
 
-        // 检测重复释放
+        // Detect double frees.
         EXEC_WHEN_DEBUG({
             for (const auto &[addr, size] : blocks) {
                 FreeBlock *fb = freeList_;
@@ -198,7 +198,7 @@ class FreeListAllocator : public IAllocator {
                     std::byte *fb_end    = fb_start + fb->size;
                     std::byte *block_end = addr + size;
 
-                    // 检查重叠
+                    // Check for overlap.
                     ASSERT(!(addr < fb_end && block_end > fb_start), "Double free in bulk");
 
                     fb = fb->next;
@@ -206,7 +206,7 @@ class FreeListAllocator : public IAllocator {
             }
         });
 
-        // 逐个插入并合并
+        // Insert and coalesce one block at a time.
         for (const auto &[addr, size] : blocks) {
             insertAndCoalesce(addr, size);
         }
@@ -251,9 +251,9 @@ class FreeListAllocator : public IAllocator {
         FreeBlock *fb      = freeList_;
 
         while (LIKELY(current < end_)) {
-            // 当前位置是否是空闲块？
+            // Is the current position a free block?
             if (UNLIKELY(fb && reinterpret_cast<std::byte *>(fb) == current)) {
-                // 跳过空闲块
+                // Skip the free block.
                 ASSERT(fb->size >= sizeof(FreeBlock), "Free block too small");
                 ASSERT(fb->size % alignof(slot_t) == 0, "Free block not aligned");
                 ASSERT(current + fb->size <= end_, "Free block out of bounds");
@@ -261,7 +261,7 @@ class FreeListAllocator : public IAllocator {
                 current += fb->size;
                 fb = fb->next;
             } else {
-                // 必须是已分配对象
+                // Must be an allocated object.
                 ASSERT(
                     !fb || reinterpret_cast<std::byte *>(fb) > current,
                     "Free list ordering error");
@@ -273,7 +273,7 @@ class FreeListAllocator : public IAllocator {
                 ASSERT(obj_size % alignof(slot_t) == 0, "Object not aligned");
                 ASSERT(current + obj_size <= end_, "Object out of bounds");
 
-                // 确保不与下一个空闲块重叠
+                // Ensure we do not overlap the next free block.
                 if (fb) {
                     ASSERT(
                         current + obj_size <= reinterpret_cast<std::byte *>(fb),
@@ -292,14 +292,14 @@ class FreeListAllocator : public IAllocator {
     bool validate() const {
         std::lock_guard<std::mutex> lock(mutex_);
         try {
-            // 步骤1：验证空闲链表自身
+            // Step 1: validate the free list itself.
             std::unordered_set<const void *> freeBlockSet;
             FreeBlock *curr    = freeList_;
             FreeBlock *prev_fb = nullptr;
             size_t free_total  = 0;
 
             while (curr) {
-                // 检测环路
+                // Detect cycles.
                 if (UNLIKELY(freeBlockSet.find(curr) != freeBlockSet.end())) {
                     return false;
                 }
@@ -311,30 +311,30 @@ class FreeListAllocator : public IAllocator {
                 }
                 std::byte *curr_end = curr_start + curr->size;
 
-                // 边界检查
+                // Boundary checks.
                 if (UNLIKELY(curr_start < start_ || curr_end > end_)) {
                     return false;
                 }
 
-                // 大小和对齐检查
+                // Size and alignment checks.
                 if (UNLIKELY(curr->size < sizeof(FreeBlock) || curr->size % alignof(slot_t) != 0)) {
                     return false;
                 }
 
-                // 排序和无重叠检查
+                // Check sorting and absence of overlap.
                 if (UNLIKELY(prev_fb)) {
                     std::byte *prev_start = reinterpret_cast<std::byte *>(prev_fb);
                     std::byte *prev_end   = prev_start + prev_fb->size;
 
                     if (UNLIKELY(prev_start >= curr_start)) {
-                        return false; // 未排序
+                        return false; // Not sorted.
                     }
                     if (UNLIKELY(prev_end > curr_start)) {
-                        return false; // 重叠
+                        return false; // Overlap.
                     }
-                    // 检查相邻块是否应该合并
+                    // Check whether adjacent blocks should be merged.
                     if (UNLIKELY(prev_end == curr_start)) {
-                        return false; // 相邻块应该被合并
+                        return false; // Adjacent blocks should have been merged.
                     }
                 }
 
@@ -343,39 +343,39 @@ class FreeListAllocator : public IAllocator {
                 curr    = curr->next;
             }
 
-            // 步骤2：扫描整个内存区域
+            // Step 2: scan the entire memory region.
             std::byte *scan        = start_;
             size_t allocated_total = 0;
             FreeBlock *expected_fb = freeList_;
 
             while (UNLIKELY(scan < end_)) {
-                // 检查当前位置是否是空闲块
+                // Check whether the current position is a free block.
                 if (UNLIKELY(expected_fb && reinterpret_cast<std::byte *>(expected_fb) == scan)) {
                     std::byte *expected_addr = reinterpret_cast<std::byte *>(expected_fb);
                     if (UNLIKELY(expected_addr < start_ || expected_addr >= end_)) {
                         return false;
                     }
-                    // 是空闲块
+                    // It is a free block.
                     scan += expected_fb->size;
                     expected_fb = expected_fb->next;
                 } else {
-                    // 应该是已分配对象
+                    // It should be an allocated object.
                     if (UNLIKELY(
                             expected_fb && reinterpret_cast<std::byte *>(expected_fb) < scan)) {
-                        return false; // 空闲链表顺序错误
+                        return false; // Free-list order is incorrect.
                     }
 
                     ObjectHeader *header = reinterpret_cast<ObjectHeader *>(scan);
                     size_t obj_size      = header->size();
 
-                    // 基本验证
+                    // Basic validation.
                     if (UNLIKELY(
                             obj_size < sizeof(ObjectHeader) || obj_size % alignof(slot_t) != 0 ||
                             scan + obj_size > end_)) {
                         return false;
                     }
 
-                    // 检查不与下一个空闲块重叠
+                    // Ensure it does not overlap the next free block.
                     if (UNLIKELY(expected_fb)) {
                         std::byte *next_fb_start = reinterpret_cast<std::byte *>(expected_fb);
                         if (UNLIKELY(scan + obj_size > next_fb_start)) {
@@ -388,16 +388,16 @@ class FreeListAllocator : public IAllocator {
                 }
             }
 
-            // 步骤3：最终检查
+            // Step 3: final checks.
             if (UNLIKELY(scan != end_)) {
-                return false; // 未完全扫描
+                return false; // Not fully scanned.
             }
 
             if (UNLIKELY(expected_fb != nullptr)) {
-                return false; // 空闲链表有剩余
+                return false; // Free list still has leftovers.
             }
 
-            // 检查总和
+            // Check the total sum.
             size_t total_capacity = end_ - start_;
             if (UNLIKELY(free_total + allocated_total != total_capacity)) {
                 return false;
@@ -420,7 +420,7 @@ class FreeListAllocator : public IAllocator {
     };
 
     size_t capacity_;
-    const char *debugRegion_{nullptr}; // Debug 模式下用于 hook
+    const char *debugRegion_{nullptr}; // Used for debug hooks.
     std::unique_ptr<slot_t[]> buffer_;
     std::byte *start_;
     std::byte *end_;
@@ -428,13 +428,13 @@ class FreeListAllocator : public IAllocator {
     mutable std::mutex mutex_;
     std::unordered_map<void *, size_t> allocatedSizes_;
 
-    // 辅助函数：从用户指针获取对象头
+    // Helper: get the object header from a user pointer.
     ObjectHeader *headerOf(void *ptr) const {
         return reinterpret_cast<ObjectHeader *>(
             static_cast<std::byte *>(ptr) - sizeof(ObjectHeader));
     }
 
-    // 核心函数：插入并合并空闲块
+    // Core helper: insert and coalesce a free block.
     void insertAndCoalesce(std::byte *blockData, size_t total_size) {
         ASSERT(total_size >= sizeof(FreeBlock), "Block too small");
         ASSERT(blockData >= start_ && blockData + total_size <= end_, "Block out of bounds");
@@ -443,7 +443,7 @@ class FreeListAllocator : public IAllocator {
         FreeBlock *prev     = nullptr;
         FreeBlock *curr     = freeList_;
 
-        // 找到插入位置（保持按地址排序）
+        // Find the insertion point while preserving address order.
         while (curr && reinterpret_cast<std::byte *>(curr) < blockData) {
             prev    = curr;
             prevPtr = &(curr->next);
@@ -452,13 +452,13 @@ class FreeListAllocator : public IAllocator {
 
         std::byte *blockEnd = blockData + total_size;
 
-        // 检查与后块合并
+        // Check whether we can merge with the next block.
         if (LIKELY(curr) && UNLIKELY(blockEnd == reinterpret_cast<std::byte *>(curr))) {
             total_size += curr->size;
             curr = curr->next;
         }
 
-        // 检查与前块合并
+        // Check whether we can merge with the previous block.
         if (LIKELY(prev)) {
             std::byte *prevEnd = reinterpret_cast<std::byte *>(prev) + prev->size;
             if (UNLIKELY(prevEnd == blockData)) {
@@ -468,7 +468,7 @@ class FreeListAllocator : public IAllocator {
             }
         }
 
-        // 否则，创建新的 free block
+        // Otherwise, create a new free block.
         FreeBlock *newBlock = reinterpret_cast<FreeBlock *>(blockData);
         newBlock->size      = total_size;
         newBlock->next      = curr;

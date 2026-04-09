@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,8 +28,10 @@
 
 namespace camel {
 
-/// 主机端初始化（SDK 工具如 camel、camel-cpp 等）：设置库搜索路径等，在使用 libcamel 前调用；幂等。
-/// 适用于运行在 SDK 内的可执行文件，以 exe 所在目录为 base（exe/、exe/libs、exe/../libs）。
+/// Host-side initialization (SDK tools such as camel, camel-cpp, etc.): set up
+/// library search paths and call this before using libcamel; idempotent.
+/// Intended for executables running inside the SDK, with the exe directory as
+/// the base (exe/, exe/libs, exe/../libs).
 inline std::atomic<bool> &runtimeInitialized() {
     static std::atomic<bool> initialized{false};
     return initialized;
@@ -51,15 +53,17 @@ inline void initialize() {
     });
 }
 
-/// 主机端收尾：释放 initialize() 注册的全局资源；幂等。
+/// Host-side finalization: release global resources registered by initialize();
+/// idempotent.
 inline void finalize() {
     if (!runtimeInitialized().exchange(false, std::memory_order_acq_rel)) {
         return;
     }
-    // 当前仅保留统一收尾入口，后续新增全局对象时在此集中释放。
+    // Keep a single finalization entry point for now; release future global
+    // objects here as they are added.
 }
 
-/// 作用域生命周期守卫：构造时 initialize()，析构时 finalize()。
+/// Scope lifetime guard: call initialize() on construction and finalize() on destruction.
 class ScopedRuntime {
   public:
     ScopedRuntime() { initialize(); }

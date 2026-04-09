@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,6 +37,11 @@ using graph_ptr_t = std::shared_ptr<Graph>;
 } // namespace camel::compile::gir
 
 namespace GIR = camel::compile::gir;
+
+namespace camel::runtime {
+class GCGraph;
+class GCGraphManager;
+} // namespace camel::runtime
 
 namespace camel::core::module {
 class Module;
@@ -71,12 +76,15 @@ class Context : public std::enable_shared_from_this<Context> {
     std::unordered_map<std::string, module_ptr_t> builtinModules_;
 
     std::unique_ptr<ExecutorManager> exeMgr_;
+    std::unique_ptr<camel::runtime::GCGraphManager> runtimeGraphMgr_;
     error::diagnostic_sink_ptr_t runtimeDiagSink_;
     error::runtime_error_reporter_ptr_t runtimeErrorReporter_;
     camel::source::source_context_ptr_t sourceContext_;
-    std::unordered_map<std::string, void *> loadedDllHandles_; // .cmo 路径 -> 句柄，保证 DLL 不卸载
+    std::unordered_map<std::string, void *>
+        loadedDllHandles_; // .cmo path -> handle; keep DLLs loaded.
     std::optional<int> processExitCode_;
-    /** 最近一次“找到 .cmo 但加载失败”的原因，供 ModuleNotFound 报错详情使用。 */
+    /** Most recent reason a ".cmo found but failed to load" case occurred, used by ModuleNotFound
+     * diagnostics. */
     mutable std::string lastCmoLoadError_;
 
     std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
@@ -84,14 +92,16 @@ class Context : public std::enable_shared_from_this<Context> {
     getModuleNameCandidates(const std::string &currentModule, const std::string &rawImportName);
     std::string
     resolveRelativeModuleName(const std::string &currentModule, const std::string &importName);
-    /** 查找模块对应文件：任意后缀；.cmo 视为动态库，其余视为源码。first 为空表示未找到。 */
+    /** Look up the file for a module. Any suffix other than .cmo is treated as source code; .cmo is
+     * treated as a dynamic library. An empty first value means not found. */
     std::pair<std::string, bool> getModulePathAndKind(const std::string &moduleName);
     std::string getModulePath(const std::string &moduleName);
     bool moduleFileExists(const std::string &moduleName);
     module_ptr_t tryLoadModule(const std::string &moduleName);
-    /** 收集“未找到模块”时各搜索路径的尝试结果，用于报错详情。 */
+    /** Collect lookup attempts for a missing module so error messages can report them. */
     std::vector<std::string> getModuleSearchDiagnostics(const std::string &moduleName) const;
-    /** 返回实际参与查找的搜索基路径（绝对路径）列表，用于 .cmo 加载失败时仅列出路径。 */
+    /** Return the base search paths that were actually consulted; for .cmo load failures we only
+     * list paths. */
     std::vector<std::string> getSearchPathBases() const;
 
     Context(const EntryConfig &entryConf, const error::DiagsConfig &diagConf);
@@ -114,6 +124,10 @@ class Context : public std::enable_shared_from_this<Context> {
     camel::source::source_context_ptr_t sourceContext() const { return sourceContext_; }
     GIR::graph_ptr_t rootGraph() const;
     GIR::graph_ptr_t mainGraph() const;
+    camel::runtime::GCGraph *runtimeRootGraph();
+    camel::runtime::GCGraph *materializeRuntimeRoot(const GIR::graph_ptr_t &rootGraph);
+    camel::runtime::GCGraphManager &runtimeGraphManager();
+    const camel::runtime::GCGraphManager &runtimeGraphManager() const;
     const ExecutorManager &execMgr() const { return *exeMgr_; }
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }
@@ -130,14 +144,18 @@ class Context : public std::enable_shared_from_this<Context> {
 
     void clearProcessExitCode() { processExitCode_.reset(); }
     void captureProcessExitCode(GIR::Graph *graph, slot_t result);
+    void captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t result);
     std::optional<int> processExitCode() const { return processExitCode_; }
     int processExitCodeOr(int fallback = 0) const { return processExitCode_.value_or(fallback); }
 
-    /** 由 loadCmoModule 调用，保存已加载 .cmo 的句柄以防被卸载。 */
+    /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }
 
     module_ptr_t
     importModule(const std::string &rawModuleName, const std::string &currentModuleName = "");
+
+  private:
+    void registerRuntimeGraphDebugInfo(camel::runtime::GCGraph *runtimeRoot);
 };
 
 } // namespace camel::core::context

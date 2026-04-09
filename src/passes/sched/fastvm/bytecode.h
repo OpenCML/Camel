@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,29 +28,36 @@
 
 namespace type = camel::core::type;
 
-// 分布密集的字节码指令集
-// 用于加速 switch 分派，降低 CPU 分支预测失败率
-enum class OpCode : uint8_t {
-    // 定长参数指令
-    RETN,
-    CAST, // 使用 fastop[0] 作为待转换的 slot 索引，extra 存储目标类型
-    COPY, // 使用 fastop[0] 作为待拷贝索引
-    ACCS, // fastop[0] 作为目标索引，fastop[1] 作为访问的下标
-    JUMP, // 使用 fastop[0] 作为跳转目标地址
+namespace camel::runtime {
+class GCGraph;
+}
 
-    // 变长参数指令
+// Densely packed bytecode instruction set.
+// Used to speed up switch dispatch and reduce CPU branch misprediction.
+enum class OpCode : uint8_t {
+    // Fixed-arity instructions
+    RETN,
+    CAST, // Use fastop[0] as the slot index to cast; extra stores the target type.
+    COPY, // Use fastop[0] as the source index to copy.
+    ACCS, // fastop[0] is the target index; fastop[1] is the accessed subscript.
+    JUMP, // Use fastop[0] as the jump target address.
+
+    // Variable-arity instructions
     BRCH,
     JOIN,
     FILL,
     CALL,
     FUNC,
-    TAIL, // 标记尾调用
+    TAIL, // Mark tail calls.
     OPER,
-    SCHD, // 使用 fastop[0] 作为调度策略 ID
+    SCHD, // Use fastop[0] as the scheduling strategy ID.
 
-    // 常用算子快捷指令（定长）：二元运算/比较，两个操作数均为 slot 索引
-    // fastop[0]、fastop[1]：>0 表示 Frame 槽，<0 表示静态区；result 为结果槽
-    // 算术：result = fastop[0] op fastop[1]；比较：result = (fastop[0] op fastop[1]) ? 1 : 0
+    // Common arithmetic shortcuts (fixed arity): binary arithmetic/comparison; both operands are
+    // slot indices.
+    // fastop[0] and fastop[1]: >0 means a Frame slot, <0 means a static-area slot; result is the
+    // destination slot.
+    // Arithmetic: result = fastop[0] op fastop[1]; comparison: result = (fastop[0] op fastop[1]) ?
+    // 1 : 0
     IADD,
     LADD,
     FADD,
@@ -103,7 +110,7 @@ enum class OpCode : uint8_t {
 };
 
 inline bool hasDynamicOperands(OpCode opcode) {
-    // BRCH .. SCHD: 变长参数指令
+    // BRCH .. SCHD: variable-arity instructions
     switch (opcode) {
     case OpCode::BRCH:
         [[fallthrough]];
@@ -134,7 +141,8 @@ enum class MarkOpCode {
     ForeachArr,
 };
 
-// 0 代表空，正数表示动态数据段索引，负数表示静态数据段索引的相反数
+// 0 means null; positive values are dynamic data indices, negative values are the negated static
+// data indices.
 using data_idx_t = int16_t;
 using arr_size_t = uint16_t;
 
@@ -213,7 +221,7 @@ union BytecodeExtra;
 
 struct BytecodeHeader {                  // 8 bytes
     OpCode opcode        = OpCode::RETN; // 1 byte
-    uint8_t opsize       = 0;            // 1 byte，单位为 8 字节
+    uint8_t opsize       = 0;            // 1 byte, measured in 8-byte units.
     data_idx_t result    = 0;            // 2 bytes
     data_idx_t fastop[2] = {0, 0};       // 4 bytes
 
@@ -253,7 +261,7 @@ struct BytecodeHeader {                  // 8 bytes
     }
 
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
-    // 仅对 FUNC/TAIL 有效：第二块 extra 字（count 或 JitEntryFn）
+    // Only valid for FUNC/TAIL: the second extra word (count or JitEntryFn).
     inline uint64_t *extra2() { return reinterpret_cast<uint64_t *>(this + opsize - 1); }
     inline const uint64_t *extra2() const {
         return reinterpret_cast<const uint64_t *>(this + opsize - 1);
@@ -263,19 +271,28 @@ struct BytecodeHeader {                  // 8 bytes
 
 using Bytecode = BytecodeHeader;
 
-union BytecodeExtra {  // 8 bytes
-    type::Type *pType; // for CAST
-    GIR::Graph *graph; // for FUNC/TAIL word0: Graph* only
-    operator_t func;   // for OPER
-    MarkOpCode mark;   // for SCHD
-    uint64_t raw;      // generic
+union BytecodeExtra {                      // 8 bytes
+    type::Type *pType;                     // for CAST
+    GIR::Graph *sourceGraph;               // compile-time FUNC/TAIL target
+    camel::runtime::GCGraph *runtimeGraph; // runtime FUNC/TAIL target
+    operator_t func;                       // for OPER
+    MarkOpCode mark;                       // for SCHD
+    uint64_t raw;                          // generic
 
     std::string toString(OpCode opcode) const;
 };
 
-// FUNC/TAIL：第一块 extra 为 Graph*；启用了 JIT 时第二块 extra 为 count（未 JIT）或
-// [targetPc:16 | jitFn:48]（已 JIT）
-inline GIR::Graph *getFuncExtraGraph(const BytecodeHeader *bc) { return bc->extra()->graph; }
+// FUNC/TAIL: the first extra word is Graph*; when JIT is enabled, the second extra word is count
+// (before JIT) or [targetPc:16 | jitFn:48] (after JIT).
+inline GIR::Graph *getFuncExtraSourceGraph(const BytecodeHeader *bc) {
+    return bc->extra()->sourceGraph;
+}
+inline camel::runtime::GCGraph *getFuncExtraRuntimeGraph(const BytecodeHeader *bc) {
+    return bc->extra()->runtimeGraph;
+}
+inline void setFuncExtraRuntimeGraph(BytecodeHeader *bc, camel::runtime::GCGraph *graph) {
+    bc->extra()->runtimeGraph = graph;
+}
 
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
 constexpr uint64_t kFuncExtraJitFnMask     = (1ull << 48) - 1;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -181,7 +181,8 @@ std::vector<Node *> collectStatementNodes(const GraphLoweringPlan &plan) {
     return plan.topoNodes;
 }
 
-/// 当表达式作为独立 RHS（赋值、return）时，去掉冗余的外层括号
+/// Strip redundant outer parentheses when an expression appears as a standalone RHS (assignment
+/// or return).
 std::string stripRedundantOuterParens(std::string_view s) {
     if (s.size() < 2 || s.front() != '(' || s.back() != ')')
         return std::string(s);
@@ -524,8 +525,8 @@ std::string CppEmitter::emitExpr(Node *node, expr_cache_t &cache) {
             throw std::runtime_error(
                 std::format("GATE node '{}' has no Norm input", node->toString()));
         }
-        // GATE 仅用于 value/control 会合；在 direct C++ 路径下，控制依赖由拓扑语句顺序保障，
-        // 表达式层面直接透传其值输入即可。
+        // GATE is only for value/control joins; on the direct C++ path, control dependencies are
+        // already guaranteed by the topological statement order, so we can pass through the value.
         result = emitExpr(node->normInputs().front(), cache);
         break;
 
@@ -612,7 +613,8 @@ std::string CppEmitter::emitDirectFunction(Graph *graph, const GraphLoweringPlan
     oss << emitCommentary(plan);
     oss << emitFunctionSignature(graph, true) << " {\n";
     if (shouldEmitStatementBody(plan)) {
-        // 收集 JOIN 的 then/else 臂节点，不单独作为语句发射，由 JOIN 的 ternary 内联求值以实现短路
+        // Collect JOIN then/else arm nodes and do not emit them as standalone statements; JOIN's
+        // ternary inline evaluation implements short-circuiting.
         std::unordered_set<Node *> joinArmNodes;
         for (Node *n : plan.topoNodes) {
             if (n->type() == NodeType::JOIN) {
@@ -635,7 +637,7 @@ std::string CppEmitter::emitDirectFunction(Graph *graph, const GraphLoweringPlan
                 break;
             }
             if (joinArmNodes.count(node)) {
-                continue; // 由 JOIN 的 ternary 内联求值，确保短路
+                continue; // JOIN's ternary inline evaluation preserves short-circuiting.
             }
             const std::string expr = stripRedundantOuterParens(emitExpr(node, cache));
             const std::string name = emitBindingSymbol(node, stmtIdx++);

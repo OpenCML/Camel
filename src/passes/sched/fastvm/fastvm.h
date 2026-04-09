@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,8 +22,11 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
-#include "camel/execute/pass/sched.h"
+#include "camel/execute/pass/runtime_sched.h"
+#include "camel/runtime/graph.h"
 #include "compile.h"
+#include <memory>
+#include <vector>
 
 #include "jit/jit_config.h"
 
@@ -49,7 +52,11 @@ struct FastVMConfig {
     bool enableJitTraceMir = false;
 };
 
-class FastVMSchedPass : public GraphSchedulePass {
+struct FastVMRuntimeRootCache {
+    std::vector<camel::runtime::GCGraph *> callTargetsByPc;
+};
+
+class FastVMSchedPass : public RuntimeGraphSchedulePass {
   public:
     struct CallResult {
         slot_t result;
@@ -59,21 +66,25 @@ class FastVMSchedPass : public GraphSchedulePass {
   private:
     inline static const size_t maxRecursionDepth_ = 256; // default max recursion depth
 
-    // 栈帧池
+    // Frame pool used by the interpreter and JIT trampolines.
     ctx::FramePool framePool_{1 * camel::core::mm::MB};
 
     bytecode_vec_t bytecodes_;
-    std::unordered_map<GIR::Graph *, size_t> offsetMap_;
+    std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap_;
+    camel::runtime::GCGraph *runtimeRoot_ = nullptr;
+    std::vector<std::unique_ptr<FastVMRuntimeRootCache>> runtimeRootCaches_;
 
 #if ENABLE_FASTVM_JIT
     std::unique_ptr<jit::IJitBackend> jitBackend_;
-    std::unordered_map<jit::JitEntryFn, GIR::Graph *> jitFnToGraph_;
+    std::unordered_map<jit::JitEntryFn, camel::runtime::GCGraph *> jitFnToGraph_;
     std::mutex jitCacheMutex_;
     jit::JitConfig jitConfig_{};
     jit::TierPolicy tierPolicy_{jitConfig_};
     bool enableJitTraceMir_ = false;
-    void *currentJitCtx_{}; // 供解释器 FUNC/TAIL 调用 invokeCallOrJit 时使用
-    void compileAndCacheGraph(GIR::Graph *graph, size_t entryPc);
+    // Shared JIT call context consumed by interpreter-side FUNC/TAIL slow paths.
+    void *currentJitCtx_{};
+    void compileAndCacheGraph(camel::runtime::GCGraph *graph, size_t entryPc);
+    bool jitEnabled() const { return jitConfig_.policy != jit::JitPolicy::Disabled; }
 
     template <typename ReadSlotFn>
     void populateCallFrame(
@@ -83,31 +94,21 @@ class FastVMSchedPass : public GraphSchedulePass {
         }
     }
 
-    template <typename ReadSlotFn>
-    ctx::Frame *acquireCallFrameWithArgs(
-        GIR::Graph *graph, const data_idx_t *args, size_t argsCnt, ReadSlotFn &&readSlot) {
-        ctx::Frame *frame = framePool_.acquire(graph);
-        populateCallFrame(frame, args, argsCnt, std::forward<ReadSlotFn>(readSlot));
-        return frame;
-    }
-
-    template <typename ReadSlotFn>
-    ctx::Frame *acquireTailFrameWithArgs(
-        GIR::Graph *graph, const data_idx_t *args, size_t argsCnt, ReadSlotFn &&readSlot) {
-        ctx::Frame *frame = framePool_._acquire(graph);
-        populateCallFrame(frame, args, argsCnt, std::forward<ReadSlotFn>(readSlot));
-        framePool_._resetTop();
-        return frame;
-    }
-
     Bytecode *materializeCallTarget(size_t pc, Bytecode *bc);
+    jit::JitEntryFn jitFnOf(camel::runtime::GCGraph *graph) const;
+    void setJitFnOf(camel::runtime::GCGraph *graph, jit::JitEntryFn fn);
+    bool jitCompileFailedOf(camel::runtime::GCGraph *graph) const;
+    void
+    setJitCompileFailedOf(camel::runtime::GCGraph *graph, bool failed, bool resetReport = false);
+    bool jitFailureReportedOf(camel::runtime::GCGraph *graph) const;
+    void setJitFailureReportedOf(camel::runtime::GCGraph *graph, bool reported);
 #endif
 
-    // 程序计数器栈和栈帧栈
+    // Explicit interpreter stacks for nested program counters and frames.
     std::vector<size_t> pcStack_{maxRecursionDepth_};
     std::vector<ctx::Frame *> frameStack_{maxRecursionDepth_};
 
-    void precompile(GIR::Graph *graph);
+    void precompile(camel::runtime::GCGraph *runtimeRoot);
 
     void push(size_t pc, ctx::Frame *frame);
     std::pair<size_t, ctx::Frame *> pop();
@@ -129,7 +130,7 @@ class FastVMSchedPass : public GraphSchedulePass {
 
   public:
     FastVMSchedPass(const ctx::context_ptr_t &ctx, const FastVMConfig &config = {})
-        : GraphSchedulePass(ctx)
+        : RuntimeGraphSchedulePass(ctx)
 #if ENABLE_FASTVM_JIT
           ,
           jitConfig_([&config]() {
@@ -152,26 +153,33 @@ class FastVMSchedPass : public GraphSchedulePass {
 #endif
     {
     }
-    virtual ~FastVMSchedPass() = default;
+    virtual ~FastVMSchedPass();
 
-    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 
     CallResult callBorrowed(size_t pc, ctx::Frame *rootFrame);
     slot_t call(size_t pc, ctx::Frame *rootFrame);
-    size_t graphEntryPc(GIR::Graph *graph) const;
+    size_t graphEntryPc(camel::runtime::GCGraph *graph) const;
+    camel::runtime::GCGraph *runtimeCallTarget(size_t pc) const;
+    uint32_t noteIndirectCall(camel::runtime::GCGraph *graph) const;
 
 #if ENABLE_FASTVM_JIT
-    inline ctx::Frame *acquireFrameForCall(GIR::Graph *graph) { return framePool_.acquire(graph); }
+    inline ctx::Frame *acquireFrameForCall(camel::runtime::GCGraph *graph) {
+        ASSERT(graph != nullptr, "Runtime graph is null.");
+        return framePool_.acquire(graph);
+    }
     inline void releaseFrameForCall(ctx::Frame *frame) {
         if (framePool_.isActive(frame))
             framePool_.release(frame);
     }
     inline void releaseFrameUnchecked(ctx::Frame *frame) { framePool_.release(frame); }
     inline void releaseFrameForCall(ctx::Frame *frame, GIR::Graph *owner) {
-        if (framePool_.isActive(frame, owner))
+        (void)owner;
+        if (framePool_.isActive(frame))
             framePool_.release(frame);
     }
-    inline ctx::Frame *acquireFrameForTail(GIR::Graph *graph) {
+    inline ctx::Frame *acquireFrameForTail(camel::runtime::GCGraph *graph) {
+        ASSERT(graph != nullptr, "Runtime graph is null.");
         ctx::Frame *f = framePool_._acquire(graph);
         framePool_._resetTop();
         return f;
@@ -182,8 +190,9 @@ class FastVMSchedPass : public GraphSchedulePass {
     }
     slot_t invokeOwnedJitFrame(jit::JitEntryFn fn, ctx::Frame *frame, void *jitCtx);
     inline ctx::Context &context() { return *context_; }
-    GIR::Graph *jitFnToGraph(jit::JitEntryFn fn) const;
+    camel::runtime::GCGraph *jitFnToGraph(jit::JitEntryFn fn) const;
     slot_t invokeCallOrJit(
-        size_t pc, GIR::Graph *graph, ctx::Frame *frame, void *jitCtx, uint32_t callCount = 0);
+        size_t pc, camel::runtime::GCGraph *runtimeGraph, ctx::Frame *frame, void *jitCtx,
+        uint32_t callCount = 0);
 #endif
 };

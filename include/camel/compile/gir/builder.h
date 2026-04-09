@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 14, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,11 +48,12 @@ struct InlineResult {
 };
 
 // =============================================================================
-// LayoutResult：computeLayout() 的纯计算输出。
+// LayoutResult: pure compute output from computeLayout().
 //
-// 包含图中所有节点的新 slot 编号映射、静态数据数组、以及各类签名类型，
-// 由 applyLayout() 一次性写入 Graph。将 layout 计算与 Graph 变更解耦，
-// 使得 sealGraph / exportRoot 等流程可以先计算再搬运。
+// Contains the new slot index mapping for all nodes, the static data array,
+// and the various signature types. applyLayout() writes it into Graph in one
+// pass. Decoupling layout computation from Graph mutation lets sealGraph /
+// exportRoot-style flows compute first and apply later.
 // =============================================================================
 struct LayoutResult {
     std::vector<std::pair<Node *, data_idx_t>> nodeIndices;
@@ -64,20 +65,24 @@ struct LayoutResult {
 };
 
 // =============================================================================
-// GraphBuilder：Graph 的唯一底层构造/变换入口。
+// GraphBuilder: the only low-level construction/transformation entry point for Graph.
 //
-// 职责：
-//   1. 创建新图 (createGraph)、克隆图 (cloneGraph)。
-//   2. 在 draft（非 finalized）图上执行单图结构编辑：增删节点、端口、闭包、子图、依赖。
-//   3. 封印 (sealGraph)：一次性执行布局计算（rearrange + finalized frame layout），然后将所有
-//      节点的 draft 邻接 vectors 冻结到 arena 定长数组上。封印后图不再允许编辑。
+// Responsibilities:
+//   1. Create new graphs (createGraph) and clone graphs (cloneGraph).
+//   2. Perform single-graph structural edits on draft (non-finalized) graphs:
+//      add/remove nodes, ports, closures, subgraphs, and dependencies.
+//   3. Seal graphs (sealGraph): run layout computation once (rearrange + finalized
+//      frame layout), then freeze all nodes' draft adjacency vectors into arena-backed
+//      fixed arrays. After sealing, the graph can no longer be edited.
 //
-// 设计约束：
-//   - GraphBuilder 只负责当前 graph_ 这一张图的底层变换，不负责跨图事务。
-//   - 构图期可变状态存放在 GraphBuilderState（定义于 graph.h）中。
-//   - Graph 自身不暴露任何 mutable 接口，所有写操作均通过 GraphBuilder (friend)。
-//   - sealGraph 是单向终结。要修改已封印的图必须先 cloneGraph 出 draft 副本。
-//   - computeLayout() / applyLayout() 将布局计算与变更解耦。
+// Design constraints:
+//   - GraphBuilder only handles low-level mutation for the current graph_; it does
+//     not manage cross-graph transactions.
+//   - Mutable build-time state lives in GraphBuilderState (defined in graph.h).
+//   - Graph itself exposes no mutable API; all writes go through GraphBuilder (friend).
+//   - sealGraph is a one-way terminal step. To modify a sealed graph, cloneGraph it
+//     into a draft copy first.
+//   - computeLayout() / applyLayout() separate layout computation from mutation.
 // =============================================================================
 class GraphBuilder {
   public:
@@ -89,7 +94,8 @@ class GraphBuilder {
 
     static graph_ptr_t createGraph(
         FunctionType *funcType, const graph_ptr_t &outer = nullptr, const std::string &name = "");
-    static graph_ptr_t cloneGraph(const graph_ptr_t &graph);
+    static graph_ptr_t cloneGraph(
+        const graph_ptr_t &graph, std::unordered_map<const Node *, Node *> *nodeMapOut = nullptr);
 
     Graph &graph() const { return *graph_; }
     graph_ptr_t graphPtr() const { return graph().shared_from_this(); }
@@ -120,29 +126,32 @@ class GraphBuilder {
     }
     InlineResult inlineCallable(Node *node, const InlineOptions &options = {}) const;
     void pruneUnreachable() const;
-    /// 封印此图：执行布局计算（rearrange + finalized frame layout），然后将所有节点的
-    /// draft 邻接 vectors 搬迁到 arena 上的定长数组。具有 consume 语义：
-    /// 调用后 builder 不再可用（graph_ 置 nullptr）。
+    /// Seal this graph: run layout computation (rearrange + finalized frame layout),
+    /// then move all nodes' draft adjacency vectors into arena-backed fixed arrays.
+    /// This has consume semantics: after the call, the builder is no longer usable
+    /// (graph_ becomes nullptr).
     void sealGraph();
-    /// 递归封印整棵图树（深度优先）。
+    /// Recursively seal the whole graph tree (depth-first).
     static void sealGraphRecursively(const graph_ptr_t &graph);
 
-    /// 纯计算：遍历 graph 的 ports/closure/nodes，生成 slot 编号映射和签名类型，
-    /// 不修改 Graph 任何成员。后续由 applyLayout() 一次性写入。
+    /// Pure computation: walk graph ports/closure/nodes, generate slot mappings
+    /// and signature types, and modify no Graph members. applyLayout() writes the
+    /// result later in one pass.
     static LayoutResult computeLayout(const Graph &graph);
 
     static void validateGraph(const Graph &graph);
     static void validateGraphRecursively(const graph_ptr_t &graph);
 
   private:
-    // 所有写操作先写 GraphBuilderState(staging)，再由 syncStateToGraph 镜像到 Graph 字段。
-    // sealed 后 staging 被消费，Graph 回到只读视图。
-    /// 内部 seal 状态机：Draft -> Sealing -> Sealed（幂等）。
-    /// 顺序固定为：rearrange -> debug promote -> freeze adjacency -> static pack
-    /// -> installFinalFrameLayout -> releaseDraftRegion。
+    // All writes go to GraphBuilderState (staging) first, then syncStateToGraph
+    // mirrors them into Graph fields. After sealing, staging is consumed and
+    // Graph returns to a read-only view.
+    /// Internal seal state machine: Draft -> Sealing -> Sealed (idempotent).
+    /// Fixed order: rearrange -> debug promote -> freeze adjacency -> static pack
+    /// -> installFinalFrameLayout -> releaseDraftRegion.
     void finalize() const;
-    /// 将 computeLayout() 的结果写入 graph：更新每个节点的 dataIndex、
-    /// 更新 Graph 的 signature / staticDataArr / finalized frame layout。
+    /// Write the result of computeLayout() into graph: update each node's dataIndex
+    /// and update Graph's signature / staticDataArr / finalized frame layout.
     static void applyLayout(Graph &graph, const LayoutResult &layout);
     void rearrange() const;
     void assertBuildable(const char *action) const;
@@ -154,7 +163,8 @@ class GraphBuilder {
     Graph *graph_;
 };
 
-// GraphDraft 已拆分至 `draft.h`，用于承载跨图 rewrite 会话中的 owned 范围、
-// source->draft 规范化与封印导出流程。`builder.h` 仅保留单图底层变换 API。
+// GraphDraft has been split into draft.h to carry owned scopes, source->draft
+// normalization, and sealing export for cross-graph rewrite sessions.
+// builder.h keeps only the single-graph low-level mutation API.
 
 } // namespace camel::compile::gir

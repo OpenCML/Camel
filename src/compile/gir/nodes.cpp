@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,7 +49,8 @@ inline void assertDraftMutable(const Node *node, const char *action) {
 template <typename T, typename... Args> T *makeOwnedNode(Graph &graph, Args &&...args) {
     auto arena = graph.arena();
     ASSERT(arena != nullptr, "Graph arena is null.");
-    // Node 本体直接进入 FrozenRegion，确保 seal 后 releaseDraftRegion 不影响节点生命周期。
+    // Put the Node body directly into FrozenRegion so releaseDraftRegion after
+    // sealing does not affect node lifetime.
     Node *owned = GraphBuilder(graph).ownNode(arena->constructTrackedInRegion<T>(
         GraphArena::Region::Frozen,
         std::forward<Args>(args)...));
@@ -59,7 +60,7 @@ template <typename T, typename... Args> T *makeOwnedNode(Graph &graph, Args &&..
 } // namespace
 
 // =============================================================================
-// Node freeze 支持
+// Node freeze support
 // =============================================================================
 
 void Node::freezeAdjacency(GraphArena &arena) {
@@ -81,7 +82,7 @@ void Node::freezeAdjacency(GraphArena &arena) {
     frzWithOut_ = copyToArena(withOutputs_);
     frzCtrlOut_ = copyToArena(ctrlOutputs_);
 
-    // 释放 draft vectors 的堆内存
+    // Release the heap memory used by the draft vectors.
     normInputs_  = {};
     withInputs_  = {};
     ctrlInputs_  = {};
@@ -92,7 +93,7 @@ void Node::freezeAdjacency(GraphArena &arena) {
 }
 
 // =============================================================================
-// Node 索引与连通性
+// Node indexing and connectivity
 // =============================================================================
 
 data_idx_t Node::index() const {
@@ -233,7 +234,7 @@ JoinNode *Node::matchedJoinOutput() const {
 }
 
 // =============================================================================
-// Node 连边与替换
+// Node edge linking and replacement
 // =============================================================================
 
 void Node::link(LinkType type, Node *from, Node *to) {
@@ -401,7 +402,8 @@ void Node::replaceInput(LinkType type, Node *owner, Node *oldInput, Node *newInp
         return;
     }
 
-    // BRCH/JOIN 等节点会把边序当作槽位语义，不能用 unlink+link 破坏原位置。
+    // BRCH/JOIN and similar nodes treat edge order as slot semantics, so do
+    // not use unlink+link to disturb the original position.
     auto &inputs     = selectInputs(type, owner);
     auto &oldOutputs = selectOutputs(type, oldInput);
     auto &newOutputs = selectOutputs(type, newInput);
@@ -447,7 +449,8 @@ void Node::replaceOutput(LinkType type, Node *owner, Node *oldOutput, Node *newO
         return;
     }
 
-    // 这里保留 owner 侧的输出槽位顺序，避免控制分支编号在 rewrite 之后漂移。
+    // Preserve the owner's output slot order here so control-branch numbering
+    // does not drift after rewrite.
     auto &outputs   = selectOutputs(type, owner);
     auto &oldInputs = selectInputs(type, oldOutput);
     auto &newInputs = selectInputs(type, newOutput);
@@ -500,8 +503,9 @@ bool Node::replace(Node *oldNode, Node *newNode) {
     const node_vec_t normOutputs(oldNode->normOutputs().begin(), oldNode->normOutputs().end());
     const node_vec_t ctrlOutputs(oldNode->ctrlOutputs().begin(), oldNode->ctrlOutputs().end());
 
-    // 整节点替换与单边替换必须复用同一套保序语义，否则 BRCH/JOIN/CALL 这类依赖槽位
-    // 顺序的节点会在“节点级 rewrite”里悄悄漂移。
+    // Whole-node replacement and single-edge replacement must share the same
+    // order-preserving semantics, or BRCH/JOIN/CALL-style nodes that depend on
+    // slot order will silently drift during node-level rewrite.
     for (Node *in : withInputs) {
         Node::replaceOutput(LinkType::With, in, oldNode, newNode);
     }

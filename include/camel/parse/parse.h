@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 24, 2025
- * Updated: Mar. 10, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -67,7 +67,8 @@ class ParserErrorListener : public antlr4::BaseErrorListener {
 
 class CamelParser {
     camel::core::error::diagnostics_ptr_t diagnostics_;
-    camel::source::source_context_ptr_t sourceContext_; // 解析阶段产出的 span/origin 都写入这里。
+    camel::source::source_context_ptr_t
+        sourceContext_; // Parse-stage spans/origins are written here.
     antlr4::ANTLRInputStream input_;
 
     std::unique_ptr<OpenCMLLexer> lexer_;
@@ -76,7 +77,7 @@ class CamelParser {
 
     antlr4::tree::ParseTree *cst_ = nullptr;
     AST::node_ptr_t ast_          = nullptr;
-    // 当前正在解析的源文件在 SourceContext 中的逻辑 ID。
+    // Logical ID of the source file currently being parsed in SourceContext.
     camel::source::source_file_id_t sourceFileId_ = camel::source::kInvalidSourceFileId;
 
     bool buildCST() {
@@ -127,7 +128,7 @@ class CamelParser {
     CamelParser(camel::core::error::diagnostics_ptr_t diagnostics) : diagnostics_(diagnostics) {}
     ~CamelParser() = default;
 
-    /// 解析器本身不拥有 SourceContext，只把解析结果登记进去。
+    /// The parser does not own SourceContext; it only records parse results into it.
     void setSourceContext(camel::source::source_context_ptr_t sourceContext) {
         sourceContext_ = std::move(sourceContext);
         if (diagnostics_) {
@@ -159,8 +160,8 @@ class CamelParser {
     bool parse(std::istream &is) {
         input_.load(is);
         if (sourceContext_) {
-            // 在词法/语法分析前先注册完整源文件文本。
-            // 后续 AST builder 会基于 parser context 的 start/stop offset 创建 span。
+            // Register the full source text before parsing so later AST construction can build
+            // spans from parser context start/stop offsets.
             sourceFileId_ =
                 sourceContext_->registerFile(diagnostics_->modulePath(), input_.toString());
         }

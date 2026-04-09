@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 12, 2026
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -280,8 +280,10 @@ class GraphArena {
             metrics_.draftFreedBytes += usedInRegion(Region::Draft);
             runTrackedDestructors(draftTrackedDtors_);
             if (!recycleMemory) {
-                // Draft 区在 seal 后逻辑上已释放，但物理内存回收到 metaSpace 会让任何
-                // 残余悬挂指针直接破坏 free-list。这里延迟到 GraphArena 析构时统一回收。
+                // The Draft region is logically released after sealing, but returning
+                // the physical memory to metaSpace would let any dangling pointer
+                // immediately corrupt the free list. Defer this to GraphArena
+                // destruction and reclaim it there in one place.
                 return;
             }
         }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 20, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -68,5 +68,5 @@ std::string cppBridgeTypeExprFor(const CppBridgePlan &plan, camel::core::type::T
 std::string emitCppRuntimeFallbackExpr(
     const CppBridgePlan &plan, GIR::OperNode *node,
     const std::function<std::string(GIR::Node *)> &emitExpr);
-/// 生成 main 中的 initialize 调用；usesRuntimeBridge 为 false 时返回空。
+/// Generate the initialize call in main; return empty when usesRuntimeBridge is false.
 std::string emitCppBridgeInitializeCall(const CppBridgePlan &plan);

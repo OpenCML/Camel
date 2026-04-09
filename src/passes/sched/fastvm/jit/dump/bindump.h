@@ -13,24 +13,26 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "camel/execute/pass/trans.h"
+#include "camel/execute/pass/runtime_trans.h"
 
 namespace ctx = camel::core::context;
 
 /**
- * JitBinaryDumpPass: 对所有图尝试 JIT 编译，并将生成的机器码可视化打印。
- * 参照 LinkedBytecodeDumpPass 的格式，输出每个图的机器码（十六进制）。
+ * JitBinaryDumpPass: attempts to JIT-compile every graph and prints the
+ * generated machine code in a visualized form.
+ * The output follows LinkedBytecodeDumpPass formatting and prints each graph's
+ * machine code in hexadecimal.
  */
-class JitBinaryDumpPass : public GraphTranslatePass {
+class JitBinaryDumpPass : public RuntimeGraphTranslatePass {
   public:
-    JitBinaryDumpPass(const ctx::context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
+    JitBinaryDumpPass(const ctx::context_ptr_t &ctx) : RuntimeGraphTranslatePass(ctx) {}
     virtual ~JitBinaryDumpPass() = default;
 
-    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 };

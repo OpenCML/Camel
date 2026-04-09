@@ -1,10 +1,10 @@
-# Camel 项目编译选项
-# 选项定义见 cmake/options.json，可用 npm run config 交互式配置
-# 用户覆盖保存在 .camel-opts.json，build/debug/profile 会自动读取
+# Camel project build options
+# Option definitions live in cmake/options.json and can be configured interactively with `npm run config`.
+# User overrides are stored in .camel-opts.json and are read automatically by build/debug/profile.
 
 include_guard(GLOBAL)
 
-# 当使用 CAMEL_OPTIONS_TARGET（interface 库）时用 INTERFACE，否则用 PRIVATE
+# Use INTERFACE when CAMEL_OPTIONS_TARGET is set (an interface library); otherwise use PRIVATE.
 set(_opt_visibility PRIVATE)
 set(_opt_target ${PROJECT_NAME})
 if(DEFINED CAMEL_OPTIONS_TARGET)
@@ -12,7 +12,7 @@ if(DEFINED CAMEL_OPTIONS_TARGET)
     set(_opt_target ${CAMEL_OPTIONS_TARGET})
 endif()
 
-# 简单布尔选项: option(NAME) + target_compile_definitions(NAME=0|1)
+# Simple boolean option: option(NAME) + target_compile_definitions(NAME=0|1).
 macro(add_bool_option name description default)
     option(${name} ${description} ${default})
     if(${name})
@@ -23,8 +23,8 @@ macro(add_bool_option name description default)
     message(STATUS "${name}=${${name}}")
 endmacro()
 
-# 带平台检查的选项: 仅在指定平台且 option=ON 时启用
-# extra_on/off: 额外的 compile definitions（如 JIT_TARGET_X64=1）
+# Platform-checked option: only enabled when the platform matches and option=ON.
+# extra_on/off: additional compile definitions (for example JIT_TARGET_X64=1).
 macro(add_platform_option name description default platform_regex extra_on extra_off)
     option(${name} ${description} ${default})
     set(_enabled FALSE)
@@ -44,7 +44,7 @@ macro(add_platform_option name description default platform_regex extra_on extra
     endif()
 endmacro()
 
-# ========== FastVM 选项 ==========
+# ========== FastVM options ==========
 
 message(STATUS "============ Build options: ============")
 
@@ -58,5 +58,17 @@ add_platform_option(
 )
 
 add_bool_option(ENABLE_FASTVM_COMPUTED_GOTO "Use computed goto in interpreter" ON)
+
+# ========== Python embedding modules (python.cmo / pyplot.cmo / py_bridge*) ==========
+# Defined in cmake/options.json; CAMEL_SKIP_PYTHON=1 forces them off during configuration (higher priority than cache).
+option(
+    CAMEL_ENABLE_PYTHON
+    "Build python.cmo, pyplot.cmo, and py_bridge* (requires Python dev layout)"
+    ON
+)
+if(DEFINED ENV{CAMEL_SKIP_PYTHON} AND "$ENV{CAMEL_SKIP_PYTHON}" MATCHES "^(1|ON|YES|TRUE)$")
+    set(CAMEL_ENABLE_PYTHON OFF CACHE BOOL "disabled via CAMEL_SKIP_PYTHON" FORCE)
+endif()
+message(STATUS "CAMEL_ENABLE_PYTHON=${CAMEL_ENABLE_PYTHON}")
 
 message(STATUS "========================================")

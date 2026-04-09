@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,23 +40,26 @@ class Encoder {
     size_t here() const { return out_.size(); }
 
     void emitByte(uint8_t b) { out_.push_back(b); }
-    // 缓冲 asm 行 (地址, 指令文本)，flush 时按实际最大地址宽度右对齐；始终记录以便取指令边界
+    // Buffer asm lines (address, instruction text); flush right-aligns them by the actual maximum
+    // address width. Keep recording so instruction boundaries can be extracted.
     void asmLine(const std::string &s) {
         if (!recordAsm_)
             return;
         asmLines_.emplace_back(baseAddr_ + here(), s);
     }
-    // 用指令起始偏移记录 asm 行（用于跳转等，保证 [addr] 与下一指令间隔 = 本条指令长度）
+    // Record asm lines by instruction start offset (for jumps, etc.), so the gap between [addr] and
+    // the next instruction equals this instruction's length.
     void asmLineAt(size_t instrStart, const std::string &s) {
         if (!recordAsm_)
             return;
         asmLines_.emplace_back(baseAddr_ + instrStart, s);
     }
     size_t getAsmLineCount() const { return asmLines_.size(); }
-    // 供 bindump 等按指令分解机器码：(baseAddr 相对) 起始偏移、长度、汇编文本
+    // Used by bindump and similar tools to split machine code by instruction: (baseAddr-relative)
+    // start offset, length, and assembly text.
     const std::vector<std::pair<size_t, std::string>> &getAsmLines() const { return asmLines_; }
-    // 将缓冲中第 index 行的 rel32 显示改为 rel（用于 jz/jmp/jle 修补后）；rel=0 时注释标为 (next)
-    // 避免误解为死循环
+    // Update the rel32 comment in the index-th buffered line (after jz/jmp/jle patches); when
+    // rel=0, mark the comment as (next). Avoid misreading it as an infinite loop.
     void setAsmLineRel(size_t index, int32_t rel) {
         if (index >= asmLines_.size())
             return;
@@ -104,10 +107,10 @@ class Encoder {
     void rexWR() { emitByte(0x4C); }
     void rexWB() { emitByte(0x49); }
 
-    // --- 标准槽模型：每槽一字（8 字节），以下所有 frame/静态区 访问均为 64 位（r64/m64 或 xmm
-    // 双精度）---
+    // --- Standard slot model: one word per slot (8 bytes). All frame/static-area accesses below
+    // are 64-bit (r64/m64 or xmm double precision) ---
 
-    // mov rax, [rdi + disp] (disp8 或 disp32)，64 位加载一槽
+    // mov rax, [rdi + disp] (disp8 or disp32), load one 64-bit slot.
     void movRaxFromFrame(int disp) {
         size_t at = here();
         rexW();
@@ -173,7 +176,7 @@ class Encoder {
         asmLineAt(at, std::string("mov [rdi+") + std::to_string(disp) + "], " + regName(reg));
     }
 
-    // mov [rdi + disp], rax，64 位写回一槽
+    // mov [rdi + disp], rax, write back one 64-bit slot.
     void movFrameFromRax(int disp) {
         size_t at = here();
         rexW();
@@ -327,7 +330,8 @@ class Encoder {
         endScratch();
     }
 
-    // double (float64) 算术：用 xmm0，一槽 8 字节；与 LADD/LSUB 槽布局一致
+    // double (float64) arithmetic: use xmm0; one slot is 8 bytes; matches the LADD/LSUB slot
+    // layout.
     void movXmm0FromFrame(int disp) {
         emitBytes({0xf2, 0x0f, 0x10});
         if (fitsDisp8(disp))
@@ -428,7 +432,7 @@ class Encoder {
         asmLine("divsd xmm0, [rbx]");
         endScratch();
     }
-    // comisd xmm0, op; setcc al; movzx rax, al（D* 比较，op 在 frame/memat/reg）
+    // comisd xmm0, op; setcc al; movzx rax, al (D* comparisons; op may be in frame/mem/ reg).
     void comisdXmm0WithFrame(int disp) {
         emitBytes({0x66, 0x0f, 0x2f});
         if (fitsDisp8(disp))
@@ -491,7 +495,7 @@ class Encoder {
         asmLine("movzx rax, al");
     }
 
-    // --- 32 位整型 (I*)：无 REX.W，操作数 32 位，结果零扩展到 rax ---
+    // --- 32-bit integers (I*): no REX.W, operands are 32-bit, result is zero-extended to rax ---
     void movEaxFromFrame(int disp) {
         if (fitsDisp8(disp)) {
             emitBytes({0x8b, 0x47, static_cast<uint8_t>(disp & 0xff)});
@@ -513,7 +517,7 @@ class Encoder {
         emitBytes({0x8b, modrm});
         asmLine(std::string("mov eax, ") + regName(reg));
     }
-    // mov reg, eax（32 位，零扩展到 64），用于 VAdd32 等结果写回
+    // mov reg, eax (32-bit, zero-extends to 64), used to write back results for VAdd32, etc.
     void movRegFromEax(uint8_t reg) {
         if (reg == 0)
             return;
@@ -754,7 +758,8 @@ class Encoder {
         emitBytes({0x48, 0x0f, 0xb6, 0xc0});
     }
 
-    // --- 32 位浮点 (F*)：movss/addss/subss/mulss/divss/comiss，一槽仍 8 字节，低 4 字节为 float
+    // --- 32-bit floats (F*): movss/addss/subss/mulss/divss/comiss; one slot is still 8 bytes, low
+    // 4 bytes hold the float.
     // ---
     void movSsXmm0FromFrame(int disp) {
         emitBytes({0xf3, 0x0f, 0x10});
@@ -917,7 +922,7 @@ class Encoder {
         asmLine("comiss xmm0, xmm1");
     }
 
-    // double 与 GPR 互转（reg 0..7 = rax..r11，与 regName 一致）
+    // Convert between double and GPR (reg 0..7 = rax..r11, matching regName).
     void movXmm0FromReg(uint8_t reg) {
         uint8_t regEnc = reg & 7;
         uint8_t modrm  = static_cast<uint8_t>(0xC0 | (regEnc & 7));
@@ -964,7 +969,7 @@ class Encoder {
         asmLineAt(at, std::string("movq ") + regName(reg) + ", xmm0");
     }
 
-    // cmp [rdi + disp8], imm32 (signed)，64 位比较一槽（REX.W）
+    // cmp [rdi + disp8], imm32 (signed), 64-bit comparison, one slot (REX.W).
     void cmpFrameWithImm(int disp, int32_t imm) {
         rexW();
         emitBytes({0x81, 0x7f, static_cast<uint8_t>(disp & 0xff)});
@@ -977,7 +982,7 @@ class Encoder {
         asmLine("cmp [rdi+" + std::to_string(disp) + "], " + std::to_string(imm));
     }
 
-    // cmp rax, reg（64 位，用于 VCmpSet* 两操作数均在 reg）
+    // cmp rax, reg (64-bit, used when both VCmpSet* operands are in regs).
     void cmpRaxWithReg(uint8_t reg) {
         size_t at      = here();
         uint8_t regEnc = reg & 7;
@@ -1068,7 +1073,7 @@ class Encoder {
         asmLineAt(at, std::string("cmp ") + regName(reg) + ", " + std::to_string(imm));
     }
 
-    // cmp rax, [rdi + disp] 64 位比较一槽（disp8 或 disp32）
+    // cmp rax, [rdi + disp] 64-bit comparison, one slot (disp8 or disp32).
     void cmpRaxWithFrame(int disp) {
         rexW();
         if (fitsDisp8(disp)) {
@@ -1080,7 +1085,7 @@ class Encoder {
         asmLine("cmp rax, [rdi+" + std::to_string(disp) + "]");
     }
 
-    // cmp rax, [rdi+disp]; setle al; movzx rax, al（LLE 右操作数在 frame）
+    // cmp rax, [rdi+disp]; setle al; movzx rax, al (LLE right operand in frame).
     void cmpRaxFrameSetle(int disp) {
         cmpRaxWithFrame(disp);
         emitBytes({0x0f, 0x9e, 0xc0}); // setle al
@@ -1089,7 +1094,7 @@ class Encoder {
         asmLine("movzx rax, al");
     }
 
-    // mov rbx, addr; cmp rax, [rbx]; setle al; movzx rax, al（LLE 右操作数在静态区）
+    // mov rbx, addr; cmp rax, [rbx]; setle al; movzx rax, al (LLE right operand in static area).
     void cmpRaxMemAtSetle(uint64_t addr) {
         cmpRaxWithMemAt(addr);
         emitBytes({0x0f, 0x9e, 0xc0}); // setle al
@@ -1098,8 +1103,8 @@ class Encoder {
         asmLine("movzx rax, al");
     }
 
-    // cmp rax, [addr]; setcc al; movzx（静态区右操作数），setcc: 0x9c=setl 0x9f=setg 0x94=sete
-    // 0x95=setne 0x9d=setge
+    // cmp rax, [addr]; setcc al; movzx (static-area right operand), setcc: 0x9c=setl 0x9f=setg
+    // 0x94=sete 0x95=setne 0x9d=setge
     void cmpRaxWithMemAt(uint64_t addr) {
         beginScratchAddr(addr);
         rexW();
@@ -1209,7 +1214,7 @@ class Encoder {
         endScratch();
     }
 
-    // cqo; idiv r/m64（LDIV，被除数已在 rax）
+    // cqo; idiv r/m64 (LDIV, dividend already in rax).
     void idivRaxByReg(uint8_t reg) {
         emitBytes({0x48, 0x99}); // cqo
         asmLine("cqo");
@@ -1246,7 +1251,7 @@ class Encoder {
         endScratch();
     }
 
-    // jmp rel32 (到 offset)
+    // jmp rel32 (to offset).
     void jmpRel32(int32_t rel) {
         size_t at = here();
         emitByte(0xe9);
@@ -1310,7 +1315,7 @@ class Encoder {
              static_cast<uint8_t>((rel >> 24) & 0xff)});
         asmLineAt(at, "je .+" + std::to_string(rel) + "  ; rel32");
     }
-    // jmp rel8 (短跳转, -128..127)
+    // jmp rel8 (short jump, -128..127).
     void jmpRel8(int8_t rel) {
         emitByte(0xeb);
         emitByte(static_cast<uint8_t>(rel & 0xff));
@@ -1339,7 +1344,8 @@ class Encoder {
     // JIT body has no prologue to undo — just jmp rax
     void tailJmpRaxWin64() { jmpRax(); }
 
-    // push rdi / pop rdi：trampoline 会覆盖 rdi，caller 需在调用前后保存/恢复 slot base
+    // push rdi / pop rdi: trampoline clobbers rdi, so the caller must save/restore the slot base
+    // around calls.
     void pushRdi() {
         size_t at = here();
         emitByte(0x57);
@@ -1391,16 +1397,20 @@ class Encoder {
         asmLineAt(at, "add rsp, 8");
     }
 
-    // Debug：栈 136 字节，保存区与 JitDebugContext 布局一致；JIT 调用 jitDebugTraceWrapper，
-    // wrapper 将 ctx 拷入 thread_local 再调 stub，stub 只写 thread_local，不覆盖本栈，恢复正确。
-    // rdi 为 slot 基址，trace 路径会破坏 rdi，必须在 call 前保存、call 后恢复。将 rdi 额外存到
-    // [rsp+128]，恢复时从备份取，避免 callee 写 shadow/栈覆盖 [rsp+64] 导致 JOIN 等读到错误 frame。
+    // Debug: 136-byte stack; the save area matches the JitDebugContext layout. JIT calls
+    // jitDebugTraceWrapper, and the wrapper copies ctx into thread_local before calling the stub;
+    // the stub writes only to thread_local, not this stack, so restoration is correct. rdi is the
+    // slot base; the trace path clobbers rdi, so it must be saved before the call and restored
+    // after it. Store rdi additionally into [rsp+128] and restore from that backup to avoid the
+    // callee overwriting [rsp+64] through shadow/stack writes and causing JOIN, etc. to read the
+    // wrong frame.
     void emitDebugTraceCall(uint32_t pc, void *fnAddr) {
         constexpr uint8_t off_rax = 112, off_rcx = 104, off_rdx = 96;
         constexpr uint8_t off_r8 = 56, off_r9 = 48, off_r10 = 40, off_r11 = 32;
-        constexpr uint8_t off_rdi     = 64;  // JitDebugContext.rdi
-        constexpr uint8_t off_rdi_bak = 128; // 备份，恢复时用，避免 [rsp+64] 被 callee 覆盖
-        size_t blockStart             = here();
+        constexpr uint8_t off_rdi = 64; // JitDebugContext.rdi
+        constexpr uint8_t off_rdi_bak =
+            128; // Backup used during restore, to avoid [rsp+64] being clobbered by the callee
+        size_t blockStart = here();
         emitBytes({0x48, 0x81, 0xec, 0x88, 0x00, 0x00, 0x00}); // sub rsp, 136
         emitBytes({0x48, 0x89, 0x44, 0x24, off_rax});
         emitBytes({0x48, 0x89, 0x4c, 0x24, off_rcx});
@@ -1411,7 +1421,7 @@ class Encoder {
         emitBytes({0x4c, 0x89, 0x5c, 0x24, off_r11});
         emitBytes({0x48, 0x89, 0xbc, 0x24, off_rdi, 0x00, 0x00, 0x00}); // mov [rsp+64], rdi
         emitBytes(
-            {0x48, 0x89, 0xbc, 0x24, off_rdi_bak, 0x00, 0x00, 0x00}); // mov [rsp+128], rdi 备份
+            {0x48, 0x89, 0xbc, 0x24, off_rdi_bak, 0x00, 0x00, 0x00}); // mov [rsp+128], rdi backup
         emitBytes({0xc7, 0x84, 0x24, 0x78, 0x00, 0x00, 0x00});
         emitBytes({
             static_cast<uint8_t>(pc & 0xff),
@@ -1442,7 +1452,8 @@ class Encoder {
             for (int i = 0; i < 16; ++i)
                 emitByte(0x90);
         }
-        // 先恢复 rdi（slot 基址），再恢复其它寄存器，避免 JOIN 等后续指令用错 frame
+        // Restore rdi (slot base) first, then restore the other registers to avoid later
+        // instructions using the wrong frame.
         emitBytes({0x48, 0x8b, 0xbc, 0x24, off_rdi_bak, 0x00, 0x00, 0x00}); // mov rdi, [rsp+128]
         emitBytes({0x48, 0x8b, 0x44, 0x24, off_rax});
         emitBytes({0x48, 0x8b, 0x4c, 0x24, off_rcx});
@@ -1483,13 +1494,13 @@ class Encoder {
         asmLine("movzx rax, al");
     }
 
-    // test rax, rax（设置 ZF，供后续 cmove 使用）
+    // test rax, rax (set ZF for later cmove use)
     void testRaxRax() {
         size_t at = here();
         emitBytes({0x48, 0x85, 0xc0});
         asmLineAt(at, "test rax, rax");
     }
-    // test reg, reg（不破坏 rax，用于 JOIN 的 vtest 后接 vcmovnz）
+    // test reg, reg (does not clobber rax; used for JOIN's vtest followed by vcmovnz)
     void testRegReg(uint8_t reg) {
         if (reg == 0) {
             testRaxRax();
@@ -1506,19 +1517,19 @@ class Encoder {
         asmLineAt(at, std::string("test ") + regName(reg) + ", " + regName(reg));
     }
 
-    // cmove rcx, rbx（ZF=1 时 rcx=rbx），用于 JOIN 根据分支索引选值
+    // cmove rcx, rbx (rcx = rbx when ZF=1), used by JOIN to select a value by branch index.
     void cmoveRcxFromRbx() {
         emitBytes({0x48, 0x0f, 0x44, 0xcb});
         asmLine("cmove rcx, rbx");
     }
 
-    // cmove r8, r9（ZF=1 时 r8=r9），用于 BRCH 在 test rax,rax 后选 0/1
+    // cmove r8, r9 (r8 = r9 when ZF=1), used by BRCH to select 0/1 after test rax,rax.
     void cmoveR8FromR9() {
         emitBytes({0x4d, 0x0f, 0x44, 0xc1}); // REX.WRB 0F 44 /r: reg=r8, r/m=r9
         asmLine("cmove r8, r9");
     }
 
-    // cmove/cmovnz 通用两寄存器（用于 VReg 分配后的 JOIN 等）
+    // Generic two-register cmove/cmovnz (used by JOIN after VReg allocation, etc.)
     void cmoveRegFromReg(uint8_t dst, uint8_t src) {
         size_t at   = here();
         uint8_t rex = 0x48;
@@ -1526,7 +1537,7 @@ class Encoder {
             rex |= 1;
         if (src >= 4 && src <= 7)
             rex |= 4;
-        // ModRM: reg=dst, r/m=src → cmove dst, src（ZF=1 时 dst:=src）
+        // ModRM: reg=dst, r/m=src -> cmove dst, src (dst := src when ZF=1)
         emitByte(rex);
         emitBytes({0x0f, 0x44, static_cast<uint8_t>(0xC0 | ((dst & 7) << 3) | (src & 7))});
         asmLineAt(at, std::string("cmove ") + regName(dst) + ", " + regName(src));
@@ -1539,7 +1550,7 @@ class Encoder {
         if (src >= 4 && src <= 7)
             rex |= 4;
         emitByte(rex);
-        // ModRM: reg=dst(目标), r/m=src(源) → cmovnz dst, src（ZF=0 时 dst:=src）
+        // ModRM: reg=dst (destination), r/m=src (source) -> cmovnz dst, src (dst := src when ZF=0)
         emitBytes({0x0f, 0x45, static_cast<uint8_t>(0xC0 | ((dst & 7) << 3) | (src & 7))});
         asmLineAt(at, std::string("cmovnz ") + regName(dst) + ", " + regName(src));
     }
@@ -1551,7 +1562,7 @@ class Encoder {
         jzRel32(rel);
     }
 
-    // 仅 jz rel32（ZF 已由前一条 test/cmov 等设置）
+    // Only jz rel32 (ZF already set by the preceding test/cmov, etc.).
     void jzRel32(int32_t rel) {
         size_t at = here();
         emitBytes({0x0f, 0x84}); // jz rel32
@@ -1585,8 +1596,10 @@ class Encoder {
     }
 
     // call [rax] - call through rax (used after movRaxImm64)
-    // Win64: call 前 RSP 必须 16 字节对齐。CallRax 前必有 PushRdi，push 后 RSP=0(mod 16)，
-    // 故仅需 sub 32（shadow），无需额外 8 字节对齐；sub 40 会导致 call 前 RSP=8(mod 16)，违反 ABI。
+    // Win64: RSP must be 16-byte aligned before a call. CallRax is always preceded by PushRdi;
+    // after the push, RSP = 0 (mod 16), so only sub 32 (shadow space) is needed; no extra 8-byte
+    // alignment is required. sub 40 would make RSP = 8 (mod 16) before the call and violate the
+    // ABI.
     void callRax() {
         size_t at;
 #if defined(_WIN32) || defined(_WIN64)
@@ -1604,7 +1617,7 @@ class Encoder {
 #endif
     }
 
-    // 通用 mov r64, r64（用于 MIR 编码；reg 0-7=rax..r11，8=rdi，9=rsi）
+    // Generic mov r64, r64 (for MIR encoding; reg 0-7 = rax..r11, 8 = rdi, 9 = rsi)
     void emitMovRegReg(uint8_t dst, uint8_t src) {
         if (dst == src)
             return;
@@ -1752,7 +1765,8 @@ class Encoder {
     }
 
     // Windows x64: preserve non-volatile regs, then copy rcx->rdi / rdx->rsi for internal use.
-    // 额外 sub rsp, 8 让函数体内维持 RSP=8(mod16)，与现有 call/debug-trace 对齐假设保持一致。
+    // An extra sub rsp, 8 keeps RSP = 8 (mod 16) inside the function body, matching the existing
+    // call/debug-trace alignment assumption.
     void prologueWin64() {
         size_t at1 = here();
         emitByte(0x57); // push rdi
@@ -1775,7 +1789,8 @@ class Encoder {
     }
 
     // Windows x64: call trampoline(frame, ctx, pc). Assumes rdi=frame, rsi=ctx.
-    // trampoline/callee 会覆盖 rdi，返回后 JOIN 等需用 caller 的 frame，故调用前后 push/pop rdi。
+    // trampoline/callee clobbers rdi; JOIN and similar code needs the caller's frame after return,
+    // so push/pop rdi around the call.
     void callTrampolineWin64(uint32_t pc, uint64_t addr) {
         pushRdi();
         emitBytes({0x48, 0x89, 0xf9}); // mov rcx, rdi (arg1)
@@ -1796,8 +1811,8 @@ class Encoder {
         popRdi();
     }
 
-    // Windows x64: call trampolineOper(slots, ctx, pc). rdi=slots, rsi=ctx. graph 从 slots[0] 即
-    // Frame* 获取。trampoline 会覆盖 rdi，返回后需恢复。
+    // Windows x64: call trampolineOper(slots, ctx, pc). rdi = slots, rsi = ctx. The graph is
+    // obtained from slots[0], i.e. Frame*. The trampoline clobbers rdi, so restore it after return.
     void callTrampolineOperWin64(uint32_t pc, uint64_t addr) {
         pushRdi();
         emitBytes({0x48, 0x89, 0xf9}); // mov rcx, rdi (arg1 slots)

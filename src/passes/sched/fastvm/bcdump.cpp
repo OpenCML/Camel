@@ -13,40 +13,27 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "bcdump.h"
-#include "camel/common/algo/topo.h"
+
+#include "camel/runtime/reachable.h"
 #include "compile.h"
 
 using namespace GIR;
 
-graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    // 收集所有被依赖的子图
-    std::vector<graph_ptr_t> allGraphs;
-    allGraphs.push_back(graph);
-    for (const auto &[_, gSet] : graph->subGraphs()) {
-        for (const auto &g : gSet) {
-            auto sortedSubGraphs =
-                findReachable(g, [](const graph_ptr_t &g) { return g->dependencies(); });
-            allGraphs.insert(allGraphs.end(), sortedSubGraphs.begin(), sortedSubGraphs.end());
-        }
-    }
-
-    std::unordered_set<graph_ptr_t> visited;
+graph_ptr_t BytecodeDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+    std::vector<camel::runtime::GCGraph *> allGraphs =
+        camel::runtime::collectReachableGraphs(graph);
 
     os << "[index] opcode (opsize) [self] | [fastops] | <with> (norm) | extra\n";
 
-    for (const auto &g : allGraphs) {
-        if (visited.count(g))
-            continue;
-        visited.insert(g);
-
+    for (auto *g : allGraphs) {
         auto bytecodes = compile(
             context_,
-            g.get(),
+            g,
             {
                 .enableTailCallDetection = true,
                 .enableInlineOperators   = true,
@@ -68,10 +55,10 @@ graph_ptr_t BytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     return GIR::Graph::null();
 }
 
-graph_ptr_t LinkedBytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    const auto &[codes, graphs, _] = compileAndLink(
+graph_ptr_t LinkedBytecodeDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+    auto linked = compileAndLink(
         context_,
-        graph.get(),
+        graph,
         {
             .enableTailCallDetection = true,
             .enableInlineOperators   = true,
@@ -80,14 +67,15 @@ graph_ptr_t LinkedBytecodeDumpPass::apply(graph_ptr_t &graph, std::ostream &os) 
 
     os << "[index] opcode (opsize) [self] | [fastops] | <with> (norm) | extra\n";
 
-    int maxwidth = computeWidth(codes.size());
+    int maxwidth = computeWidth(linked.codes.size());
 
-    for (const auto &[offset, length, graph] : graphs) {
-        os << graph->mangledName() << ":\n";
+    for (const auto &[offset, length, runtimeGraph] : linked.graphs) {
+        ASSERT(runtimeGraph != nullptr, "Linked bytecode entry is missing runtime graph metadata.");
+        os << runtimeGraph->mangledName() << ":\n";
         for (size_t i = offset; i < offset + length;) {
             os << "  [" << formatIndex(i, maxwidth) << "] ";
-            os << opCodeToString(codes[i], context_) << "\n";
-            i += codes[i].opsize;
+            os << opCodeToString(linked.codes[i], context_) << "\n";
+            i += linked.codes[i].opsize;
         }
     }
 

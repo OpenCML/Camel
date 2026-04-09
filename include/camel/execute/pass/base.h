@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/runtime/graph.h"
 
 class GraphIRPass {
   protected:
@@ -30,7 +31,10 @@ class GraphIRPass {
     GraphIRPass(const camel::core::context::context_ptr_t &ctx) : context_(ctx) {};
     virtual ~GraphIRPass() = default;
 
-    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) = 0;
+    virtual bool requiresRuntimeGraph() const { return false; }
+
+    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os);
+    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os);
 };
 
 class NullGraphIRPass : public GraphIRPass {
@@ -42,6 +46,16 @@ class NullGraphIRPass : public GraphIRPass {
     virtual ~NullGraphIRPass() = default;
 
     virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
+};
+
+class RuntimeGraphIRPass : public GraphIRPass {
+  public:
+    RuntimeGraphIRPass(const camel::core::context::context_ptr_t &ctx) : GraphIRPass(ctx) {};
+    ~RuntimeGraphIRPass() override = default;
+
+    bool requiresRuntimeGraph() const override { return true; }
+    GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
+    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override = 0;
 };
 
 enum class PassApplyStatus {
