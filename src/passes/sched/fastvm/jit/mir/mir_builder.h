@@ -685,11 +685,16 @@ class MirBuilder {
         emitPopRdi();
     }
 
+    // SysV AMD64 restores jitCtx from r13 before helper/trampoline calls. The entry wrapper seeds
+    // r13 once, then every slow/helper path can reconstruct rsi without reloading from memory.
+    void emitMovRsiR13() { push(MirOp::MovRsiR13, 0, 0); }
+
     // SysV: rdi/rsi already hold slots/ctx, set rdx = pc and rax = addr, then call.
     // The trampoline calls fn(callee_slots) and clobbers rdi, so push/pop must save the caller's
     // slot base.
     void emitCallTrampolineSysV(uint32_t pc, uint64_t trampolineAddr) {
         emitPushRdi();
+        emitMovRsiR13();
         emitMovRegImm32(kRegRdx, pc);
         emitMovRegImm64(kRegRax, trampolineAddr);
         emitCallRax();
@@ -699,6 +704,7 @@ class MirBuilder {
     // Frame*).
     void emitCallTrampolineOperSysV(uint32_t pc, uint64_t trampolineAddr) {
         emitPushRdi();
+        emitMovRsiR13();
         emitMovRegImm32(kRegRdx, pc);
         emitMovRegImm64(kRegRax, trampolineAddr);
         emitCallRax();

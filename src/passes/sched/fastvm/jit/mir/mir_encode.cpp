@@ -533,6 +533,15 @@ void encodeMirBuffer(
             if (debugTraceFn)
                 enc.emitDebugTraceCall(m.pc, debugTraceFn);
             break;
+        case MirOp::MovRsiR13:
+#if defined(_WIN32) || defined(_WIN64)
+            enc.nop();
+#else
+            // r13 is seeded once by the SysV entry wrapper and survives helper calls.
+            enc.emitBytes({0x4C, 0x89, 0xEE});
+            enc.asmLine("mov rsi, r13  ; restore jitCtx");
+#endif
+            break;
         case MirOp::NativeJitFuncCall: {
             auto *p = reinterpret_cast<const NativeJitCallParams *>(m.imm64);
 
@@ -575,6 +584,10 @@ void encodeMirBuffer(
                     enc.movToFrame(static_cast<int>((ai + 1) * sizeof(slot_t)), actualArgRegs[ai]);
 
                 patches.push_back({enc.here(), 0, 5, 0, 0});
+#if !defined(_WIN32) && !defined(_WIN64)
+                enc.emitBytes({0x4C, 0x89, 0xEE});
+                enc.asmLine("mov rsi, r13  ; jitCtx (frameless recursive entry)");
+#endif
                 enc.callRel32(0);
                 patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
                 patches.back().jumpEndPos   = enc.here();
@@ -642,11 +655,19 @@ void encodeMirBuffer(
 
             if (p->isSameGraph) {
                 patches.push_back({enc.here(), 0, 5, 0, 0});
+#if !defined(_WIN32) && !defined(_WIN64)
+                enc.emitBytes({0x4C, 0x89, 0xEE});
+                enc.asmLine("mov rsi, r13  ; jitCtx (same-graph frame-based entry)");
+#endif
                 enc.callRel32(0);
                 patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
                 patches.back().jumpEndPos   = enc.here();
             } else {
                 enc.popRax();
+#if !defined(_WIN32) && !defined(_WIN64)
+                enc.emitBytes({0x4C, 0x89, 0xEE});
+                enc.asmLine("mov rsi, r13  ; jitCtx (cross-graph entry)");
+#endif
                 enc.movRcxRdi();
                 enc.movRdxRsi();
                 enc.subRspShadow();
@@ -682,10 +703,18 @@ void encodeMirBuffer(
             }
 
             if (p->isSameGraph) {
+#if !defined(_WIN32) && !defined(_WIN64)
+                enc.emitBytes({0x4C, 0x89, 0xEE});
+                enc.asmLine("mov rsi, r13  ; jitCtx (same-graph slow path)");
+#endif
                 enc.movRcxRdi();
                 enc.movRdxRsi();
                 enc.movR8Imm64(p->slowPathBcAddr);
             } else {
+#if !defined(_WIN32) && !defined(_WIN64)
+                enc.emitBytes({0x4C, 0x89, 0xEE});
+                enc.asmLine("mov rsi, r13  ; jitCtx (cross-graph slow path)");
+#endif
                 enc.movRcxRdi();
                 enc.movRdxRsi();
                 enc.emitMovRegImm32(4, p->slowPathPc);

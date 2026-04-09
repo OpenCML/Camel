@@ -1114,11 +1114,14 @@ bool X64Backend::compileBytecode(
     }
 #else
     // System V AMD64: slot_t * in rdi, void *ctx in rsi (same as JIT body convention).
+    // r13 keeps a stable copy of jitCtx because helper calls are free to clobber rsi under SysV.
     {
         uint64_t poolAddr  = unit.poolTopAddr ? reinterpret_cast<uint64_t>(unit.poolTopAddr) : 0;
         uint64_t graphAddr = reinterpret_cast<uint64_t>(unit.runtimeGraph);
-        code.push_back(0x53);                  // push rbx (callee-saved)
-        code.insert(code.end(), {0x41, 0x54}); // push r12
+        code.push_back(0x53);                        // push rbx (callee-saved)
+        code.insert(code.end(), {0x41, 0x54});       // push r12
+        code.insert(code.end(), {0x41, 0x55});       // push r13
+        code.insert(code.end(), {0x49, 0x89, 0xF5}); // mov r13, rsi
         // mov rbx, imm64(poolTopAddr)
         code.push_back(0x48);
         code.push_back(0xBB);
@@ -1132,6 +1135,7 @@ bool X64Backend::compileBytecode(
         code.push_back(0xE8);
         size_t callPatchPos = code.size();
         code.insert(code.end(), {0, 0, 0, 0});
+        code.insert(code.end(), {0x41, 0x5D}); // pop r13
         code.insert(code.end(), {0x41, 0x5C}); // pop r12
         code.push_back(0x5B);                  // pop rbx
         code.push_back(0xC3);                  // ret

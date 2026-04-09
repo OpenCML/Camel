@@ -369,6 +369,9 @@ std::string mirToString(const Mir &m) {
            << " args=" << static_cast<int>(p->argsCnt) << " resultDisp=" << p->resultDisp;
         break;
     }
+    case MirOp::MovRsiR13:
+        os << "mov rsi, r13";
+        break;
     case MirOp::Nop:
         os << "nop";
         break;
@@ -660,6 +663,8 @@ size_t mirSizeBytes(const Mir &m) {
         return 80;
     case MirOp::NativeJitFuncCall:
         return 250;
+    case MirOp::MovRsiR13:
+        return 3;
     case MirOp::Nop:
         return 1;
     }

@@ -159,6 +159,9 @@ enum class MirOp : uint8_t {
                 // builds
     NativeJitFuncCall, // FUNC inline frame management + call rel32/rax; imm64 =
                        // NativeJitCallParams*
+    // SysV AMD64 keeps jitCtx in r13 across helper calls because rsi is caller-saved there.
+    // Win64 can encode this as a nop because rsi is already callee-saved.
+    MovRsiR13,
     Nop,
 };
 
@@ -179,7 +182,7 @@ struct Mir {
 
 struct NativeJitCallParams {
     uint64_t poolTopAddr;            // &FramePool::top_
-    uint64_t targetRuntimeGraphAddr; // Target GIR::Graph* (frame reuse check).
+    uint64_t targetRuntimeGraphAddr; // Target runtime graph pointer used by frame reuse checks.
     uint64_t slowPathFnAddr; // Same graph: &directSelfFuncInvoke; cross graph: trampolineFunc
     uint64_t slowPathBcAddr; // &bc (for same-graph slow path)
     uint32_t slowPathPc;     // Bytecode pc (for cross-graph slow path)
