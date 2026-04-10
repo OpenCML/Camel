@@ -155,7 +155,8 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     }
     virtual ~FastVMSchedPass();
 
-    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    virtual camel::runtime::GCGraph *
+    apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 
     CallResult callBorrowed(size_t pc, ctx::Frame *rootFrame);
     slot_t call(size_t pc, ctx::Frame *rootFrame);

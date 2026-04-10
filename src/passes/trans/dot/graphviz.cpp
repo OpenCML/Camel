@@ -501,7 +501,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
 GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context)
     : RuntimeGraphTranslatePass(context) {}
 
-graph_ptr_t GraphVizDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+camel::runtime::GCGraph *GraphVizDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     os << dumpGraph(graph);
-    return GIR::Graph::null();
+    return nullptr;
 }

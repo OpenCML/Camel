@@ -275,8 +275,8 @@ class Frame : public rtdata::Object {
     Frame(
         camel::runtime::GCGraph *runtimeGraph, ::Tuple *staticArea,
         const type::TupleType *dynamicAreaType)
-        : sourceGraph_(runtimeGraph ? runtimeGraph->compileGraph() : nullptr),
-          runtimeGraph_(runtimeGraph), staticArea_(staticArea), dynamicAreaType_(dynamicAreaType) {
+        : sourceGraph_(nullptr), runtimeGraph_(runtimeGraph), staticArea_(staticArea),
+          dynamicAreaType_(dynamicAreaType) {
         // Do not eagerly initialize the dynamic area here. FastVM relies on
         // reusing freshly released frame memory on the hot path, and forcing
         // constructor-time initialization would add avoidable churn. Debug-mode

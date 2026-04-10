@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -191,8 +191,8 @@ int main(int argc, char *argv[]) {
 
         std::cerr << "[camel-cpp] Applying std::cpp..." << std::endl;
         std::stringstream cppOutput;
-        auto graph = ctx->rootGraph();
-        graph      = applyPasses(graph, {"std::cpp"}, ctx, cppOutput);
+        auto *graph = ctx->runtimeRootGraph();
+        graph       = applyPasses(graph, {"std::cpp"}, ctx, cppOutput);
         if (ctx->rtmDiags()->hasErrors()) {
             ctx->runtimeDiagSink()->dump(std::cerr, false);
             return 1;

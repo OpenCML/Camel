@@ -34,7 +34,7 @@ using namespace camel::core::context;
 using namespace camel::jit;
 #endif
 
-graph_ptr_t JitAsmDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+camel::runtime::GCGraph *JitAsmDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
     auto linked = compileAndLink(
         context_,
@@ -48,7 +48,7 @@ graph_ptr_t JitAsmDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &
     auto backend = createBackend();
     if (!backend) {
         os << "[JIT] Backend not available, cannot dump assembly.\n";
-        return Graph::null();
+        return nullptr;
     }
 
     os << "[JIT Assembly] [offset]  instruction\n";
@@ -92,10 +92,10 @@ graph_ptr_t JitAsmDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &
         os << "\n";
     }
 
-    return Graph::null();
+    return nullptr;
 #else
     (void)graph;
     os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump assembly.\n";
-    return Graph::null();
+    return nullptr;
 #endif
 }

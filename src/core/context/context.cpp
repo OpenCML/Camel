@@ -542,6 +542,18 @@ camel::runtime::GCGraph *Context::materializeRuntimeRoot(const GIR::graph_ptr_t 
     return runtimeRoot;
 }
 
+camel::runtime::GCGraph *Context::installRuntimeRoot(camel::runtime::GCGraph *runtimeRoot) {
+    runtimeGraphManager().replaceRoot(runtimeRoot);
+    registerRuntimeGraphDebugInfo(runtimeRoot);
+    return runtimeRoot;
+}
+
+camel::runtime::GCGraph *Context::adoptRuntimeRoot(camel::runtime::GCGraph *runtimeRoot) {
+    runtimeGraphManager().adoptRoot(runtimeRoot);
+    registerRuntimeGraphDebugInfo(runtimeRoot);
+    return runtimeRoot;
+}
+
 camel::runtime::GCGraphManager &Context::runtimeGraphManager() {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     return *runtimeGraphMgr_;

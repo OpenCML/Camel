@@ -234,7 +234,7 @@ std::pair<size_t, Frame *> FastVMSchedPass::pop() {
     return {pc, frame};
 }
 
-graph_ptr_t FastVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     (void)os;
     ASSERT(graph != nullptr, "FastVM requires a non-null runtime root graph.");
 
@@ -279,7 +279,7 @@ graph_ptr_t FastVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream 
         opperf::stop();
         opperf::report(std::cout);
         context_->captureProcessExitCode(runtimeRoot, result);
-        return Graph::null();
+        return nullptr;
     }
     CAMEL_LOG_INFO_S(
         "JIT",
@@ -300,7 +300,7 @@ graph_ptr_t FastVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream 
     }
     opperf::stop();
     opperf::report(std::cout);
-    return Graph::null();
+    return nullptr;
 }
 
 void FastVMSchedPass::evalMarkedOperator(

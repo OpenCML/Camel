@@ -126,6 +126,8 @@ class Context : public std::enable_shared_from_this<Context> {
     GIR::graph_ptr_t mainGraph() const;
     camel::runtime::GCGraph *runtimeRootGraph();
     camel::runtime::GCGraph *materializeRuntimeRoot(const GIR::graph_ptr_t &rootGraph);
+    camel::runtime::GCGraph *adoptRuntimeRoot(camel::runtime::GCGraph *runtimeRoot);
+    camel::runtime::GCGraph *installRuntimeRoot(camel::runtime::GCGraph *runtimeRoot);
     camel::runtime::GCGraphManager &runtimeGraphManager();
     const camel::runtime::GCGraphManager &runtimeGraphManager() const;
     const ExecutorManager &execMgr() const { return *exeMgr_; }

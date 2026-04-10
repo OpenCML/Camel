@@ -40,35 +40,14 @@
 #include <memory>
 #include <sstream>
 
-using namespace GIR;
 using namespace camel::core::error;
 using namespace camel::core::context;
+using camel::runtime::GCGraph;
 
-graph_ptr_t GraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
+GCGraph *NullGraphIRPass::apply(GCGraph *graph, std::ostream &os) {
     (void)graph;
     (void)os;
-    ASSERT(false, "Compile-time apply() is not supported by this pass.");
-    return Graph::null();
-}
-
-graph_ptr_t GraphIRPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
-    (void)graph;
-    (void)os;
-    ASSERT(false, "Runtime apply() is not supported by this pass.");
-    return Graph::null();
-}
-
-graph_ptr_t RuntimeGraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    ASSERT(context_ != nullptr, "Runtime graph pass requires a valid context.");
-    ASSERT(graph != nullptr, "Runtime graph pass requires a non-null compile graph.");
-    auto *runtimeRoot = context_->materializeRuntimeRoot(graph);
-    ASSERT(runtimeRoot != nullptr, "Runtime root graph materialization failed.");
-    return apply(runtimeRoot, os);
-}
-
-graph_ptr_t NullGraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    // No-op.
-    return Graph::null();
+    return nullptr;
 }
 
 using PassFactory  = std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>;
@@ -207,21 +186,21 @@ PassScopePtr initPassScope() {
                                   return std::make_unique<InlineRewritePass>(
                                       ctx,
                                       InlineRewriteConfig{
-                                          .strategy = InlineTargetStrategy::Small,
+                                          .inlineStrategy = InlineTargetStrategy::Small,
                                       });
                               })},
                              {"arm", def([](const context_ptr_t &ctx) {
                                   return std::make_unique<InlineRewritePass>(
                                       ctx,
                                       InlineRewriteConfig{
-                                          .strategy = InlineTargetStrategy::Arm,
+                                          .inlineStrategy = InlineTargetStrategy::Arm,
                                       });
                               })},
                              {"hybrid", def([](const context_ptr_t &ctx) {
                                   return std::make_unique<InlineRewritePass>(
                                       ctx,
                                       InlineRewriteConfig{
-                                          .strategy = InlineTargetStrategy::Hybrid,
+                                          .inlineStrategy = InlineTargetStrategy::Hybrid,
                                       });
                               })},
                          })},
@@ -317,7 +296,7 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
 }
 
 PassApplyResult applyPassesDetailed(
-    GIR::graph_ptr_t graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
+    GCGraph *graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
     std::ostream &os) {
     if (!passes.empty() && Logger::ShouldEmit(LogLevel::Info, "Pass")) {
         std::ostringstream seq;
@@ -332,25 +311,22 @@ PassApplyResult applyPassesDetailed(
             std::format("run | passes | plan ({}): {}", passes.size(), seq.str()));
     }
     for (const auto &p : passes) {
-        if (graph == nullptr || graph == Graph::null()) {
-            return {Graph::null(), PassApplyStatus::Consumed};
+        if (graph == nullptr) {
+            return {nullptr, PassApplyStatus::Consumed};
         }
-        ASSERT(
-            graph->finalized(),
-            std::format("Graph {} is not finalized before pass execution.", graph->name()));
 
         auto factory = findPassFactory(p, os);
         if (factory) {
-            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), graph.get()); });
+            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), graph); });
             auto pass = factory(ctx);
-            graph = pass->requiresRuntimeGraph() ? pass->apply(graph, os) : pass->apply(graph, os);
+            graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (see diagnostics)", p);
                 return {nullptr, PassApplyStatus::Failed};
             }
-            if (!graph || graph == Graph::null()) {
+            if (!graph) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> consumed", p);
-                return {Graph::null(), PassApplyStatus::Consumed};
+                return {nullptr, PassApplyStatus::Consumed};
             }
             CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> next graph '{}'", p, graph->name());
         } else {
@@ -358,12 +334,12 @@ PassApplyResult applyPassesDetailed(
         }
     }
 
-    EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GIR-Z", graph ? graph.get() : nullptr); });
+    EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GIR-Z", graph); });
     return {graph, PassApplyStatus::Transformed};
 }
 
-GIR::graph_ptr_t applyPasses(
-    GIR::graph_ptr_t graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
+GCGraph *applyPasses(
+    GCGraph *graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
     std::ostream &os) {
-    return applyPassesDetailed(std::move(graph), passes, ctx, os).graph;
+    return applyPassesDetailed(graph, passes, ctx, os).graph;
 }

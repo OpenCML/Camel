@@ -20,18 +20,7 @@
 #pragma once
 
 #include "camel/execute/pass/opt.h"
-
-enum class InlineTargetStrategy {
-    Small,
-    Arm,
-    Hybrid,
-};
-
-struct InlineRewriteConfig {
-    InlineTargetStrategy strategy           = InlineTargetStrategy::Hybrid;
-    size_t smallSubgraphMaxNonDataPortNodes = 8;
-    bool blockCallsToSccEntryCallees        = true;
-};
+#include "config.h"
 
 class InlineRewritePass : public RuntimeGraphRewritePass {
   public:
@@ -40,7 +29,8 @@ class InlineRewritePass : public RuntimeGraphRewritePass {
         : RuntimeGraphRewritePass(ctx), config_(config) {};
     virtual ~InlineRewritePass() = default;
 
-    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    virtual camel::runtime::GCGraph *
+    apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 
   private:
     InlineRewriteConfig config_{};

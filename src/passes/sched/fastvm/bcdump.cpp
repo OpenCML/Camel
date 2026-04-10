@@ -24,7 +24,7 @@
 
 using namespace GIR;
 
-graph_ptr_t BytecodeDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+camel::runtime::GCGraph *BytecodeDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     std::vector<camel::runtime::GCGraph *> allGraphs =
         camel::runtime::collectReachableGraphs(graph);
 
@@ -52,10 +52,11 @@ graph_ptr_t BytecodeDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream
         os << std::format("  [used: {}, allocated: {}]\n", bytecodes.size(), bytecodes.capacity());
     }
 
-    return GIR::Graph::null();
+    return nullptr;
 }
 
-graph_ptr_t LinkedBytecodeDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+camel::runtime::GCGraph *
+LinkedBytecodeDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     auto linked = compileAndLink(
         context_,
         graph,
@@ -79,5 +80,5 @@ graph_ptr_t LinkedBytecodeDumpPass::apply(camel::runtime::GCGraph *graph, std::o
         }
     }
 
-    return GIR::Graph::null();
+    return nullptr;
 }

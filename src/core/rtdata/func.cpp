@@ -26,7 +26,6 @@ GIR::Graph *Function::sourceGraph() const { return sourceGraph_; }
 void Function::setRuntimeGraph(camel::runtime::GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime Function graph cannot be null.");
     runtimeGraph_ = graph;
-    sourceGraph_  = graph->compileGraph();
 }
 
 const type::TupleType *Function::tupleType() const {
@@ -67,13 +66,14 @@ Function *Function::create(
     if (!mem)
         throw std::bad_alloc();
 
-    auto *fn     = new (mem) Function(graph->compileGraph(), graph);
+    auto *fn     = new (mem) Function(nullptr, graph);
     fn->closure_ = Tuple::create(tt->size(), allocator);
     return fn;
 }
 
 void Function::print(std::ostream &os, const type::Type *type) const {
     (void)type;
+    ASSERT(runtimeGraph_ || sourceGraph_, "Function print requires graph identity.");
     const std::string &graphName = runtimeGraph_ ? runtimeGraph_->name() : sourceGraph_->name();
     os << "Function(graph=" << graphName << ", tupleSlots=";
     os << (closure_ ? std::to_string(closure_->size()) : "null");

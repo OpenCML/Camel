@@ -28,7 +28,8 @@ class BytecodeDumpPass : public RuntimeGraphTranslatePass {
     BytecodeDumpPass(const ctx::context_ptr_t &ctx) : RuntimeGraphTranslatePass(ctx) {}
     virtual ~BytecodeDumpPass() = default;
 
-    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    virtual camel::runtime::GCGraph *
+    apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 };
 
 class LinkedBytecodeDumpPass : public RuntimeGraphTranslatePass {
@@ -36,5 +37,6 @@ class LinkedBytecodeDumpPass : public RuntimeGraphTranslatePass {
     LinkedBytecodeDumpPass(const ctx::context_ptr_t &ctx) : RuntimeGraphTranslatePass(ctx) {}
     virtual ~LinkedBytecodeDumpPass() = default;
 
-    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    virtual camel::runtime::GCGraph *
+    apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 };

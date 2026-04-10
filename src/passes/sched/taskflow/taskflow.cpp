@@ -18,361 +18,213 @@
  */
 
 #include "taskflow.h"
-#include "camel/common/algo/topo.h"
-#include "camel/compile/gir/nodes.h"
-#include "camel/core/debug_breakpoint.h"
+
 #include "camel/core/error/runtime.h"
-#include "camel/core/mm.h"
-#include "camel/core/module/module.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/execute/executor.h"
-#include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
-#include "camel/utils/debug.h"
 #include "camel/utils/log.h"
 
+#include <algorithm>
 #include <array>
 #include <format>
-#include <functional>
-#include <queue>
-#include <regex>
 #include <string>
-#include <unordered_set>
 
-using namespace std;
-using namespace GIR;
-using namespace camel::core::error;
 using namespace camel::core::context;
-using namespace camel::core::type;
+using namespace camel::core::error;
 using namespace camel::core::rtdata;
+using namespace camel::core::type;
 
-static Node *resolve_taskflow_value_node(Node *node) {
-    Node *current = node;
-    while (current != nullptr && current->type() == NodeType::GATE) {
-        auto dataInputs = current->dataInputs();
-        if (!dataInputs.empty()) {
-            current = dataInputs.back();
-            continue;
+namespace {
+
+using camel::execute::RuntimeBranchArmRegion;
+using camel::runtime::gc_node_ref_t;
+using camel::runtime::GCAccsBody;
+using camel::runtime::GCGraph;
+using camel::runtime::GCNode;
+using camel::runtime::GCNodeKind;
+using camel::runtime::GCOperBody;
+using camel::runtime::kInvalidNodeRef;
+
+struct TaskflowHigherOrderCallSite {
+    GCGraph *runtimeGraph = nullptr;
+    Tuple *closure        = nullptr;
+};
+
+inline GIR::data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
+    const auto *node = graph ? graph->node(nodeRef) : nullptr;
+    ASSERT(node != nullptr, "Taskflow runtime node lookup resolved to null.");
+    return node->dataIndex;
+}
+
+inline const GCNode *requireNode(const GCGraph *graph, gc_node_ref_t nodeRef) {
+    const auto *node = graph ? graph->node(nodeRef) : nullptr;
+    ASSERT(node != nullptr, "Taskflow runtime node lookup resolved to null.");
+    return node;
+}
+
+slot_t readForwardedRuntimeValue(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+    ASSERT(graph != nullptr, "Taskflow forwarded-value read requires a graph.");
+    ASSERT(frame != nullptr, "Taskflow forwarded-value read requires a frame.");
+
+    gc_node_ref_t current = nodeRef;
+    while (current != kInvalidNodeRef) {
+        const auto *node = requireNode(graph, current);
+        if (node->kind != GCNodeKind::Gate) {
+            ASSERT(node->dataIndex != 0, "Taskflow forwarded-value chain resolved to slot 0.");
+            return frame->get<slot_t>(node->dataIndex);
         }
-        auto normInputs = current->normInputs();
+        const auto normInputs = graph->normInputsOf(current);
         if (!normInputs.empty()) {
             current = normInputs.back();
             continue;
         }
-        return nullptr;
+        const auto withInputs = graph->withInputsOf(current);
+        if (!withInputs.empty()) {
+            current = withInputs.back();
+            continue;
+        }
+        return NullSlot;
+    }
+    return NullSlot;
+}
+
+gc_node_ref_t resolveTailAnchorRef(const GCGraph *graph) {
+    if (!graph) {
+        return kInvalidNodeRef;
+    }
+    gc_node_ref_t current = graph->returnNodeRef();
+    if (current == kInvalidNodeRef) {
+        current = graph->exitNodeRef();
+    }
+    while (current != kInvalidNodeRef) {
+        const auto *node = graph->node(current);
+        ASSERT(node != nullptr, "Taskflow tail-anchor resolution resolved to null.");
+        if (node->kind != GCNodeKind::Gate) {
+            break;
+        }
+        const auto normInputs = graph->normInputsOf(current);
+        if (!normInputs.empty()) {
+            current = normInputs.back();
+            continue;
+        }
+        const auto ctrlInputs = graph->ctrlInputsOf(current);
+        if (!ctrlInputs.empty()) {
+            current = ctrlInputs.back();
+            continue;
+        }
+        return kInvalidNodeRef;
     }
     return current;
 }
 
-static slot_t read_taskflow_node_value(Node *node, Frame *frame) {
-    ASSERT(node != nullptr, "Taskflow value read received a null node.");
-    Node *valueNode = resolve_taskflow_value_node(node);
-    ASSERT(valueNode != nullptr, "Taskflow could not resolve a concrete value node.");
-    ASSERT(valueNode->index() != 0, "Taskflow value node resolved to slot 0, which is invalid.");
-    return frame->get<slot_t>(valueNode->index());
-}
-
-// Read the graph return value while treating GATE as pure forwarding plumbing.
-static slot_t get_graph_return(camel::runtime::GCGraph *graph, Frame *frame) {
-    return camel::execute::readRuntimeGraphReturn(graph, frame);
-}
-
-static camel::runtime::GCGraph *
-find_runtime_graph(camel::core::context::Context *context, Graph *graph) {
-    if (!context || !graph) {
-        return nullptr;
+bool outputsContain(const GCGraph *graph, gc_node_ref_t nodeRef, gc_node_ref_t targetRef) {
+    if (!graph || targetRef == kInvalidNodeRef) {
+        return false;
     }
-    return context->runtimeGraphManager().find(graph);
+    auto contains = [targetRef](std::span<const gc_node_ref_t> refs) {
+        return std::find(refs.begin(), refs.end(), targetRef) != refs.end();
+    };
+    return contains(graph->normOutputsOf(nodeRef)) || contains(graph->withOutputsOf(nodeRef)) ||
+           contains(graph->ctrlOutputsOf(nodeRef));
 }
 
-struct TaskflowHigherOrderCallSite {
-    camel::runtime::GCGraph *runtimeGraph = nullptr;
-    Tuple *closure                        = nullptr;
-};
+bool hasOnlyTrivialTailSuffixAfter(
+    const GCGraph *graph, std::span<const gc_node_ref_t> nodes, size_t anchorIndex) {
+    for (size_t j = anchorIndex + 1; j < nodes.size(); ++j) {
+        const auto *node = graph->node(nodes[j]);
+        ASSERT(node != nullptr, "Taskflow tail-suffix lookup resolved to null.");
+        if (node->kind != GCNodeKind::Gate) {
+            return false;
+        }
+    }
+    return true;
+}
 
-static TaskflowHigherOrderCallSite make_taskflow_higher_order_call_site(Function *func) {
+TaskflowHigherOrderCallSite makeHigherOrderCallSite(Function *func) {
     auto *runtimeGraph = func ? func->graph() : nullptr;
-    ASSERT(
-        runtimeGraph != nullptr,
-        "Taskflow higher-order call requires a materialized runtime graph target.");
+    ASSERT(runtimeGraph != nullptr, "Taskflow higher-order call requires a runtime graph target.");
     return {
         .runtimeGraph = runtimeGraph,
         .closure      = func ? func->tuple() : nullptr,
     };
 }
 
-static Node *find_taskflow_source_node(
-    const TaskflowExecSchedPass::GraphInfos &graphInfo, camel::runtime::gc_node_ref_t nodeRef) {
-    if (!graphInfo.runtimeGraph) {
-        return nullptr;
+size_t selectBranchArm(GCGraph *graph, gc_node_ref_t brchRef, Frame *frame) {
+    const auto normInputs = graph->normInputsOf(brchRef);
+    const auto withInputs = graph->withInputsOf(brchRef);
+    ASSERT(normInputs.size() == 1, "Taskflow BRCH must have exactly one norm input.");
+
+    if (withInputs.empty()) {
+        return frame->get<bool>(dataIndexOf(graph, normInputs.front())) ? 0 : 1;
     }
-    return graphInfo.sourceNodeOf(nodeRef);
+
+    const auto condIndex    = dataIndexOf(graph, normInputs.front());
+    const TypeCode condType = frame->codeAt(condIndex);
+    if (camel::core::type::isGCTraced(condType)) {
+        Type *condTypePtr = frame->typeAt<Type>(condIndex);
+        Object *condData  = frame->get<Object *>(condIndex);
+        for (size_t i = 0; i < withInputs.size(); ++i) {
+            Object *caseData = frame->get<Object *>(dataIndexOf(graph, withInputs[i]));
+            if (condData->equals(caseData, condTypePtr, false)) {
+                return i;
+            }
+        }
+        return withInputs.size();
+    }
+
+    const slot_t condData = frame->get<slot_t>(condIndex);
+    for (size_t i = 0; i < withInputs.size(); ++i) {
+        if (condData == frame->get<slot_t>(dataIndexOf(graph, withInputs[i]))) {
+            return i;
+        }
+    }
+    return withInputs.size();
 }
 
-static TaskflowExecSchedPass::GraphInfos::BranchArmMeta
-collect_branch_arm_meta(BrchNode *brch, size_t armIndex) {
-    ASSERT(brch != nullptr, "Taskflow branch arm collection received a null BRCH node.");
-    auto *join = brch->matchedJoin();
-    ASSERT(join != nullptr, "Taskflow branch arm collection requires a matched JOIN node.");
+} // namespace
 
-    Node *head = brch->armHead(armIndex);
-    Node *tail = join->armTail(armIndex);
-    ASSERT(head != nullptr && tail != nullptr, "Taskflow branch arm endpoints must be non-null.");
+TaskflowExecSchedPass::RuntimeBuildInfo
+TaskflowExecSchedPass::buildRuntimeBuildInfo(GCGraph *graph) {
+    ASSERT(graph != nullptr, "Taskflow build info requires a runtime graph.");
 
-    std::unordered_set<Node *> forward;
-    std::vector<Node *> worklist{head};
-    while (!worklist.empty()) {
-        Node *current = worklist.back();
-        worklist.pop_back();
-        if (!current || current == join || !forward.insert(current).second) {
+    RuntimeBuildInfo info;
+    info.skipNodes.resize(graph->nodeBlockCount(), 0);
+    info.branchArms.resize(graph->nodeBlockCount());
+
+    for (gc_node_ref_t nodeRef : camel::execute::buildReachableExecutionTopoIndices(graph)) {
+        const auto *node = requireNode(graph, nodeRef);
+        if (node->kind != GCNodeKind::Brch) {
             continue;
         }
-        for (Node *out : current->ctrlOutputs()) {
-            if (&out->graph() == &brch->graph() && out != join) {
-                worklist.push_back(out);
-            }
-        }
-        for (Node *out : current->normOutputs()) {
-            if (&out->graph() == &brch->graph() && out != join) {
-                worklist.push_back(out);
-            }
-        }
-        for (Node *out : current->withOutputs()) {
-            if (&out->graph() == &brch->graph() && out != join) {
-                worklist.push_back(out);
-            }
-        }
-    }
-
-    std::vector<Node *> topoNodes;
-    std::unordered_set<Node *> visited;
-    std::function<void(Node *)> visit = [&](Node *node) {
-        if (!node || !forward.contains(node) || !visited.insert(node).second) {
-            return;
-        }
-        for (Node *in : node->ctrlInputs()) {
-            if (&in->graph() == &brch->graph() && forward.contains(in)) {
-                visit(in);
-            }
-        }
-        for (Node *in : node->dataInputs()) {
-            if (&in->graph() == &brch->graph() && forward.contains(in)) {
-                visit(in);
-            }
-        }
-        topoNodes.push_back(node);
-    };
-    visit(tail);
-    ASSERT(
-        !topoNodes.empty(),
-        std::format(
-            "Taskflow branch arm collection produced an empty region for graph '{}' arm {}.",
-            brch->graph().name(),
-            armIndex));
-
-    return {
-        .head                   = head,
-        .tail                   = tail,
-        .headRuntimeIndex       = camel::runtime::kInvalidNodeRef,
-        .tailRuntimeIndex       = camel::runtime::kInvalidNodeRef,
-        .topoNodes              = std::move(topoNodes),
-        .topoNodeRuntimeIndices = {},
-    };
-}
-
-static std::vector<Node *> collect_taskflow_execution_nodes(Graph *graph) {
-    ASSERT(graph != nullptr, "Taskflow execution-node collection received a null graph.");
-
-    std::vector<Node *> nodes;
-    nodes.reserve(graph->nodes().size() + 2);
-    for (Node *node : graph->nodes()) {
-        nodes.push_back(node);
-    }
-
-    auto push_unique = [&](Node *node) {
-        if (node && std::find(nodes.begin(), nodes.end(), node) == nodes.end()) {
-            nodes.push_back(node);
-        }
-    };
-
-    // Some rewritten graphs keep the executable output anchor outside graph->nodes().
-    // Runtime schedulers must still see that carrier node, otherwise the entire
-    // graph can become observationally empty after a rewrite such as std::inline.
-    push_unique(graph->outputNode());
-    push_unique(graph->exitNode());
-    return nodes;
-}
-
-static void populate_graph_info(
-    TaskflowExecSchedPass &pass, Graph *graph, camel::runtime::GCGraph *runtimeGraph) {
-    ASSERT(graph != nullptr, "Taskflow graph metadata population received a null graph.");
-
-    auto &gt        = runtimeGraph ? pass.globalBuildCtx_.getOrCreateGraphInfos(runtimeGraph, graph)
-                                   : pass.globalBuildCtx_.getOrCreateGraphInfos(graph);
-    gt.graph        = graph;
-    gt.runtimeGraph = runtimeGraph;
-    gt.joinToBrch.clear();
-    gt.branchArms.clear();
-    gt.nodeExecMeta.clear();
-    gt.runtimeNodeExecMeta.clear();
-    gt.runtimeBranchArms.clear();
-    gt.runtimeSourceNodes.clear();
-    gt.normPortIndices.clear();
-    gt.withPortIndices.clear();
-    gt.closureIndices.clear();
-    gt.runtimeSkipNodeIndices.clear();
-
-    gt.normPortIndices.reserve(graph->normPorts().size());
-    for (Node *port : graph->normPorts())
-        gt.normPortIndices.push_back(port->index());
-
-    gt.withPortIndices.reserve(graph->withPorts().size());
-    for (Node *port : graph->withPorts())
-        gt.withPortIndices.push_back(port->index());
-
-    gt.closureIndices.reserve(graph->closure().size());
-    for (Node *closure : graph->closure())
-        gt.closureIndices.push_back(closure->index());
-
-    std::unordered_map<GIR::data_idx_t, camel::runtime::gc_node_ref_t> runtimeNodeIndexByData;
-    if (runtimeGraph != nullptr) {
-        gt.runtimeNodeExecMeta.resize(runtimeGraph->nodeBlockCount());
-        gt.runtimeBranchArms.resize(runtimeGraph->nodeBlockCount());
-        gt.runtimeSourceNodes.resize(runtimeGraph->nodeBlockCount(), nullptr);
-        runtimeNodeIndexByData.reserve(runtimeGraph->nodeCount());
-        for (auto it = runtimeGraph->nodes().begin(); it != runtimeGraph->nodes().end(); ++it) {
-            const auto nodeRef           = it.ref();
-            auto &runtimeMeta            = gt.runtimeNodeExecMeta[nodeRef];
-            runtimeMeta.runtimeNodeIndex = nodeRef;
-            runtimeMeta.normIndices.clear();
-            runtimeMeta.withIndices.clear();
-            for (auto inputIndex : runtimeGraph->normInputsOf(nodeRef)) {
-                const auto *inputRecord = runtimeGraph->node(inputIndex);
-                ASSERT(inputRecord != nullptr, "Taskflow runtime norm-input record is missing.");
-                runtimeMeta.normIndices.push_back(
-                    static_cast<GIR::data_idx_t>(inputRecord->dataIndex));
-            }
-            for (auto inputIndex : runtimeGraph->withInputsOf(nodeRef)) {
-                const auto *inputRecord = runtimeGraph->node(inputIndex);
-                ASSERT(inputRecord != nullptr, "Taskflow runtime with-input record is missing.");
-                runtimeMeta.withIndices.push_back(
-                    static_cast<GIR::data_idx_t>(inputRecord->dataIndex));
-            }
-            const auto *runtimeNode = runtimeGraph->node(nodeRef);
-            if (runtimeNode != nullptr && runtimeNode->dataIndex != 0) {
-                runtimeNodeIndexByData.emplace(runtimeNode->dataIndex, nodeRef);
-            }
-        }
-    }
-
-    for (Node *n : collect_taskflow_execution_nodes(graph)) {
-        auto &nodeMeta = gt.getOrCreateNodeExecMeta(n);
-        nodeMeta.normIndices.clear();
-        nodeMeta.withIndices.clear();
-        nodeMeta.runtimeNodeIndex = camel::runtime::kInvalidNodeRef;
-        nodeMeta.normIndices.reserve(n->normInputs().size());
-        nodeMeta.withIndices.reserve(n->withInputs().size());
-        for (Node *in : n->normInputs())
-            nodeMeta.normIndices.push_back(in->index());
-        for (Node *in : n->withInputs())
-            nodeMeta.withIndices.push_back(in->index());
-        if (auto it = runtimeNodeIndexByData.find(n->index()); it != runtimeNodeIndexByData.end()) {
-            nodeMeta.runtimeNodeIndex = it->second;
-            if (runtimeGraph != nullptr) {
-                gt.runtimeSourceNodes[it->second] = n;
-            }
-        }
-
-        if (n->type() == NodeType::BRCH) {
-            const auto candidates = n->ctrlOutputs();
-            Node *join            = n->normOutputs().front();
-            pass.globalBuildCtx_.skipNodes.insert(join);
-            ASSERT(join->type() == NodeType::JOIN, "BRCH must be paired with JOIN.");
-            gt.joinToBrch[join] = n;
-            auto *brch          = tt::as_ptr<BrchNode>(n);
-            auto &arms          = gt.branchArms[n];
-            arms.reserve(candidates.size());
-            for (size_t armIndex = 0; armIndex < candidates.size(); ++armIndex) {
-                auto arm = collect_branch_arm_meta(brch, armIndex);
-                if (runtimeGraph != nullptr) {
-                    auto runtimeArm = camel::execute::collectRuntimeBranchArmRegion(
-                        runtimeGraph,
-                        runtimeNodeIndexByData.at(n->index()),
-                        armIndex);
-                    arm.headRuntimeIndex       = runtimeArm.headIndex;
-                    arm.tailRuntimeIndex       = runtimeArm.tailIndex;
-                    arm.topoNodeRuntimeIndices = std::move(runtimeArm.topoIndices);
-                    gt.runtimeBranchArms[runtimeNodeIndexByData.at(n->index())].push_back(arm);
+        const auto ctrlOutputs = graph->ctrlOutputsOf(nodeRef);
+        auto &arms             = info.branchArms[nodeRef];
+        arms.reserve(ctrlOutputs.size());
+        for (size_t armIndex = 0; armIndex < ctrlOutputs.size(); ++armIndex) {
+            auto arm = camel::execute::collectRuntimeBranchArmRegion(graph, nodeRef, armIndex);
+            for (gc_node_ref_t bodyRef : arm.topoIndices) {
+                if (bodyRef < info.skipNodes.size()) {
+                    info.skipNodes[bodyRef] = 1;
                 }
-                for (Node *armNode : arm.topoNodes) {
-                    pass.globalBuildCtx_.skipNodes.insert(armNode);
-                    if (runtimeGraph != nullptr) {
-                        gt.runtimeSkipNodeIndices.insert(
-                            runtimeNodeIndexByData.at(armNode->index()));
-                    }
-                }
-                arms.push_back(std::move(arm));
             }
-            if (runtimeGraph != nullptr) {
-                const auto joinRuntimeIndex = runtimeNodeIndexByData.at(join->index());
-                gt.runtimeSkipNodeIndices.insert(joinRuntimeIndex);
+            if (arm.joinIndex < info.skipNodes.size()) {
+                info.skipNodes[arm.joinIndex] = 1;
             }
+            arms.push_back(std::move(arm));
         }
     }
 
-    if (runtimeGraph != nullptr) {
-        pass.framePool_.warmup(runtimeGraph, 1);
-    }
+    framePool_.warmup(graph, 1);
+    return info;
 }
 
-static const TaskflowExecSchedPass::GraphInfos::NodeExecMeta &taskflow_node_exec_meta(
-    const TaskflowExecSchedPass::GlobalBuildCtx &buildCtx, Frame *frame, Node *node) {
-    ASSERT(node != nullptr, "Taskflow node exec meta lookup received a null node.");
-    if (frame != nullptr && frame->runtimeGraph() != nullptr) {
-        const auto &sourceMeta = buildCtx.getGraphInfos(&node->graph()).getNodeExecMeta(node);
-        if (sourceMeta.runtimeNodeIndex != camel::runtime::kInvalidNodeRef) {
-            return buildCtx.getGraphInfos(frame->runtimeGraph())
-                .getNodeExecMeta(sourceMeta.runtimeNodeIndex);
-        }
-    }
-    return buildCtx.getGraphInfos(&node->graph()).getNodeExecMeta(node);
-}
-
-static bool taskflow_should_skip_node(
-    const TaskflowExecSchedPass::GlobalBuildCtx &buildCtx, Frame *frame, Node *node) {
-    ASSERT(node != nullptr, "Taskflow skip-node query received a null node.");
-    if (frame != nullptr && frame->runtimeGraph() != nullptr) {
-        const auto &sourceMeta = buildCtx.getGraphInfos(&node->graph()).getNodeExecMeta(node);
-        if (sourceMeta.runtimeNodeIndex != camel::runtime::kInvalidNodeRef) {
-            const auto &runtimeInfo = buildCtx.getGraphInfos(frame->runtimeGraph());
-            return runtimeInfo.runtimeSkipNodeIndices.contains(sourceMeta.runtimeNodeIndex);
-        }
-    }
-    return buildCtx.skipNodes.contains(node);
-}
-
-static const std::vector<TaskflowExecSchedPass::GraphInfos::BranchArmMeta> &taskflow_branch_arms(
-    const TaskflowExecSchedPass::GlobalBuildCtx &buildCtx, Frame *frame, Node *brch) {
-    ASSERT(brch != nullptr, "Taskflow branch-arm lookup requires a BRCH node.");
-    if (frame != nullptr && frame->runtimeGraph() != nullptr) {
-        const auto &sourceMeta = buildCtx.getGraphInfos(&brch->graph()).getNodeExecMeta(brch);
-        if (sourceMeta.runtimeNodeIndex != camel::runtime::kInvalidNodeRef) {
-            const auto &runtimeInfo = buildCtx.getGraphInfos(frame->runtimeGraph());
-            if (sourceMeta.runtimeNodeIndex < runtimeInfo.runtimeBranchArms.size() &&
-                !runtimeInfo.runtimeBranchArms[sourceMeta.runtimeNodeIndex].empty()) {
-                return runtimeInfo.runtimeBranchArms[sourceMeta.runtimeNodeIndex];
-            }
-        }
-    }
-    return buildCtx.getGraphInfos(&brch->graph()).branchArms.at(brch);
-}
-
-graph_ptr_t TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os*/) {
+camel::runtime::GCGraph *
+TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os*/) {
     ASSERT(graph != nullptr, "Taskflow requires a non-null runtime root graph.");
-    buildGraphsInfo(graph);
 
+    linearTopoCache_.clear();
     Frame *rootFrame = framePool_.acquire(graph);
     try {
         slot_t result = evalGraphTF(graph, rootFrame);
@@ -382,30 +234,154 @@ graph_ptr_t TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::os
         framePool_.release(rootFrame);
         throw;
     }
-
-    return Graph::null();
+    return nullptr;
 }
 
-slot_t TaskflowExecSchedPass::evalGraphTF(camel::runtime::GCGraph *graph, Frame *frame) {
-    ASSERT(graph != nullptr, "Taskflow evaluation requires a materialized runtime graph.");
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Taskflow", "Evaluating graph: {}", graph->name()));
-    mainFlow_.clear();
-    instantiate_graph_instance_generic(mainFlow_, graph, frame);
-    executor_.run(mainFlow_).wait();
-    slot_t ret = get_graph_return(graph, frame);
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Taskflow", "Graph {} finished.", graph->name()));
-    return ret;
+slot_t TaskflowExecSchedPass::evalGraphTF(GCGraph *graph, Frame *frame) {
+    ASSERT(graph != nullptr, "Taskflow evaluation requires a runtime graph.");
+    return evalGraphLinear(graph, frame);
 }
 
-slot_t TaskflowExecSchedPass::runPreparedSubgraph(
-    tf::Subflow &sf, camel::runtime::GCGraph *graph, Frame *frame) {
-    ASSERT(graph != nullptr, "Taskflow prepared subgraph execution requires a runtime graph.");
+std::span<const gc_node_ref_t> TaskflowExecSchedPass::topoNodesForLinear(GCGraph *graph) {
+    ASSERT(graph != nullptr, "Taskflow linear topo lookup requires a runtime graph.");
+    auto [it, inserted] = linearTopoCache_.try_emplace(graph);
+    if (inserted) {
+        it->second = camel::execute::buildReachableExecutionTopoIndices(graph);
+    }
+    return std::span<const gc_node_ref_t>(it->second);
+}
+
+slot_t TaskflowExecSchedPass::evalGraphLinear(GCGraph *graph, Frame *frame) {
+    ASSERT(graph != nullptr, "Taskflow linear evaluation requires a runtime graph.");
+    Frame *rootFrame       = frame;
+    Frame *currFrame       = frame;
+    Frame *twinFrame       = nullptr;
+    auto *currRuntimeGraph = graph;
+    auto currNodes         = topoNodesForLinear(currRuntimeGraph);
+
+    gc_node_ref_t tillNode = kInvalidNodeRef;
+    gc_node_ref_t skipNode = kInvalidNodeRef;
+    gc_node_ref_t joinNode = kInvalidNodeRef;
+
+loop_start:
+    const gc_node_ref_t lastNode = resolveTailAnchorRef(currRuntimeGraph);
+    const bool lastNodeIsJoin =
+        lastNode != kInvalidNodeRef && currRuntimeGraph->node(lastNode)->kind == GCNodeKind::Join;
+
+    for (size_t i = 0; i < currNodes.size(); ++i) {
+        const gc_node_ref_t nodeRef = currNodes[i];
+        const auto *node            = requireNode(currRuntimeGraph, nodeRef);
+
+        if (tillNode != kInvalidNodeRef) {
+            if (tillNode == nodeRef) {
+                tillNode = kInvalidNodeRef;
+            } else {
+                continue;
+            }
+        }
+        if (skipNode != kInvalidNodeRef && skipNode == nodeRef) {
+            skipNode = kInvalidNodeRef;
+            tillNode = joinNode;
+        }
+
+        if (node->kind == GCNodeKind::Brch) {
+            const size_t jumpIdx = selectBranchArm(currRuntimeGraph, nodeRef, currFrame);
+            currFrame->set(node->dataIndex, static_cast<Int32>(jumpIdx));
+
+            const auto arms  = currRuntimeGraph->branchArmsOf(nodeRef);
+            const auto *body = currRuntimeGraph->nodeBodyAs<camel::runtime::GCBrchBody>(nodeRef);
+            ASSERT(jumpIdx < arms.size(), "Taskflow linear BRCH arm index is out of range.");
+            tillNode = arms[jumpIdx].head;
+            skipNode = arms[jumpIdx].tail;
+            joinNode = body->join;
+            continue;
+        }
+
+        if (node->kind == GCNodeKind::Func) {
+            auto *callerRuntimeGraph = currRuntimeGraph;
+            auto *runtimeTarget      = currRuntimeGraph->directCalleeGraphOf(nodeRef);
+            ASSERT(runtimeTarget != nullptr, "Taskflow linear FUNC target graph is null.");
+
+            size_t anchorIdx = currNodes.size();
+            for (size_t k = 0; k < currNodes.size(); ++k) {
+                if (currNodes[k] == lastNode) {
+                    anchorIdx = k;
+                    break;
+                }
+            }
+            const bool anchorOk =
+                anchorIdx < currNodes.size() &&
+                hasOnlyTrivialTailSuffixAfter(currRuntimeGraph, currNodes, anchorIdx);
+            const bool tailShape =
+                (nodeRef == lastNode) ||
+                (lastNodeIsJoin && outputsContain(currRuntimeGraph, nodeRef, lastNode));
+            const bool isTailCall = anchorOk && tailShape;
+            if (isTailCall) {
+                Frame *lastFrame = currFrame;
+                tillNode         = kInvalidNodeRef;
+                skipNode         = kInvalidNodeRef;
+                joinNode         = kInvalidNodeRef;
+
+                if (runtimeTarget == currRuntimeGraph) {
+                    camel::execute::fillFrameForDirectInvoke(
+                        lastFrame,
+                        currFrame,
+                        callerRuntimeGraph,
+                        nodeRef);
+                    goto loop_start;
+                }
+
+                currRuntimeGraph = runtimeTarget;
+                currNodes        = topoNodesForLinear(currRuntimeGraph);
+
+                if (twinFrame && twinFrame->runtimeGraph() == runtimeTarget) {
+                    currFrame = twinFrame;
+                    twinFrame = lastFrame;
+                } else {
+                    if (twinFrame != nullptr && twinFrame != rootFrame) {
+                        framePool_.release(twinFrame);
+                    }
+                    twinFrame = currFrame;
+
+                    Frame *funcFrame = framePool_.acquire(runtimeTarget);
+                    camel::execute::fillFrameForDirectInvoke(
+                        lastFrame,
+                        funcFrame,
+                        callerRuntimeGraph,
+                        nodeRef);
+                    currFrame = funcFrame;
+                    goto loop_start;
+                }
+
+                camel::execute::fillFrameForDirectInvoke(
+                    lastFrame,
+                    currFrame,
+                    callerRuntimeGraph,
+                    nodeRef);
+                goto loop_start;
+            }
+        }
+
+        (void)executeLinearNode(currRuntimeGraph, nodeRef, currFrame);
+    }
+
+    slot_t result = camel::execute::readRuntimeGraphReturn(currRuntimeGraph, currFrame);
+    if (twinFrame != nullptr) {
+        if (currFrame != rootFrame) {
+            framePool_.release(currFrame);
+        }
+        if (twinFrame != rootFrame) {
+            framePool_.release(twinFrame);
+        }
+    }
+    return result;
+}
+
+slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, GCGraph *graph, Frame *frame) {
+    ASSERT(graph != nullptr, "Taskflow subgraph execution requires a runtime graph.");
     (void)sf;
     try {
-        tf::Taskflow localFlow;
-        instantiate_graph_instance_generic(localFlow, graph, frame);
-        executor_.run(localFlow).wait();
-        slot_t result = get_graph_return(graph, frame);
+        slot_t result = evalGraphLinear(graph, frame);
         framePool_.release(frame);
         return result;
     } catch (...) {
@@ -414,49 +390,248 @@ slot_t TaskflowExecSchedPass::runPreparedSubgraph(
     }
 }
 
-Frame *TaskflowExecSchedPass::acquirePreparedNodeCallFrame(
-    camel::runtime::GCGraph *targetGraph, Node *callNode, Frame *sourceFrame) {
-    ASSERT(targetGraph != nullptr, "Taskflow call target graph is null.");
-    ASSERT(sourceFrame != nullptr, "Taskflow source frame is null.");
-    ASSERT(
-        sourceFrame->runtimeGraph() != nullptr,
-        "Taskflow call binding requires a runtime caller graph.");
-    Frame *dest          = framePool_.acquire(targetGraph);
-    const auto &callMeta = taskflow_node_exec_meta(globalBuildCtx_, sourceFrame, callNode);
-    ASSERT(
-        callMeta.runtimeNodeIndex != camel::runtime::kInvalidNodeRef,
-        "Taskflow runtime node index is missing for call-site frame binding.");
+slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+    tf::Taskflow flow;
+    flow.emplace([this, graph, nodeRef, frame](tf::Subflow &sf) {
+        const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
+        const std::string uri(body->uri());
+        if (uri == ":mark/map_arr") {
+            mark_map_arr(graph, nodeRef, frame, sf);
+        } else if (uri == ":mark/apply_arr") {
+            mark_apply_arr(graph, nodeRef, frame, sf);
+        } else if (uri == ":mark/filter_arr") {
+            mark_filter_arr(graph, nodeRef, frame, sf);
+        } else if (uri == ":mark/reduce_arr") {
+            mark_reduce_arr(graph, nodeRef, frame, sf);
+        } else if (uri == ":mark/unordered_reduce_arr") {
+            mark_unordered_reduce_arr(graph, nodeRef, frame, sf);
+        } else if (uri == ":mark/foreach_arr") {
+            mark_foreach_arr(graph, nodeRef, frame, sf);
+        } else if (uri == ":mark/unordered_foreach_arr") {
+            mark_unordered_foreach_arr(graph, nodeRef, frame, sf);
+        }
+    });
+    tf::Executor nestedExecutor;
+    nestedExecutor.run(flow).wait();
+    const auto *node = requireNode(graph, nodeRef);
+    return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+}
 
-    if (callNode->type() == NodeType::CALL) {
-        camel::execute::fillFrameForIndirectCall(
-            sourceFrame,
-            dest,
-            sourceFrame->runtimeGraph(),
-            callMeta.runtimeNodeIndex);
-    } else {
-        camel::execute::fillFrameForDirectInvoke(
-            sourceFrame,
-            dest,
-            sourceFrame->runtimeGraph(),
-            callMeta.runtimeNodeIndex);
+slot_t
+TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+    const auto *node = requireNode(graph, nodeRef);
+
+    switch (node->kind) {
+    case GCNodeKind::Data:
+    case GCNodeKind::Port:
+    case GCNodeKind::Sync:
+        return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+
+    case GCNodeKind::Join: {
+        const auto normInputs = graph->normInputsOf(nodeRef);
+        const auto withInputs = graph->withInputsOf(nodeRef);
+        ASSERT(!normInputs.empty(), "Taskflow linear JOIN must have branch-index input.");
+        const auto brIndex = frame->get<Int32>(dataIndexOf(graph, normInputs.front()));
+        ASSERT(
+            brIndex >= 0 && static_cast<size_t>(brIndex) < withInputs.size(),
+            "Taskflow linear JOIN branch index is out of range.");
+        const slot_t result =
+            frame->get<slot_t>(dataIndexOf(graph, withInputs[static_cast<size_t>(brIndex)]));
+        if (node->dataIndex != 0) {
+            frame->set(node->dataIndex, result);
+        }
+        return result;
     }
 
-    return dest;
+    case GCNodeKind::Gate: {
+        const slot_t value = readForwardedRuntimeValue(graph, nodeRef, frame);
+        if (node->dataIndex != 0) {
+            frame->set(node->dataIndex, value);
+        }
+        return value;
+    }
+
+    case GCNodeKind::Copy: {
+        const auto normInputs = graph->normInputsOf(nodeRef);
+        ASSERT(!normInputs.empty(), "Taskflow linear COPY node must have one norm input.");
+        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        const TypeCode srcCode       = frame->codeAt(srcIdx);
+        if (camel::core::type::isGCTraced(srcCode)) {
+            Object *srcData  = frame->get<Object *>(srcIdx);
+            Type *srcTypePtr = frame->typeAt<Type>(srcIdx);
+            auto *copy       = srcData->clone(camel::core::mm::autoSpace(), srcTypePtr, false);
+            frame->set(node->dataIndex, copy);
+            return toSlot(copy);
+        }
+        const slot_t value = frame->get<slot_t>(srcIdx);
+        frame->set(node->dataIndex, value);
+        return value;
+    }
+
+    case GCNodeKind::Cast: {
+        const auto normInputs = graph->normInputsOf(nodeRef);
+        ASSERT(!normInputs.empty(), "Taskflow linear CAST node must have one norm input.");
+        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        Type *srcType                = frame->typeAt<Type>(srcIdx);
+        Type *tgtType                = node->dataType;
+        slot_t value                 = frame->get<slot_t>(srcIdx);
+        slot_t result                = tgtType->castSlotFrom(value, srcType);
+        frame->set(node->dataIndex, result);
+        return result;
+    }
+
+    case GCNodeKind::Fill: {
+        const auto normInputs = graph->normInputsOf(nodeRef);
+        const auto withInputs = graph->withInputsOf(nodeRef);
+        ASSERT(!normInputs.empty(), "Taskflow linear FILL node must have one norm input.");
+        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        const TypeCode srcCode       = frame->codeAt(srcIdx);
+        Type *srcType                = frame->typeAt<Type>(srcIdx);
+        ASSERT(
+            camel::core::type::isGCTraced(srcCode),
+            "Taskflow linear FILL target must be GC-traced.");
+        Object *srcObj =
+            frame->get<Object *>(srcIdx)->clone(camel::core::mm::autoSpace(), srcType, false);
+        ASSERT(srcObj != nullptr, "Taskflow linear FILL source object is null.");
+
+        switch (srcCode) {
+        case TypeCode::Tuple: {
+            auto *type         = tt::as_ptr<TupleType>(srcType);
+            auto *tuple        = tt::as_ptr<Tuple>(srcObj);
+            const size_t *refs = type->refs();
+            for (size_t i = 0; i < withInputs.size(); ++i) {
+                tuple->set<slot_t>(refs[i], frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
+            }
+        } break;
+        case TypeCode::Array: {
+            auto *array = tt::as_ptr<Array>(srcObj);
+            for (size_t i = 0; i < withInputs.size(); ++i) {
+                array->set<slot_t>(i, frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
+            }
+        } break;
+        case TypeCode::Struct: {
+            auto *type         = tt::as_ptr<StructType>(srcType);
+            auto *st           = tt::as_ptr<Struct>(srcObj);
+            const size_t *refs = type->refs();
+            for (size_t i = 0; i < withInputs.size(); ++i) {
+                st->set<slot_t>(refs[i], frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
+            }
+        } break;
+        case TypeCode::Function: {
+            auto *func         = tt::as_ptr<Function>(srcObj);
+            Tuple *closureData = func->tuple();
+            ASSERT(closureData != nullptr, "Taskflow linear FILL function closure is null.");
+            for (size_t i = 0; i < withInputs.size(); ++i) {
+                closureData->set<slot_t>(i, frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
+            }
+        } break;
+        default:
+            ASSERT(
+                false,
+                std::format(
+                    "Unsupported Taskflow linear FILL type {}.",
+                    typeCodeToString(srcCode)));
+        }
+
+        frame->set(node->dataIndex, srcObj);
+        return toSlot(srcObj);
+    }
+
+    case GCNodeKind::Accs: {
+        const auto normInputs = graph->normInputsOf(nodeRef);
+        ASSERT(!normInputs.empty(), "Taskflow linear ACCS node must have one norm input.");
+        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        const auto *body             = graph->nodeBodyAs<GCAccsBody>(nodeRef);
+        if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
+            Tuple *tuple = frame->get<Tuple *>(srcIdx);
+            ASSERT(body->value < tuple->size(), "Taskflow linear ACCS tuple index out of bounds.");
+            const slot_t value = tuple->get<slot_t>(body->value);
+            frame->set(node->dataIndex, value);
+            return value;
+        }
+        Struct *st   = frame->get<Struct *>(srcIdx);
+        Type *stType = frame->typeAt<Type>(srcIdx);
+        slot_t value = st->get<slot_t>(std::string(body->key()), stType);
+        frame->set(node->dataIndex, value);
+        return value;
+    }
+
+    case GCNodeKind::Func: {
+        auto *targetGraph = graph->directCalleeGraphOf(nodeRef);
+        ASSERT(targetGraph != nullptr, "Taskflow linear FUNC target graph is null.");
+        Frame *calleeFrame = acquirePreparedRuntimeCallFrame(targetGraph, nodeRef, frame);
+        slot_t result      = NullSlot;
+        try {
+            result = evalGraphLinear(targetGraph, calleeFrame);
+            framePool_.release(calleeFrame);
+        } catch (...) {
+            framePool_.release(calleeFrame);
+            throw;
+        }
+        frame->set(node->dataIndex, result);
+        return result;
+    }
+
+    case GCNodeKind::Call: {
+        const auto withInputs = graph->withInputsOf(nodeRef);
+        ASSERT(!withInputs.empty(), "Taskflow linear CALL node must have function input.");
+        Function *func    = frame->get<Function *>(dataIndexOf(graph, withInputs.front()));
+        auto *targetGraph = func ? func->graph() : nullptr;
+        ASSERT(targetGraph != nullptr, "Taskflow linear CALL target graph is null.");
+        Frame *calleeFrame = acquirePreparedRuntimeCallFrame(targetGraph, nodeRef, frame);
+        slot_t result      = NullSlot;
+        try {
+            result = evalGraphLinear(targetGraph, calleeFrame);
+            framePool_.release(calleeFrame);
+        } catch (...) {
+            framePool_.release(calleeFrame);
+            throw;
+        }
+        frame->set(node->dataIndex, result);
+        return result;
+    }
+
+    case GCNodeKind::Oper: {
+        const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
+        const std::string uri(body->uri());
+        if (uri.starts_with(":mark/")) {
+            return executeLinearMarkedOperator(graph, nodeRef, frame);
+        }
+        const slot_t result = executePreparedOperator(graph, nodeRef, frame);
+        frame->set(node->dataIndex, result);
+        return result;
+    }
+
+    case GCNodeKind::Brch:
+        return NullSlot;
+
+    case GCNodeKind::Bind:
+    case GCNodeKind::Dref:
+        return NullSlot;
+
+    default: {
+        tf::Taskflow flow;
+        slot_t result = NullSlot;
+        flow.emplace([this, graph, nodeRef, frame, &result](tf::Subflow &sf) {
+            result = executePreparedNode(graph, nodeRef, frame, sf, nullptr);
+        });
+        tf::Executor nestedExecutor;
+        nestedExecutor.run(flow).wait();
+        return result;
+    }
+    }
 }
 
 Frame *TaskflowExecSchedPass::acquirePreparedRuntimeCallFrame(
-    camel::runtime::GCGraph *targetGraph, camel::runtime::gc_node_ref_t callNodeRuntimeIndex,
-    Frame *sourceFrame) {
+    GCGraph *targetGraph, gc_node_ref_t callNodeRuntimeIndex, Frame *sourceFrame) {
     ASSERT(targetGraph != nullptr, "Taskflow runtime call target graph is null.");
     ASSERT(sourceFrame != nullptr, "Taskflow runtime source frame is null.");
-    ASSERT(
-        sourceFrame->runtimeGraph() != nullptr,
-        "Taskflow runtime call binding requires a runtime caller graph.");
-    Frame *dest            = framePool_.acquire(targetGraph);
-    const auto *callRecord = sourceFrame->runtimeGraph()->node(callNodeRuntimeIndex);
-    ASSERT(callRecord != nullptr, "Taskflow runtime call-site record is missing.");
+    ASSERT(sourceFrame->runtimeGraph() != nullptr, "Taskflow runtime source graph is null.");
 
-    if (callRecord->kind == camel::runtime::GCNodeKind::Call) {
+    Frame *dest            = framePool_.acquire(targetGraph);
+    const auto *callRecord = requireNode(sourceFrame->runtimeGraph(), callNodeRuntimeIndex);
+    if (callRecord->kind == GCNodeKind::Call) {
         camel::execute::fillFrameForIndirectCall(
             sourceFrame,
             dest,
@@ -469,59 +644,61 @@ Frame *TaskflowExecSchedPass::acquirePreparedRuntimeCallFrame(
             sourceFrame->runtimeGraph(),
             callNodeRuntimeIndex);
     }
-
     return dest;
 }
 
 Frame *TaskflowExecSchedPass::acquirePreparedClosureCallFrame(
-    camel::runtime::GCGraph *targetGraph, Tuple *closure, std::span<const slot_t> args) {
-    ASSERT(
-        targetGraph != nullptr,
-        "Taskflow closure call requires a materialized runtime graph target.");
-    Frame *dest                 = framePool_.acquire(targetGraph);
-    const auto &targetInfo      = globalBuildCtx_.getGraphInfos(targetGraph);
-    const auto &normPortIndices = targetInfo.normPortIndices;
-    const auto &closureIndices  = targetInfo.closureIndices;
+    GCGraph *targetGraph, Tuple *closure, std::span<const slot_t> args) {
+    ASSERT(targetGraph != nullptr, "Taskflow closure call requires a runtime graph target.");
+    Frame *dest = framePool_.acquire(targetGraph);
 
-    ASSERT(
-        args.size() == normPortIndices.size(),
-        "Norm args and ports count mismatch in Taskflow closure call frame fill.");
-    ASSERT(
-        targetInfo.withPortIndices.empty(),
-        "Closure call target graph should not require with ports in Taskflow.");
-    ASSERT(
-        closure->size() == closureIndices.size(),
-        "Closure nodes and tuple size mismatch in Taskflow closure call frame fill.");
+    const auto normPorts = targetGraph->normPorts();
+    ASSERT(args.size() == normPorts.size(), "Taskflow closure call norm-arg count mismatch.");
+    for (size_t i = 0; i < args.size(); ++i) {
+        dest->set(dataIndexOf(targetGraph, normPorts[i]), args[i]);
+    }
 
-    for (size_t i = 0; i < args.size(); ++i)
-        dest->set(normPortIndices[i], args[i]);
-    for (size_t j = 0; j < closure->size(); ++j)
-        dest->set(closureIndices[j], closure->get<slot_t>(j));
+    const auto closureNodes = targetGraph->closureNodes();
+    if (closureNodes.empty()) {
+        return dest;
+    }
 
+    ASSERT(closure != nullptr, "Taskflow closure tuple is null.");
+    ASSERT(closure->size() == closureNodes.size(), "Taskflow closure size mismatch.");
+    for (size_t i = 0; i < closureNodes.size(); ++i) {
+        dest->set(dataIndexOf(targetGraph, closureNodes[i]), closure->get<slot_t>(i));
+    }
     return dest;
 }
 
-slot_t TaskflowExecSchedPass::executePreparedOperator(Node *n, Frame *frame) {
-    auto opNode     = tt::as_ptr<OperNode>(n);
-    const auto &uri = opNode->oper()->uri();
-    auto opFunc     = context_->execMgr().find(uri);
+slot_t TaskflowExecSchedPass::executePreparedOperator(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+    ASSERT(graph != nullptr, "Taskflow operator execution requires a graph.");
+    ASSERT(frame != nullptr, "Taskflow operator execution requires a frame.");
+
+    const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
+    const std::string uri(body->uri());
+    auto opFunc = context_->execMgr().find(uri);
     if (!opFunc) {
         throw reportRuntimeFault(
             *context_,
             RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri),
-            makeNodeExecutionSite(
-                context_->sourceContext(),
-                frame ? frame->runtimeGraph() : nullptr,
-                &n->graph(),
-                n,
-                0,
-                "taskflow",
-                ExecutionSiteKind::TaskNode));
+            makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow"));
     }
 
-    const auto &meta = taskflow_node_exec_meta(globalBuildCtx_, frame, n);
-    data_arr_t nargs{meta.normIndices.data(), static_cast<size_t>(meta.normIndices.size())};
-    data_arr_t wargs{meta.withIndices.data(), static_cast<size_t>(meta.withIndices.size())};
+    std::vector<GIR::data_idx_t> withIndices;
+    std::vector<GIR::data_idx_t> normIndices;
+    withIndices.reserve(graph->withInputsOf(nodeRef).size());
+    normIndices.reserve(graph->normInputsOf(nodeRef).size());
+    for (gc_node_ref_t inputRef : graph->withInputsOf(nodeRef)) {
+        withIndices.push_back(dataIndexOf(graph, inputRef));
+    }
+    for (gc_node_ref_t inputRef : graph->normInputsOf(nodeRef)) {
+        normIndices.push_back(dataIndexOf(graph, inputRef));
+    }
+
+    data_arr_t wargs{withIndices.data(), withIndices.size()};
+    data_arr_t nargs{normIndices.data(), normIndices.size()};
     FrameArgsView withView(*frame, wargs);
     FrameArgsView normView(*frame, nargs);
 
@@ -531,1265 +708,646 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(Node *n, Frame *frame) {
         throw reportRuntimeFault(
             *context_,
             fault,
-            makeNodeExecutionSite(
-                context_->sourceContext(),
-                frame ? frame->runtimeGraph() : nullptr,
-                &n->graph(),
-                n,
-                0,
-                "taskflow",
-                ExecutionSiteKind::TaskNode));
-    }
-}
-
-void TaskflowExecSchedPass::buildGraphsInfo(Graph *rootGraph) {
-    globalBuildCtx_.ownedGraphInfos.clear();
-    globalBuildCtx_.graphInfoMap.clear();
-    globalBuildCtx_.runtimeGraphInfoMap.clear();
-    globalBuildCtx_.skipNodes.clear();
-    std::unordered_set<Graph *> visited;
-    std::queue<Graph *> q;
-    q.push(rootGraph);
-
-    while (!q.empty()) {
-        auto g = q.front();
-        q.pop();
-        if (visited.count(g))
-            continue;
-        visited.insert(g);
-
-        populate_graph_info(*this, g, find_runtime_graph(context_.get(), g));
-
-        for (Node *n : collect_taskflow_execution_nodes(g)) {
-            if (n->type() == NodeType::FUNC) {
-                auto fn    = tt::as_ptr<FuncNode>(n);
-                Graph *sub = fn->bodyGraph();
-                if (!visited.count(sub))
-                    q.push(sub);
-            }
-        }
-
-        for (const auto &[_, graphsSet] : g->subGraphs()) {
-            for (const auto &sg : graphsSet) {
-                if (!visited.count(sg.get()))
-                    q.push(sg.get());
-            }
-        }
-
-        // Sealed graphs already own finalized frame layouts. Warm only the frame pool here so the
-        // first subgraph entry does not pay the cold-start cost.
-    }
-}
-
-slot_t TaskflowExecSchedPass::executePreparedNode(Node *n, Frame *frame, tf::Subflow &sf) {
-    ASSERT(n != nullptr, "Taskflow prepared node execution received a null node.");
-
-    switch (n->type()) {
-    case NodeType::DATA:
-    case NodeType::PORT:
-        return frame->get<slot_t>(n->index());
-
-    case NodeType::SYNC:
-        return frame->get<slot_t>(n->index());
-
-    case NodeType::GATE: {
-        auto dataInputs = n->dataInputs();
-        if (!dataInputs.empty()) {
-            slot_t value = read_taskflow_node_value(dataInputs.back(), frame);
-            if (n->index() != 0) {
-                frame->set(n->index(), value);
-            }
-            return value;
-        }
-        return n->index() == 0 ? NullSlot : frame->get<slot_t>(n->index());
-    }
-
-    case NodeType::COPY: {
-        auto inputNode    = n->normInputs().front();
-        data_idx_t srcIdx = inputNode->index();
-        TypeCode srcCode  = frame->codeAt(srcIdx);
-        if (isGCTraced(srcCode)) {
-            Object *srcData  = frame->get<Object *>(srcIdx);
-            Type *srcTypePtr = frame->typeAt<Type>(srcIdx);
-            auto *copy       = srcData->clone(mm::autoSpace(), srcTypePtr, false);
-            frame->set(n->index(), copy);
-            return toSlot(copy);
-        }
-        slot_t value = frame->get<slot_t>(srcIdx);
-        frame->set(n->index(), value);
-        return value;
-    }
-
-    case NodeType::CAST: {
-        auto inputNode = n->normInputs().front();
-        Type *srcType  = frame->typeAt<Type>(inputNode->index());
-        Type *tgtType  = n->dataType();
-        slot_t value   = frame->get<slot_t>(inputNode->index());
-        slot_t result  = tgtType->castSlotFrom(value, srcType);
-        frame->set(n->index(), result);
-        return result;
-    }
-
-    case NodeType::FILL: {
-        auto srcNode           = n->normInputs().front();
-        const auto &dataInputs = n->withInputs();
-        TypeCode srcCode       = frame->codeAt(srcNode->index());
-        Type *srcType          = frame->typeAt<Type>(srcNode->index());
-        ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced in Taskflow.");
-        Object *srcObj =
-            frame->get<Object *>(srcNode->index())->clone(mm::autoSpace(), srcType, false);
-        ASSERT(srcObj != nullptr, "FILL target data is null.");
-        switch (srcCode) {
-        case TypeCode::Tuple: {
-            auto type          = tt::as_ptr<TupleType>(srcType);
-            auto tup           = tt::as_ptr<Tuple>(srcObj);
-            const size_t *refs = type->refs();
-            for (size_t j = 0; j < dataInputs.size(); ++j)
-                tup->set<slot_t>(refs[j], frame->get<slot_t>(dataInputs[j]->index()));
-        } break;
-        case TypeCode::Array: {
-            auto arr = tt::as_ptr<Array>(srcObj);
-            for (size_t j = 0; j < dataInputs.size(); ++j)
-                arr->set<slot_t>(j, frame->get<slot_t>(dataInputs[j]->index()));
-        } break;
-        case TypeCode::Struct: {
-            auto type          = tt::as_ptr<StructType>(srcType);
-            auto str           = tt::as_ptr<Struct>(srcObj);
-            const size_t *refs = type->refs();
-            for (size_t j = 0; j < dataInputs.size(); ++j)
-                str->set<slot_t>(refs[j], frame->get<slot_t>(dataInputs[j]->index()));
-        } break;
-        case TypeCode::Function: {
-            auto func          = tt::as_ptr<Function>(srcObj);
-            Tuple *closureData = func->tuple();
-            for (size_t j = 0; j < dataInputs.size(); ++j)
-                closureData->set<slot_t>(j, frame->get<slot_t>(dataInputs[j]->index()));
-        } break;
-        default:
-            ASSERT(
-                false,
-                std::format(
-                    "Unsupported FILL target type {} in Taskflow.",
-                    typeCodeToString(srcCode)));
-        }
-        frame->set(n->index(), srcObj);
-        return toSlot(srcObj);
-    }
-
-    case NodeType::ACCS: {
-        auto accsNode     = tt::as_ptr<AccsNode>(n);
-        data_idx_t srcIdx = n->dataInputs().front()->index();
-        if (accsNode->isNum()) {
-            size_t idx = accsNode->numIndex();
-            Tuple *t   = frame->get<Tuple *>(srcIdx);
-            ASSERT(idx < t->size(), "Tuple index out of bounds in Taskflow.");
-            slot_t value = t->get<slot_t>(idx);
-            frame->set(n->index(), value);
-            return value;
-        }
-        std::string key  = accsNode->strIndex();
-        Struct *s        = frame->get<Struct *>(srcIdx);
-        Type *structType = frame->typeAt<Type>(srcIdx);
-        slot_t value     = s->get<slot_t>(key, structType);
-        frame->set(n->index(), value);
-        return value;
-    }
-
-    case NodeType::FUNC: {
-        const auto &nodeMeta = taskflow_node_exec_meta(globalBuildCtx_, frame, n);
-        auto *runtimeTarget =
-            frame->runtimeGraph()
-                ? frame->runtimeGraph()->directCalleeGraphOf(nodeMeta.runtimeNodeIndex)
-                : nullptr;
-        ASSERT(
-            runtimeTarget != nullptr,
-            "Taskflow direct FUNC target must have a materialized runtime graph.");
-        Frame *funcFrame =
-            acquirePreparedRuntimeCallFrame(runtimeTarget, nodeMeta.runtimeNodeIndex, frame);
-        slot_t result = runPreparedSubgraph(sf, runtimeTarget, funcFrame);
-        frame->set(n->index(), result);
-        return result;
-    }
-
-    case NodeType::CALL: {
-        auto *callNode      = tt::as_ptr<CallNode>(n);
-        auto *runtimeTarget = frame->get<Function *>(callNode->calleeInput()->index())->graph();
-        ASSERT(
-            runtimeTarget != nullptr,
-            "Taskflow indirect CALL requires a materialized runtime graph target.");
-        const auto &nodeMeta = taskflow_node_exec_meta(globalBuildCtx_, frame, n);
-        Frame *funcFrame =
-            acquirePreparedRuntimeCallFrame(runtimeTarget, nodeMeta.runtimeNodeIndex, frame);
-        slot_t result = runPreparedSubgraph(sf, runtimeTarget, funcFrame);
-        frame->set(n->index(), result);
-        return result;
-    }
-
-    case NodeType::OPER: {
-        slot_t result = executePreparedOperator(n, frame);
-        frame->set(n->index(), result);
-        return result;
-    }
-
-    case NodeType::BRCH: {
-        auto *brch           = tt::as_ptr<BrchNode>(n);
-        const auto &nodeMeta = taskflow_node_exec_meta(globalBuildCtx_, frame, n);
-        const auto &normIns  = nodeMeta.normIndices;
-        const auto &withIns  = nodeMeta.withIndices;
-        ASSERT(normIns.size() == 1, "Branch node must have exactly one norm input.");
-
-        size_t jumpIdx = 0;
-        if (withIns.empty()) {
-            bool cond = frame->get<bool>(normIns.front());
-            jumpIdx   = cond ? 0 : 1;
-        } else {
-            TypeCode condType = frame->codeAt(normIns.front());
-            size_t j          = 0;
-            if (isGCTraced(condType)) {
-                Type *condTypePtr = frame->typeAt<Type>(normIns.front());
-                Object *condData  = frame->get<Object *>(normIns.front());
-                for (; j < withIns.size(); ++j) {
-                    Object *caseData = frame->get<Object *>(withIns[j]);
-                    if (condData->equals(caseData, condTypePtr, false)) {
-                        jumpIdx = j;
-                        break;
-                    }
-                }
-            } else {
-                slot_t condData = frame->get<slot_t>(normIns.front());
-                for (; j < withIns.size(); ++j) {
-                    if (condData == frame->get<slot_t>(withIns[j])) {
-                        jumpIdx = j;
-                        break;
-                    }
-                }
-            }
-            if (j == withIns.size()) {
-                jumpIdx = withIns.size();
-            }
-        }
-        frame->set(brch->index(), static_cast<Int32>(jumpIdx));
-        return executePreparedBranchArm(brch, jumpIdx, frame, sf);
-    }
-
-    case NodeType::JOIN:
-        return frame->get<slot_t>(n->index());
-
-    default:
-        ASSERT(false, std::format("Unsupported prepared Taskflow node type: {}", n->toString()));
-        return NullSlot;
+            makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow"));
     }
 }
 
 slot_t TaskflowExecSchedPass::executePreparedBranchArm(
-    BrchNode *brch, size_t armIndex, Frame *frame, tf::Subflow &sf) {
-    ASSERT(brch != nullptr, "Taskflow branch arm execution received a null BRCH node.");
-    const auto &arms = taskflow_branch_arms(globalBuildCtx_, frame, brch);
-    ASSERT(armIndex < arms.size(), "Taskflow branch arm index is out of range.");
-
-    const auto &arm = arms[armIndex];
-    if (frame != nullptr && frame->runtimeGraph() != nullptr &&
-        !arm.topoNodeRuntimeIndices.empty()) {
-        const auto &runtimeInfo = globalBuildCtx_.getGraphInfos(frame->runtimeGraph());
-        for (camel::runtime::gc_node_ref_t runtimeIndex : arm.topoNodeRuntimeIndices) {
-            Node *node = find_taskflow_source_node(runtimeInfo, runtimeIndex);
-            ASSERT(node != nullptr, "Taskflow runtime branch node is missing source metadata.");
-            executePreparedNode(node, frame, sf);
-        }
+    GCGraph *graph, gc_node_ref_t brchRef, size_t armIndex, Frame *frame, tf::Subflow &sf,
+    const RuntimeBuildInfo *buildInfo) {
+    ASSERT(graph != nullptr, "Taskflow branch execution requires a graph.");
+    RuntimeBranchArmRegion ownedArm;
+    const RuntimeBranchArmRegion *arm = nullptr;
+    if (buildInfo != nullptr && brchRef < buildInfo->branchArms.size()) {
+        const auto &arms = buildInfo->branchArms[brchRef];
+        ASSERT(armIndex < arms.size(), "Taskflow branch arm index is out of range.");
+        arm = &arms[armIndex];
     } else {
-        for (Node *node : arm.topoNodes) {
-            executePreparedNode(node, frame, sf);
-        }
+        ownedArm = camel::execute::collectRuntimeBranchArmRegion(graph, brchRef, armIndex);
+        arm      = &ownedArm;
+    }
+    ASSERT(arm != nullptr, "Taskflow branch arm resolution failed.");
+    for (gc_node_ref_t nodeRef : arm->topoIndices) {
+        (void)executePreparedNode(graph, nodeRef, frame, sf, buildInfo);
     }
 
-    auto *join = brch->matchedJoin();
-    ASSERT(join != nullptr, "Taskflow branch execution requires a matched JOIN node.");
-    slot_t result = NullSlot;
-    if (frame != nullptr && frame->runtimeGraph() != nullptr &&
-        arm.tailRuntimeIndex != camel::runtime::kInvalidNodeRef) {
-        const auto *tailRecord = frame->runtimeGraph()->node(arm.tailRuntimeIndex);
-        ASSERT(tailRecord != nullptr, "Taskflow runtime branch tail record is missing.");
-        result = frame->get<slot_t>(tailRecord->dataIndex);
-    } else {
-        result = read_taskflow_node_value(arm.tail, frame);
-    }
-    frame->set(join->index(), result);
-    return result;
+    ASSERT(arm->tailIndex != kInvalidNodeRef, "Taskflow branch arm has no tail.");
+    return frame->get<slot_t>(dataIndexOf(graph, arm->tailIndex));
 }
 
-void TaskflowExecSchedPass::buildGraphsInfo(camel::runtime::GCGraph *rootGraph) {
-    globalBuildCtx_.ownedGraphInfos.clear();
-    globalBuildCtx_.graphInfoMap.clear();
-    globalBuildCtx_.runtimeGraphInfoMap.clear();
-    globalBuildCtx_.skipNodes.clear();
+slot_t TaskflowExecSchedPass::executePreparedNode(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf,
+    const RuntimeBuildInfo *buildInfo) {
+    const auto *node = requireNode(graph, nodeRef);
 
-    for (camel::runtime::GCGraph *runtimeGraph :
-         camel::runtime::collectReachableGraphs(rootGraph)) {
-        ASSERT(runtimeGraph != nullptr, "Taskflow reachable runtime graph set contains null.");
-        const GIR::graph_ptr_t &sourceGraph = runtimeGraph->sourceGraph();
-        Graph *graph                        = sourceGraph.get();
-        ASSERT(graph != nullptr, "Taskflow runtime graph is missing compile graph metadata.");
-        populate_graph_info(*this, graph, runtimeGraph);
+    switch (node->kind) {
+    case GCNodeKind::Data:
+    case GCNodeKind::Port:
+    case GCNodeKind::Sync:
+        return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+
+    case GCNodeKind::Join: {
+        const auto normInputs = graph->normInputsOf(nodeRef);
+        const auto withInputs = graph->withInputsOf(nodeRef);
+        ASSERT(!normInputs.empty(), "Taskflow JOIN must have branch-index input.");
+        const auto brIndex = frame->get<Int32>(dataIndexOf(graph, normInputs.front()));
+        ASSERT(
+            brIndex >= 0 && static_cast<size_t>(brIndex) < withInputs.size(),
+            "Taskflow JOIN branch index is out of range.");
+        const slot_t result =
+            frame->get<slot_t>(dataIndexOf(graph, withInputs[static_cast<size_t>(brIndex)]));
+        if (node->dataIndex != 0) {
+            frame->set(node->dataIndex, result);
+        }
+        return result;
     }
+
+    case GCNodeKind::Gate: {
+        const slot_t value = readForwardedRuntimeValue(graph, nodeRef, frame);
+        if (node->dataIndex != 0) {
+            frame->set(node->dataIndex, value);
+        }
+        return value;
+    }
+
+    case GCNodeKind::Copy: {
+        const auto normInputs = graph->normInputsOf(nodeRef);
+        ASSERT(!normInputs.empty(), "Taskflow COPY node must have one norm input.");
+        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        const TypeCode srcCode       = frame->codeAt(srcIdx);
+        if (camel::core::type::isGCTraced(srcCode)) {
+            Object *srcData  = frame->get<Object *>(srcIdx);
+            Type *srcTypePtr = frame->typeAt<Type>(srcIdx);
+            auto *copy       = srcData->clone(camel::core::mm::autoSpace(), srcTypePtr, false);
+            frame->set(node->dataIndex, copy);
+            return toSlot(copy);
+        }
+        const slot_t value = frame->get<slot_t>(srcIdx);
+        frame->set(node->dataIndex, value);
+        return value;
+    }
+
+    case GCNodeKind::Cast: {
+        const auto normInputs = graph->normInputsOf(nodeRef);
+        ASSERT(!normInputs.empty(), "Taskflow CAST node must have one norm input.");
+        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        Type *srcType                = frame->typeAt<Type>(srcIdx);
+        Type *tgtType                = node->dataType;
+        slot_t value                 = frame->get<slot_t>(srcIdx);
+        slot_t result                = tgtType->castSlotFrom(value, srcType);
+        frame->set(node->dataIndex, result);
+        return result;
+    }
+
+    case GCNodeKind::Fill: {
+        const auto normInputs = graph->normInputsOf(nodeRef);
+        const auto withInputs = graph->withInputsOf(nodeRef);
+        ASSERT(!normInputs.empty(), "Taskflow FILL node must have one norm input.");
+        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        const TypeCode srcCode       = frame->codeAt(srcIdx);
+        Type *srcType                = frame->typeAt<Type>(srcIdx);
+        ASSERT(camel::core::type::isGCTraced(srcCode), "Taskflow FILL target must be GC-traced.");
+        Object *srcObj =
+            frame->get<Object *>(srcIdx)->clone(camel::core::mm::autoSpace(), srcType, false);
+        ASSERT(srcObj != nullptr, "Taskflow FILL source object is null.");
+
+        switch (srcCode) {
+        case TypeCode::Tuple: {
+            auto *type         = tt::as_ptr<TupleType>(srcType);
+            auto *tuple        = tt::as_ptr<Tuple>(srcObj);
+            const size_t *refs = type->refs();
+            for (size_t i = 0; i < withInputs.size(); ++i) {
+                tuple->set<slot_t>(refs[i], frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
+            }
+        } break;
+        case TypeCode::Array: {
+            auto *array = tt::as_ptr<Array>(srcObj);
+            for (size_t i = 0; i < withInputs.size(); ++i) {
+                array->set<slot_t>(i, frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
+            }
+        } break;
+        case TypeCode::Struct: {
+            auto *type         = tt::as_ptr<StructType>(srcType);
+            auto *st           = tt::as_ptr<Struct>(srcObj);
+            const size_t *refs = type->refs();
+            for (size_t i = 0; i < withInputs.size(); ++i) {
+                st->set<slot_t>(refs[i], frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
+            }
+        } break;
+        case TypeCode::Function: {
+            auto *func         = tt::as_ptr<Function>(srcObj);
+            Tuple *closureData = func->tuple();
+            ASSERT(closureData != nullptr, "Taskflow FILL function closure is null.");
+            for (size_t i = 0; i < withInputs.size(); ++i) {
+                closureData->set<slot_t>(i, frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
+            }
+        } break;
+        default:
+            ASSERT(
+                false,
+                std::format("Unsupported Taskflow FILL type {}.", typeCodeToString(srcCode)));
+        }
+        frame->set(node->dataIndex, srcObj);
+        return toSlot(srcObj);
+    }
+
+    case GCNodeKind::Accs: {
+        const auto normInputs = graph->normInputsOf(nodeRef);
+        ASSERT(!normInputs.empty(), "Taskflow ACCS node must have one norm input.");
+        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        const auto *body             = graph->nodeBodyAs<GCAccsBody>(nodeRef);
+        if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
+            Tuple *tuple = frame->get<Tuple *>(srcIdx);
+            ASSERT(body->value < tuple->size(), "Taskflow ACCS tuple index out of bounds.");
+            const slot_t value = tuple->get<slot_t>(body->value);
+            frame->set(node->dataIndex, value);
+            return value;
+        }
+        Struct *st   = frame->get<Struct *>(srcIdx);
+        Type *stType = frame->typeAt<Type>(srcIdx);
+        slot_t value = st->get<slot_t>(std::string(body->key()), stType);
+        frame->set(node->dataIndex, value);
+        return value;
+    }
+
+    case GCNodeKind::Func: {
+        auto *targetGraph = graph->directCalleeGraphOf(nodeRef);
+        ASSERT(targetGraph != nullptr, "Taskflow FUNC target graph is null.");
+        Frame *calleeFrame = acquirePreparedRuntimeCallFrame(targetGraph, nodeRef, frame);
+        slot_t result      = runPreparedSubgraph(sf, targetGraph, calleeFrame);
+        frame->set(node->dataIndex, result);
+        return result;
+    }
+
+    case GCNodeKind::Call: {
+        const auto withInputs = graph->withInputsOf(nodeRef);
+        ASSERT(!withInputs.empty(), "Taskflow CALL node must have function input.");
+        Function *func    = frame->get<Function *>(dataIndexOf(graph, withInputs.front()));
+        auto *targetGraph = func ? func->graph() : nullptr;
+        ASSERT(targetGraph != nullptr, "Taskflow CALL target graph is null.");
+        Frame *calleeFrame = acquirePreparedRuntimeCallFrame(targetGraph, nodeRef, frame);
+        slot_t result      = runPreparedSubgraph(sf, targetGraph, calleeFrame);
+        frame->set(node->dataIndex, result);
+        return result;
+    }
+
+    case GCNodeKind::Oper: {
+        const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
+        const std::string uri(body->uri());
+        if (uri == ":mark/map_arr") {
+            mark_map_arr(graph, nodeRef, frame, sf);
+        } else if (uri == ":mark/apply_arr") {
+            mark_apply_arr(graph, nodeRef, frame, sf);
+        } else if (uri == ":mark/filter_arr") {
+            mark_filter_arr(graph, nodeRef, frame, sf);
+        } else if (uri == ":mark/reduce_arr") {
+            mark_reduce_arr(graph, nodeRef, frame, sf);
+        } else if (uri == ":mark/unordered_reduce_arr") {
+            mark_unordered_reduce_arr(graph, nodeRef, frame, sf);
+        } else if (uri == ":mark/foreach_arr") {
+            mark_foreach_arr(graph, nodeRef, frame, sf);
+        } else if (uri == ":mark/unordered_foreach_arr") {
+            mark_unordered_foreach_arr(graph, nodeRef, frame, sf);
+        } else {
+            const slot_t result = executePreparedOperator(graph, nodeRef, frame);
+            frame->set(node->dataIndex, result);
+            return result;
+        }
+        return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+    }
+
+    case GCNodeKind::Brch: {
+        const size_t jumpIdx = selectBranchArm(graph, nodeRef, frame);
+        frame->set(node->dataIndex, static_cast<Int32>(jumpIdx));
+        return executePreparedBranchArm(graph, nodeRef, jumpIdx, frame, sf, buildInfo);
+    }
+
+    case GCNodeKind::Bind:
+    case GCNodeKind::Dref:
+        return NullSlot;
+    }
+
+    return NullSlot;
 }
 
 template <typename FlowT>
 void TaskflowExecSchedPass::instantiate_graph_instance_generic(
-    FlowT &flowLike, camel::runtime::GCGraph *runtimeGraph, Frame *frame) {
+    FlowT &flowLike, GCGraph *runtimeGraph, Frame *frame) {
     ASSERT(runtimeGraph != nullptr, "Taskflow graph instantiation requires a runtime graph.");
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "Taskflow",
-        "Instantiating runtime graph instance: {} (runtimeNodes={})",
-        runtimeGraph->name(),
-        runtimeGraph->nodeBlockCount()));
+    auto buildInfo = std::make_shared<RuntimeBuildInfo>(buildRuntimeBuildInfo(runtimeGraph));
     std::vector<tf::Task> taskMap(runtimeGraph->nodeBlockCount());
     std::vector<uint8_t> taskBuilt(runtimeGraph->nodeBlockCount(), 0);
-    buildRuntimeNodeTasks(flowLike, runtimeGraph, frame, taskMap, taskBuilt);
-    connectRuntimeDependencies(flowLike, runtimeGraph, frame, taskMap, taskBuilt);
-}
-
-template <typename FlowT>
-void TaskflowExecSchedPass::instantiate_graph_instance_generic(
-    FlowT &flowLike, Graph *graph, Frame *frame) {
-    ASSERT(graph != nullptr, "Taskflow graph instantiation requires a source graph.");
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "Taskflow",
-        "Instantiating graph instance: {} (nodes={})",
-        graph->name(),
-        graph->nodes().size()));
-    std::unordered_map<Node *, tf::Task> taskMap;
-    buildNormalNodeTasks(flowLike, graph, frame, taskMap);
-    connectDependencies(flowLike, graph, frame, taskMap);
+    buildRuntimeNodeTasks(flowLike, runtimeGraph, frame, buildInfo, taskMap, taskBuilt);
+    connectRuntimeDependencies(flowLike, runtimeGraph, frame, buildInfo, taskMap, taskBuilt);
 }
 
 template <typename FlowT>
 void TaskflowExecSchedPass::buildRuntimeNodeTasks(
-    FlowT &flowLike, camel::runtime::GCGraph *runtimeGraph, Frame *frame,
-    std::vector<tf::Task> &taskMap, std::vector<uint8_t> &taskBuilt) {
-    ASSERT(runtimeGraph != nullptr, "Taskflow runtime-node task construction requires a graph.");
-    ASSERT(
-        taskMap.size() == runtimeGraph->nodeBlockCount() &&
-            taskBuilt.size() == runtimeGraph->nodeBlockCount(),
-        "Taskflow runtime task tables must match runtime graph node count.");
-    const auto &graphInfo = globalBuildCtx_.getGraphInfos(runtimeGraph);
-    for (camel::runtime::gc_node_ref_t runtimeIndex :
-         camel::execute::buildReachableExecutionTopoIndices(runtimeGraph)) {
-        const auto *record = runtimeGraph->node(runtimeIndex);
-        ASSERT(record != nullptr, "Taskflow runtime node record lookup failed.");
-        Node *n = find_taskflow_source_node(graphInfo, runtimeIndex);
-        if (n == nullptr) {
-            continue;
-        }
-        if (taskflow_should_skip_node(globalBuildCtx_, frame, n)) {
-            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                "Taskflow",
-                "Skipping runtime node (BRCH region) graph={}: {}",
-                runtimeGraph->name(),
-                n->toString()));
-            continue;
-        }
-        tf::Task t;
-        switch (record->kind) {
-        case camel::runtime::GCNodeKind::Data:
-            t = buildDataTask(flowLike, n, frame);
-            break;
-        case camel::runtime::GCNodeKind::Port:
-            t = buildPortTask(flowLike, n, frame);
-            break;
-        case camel::runtime::GCNodeKind::Copy:
-            t = buildCopyTask(flowLike, n, frame);
-            break;
-        case camel::runtime::GCNodeKind::Cast:
-            t = buildCastTask(flowLike, n, frame);
-            break;
-        case camel::runtime::GCNodeKind::Fill:
-            t = buildFillTask(flowLike, n, frame);
-            break;
-        case camel::runtime::GCNodeKind::Accs:
-            t = buildAccsTask(flowLike, n, frame);
-            break;
-        case camel::runtime::GCNodeKind::Func:
-            t = buildFuncTask(flowLike, n, frame);
-            break;
-        case camel::runtime::GCNodeKind::Call:
-            t = buildCallTask(flowLike, n, frame);
-            break;
-        case camel::runtime::GCNodeKind::Oper:
-            t = buildOperTask(flowLike, n, frame);
-            break;
-        case camel::runtime::GCNodeKind::Sync:
-        case camel::runtime::GCNodeKind::Gate:
-            if (record->kind == camel::runtime::GCNodeKind::Gate) {
-                t = flowLike
-                        .emplace([n, frame]() {
-                            auto dataInputs = n->dataInputs();
-                            if (!dataInputs.empty()) {
-                                slot_t value = read_taskflow_node_value(dataInputs.back(), frame);
-                                if (n->index() != 0) {
-                                    frame->set(n->index(), value);
-                                }
-                            }
-                        })
-                        .name("GATE");
-            } else {
-                t = flowLike.emplace([]() {}).name("SYNC");
-            }
-            break;
-        case camel::runtime::GCNodeKind::Brch:
+    FlowT &flowLike, GCGraph *graph, Frame *frame,
+    const std::shared_ptr<const RuntimeBuildInfo> &buildInfo, std::vector<tf::Task> &taskMap,
+    std::vector<uint8_t> &taskBuilt) {
+    for (gc_node_ref_t nodeRef : camel::execute::buildReachableExecutionTopoIndices(graph)) {
+        const auto *node = requireNode(graph, nodeRef);
+        if (node->kind == GCNodeKind::Brch) {
             buildRuntimeBranchJoinRegion(
                 flowLike,
-                runtimeGraph,
+                graph,
                 frame,
+                buildInfo,
                 taskMap,
                 taskBuilt,
-                runtimeIndex,
-                n);
+                nodeRef);
             continue;
-        case camel::runtime::GCNodeKind::Join:
-        case camel::runtime::GCNodeKind::Bind:
-        case camel::runtime::GCNodeKind::Dref:
-            continue;
-        default:
-            ASSERT(
-                false,
-                std::format(
-                    "Unsupported runtime node kind in Taskflow task construction: {}",
-                    static_cast<int>(record->kind)));
         }
-        taskMap[runtimeIndex]   = t;
-        taskBuilt[runtimeIndex] = 1;
+        if (nodeRef < buildInfo->skipNodes.size() && buildInfo->skipNodes[nodeRef] != 0) {
+            continue;
+        }
+        if (node->kind == GCNodeKind::Bind || node->kind == GCNodeKind::Dref) {
+            continue;
+        }
+
+        tf::Task task;
+        switch (node->kind) {
+        case GCNodeKind::Data:
+            task = buildDataTask(flowLike, graph, nodeRef, frame);
+            break;
+        case GCNodeKind::Port:
+            task = buildPortTask(flowLike, graph, nodeRef, frame);
+            break;
+        case GCNodeKind::Copy:
+            task = buildCopyTask(flowLike, graph, nodeRef, frame);
+            break;
+        case GCNodeKind::Cast:
+            task = buildCastTask(flowLike, graph, nodeRef, frame);
+            break;
+        case GCNodeKind::Fill:
+            task = buildFillTask(flowLike, graph, nodeRef, frame);
+            break;
+        case GCNodeKind::Accs:
+            task = buildAccsTask(flowLike, graph, nodeRef, frame);
+            break;
+        case GCNodeKind::Func:
+            task = buildFuncTask(flowLike, graph, nodeRef, frame);
+            break;
+        case GCNodeKind::Call:
+            task = buildCallTask(flowLike, graph, nodeRef, frame);
+            break;
+        case GCNodeKind::Oper:
+            task = buildOperTask(flowLike, graph, nodeRef, frame);
+            break;
+        case GCNodeKind::Sync:
+            task = flowLike.emplace([]() {}).name("SYNC");
+            break;
+        case GCNodeKind::Gate:
+            task = flowLike
+                       .emplace([graph, nodeRef, frame]() {
+                           const auto *node   = requireNode(graph, nodeRef);
+                           const slot_t value = readForwardedRuntimeValue(graph, nodeRef, frame);
+                           if (node->dataIndex != 0) {
+                               frame->set(node->dataIndex, value);
+                           }
+                       })
+                       .name("GATE");
+            break;
+        case GCNodeKind::Join:
+            task = flowLike.emplace([]() {}).name("JOIN");
+            break;
+        default:
+            continue;
+        }
+        taskMap[nodeRef]   = task;
+        taskBuilt[nodeRef] = 1;
     }
 }
 
 template <typename FlowT>
 void TaskflowExecSchedPass::connectRuntimeDependencies(
-    FlowT &flowLike, camel::runtime::GCGraph *runtimeGraph, Frame *frame,
-    std::vector<tf::Task> &taskMap, std::vector<uint8_t> &taskBuilt) {
+    FlowT &flowLike, GCGraph *graph, Frame *frame,
+    const std::shared_ptr<const RuntimeBuildInfo> &buildInfo, std::vector<tf::Task> &taskMap,
+    std::vector<uint8_t> &taskBuilt) {
     (void)flowLike;
-    ASSERT(runtimeGraph != nullptr, "Taskflow runtime dependency construction requires a graph.");
-    const auto &graphInfo              = globalBuildCtx_.getGraphInfos(runtimeGraph);
-    auto add_edges_from_runtime_inputs = [&](std::span<const camel::runtime::gc_node_ref_t> inputs,
-                                             tf::Task tsk) {
-        for (uint32_t inputIndex : inputs) {
-            const auto *inputRecord = runtimeGraph->node(inputIndex);
-            if (inputRecord == nullptr) {
+    (void)frame;
+    auto addEdges = [&](std::span<const gc_node_ref_t> inputs, tf::Task task) {
+        for (gc_node_ref_t inputRef : inputs) {
+            if (inputRef >= taskBuilt.size() || taskBuilt[inputRef] == 0) {
                 continue;
             }
-            if (graphInfo.runtimeSkipNodeIndices.contains(inputIndex) &&
-                inputRecord->kind != camel::runtime::GCNodeKind::Join) {
+            if (inputRef < buildInfo->skipNodes.size() && buildInfo->skipNodes[inputRef] != 0 &&
+                requireNode(graph, inputRef)->kind != GCNodeKind::Join) {
                 continue;
             }
-            if (inputIndex < taskBuilt.size() && taskBuilt[inputIndex] != 0) {
-                taskMap[inputIndex].precede(tsk);
-            }
+            taskMap[inputRef].precede(task);
         }
     };
 
-    for (camel::runtime::gc_node_ref_t runtimeIndex :
-         camel::execute::buildReachableExecutionTopoIndices(runtimeGraph)) {
-        const auto *record = runtimeGraph->node(runtimeIndex);
-        if (record == nullptr) {
+    for (gc_node_ref_t nodeRef : camel::execute::buildReachableExecutionTopoIndices(graph)) {
+        const auto *node = requireNode(graph, nodeRef);
+        if (node->kind == GCNodeKind::Brch) {
             continue;
         }
-        if (record->kind == camel::runtime::GCNodeKind::Brch) {
+        if (nodeRef < taskBuilt.size() && taskBuilt[nodeRef] == 0) {
             continue;
         }
-        if (graphInfo.runtimeSkipNodeIndices.contains(runtimeIndex)) {
+        if (nodeRef < buildInfo->skipNodes.size() && buildInfo->skipNodes[nodeRef] != 0) {
             continue;
         }
-        if (runtimeIndex >= taskBuilt.size() || taskBuilt[runtimeIndex] == 0) {
-            continue;
-        }
-        add_edges_from_runtime_inputs(
-            runtimeGraph->normInputsOf(runtimeIndex),
-            taskMap[runtimeIndex]);
-        add_edges_from_runtime_inputs(
-            runtimeGraph->withInputsOf(runtimeIndex),
-            taskMap[runtimeIndex]);
-        add_edges_from_runtime_inputs(
-            runtimeGraph->ctrlInputsOf(runtimeIndex),
-            taskMap[runtimeIndex]);
-    }
-
-    if (const auto exitIndex = runtimeGraph->exitNodeRef();
-        exitIndex != camel::runtime::kInvalidNodeRef) {
-        if (exitIndex < taskBuilt.size() && taskBuilt[exitIndex] != 0) {
-            for (auto inputIndex : runtimeGraph->normInputsOf(exitIndex)) {
-                if (inputIndex < taskBuilt.size() && taskBuilt[inputIndex] != 0) {
-                    taskMap[inputIndex].precede(taskMap[exitIndex]);
-                }
-            }
-        }
+        addEdges(graph->normInputsOf(nodeRef), taskMap[nodeRef]);
+        addEdges(graph->withInputsOf(nodeRef), taskMap[nodeRef]);
+        addEdges(graph->ctrlInputsOf(nodeRef), taskMap[nodeRef]);
     }
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildDataTask(FlowT &flowLike, Node *n, Frame *frame) {
-    (void)n;
+tf::Task TaskflowExecSchedPass::buildDataTask(
+    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+    (void)graph;
+    (void)nodeRef;
     (void)frame;
     return flowLike.emplace([]() {}).name("DATA");
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildPortTask(FlowT &flowLike, Node *n, Frame *frame) {
-    (void)n;
+tf::Task TaskflowExecSchedPass::buildPortTask(
+    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+    (void)graph;
+    (void)nodeRef;
     (void)frame;
     return flowLike.emplace([]() {}).name("PORT");
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildCopyTask(FlowT &flowLike, Node *n, Frame *frame) {
+tf::Task TaskflowExecSchedPass::buildCopyTask(
+    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     return flowLike
-        .emplace([n, frame]() {
-            EXEC_WHEN_DEBUG({
-                CAMEL_LOG_DEBUG_S(
-                    "Taskflow",
-                    "Executing COPY graph={}: {}",
-                    n->graph().name(),
-                    n->toString());
-                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
-                    camel::DebugBreakpoint::Hit("gir_node", n);
-            });
-            auto inputNode    = n->normInputs().front();
-            data_idx_t srcIdx = inputNode->index();
-            TypeCode srcCode  = frame->codeAt(srcIdx);
-            if (isGCTraced(srcCode)) {
-                Object *srcData  = frame->get<Object *>(srcIdx);
-                Type *srcTypePtr = frame->typeAt<Type>(srcIdx);
-                frame->set(n->index(), srcData->clone(mm::autoSpace(), srcTypePtr, false));
-            } else {
-                frame->set(n->index(), frame->get<slot_t>(srcIdx));
-            }
-        })
+        .emplace(
+            [this, graph, nodeRef, frame]() { (void)executeLinearNode(graph, nodeRef, frame); })
         .name("COPY");
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildCastTask(FlowT &flowLike, Node *n, Frame *frame) {
+tf::Task TaskflowExecSchedPass::buildCastTask(
+    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     return flowLike
-        .emplace([n, frame]() {
-            EXEC_WHEN_DEBUG({
-                CAMEL_LOG_DEBUG_S(
-                    "Taskflow",
-                    "Executing CAST graph={}: {}",
-                    n->graph().name(),
-                    n->toString());
-                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
-                    camel::DebugBreakpoint::Hit("gir_node", n);
-            });
-            auto inputNode = n->normInputs().front();
-            Type *srcType  = frame->typeAt<Type>(inputNode->index());
-            Type *tgtType  = n->dataType();
-            slot_t value   = frame->get<slot_t>(inputNode->index());
-            slot_t result  = tgtType->castSlotFrom(value, srcType);
-            frame->set(n->index(), result);
-        })
+        .emplace(
+            [this, graph, nodeRef, frame]() { (void)executeLinearNode(graph, nodeRef, frame); })
         .name("CAST");
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildFillTask(FlowT &flowLike, Node *n, Frame *frame) {
+tf::Task TaskflowExecSchedPass::buildFillTask(
+    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     return flowLike
-        .emplace([n, frame]() {
-            EXEC_WHEN_DEBUG({
-                CAMEL_LOG_DEBUG_S(
-                    "Taskflow",
-                    "Executing FILL graph={}: {}",
-                    n->graph().name(),
-                    n->toString());
-                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
-                    camel::DebugBreakpoint::Hit("gir_node", n);
-            });
-            auto srcNode           = n->normInputs().front();
-            const auto &dataInputs = n->withInputs();
-            TypeCode srcCode       = frame->codeAt(srcNode->index());
-            Type *srcType          = frame->typeAt<Type>(srcNode->index());
-            ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced in Taskflow.");
-            Object *srcObj =
-                frame->get<Object *>(srcNode->index())->clone(mm::autoSpace(), srcType, false);
-            ASSERT(srcObj != nullptr, "FILL target data is null.");
-            switch (srcCode) {
-            case TypeCode::Tuple: {
-                auto type          = tt::as_ptr<TupleType>(srcType);
-                auto tup           = tt::as_ptr<Tuple>(srcObj);
-                const size_t *refs = type->refs();
-                for (size_t j = 0; j < dataInputs.size(); ++j)
-                    tup->set<slot_t>(refs[j], frame->get<slot_t>(dataInputs[j]->index()));
-            } break;
-            case TypeCode::Array: {
-                auto arr = tt::as_ptr<Array>(srcObj);
-                for (size_t j = 0; j < dataInputs.size(); ++j)
-                    arr->set<slot_t>(j, frame->get<slot_t>(dataInputs[j]->index()));
-            } break;
-            case TypeCode::Struct: {
-                auto type          = tt::as_ptr<StructType>(srcType);
-                auto str           = tt::as_ptr<Struct>(srcObj);
-                const size_t *refs = type->refs();
-                for (size_t j = 0; j < dataInputs.size(); ++j)
-                    str->set<slot_t>(refs[j], frame->get<slot_t>(dataInputs[j]->index()));
-            } break;
-            case TypeCode::Function: {
-                auto func          = tt::as_ptr<Function>(srcObj);
-                Tuple *closureData = func->tuple();
-                for (size_t j = 0; j < dataInputs.size(); ++j)
-                    closureData->set<slot_t>(j, frame->get<slot_t>(dataInputs[j]->index()));
-            } break;
-            default:
-                ASSERT(
-                    false,
-                    std::format(
-                        "Unsupported FILL target type {} in Taskflow.",
-                        typeCodeToString(srcCode)));
-            }
-            frame->set(n->index(), srcObj);
-        })
+        .emplace(
+            [this, graph, nodeRef, frame]() { (void)executeLinearNode(graph, nodeRef, frame); })
         .name("FILL");
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildAccsTask(FlowT &flowLike, Node *n, Frame *frame) {
+tf::Task TaskflowExecSchedPass::buildAccsTask(
+    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     return flowLike
-        .emplace([n, frame]() {
-            EXEC_WHEN_DEBUG({
-                CAMEL_LOG_DEBUG_S(
-                    "Taskflow",
-                    "Executing ACCS graph={}: {}",
-                    n->graph().name(),
-                    n->toString());
-                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
-                    camel::DebugBreakpoint::Hit("gir_node", n);
-            });
-            auto accsNode     = tt::as_ptr<AccsNode>(n);
-            data_idx_t srcIdx = n->dataInputs().front()->index();
-            if (accsNode->isNum()) {
-                size_t idx = accsNode->numIndex();
-                Tuple *t   = frame->get<Tuple *>(srcIdx);
-                ASSERT(idx < t->size(), "Tuple index out of bounds in Taskflow.");
-                frame->set(n->index(), t->get<slot_t>(idx));
-            } else {
-                std::string key  = accsNode->strIndex();
-                Struct *s        = frame->get<Struct *>(srcIdx);
-                Type *structType = frame->typeAt<Type>(srcIdx);
-                frame->set(n->index(), s->get<slot_t>(key, structType));
-            }
-        })
+        .emplace(
+            [this, graph, nodeRef, frame]() { (void)executeLinearNode(graph, nodeRef, frame); })
         .name("ACCS");
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildFuncTask(FlowT &flowLike, Node *n, Frame *frame) {
+tf::Task TaskflowExecSchedPass::buildFuncTask(
+    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     return flowLike
-        .emplace([n, frame, this](tf::Subflow &sf) {
-            EXEC_WHEN_DEBUG({
-                CAMEL_LOG_DEBUG_S(
-                    "Taskflow",
-                    "Executing FUNC (entering subgraph) graph={} node={} -> subgraph={}",
-                    n->graph().name(),
-                    n->toString(),
-                    tt::as_ptr<FuncNode>(n)->bodyGraph()->name());
-                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
-                    camel::DebugBreakpoint::Hit("gir_node", n);
-            });
-            const auto &nodeMeta = taskflow_node_exec_meta(globalBuildCtx_, frame, n);
-            auto *runtimeTarget =
-                frame->runtimeGraph()
-                    ? frame->runtimeGraph()->directCalleeGraphOf(nodeMeta.runtimeNodeIndex)
-                    : nullptr;
-            ASSERT(
-                runtimeTarget != nullptr,
-                "Taskflow direct FUNC target must have a materialized runtime graph.");
-            Frame *funcFrame =
-                acquirePreparedRuntimeCallFrame(runtimeTarget, nodeMeta.runtimeNodeIndex, frame);
-            slot_t result = runPreparedSubgraph(sf, runtimeTarget, funcFrame);
-            frame->set(n->index(), result);
-        })
+        .emplace(
+            [this, graph, nodeRef, frame]() { (void)executeLinearNode(graph, nodeRef, frame); })
         .name("FUNC");
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildCallTask(FlowT &flowLike, Node *n, Frame *frame) {
+tf::Task TaskflowExecSchedPass::buildCallTask(
+    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     return flowLike
-        .emplace([n, frame, this](tf::Subflow &sf) {
-            auto *runtimeTarget = frame->get<Function *>(n->withInputs().front()->index())->graph();
-            ASSERT(
-                runtimeTarget != nullptr,
-                "Taskflow indirect CALL requires a materialized runtime graph target.");
-            const auto &nodeMeta = taskflow_node_exec_meta(globalBuildCtx_, frame, n);
-            EXEC_WHEN_DEBUG({
-                CAMEL_LOG_DEBUG_S(
-                    "Taskflow",
-                    "Executing CALL graph={} node={} -> subgraph={}",
-                    n->graph().name(),
-                    n->toString(),
-                    runtimeTarget->name());
-                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
-                    camel::DebugBreakpoint::Hit("gir_node", n);
-            });
-            Frame *funcFrame =
-                acquirePreparedRuntimeCallFrame(runtimeTarget, nodeMeta.runtimeNodeIndex, frame);
-            frame->set(n->index(), runPreparedSubgraph(sf, runtimeTarget, funcFrame));
-        })
+        .emplace(
+            [this, graph, nodeRef, frame]() { (void)executeLinearNode(graph, nodeRef, frame); })
         .name("CALL");
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildOperTask(FlowT &flowLike, Node *n, Frame *frame) {
+tf::Task TaskflowExecSchedPass::buildOperTask(
+    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     return flowLike
-        .emplace([n, frame, this](tf::Subflow &sf) {
-            EXEC_WHEN_DEBUG({
-                CAMEL_LOG_DEBUG_S(
-                    "Taskflow",
-                    "Executing OPER graph={}: {} uri={}",
-                    n->graph().name(),
-                    n->toString(),
-                    tt::as_ptr<OperNode>(n)->oper()->uri());
-                if (camel::DebugBreakpoint::IsEnabled("gir_node"))
-                    camel::DebugBreakpoint::Hit("gir_node", n);
-            });
-            auto opNode     = tt::as_ptr<OperNode>(n);
-            const auto &uri = opNode->oper()->uri();
-            if (uri.starts_with(":mark/")) {
-                if (uri == ":mark/map_arr") {
-                    mark_map_arr(n, frame, sf);
-                } else if (uri == ":mark/apply_arr") {
-                    mark_apply_arr(n, frame, sf);
-                } else if (uri == ":mark/filter_arr") {
-                    mark_filter_arr(n, frame, sf);
-                } else if (uri == ":mark/reduce_arr") {
-                    mark_reduce_arr(n, frame, sf);
-                } else if (uri == ":mark/foreach_arr") {
-                    mark_foreach_arr(n, frame, sf);
-                } else if (uri == ":mark/unordered_foreach_arr") {
-                    mark_unordered_foreach_arr(n, frame, sf);
-                } else if (uri == ":mark/unordered_reduce_arr") {
-                    mark_unordered_reduce_arr(n, frame, sf);
-                } else {
-                    ASSERT(false, std::format("Mark Operator {} not implemented.", uri.substr(6)));
-                }
-            } else {
-                frame->set(n->index(), executePreparedOperator(n, frame));
-            }
-        })
+        .emplace(
+            [this, graph, nodeRef, frame]() { (void)executeLinearNode(graph, nodeRef, frame); })
         .name("OPER");
 }
 
 template <typename FlowT>
-void TaskflowExecSchedPass::buildBranchJoinRegion(
-    FlowT &flowLike, Frame *frame, std::unordered_map<Node *, tf::Task> &taskMap, Node *brch) {
-    auto *brchNode         = tt::as_ptr<BrchNode>(brch);
-    Graph *ownerGraph      = &brch->graph();
-    Node *join             = brchNode->matchedJoin();
-    const auto &branchArms = taskflow_branch_arms(globalBuildCtx_, frame, brch);
-
-    auto selector =
-        flowLike
-            .emplace([brch, frame, this]() {
-                const auto &nodeMeta = taskflow_node_exec_meta(globalBuildCtx_, frame, brch);
-                const auto &normIns  = nodeMeta.normIndices;
-                const auto &withIns  = nodeMeta.withIndices;
-                ASSERT(normIns.size() == 1, "Branch node must have exactly one norm input.");
-                size_t jumpIdx = 0;
-                if (withIns.empty()) {
-                    bool cond = frame->get<bool>(normIns.front());
-                    jumpIdx   = cond ? 0 : 1;
-                } else {
-                    TypeCode condType = frame->codeAt(normIns.front());
-                    size_t j          = 0;
-                    if (isGCTraced(condType)) {
-                        Type *condTypePtr = frame->typeAt<Type>(normIns.front());
-                        Object *condData  = frame->get<Object *>(normIns.front());
-                        for (; j < withIns.size(); ++j) {
-                            Object *caseData = frame->get<Object *>(withIns[j]);
-                            if (condData->equals(caseData, condTypePtr, false)) {
-                                jumpIdx = j;
-                                break;
-                            }
-                        }
-                    } else {
-                        slot_t condData = frame->get<slot_t>(normIns.front());
-                        for (; j < withIns.size(); ++j) {
-                            if (condData == frame->get<slot_t>(withIns[j])) {
-                                jumpIdx = j;
-                                break;
-                            }
-                        }
-                    }
-                    if (j == withIns.size())
-                        jumpIdx = withIns.size();
-                }
-                frame->set(brch->index(), static_cast<Int32>(jumpIdx));
-                EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                    "Taskflow",
-                    "BRCH_SEL graph={} brch={} selected branch index {}",
-                    brch->graph().name(),
-                    brch->toString(),
-                    jumpIdx));
-            })
-            .name("BRCH_SEL");
-
-    auto joiner = flowLike
-                      .emplace([join, frame]() {
-                          (void)frame->get<slot_t>(join->index());
-                          EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                              "Taskflow",
-                              "JOIN graph={}: {}",
-                              join->graph().name(),
-                              join->toString()));
-                      })
-                      .name("JOIN");
-
-    auto precede_from_inputs = [&](node_span_t inputs, tf::Task tsk) {
-        for (const auto &in : inputs) {
-            if (&in->graph() != ownerGraph)
-                continue;
-            if (taskflow_should_skip_node(globalBuildCtx_, frame, in) &&
-                in->type() != NodeType::JOIN)
-                continue;
-            auto it = taskMap.find(in);
-            if (it != taskMap.end())
-                it->second.precede(tsk);
-        }
-    };
-
-    precede_from_inputs(brch->dataInputs(), selector);
-    precede_from_inputs(brch->ctrlInputs(), selector);
-
-    for (size_t i = 0; i < branchArms.size(); ++i) {
-        auto layer = flowLike.emplace([]() {}).name("BRCH_CAND_LAYER");
-
-        tf::Task task_do =
-            flowLike
-                .emplace([i, brchNode, join, frame, this](tf::Subflow &csf) {
-                    int32_t tarIdx = frame->get<int32_t>(brchNode->index());
-                    if (static_cast<size_t>(tarIdx) != i) {
-                        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                            "Taskflow",
-                            "BRCH_CAND_EXEC graph={} branch [{}] skipped (selected={})",
-                            brchNode->graph().name(),
-                            i,
-                            tarIdx));
-                        return;
-                    }
-                    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                        "Taskflow",
-                        "BRCH_CAND_EXEC graph={} executing branch [{}]",
-                        brchNode->graph().name(),
-                        i));
-
-                    slot_t out = executePreparedBranchArm(brchNode, i, frame, csf);
-                    frame->set(join->index(), out);
-                })
-                .name("BRCH_CAND_EXEC");
-
-        selector.precede(layer);
-        layer.precede(task_do);
-        task_do.precede(joiner);
-    }
-
-    taskMap[brch] = selector;
-    taskMap[join] = joiner;
-}
-
-template <typename FlowT>
 void TaskflowExecSchedPass::buildRuntimeBranchJoinRegion(
-    FlowT &flowLike, camel::runtime::GCGraph *runtimeGraph, Frame *frame,
-    std::vector<tf::Task> &taskMap, std::vector<uint8_t> &taskBuilt,
-    camel::runtime::gc_node_ref_t brchRuntimeIndex, Node *brch) {
-    ASSERT(
-        runtimeGraph != nullptr,
-        "Taskflow runtime branch construction requires a runtime graph.");
-    ASSERT(brch != nullptr, "Taskflow runtime branch construction requires source metadata.");
-    auto *brchNode = tt::as_ptr<BrchNode>(brch);
-    ASSERT(brchNode != nullptr, "Taskflow runtime branch construction requires a BRCH node.");
-    ASSERT(brchRuntimeIndex < taskMap.size(), "Taskflow runtime BRCH index is out of range.");
+    FlowT &flowLike, GCGraph *runtimeGraph, Frame *frame,
+    const std::shared_ptr<const RuntimeBuildInfo> &buildInfo, std::vector<tf::Task> &taskMap,
+    std::vector<uint8_t> &taskBuilt, gc_node_ref_t brchRuntimeIndex) {
+    ASSERT(runtimeGraph != nullptr, "Taskflow BRCH region requires a runtime graph.");
+    ASSERT(brchRuntimeIndex < buildInfo->branchArms.size(), "Taskflow BRCH ref is out of range.");
+    const auto &arms = buildInfo->branchArms[brchRuntimeIndex];
+    ASSERT(!arms.empty(), "Taskflow BRCH region has no branch arms.");
+    const gc_node_ref_t joinRef = arms.front().joinIndex;
+    ASSERT(joinRef != kInvalidNodeRef, "Taskflow BRCH region has no JOIN.");
 
-    const auto &branchArms = taskflow_branch_arms(globalBuildCtx_, frame, brch);
-    const auto &graphInfo  = globalBuildCtx_.getGraphInfos(runtimeGraph);
-    ASSERT(
-        graphInfo.getNodeExecMeta(brchRuntimeIndex).runtimeNodeIndex == brchRuntimeIndex,
-        "Taskflow runtime BRCH metadata is inconsistent.");
-
-    Node *join = brchNode->matchedJoin();
-    ASSERT(join != nullptr, "Taskflow runtime BRCH requires a matched JOIN.");
-    const auto &sourceJoinMeta =
-        globalBuildCtx_.getGraphInfos(&brch->graph()).getNodeExecMeta(join);
-    ASSERT(
-        sourceJoinMeta.runtimeNodeIndex != camel::runtime::kInvalidNodeRef,
-        "Taskflow runtime JOIN index is missing.");
-    const uint32_t joinRuntimeIndex = sourceJoinMeta.runtimeNodeIndex;
-    ASSERT(joinRuntimeIndex < taskMap.size(), "Taskflow runtime JOIN index is out of range.");
-
-    auto selector =
-        flowLike
-            .emplace([brch, frame, this]() {
-                const auto &nodeMeta = taskflow_node_exec_meta(globalBuildCtx_, frame, brch);
-                const auto &normIns  = nodeMeta.normIndices;
-                const auto &withIns  = nodeMeta.withIndices;
-                ASSERT(normIns.size() == 1, "Branch node must have exactly one norm input.");
-                size_t jumpIdx = 0;
-                if (withIns.empty()) {
-                    bool cond = frame->get<bool>(normIns.front());
-                    jumpIdx   = cond ? 0 : 1;
-                } else {
-                    TypeCode condType = frame->codeAt(normIns.front());
-                    size_t j          = 0;
-                    if (isGCTraced(condType)) {
-                        Type *condTypePtr = frame->typeAt<Type>(normIns.front());
-                        Object *condData  = frame->get<Object *>(normIns.front());
-                        for (; j < withIns.size(); ++j) {
-                            Object *caseData = frame->get<Object *>(withIns[j]);
-                            if (condData->equals(caseData, condTypePtr, false)) {
-                                jumpIdx = j;
-                                break;
-                            }
-                        }
-                    } else {
-                        slot_t condData = frame->get<slot_t>(normIns.front());
-                        for (; j < withIns.size(); ++j) {
-                            if (condData == frame->get<slot_t>(withIns[j])) {
-                                jumpIdx = j;
-                                break;
-                            }
-                        }
-                    }
-                    if (j == withIns.size()) {
-                        jumpIdx = withIns.size();
-                    }
-                }
-                frame->set(brch->index(), static_cast<Int32>(jumpIdx));
-                EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                    "Taskflow",
-                    "BRCH_SEL graph={} brch={} selected branch index {}",
-                    brch->graph().name(),
-                    brch->toString(),
-                    jumpIdx));
-            })
-            .name("BRCH_SEL");
+    auto selector = flowLike
+                        .emplace([this, runtimeGraph, brchRuntimeIndex, frame](tf::Subflow &sf) {
+                            const auto brchSlot = dataIndexOf(runtimeGraph, brchRuntimeIndex);
+                            const size_t jumpIdx =
+                                selectBranchArm(runtimeGraph, brchRuntimeIndex, frame);
+                            frame->set(brchSlot, static_cast<Int32>(jumpIdx));
+                            (void)executePreparedBranchArm(
+                                runtimeGraph,
+                                brchRuntimeIndex,
+                                jumpIdx,
+                                frame,
+                                sf,
+                                nullptr);
+                        })
+                        .name("BRCH");
 
     auto joiner = flowLike
-                      .emplace([join, frame]() {
-                          (void)frame->get<slot_t>(join->index());
-                          EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                              "Taskflow",
-                              "JOIN graph={}: {}",
-                              join->graph().name(),
-                              join->toString()));
+                      .emplace([this, runtimeGraph, joinRef, frame](tf::Subflow &sf) {
+                          (void)executePreparedNode(runtimeGraph, joinRef, frame, sf, nullptr);
                       })
                       .name("JOIN");
 
-    auto precede_from_runtime_inputs = [&](std::span<const camel::runtime::gc_node_ref_t> inputs,
-                                           tf::Task tsk) {
-        for (uint32_t inputIndex : inputs) {
-            const auto *inputRecord = runtimeGraph->node(inputIndex);
-            if (inputRecord == nullptr) {
+    auto precedeFromInputs = [&](std::span<const gc_node_ref_t> inputs, tf::Task task) {
+        for (gc_node_ref_t inputRef : inputs) {
+            if (inputRef < buildInfo->skipNodes.size() && buildInfo->skipNodes[inputRef] != 0 &&
+                requireNode(runtimeGraph, inputRef)->kind != GCNodeKind::Join) {
                 continue;
             }
-            if (graphInfo.runtimeSkipNodeIndices.contains(inputIndex) &&
-                inputRecord->kind != camel::runtime::GCNodeKind::Join) {
-                continue;
-            }
-            if (inputIndex < taskBuilt.size() && taskBuilt[inputIndex] != 0) {
-                taskMap[inputIndex].precede(tsk);
+            if (inputRef < taskBuilt.size() && taskBuilt[inputRef] != 0) {
+                taskMap[inputRef].precede(task);
             }
         }
     };
 
-    precede_from_runtime_inputs(runtimeGraph->normInputsOf(brchRuntimeIndex), selector);
-    precede_from_runtime_inputs(runtimeGraph->ctrlInputsOf(brchRuntimeIndex), selector);
+    precedeFromInputs(runtimeGraph->normInputsOf(brchRuntimeIndex), selector);
+    precedeFromInputs(runtimeGraph->ctrlInputsOf(brchRuntimeIndex), selector);
 
-    for (size_t i = 0; i < branchArms.size(); ++i) {
-        auto layer = flowLike.emplace([]() {}).name("BRCH_CAND_LAYER");
-
-        tf::Task task_do =
-            flowLike
-                .emplace([i, brchNode, join, frame, this](tf::Subflow &csf) {
-                    int32_t tarIdx = frame->get<int32_t>(brchNode->index());
-                    if (static_cast<size_t>(tarIdx) != i) {
-                        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                            "Taskflow",
-                            "BRCH_CAND_EXEC graph={} branch [{}] skipped (selected={})",
-                            brchNode->graph().name(),
-                            i,
-                            tarIdx));
-                        return;
-                    }
-                    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                        "Taskflow",
-                        "BRCH_CAND_EXEC graph={} executing branch [{}]",
-                        brchNode->graph().name(),
-                        i));
-
-                    slot_t out = executePreparedBranchArm(brchNode, i, frame, csf);
-                    frame->set(join->index(), out);
-                })
-                .name("BRCH_CAND_EXEC");
-
-        selector.precede(layer);
-        layer.precede(task_do);
-        task_do.precede(joiner);
-    }
+    selector.precede(joiner);
 
     taskMap[brchRuntimeIndex]   = selector;
     taskBuilt[brchRuntimeIndex] = 1;
-    taskMap[joinRuntimeIndex]   = joiner;
-    taskBuilt[joinRuntimeIndex] = 1;
+    taskMap[joinRef]            = joiner;
+    taskBuilt[joinRef]          = 1;
 }
 
-template <typename FlowT>
-void TaskflowExecSchedPass::buildNormalNodeTasks(
-    FlowT &flowLike, Graph *graph, Frame *frame, std::unordered_map<Node *, tf::Task> &taskMap) {
-    for (Node *n : collect_taskflow_execution_nodes(graph)) {
-        if (taskflow_should_skip_node(globalBuildCtx_, frame, n)) {
-            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                "Taskflow",
-                "Skipping node (BRCH region) graph={}: {}",
-                graph->name(),
-                n->toString()));
-            continue;
-        }
-        tf::Task t;
-        switch (n->type()) {
-        case NodeType::DATA:
-            t = buildDataTask(flowLike, n, frame);
-            break;
-        case NodeType::PORT:
-            t = buildPortTask(flowLike, n, frame);
-            break;
-        case NodeType::COPY:
-            t = buildCopyTask(flowLike, n, frame);
-            break;
-        case NodeType::CAST:
-            t = buildCastTask(flowLike, n, frame);
-            break;
-        case NodeType::FILL:
-            t = buildFillTask(flowLike, n, frame);
-            break;
-        case NodeType::ACCS:
-            t = buildAccsTask(flowLike, n, frame);
-            break;
-        case NodeType::FUNC:
-            t = buildFuncTask(flowLike, n, frame);
-            break;
-        case NodeType::CALL:
-            t = buildCallTask(flowLike, n, frame);
-            break;
-        case NodeType::OPER:
-            t = buildOperTask(flowLike, n, frame);
-            break;
-        case NodeType::SYNC:
-            [[fallthrough]];
-        case NodeType::GATE:
-            // Match NodeVM semantics: GATE has no executable side effects and only forwards the
-            // value already defined by GIR connectivity. Taskflow still needs a task node here so
-            // dependency edges remain ordered.
-            if (n->type() == NodeType::GATE) {
-                t = flowLike
-                        .emplace([n, frame]() {
-                            auto dataInputs = n->dataInputs();
-                            if (!dataInputs.empty()) {
-                                slot_t value = read_taskflow_node_value(dataInputs.back(), frame);
-                                if (n->index() != 0) {
-                                    frame->set(n->index(), value);
-                                }
-                            }
-                        })
-                        .name("GATE");
-            } else {
-                t = flowLike.emplace([]() {}).name("SYNC");
-            }
-            break;
-        case NodeType::BRCH:
-            buildBranchJoinRegion(flowLike, frame, taskMap, n);
-            continue;
-        default:
-            ASSERT(false, std::format("Unsupported node type: {}", n->toString()));
-        }
-        taskMap[n] = t;
-    }
-
-    for (const auto &port : graph->ports()) {
-        tf::Task t    = buildPortTask(flowLike, port, frame);
-        taskMap[port] = t;
-    }
-}
-
-template <typename FlowT>
-void TaskflowExecSchedPass::connectDependencies(
-    FlowT &flow, Graph *graph, Frame *frame, std::unordered_map<Node *, tf::Task> &taskMap) {
-    auto add_edges_from_inputs = [&](node_span_t inputs, tf::Task tsk) {
-        for (const auto &in : inputs) {
-            if (&in->graph() != graph)
-                continue;
-            if (taskflow_should_skip_node(globalBuildCtx_, frame, in) &&
-                in->type() != NodeType::JOIN)
-                continue;
-            auto it = taskMap.find(in);
-            if (it != taskMap.end())
-                it->second.precede(tsk);
-        }
-    };
-
-    for (Node *n : collect_taskflow_execution_nodes(graph)) {
-        if (n->type() == NodeType::BRCH)
-            continue;
-        if (taskflow_should_skip_node(globalBuildCtx_, frame, n))
-            continue;
-        auto it = taskMap.find(n);
-        if (it == taskMap.end())
-            continue;
-        add_edges_from_inputs(n->dataInputs(), it->second);
-        add_edges_from_inputs(n->ctrlInputs(), it->second);
-    }
-
-    Node *exitNode = graph->exitNode();
-    auto it        = taskMap.find(exitNode);
-    if (it != taskMap.end()) {
-        add_edges_from_inputs(exitNode->dataInputs(), it->second);
-        add_edges_from_inputs(exitNode->ctrlInputs(), it->second);
-    }
-}
-
-void TaskflowExecSchedPass::mark_map_arr(Node *node, Frame *frame, tf::Subflow &sf) {
-    Array *arr      = frame->get<Array *>(node->normInputs().front()->index());
-    Function *func  = frame->get<Function *>(node->withInputs().front()->index());
-    const auto site = make_taskflow_higher_order_call_site(func);
-    const size_t n  = arr->size();
-
-    std::vector<slot_t> results(n);
-    for (size_t i = 0; i < n; ++i) {
+void TaskflowExecSchedPass::mark_map_arr(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
+    Array *arr = frame->get<Array *>(dataIndexOf(graph, graph->normInputsOf(nodeRef).front()));
+    Function *func =
+        frame->get<Function *>(dataIndexOf(graph, graph->withInputsOf(nodeRef).front()));
+    const auto site = makeHigherOrderCallSite(func);
+    std::vector<slot_t> results(arr->size());
+    for (size_t i = 0; i < arr->size(); ++i) {
         sf.emplace([this, i, arr, site, &results](tf::Subflow &isf) {
               std::array<slot_t, 1> args{arr->get<slot_t>(i)};
-              Frame *f   = acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
-              results[i] = runPreparedSubgraph(isf, site.runtimeGraph, f);
+              Frame *callee =
+                  acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
+              results[i] = runPreparedSubgraph(isf, site.runtimeGraph, callee);
           }).name("MAP_ELEM");
     }
     sf.join();
-    Array *res = Array::create(mm::autoSpace(), n);
-    for (size_t i = 0; i < n; ++i)
+    Array *res = Array::create(camel::core::mm::autoSpace(), arr->size());
+    for (size_t i = 0; i < arr->size(); ++i) {
         res->set(i, results[i]);
-    frame->set(node->index(), res);
+    }
+    frame->set(dataIndexOf(graph, nodeRef), res);
 }
 
-void TaskflowExecSchedPass::mark_apply_arr(Node *node, Frame *frame, tf::Subflow &sf) {
-    Array *arr      = frame->get<Array *>(node->normInputs().front()->index());
-    Function *func  = frame->get<Function *>(node->withInputs().front()->index());
-    const auto site = make_taskflow_higher_order_call_site(func);
-    const size_t n  = arr->size();
-
-    std::vector<slot_t> results(n);
-    for (size_t i = 0; i < n; ++i) {
+void TaskflowExecSchedPass::mark_apply_arr(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
+    Array *arr = frame->get<Array *>(dataIndexOf(graph, graph->normInputsOf(nodeRef).front()));
+    Function *func =
+        frame->get<Function *>(dataIndexOf(graph, graph->withInputsOf(nodeRef).front()));
+    const auto site = makeHigherOrderCallSite(func);
+    std::vector<slot_t> results(arr->size());
+    for (size_t i = 0; i < arr->size(); ++i) {
         sf.emplace([this, i, arr, site, &results](tf::Subflow &isf) {
               std::array<slot_t, 1> args{arr->get<slot_t>(i)};
-              Frame *f   = acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
-              results[i] = runPreparedSubgraph(isf, site.runtimeGraph, f);
+              Frame *callee =
+                  acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
+              results[i] = runPreparedSubgraph(isf, site.runtimeGraph, callee);
           }).name("APPLY_ELEM");
     }
     sf.join();
-    for (size_t i = 0; i < n; ++i)
+    for (size_t i = 0; i < arr->size(); ++i) {
         arr->set(i, results[i]);
-    frame->set(node->index(), arr);
+    }
+    frame->set(dataIndexOf(graph, nodeRef), arr);
 }
 
-void TaskflowExecSchedPass::mark_filter_arr(Node *node, Frame *frame, tf::Subflow &sf) {
-    Array *arr      = frame->get<Array *>(node->normInputs().front()->index());
-    Function *func  = frame->get<Function *>(node->withInputs().front()->index());
-    const auto site = make_taskflow_higher_order_call_site(func);
-    const size_t n  = arr->size();
-
-    std::vector<bool> keep(n, false);
-    for (size_t i = 0; i < n; ++i) {
+void TaskflowExecSchedPass::mark_filter_arr(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
+    Array *arr = frame->get<Array *>(dataIndexOf(graph, graph->normInputsOf(nodeRef).front()));
+    Function *func =
+        frame->get<Function *>(dataIndexOf(graph, graph->withInputsOf(nodeRef).front()));
+    const auto site = makeHigherOrderCallSite(func);
+    std::vector<bool> keep(arr->size(), false);
+    for (size_t i = 0; i < arr->size(); ++i) {
         sf.emplace([this, i, arr, site, &keep](tf::Subflow &isf) {
               std::array<slot_t, 1> args{arr->get<slot_t>(i)};
-              Frame *f = acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
-              keep[i]  = fromSlot<bool>(runPreparedSubgraph(isf, site.runtimeGraph, f));
+              Frame *callee =
+                  acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
+              keep[i] = fromSlot<bool>(runPreparedSubgraph(isf, site.runtimeGraph, callee));
           }).name("FILTER_PRED");
     }
     sf.join();
-    Array *filtered = Array::create(mm::autoSpace(), 0);
-    for (size_t i = 0; i < n; ++i)
-        if (keep[i])
+    Array *filtered = Array::create(camel::core::mm::autoSpace(), 0);
+    for (size_t i = 0; i < arr->size(); ++i) {
+        if (keep[i]) {
             filtered->append(arr->get<slot_t>(i));
+        }
+    }
     filtered->shrinkToFit();
-    frame->set(node->index(), filtered);
+    frame->set(dataIndexOf(graph, nodeRef), filtered);
 }
 
-void TaskflowExecSchedPass::mark_reduce_arr(Node *node, Frame *frame, tf::Subflow &sf) {
-    Array *arr      = frame->get<Array *>(node->normInputs().front()->index());
-    Function *func  = frame->get<Function *>(node->withInputs()[0]->index());
-    slot_t init     = frame->get<slot_t>(node->withInputs()[1]->index());
-    const auto site = make_taskflow_higher_order_call_site(func);
-
+void TaskflowExecSchedPass::mark_reduce_arr(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
+    Array *arr = frame->get<Array *>(dataIndexOf(graph, graph->normInputsOf(nodeRef).front()));
+    const auto withInputs = graph->withInputsOf(nodeRef);
+    Function *func        = frame->get<Function *>(dataIndexOf(graph, withInputs[0]));
+    slot_t init           = frame->get<slot_t>(dataIndexOf(graph, withInputs[1]));
+    const auto site       = makeHigherOrderCallSite(func);
     if (arr->size() == 0) {
-        frame->set(node->index(), init);
+        frame->set(dataIndexOf(graph, nodeRef), init);
         return;
     }
-
     auto accPtr = std::make_shared<slot_t>(init);
     tf::Task prev;
-    bool has_prev = false;
+    bool hasPrev = false;
     for (size_t i = 0; i < arr->size(); ++i) {
         slot_t elem = arr->get<slot_t>(i);
         tf::Task step =
             sf.emplace([this, accPtr, elem, site](tf::Subflow &isf) {
                   std::array<slot_t, 2> args{*accPtr, elem};
-                  Frame *f = acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
-                  *accPtr  = runPreparedSubgraph(isf, site.runtimeGraph, f);
+                  Frame *callee =
+                      acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
+                  *accPtr = runPreparedSubgraph(isf, site.runtimeGraph, callee);
               }).name("REDUCE_STEP");
-        if (has_prev)
+        if (hasPrev) {
             step.succeed(prev);
-        prev     = step;
-        has_prev = true;
+        }
+        prev    = step;
+        hasPrev = true;
     }
     sf.join();
-    frame->set(node->index(), *accPtr);
+    frame->set(dataIndexOf(graph, nodeRef), *accPtr);
 }
 
-void TaskflowExecSchedPass::mark_unordered_reduce_arr(Node *node, Frame *frame, tf::Subflow &sf) {
-    // Keep the same semantics as reduce_arr for now. The implementation is a sequential left fold
-    // and can be upgraded to parallel divide-and-conquer later.
-    mark_reduce_arr(node, frame, sf);
+void TaskflowExecSchedPass::mark_unordered_reduce_arr(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
+    mark_reduce_arr(graph, nodeRef, frame, sf);
 }
 
-void TaskflowExecSchedPass::mark_foreach_arr(Node *node, Frame *frame, tf::Subflow &sf) {
-    Array *arr      = frame->get<Array *>(node->normInputs().front()->index());
-    Function *func  = frame->get<Function *>(node->withInputs().front()->index());
-    const auto site = make_taskflow_higher_order_call_site(func);
-
+void TaskflowExecSchedPass::mark_foreach_arr(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
+    Array *arr = frame->get<Array *>(dataIndexOf(graph, graph->normInputsOf(nodeRef).front()));
+    Function *func =
+        frame->get<Function *>(dataIndexOf(graph, graph->withInputsOf(nodeRef).front()));
+    const auto site = makeHigherOrderCallSite(func);
     tf::Task prev;
-    bool has_prev = false;
+    bool hasPrev = false;
     for (size_t i = 0; i < arr->size(); ++i) {
         slot_t elem = arr->get<slot_t>(i);
         tf::Task step =
             sf.emplace([this, elem, site](tf::Subflow &isf) {
                   std::array<slot_t, 1> args{elem};
-                  Frame *f = acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
-                  (void)runPreparedSubgraph(isf, site.runtimeGraph, f);
+                  Frame *callee =
+                      acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
+                  (void)runPreparedSubgraph(isf, site.runtimeGraph, callee);
               }).name("FOREACH_ELEM");
-        if (has_prev)
+        if (hasPrev) {
             step.succeed(prev);
-        prev     = step;
-        has_prev = true;
+        }
+        prev    = step;
+        hasPrev = true;
     }
     sf.join();
-    frame->set(node->index(), NullSlot);
+    frame->set(dataIndexOf(graph, nodeRef), NullSlot);
 }
 
-void TaskflowExecSchedPass::mark_unordered_foreach_arr(Node *node, Frame *frame, tf::Subflow &sf) {
-    Array *arr      = frame->get<Array *>(node->normInputs().front()->index());
-    Function *func  = frame->get<Function *>(node->withInputs().front()->index());
-    const auto site = make_taskflow_higher_order_call_site(func);
-    const size_t n  = arr->size();
-
-    for (size_t i = 0; i < n; ++i) {
+void TaskflowExecSchedPass::mark_unordered_foreach_arr(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
+    Array *arr = frame->get<Array *>(dataIndexOf(graph, graph->normInputsOf(nodeRef).front()));
+    Function *func =
+        frame->get<Function *>(dataIndexOf(graph, graph->withInputsOf(nodeRef).front()));
+    const auto site = makeHigherOrderCallSite(func);
+    for (size_t i = 0; i < arr->size(); ++i) {
         sf.emplace([this, i, arr, site](tf::Subflow &isf) {
               std::array<slot_t, 1> args{arr->get<slot_t>(i)};
-              Frame *f = acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
-              (void)runPreparedSubgraph(isf, site.runtimeGraph, f);
+              Frame *callee =
+                  acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
+              (void)runPreparedSubgraph(isf, site.runtimeGraph, callee);
           }).name("FOREACH_ELEM");
     }
     sf.join();
-    frame->set(node->index(), NullSlot);
+    frame->set(dataIndexOf(graph, nodeRef), NullSlot);
 }
 
 template void TaskflowExecSchedPass::instantiate_graph_instance_generic<tf::Taskflow>(
-    tf::Taskflow &flowLike, GIR::Graph *graph, ctx::Frame *frame);
+    tf::Taskflow &flowLike, GCGraph *runtimeGraph, Frame *frame);

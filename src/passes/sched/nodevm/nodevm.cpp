@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
  * You can use this software according to the terms and conditions of the
@@ -709,7 +709,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
     }
 }
 
-GIR::graph_ptr_t NodeVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+camel::runtime::GCGraph *NodeVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     (void)os;
     ASSERT(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
     graphCaches_.clear();
@@ -717,7 +717,7 @@ GIR::graph_ptr_t NodeVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ost
     Frame *rootFrame = framePool_.acquire(graph);
     slot_t result    = call(graph, rootFrame);
     context_->captureProcessExitCode(graph, result);
-    return Graph::null();
+    return nullptr;
 }
 
 void NodeVMSchedPass::evalMarkedOperator(

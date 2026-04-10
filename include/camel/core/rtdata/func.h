@@ -52,7 +52,8 @@ class Function : public rtdata::Object {
     camel::runtime::GCGraph *runtimeGraph() const { return runtimeGraph_; }
     bool hasRuntimeGraph() const { return runtimeGraph_ != nullptr; }
     // Compile GIR access is a cold metadata bridge. Runtime execution must
-    // never depend on it for identity.
+    // never depend on it for identity, and runtime-created Function objects
+    // may legitimately leave it null.
     GIR::Graph *sourceGraph() const;
     void setSourceGraph(GIR::Graph *graph) {
         ASSERT(graph != nullptr, "Function source graph cannot be null.");
@@ -128,8 +129,9 @@ class Function : public rtdata::Object {
         : sourceGraph_(sourceGraph), runtimeGraph_(runtimeGraph), closure_(nullptr) {}
 
     // Compile-side static Function objects may only carry sourceGraph_.
-    // Runtime Function objects must carry runtimeGraph_ and may optionally keep
-    // sourceGraph_ as a cold metadata bridge.
+    // Runtime Function objects must carry runtimeGraph_. They may optionally
+    // keep sourceGraph_ as a cold metadata bridge, but runtime logic must not
+    // require it.
     GIR::Graph *sourceGraph_;
     camel::runtime::GCGraph *runtimeGraph_;
     Tuple *closure_;

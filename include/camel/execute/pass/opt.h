@@ -21,19 +21,8 @@
 
 #include "base.h"
 
-class GraphRewritePass : public GraphIRPass {
+class RuntimeGraphRewritePass : public GraphIRPass {
   public:
-    GraphRewritePass(const camel::core::context::context_ptr_t &ctx) : GraphIRPass(ctx) {};
-    virtual ~GraphRewritePass() = default;
-
-    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override = 0;
-};
-
-class RuntimeGraphRewritePass : public RuntimeGraphIRPass {
-  public:
-    RuntimeGraphRewritePass(const camel::core::context::context_ptr_t &ctx)
-        : RuntimeGraphIRPass(ctx) {};
+    RuntimeGraphRewritePass(const camel::core::context::context_ptr_t &ctx) : GraphIRPass(ctx) {};
     virtual ~RuntimeGraphRewritePass() = default;
-
-    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override = 0;
 };

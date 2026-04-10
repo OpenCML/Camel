@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/runtime/graph.h"
 
@@ -31,31 +30,17 @@ class GraphIRPass {
     GraphIRPass(const camel::core::context::context_ptr_t &ctx) : context_(ctx) {};
     virtual ~GraphIRPass() = default;
 
-    virtual bool requiresRuntimeGraph() const { return false; }
-
-    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os);
-    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os);
+    // Compile finishes before pass execution starts. The post-compile pipeline
+    // therefore carries runtime GCGraph objects exclusively.
+    virtual camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) = 0;
 };
 
 class NullGraphIRPass : public GraphIRPass {
-  protected:
-    camel::core::context::context_ptr_t context_;
-
   public:
     NullGraphIRPass(const camel::core::context::context_ptr_t &ctx) : GraphIRPass(ctx) {};
     virtual ~NullGraphIRPass() = default;
 
-    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
-};
-
-class RuntimeGraphIRPass : public GraphIRPass {
-  public:
-    RuntimeGraphIRPass(const camel::core::context::context_ptr_t &ctx) : GraphIRPass(ctx) {};
-    ~RuntimeGraphIRPass() override = default;
-
-    bool requiresRuntimeGraph() const override { return true; }
-    GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
-    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override = 0;
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 };
 
 enum class PassApplyStatus {
@@ -65,7 +50,7 @@ enum class PassApplyStatus {
 };
 
 struct PassApplyResult {
-    GIR::graph_ptr_t graph;
+    camel::runtime::GCGraph *graph = nullptr;
     PassApplyStatus status{PassApplyStatus::Transformed};
 
     bool failed() const { return status == PassApplyStatus::Failed; }
@@ -81,10 +66,10 @@ struct PassApplyResult {
  * - non-null graph: pass transformed the graph and left it for later passes
  */
 PassApplyResult applyPassesDetailed(
-    GIR::graph_ptr_t graph, const std::vector<std::string> &passes,
+    camel::runtime::GCGraph *graph, const std::vector<std::string> &passes,
     const camel::core::context::context_ptr_t &ctx, std::ostream &os);
 
 /** Backward-compatible wrapper: only returns the graph payload, without status. */
-GIR::graph_ptr_t applyPasses(
-    GIR::graph_ptr_t graph, const std::vector<std::string> &passes,
+camel::runtime::GCGraph *applyPasses(
+    camel::runtime::GCGraph *graph, const std::vector<std::string> &passes,
     const camel::core::context::context_ptr_t &ctx, std::ostream &os);

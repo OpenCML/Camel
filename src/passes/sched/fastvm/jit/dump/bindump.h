@@ -34,5 +34,6 @@ class JitBinaryDumpPass : public RuntimeGraphTranslatePass {
     JitBinaryDumpPass(const ctx::context_ptr_t &ctx) : RuntimeGraphTranslatePass(ctx) {}
     virtual ~JitBinaryDumpPass() = default;
 
-    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    virtual camel::runtime::GCGraph *
+    apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 };

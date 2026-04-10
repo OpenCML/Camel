@@ -80,7 +80,8 @@ static void dumpMachineCodeByInstruction(
 }
 #endif
 
-graph_ptr_t JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+camel::runtime::GCGraph *
+JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
     auto linked = compileAndLink(
         context_,
@@ -94,7 +95,7 @@ graph_ptr_t JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostrea
     auto backend = createBackend();
     if (!backend) {
         os << "[JIT] Backend not available, cannot dump machine code.\n";
-        return Graph::null();
+        return nullptr;
     }
 
     os << "[JIT Machine Code] offset (hex bytes) ; entry @ entryOffset\n";
@@ -167,10 +168,10 @@ graph_ptr_t JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostrea
         os << "\n";
     }
 
-    return Graph::null();
+    return nullptr;
 #else
     (void)graph;
     os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump machine code.\n";
-    return Graph::null();
+    return nullptr;
 #endif
 }

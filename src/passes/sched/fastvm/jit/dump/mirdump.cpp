@@ -36,7 +36,7 @@ using namespace camel::jit;
 #endif
 
 #if ENABLE_FASTVM_JIT
-static graph_ptr_t applyMirDump(
+static camel::runtime::GCGraph *applyMirDump(
     const context_ptr_t &context, camel::runtime::GCGraph *graph, std::ostream &os, bool slotOnly) {
     auto linked = compileAndLink(
         context,
@@ -50,7 +50,7 @@ static graph_ptr_t applyMirDump(
     auto backend = createBackend();
     if (!backend) {
         os << "[JIT] Backend not available, cannot dump MIR.\n";
-        return Graph::null();
+        return nullptr;
     }
 
     os << "[JIT MIR]  [pc][idx]  instruction  ; symbol/slot\n";
@@ -103,26 +103,26 @@ static graph_ptr_t applyMirDump(
         }
         os << "\n";
     }
-    return Graph::null();
+    return nullptr;
 }
 #endif
 
-graph_ptr_t JitRmirDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+camel::runtime::GCGraph *JitRmirDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
     return applyMirDump(context_, graph, os, true);
 #else
     (void)graph;
     os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump rmir.\n";
-    return Graph::null();
+    return nullptr;
 #endif
 }
 
-graph_ptr_t JitMirDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+camel::runtime::GCGraph *JitMirDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
     return applyMirDump(context_, graph, os, false);
 #else
     (void)graph;
     os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump MIR.\n";
-    return Graph::null();
+    return nullptr;
 #endif
 }

@@ -52,7 +52,7 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     NodeVMSchedPass(const ctx::context_ptr_t &ctx) : RuntimeGraphSchedulePass(ctx) {}
     ~NodeVMSchedPass() override;
 
-    GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 
   private:
     void evalMarkedOperator(

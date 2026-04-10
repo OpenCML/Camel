@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Apr. 08, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -212,12 +212,12 @@ int main(int argc, char *argv[]) {
                 if (Inspect::dumpGIR && ctx->rootGraph()) {
                     GraphVizDumpPass pass(ctx);
                     auto *root = ctx->runtimeRootGraph();
-                    auto res   = pass.apply(root, os);
+                    (void)pass.apply(root, os);
                 }
                 if (Inspect::dumpTNS && ctx->rootGraph()) {
-                    auto entry = ctx->rootGraph();
+                    auto *entry = ctx->runtimeRootGraph();
                     TopoNodeSeqDumpPass pass(ctx);
-                    auto res = pass.apply(entry, os);
+                    (void)pass.apply(entry, os);
                 }
                 return 0;
             }
@@ -255,7 +255,7 @@ int main(int argc, char *argv[]) {
 
                 try {
                     try {
-                        auto graph  = ctx->rootGraph();
+                        auto *graph = ctx->runtimeRootGraph();
                         auto result = applyPassesDetailed(graph, Run::resolvedPassList, ctx, os);
                         graph       = result.graph;
                         if (result.failed()) {

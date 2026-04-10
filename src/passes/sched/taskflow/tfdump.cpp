@@ -17,22 +17,17 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "camel/core/error/runtime.h"
-#include "camel/core/module/module.h"
 #include "taskflow.h"
+
+#include "camel/runtime/reachable.h"
 
 #include <cctype>
 #include <sstream>
 #include <string>
 #include <vector>
 
-using namespace GIR;
-using namespace camel::core::error;
-using namespace camel::core::context;
-
 namespace {
 
-// Extract the first subgraph block from the Taskflow DOT dump.
 std::string extractSubgraphBlock(const std::string &fullDump) {
     size_t sub = fullDump.find("subgraph ");
     if (sub == std::string::npos)
@@ -54,7 +49,6 @@ std::string extractSubgraphBlock(const std::string &fullDump) {
     return fullDump.substr(sub, (i - 1) - sub + 1);
 }
 
-// Convert a graph name into a stable DOT cluster identifier.
 std::string sanitizeClusterId(const std::string &name) {
     std::string out;
     for (char c : name) {
@@ -68,66 +62,51 @@ std::string sanitizeClusterId(const std::string &name) {
 
 } // namespace
 
-void TaskflowExecSchedPass::buildAndDump(Graph *graph, std::ostream &os) {
-    (void)graph->exitNode();
-    buildGraphsInfo(graph);
-    ctx::FramePool dumpFramePool{1 * camel::core::mm::MB};
+void TaskflowExecSchedPass::buildAndDump(camel::runtime::GCGraph *graph, std::ostream &os) {
+    ASSERT(graph != nullptr, "Taskflow dump requires a non-null runtime root graph.");
 
     os << "digraph Taskflow {\n";
-    try {
-        Graph *rootGraph     = graph;
-        const auto &graphMap = globalBuildCtx_.graphInfoMap;
+    for (auto *runtimeGraph : camel::runtime::collectReachableGraphs(graph)) {
+        ctx::Frame *frame = framePool_.acquire(runtimeGraph);
+        try {
+            mainFlow_.clear();
+            instantiate_graph_instance_generic(mainFlow_, runtimeGraph, frame);
 
-        // Emit the root graph first so nested subgraphs read naturally in the dump.
-        std::vector<Graph *> ordered;
-        ordered.push_back(rootGraph);
-        for (const auto &[g, _] : graphMap)
-            if (g != rootGraph)
-                ordered.push_back(g);
-
-        for (Graph *g : ordered) {
-            Frame *frame = dumpFramePool.acquire(g);
-            try {
-                mainFlow_.clear();
-                instantiate_graph_instance_generic(mainFlow_, g, frame);
-
-                std::ostringstream ss;
-                mainFlow_.dump(ss);
-                std::string block = extractSubgraphBlock(ss.str());
-                if (!block.empty()) {
-                    // Rewrite cluster id and label so each graph keeps a readable, stable name.
-                    std::string clusterId   = sanitizeClusterId(g->name());
-                    std::string displayName = g->name();
-                    size_t labelStart       = block.find("label=");
-                    if (labelStart != std::string::npos) {
-                        size_t labelEnd = block.find(';', labelStart);
-                        if (labelEnd != std::string::npos)
-                            block = block.substr(0, labelStart) + "label=\"" + displayName + "\";" +
-                                    block.substr(labelEnd + 1);
+            std::ostringstream ss;
+            mainFlow_.dump(ss);
+            std::string block = extractSubgraphBlock(ss.str());
+            if (!block.empty()) {
+                const std::string clusterId   = sanitizeClusterId(runtimeGraph->name());
+                const std::string displayName = runtimeGraph->name();
+                size_t labelStart             = block.find("label=");
+                if (labelStart != std::string::npos) {
+                    size_t labelEnd = block.find(';', labelStart);
+                    if (labelEnd != std::string::npos) {
+                        block = block.substr(0, labelStart) + "label=\"" + displayName + "\";" +
+                                block.substr(labelEnd + 1);
                     }
-                    size_t clusterStart = block.find("cluster_");
-                    if (clusterStart != std::string::npos) {
-                        size_t clusterEnd = block.find_first_of(" \t{", clusterStart + 8);
-                        if (clusterEnd != std::string::npos)
-                            block = block.substr(0, clusterStart) + "cluster_" + clusterId +
-                                    block.substr(clusterEnd);
-                    }
-                    os << "  " << block << "\n";
                 }
-                dumpFramePool.release(frame);
-            } catch (...) {
-                dumpFramePool.release(frame);
-                throw;
+                size_t clusterStart = block.find("cluster_");
+                if (clusterStart != std::string::npos) {
+                    size_t clusterEnd = block.find_first_of(" \t{", clusterStart + 8);
+                    if (clusterEnd != std::string::npos) {
+                        block = block.substr(0, clusterStart) + "cluster_" + clusterId +
+                                block.substr(clusterEnd);
+                    }
+                }
+                os << "  " << block << "\n";
             }
+            framePool_.release(frame);
+        } catch (...) {
+            framePool_.release(frame);
+            throw;
         }
-        os << "}\n";
-    } catch (...) {
-        throw;
     }
+    os << "}\n";
 }
 
-GIR::graph_ptr_t TfDumpPass::apply(GIR::graph_ptr_t &graph, std::ostream &os) {
+camel::runtime::GCGraph *TfDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     TaskflowExecSchedPass tfPass(context_, 32);
-    tfPass.buildAndDump(graph.get(), os);
-    return GIR::Graph::null();
+    tfPass.buildAndDump(graph, os);
+    return nullptr;
 }

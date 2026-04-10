@@ -18,16 +18,34 @@
  */
 
 #include "topo_node_seq.h"
-#include "camel/common/algo/topo.h"
-#include "camel/utils/log.h"
+
+#include "camel/execute/graph_runtime_support.h"
+#include "camel/runtime/graph.h"
+#include "camel/runtime/reachable.h"
 #include "camel/utils/type.h"
 
+#include <format>
 #include <iomanip>
 #include <sstream>
 
 using namespace std;
-using namespace GIR;
 using namespace camel::core::context;
+using camel::runtime::gc_node_ref_t;
+using camel::runtime::GCAccsBody;
+using camel::runtime::GCGraph;
+using camel::runtime::GCNode;
+using camel::runtime::GCNodeKind;
+using camel::runtime::GCOperBody;
+
+namespace {
+
+const GCNode *requireNode(GCGraph *graph, gc_node_ref_t nodeRef) {
+    const auto *node = graph ? graph->node(nodeRef) : nullptr;
+    ASSERT(node != nullptr, "Topo dump resolved to a null runtime node.");
+    return node;
+}
+
+} // namespace
 
 TopoNodeSeqDumpPass::TopoNodeSeqDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
 
@@ -58,132 +76,150 @@ string TopoNodeSeqDumpPass::getPtrRepr(const string &prefix, uintptr_t ptrVal, b
     return ss.str();
 }
 
-graph_ptr_t TopoNodeSeqDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    auto optMainGraph = graph->getSubGraphsByName("main");
-    ASSERT(optMainGraph.has_value(), "Main graph not found.");
-    auto mainGraphSet = optMainGraph.value();
-    ASSERT(!mainGraphSet.empty(), "Main graph set is empty.");
-    ASSERT(mainGraphSet.size() == 1, "Multiple main graphs found.");
-    auto mainGraph = *mainGraphSet.begin();
+GCGraph *TopoNodeSeqDumpPass::apply(GCGraph *graph, std::ostream &os) {
+    ASSERT(graph != nullptr, "Topo dump requires a non-null runtime root graph.");
 
-    // Collect all dependent subgraphs.
-    auto sortedGraphs =
-        findReachable(mainGraph, [](const graph_ptr_t &g) { return g->dependencies(); });
-
+    auto sortedGraphs = camel::runtime::collectReachableGraphs(graph);
     ostringstream oss;
 
-    // Print node sequences in order.
-    for (const auto &g : sortedGraphs) {
-        // Topologically sort the nodes.
-        Node *exitNode   = g->exitNode();
-        auto sortedNodes = findReachable(
-            exitNode,
-            [](Node *n) {
-                vector<Node *> ins;
-                ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
-                for (const auto &in : n->ctrlInputs()) {
-                    if (&in->graph() == &n->graph()) // Only consider nodes in the same graph.
-                        ins.push_back(in);
+    for (auto *runtimeGraph : sortedGraphs) {
+        auto sortedNodes     = camel::execute::buildReachableExecutionTopoIndices(runtimeGraph);
+        auto formatNodeIdent = [&](gc_node_ref_t nodeRef) {
+            return pointerToIdent(requireNode(runtimeGraph, nodeRef));
+        };
+        auto formatInputs = [&](std::span<const gc_node_ref_t> inputs) {
+            string text;
+            for (gc_node_ref_t inputRef : inputs) {
+                if (!text.empty()) {
+                    text += ", ";
                 }
-                for (const auto &in : n->dataInputs()) {
-                    if (&in->graph() == &n->graph()) // Only consider nodes in the same graph.
-                        ins.push_back(in);
-                }
-                return ins;
-            },
-            false);
-        EXEC_WHEN_DEBUG({
-            CAMEL_LOG_DEBUG_S("Topo", "Topologically sorted nodes for graph {}:", graph->name());
-            for (const auto &n : sortedNodes) {
-                CAMEL_LOG_DEBUG_S("Topo", "  {}", n->toString());
+                text += formatNodeIdent(inputRef);
             }
-            size_t totalNodeCnt = g->nodes().size() + g->ports().size() + g->closure().size();
-            auto contains       = [](node_span_t nodes, Node *target) {
-                return std::find(nodes.begin(), nodes.end(), target) != nodes.end();
-            };
-            const bool exitCounted =
-                contains(g->nodes(), exitNode) || contains(g->normPorts(), exitNode) ||
-                contains(g->withPorts(), exitNode) || contains(g->closure(), exitNode);
-            const size_t expectedTopoCnt = totalNodeCnt + (exitCounted ? 0 : 1);
-            if (sortedNodes.size() != expectedTopoCnt) {
-                GIR::node_vec_t unreachableNodes;
-                for (Node *n : g->nodes()) {
-                    if (n != exitNode &&
-                        std::find(sortedNodes.begin(), sortedNodes.end(), n) == sortedNodes.end()) {
-                        unreachableNodes.push_back(n);
+            return text;
+        };
+        auto describeRuntimeNode = [&](gc_node_ref_t nodeRef, const GCNode &node) {
+            switch (node.kind) {
+            case GCNodeKind::Func: {
+                auto *callee          = runtimeGraph->directCalleeGraphOf(nodeRef);
+                string name           = callee ? callee->name() : "<null>";
+                string res            = format("CALL: {}", name);
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
+                if (!normInputs.empty()) {
+                    res += format(", nargs=[{}]", formatInputs(normInputs));
+                }
+                if (!withInputs.empty()) {
+                    res += format(", wargs=[{}]", formatInputs(withInputs));
+                }
+                return res;
+            }
+            case GCNodeKind::Call: {
+                string res            = "CALL: <indirect>";
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
+                if (!normInputs.empty()) {
+                    res += format(", nargs=[{}]", formatInputs(normInputs));
+                }
+                if (!withInputs.empty()) {
+                    res += format(", wargs=[{}]", formatInputs(withInputs));
+                }
+                return res;
+            }
+            case GCNodeKind::Oper: {
+                const auto *body      = runtimeGraph->nodeBodyAs<GCOperBody>(nodeRef);
+                string res            = format("CALL: <{}>", std::string(body->uri()));
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
+                if (!normInputs.empty()) {
+                    res += format(", nargs=[{}]", formatInputs(normInputs));
+                }
+                if (!withInputs.empty()) {
+                    res += format(", wargs=[{}]", formatInputs(withInputs));
+                }
+                return res;
+            }
+            case GCNodeKind::Brch: {
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto arms       = runtimeGraph->ctrlOutputsOf(nodeRef);
+                string res            = format(
+                    "BRCH: {}",
+                    normInputs.empty() ? "<missing-cond>" : formatNodeIdent(normInputs.front()));
+                if (!arms.empty()) {
+                    res += " ? ";
+                    for (size_t i = 0; i < arms.size(); ++i) {
+                        if (i != 0) {
+                            res += ": ";
+                        }
+                        res += formatNodeIdent(arms[i]);
                     }
                 }
-                std::string nodeStrs;
-                for (const auto &node : unreachableNodes) {
-                    if (!nodeStrs.empty()) {
-                        nodeStrs += ", ";
-                    }
-                    nodeStrs += node->toString();
+                return res;
+            }
+            case GCNodeKind::Join: {
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
+                string res            = "JOIN:";
+                if (!normInputs.empty()) {
+                    res += format(" brch={}", formatNodeIdent(normInputs.front()));
                 }
-                CAMEL_LOG_WARN_S(
-                    "Topo",
-                    "Unreachable nodes in graph {} detected: {}",
-                    g->name(),
-                    nodeStrs);
-            }
-        });
-        // Print the function signature, including parameter info.
-        oss << "FUNC: " << g->name();
-        for (const auto &portNode : g->ports()) {
-            oss << ", " << pointerToIdent(portNode);
-        }
-        oss << "\n";
-        // Print subgraph node information.
-        for (const auto &n : sortedNodes) {
-            string res;
-            switch (n->type()) {
-            case NodeType::FUNC: {
-                auto *func  = tt::as_ptr<FuncNode>(n);
-                string name = func->bodyGraph()->name();
-                res         = format("CALL: {}", name);
-                for (const auto &inputNode : n->dataInputs()) {
-                    res += format(", {}", pointerToIdent(inputNode));
+                if (!withInputs.empty()) {
+                    res += format(" arms=[{}]", formatInputs(withInputs));
                 }
-                break;
+                return res;
             }
-            case NodeType::OPER: {
-                auto oper   = tt::as_ptr<OperNode>(n);
-                string name = oper->oper()->name();
-                res         = format("CALL: <{}>", name);
-                for (const auto &inputNode : n->dataInputs()) {
-                    res += format(", {}", pointerToIdent(inputNode));
+            case GCNodeKind::Accs: {
+                const auto *body = runtimeGraph->nodeBodyAs<GCAccsBody>(nodeRef);
+                if (body->accsKind == camel::runtime::GCAccsKind::StructKey) {
+                    return format("ACCS: .{}", std::string(body->key()));
                 }
-                break;
+                return format("ACCS: .{}", body->value);
             }
-            case NodeType::BRCH: {
-                auto brchNode    = tt::as_ptr<BrchNode>(n);
-                const auto &ins  = brchNode->dataInputs();
-                const auto &outs = brchNode->ctrlOutputs();
-                res              = format(
-                    "BRCH: {}? {}: {}",
-                    pointerToIdent(ins[0]),
-                    pointerToIdent(outs[0]),
-                    pointerToIdent(outs[1]));
-                break;
-            }
-            case NodeType::JOIN: {
-                auto joinNode   = tt::as_ptr<JoinNode>(n);
-                const auto &ins = joinNode->withInputs();
-                res = format("JOIN: {}, {}", pointerToIdent(ins[0]), pointerToIdent(ins[1]));
-                break;
+            case GCNodeKind::Fill: {
+                string res            = "FILL:";
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
+                if (!normInputs.empty()) {
+                    res += format(" src={}", formatNodeIdent(normInputs.front()));
+                }
+                if (!withInputs.empty()) {
+                    res += format(" with=[{}]", formatInputs(withInputs));
+                }
+                return res;
             }
             default:
-                res = format("NODE: {}", n->toString());
+                return format("NODE: kind={} slot={}", static_cast<int>(node.kind), node.dataIndex);
             }
-            oss << "    [" << pointerToIdent(n) << "] " << res << "\n";
+        };
+
+        oss << "FUNC: " << runtimeGraph->name();
+        for (gc_node_ref_t portRef : runtimeGraph->normPorts()) {
+            oss << ", " << pointerToIdent(requireNode(runtimeGraph, portRef));
         }
-        // Print the return node.
-        oss << "RETN: " << pointerToIdent(g->exitNode()) << "\n\n";
+        for (gc_node_ref_t portRef : runtimeGraph->withPorts()) {
+            oss << ", " << pointerToIdent(requireNode(runtimeGraph, portRef));
+        }
+        for (gc_node_ref_t closureRef : runtimeGraph->closureNodes()) {
+            oss << ", " << pointerToIdent(requireNode(runtimeGraph, closureRef));
+        }
+        oss << "\n";
+
+        for (gc_node_ref_t nodeRef : sortedNodes) {
+            const auto *node = requireNode(runtimeGraph, nodeRef);
+            oss << "    [" << pointerToIdent(node) << "] " << describeRuntimeNode(nodeRef, *node)
+                << "\n";
+        }
+
+        const auto *returnNode = runtimeGraph->returnNode();
+        if (returnNode != nullptr) {
+            oss << "RETN: " << pointerToIdent(returnNode) << "\n\n";
+        } else if (const auto *exitNode = runtimeGraph->exitNode(); exitNode != nullptr) {
+            oss << "RETN: " << pointerToIdent(exitNode) << "\n\n";
+        } else {
+            oss << "RETN: <none>\n\n";
+        }
     }
 
     oss << format("CALL: {}", graph->name()) << "\n";
-
     os << oss.str();
-
-    return GIR::Graph::null();
+    return nullptr;
 }

@@ -27,6 +27,7 @@
  */
 
 #include "camel/runtime/graph.h"
+#include "camel/runtime/draft.h"
 
 #include "camel/compile/gir/nodes.h"
 #include "camel/core/mm.h"
@@ -140,6 +141,10 @@ template <typename T, typename U> T narrowIntegral(U value, const char *what) {
     return static_cast<T>(value);
 }
 
+GIR::graph_ptr_t ownerSourceGraphHandleForBridge(const GCGraph *owner) {
+    return owner && owner->sourceGraph() ? owner->sourceGraph() : GIR::graph_ptr_t{};
+}
+
 GCNodeKind toRuntimeNodeKind(GIR::NodeType type) {
     using GIR::NodeType;
     switch (type) {
@@ -224,6 +229,36 @@ GIR::graph_ptr_t resolveGraphHandle(const GIR::graph_ptr_t &owner, const GIR::Gr
         }
     }
     return nullptr;
+}
+
+GCGraph *resolveRuntimeFunctionGraphForMaterialization(
+    ::Function *funcObj, const GIR::graph_ptr_t &ownerSourceGraph,
+    const std::function<GCGraph *(const GIR::graph_ptr_t &)> &materializeSourceGraph,
+    const std::function<GCGraph *(const GIR::Graph *)> &findRuntimeGraph, std::string_view context,
+    GCGraph *owner = nullptr) {
+    // This helper belongs strictly to the compile-to-runtime bridge. Runtime
+    // execution and runtime rewrites should already carry GCGraph identity
+    // directly through Function::runtimeGraph().
+    ASSERT(funcObj != nullptr, "Runtime Function graph resolution received a null function.");
+
+    if (GCGraph *runtimeGraph = funcObj->runtimeGraph()) {
+        return runtimeGraph;
+    }
+
+    GIR::Graph *sourceGraph = funcObj->sourceGraph();
+    ASSERT(
+        sourceGraph != nullptr,
+        "Function graph resolution requires runtimeGraph or sourceGraph.");
+
+    if (GCGraph *runtimeGraph = findRuntimeGraph(sourceGraph)) {
+        return runtimeGraph;
+    }
+
+    GIR::graph_ptr_t targetGraph = resolveGraphHandle(ownerSourceGraph, sourceGraph);
+    if (!targetGraph) {
+        targetGraph = requireOwnedSourceGraphHandle(sourceGraph, context, owner);
+    }
+    return materializeSourceGraph(targetGraph);
 }
 
 size_t nodeBodyBytes(const GIR::Node *node) {
@@ -329,6 +364,20 @@ struct PlannedNativeNode {
     gc_cnt_t blockCount = 0;
 };
 
+struct PlannedDraftNode {
+    gc_node_ref_t draftId = kInvalidNodeRef;
+    gc_node_ref_t ref     = kInvalidNodeRef;
+    gc_cnt_t blockCount   = 0;
+};
+
+struct DraftPayloadPlan {
+    std::vector<PlannedDraftNode> nodes;
+    std::vector<gc_node_ref_t> runtimeRefsByDraftId;
+    gc_cnt_t nodeBlockCount = 0;
+    gc_cnt_t edgeCount      = 0;
+    gc_cnt_t branchArmCount = 0;
+};
+
 struct NativePayloadPlan {
     std::vector<PlannedNativeNode> nodes;
     std::unordered_map<const GIR::Node *, gc_node_ref_t> nodeRefs;
@@ -385,6 +434,75 @@ NativePayloadPlan planNativePayload(const GIR::graph_ptr_t &graph) {
         narrowIntegral<gc_cnt_t>(currentNodeOffset, "Runtime node-blob block count");
     plan.edgeCount      = narrowIntegral<gc_cnt_t>(edgeCount, "Runtime edge arena size");
     plan.branchArmCount = narrowIntegral<gc_cnt_t>(branchArmCount, "Runtime branch-arm arena size");
+    return plan;
+}
+
+gc_cnt_t draftNodeBlockCount(const DraftNodeHeader &header) {
+    size_t bodyBytes = 0;
+    switch (header.kind) {
+    case GCNodeKind::Func:
+        bodyBytes = sizeof(GCFuncBody);
+        break;
+    case GCNodeKind::Call:
+        bodyBytes = sizeof(GCCallBody);
+        break;
+    case GCNodeKind::Accs:
+    case GCNodeKind::Oper:
+        bodyBytes = header.payloadBytes;
+        break;
+    case GCNodeKind::Fill:
+        bodyBytes = sizeof(GCFillBody);
+        break;
+    case GCNodeKind::Brch:
+        bodyBytes = sizeof(GCBrchBody);
+        break;
+    case GCNodeKind::Join:
+        bodyBytes = sizeof(GCJoinBody);
+        break;
+    default:
+        bodyBytes = 0;
+        break;
+    }
+    return blocksForBytes(sizeof(GCNode) + bodyBytes);
+}
+
+DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
+    DraftPayloadPlan plan;
+    plan.runtimeRefsByDraftId.assign(draft.nodeSlotCount(), kInvalidNodeRef);
+
+    gc_off_t currentNodeOffset = 0;
+    size_t edgeCount           = 0;
+    size_t branchArmCount      = 0;
+    for (gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount(); ++draftId) {
+        if (!draft.alive(draftId)) {
+            continue;
+        }
+        const DraftNodeHeader *header = draft.header(draftId);
+        ASSERT(header != nullptr, "Draft payload plan requires a non-null node header.");
+        const gc_cnt_t blockCount = draftNodeBlockCount(*header);
+        plan.nodes.push_back(
+            PlannedDraftNode{
+                .draftId    = draftId,
+                .ref        = currentNodeOffset,
+                .blockCount = blockCount,
+            });
+        plan.runtimeRefsByDraftId[draftId] = currentNodeOffset;
+        currentNodeOffset                  = narrowIntegral<gc_off_t>(
+            static_cast<size_t>(currentNodeOffset) + blockCount,
+            "Draft runtime node blob size");
+        edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
+                     draft.ctrlInputsOf(draftId).size() + draft.normUsersOf(draftId).size() +
+                     draft.withUsersOf(draftId).size() + draft.ctrlUsersOf(draftId).size();
+        if (header->kind == GCNodeKind::Brch) {
+            branchArmCount += draft.branchArmsOf(draftId).size();
+        }
+    }
+
+    plan.nodeBlockCount =
+        narrowIntegral<gc_cnt_t>(currentNodeOffset, "Draft runtime node-blob block count");
+    plan.edgeCount = narrowIntegral<gc_cnt_t>(edgeCount, "Draft runtime edge arena size");
+    plan.branchArmCount =
+        narrowIntegral<gc_cnt_t>(branchArmCount, "Draft runtime branch-arm arena size");
     return plan;
 }
 
@@ -597,6 +715,158 @@ GCGraphNativePayload buildNativePayload(
     return payload;
 }
 
+GCGraphNativePayload buildNativePayload(const GraphDraft &draft) {
+    GCGraphNativePayload payload;
+    const DraftPayloadPlan plan = planDraftPayload(draft);
+    payload.nodeCount = narrowIntegral<gc_cnt_t>(plan.nodes.size(), "Draft runtime node count");
+    payload.nodeBlockCount = plan.nodeBlockCount;
+    payload.edgeCount      = plan.edgeCount;
+    payload.normPortCount =
+        narrowIntegral<gc_cnt_t>(draft.normPorts().size(), "Draft runtime norm-port count");
+    payload.withPortCount =
+        narrowIntegral<gc_cnt_t>(draft.withPorts().size(), "Draft runtime with-port count");
+    payload.closureCount =
+        narrowIntegral<gc_cnt_t>(draft.closureNodes().size(), "Draft runtime closure count");
+    payload.branchArmCount = plan.branchArmCount;
+
+    payload.nodeBlocks = graphAllocArray<gc_block_t>(payload.nodeBlockCount);
+    payload.edges      = graphAllocArray<gc_node_ref_t>(payload.edgeCount);
+    payload.normPorts  = graphAllocArray<gc_node_ref_t>(payload.normPortCount);
+    payload.withPorts  = graphAllocArray<gc_node_ref_t>(payload.withPortCount);
+    payload.closure    = graphAllocArray<gc_node_ref_t>(payload.closureCount);
+    payload.branchArms = graphAllocArray<GCBranchArm>(payload.branchArmCount);
+
+    gc_off_t edgeCursor      = 0;
+    gc_off_t branchArmCursor = 0;
+    auto appendSlice         = [&](std::span<const gc_node_ref_t> refs) -> Slice {
+        Slice slice{.offset = edgeCursor, .count = 0};
+        for (gc_node_ref_t draftRef : refs) {
+            ASSERT(
+                draftRef < plan.runtimeRefsByDraftId.size(),
+                "Draft edge emission encountered a node outside the payload plan.");
+            const gc_node_ref_t runtimeRef = plan.runtimeRefsByDraftId[draftRef];
+            ASSERT(runtimeRef != kInvalidNodeRef, "Draft edge emission encountered a dead node.");
+            payload.edges[edgeCursor++] = runtimeRef;
+        }
+        slice.count = narrowIntegral<gc_cnt_t>(edgeCursor - slice.offset, "Draft edge slice count");
+        return slice;
+    };
+
+    for (const PlannedDraftNode &planned : plan.nodes) {
+        const DraftNodeHeader *draftHeader = draft.header(planned.draftId);
+        ASSERT(draftHeader != nullptr, "Draft payload emission requires a non-null node header.");
+        auto *header =
+            reinterpret_cast<GCNode *>(mutableNodeStorage(payload.nodeBlocks, planned.ref));
+        *header = GCNode{
+            .dataIndex   = draftHeader->dataIndex,
+            .blockCount  = planned.blockCount,
+            .normInputs  = appendSlice(draft.normInputsOf(planned.draftId)),
+            .withInputs  = appendSlice(draft.withInputsOf(planned.draftId)),
+            .ctrlInputs  = appendSlice(draft.ctrlInputsOf(planned.draftId)),
+            .normOutputs = appendSlice(draft.normUsersOf(planned.draftId)),
+            .withOutputs = appendSlice(draft.withUsersOf(planned.draftId)),
+            .ctrlOutputs = appendSlice(draft.ctrlUsersOf(planned.draftId)),
+            .dataType    = draftHeader->dataType,
+            .kind        = draftHeader->kind,
+            .flags       = draftHeader->runtimeFlags,
+        };
+
+        const auto payloadBytes = draft.payloadOf(planned.draftId);
+        switch (draftHeader->kind) {
+        case GCNodeKind::Func:
+            if (!payloadBytes.empty()) {
+                writeBody(
+                    payload.nodeBlocks,
+                    planned.ref,
+                    *reinterpret_cast<const GCFuncBody *>(payloadBytes.data()));
+            }
+            break;
+        case GCNodeKind::Call:
+            writeBody(
+                payload.nodeBlocks,
+                planned.ref,
+                payloadBytes.empty() ? GCCallBody{}
+                                     : *reinterpret_cast<const GCCallBody *>(payloadBytes.data()));
+            break;
+        case GCNodeKind::Accs:
+        case GCNodeKind::Oper:
+            if (!payloadBytes.empty()) {
+                std::memcpy(
+                    mutableNodeStorage(payload.nodeBlocks, planned.ref) + sizeof(GCNode),
+                    payloadBytes.data(),
+                    payloadBytes.size_bytes());
+            }
+            break;
+        case GCNodeKind::Fill:
+            writeBody(
+                payload.nodeBlocks,
+                planned.ref,
+                payloadBytes.empty() ? GCFillBody{}
+                                     : *reinterpret_cast<const GCFillBody *>(payloadBytes.data()));
+            break;
+        case GCNodeKind::Brch: {
+            const auto *draftBody = reinterpret_cast<const DraftBrchPayload *>(payloadBytes.data());
+            ASSERT(draftBody != nullptr, "Draft BRCH payload is missing.");
+            const gc_off_t armOffset = branchArmCursor;
+            const auto arms          = draft.branchArmsOf(planned.draftId);
+            for (const GCBranchArm &arm : arms) {
+                payload.branchArms[branchArmCursor++] = GCBranchArm{
+                    .head = plan.runtimeRefsByDraftId[arm.head],
+                    .tail = plan.runtimeRefsByDraftId[arm.tail],
+                };
+            }
+            writeBody(
+                payload.nodeBlocks,
+                planned.ref,
+                GCBrchBody{
+                    .join       = plan.runtimeRefsByDraftId[draftBody->join],
+                    .armOffset  = armOffset,
+                    .armCount   = draftBody->armCount,
+                    .defaultArm = draftBody->defaultArm == kInvalidNodeRef
+                                      ? kInvalidNodeRef
+                                      : plan.runtimeRefsByDraftId[draftBody->defaultArm],
+                });
+        } break;
+        case GCNodeKind::Join: {
+            GCJoinBody body = payloadBytes.empty()
+                                  ? GCJoinBody{}
+                                  : *reinterpret_cast<const GCJoinBody *>(payloadBytes.data());
+            body.brch       = body.brch == kInvalidNodeRef ? kInvalidNodeRef
+                                                           : plan.runtimeRefsByDraftId[body.brch];
+            writeBody(payload.nodeBlocks, planned.ref, body);
+        } break;
+        default:
+            break;
+        }
+    }
+
+    for (size_t i = 0; i < draft.normPorts().size(); ++i) {
+        payload.normPorts[i] = plan.runtimeRefsByDraftId[draft.normPorts()[i]];
+    }
+    for (size_t i = 0; i < draft.withPorts().size(); ++i) {
+        payload.withPorts[i] = plan.runtimeRefsByDraftId[draft.withPorts()[i]];
+    }
+    for (size_t i = 0; i < draft.closureNodes().size(); ++i) {
+        payload.closure[i] = plan.runtimeRefsByDraftId[draft.closureNodes()[i]];
+    }
+
+    payload.entryNode  = draft.entryNode() == kInvalidNodeRef
+                             ? (plan.nodes.empty() ? kInvalidNodeRef : plan.nodes.front().ref)
+                             : plan.runtimeRefsByDraftId[draft.entryNode()];
+    payload.exitNode   = draft.exitNode() == kInvalidNodeRef
+                             ? kInvalidNodeRef
+                             : plan.runtimeRefsByDraftId[draft.exitNode()];
+    payload.outputNode = draft.outputNode() == kInvalidNodeRef
+                             ? payload.exitNode
+                             : plan.runtimeRefsByDraftId[draft.outputNode()];
+    payload.returnNode = draft.returnNode() == kInvalidNodeRef
+                             ? kInvalidNodeRef
+                             : plan.runtimeRefsByDraftId[draft.returnNode()];
+    payload.returnKind = draft.returnKind();
+
+    return payload;
+}
+
 } // namespace
 
 GCGraphMetadataRecord::~GCGraphMetadataRecord() {
@@ -610,8 +880,6 @@ GCGraphMetadataRecord::~GCGraphMetadataRecord() {
 }
 
 GCGraph::GCGraph(GCGraphMetadataRecord *metadata) : metadata_(metadata) {}
-
-GIR::Graph *GCGraph::compileGraph() const { return metadata_->sourceGraph.get(); }
 
 const GIR::graph_ptr_t &GCGraph::sourceGraph() const { return metadata_->sourceGraph; }
 
@@ -840,6 +1108,12 @@ void GCGraph::addSubGraph(GCGraph *graph) { pushUnique(metadata_->subGraphs, gra
 
 void GCGraph::addStaticGraphRef(GCGraph *graph) { pushUnique(metadata_->staticGraphRefs, graph); }
 
+void GCGraph::clearGraphRefs() {
+    metadata_->dependencies.clear();
+    metadata_->subGraphs.clear();
+    metadata_->staticGraphRefs.clear();
+}
+
 void GCGraph::setStaticSlots(camel::compile::gir::static_slot_vec_t slots) {
     const TupleType *staticType = staticDataType();
     if (!staticType) {
@@ -853,6 +1127,10 @@ void GCGraph::setStaticSlots(camel::compile::gir::static_slot_vec_t slots) {
     for (size_t i = 1; i < staticType->size() && i < slots.size(); ++i) {
         staticArea_->set<slot_t>(i, slots[i]);
     }
+}
+
+void GCGraph::setStaticDataType(camel::core::type::TupleType *type) {
+    metadata_->staticDataType = type;
 }
 
 bool GCGraph::equals(
@@ -908,9 +1186,73 @@ GCGraph *GCGraphManager::materializeRoot(const GIR::graph_ptr_t &rootGraph) {
     return root_;
 }
 
+void GCGraphManager::replaceRoot(GCGraph *rootGraph) {
+    clear();
+    adoptRoot(rootGraph);
+}
+
+void GCGraphManager::adoptRoot(GCGraph *rootGraph) {
+    root_ = rootGraph;
+    if (!root_) {
+        return;
+    }
+
+    graphs_ = collectReachableGraphs(root_);
+    gcRoots_.reserve(graphs_.size());
+    metadataRecords_.reserve(graphs_.size());
+    for (GCGraph *graph : graphs_) {
+        if (!graph) {
+            continue;
+        }
+        gcRoots_.push_back(graph);
+        metadataRecords_.push_back(graph->metadata_);
+        // Keep the compile-to-runtime bridge index coherent for cold metadata
+        // lookups and materialization bookkeeping only.
+        if (const GIR::graph_ptr_t &sourceGraph = graph->sourceGraph(); sourceGraph) {
+            bySource_[sourceGraph.get()] = graph;
+        }
+    }
+}
+
 GCGraphManager::~GCGraphManager() { clear(); }
 
+GCGraph *encodeGraphDraft(const GraphDraft &draft) {
+    auto *metadataRecord            = new GCGraphMetadataRecord();
+    metadataRecord->sourceGraph     = draft.sourceGraphHandle();
+    metadataRecord->stableId        = draft.stableId();
+    metadataRecord->mangledName     = draft.mangledName();
+    metadataRecord->name            = draft.name();
+    metadataRecord->funcType        = draft.funcType();
+    metadataRecord->runtimeDataType = draft.runtimeDataType();
+    metadataRecord->staticDataType  = nullptr;
+    metadataRecord->closureType     = draft.closureType();
+    metadataRecord->frameSize       = draft.frameSize();
+    metadataRecord->hasFrameLayout  = draft.hasFrameLayout();
+    metadataRecord->isMacro         = draft.isMacroGraph();
+    metadataRecord->isRoot          = draft.isRootGraph();
+    metadataRecord->nativePayload   = buildNativePayload(draft);
+
+    GCGraph *runtimeGraphRaw = graphAllocObject<GCGraph>(metadataRecord);
+    for (GCGraph *dep : draft.dependencies()) {
+        runtimeGraphRaw->addDependency(dep);
+    }
+    for (GCGraph *sub : draft.subGraphs()) {
+        runtimeGraphRaw->addSubGraph(sub);
+    }
+    for (GCGraph *ref : draft.staticGraphRefs()) {
+        runtimeGraphRaw->addStaticGraphRef(ref);
+    }
+
+    camel::compile::gir::static_slot_vec_t staticSlots(
+        draft.staticSlots().begin(),
+        draft.staticSlots().end());
+    runtimeGraphRaw->setStaticSlots(std::move(staticSlots));
+    return runtimeGraphRaw;
+}
+
 GCGraph *GCGraphManager::find(const GIR::Graph *sourceGraph) const {
+    // Bridge-only lookup from compile graph identity to an already
+    // materialized runtime carrier.
     auto it = bySource_.find(sourceGraph);
     return it == bySource_.end() ? nullptr : it->second;
 }
@@ -928,16 +1270,18 @@ std::vector<GCGraph *> GCGraphManager::reachableFromRoots() const {
 
 void GCGraphManager::clear() {
     gcRoots_.clear();
-    for (GCGraph *graph : graphs_) {
-        graphFreeOwned(graph);
-    }
     graphs_.clear();
     for (auto *record : metadataRecords_) {
+        if (record) {
+            record->ownedStaticArea = nullptr;
+            record->nativePayload   = GCGraphNativePayload{};
+        }
         delete record;
     }
     metadataRecords_.clear();
     bySource_.clear();
     root_ = nullptr;
+    mm::graphSpace().reset();
 }
 
 GCGraph *GCGraphManager::materializeGraph(
@@ -1023,21 +1367,14 @@ GCGraph *GCGraphManager::materializeGraph(
             continue;
         }
         auto *funcObj = fromSlot<::Function *>(dataNode->dataSlot());
-        if (funcObj && funcObj->sourceGraph()) {
-            GCGraph *runtimeRef = find(funcObj->sourceGraph());
-            if (!runtimeRef) {
-                auto targetGraph = resolveGraphHandle(sourceGraph, funcObj->sourceGraph());
-                if (!targetGraph) {
-                    try {
-                        targetGraph = funcObj->sourceGraph()->shared_from_this();
-                    } catch (const std::bad_weak_ptr &) {
-                        targetGraph = nullptr;
-                    }
-                }
-                if (targetGraph) {
-                    runtimeRef = materializeGraph(targetGraph, cache);
-                }
-            }
+        if (funcObj) {
+            GCGraph *runtimeRef = resolveRuntimeFunctionGraphForMaterialization(
+                funcObj,
+                sourceGraph,
+                [&](const GIR::graph_ptr_t &target) { return materializeGraph(target, cache); },
+                [&](const GIR::Graph *target) { return find(target); },
+                "GCGraphManager::materializeGraph(static-function-ref)",
+                runtimeGraphRaw);
             if (runtimeRef) {
                 runtimeGraphRaw->addStaticGraphRef(runtimeRef);
             }
@@ -1096,18 +1433,18 @@ slot_t GCGraphManager::canonicalizeStaticSlot(
     case TypeCode::Function: {
         auto *funcObj = fromSlot<::Function *>(slot);
         ASSERT(funcObj != nullptr, "Function static slot payload is null.");
-        GIR::Graph *sourceGraph = funcObj->sourceGraph();
-        ASSERT(sourceGraph != nullptr, "Function static slot must reference a graph.");
-        GCGraph *runtimeGraph =
-            funcObj->runtimeGraph()
-                ? funcObj->runtimeGraph()
-                : materializeGraph(
-                      requireOwnedSourceGraphHandle(
-                          sourceGraph,
-                          std::format(
-                              "GCGraphManager::canonicalizeStaticSlot(owner='{}')",
-                              sourceOwner ? sourceOwner->name() : "<null>")),
-                      cache);
+        GCGraph *runtimeGraph = resolveRuntimeFunctionGraphForMaterialization(
+            funcObj,
+            sourceOwner ? requireOwnedSourceGraphHandle(
+                              const_cast<GIR::Graph *>(sourceOwner),
+                              "GCGraphManager::canonicalizeStaticSlot(owner-source)")
+                        : GIR::graph_ptr_t{},
+            [&](const GIR::graph_ptr_t &target) { return materializeGraph(target, cache); },
+            [&](const GIR::Graph *target) { return find(target); },
+            std::format(
+                "GCGraphManager::canonicalizeStaticSlot(owner='{}')",
+                sourceOwner ? sourceOwner->name() : "<null>"),
+            nullptr);
         auto *runtimeFunc = ::Function::create(runtimeGraph, funcObj->tupleType(), mm::autoSpace());
         objectCache.emplace(object, runtimeFunc);
 
@@ -1209,19 +1546,17 @@ void GCGraphManager::collectStaticGraphRefs(
 
     switch (type->code()) {
     case TypeCode::Function: {
-        auto *funcObj           = fromSlot<::Function *>(slot);
-        GIR::Graph *sourceGraph = funcObj ? funcObj->sourceGraph() : nullptr;
-        if (!funcObj || !sourceGraph) {
+        auto *funcObj = fromSlot<::Function *>(slot);
+        if (!funcObj) {
             return;
         }
-        GCGraph *runtimeGraph = funcObj->runtimeGraph()
-                                    ? funcObj->runtimeGraph()
-                                    : materializeGraph(
-                                          requireOwnedSourceGraphHandle(
-                                              sourceGraph,
-                                              "GCGraphManager::collectStaticGraphRefs",
-                                              owner),
-                                          cache);
+        GCGraph *runtimeGraph = resolveRuntimeFunctionGraphForMaterialization(
+            funcObj,
+            ownerSourceGraphHandleForBridge(owner),
+            [&](const GIR::graph_ptr_t &target) { return materializeGraph(target, cache); },
+            [&](const GIR::Graph *target) { return find(target); },
+            "GCGraphManager::collectStaticGraphRefs",
+            owner);
         owner->addStaticGraphRef(runtimeGraph);
 
         if (::Tuple *closure = funcObj->tuple()) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -96,7 +96,7 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
 
         std::vector<std::string> passes = getState().runPasses;
         static const std::vector<std::string> defaultFallback{"std::default"};
-        auto graph  = st.ctx->rootGraph();
+        auto *graph = st.ctx->runtimeRootGraph();
         auto result = applyPassesDetailed(graph, passes, st.ctx, std::cout);
         graph       = result.graph;
         if (result.failed()) {

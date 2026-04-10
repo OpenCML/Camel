@@ -117,6 +117,16 @@ forcing an all-at-once migration of every scheduler and cache.
 Runtime root materialization is now routed through `Context` so the runtime side
 has a single place to perform post-materialization registration work.
 
+Runtime rewrite now also has a dedicated transaction boundary:
+
+- `RuntimeGraphDraftSession` owns lazy `decode(GCGraph) -> GraphDraft`
+- `commit()` re-encodes the whole runtime-reachable closure
+- cross-graph runtime references are rewired during commit before the new root
+  is installed into `GCGraphManager`
+
+This makes runtime rewrite a GCGraph-native workflow rather than a rematerialize-
+through-GIR workflow, even though downstream passes have not been migrated yet.
+
 `std::nvm` and `std::fvm` now go one step further:
 
 - root frames are allocated from `GCGraph`

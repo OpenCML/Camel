@@ -49,6 +49,8 @@
 
 namespace camel::runtime {
 
+class GraphDraft;
+
 using gc_node_ref_t = uint16_t;
 using gc_slot_idx_t = int16_t;
 using gc_off_t      = uint16_t;
@@ -274,7 +276,8 @@ class GCGraph : public camel::core::rtdata::Object {
 
     // These accessors expose cold compile/debug metadata only. Runtime passes
     // should derive execution semantics from the native payload instead.
-    GIR::Graph *compileGraph() const;
+    // Cold compile/debug metadata only. Runtime execution and runtime rewrites
+    // must not recover semantics from the compile graph through this bridge.
     const GIR::graph_ptr_t &sourceGraph() const;
     const std::string &stableId() const;
     const std::string &mangledName() const;
@@ -378,7 +381,9 @@ class GCGraph : public camel::core::rtdata::Object {
     void addDependency(GCGraph *graph);
     void addSubGraph(GCGraph *graph);
     void addStaticGraphRef(GCGraph *graph);
+    void clearGraphRefs();
     void setStaticSlots(camel::compile::gir::static_slot_vec_t slots);
+    void setStaticDataType(camel::core::type::TupleType *type);
 
     template <typename Visitor> void traceGraphs(Visitor &&visitor) const {
         for (GCGraph *graph : dependencies()) {
@@ -411,6 +416,8 @@ class GCGraph : public camel::core::rtdata::Object {
         const camel::core::type::Type *type) override;
 
   private:
+    friend class GCGraphManager;
+
     GCGraphMetadataRecord *metadata_ = nullptr;
     ::Tuple *staticArea_             = nullptr;
     uintptr_t extraSlots_[kExtraSlotCount]{};
@@ -422,6 +429,9 @@ class GCGraphManager {
     ~GCGraphManager();
 
     GCGraph *materializeRoot(const GIR::graph_ptr_t &rootGraph);
+    void adoptRoot(GCGraph *rootGraph);
+    void replaceRoot(GCGraph *rootGraph);
+    // Compile-to-runtime bridge lookup only.
     GCGraph *find(const GIR::Graph *sourceGraph) const;
     GCGraph *root() const { return root_; }
     std::vector<camel::core::rtdata::Object *> &gcRoots() { return gcRoots_; }
@@ -448,9 +458,13 @@ class GCGraphManager {
 
     std::vector<GCGraph *> graphs_;
     std::vector<GCGraphMetadataRecord *> metadataRecords_;
+    // Cold bridge index from compile graphs to their materialized runtime
+    // carriers. Do not use this map on runtime execution paths.
     std::unordered_map<const GIR::Graph *, GCGraph *> bySource_;
     std::vector<camel::core::rtdata::Object *> gcRoots_;
     GCGraph *root_ = nullptr;
 };
+
+GCGraph *encodeGraphDraft(const GraphDraft &draft);
 
 } // namespace camel::runtime

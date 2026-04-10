@@ -12,37 +12,25 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Oct. 21, 2024
+ * Created: Apr. 10, 2026
  * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "camel/execute/pass/runtime_trans.h"
+#include "../inline/config.h"
+#include "camel/execute/pass/opt.h"
 
-#include <unordered_set>
-
-class GraphVizDumpPass : public RuntimeGraphTranslatePass {
-    bool showRawPtr = false;
-    std::unordered_map<std::string, size_t> ptrCnt_;
-    std::unordered_map<std::string, std::unordered_map<uintptr_t, size_t>> ptrsMap_;
-    std::unordered_set<camel::runtime::GCGraph *> visitedGraphs_;
-
-    size_t depth_ = 0;
-    std::string baseIndent_;
-    const std::string indent_ = "    ";
-
-    void pushIndent();
-    void popIndent();
-
-    std::string pointerToIdent(const void *ptr, const char *prefix = "N");
-
-    std::string dumpGraph(camel::runtime::GCGraph *graph);
-
+class OptimizeRewritePass : public RuntimeGraphRewritePass {
   public:
-    GraphVizDumpPass(const camel::core::context::context_ptr_t &context);
-    virtual ~GraphVizDumpPass() = default;
+    OptimizeRewritePass(
+        const camel::core::context::context_ptr_t &ctx, const OptimizeRewriteConfig &config = {})
+        : RuntimeGraphRewritePass(ctx), config_(config) {}
+    ~OptimizeRewritePass() override = default;
 
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+
+  private:
+    OptimizeRewriteConfig config_{};
 };

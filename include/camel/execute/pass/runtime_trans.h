@@ -19,13 +19,11 @@
 
 #pragma once
 
-#include "base.h"
+#include "trans.h"
 
-class RuntimeGraphTranslatePass : public RuntimeGraphIRPass {
+class RuntimeGraphTranslatePass : public GraphTranslatePass {
   public:
     RuntimeGraphTranslatePass(const camel::core::context::context_ptr_t &ctx)
-        : RuntimeGraphIRPass(ctx) {};
+        : GraphTranslatePass(ctx) {};
     ~RuntimeGraphTranslatePass() override = default;
-
-    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override = 0;
 };

@@ -19,13 +19,11 @@
 
 #pragma once
 
-#include "base.h"
+#include "sched.h"
 
-class RuntimeGraphSchedulePass : public RuntimeGraphIRPass {
+class RuntimeGraphSchedulePass : public GraphSchedulePass {
   public:
     RuntimeGraphSchedulePass(const camel::core::context::context_ptr_t &ctx)
-        : RuntimeGraphIRPass(ctx) {};
+        : GraphSchedulePass(ctx) {};
     ~RuntimeGraphSchedulePass() override = default;
-
-    virtual GIR::graph_ptr_t apply(camel::runtime::GCGraph *graph, std::ostream &os) override = 0;
 };
