@@ -71,14 +71,9 @@ std::string sanitizeClusterId(const std::string &name) {
 void TaskflowExecSchedPass::buildAndDump(Graph *graph, std::ostream &os) {
     (void)graph->exitNode();
     buildGraphsInfo(graph);
+    ctx::FramePool dumpFramePool{1 * camel::core::mm::MB};
 
     os << "digraph Taskflow {\n";
-    std::vector<Frame *> framesToRelease;
-    auto releaseAll = [&]() {
-        for (Frame *f : framesToRelease)
-            framePool_.release(f);
-    };
-
     try {
         Graph *rootGraph     = graph;
         const auto &graphMap = globalBuildCtx_.graphInfoMap;
@@ -91,41 +86,44 @@ void TaskflowExecSchedPass::buildAndDump(Graph *graph, std::ostream &os) {
                 ordered.push_back(g);
 
         for (Graph *g : ordered) {
-            Frame *frame = framePool_.acquire(g);
-            framesToRelease.push_back(frame);
-            mainFlow_.clear();
-            instantiate_graph_instance_generic(mainFlow_, g, frame);
+            Frame *frame = dumpFramePool.acquire(g);
+            try {
+                mainFlow_.clear();
+                instantiate_graph_instance_generic(mainFlow_, g, frame);
 
-            std::ostringstream ss;
-            mainFlow_.dump(ss);
-            std::string block = extractSubgraphBlock(ss.str());
-            if (block.empty())
-                continue;
-            // Rewrite cluster id and label so each graph keeps a readable, stable name.
-            std::string clusterId   = sanitizeClusterId(g->name());
-            std::string displayName = g->name();
-            size_t labelStart       = block.find("label=");
-            if (labelStart != std::string::npos) {
-                size_t labelEnd = block.find(';', labelStart);
-                if (labelEnd != std::string::npos)
-                    block = block.substr(0, labelStart) + "label=\"" + displayName + "\";" +
-                            block.substr(labelEnd + 1);
+                std::ostringstream ss;
+                mainFlow_.dump(ss);
+                std::string block = extractSubgraphBlock(ss.str());
+                if (!block.empty()) {
+                    // Rewrite cluster id and label so each graph keeps a readable, stable name.
+                    std::string clusterId   = sanitizeClusterId(g->name());
+                    std::string displayName = g->name();
+                    size_t labelStart       = block.find("label=");
+                    if (labelStart != std::string::npos) {
+                        size_t labelEnd = block.find(';', labelStart);
+                        if (labelEnd != std::string::npos)
+                            block = block.substr(0, labelStart) + "label=\"" + displayName + "\";" +
+                                    block.substr(labelEnd + 1);
+                    }
+                    size_t clusterStart = block.find("cluster_");
+                    if (clusterStart != std::string::npos) {
+                        size_t clusterEnd = block.find_first_of(" \t{", clusterStart + 8);
+                        if (clusterEnd != std::string::npos)
+                            block = block.substr(0, clusterStart) + "cluster_" + clusterId +
+                                    block.substr(clusterEnd);
+                    }
+                    os << "  " << block << "\n";
+                }
+                dumpFramePool.release(frame);
+            } catch (...) {
+                dumpFramePool.release(frame);
+                throw;
             }
-            size_t clusterStart = block.find("cluster_");
-            if (clusterStart != std::string::npos) {
-                size_t clusterEnd = block.find_first_of(" \t{", clusterStart + 8);
-                if (clusterEnd != std::string::npos)
-                    block = block.substr(0, clusterStart) + "cluster_" + clusterId +
-                            block.substr(clusterEnd);
-            }
-            os << "  " << block << "\n";
         }
         os << "}\n";
     } catch (...) {
-        releaseAll();
         throw;
     }
-    releaseAll();
 }
 
 GIR::graph_ptr_t TfDumpPass::apply(GIR::graph_ptr_t &graph, std::ostream &os) {

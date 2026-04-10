@@ -276,7 +276,6 @@ class GCGraph : public camel::core::rtdata::Object {
     // should derive execution semantics from the native payload instead.
     GIR::Graph *compileGraph() const;
     const GIR::graph_ptr_t &sourceGraph() const;
-    const GIR::graph_ptr_t &compileGraphMetadata() const;
     const std::string &stableId() const;
     const std::string &mangledName() const;
     const std::string &name() const;

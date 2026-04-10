@@ -106,7 +106,7 @@ inline Graph *macroFunctionMetadataGraph(const ::Function *funcObj) {
     ASSERT(funcObj != nullptr, "Macro function is null.");
     auto *runtimeGraph = funcObj->graph();
     ASSERT(runtimeGraph != nullptr, "Macro function is missing runtime graph materialization.");
-    auto *graph = runtimeGraph->compileGraphMetadata().get();
+    auto *graph = runtimeGraph->sourceGraph().get();
     ASSERT(graph != nullptr, "Macro function is missing compile graph metadata.");
     return graph;
 }
@@ -331,7 +331,7 @@ class MacroExecutor {
         ASSERT(runtimeGraph != nullptr, "Macro runtime source-node lookup requires a graph.");
         const auto *record = runtimeGraph->node(runtimeNodeIndex);
         ASSERT(record != nullptr, "Macro runtime source-node lookup requires a node record.");
-        auto *sourceGraph = runtimeGraph->compileGraphMetadata().get();
+        auto *sourceGraph = runtimeGraph->sourceGraph().get();
         Node *sourceNode  = findSourceNodeByIndex(sourceGraph, record->dataIndex);
         ASSERT(
             sourceNode != nullptr,
@@ -353,7 +353,7 @@ class MacroExecutor {
     slot_t executeGraph(Frame *frame, camel::runtime::GCGraph *runtimeGraph) {
         ASSERT(runtimeGraph != nullptr, "Macro runtime graph execution requires a runtime graph.");
         ASSERT(
-            runtimeGraph->compileGraphMetadata().get() != nullptr,
+            runtimeGraph->sourceGraph() != nullptr,
             "Macro runtime graph is missing compile metadata.");
         if (recursionDepth_ > kMaxMacroRecursionDepth) {
             throw MacroExecutionError(
@@ -721,7 +721,7 @@ graph_ptr_t MacroRewritePass::apply(camel::runtime::GCGraph *graph, ostream &os)
                 session.replaceNode(draftNode, newNode);
                 roundChanged = true;
                 os << "[macro] rewrote " << sourceNode->debugEntityId() << " -> "
-                   << newNode->debugEntityId() << "\n";
+                   << sourceNode->graph().name() << "::node#" << newNode->index() << "\n";
             }
         }
 

@@ -48,8 +48,7 @@ extern "C" slot_t trampolineCast(slot_t *slots, void *ctx, size_t pc);
 extern "C" slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc);
 extern "C" slot_t *prepareDirectJitCall(slot_t *callerSlots, void *ctx, const Bytecode *bc);
 extern "C" slot_t *prepareDirectJitTailCall(slot_t *callerSlots, void *ctx, const Bytecode *bc);
-extern "C" slot_t
-finishDirectJitCall(slot_t result, slot_t *calleeSlots, void *ctx, GIR::Graph *owner);
+extern "C" slot_t finishDirectJitCall(slot_t result, slot_t *calleeSlots, void *ctx);
 extern "C" slot_t finishDirectJitCallFast(slot_t *calleeSlots, void *ctx, slot_t result);
 extern "C" slot_t directSelfFuncInvoke(slot_t *callerSlots, void *ctx, const Bytecode *bc);
 

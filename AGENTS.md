@@ -86,6 +86,7 @@ camel fib.cml std::inline std::fvm   # Inline first, then execute on high-perfor
 - Follow industrial-grade best practices with a long-term perspective; refactor proactively and frequently to prevent technical debt accumulation.
 - This project is currently internal-only. Unless explicitly required, do not optimize for forward compatibility. Prioritize cleanliness and correctness; avoid dual-track APIs.
 - Escalate fundamental design conflicts or ambiguous trade-offs early. Record decisions and rationale in both documentation and code comments.
+- During refactors, always identify and report the primary structural contradiction early. If progress is blocked by a deeper architectural dependency, surface that key blocker to the user promptly instead of spending many rounds only cleaning peripheral symptoms.
 - Every implementation plan must define explicit acceptance criteria and validate against them during execution.
 - If a single file grows beyond 800 lines, evaluate decomposition. New `.h/.cpp` files must include a standard file header (copyright notice, aligned with existing files), followed by a dedicated multi-line comment describing file responsibilities.
 - Enforce strict declaration/implementation separation. Avoid implementation logic in header files unless strictly necessary. Keep headers in `include/` and implementations in `src/`.

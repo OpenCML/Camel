@@ -143,7 +143,6 @@ class Context : public std::enable_shared_from_this<Context> {
     void eval(std::string uri, GIR::Node *self, Frame &frame);
 
     void clearProcessExitCode() { processExitCode_.reset(); }
-    void captureProcessExitCode(GIR::Graph *graph, slot_t result);
     void captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t result);
     std::optional<int> processExitCode() const { return processExitCode_; }
     int processExitCodeOr(int fallback = 0) const { return processExitCode_.value_or(fallback); }

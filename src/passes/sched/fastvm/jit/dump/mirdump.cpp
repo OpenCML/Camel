@@ -60,13 +60,10 @@ static graph_ptr_t applyMirDump(
     std::unordered_map<uint64_t, std::string> mirSymbolNames;
 
     for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
-        GIR::Graph *g = runtimeGraph ? runtimeGraph->compileGraphMetadata().get() : nullptr;
+        ASSERT(runtimeGraph != nullptr, "JIT MIR dump requires a runtime graph.");
         ASSERT(
-            g->finalized(),
-            std::format("Graph '{}' must be sealed before JIT MIR dump.", g->name()));
-        ASSERT(
-            g->hasFrameLayout(),
-            std::format("Graph '{}' has no finalized frame layout.", g->name()));
+            runtimeGraph->hasFrameLayout(),
+            std::format("Graph '{}' has no finalized frame layout.", runtimeGraph->name()));
 
         mirSymbolNames.clear();
         mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineFunc)]     = "trampolineFunc";
@@ -84,7 +81,7 @@ static graph_ptr_t applyMirDump(
         };
         static uint64_t dummyPoolTop = 0;
         CompilationUnit unit{
-            .graph                    = g,
+            .runtimeGraph             = runtimeGraph,
             .bytecodes                = bcSpan,
             .entryPc                  = entryPc,
             .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
@@ -97,7 +94,7 @@ static graph_ptr_t applyMirDump(
             .debug                    = &debugOptions,
         };
 
-        os << "\n" << g->mangledName() << ":\n";
+        os << "\n" << runtimeGraph->mangledName() << ":\n";
         std::string failureReason;
         if (!backend->compile(unit, &failureReason)) {
             os << "  [compile failed] " << (failureReason.empty() ? "(unknown)" : failureReason)

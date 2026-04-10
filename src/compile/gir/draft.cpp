@@ -77,7 +77,7 @@ bool retargetStaticSlotGraphs(
         bool changed            = false;
         graph_ptr_t mappedGraph = resolveTarget(funcObj->sourceGraph());
         if (mappedGraph && mappedGraph.get() != funcObj->sourceGraph()) {
-            funcObj->setGraph(mappedGraph.get());
+            funcObj->setSourceGraph(mappedGraph.get());
             if (ownerRaw != mappedGraph.get() && !ownerRaw->dependencies().contains(mappedGraph)) {
                 ownerBuilder.addDependency(mappedGraph);
             }

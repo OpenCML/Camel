@@ -273,7 +273,6 @@ using Bytecode = BytecodeHeader;
 
 union BytecodeExtra {                      // 8 bytes
     type::Type *pType;                     // for CAST
-    GIR::Graph *sourceGraph;               // compile-time FUNC/TAIL target
     camel::runtime::GCGraph *runtimeGraph; // runtime FUNC/TAIL target
     operator_t func;                       // for OPER
     MarkOpCode mark;                       // for SCHD
@@ -282,11 +281,8 @@ union BytecodeExtra {                      // 8 bytes
     std::string toString(OpCode opcode) const;
 };
 
-// FUNC/TAIL: the first extra word is Graph*; when JIT is enabled, the second extra word is count
-// (before JIT) or [targetPc:16 | jitFn:48] (after JIT).
-inline GIR::Graph *getFuncExtraSourceGraph(const BytecodeHeader *bc) {
-    return bc->extra()->sourceGraph;
-}
+// FUNC/TAIL: the first extra word is the runtime callee graph pointer; when JIT is enabled, the
+// second extra word is count (before JIT) or [targetPc:16 | jitFn:48] (after JIT).
 inline camel::runtime::GCGraph *getFuncExtraRuntimeGraph(const BytecodeHeader *bc) {
     return bc->extra()->runtimeGraph;
 }

@@ -57,13 +57,10 @@ graph_ptr_t JitAsmDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &
     std::span<const Bytecode> bcSpan(linked.codes.data(), linked.codes.size());
 
     for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
-        GIR::Graph *g = runtimeGraph ? runtimeGraph->compileGraphMetadata().get() : nullptr;
+        ASSERT(runtimeGraph != nullptr, "JIT assembly dump requires a runtime graph.");
         ASSERT(
-            g->finalized(),
-            std::format("Graph '{}' must be sealed before JIT assembly dump.", g->name()));
-        ASSERT(
-            g->hasFrameLayout(),
-            std::format("Graph '{}' has no finalized frame layout.", g->name()));
+            runtimeGraph->hasFrameLayout(),
+            std::format("Graph '{}' has no finalized frame layout.", runtimeGraph->name()));
 
         CompilationDebugOptions debugOptions{
             .asmOut           = &os,
@@ -71,7 +68,7 @@ graph_ptr_t JitAsmDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &
         };
         static uint64_t dummyPoolTop = 0;
         CompilationUnit unit{
-            .graph                    = g,
+            .runtimeGraph             = runtimeGraph,
             .bytecodes                = bcSpan,
             .entryPc                  = entryPc,
             .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
@@ -84,7 +81,7 @@ graph_ptr_t JitAsmDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &
             .debug                    = &debugOptions,
         };
 
-        os << g->mangledName() << ":\n";
+        os << runtimeGraph->mangledName() << ":\n";
         std::string failureReason;
         auto compiled = backend->compile(unit, &failureReason);
         if (!compiled) {

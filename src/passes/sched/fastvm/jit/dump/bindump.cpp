@@ -103,13 +103,10 @@ graph_ptr_t JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostrea
     std::span<const Bytecode> bcSpan(linked.codes.data(), linked.codes.size());
 
     for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
-        GIR::Graph *g = runtimeGraph ? runtimeGraph->compileGraphMetadata().get() : nullptr;
+        ASSERT(runtimeGraph != nullptr, "JIT machine-code dump requires a runtime graph.");
         ASSERT(
-            g->finalized(),
-            std::format("Graph '{}' must be sealed before JIT machine-code dump.", g->name()));
-        ASSERT(
-            g->hasFrameLayout(),
-            std::format("Graph '{}' has no finalized frame layout.", g->name()));
+            runtimeGraph->hasFrameLayout(),
+            std::format("Graph '{}' has no finalized frame layout.", runtimeGraph->name()));
 
         std::vector<std::tuple<size_t, size_t, std::string>> instructionBoundaries;
         CompilationDebugOptions debugOptions{
@@ -117,7 +114,7 @@ graph_ptr_t JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostrea
             .enableDebugTrace      = true,
         };
         CompilationUnit unit{
-            .graph              = g,
+            .runtimeGraph       = runtimeGraph,
             .bytecodes          = bcSpan,
             .entryPc            = entryPc,
             .trampolineFunc     = reinterpret_cast<void *>(&trampolineFunc),
@@ -131,7 +128,7 @@ graph_ptr_t JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostrea
         std::string failureReason;
         auto compiled = backend->compile(unit, &failureReason);
         if (!compiled) {
-            os << g->mangledName() << ":\n  [compile failed] "
+            os << runtimeGraph->mangledName() << ":\n  [compile failed] "
                << (failureReason.empty() ? "(unknown)" : failureReason) << "\n\n";
             continue;
         }
@@ -144,7 +141,7 @@ graph_ptr_t JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostrea
         for (size_t v = maxOffset; v; v /= 10)
             ++idxWidth;
 
-        os << g->mangledName() << ":\n";
+        os << runtimeGraph->mangledName() << ":\n";
         os << "  [code size: " << codeSize << " bytes, entryOffset: " << compiled->entryOffset
            << "]\n";
 

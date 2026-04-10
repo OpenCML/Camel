@@ -210,11 +210,9 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
         rootRuntimeGraph != nullptr,
         "NodeVM runtime graph must be materialized before execution.");
 
-    Frame *currFrame             = rootFrame;
-    Frame *twinFrame             = nullptr;
-    auto *currRuntimeGraph       = rootRuntimeGraph;
-    gc_node_ref_t currentNodeRef = kInvalidNodeRef;
-
+    Frame *currFrame       = rootFrame;
+    Frame *twinFrame       = nullptr;
+    auto *currRuntimeGraph = rootRuntimeGraph;
     try {
         if (currRecursionDepth_ > maxRecursionDepth_) {
             throwRuntimeFault(
@@ -241,7 +239,6 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
         size_t i = 0;
         for (; i < nodesSize; ++i) {
             const gc_node_ref_t nodeRef = currNodes[i];
-            currentNodeRef              = nodeRef;
             const GCNode *n             = currRuntimeGraph->node(nodeRef);
             ASSERT(n != nullptr, "NodeVM execution resolved to a null runtime node.");
 

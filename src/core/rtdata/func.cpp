@@ -21,17 +21,20 @@
 #include "camel/compile/gir/graph.h"
 #include "camel/runtime/graph.h"
 
-GIR::Graph *Function::sourceGraph() const {
-    return graph_ ? graph_
-                  : (runtimeGraph_ ? runtimeGraph_->compileGraphMetadata().get() : nullptr);
+GIR::Graph *Function::sourceGraph() const { return sourceGraph_; }
+
+void Function::setRuntimeGraph(camel::runtime::GCGraph *graph) {
+    ASSERT(graph != nullptr, "Runtime Function graph cannot be null.");
+    runtimeGraph_ = graph;
+    sourceGraph_  = graph->compileGraph();
 }
 
 const type::TupleType *Function::tupleType() const {
     if (runtimeGraph_) {
         return runtimeGraph_->closureType();
     }
-    ASSERT(graph_ != nullptr, "Function graph cannot be null.");
-    return graph_->closureType();
+    ASSERT(sourceGraph_ != nullptr, "Function source graph cannot be null.");
+    return sourceGraph_->closureType();
 }
 
 Function *Function::create(
@@ -64,14 +67,14 @@ Function *Function::create(
     if (!mem)
         throw std::bad_alloc();
 
-    auto *fn     = new (mem) Function(nullptr, graph);
+    auto *fn     = new (mem) Function(graph->compileGraph(), graph);
     fn->closure_ = Tuple::create(tt->size(), allocator);
     return fn;
 }
 
 void Function::print(std::ostream &os, const type::Type *type) const {
     (void)type;
-    const std::string &graphName = runtimeGraph_ ? runtimeGraph_->name() : graph_->name();
+    const std::string &graphName = runtimeGraph_ ? runtimeGraph_->name() : sourceGraph_->name();
     os << "Function(graph=" << graphName << ", tupleSlots=";
     os << (closure_ ? std::to_string(closure_->size()) : "null");
     os << ")";

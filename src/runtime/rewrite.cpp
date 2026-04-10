@@ -18,13 +18,19 @@
  */
 
 /*
- * Minimal runtime-side source graph editing support.
+ * Runtime-side source graph editing support.
  *
- * Runtime passes still need GIR node payloads until GCGraph grows native node
- * storage. This file intentionally provides only the small subset needed by
- * runtime rewrite passes: clone the runtime-reachable source closure, retarget
- * graph references inside the cloned closure, materialize static values into an
- * owned clone graph, replace nodes, and seal the rewritten root.
+ * Runtime rewrite passes still rewrite source
+ * GIR today, but the session is now
+ * scoped strictly as a cold rewrite utility rather than a
+ * general execution
+ * dependency. This file owns the minimal source-graph editing workflow needed
+
+ * * by runtime passes: clone the runtime-reachable source closure, retarget graph
+ * references
+ * inside the cloned closure, materialize static values into an owned
+ * editable graph, replace
+ * nodes, and seal the rewritten root.
  */
 
 #include "camel/runtime/rewrite.h"
@@ -94,7 +100,7 @@ bool retargetStaticSlotGraphs(
         bool changed = false;
         if (Graph *mapped = resolveTarget(funcObj->sourceGraph());
             mapped && mapped != funcObj->sourceGraph()) {
-            funcObj->setGraph(mapped);
+            funcObj->setSourceGraph(mapped);
             if (ownerRaw != mapped) {
                 auto mappedHandle = mapped->shared_from_this();
                 if (!ownerRaw->dependencies().contains(mappedHandle)) {
@@ -389,9 +395,9 @@ RuntimeGraphRewriteSession::collectReachableSourceGraphs() const {
         if (!runtimeGraph) {
             continue;
         }
-        const GIR::graph_ptr_t &metadata = runtimeGraph->compileGraphMetadata();
-        if (metadata) {
-            graphs.push_back(metadata);
+        const GIR::graph_ptr_t &sourceGraph = runtimeGraph->sourceGraph();
+        if (sourceGraph) {
+            graphs.push_back(sourceGraph);
         }
     }
     return graphs;

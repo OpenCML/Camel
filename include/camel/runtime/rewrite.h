@@ -48,7 +48,7 @@ class RuntimeGraphRewriteSession {
         : context_(context), runtimeRoot_(runtimeRoot) {
         ASSERT(context_ != nullptr, "Runtime rewrite session requires a valid context.");
         ASSERT(runtimeRoot_ != nullptr, "Runtime rewrite session requires a runtime root graph.");
-        sourceRoot_ = runtimeRoot_->compileGraphMetadata();
+        sourceRoot_ = runtimeRoot_->sourceGraph();
         ASSERT(sourceRoot_ != nullptr, "Runtime rewrite session requires source graph metadata.");
     }
 
@@ -71,7 +71,7 @@ class RuntimeGraphRewriteSession {
         // passes do not own runtime graph lifetimes directly.
         runtimeRoot_ = context_->materializeRuntimeRoot(rewrittenRoot);
         ASSERT(runtimeRoot_ != nullptr, "Runtime rewrite rematerialization returned null root.");
-        sourceRoot_ = runtimeRoot_->compileGraphMetadata();
+        sourceRoot_ = runtimeRoot_->sourceGraph();
         ASSERT(sourceRoot_ != nullptr, "Rematerialized runtime root is missing compile metadata.");
         return runtimeRoot_;
     }

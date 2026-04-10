@@ -40,12 +40,11 @@ class Frame : public rtdata::Object {
     camel::runtime::GCGraph *graph() { return runtimeGraph_; }
     const camel::runtime::GCGraph *graph() const { return runtimeGraph_; }
     // Source GIR exposure is a cold-path metadata bridge only.
-    GIR::Graph *sourceGraph() { return sourceGraphImpl(); }
-    const GIR::Graph *sourceGraph() const { return sourceGraphImpl(); }
+    GIR::Graph *sourceGraph() { return sourceGraph_; }
+    const GIR::Graph *sourceGraph() const { return sourceGraph_; }
     camel::runtime::GCGraph *runtimeGraph() { return runtimeGraph_; }
     const camel::runtime::GCGraph *runtimeGraph() const { return runtimeGraph_; }
     bool hasRuntimeGraph() const { return runtimeGraph_ != nullptr; }
-    bool hasSourceGraph() const { return sourceGraphImpl() != nullptr; }
     const type::TupleType *runtimeDataLayout() const {
         if (runtimeGraph_) {
             return runtimeGraph_->runtimeDataType();
@@ -232,7 +231,7 @@ class Frame : public rtdata::Object {
     const slot_t *slotBase() const { return dynamicArea_; }
 
     void printSlotsTo(std::ostream &os) const {
-        os << "frame <" << ((sourceGraph() || runtimeGraph_) ? graphName() : "(null)") << "> at "
+        os << "frame <" << ((sourceGraph_ || runtimeGraph_) ? graphName() : "(null)") << "> at "
            << mm::formatAddress(this, true) << ":\n";
         for (size_t i = 1; i < dynamicAreaType_->size(); ++i) {
             slot_t s      = dynamicArea_[i];
@@ -263,18 +262,21 @@ class Frame : public rtdata::Object {
     friend class TaskflowFramePool;
     friend class FrameView;
 
-    GIR::Graph *sourceGraphImpl() const {
-        return sourceGraph_
-                   ? sourceGraph_
-                   : (runtimeGraph_ ? runtimeGraph_->compileGraphMetadata().get() : nullptr);
+    // Only frame pools construct frames directly.
+    Frame(GIR::Graph *graph, ::Tuple *staticArea, const type::TupleType *dynamicAreaType)
+        : sourceGraph_(graph), runtimeGraph_(nullptr), staticArea_(staticArea),
+          dynamicAreaType_(dynamicAreaType) {
+        // Do not eagerly initialize the dynamic area here. FastVM relies on
+        // reusing freshly released frame memory on the hot path, and forcing
+        // constructor-time initialization would add avoidable churn. Debug-mode
+        // uninitialized-slot diagnostics therefore happen at access sites.
     }
 
-    // Only frame pools construct frames directly.
     Frame(
-        GIR::Graph *graph, ::Tuple *staticArea, const type::TupleType *dynamicAreaType,
-        camel::runtime::GCGraph *runtimeGraph = nullptr)
-        : sourceGraph_(graph), runtimeGraph_(runtimeGraph), staticArea_(staticArea),
-          dynamicAreaType_(dynamicAreaType) {
+        camel::runtime::GCGraph *runtimeGraph, ::Tuple *staticArea,
+        const type::TupleType *dynamicAreaType)
+        : sourceGraph_(runtimeGraph ? runtimeGraph->compileGraph() : nullptr),
+          runtimeGraph_(runtimeGraph), staticArea_(staticArea), dynamicAreaType_(dynamicAreaType) {
         // Do not eagerly initialize the dynamic area here. FastVM relies on
         // reusing freshly released frame memory on the hot path, and forcing
         // constructor-time initialization would add avoidable churn. Debug-mode
@@ -474,8 +476,7 @@ class FramePool {
                 mm::formatAddress(end_, true));
             throw std::bad_alloc{};
         }
-        Frame *frame =
-            new (top_) Frame(nullptr, graph->staticArea(), graph->runtimeDataType(), graph);
+        Frame *frame = new (top_) Frame(graph, graph->staticArea(), graph->runtimeDataType());
 
         EXEC_WHEN_DEBUG({
             CAMEL_LOG_INFO_S(

@@ -90,16 +90,6 @@ static camel::runtime::gc_node_ref_t resolveTailValueNode(camel::runtime::GCGrap
     return current;
 }
 
-static bool runtimeOutputsContain(
-    const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
-    camel::runtime::gc_node_ref_t targetRef) {
-    auto contains = [targetRef](std::span<const camel::runtime::gc_node_ref_t> refs) {
-        return std::find(refs.begin(), refs.end(), targetRef) != refs.end();
-    };
-    return contains(graph->normOutputsOf(nodeRef)) || contains(graph->withOutputsOf(nodeRef)) ||
-           contains(graph->ctrlOutputsOf(nodeRef));
-}
-
 static bool emitsRuntimeBytecode(camel::runtime::GCNodeKind kind) {
     switch (kind) {
     case camel::runtime::GCNodeKind::Data:
@@ -532,9 +522,7 @@ bytecode_vec_t compile(
             break;
 
         case NodeType::FUNC: {
-            bool isTail    = node == tailValueNode && hasOnlyTrivialSuffixAfter(i);
-            auto *funcNode = tt::as_ptr<FuncNode>(node);
-            // Comment normalized during runtime-graph refactor.
+            bool isTail = node == tailValueNode && hasOnlyTrivialSuffixAfter(i);
             // Comment normalized during runtime-graph refactor.
             normOps.insert(normOps.end(), withOps.begin(), withOps.end());
             appendBytecode(
@@ -545,7 +533,7 @@ bytecode_vec_t compile(
                 normOps,
                 {},
                 true,
-                {.sourceGraph = funcNode->bodyGraph()},
+                {.runtimeGraph = nullptr},
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
                 2
 #else
@@ -708,9 +696,8 @@ static bytecode_vec_t compileRuntimeGraph(
 
     auto topoSortedIndices   = camel::execute::buildReachableExecutionTopoIndices(graph);
     const auto returnNodeRef = graph->returnNodeRef();
-    const auto *returnRecord = graph->returnNode();
-    ASSERT(returnRecord != nullptr, "Runtime graph return node is null.");
-    ASSERT(returnRecord->dataIndex != 0, "Runtime graph return slot is invalid.");
+    ASSERT(graph->returnNode() != nullptr, "Runtime graph return node is null.");
+    ASSERT(graph->returnNode()->dataIndex != 0, "Runtime graph return slot is invalid.");
 
     EXEC_WHEN_DEBUG({
         CAMEL_LOG_DEBUG_S("Topo", "Topologically sorted nodes for graph {}:", graph->name());

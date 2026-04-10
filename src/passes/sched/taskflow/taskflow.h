@@ -46,15 +46,12 @@ class TaskflowFramePool {
     TaskflowFramePool(const TaskflowFramePool &)            = delete;
     TaskflowFramePool &operator=(const TaskflowFramePool &) = delete;
 
-    Frame *acquire(GIR::Graph *graph);
     Frame *acquire(camel::runtime::GCGraph *graph);
     void release(Frame *frame);
-    void warmup(GIR::Graph *graph, size_t count);
     void warmup(camel::runtime::GCGraph *graph, size_t count);
 
   private:
     struct GraphArena {
-        GIR::Graph *sourceGraph{nullptr};
         camel::runtime::GCGraph *runtimeGraph{nullptr};
         size_t frameSize{0};
         const camel::core::type::TupleType *runtimeDataType{nullptr};
@@ -65,10 +62,8 @@ class TaskflowFramePool {
         std::vector<std::byte *> chunks;
     };
 
-    GraphArena &getOrCreateArena(GIR::Graph *graph);
     GraphArena &getOrCreateArena(camel::runtime::GCGraph *graph);
     void allocateChunk(GraphArena &arena, size_t minFrameCount);
-    static uintptr_t arenaKey(GIR::Graph *graph);
     static uintptr_t arenaKey(camel::runtime::GCGraph *graph);
 
     size_t chunkBytes_;
@@ -120,6 +115,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         std::unordered_map<GIR::Node *, NodeExecMeta> nodeExecMeta;
         std::vector<NodeExecMeta> runtimeNodeExecMeta;
         std::vector<std::vector<BranchArmMeta>> runtimeBranchArms;
+        std::vector<GIR::Node *> runtimeSourceNodes;
         std::vector<GIR::data_idx_t> normPortIndices;
         std::vector<GIR::data_idx_t> withPortIndices;
         std::vector<GIR::data_idx_t> closureIndices;
@@ -138,6 +134,13 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
                 runtimeNodeIndex < runtimeNodeExecMeta.size(),
                 "Runtime node exec meta index is out of range.");
             return runtimeNodeExecMeta[runtimeNodeIndex];
+        }
+
+        GIR::Node *sourceNodeOf(camel::runtime::gc_node_ref_t runtimeNodeIndex) const {
+            if (runtimeNodeIndex >= runtimeSourceNodes.size()) {
+                return nullptr;
+            }
+            return runtimeSourceNodes[runtimeNodeIndex];
         }
     };
 

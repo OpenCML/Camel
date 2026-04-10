@@ -173,11 +173,6 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
             framePool_.release(frame);
     }
     inline void releaseFrameUnchecked(ctx::Frame *frame) { framePool_.release(frame); }
-    inline void releaseFrameForCall(ctx::Frame *frame, GIR::Graph *owner) {
-        (void)owner;
-        if (framePool_.isActive(frame))
-            framePool_.release(frame);
-    }
     inline ctx::Frame *acquireFrameForTail(camel::runtime::GCGraph *graph) {
         ASSERT(graph != nullptr, "Runtime graph is null.");
         ctx::Frame *f = framePool_._acquire(graph);

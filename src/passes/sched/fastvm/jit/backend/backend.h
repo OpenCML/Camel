@@ -59,7 +59,6 @@ struct CompilationDebugOptions {
 };
 
 struct CompilationUnit {
-    GIR::Graph *graph;
     camel::runtime::GCGraph *runtimeGraph = nullptr;
     std::span<const Bytecode> bytecodes;
     size_t entryPc;
@@ -88,56 +87,6 @@ struct CompiledCode {
 };
 
 using JitEntryFn = slot_t (*)(slot_t *slots, void *ctx);
-
-inline static constexpr std::size_t kJitGraphInfoExtraIndex = 1;
-
-// JIT entry still performs O(1) lookup through Graph extra, but the extra index is maintained by
-// JIT itself, and this kind of backend detail is not exposed as a dedicated Graph API.
-struct JitGraphInfo {
-    JitEntryFn fn        = nullptr;
-    bool compileFailed   = false;
-    bool failureReported = false;
-};
-inline JitEntryFn getGraphJitFn(GIR::Graph *g) {
-    auto *info = g->getExtra<JitGraphInfo, kJitGraphInfoExtraIndex>();
-    return info ? info->fn : nullptr;
-}
-inline void setGraphJitFn(GIR::Graph *g, JitEntryFn fn) {
-    auto *info = g->getExtra<JitGraphInfo, kJitGraphInfoExtraIndex>();
-    if (!info) {
-        info = new JitGraphInfo{fn};
-        g->setExtra<JitGraphInfo, kJitGraphInfoExtraIndex>(info);
-    } else {
-        info->fn = fn;
-    }
-}
-inline bool getGraphJitCompileFailed(GIR::Graph *g) {
-    auto *info = g->getExtra<JitGraphInfo, kJitGraphInfoExtraIndex>();
-    return info ? info->compileFailed : false;
-}
-inline void setGraphJitCompileFailed(GIR::Graph *g, bool failed, bool resetReport = false) {
-    auto *info = g->getExtra<JitGraphInfo, kJitGraphInfoExtraIndex>();
-    if (!info) {
-        info = new JitGraphInfo{};
-        g->setExtra<JitGraphInfo, kJitGraphInfoExtraIndex>(info);
-    }
-    info->compileFailed = failed;
-    if (resetReport) {
-        info->failureReported = false;
-    }
-}
-inline bool getGraphJitFailureReported(GIR::Graph *g) {
-    auto *info = g->getExtra<JitGraphInfo, kJitGraphInfoExtraIndex>();
-    return info ? info->failureReported : false;
-}
-inline void setGraphJitFailureReported(GIR::Graph *g, bool reported) {
-    auto *info = g->getExtra<JitGraphInfo, kJitGraphInfoExtraIndex>();
-    if (!info) {
-        info = new JitGraphInfo{};
-        g->setExtra<JitGraphInfo, kJitGraphInfoExtraIndex>(info);
-    }
-    info->failureReported = reported;
-}
 
 class IJitBackend {
   public:

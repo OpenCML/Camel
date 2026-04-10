@@ -42,26 +42,6 @@ namespace camel::core::context {
 
 namespace {
 
-int deriveProcessExitCode(GIR::Graph *graph, slot_t result) {
-    if (!graph || !graph->funcType() || !graph->funcType()->hasExitType())
-        return 0;
-
-    switch (graph->funcType()->exitType()->code()) {
-    case TypeCode::Int32:
-        return static_cast<int>(static_cast<int32_t>(result));
-    case TypeCode::Int64:
-        return static_cast<int>(static_cast<int64_t>(result));
-    case TypeCode::Bool:
-        return result != 0 ? 1 : 0;
-    case TypeCode::Byte:
-        return static_cast<int>(static_cast<uint8_t>(result));
-    case TypeCode::Void:
-        return 0;
-    default:
-        return 0;
-    }
-}
-
 int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result) {
     if (!graph || !graph->funcType() || !graph->funcType()->hasExitType())
         return 0;
@@ -214,10 +194,6 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
                << std::flush;
         }
     }
-}
-
-void Context::captureProcessExitCode(GIR::Graph *graph, slot_t result) {
-    processExitCode_ = deriveProcessExitCode(graph, result);
 }
 
 void Context::captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t result) {
@@ -593,11 +569,7 @@ void Context::registerRuntimeGraphDebugInfo(camel::runtime::GCGraph *runtimeRoot
         if (!graph) {
             return;
         }
-        GIR::Graph *sourceGraph = graph->compileGraphMetadata().get();
-        if (!sourceGraph) {
-            return;
-        }
-        camel::source::origin_id_t origin = debugMap.graphOrigin(sourceGraph->stableId());
+        camel::source::origin_id_t origin = debugMap.graphOrigin(graph->stableId());
         if (origin != camel::source::kInvalidOriginId) {
             debugMap.registerRuntimeGraphOrigin(reinterpret_cast<uintptr_t>(graph), origin);
         }

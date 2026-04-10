@@ -104,39 +104,11 @@ static TaskflowHigherOrderCallSite make_taskflow_higher_order_call_site(Function
 }
 
 static Node *find_taskflow_source_node(
-    camel::runtime::GCGraph *runtimeGraph, camel::runtime::gc_node_ref_t nodeRef) {
-    if (!runtimeGraph) {
+    const TaskflowExecSchedPass::GraphInfos &graphInfo, camel::runtime::gc_node_ref_t nodeRef) {
+    if (!graphInfo.runtimeGraph) {
         return nullptr;
     }
-    const auto *runtimeNode = runtimeGraph->node(nodeRef);
-    auto *sourceGraph       = runtimeGraph->compileGraphMetadata().get();
-    if (!runtimeNode || !sourceGraph || runtimeNode->dataIndex == 0) {
-        return nullptr;
-    }
-    auto matches = [runtimeNode](Node *node) {
-        return node && node->index() == runtimeNode->dataIndex;
-    };
-    for (Node *node : sourceGraph->normPorts()) {
-        if (matches(node))
-            return node;
-    }
-    for (Node *node : sourceGraph->withPorts()) {
-        if (matches(node))
-            return node;
-    }
-    for (Node *node : sourceGraph->closure()) {
-        if (matches(node))
-            return node;
-    }
-    for (Node *node : sourceGraph->nodes()) {
-        if (matches(node))
-            return node;
-    }
-    if (matches(sourceGraph->outputNode()))
-        return sourceGraph->outputNode();
-    if (matches(sourceGraph->exitNode()))
-        return sourceGraph->exitNode();
-    return nullptr;
+    return graphInfo.sourceNodeOf(nodeRef);
 }
 
 static TaskflowExecSchedPass::GraphInfos::BranchArmMeta
@@ -246,6 +218,7 @@ static void populate_graph_info(
     gt.nodeExecMeta.clear();
     gt.runtimeNodeExecMeta.clear();
     gt.runtimeBranchArms.clear();
+    gt.runtimeSourceNodes.clear();
     gt.normPortIndices.clear();
     gt.withPortIndices.clear();
     gt.closureIndices.clear();
@@ -267,6 +240,7 @@ static void populate_graph_info(
     if (runtimeGraph != nullptr) {
         gt.runtimeNodeExecMeta.resize(runtimeGraph->nodeBlockCount());
         gt.runtimeBranchArms.resize(runtimeGraph->nodeBlockCount());
+        gt.runtimeSourceNodes.resize(runtimeGraph->nodeBlockCount(), nullptr);
         runtimeNodeIndexByData.reserve(runtimeGraph->nodeCount());
         for (auto it = runtimeGraph->nodes().begin(); it != runtimeGraph->nodes().end(); ++it) {
             const auto nodeRef           = it.ref();
@@ -306,6 +280,9 @@ static void populate_graph_info(
             nodeMeta.withIndices.push_back(in->index());
         if (auto it = runtimeNodeIndexByData.find(n->index()); it != runtimeNodeIndexByData.end()) {
             nodeMeta.runtimeNodeIndex = it->second;
+            if (runtimeGraph != nullptr) {
+                gt.runtimeSourceNodes[it->second] = n;
+            }
         }
 
         if (n->type() == NodeType::BRCH) {
@@ -347,8 +324,6 @@ static void populate_graph_info(
 
     if (runtimeGraph != nullptr) {
         pass.framePool_.warmup(runtimeGraph, 1);
-    } else {
-        pass.framePool_.warmup(graph, 1);
     }
 }
 
@@ -815,8 +790,9 @@ slot_t TaskflowExecSchedPass::executePreparedBranchArm(
     const auto &arm = arms[armIndex];
     if (frame != nullptr && frame->runtimeGraph() != nullptr &&
         !arm.topoNodeRuntimeIndices.empty()) {
+        const auto &runtimeInfo = globalBuildCtx_.getGraphInfos(frame->runtimeGraph());
         for (camel::runtime::gc_node_ref_t runtimeIndex : arm.topoNodeRuntimeIndices) {
-            Node *node = find_taskflow_source_node(frame->runtimeGraph(), runtimeIndex);
+            Node *node = find_taskflow_source_node(runtimeInfo, runtimeIndex);
             ASSERT(node != nullptr, "Taskflow runtime branch node is missing source metadata.");
             executePreparedNode(node, frame, sf);
         }
@@ -850,7 +826,8 @@ void TaskflowExecSchedPass::buildGraphsInfo(camel::runtime::GCGraph *rootGraph) 
     for (camel::runtime::GCGraph *runtimeGraph :
          camel::runtime::collectReachableGraphs(rootGraph)) {
         ASSERT(runtimeGraph != nullptr, "Taskflow reachable runtime graph set contains null.");
-        Graph *graph = runtimeGraph->compileGraphMetadata().get();
+        const GIR::graph_ptr_t &sourceGraph = runtimeGraph->sourceGraph();
+        Graph *graph                        = sourceGraph.get();
         ASSERT(graph != nullptr, "Taskflow runtime graph is missing compile graph metadata.");
         populate_graph_info(*this, graph, runtimeGraph);
     }
@@ -894,11 +871,12 @@ void TaskflowExecSchedPass::buildRuntimeNodeTasks(
         taskMap.size() == runtimeGraph->nodeBlockCount() &&
             taskBuilt.size() == runtimeGraph->nodeBlockCount(),
         "Taskflow runtime task tables must match runtime graph node count.");
+    const auto &graphInfo = globalBuildCtx_.getGraphInfos(runtimeGraph);
     for (camel::runtime::gc_node_ref_t runtimeIndex :
          camel::execute::buildReachableExecutionTopoIndices(runtimeGraph)) {
         const auto *record = runtimeGraph->node(runtimeIndex);
         ASSERT(record != nullptr, "Taskflow runtime node record lookup failed.");
-        Node *n = find_taskflow_source_node(runtimeGraph, runtimeIndex);
+        Node *n = find_taskflow_source_node(graphInfo, runtimeIndex);
         if (n == nullptr) {
             continue;
         }

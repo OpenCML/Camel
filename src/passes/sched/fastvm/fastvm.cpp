@@ -548,20 +548,14 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
     if (jitFnOf(graph) || jitCompileFailedOf(graph)) {
         return;
     }
-    GIR::Graph *sourceGraph = graph->compileGraphMetadata().get();
-    ASSERT(sourceGraph != nullptr, "FastVM runtime graph is missing compile graph metadata.");
     ASSERT(
-        sourceGraph->finalized(),
-        std::format("Graph '{}' must be sealed before JIT compilation.", graph->name()));
-    ASSERT(
-        sourceGraph->hasFrameLayout(),
+        graph->hasFrameLayout(),
         std::format("Graph '{}' has no finalized frame layout.", graph->name()));
 
     CompilationDebugOptions debugOptions{
         .enableDebugTrace = enableJitTraceMir_,
     };
     CompilationUnit unit{
-        .graph                    = sourceGraph,
         .runtimeGraph             = graph,
         .bytecodes                = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
         .entryPc                  = entryPc,

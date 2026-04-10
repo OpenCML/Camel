@@ -383,11 +383,11 @@ slot_t *prepareDirectJitTailCall(slot_t *callerSlots, void *ctx, const Bytecode 
     return newFrame->slotBase();
 }
 
-slot_t finishDirectJitCall(slot_t result, slot_t *calleeSlots, void *ctx, GIR::Graph *owner) {
+slot_t finishDirectJitCall(slot_t result, slot_t *calleeSlots, void *ctx) {
     auto *jc    = static_cast<JitContext *>(ctx);
     auto *vm    = jc->vm;
     auto *frame = reinterpret_cast<Frame *>(calleeSlots[0]);
-    vm->releaseFrameForCall(frame, owner);
+    vm->releaseFrameForCall(frame);
     return result;
 }
 
@@ -627,7 +627,7 @@ slot_t trampolineCast(slot_t *, void *, size_t) { return {}; }
 slot_t trampolineBytecode(slot_t *, void *, size_t) { return {}; }
 slot_t *prepareDirectJitCall(slot_t *, void *, const Bytecode *) { return nullptr; }
 slot_t *prepareDirectJitTailCall(slot_t *, void *, const Bytecode *) { return nullptr; }
-slot_t finishDirectJitCall(slot_t, slot_t *, void *, GIR::Graph *) { return {}; }
+slot_t finishDirectJitCall(slot_t, slot_t *, void *) { return {}; }
 #endif
 
 } // extern "C"

@@ -615,8 +615,6 @@ GIR::Graph *GCGraph::compileGraph() const { return metadata_->sourceGraph.get();
 
 const GIR::graph_ptr_t &GCGraph::sourceGraph() const { return metadata_->sourceGraph; }
 
-const GIR::graph_ptr_t &GCGraph::compileGraphMetadata() const { return metadata_->sourceGraph; }
-
 const std::string &GCGraph::stableId() const { return metadata_->stableId; }
 
 const std::string &GCGraph::mangledName() const { return metadata_->mangledName; }

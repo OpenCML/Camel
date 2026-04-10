@@ -20,6 +20,35 @@ The new direction is:
 - `runtime::GCGraph` becomes the runtime-side graph object
 - runtime entry points materialize a pruned runtime graph closure before execution
 
+This split is now explicitly treated as a transitional bridge, not the final
+architecture.
+
+The long-term target is a single immutable runtime graph form plus two distinct
+mutable work states:
+
+- `GraphBuilder`: compile-time construction state
+- `Graph`: immutable executable graph object
+- `GraphDraft`: runtime rewrite state
+
+The intended conversion boundaries are:
+
+- `encode(GraphBuilder) -> Graph`
+- `decode(Graph) -> GraphDraft`
+- `encode(GraphDraft) -> Graph`
+
+In that target model there is no permanent compile-time/runtime graph type
+split. Compile-time code does not execute against a special graph class; it
+constructs a mutable builder and encodes the final immutable `Graph`. Runtime
+rewrite does not mutate compile-time GIR; it decodes the immutable `Graph` into
+`GraphDraft`, mutates the draft, and re-encodes a new immutable `Graph`.
+
+Two architectural rules follow from this decision:
+
+1. `GraphBuilder` and `GraphDraft` are distinct mutable domains with different
+   responsibilities and should not be converted directly into each other.
+2. `Graph` is the only graph form consumed by runtime execution engines, JIT,
+   schedulers, and long-lived runtime objects.
+
 ## Current Bridge Design
 
 The current implementation introduces `runtime::GCGraph` and
@@ -115,6 +144,15 @@ This milestone does **not** yet do the following:
 - replace compile-time `DATA(Function)` with a dedicated compile-time function constant representation
 - remove compile-time `GraphDraft` / `GraphRewriteSession`
 
+It also does **not** yet complete the final model described above:
+
+- unify the current compile-time GIR graph object and runtime `GCGraph` into a
+  single immutable `Graph`
+- replace bridge-side materialization with first-class `encode/decode`
+  transitions between `GraphBuilder`, `Graph`, and `GraphDraft`
+- move runtime rewrite passes fully onto `decode(Graph) -> GraphDraft ->
+  encode(Graph)` without compile-time GIR mutation
+
 ## Follow-up Work
 
 The intended next steps are:
@@ -125,6 +163,33 @@ The intended next steps are:
 4. add runtime graph rewrite APIs that produce new `GCGraph` versions instead of mutating compile-time GIR
 5. integrate graph roots and graph/object cross references into tracing GC
 6. eliminate the bridge-side compile-time `GIR::Graph` dependency so runtime graph metadata becomes self-hosted
+
+## Target End State
+
+The bridge should eventually collapse into a simpler graph pipeline:
+
+### Compile-time path
+
+1. front-end lowering produces `GraphBuilder`
+2. `encode(GraphBuilder)` produces immutable `Graph`
+3. execution entry retains only immutable `Graph`
+
+### Runtime rewrite path
+
+1. a runtime pass receives immutable `Graph`
+2. `decode(Graph)` produces mutable `GraphDraft`
+3. the pass mutates `GraphDraft`
+4. `encode(GraphDraft)` produces a new immutable `Graph`
+
+### Runtime execution path
+
+1. VM / JIT / scheduler consume immutable `Graph` directly
+2. debug/source mappings remain in centralized cold metadata stores
+3. no execution hot path falls back to compile-time GIR objects
+
+This means the current `compile::gir::Graph` versus `runtime::GCGraph` split is
+only a migration stage. The final architecture should expose one immutable
+graph object model plus separate builder/draft editing models.
 
 ## Transitional Bridges To Delete
 

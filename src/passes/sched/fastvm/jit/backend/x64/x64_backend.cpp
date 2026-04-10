@@ -177,18 +177,16 @@ bool X64Backend::compileBytecode(
         return false;
     };
 
-    if (!unit.graph)
-        return fail("null graph in JIT compilation unit");
-    if (!unit.graph->finalized())
-        return fail("graph '" + unit.graph->name() + "' is not sealed");
-    if (!unit.graph->hasFrameLayout())
-        return fail("incomplete frame layout for graph '" + unit.graph->name() + "'");
+    if (!unit.runtimeGraph)
+        return fail("null runtime graph in JIT compilation unit");
+    if (!unit.runtimeGraph->hasFrameLayout())
+        return fail("incomplete frame layout for graph '" + unit.runtimeGraph->name() + "'");
 
     const Bytecode *base = unit.bytecodes.data();
     size_t pcEnd         = unit.bytecodes.size();
     size_t entryPc       = unit.entryPc;
 
-    const slot_t *staticBase = unit.graph->staticArea()->data();
+    const slot_t *staticBase = unit.runtimeGraph->staticArea()->data();
     auto staticSlotAddr      = [&](data_idx_t idx) -> uint64_t {
         return reinterpret_cast<uint64_t>(staticBase + static_cast<size_t>(-idx));
     };
@@ -776,7 +774,7 @@ bool X64Backend::compileBytecode(
         case OpCode::FUNC: {
 #if defined(_WIN32) || defined(_WIN64)
             bool handledByNativeJitCall = false;
-            if (unit.poolTopAddr && !unit.graph->funcType()->modifiers().sync()) {
+            if (unit.poolTopAddr && !unit.runtimeGraph->funcType()->modifiers().sync()) {
                 auto *targetRuntimeGraph = getFuncExtraRuntimeGraph(&bc);
                 bool sameGraph           = (targetRuntimeGraph == unit.runtimeGraph);
                 if (!(sameGraph && !canUseFramelessSelfFunc)) {

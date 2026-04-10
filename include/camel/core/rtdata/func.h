@@ -51,19 +51,14 @@ class Function : public rtdata::Object {
     camel::runtime::GCGraph *graph() const { return runtimeGraph_; }
     camel::runtime::GCGraph *runtimeGraph() const { return runtimeGraph_; }
     bool hasRuntimeGraph() const { return runtimeGraph_ != nullptr; }
-    // Compile GIR access is a metadata bridge kept for cold paths such as
-    // rewriting, diagnostics, and transitional compile-time utilities.
+    // Compile GIR access is a cold metadata bridge. Runtime execution must
+    // never depend on it for identity.
     GIR::Graph *sourceGraph() const;
-    void setGraph(GIR::Graph *graph) {
-        ASSERT(graph != nullptr, "Function graph cannot be null.");
-        graph_        = graph;
-        runtimeGraph_ = nullptr;
+    void setSourceGraph(GIR::Graph *graph) {
+        ASSERT(graph != nullptr, "Function source graph cannot be null.");
+        sourceGraph_ = graph;
     }
-    void setRuntimeGraph(camel::runtime::GCGraph *graph) {
-        ASSERT(graph != nullptr, "Runtime Function graph cannot be null.");
-        graph_        = nullptr;
-        runtimeGraph_ = graph;
-    }
+    void setRuntimeGraph(camel::runtime::GCGraph *graph);
     Tuple *tuple() { return closure_; }
     const Tuple *tuple() const { return closure_; }
 
@@ -81,7 +76,7 @@ class Function : public rtdata::Object {
 
         if (runtimeGraph_ != fnOther->runtimeGraph_)
             return false;
-        if (runtimeGraph_ == nullptr && graph_ != fnOther->graph_)
+        if (runtimeGraph_ == nullptr && sourceGraph_ != fnOther->sourceGraph_)
             return false;
 
         const type::TupleType *tupleTypePtr = tupleType();
@@ -100,7 +95,7 @@ class Function : public rtdata::Object {
         if (!mem)
             throw std::bad_alloc();
 
-        Function *fnNew = new (mem) Function(graph_, runtimeGraph_);
+        Function *fnNew = new (mem) Function(sourceGraph_, runtimeGraph_);
 
         if (closure_) {
             const type::TupleType *tupleTypePtr = tupleType();
@@ -129,13 +124,13 @@ class Function : public rtdata::Object {
     }
 
   private:
-    explicit Function(GIR::Graph *g, camel::runtime::GCGraph *runtimeGraph = nullptr)
-        : graph_(g), runtimeGraph_(runtimeGraph), closure_(nullptr) {}
+    explicit Function(GIR::Graph *sourceGraph, camel::runtime::GCGraph *runtimeGraph = nullptr)
+        : sourceGraph_(sourceGraph), runtimeGraph_(runtimeGraph), closure_(nullptr) {}
 
-    // Runtime functions should point at GCGraph. The raw GIR pointer remains
-    // only for compile-side static values that have not yet been materialized
-    // into runtime graphs.
-    GIR::Graph *graph_;
+    // Compile-side static Function objects may only carry sourceGraph_.
+    // Runtime Function objects must carry runtimeGraph_ and may optionally keep
+    // sourceGraph_ as a cold metadata bridge.
+    GIR::Graph *sourceGraph_;
     camel::runtime::GCGraph *runtimeGraph_;
     Tuple *closure_;
 };
