@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -87,9 +87,9 @@ inline void storeFloatResultFromVReg(int disp, x64::VRegId v, x64::MirBuilder &b
     build.emitVXmm32StoreToFrame(disp, v);
 }
 
-inline bool graphSupportsFramelessSelfFunc(const CompilationUnit &unit) {
+std::string describeFramelessSelfFuncFailure(const CompilationUnit &unit) {
     if (unit.graphLength == 0)
-        return false;
+        return "graph bytecode span is empty";
     const size_t graphEnd = unit.entryPc + unit.graphLength;
     ASSERT(
         graphEnd <= unit.bytecodes.size(),
@@ -98,23 +98,34 @@ inline bool graphSupportsFramelessSelfFunc(const CompilationUnit &unit) {
         const Bytecode &bc = unit.bytecodes[pc];
         switch (bc.opcode) {
         case OpCode::OPER:
+            return "pc=" + std::to_string(pc) + " contains OPER";
         case OpCode::CAST:
+            return "pc=" + std::to_string(pc) + " contains CAST";
         case OpCode::COPY:
+            return "pc=" + std::to_string(pc) + " contains COPY";
         case OpCode::FILL:
+            return "pc=" + std::to_string(pc) + " contains FILL";
         case OpCode::CALL:
+            return "pc=" + std::to_string(pc) + " contains indirect CALL";
         case OpCode::ACCS:
-            return false;
+            return "pc=" + std::to_string(pc) + " contains ACCS";
         case OpCode::FUNC:
         case OpCode::TAIL:
-            if (getFuncExtraRuntimeGraph(&bc) != unit.runtimeGraph)
-                return false;
+            if (getFuncExtraRuntimeGraph(&bc) != unit.runtimeGraph) {
+                const auto *target = getFuncExtraRuntimeGraph(&bc);
+                return std::format(
+                    "pc={} targets non-self graph '{}' ({:p})",
+                    pc,
+                    target ? target->name() : "<null>",
+                    static_cast<const void *>(target));
+            }
             break;
         default:
             break;
         }
         pc += bc.opsize;
     }
-    return true;
+    return {};
 }
 
 // Camel standard slot model: every slot is one word (8 bytes); bool / 32-bit / 64-bit / pointer
@@ -200,16 +211,16 @@ bool X64Backend::compileBytecode(
     // leaving enough structure for later peephole and dead-store cleanup.
     x64::MirBuffer mirBuf;
     x64::MirBuilder build(mirBuf);
-    x64::VRegId nextVReg               = 0;
-    const bool canUseFramelessSelfFunc = graphSupportsFramelessSelfFunc(unit);
+    x64::VRegId nextVReg                     = 0;
+    const std::string framelessFailureReason = describeFramelessSelfFuncFailure(unit);
+    const bool canUseFramelessSelfFunc       = framelessFailureReason.empty();
     // The current x64 JIT is only sound for graphs whose execution stays within
     // the slot-native bytecode subset. Graphs that rely on runtime Function
     // carriers, indirect CALL, or frame-dependent trampolines still execute
     // correctly through the interpreter, while pure callee graphs such as
     // recursive fib keep the hot-path JIT speedup.
     if (!canUseFramelessSelfFunc)
-        return fail(
-            "graph requires interpreter fallback for indirect-call/frame-dependent bytecodes");
+        return fail("graph requires interpreter fallback: " + framelessFailureReason);
 
     // Compare-Branch fusion state: when a comparison detects a following BRCH
     // using its result, it emits only VLoadFromFrame + VCmpRegImm (no setcc/store),

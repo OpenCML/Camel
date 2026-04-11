@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 08, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,7 @@
 
 #include "camel/compile/gir/graph.h"
 #include "camel/compile/gir/nodes.h"
-#include "camel/core/rtdata/func.h"
+#include "camel/compile/gir/static_function.h"
 
 #include <unordered_set>
 
@@ -94,10 +94,10 @@ void forEachReachableGraph(
                 continue;
             }
 
-            auto *funcObj = camel::core::rtdata::fromSlot<::Function *>(dataNode->dataSlot());
-            if (funcObj && funcObj->sourceGraph()) {
+            auto *funcObj = camel::core::rtdata::fromSlot<StaticFunction *>(dataNode->dataSlot());
+            if (funcObj && funcObj->graph()) {
                 visit(requireOwnedGraphHandle(
-                    funcObj->sourceGraph(),
+                    funcObj->graph(),
                     curr.get(),
                     "compile::gir::reachable"));
             }

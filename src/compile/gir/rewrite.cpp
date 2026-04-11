@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 06, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,8 +29,8 @@
 
 #include "camel/compile/gir/nodes.h"
 #include "camel/compile/gir/reachable.h"
+#include "camel/compile/gir/static_function.h"
 #include "camel/core/rtdata/array.h"
-#include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 
@@ -115,10 +115,10 @@ std::vector<graph_ptr_t> collectReferencedGraphs(const graph_ptr_t &graph) {
         if (dataNode->dataType()->code() != TypeCode::Function) {
             continue;
         }
-        auto *funcObj = fromSlot<::Function *>(dataNode->dataSlot());
-        if (funcObj && funcObj->sourceGraph()) {
+        auto *funcObj = fromSlot<StaticFunction *>(dataNode->dataSlot());
+        if (funcObj && funcObj->graph()) {
             refs.push_back(requireOwnedGraphHandle(
-                funcObj->sourceGraph(),
+                funcObj->graph(),
                 graph.get(),
                 "rewrite::collectReferencedGraphs"));
         }
@@ -227,7 +227,7 @@ slot_t canonicalizeStruct(
 }
 
 slot_t canonicalizeFunction(
-    GraphRewriteSession &session, const graph_ptr_t &owner, ::Function *func, Type *funcType,
+    GraphRewriteSession &session, const graph_ptr_t &owner, StaticFunction *func, Type *funcType,
     ObjectCloneCache &clones) {
     (void)funcType;
     if (!func) {
@@ -237,7 +237,7 @@ slot_t canonicalizeFunction(
         return toSlot<Object *>(it->second);
     }
 
-    Graph *sourceGraph = func->sourceGraph();
+    Graph *sourceGraph = func->graph();
     ASSERT(sourceGraph != nullptr, "Function static value must reference a graph.");
     graph_ptr_t sourceGraphPtr =
         requireOwnedGraphHandle(sourceGraph, owner.get(), "rewrite::cloneFunctionObject");
@@ -249,7 +249,7 @@ slot_t canonicalizeFunction(
                                                         owner,
                                                         sourceGraphPtr,
                                                         GraphImportMode::CloneIntoDraft));
-    auto *cloned = ::Function::create(
+    auto *cloned = StaticFunction::create(
         canonicalGraph.get(),
         currentClosureTupleType(canonicalGraph),
         owner->arena()->allocator());
@@ -273,7 +273,7 @@ slot_t canonicalizeFunction(
         }
     }
 
-    return toSlot<::Function *>(cloned);
+    return toSlot<StaticFunction *>(cloned);
 }
 
 slot_t canonicalizeStaticSlot(
@@ -285,7 +285,7 @@ slot_t canonicalizeStaticSlot(
 
     switch (type->code()) {
     case TypeCode::Function:
-        return canonicalizeFunction(session, owner, fromSlot<::Function *>(slot), type, clones);
+        return canonicalizeFunction(session, owner, fromSlot<StaticFunction *>(slot), type, clones);
     case TypeCode::Tuple:
         return canonicalizeTuple(
             session,
@@ -337,8 +337,8 @@ Node *GraphRewriteSession::materializeStaticValue(
     Node *node           = DataNode::createStaticSlot(*owner, type, canonicalSlot);
 
     if (options.propagateMacro && type->code() == TypeCode::Function) {
-        auto *funcObj = fromSlot<::Function *>(canonicalSlot);
-        if (funcObj && funcObj->sourceGraph() && funcObj->sourceGraph()->isMacro()) {
+        auto *funcObj = fromSlot<StaticFunction *>(canonicalSlot);
+        if (funcObj && funcObj->graph() && funcObj->graph()->isMacro()) {
             detail::NodeMutation::setMacro(node, true);
         }
     }

@@ -8,66 +8,24 @@
  * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *
- * Author: Zhenjie Wei
- * Created: Feb. 21, 2026
- * Updated: Apr. 01, 2026
- * Supported by: National Key Research and Development Program of China
+ * See the the MIT license for more details.
  */
 
 #include "executor.h"
-#include "camel/compile/gir.h"
-#include "camel/core/context/frame.h"
-#include "camel/core/error/diagnostics.h"
-#include "camel/core/error/runtime.h"
-#include "camel/core/operator.h"
 #include "camel/execute/executor.h"
-#include "camel/utils/log.h"
 #include "operators.h"
-
-#include <string>
-
-using namespace camel::core::error;
-using namespace camel::core::context;
-#include <vector>
 
 namespace {
 
 class PythonExecutor : public Executor {
   public:
-    PythonExecutor(context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
-        : Executor(ctx, std::move(ops)) {}
-
-    void eval(std::string uri, GIR::Node *self, Frame &frame) override {
-        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("PythonExec", "Evaluating operator of URI: {}", uri));
-        auto it = opsMap_.find(uri);
-        if (it == opsMap_.end()) {
-            throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
-        }
-        std::vector<GIR::data_idx_t> normIndices;
-        for (const auto &in : self->normInputs())
-            normIndices.push_back(in->index());
-        std::vector<GIR::data_idx_t> withIndices;
-        for (const auto &in : self->withInputs())
-            withIndices.push_back(in->index());
-
-        data_arr_t nargs = data_arr_t{
-            normIndices.data(),
-            static_cast<GIR::arr_size_t>(normIndices.size()),
-        };
-        data_arr_t wargs = data_arr_t{
-            withIndices.data(),
-            static_cast<GIR::arr_size_t>(withIndices.size()),
-        };
-
-        FrameArgsView withView(frame, wargs);
-        FrameArgsView normView(frame, nargs);
-        slot_t result = it->second(withView, normView, *context_);
-        frame.set(self->index(), result);
-    }
+    PythonExecutor(
+        camel::core::context::context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
+        : Executor(std::move(ctx), std::move(ops)) {}
 };
 
 } // namespace
 
-executor_ptr_t createPythonExecutor(context_ptr_t ctx) {
-    return std::make_shared<PythonExecutor>(ctx, getPythonOpsMap());
+executor_ptr_t createPythonExecutor(camel::core::context::context_ptr_t ctx) {
+    return std::make_shared<PythonExecutor>(std::move(ctx), getPythonOpsMap());
 }

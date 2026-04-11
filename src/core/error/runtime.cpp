@@ -13,14 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 07, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/error/runtime.h"
 
-#include "camel/compile/gir/graph.h"
-#include "camel/compile/gir/nodes.h"
 #include "camel/core/context/context.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/source/manager.h"
@@ -79,13 +77,6 @@ camel::source::origin_id_t resolveOriginFromSite(
 
     const auto &debugMap = sourceContext->debugMap();
 
-    if (site.node) {
-        auto origin = sourceContext->resolveGirNodeOrigin(site.node);
-        if (origin != camel::source::kInvalidOriginId) {
-            return origin;
-        }
-    }
-
     if (!site.stableId.empty()) {
         if (site.kind == ExecutionSiteKind::Node || site.kind == ExecutionSiteKind::TaskNode) {
             auto origin = debugMap.nodeOrigin(site.stableId);
@@ -113,13 +104,6 @@ camel::source::origin_id_t resolveOriginFromSite(
         }
     }
 
-    if (site.graph) {
-        auto graphOrigin = debugMap.graphOrigin(site.graph->stableId());
-        if (graphOrigin != camel::source::kInvalidOriginId) {
-            return graphOrigin;
-        }
-    }
-
     return sourceContext->currentRuntimeOrigin();
 }
 
@@ -129,9 +113,6 @@ std::string defaultModuleName(const ExecutionSite &site, const std::string &sour
     }
     if (site.runtimeGraph) {
         return site.runtimeGraph->name();
-    }
-    if (site.graph) {
-        return site.graph->name();
     }
     return "runtime";
 }
@@ -198,23 +179,6 @@ RuntimeErrorReporter::report(const RuntimeFault &fault, const ExecutionSite &sit
 }
 
 ExecutionSite makeGraphExecutionSite(
-    camel::source::source_context_ptr_t sourceContext, GIR::Graph *graph, size_t frameDepth,
-    std::string taskLabel) {
-    ExecutionSite site;
-    site.kind       = ExecutionSiteKind::Unknown;
-    site.graph      = graph;
-    site.frameDepth = frameDepth;
-    site.taskLabel  = std::move(taskLabel);
-    if (graph) {
-        site.stableId = graph->stableId();
-        if (sourceContext) {
-            site.cachedOrigin = sourceContext->debugMap().graphOrigin(site.stableId);
-        }
-    }
-    return site;
-}
-
-ExecutionSite makeGraphExecutionSite(
     camel::source::source_context_ptr_t sourceContext, camel::runtime::GCGraph *graph,
     size_t frameDepth, std::string taskLabel) {
     ExecutionSite site;
@@ -229,71 +193,18 @@ ExecutionSite makeGraphExecutionSite(
     return site;
 }
 
-ExecutionSite makeNodeExecutionSite(
-    camel::source::source_context_ptr_t sourceContext, GIR::Graph *graph, GIR::Node *node,
-    size_t frameDepth, std::string taskLabel, ExecutionSiteKind kind) {
-    ExecutionSite site =
-        makeGraphExecutionSite(sourceContext, graph, frameDepth, std::move(taskLabel));
-    site.kind = kind;
-    site.node = node;
-    if (node) {
-        site.stableId = node->debugEntityId();
-        if (sourceContext) {
-            site.cachedOrigin = sourceContext->resolveGirNodeOrigin(node);
-        }
-    }
-    return site;
-}
-
 ExecutionSite makePcExecutionSite(
-    camel::source::source_context_ptr_t sourceContext, GIR::Graph *graph, size_t pc,
-    size_t frameDepth, std::string taskLabel, ExecutionSiteKind kind) {
-    ExecutionSite site =
-        makeGraphExecutionSite(sourceContext, graph, frameDepth, std::move(taskLabel));
+    camel::source::source_context_ptr_t sourceContext, const camel::core::context::Frame *frame,
+    size_t pc, size_t frameDepth, std::string taskLabel, ExecutionSiteKind kind) {
+    ExecutionSite site = makeGraphExecutionSite(
+        sourceContext,
+        frame ? const_cast<camel::runtime::GCGraph *>(frame->runtimeGraph()) : nullptr,
+        frameDepth,
+        std::move(taskLabel));
     site.kind = kind;
     site.pc   = pc;
     if (sourceContext) {
         site.cachedOrigin = sourceContext->debugMap().pcOrigin(pc);
-    }
-    return site;
-}
-
-ExecutionSite makePcExecutionSite(
-    camel::source::source_context_ptr_t sourceContext, const camel::core::context::Frame *frame,
-    size_t pc, size_t frameDepth, std::string taskLabel, ExecutionSiteKind kind) {
-    ExecutionSite site = frame && frame->runtimeGraph()
-                             ? makeGraphExecutionSite(
-                                   sourceContext,
-                                   const_cast<camel::runtime::GCGraph *>(frame->runtimeGraph()),
-                                   frameDepth,
-                                   std::move(taskLabel))
-                             : makeGraphExecutionSite(
-                                   sourceContext,
-                                   frame ? const_cast<GIR::Graph *>(frame->sourceGraph()) : nullptr,
-                                   frameDepth,
-                                   std::move(taskLabel));
-    site.kind          = kind;
-    site.pc            = pc;
-    if (sourceContext) {
-        site.cachedOrigin = sourceContext->debugMap().pcOrigin(pc);
-    }
-    return site;
-}
-
-ExecutionSite makeNodeExecutionSite(
-    camel::source::source_context_ptr_t sourceContext, camel::runtime::GCGraph *runtimeGraph,
-    GIR::Graph *graph, GIR::Node *node, size_t frameDepth, std::string taskLabel,
-    ExecutionSiteKind kind) {
-    ExecutionSite site =
-        makeGraphExecutionSite(sourceContext, runtimeGraph, frameDepth, std::move(taskLabel));
-    site.kind  = kind;
-    site.graph = graph;
-    site.node  = node;
-    if (node) {
-        site.stableId = node->debugEntityId();
-        if (sourceContext) {
-            site.cachedOrigin = sourceContext->resolveGirNodeOrigin(node);
-        }
     }
     return site;
 }

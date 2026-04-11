@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,7 +33,7 @@
 
 #pragma once
 
-#include "camel/compile/gir.h"
+#include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/tuple.h"
 
@@ -50,6 +50,15 @@
 namespace camel::runtime {
 
 class GraphDraft;
+
+} // namespace camel::runtime
+
+namespace camel::compile::gir {
+class Graph;
+using graph_ptr_t = std::shared_ptr<Graph>;
+} // namespace camel::compile::gir
+
+namespace camel::runtime {
 
 using gc_node_ref_t = uint16_t;
 using gc_slot_idx_t = int16_t;
@@ -276,9 +285,6 @@ class GCGraph : public camel::core::rtdata::Object {
 
     // These accessors expose cold compile/debug metadata only. Runtime passes
     // should derive execution semantics from the native payload instead.
-    // Cold compile/debug metadata only. Runtime execution and runtime rewrites
-    // must not recover semantics from the compile graph through this bridge.
-    const GIR::graph_ptr_t &sourceGraph() const;
     const std::string &stableId() const;
     const std::string &mangledName() const;
     const std::string &name() const;
@@ -382,7 +388,7 @@ class GCGraph : public camel::core::rtdata::Object {
     void addSubGraph(GCGraph *graph);
     void addStaticGraphRef(GCGraph *graph);
     void clearGraphRefs();
-    void setStaticSlots(camel::compile::gir::static_slot_vec_t slots);
+    void setStaticSlots(std::vector<slot_t> slots);
     void setStaticDataType(camel::core::type::TupleType *type);
 
     template <typename Visitor> void traceGraphs(Visitor &&visitor) const {
@@ -428,11 +434,8 @@ class GCGraphManager {
     GCGraphManager() = default;
     ~GCGraphManager();
 
-    GCGraph *materializeRoot(const GIR::graph_ptr_t &rootGraph);
     void adoptRoot(GCGraph *rootGraph);
     void replaceRoot(GCGraph *rootGraph);
-    // Compile-to-runtime bridge lookup only.
-    GCGraph *find(const GIR::Graph *sourceGraph) const;
     GCGraph *root() const { return root_; }
     std::vector<camel::core::rtdata::Object *> &gcRoots() { return gcRoots_; }
     const std::vector<camel::core::rtdata::Object *> &gcRoots() const { return gcRoots_; }
@@ -442,29 +445,13 @@ class GCGraphManager {
     void clear();
 
   private:
-    GCGraph *materializeGraph(
-        const GIR::graph_ptr_t &sourceGraph,
-        std::unordered_map<const GIR::Graph *, GCGraph *> &cache);
-    slot_t canonicalizeStaticSlot(
-        slot_t slot, camel::core::type::Type *type,
-        std::unordered_map<const GIR::Graph *, GCGraph *> &cache,
-        std::unordered_map<const camel::core::rtdata::Object *, camel::core::rtdata::Object *>
-            &objectCache,
-        const GIR::Graph *sourceOwner = nullptr);
-    void collectStaticGraphRefs(
-        GCGraph *owner, slot_t slot, camel::core::type::Type *type,
-        std::unordered_map<const GIR::Graph *, GCGraph *> &cache,
-        std::unordered_set<const camel::core::rtdata::Object *> &visited);
-
     std::vector<GCGraph *> graphs_;
     std::vector<GCGraphMetadataRecord *> metadataRecords_;
-    // Cold bridge index from compile graphs to their materialized runtime
-    // carriers. Do not use this map on runtime execution paths.
-    std::unordered_map<const GIR::Graph *, GCGraph *> bySource_;
     std::vector<camel::core::rtdata::Object *> gcRoots_;
     GCGraph *root_ = nullptr;
 };
 
+GCGraph *materializeRuntimeGraph(const camel::compile::gir::graph_ptr_t &rootGraph);
 GCGraph *encodeGraphDraft(const GraphDraft &draft);
 
 } // namespace camel::runtime

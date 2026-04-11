@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 08, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,6 +59,15 @@ static camel::runtime::GCGraph *applyMirDump(
     std::span<const Bytecode> bcSpan(linked.codes.data(), linked.codes.size());
     std::unordered_map<uint64_t, std::string> mirSymbolNames;
 
+    std::unordered_map<camel::runtime::GCGraph *, size_t> graphLengths;
+    graphLengths.reserve(linked.graphs.size());
+    for (const auto &[offset, length, runtimeGraph] : linked.graphs) {
+        (void)offset;
+        if (runtimeGraph) {
+            graphLengths.emplace(runtimeGraph, length);
+        }
+    }
+
     for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
         ASSERT(runtimeGraph != nullptr, "JIT MIR dump requires a runtime graph.");
         ASSERT(
@@ -81,13 +90,15 @@ static camel::runtime::GCGraph *applyMirDump(
         };
         static uint64_t dummyPoolTop = 0;
         CompilationUnit unit{
-            .runtimeGraph             = runtimeGraph,
-            .bytecodes                = bcSpan,
-            .entryPc                  = entryPc,
-            .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
-            .trampolineTail           = reinterpret_cast<void *>(&trampolineTail),
-            .trampolineOper           = reinterpret_cast<void *>(&trampolineOper),
-            .trampolineCast           = reinterpret_cast<void *>(&trampolineCast),
+            .runtimeGraph   = runtimeGraph,
+            .bytecodes      = bcSpan,
+            .entryPc        = entryPc,
+            .graphLength    = graphLengths.contains(runtimeGraph) ? graphLengths.at(runtimeGraph)
+                                                                  : static_cast<size_t>(0),
+            .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
+            .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
+            .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
+            .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
             .trampolineBytecode       = reinterpret_cast<void *>(&trampolineBytecode),
             .poolTopAddr              = &dummyPoolTop,
             .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),

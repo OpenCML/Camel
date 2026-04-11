@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,8 +21,6 @@
 
 #include "camel/runtime/reachable.h"
 #include "compile.h"
-
-using namespace GIR;
 
 camel::runtime::GCGraph *BytecodeDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     std::vector<camel::runtime::GCGraph *> allGraphs =

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -532,44 +532,44 @@ GIR::graph_ptr_t Context::mainGraph() const {
 }
 
 camel::runtime::GCGraph *Context::runtimeRootGraph() {
-    return runtimeGraphManager().find(rootGraph().get()) ? runtimeGraphManager().root()
-                                                         : materializeRuntimeRoot(rootGraph());
+    return currentRuntimeRoot() ? currentRuntimeRoot() : materializeRuntimeRoot(rootGraph());
 }
 
 camel::runtime::GCGraph *Context::materializeRuntimeRoot(const GIR::graph_ptr_t &rootGraph) {
-    camel::runtime::GCGraph *runtimeRoot = runtimeGraphManager().materializeRoot(rootGraph);
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->clear();
+    camel::runtime::GCGraph *runtimeRoot = camel::runtime::materializeRuntimeGraph(rootGraph);
+    runtimeGraphMgr_->adoptRoot(runtimeRoot);
     registerRuntimeGraphDebugInfo(runtimeRoot);
     return runtimeRoot;
 }
 
 camel::runtime::GCGraph *Context::installRuntimeRoot(camel::runtime::GCGraph *runtimeRoot) {
-    runtimeGraphManager().replaceRoot(runtimeRoot);
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->replaceRoot(runtimeRoot);
     registerRuntimeGraphDebugInfo(runtimeRoot);
     return runtimeRoot;
 }
 
 camel::runtime::GCGraph *Context::adoptRuntimeRoot(camel::runtime::GCGraph *runtimeRoot) {
-    runtimeGraphManager().adoptRoot(runtimeRoot);
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->adoptRoot(runtimeRoot);
     registerRuntimeGraphDebugInfo(runtimeRoot);
     return runtimeRoot;
 }
 
-camel::runtime::GCGraphManager &Context::runtimeGraphManager() {
+camel::runtime::GCGraph *Context::currentRuntimeRoot() const {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
-    return *runtimeGraphMgr_;
+    return runtimeGraphMgr_->root();
 }
 
-const camel::runtime::GCGraphManager &Context::runtimeGraphManager() const {
+void Context::clearRuntimeGraphs() {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
-    return *runtimeGraphMgr_;
+    runtimeGraphMgr_->clear();
 }
 
 void Context::registerExecutorFactory(std::string name, executor_factory_t fact) {
     exeMgr_->registerExecutorFactory(name, fact);
-}
-
-void Context::eval(std::string uri, GIR::Node *self, Frame &frame) {
-    return exeMgr_->eval(uri, self, frame);
 }
 
 void Context::registerRuntimeGraphDebugInfo(camel::runtime::GCGraph *runtimeRoot) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,9 @@
  */
 
 #include "camel/runtime/draft.h"
+
+#include "camel/core/context/frame.h"
+#include "camel/core/type/composite/tuple.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -395,6 +398,76 @@ std::span<const gc_node_ref_t> GraphDraft::ctrlUsersOf(gc_node_ref_t id) const {
     return draftNode ? DraftNodeView::ctrlUsers(draftNode) : std::span<const gc_node_ref_t>{};
 }
 
+bool GraphDraft::isControlAnchor(gc_node_ref_t id) const {
+    const DraftNodeHeader *draftHeader = header(id);
+    if (!draftHeader) {
+        return false;
+    }
+    switch (draftHeader->kind) {
+    case GCNodeKind::Data:
+    case GCNodeKind::Port:
+        return false;
+    default:
+        return true;
+    }
+}
+
+bool GraphDraft::isBranchArmAnchor(gc_node_ref_t id) const {
+    for (gc_node_ref_t draftId = 0; draftId < nodeSlotCount(); ++draftId) {
+        const DraftNodeHeader *draftHeader = header(draftId);
+        if (!draftHeader || draftHeader->kind != GCNodeKind::Brch) {
+            continue;
+        }
+        for (const GCBranchArm &arm : branchArmsOf(draftId)) {
+            if (arm.head == id || arm.tail == id) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+gc_node_ref_t GraphDraft::resolveForwardedValueRef(gc_node_ref_t id) const {
+    gc_node_ref_t current = id;
+    while (current != kInvalidNodeRef) {
+        const DraftNodeHeader *draftHeader = header(current);
+        if (!draftHeader) {
+            return kInvalidNodeRef;
+        }
+        if (draftHeader->kind != GCNodeKind::Gate) {
+            return current;
+        }
+        if (!ctrlInputsOf(current).empty()) {
+            // A gate with control predecessors is an observable completion
+            // anchor, not a transparent value-only forwarding node.
+            return current;
+        }
+        const auto normInputs = normInputsOf(current);
+        if (!normInputs.empty()) {
+            current = normInputs.back();
+            continue;
+        }
+        const auto withInputs = withInputsOf(current);
+        if (!withInputs.empty()) {
+            current = withInputs.back();
+            continue;
+        }
+        return kInvalidNodeRef;
+    }
+    return kInvalidNodeRef;
+}
+
+gc_node_ref_t GraphDraft::resolveForwardedCtrlRef(gc_node_ref_t id) const {
+    gc_node_ref_t current = id;
+    while (current != kInvalidNodeRef) {
+        if (alive(current)) {
+            return current;
+        }
+        return kInvalidNodeRef;
+    }
+    return kInvalidNodeRef;
+}
+
 gc_node_ref_t GraphDraft::translateNodeRef(
     gc_node_ref_t sourceRef, const std::vector<gc_node_ref_t> &sourceToDraft) {
     if (sourceRef == kInvalidNodeRef) {
@@ -498,7 +571,6 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime graph draft decode requires a non-null graph.");
     auto draft              = std::make_unique<GraphDraft>();
     draft->source_          = graph;
-    draft->sourceGraph_     = graph->sourceGraph();
     draft->stableId_        = graph->stableId();
     draft->mangledName_     = graph->mangledName();
     draft->name_            = graph->name();
@@ -810,24 +882,118 @@ void GraphDraft::replaceUsesInList(
     }
 }
 
+void GraphDraft::replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    auto replaceOne = [&](gc_node_ref_t &ref) {
+        if (ref == oldId) {
+            ref = newId;
+        }
+    };
+
+    replaceOne(output_);
+    replaceOne(returnNode_);
+
+    for (gc_node_ref_t id = 0; id < nodeSlotCount(); ++id) {
+        DraftNode *draftNode = node(id);
+        if (!draftNode) {
+            continue;
+        }
+    }
+}
+
+void GraphDraft::replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    auto replaceOne = [&](gc_node_ref_t &ref) {
+        if (ref == oldId) {
+            ref = newId;
+        }
+    };
+
+    replaceOne(entry_);
+    replaceOne(exit_);
+
+    for (gc_node_ref_t id = 0; id < nodeSlotCount(); ++id) {
+        DraftNode *draftNode = node(id);
+        if (!draftNode) {
+            continue;
+        }
+        if (draftNode->header.kind == GCNodeKind::Brch) {
+            auto *payload = DraftNodeView::payloadAs<DraftBrchPayload>(draftNode);
+            replaceOne(payload->join);
+            replaceOne(payload->defaultArm);
+            continue;
+        }
+        if (draftNode->header.kind == GCNodeKind::Join &&
+            draftNode->header.payloadBytes >= sizeof(GCJoinBody)) {
+            auto *payload = DraftNodeView::payloadAs<GCJoinBody>(draftNode);
+            replaceOne(payload->brch);
+        }
+    }
+}
+
 void GraphDraft::replaceAllNormUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
     std::vector<gc_node_ref_t> users(normUsersOf(oldId).begin(), normUsersOf(oldId).end());
     replaceUsesInList(oldId, users, oldId, newId, true, false, false);
+    replaceValueStructuralRefs(oldId, newId);
 }
 
 void GraphDraft::replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
     std::vector<gc_node_ref_t> users(withUsersOf(oldId).begin(), withUsersOf(oldId).end());
     replaceUsesInList(oldId, users, oldId, newId, false, true, false);
+    replaceValueStructuralRefs(oldId, newId);
 }
 
 void GraphDraft::replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
     std::vector<gc_node_ref_t> users(ctrlUsersOf(oldId).begin(), ctrlUsersOf(oldId).end());
     replaceUsesInList(oldId, users, oldId, newId, false, false, true);
+    replaceCtrlStructuralRefs(oldId, newId);
 }
 
 void GraphDraft::replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
     replaceAllNormUses(oldId, newId);
     replaceAllWithUses(oldId, newId);
+}
+
+void GraphDraft::retargetBranchArmAnchors(
+    gc_node_ref_t oldId, gc_node_ref_t newHeadId, gc_node_ref_t newTailId) {
+    for (gc_node_ref_t id = 0; id < nodeSlotCount(); ++id) {
+        DraftNode *draftNode = node(id);
+        if (!draftNode || draftNode->header.kind != GCNodeKind::Brch) {
+            continue;
+        }
+        auto *payload = DraftNodeView::payloadAs<DraftBrchPayload>(draftNode);
+        auto *arms    = reinterpret_cast<GCBranchArm *>(
+            DraftNodeView::payload(draftNode).data() + sizeof(DraftBrchPayload));
+        for (size_t i = 0; i < payload->armCount; ++i) {
+            if (arms[i].head == oldId) {
+                arms[i].head = newHeadId;
+            }
+            if (arms[i].tail == oldId) {
+                arms[i].tail = newTailId;
+            }
+        }
+    }
+}
+
+gc_slot_idx_t GraphDraft::allocateRuntimeSlot(camel::core::type::Type *type) {
+    ASSERT(type != nullptr, "Draft runtime slot allocation requires a non-null type.");
+
+    std::vector<camel::core::type::Type *> slotTypes;
+    if (runtimeDataType_ != nullptr) {
+        const auto currentTypes = runtimeDataType_->types();
+        slotTypes.assign(currentTypes.begin(), currentTypes.end());
+    }
+    if (slotTypes.empty()) {
+        slotTypes.push_back(camel::core::type::Type::Void());
+    }
+
+    ASSERT(
+        slotTypes.size() < static_cast<size_t>(std::numeric_limits<gc_slot_idx_t>::max()),
+        "Draft runtime slot count exceeds 16-bit data-index capacity.");
+    const gc_slot_idx_t slotIndex = static_cast<gc_slot_idx_t>(slotTypes.size());
+    slotTypes.push_back(type);
+    runtimeDataType_ = camel::core::type::TupleType::create(std::move(slotTypes));
+    frameSize_ = sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeDataType_->size();
+    hasFrameLayout_ = true;
+    return slotIndex;
 }
 
 size_t GraphDraft::appendStaticSlot(slot_t value, camel::core::type::Type *type) {

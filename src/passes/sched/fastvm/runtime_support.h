@@ -11,20 +11,27 @@
  *
  * See the the MIT license for more details.
  *
- * Author: Zhenjie Wei
- * Created: Sep. 09, 2025
+ * Author: OpenAI Codex
+ * Created: Apr. 11, 2026
  * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
+/*
+ * Shared FastVM interpreter helpers.
+ *
+ * This file holds bytecode-local execution semantics that are duplicated by
+ * multiple interpreter backends. These helpers are intentionally scoped to the
+ * FastVM bytecode layer rather than the runtime GCGraph layer.
+ */
+
 #pragma once
 
-#include "camel/execute/executor.h"
+#include "bytecode.h"
+#include "camel/core/context/frame.h"
 
-class BasicBuiltinExecutor : public Executor {
-  public:
-    BasicBuiltinExecutor(camel::core::context::context_ptr_t ctx);
-    virtual ~BasicBuiltinExecutor() = default;
+namespace camel::passes::sched::fastvm {
 
-    static executor_ptr_t create(camel::core::context::context_ptr_t ctx);
-};
+size_t selectBranchArm(const Bytecode &bc, camel::core::context::Frame *frame);
+
+} // namespace camel::passes::sched::fastvm

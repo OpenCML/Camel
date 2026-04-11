@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 29, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,7 @@
  */
 
 #include "camel/compile/gir.h"
+#include "camel/compile/gir/static_function.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
@@ -688,13 +689,13 @@ graph_ptr_t GraphBuilder::cloneGraph(
             if (staticType->codeAt(i) != TypeCode::Function) {
                 continue;
             }
-            auto *oldFunc = fromSlot<::Function *>(newGraph->staticDataArr_[i]);
+            auto *oldFunc = fromSlot<StaticFunction *>(newGraph->staticDataArr_[i]);
             if (!oldFunc) {
                 continue;
             }
-            auto *clonedFunc = static_cast<::Function *>(
+            auto *clonedFunc = static_cast<StaticFunction *>(
                 oldFunc->clone(newGraph->arena()->allocator(), staticType->typeAt(i), false));
-            newGraph->staticDataArr_[i] = toSlot<::Function *>(clonedFunc);
+            newGraph->staticDataArr_[i] = toSlot<StaticFunction *>(clonedFunc);
         }
     }
 
@@ -745,9 +746,12 @@ graph_ptr_t GraphBuilder::cloneGraph(
         }
     }
 
-    // Output/exit 锚点可能不在 nodes()/ports/closure 的枚举里（与 inline 里 collectUseCarrierNodes
-    // 额外纳入 exitNode 的约定一致）。若遗漏，nodeMap 在 requireMappedNode 会缺失键；Release 下
-    // ASSERT 被编译掉，对 end() 解引用表现为平台相关的崩溃（Linux Clang 上易复现）。
+    // Output/exit anchors may sit outside the nodes()/ports()/closure()
+    // enumerations. That matches inline's collectUseCarrierNodes contract,
+    // which explicitly adds exitNode as an extra carrier.
+    // If cloneGraph forgets that anchor, nodeMap misses the key in
+    // requireMappedNode; in release builds the stripped ASSERT then degrades
+    // into a platform-dependent end()-dereference crash.
     if (Node *exitAnchor = src->exitNode();
         exitAnchor && nodeMap.find(exitAnchor) == nodeMap.end()) {
         Node *clonedExit = exitAnchor->clone(*newGraph);

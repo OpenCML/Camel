@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builder.h"
 
-#include "camel/core/rtdata/func.h"
+#include "camel/compile/gir/static_function.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/str.h"
@@ -39,7 +39,7 @@ namespace camel::compile::gir {
 namespace {
 constexpr std::size_t kSourceContextExtraIndex = 3;
 
-camel::core::mm::IAllocator &runtimeFunctionAllocator(Graph &ownerGraph) {
+camel::core::mm::IAllocator &staticFunctionAllocator(Graph &ownerGraph) {
     return ownerGraph.arena()->allocator();
 }
 
@@ -52,12 +52,14 @@ TupleType *currentClosureTupleType(const graph_ptr_t &graph) {
     return TupleType::create(std::move(closureTypes));
 }
 
-::Function *createRuntimeFunction(Graph &ownerGraph, const graph_ptr_t &targetGraph) {
-    ASSERT(targetGraph != nullptr, "Target graph is null when materializing runtime Function.");
-    return ::Function::create(
+StaticFunction *createStaticFunction(Graph &ownerGraph, const graph_ptr_t &targetGraph) {
+    ASSERT(
+        targetGraph != nullptr,
+        "Target graph is null when materializing compile-time function.");
+    return StaticFunction::create(
         targetGraph.get(),
         currentClosureTupleType(targetGraph),
-        runtimeFunctionAllocator(ownerGraph));
+        staticFunctionAllocator(ownerGraph));
 }
 } // namespace
 
@@ -771,7 +773,7 @@ Node *Builder::createFuncDataNode(
 
     bool graphUsedBefore = usedGraphs_.find(graph.get()) != usedGraphs_.end();
     bool resolved        = graph->closure().empty();
-    auto *runtimeFunc    = createRuntimeFunction(*currGraph_, graph);
+    auto *staticFunc     = createStaticFunction(*currGraph_, graph);
 
     Node *resultNode   = nullptr;
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
@@ -816,7 +818,7 @@ Node *Builder::createFuncDataNode(
             resultNode = DataNode::createStaticSlot(
                 *currGraph_,
                 graph->funcType(),
-                camel::core::rtdata::toSlot<::Function *>(runtimeFunc));
+                camel::core::rtdata::toSlot<StaticFunction *>(staticFunc));
             markMacroNode(resultNode);
         } else {
             auto funcNode = FuncNode::create(*currGraph_, graph);
@@ -839,7 +841,7 @@ Node *Builder::createFuncDataNode(
     auto dataNode = DataNode::createStaticSlot(
         *currGraph_,
         graph->funcType(),
-        camel::core::rtdata::toSlot<::Function *>(runtimeFunc));
+        camel::core::rtdata::toSlot<StaticFunction *>(staticFunc));
     markMacroNode(dataNode);
     node_vec_t refNodes;
     for (Node *closureNode : graph->closure()) {

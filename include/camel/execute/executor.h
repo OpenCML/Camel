@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,7 +42,6 @@ class Executor : public std::enable_shared_from_this<Executor> {
         : context_(ctx), opsMap_(ops) {};
     virtual ~Executor() = default;
 
-    virtual void eval(std::string uri, GIR::Node *self, camel::core::context::Frame &frame) = 0;
     std::optional<operator_t> find(const std::string &uri);
     std::string getNameOfAnOperator(const operator_t &op);
 };
@@ -61,7 +60,6 @@ class ExecutorManager {
     ~ExecutorManager() = default;
     void registerExecutorFactory(std::string name, executor_factory_t fact);
 
-    void eval(std::string uri, GIR::Node *self, camel::core::context::Frame &frame) const;
     std::optional<operator_t> find(const std::string &uri) const;
     std::string getNameOfAnOperator(const operator_t &op) const;
 };

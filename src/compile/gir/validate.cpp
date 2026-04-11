@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 29, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/compile/gir/validate.h"
 #include "camel/compile/gir/builder.h"
+#include "camel/compile/gir/static_function.h"
 #include "camel/core/rtdata/array.h"
-#include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 
@@ -191,8 +191,8 @@ void validateStaticValueGraphRefs(
 
     switch (type->code()) {
     case TypeCode::Function: {
-        auto *funcObj                     = fromSlot<::Function *>(slot);
-        [[maybe_unused]] Graph *funcGraph = funcObj ? funcObj->sourceGraph() : nullptr;
+        auto *funcObj                     = fromSlot<StaticFunction *>(slot);
+        [[maybe_unused]] Graph *funcGraph = funcObj ? funcObj->graph() : nullptr;
         ASSERT(funcGraph != nullptr, "DATA(Function) contains a null graph pointer.");
         ASSERT(
             reachable.contains(funcGraph),

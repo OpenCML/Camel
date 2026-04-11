@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -88,8 +88,15 @@ bool isRuntimeBranchArmHead(const GCGraph *owner, gc_node_ref_t nodeRef) {
     return false;
 }
 
-std::unordered_set<const GCGraph *>
-collectRecursiveRuntimeGraphs(const std::vector<GCGraph *> &closure) {
+struct RuntimeCallGraphSccInfo {
+    std::unordered_map<const GCGraph *, size_t> componentOf;
+    std::vector<std::vector<const GCGraph *>> components;
+    std::unordered_set<const GCGraph *> recursiveGraphs;
+    std::unordered_set<const GCGraph *> componentEntryGraphs;
+};
+
+RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(const std::vector<GCGraph *> &closure) {
+    RuntimeCallGraphSccInfo info;
     std::unordered_map<const GCGraph *, size_t> indexOf;
     indexOf.reserve(closure.size());
     for (size_t i = 0; i < closure.size(); ++i) {
@@ -134,7 +141,6 @@ collectRecursiveRuntimeGraphs(const std::vector<GCGraph *> &closure) {
         dfs1(i);
     }
 
-    std::unordered_set<const GCGraph *> recursive;
     std::fill(visited.begin(), visited.end(), false);
     std::function<void(size_t, std::vector<size_t> &)> dfs2 = [&](size_t u,
                                                                   std::vector<size_t> &component) {
@@ -154,19 +160,66 @@ collectRecursiveRuntimeGraphs(const std::vector<GCGraph *> &closure) {
         if (component.empty()) {
             continue;
         }
-        if (component.size() > 1) {
-            for (size_t idx : component) {
-                recursive.insert(closure[idx]);
-            }
-            continue;
+        const size_t componentId = info.components.size();
+        info.components.emplace_back();
+        auto &graphsInComponent = info.components.back();
+        graphsInComponent.reserve(component.size());
+        for (size_t idx : component) {
+            info.componentOf.emplace(closure[idx], componentId);
+            graphsInComponent.push_back(closure[idx]);
         }
 
-        const size_t u = component.front();
-        if (std::find(edges[u].begin(), edges[u].end(), u) != edges[u].end()) {
-            recursive.insert(closure[u]);
+        bool isRecursive = component.size() > 1;
+        if (!isRecursive) {
+            const size_t u = component.front();
+            isRecursive    = std::find(edges[u].begin(), edges[u].end(), u) != edges[u].end();
+        }
+        if (isRecursive) {
+            for (size_t idx : component) {
+                info.recursiveGraphs.insert(closure[idx]);
+            }
+        }
+
+        // SCC entry graphs are nodes that receive edges from outside the SCC.
+        // When inlining recursive components, callers may inline helper graphs
+        // inside the SCC, but must not inline the SCC entry back into the
+        // component or the graph size will grow without bound.
+        for (size_t idx : component) {
+            for (size_t pred : reverseEdges[idx]) {
+                if (std::find(component.begin(), component.end(), pred) == component.end()) {
+                    info.componentEntryGraphs.insert(closure[idx]);
+                    break;
+                }
+            }
         }
     }
-    return recursive;
+    return info;
+}
+
+bool shouldSkipRecursiveInline(
+    const GCGraph *caller, const GCGraph *callee, const RuntimeCallGraphSccInfo &sccInfo,
+    const InlineRewriteConfig &config) {
+    if (!caller || !callee) {
+        return true;
+    }
+    if (!sccInfo.recursiveGraphs.contains(callee)) {
+        return false;
+    }
+
+    const auto callerIt = sccInfo.componentOf.find(caller);
+    const auto calleeIt = sccInfo.componentOf.find(callee);
+    if (callerIt == sccInfo.componentOf.end() || calleeIt == sccInfo.componentOf.end()) {
+        return true;
+    }
+
+    if (callerIt->second != calleeIt->second) {
+        return true;
+    }
+
+    if (config.blockCallsToSccEntryCallees && sccInfo.componentEntryGraphs.contains(callee)) {
+        return true;
+    }
+    return false;
 }
 
 bool applyRuntimeInline(
@@ -178,7 +231,7 @@ bool applyRuntimeInline(
     while (true) {
         bool iterationChanged                = false;
         const std::vector<GCGraph *> closure = session.collectReachableRuntimeGraphs();
-        const auto recursiveGraphs           = collectRecursiveRuntimeGraphs(closure);
+        const auto sccInfo                   = analyzeRuntimeCallGraphScc(closure);
         size_t appliedCount                  = 0;
 
         for (GCGraph *runtimeGraph : closure) {
@@ -202,11 +255,7 @@ bool applyRuntimeInline(
                 if (!body->calleeGraph || body->calleeGraph == runtimeGraph) {
                     continue;
                 }
-                if (runtimeGraph->name().starts_with("__") ||
-                    body->calleeGraph->name().starts_with("__")) {
-                    continue;
-                }
-                if (recursiveGraphs.contains(body->calleeGraph)) {
+                if (shouldSkipRecursiveInline(runtimeGraph, body->calleeGraph, sccInfo, config)) {
                     continue;
                 }
 

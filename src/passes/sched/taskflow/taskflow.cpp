@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,6 +39,8 @@ using namespace camel::core::type;
 
 namespace {
 
+using runtime_data_idx_t = camel::compile::gir::data_idx_t;
+
 using camel::execute::RuntimeBranchArmRegion;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCAccsBody;
@@ -53,7 +55,7 @@ struct TaskflowHigherOrderCallSite {
     Tuple *closure        = nullptr;
 };
 
-inline GIR::data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
+inline runtime_data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
     const auto *node = graph ? graph->node(nodeRef) : nullptr;
     ASSERT(node != nullptr, "Taskflow runtime node lookup resolved to null.");
     return node->dataIndex;
@@ -69,78 +71,13 @@ slot_t readForwardedRuntimeValue(GCGraph *graph, gc_node_ref_t nodeRef, Frame *f
     ASSERT(graph != nullptr, "Taskflow forwarded-value read requires a graph.");
     ASSERT(frame != nullptr, "Taskflow forwarded-value read requires a frame.");
 
-    gc_node_ref_t current = nodeRef;
-    while (current != kInvalidNodeRef) {
-        const auto *node = requireNode(graph, current);
-        if (node->kind != GCNodeKind::Gate) {
-            ASSERT(node->dataIndex != 0, "Taskflow forwarded-value chain resolved to slot 0.");
-            return frame->get<slot_t>(node->dataIndex);
-        }
-        const auto normInputs = graph->normInputsOf(current);
-        if (!normInputs.empty()) {
-            current = normInputs.back();
-            continue;
-        }
-        const auto withInputs = graph->withInputsOf(current);
-        if (!withInputs.empty()) {
-            current = withInputs.back();
-            continue;
-        }
+    const gc_node_ref_t current = camel::execute::resolveRuntimeForwardedValueRef(graph, nodeRef);
+    if (current == kInvalidNodeRef) {
         return NullSlot;
     }
-    return NullSlot;
-}
-
-gc_node_ref_t resolveTailAnchorRef(const GCGraph *graph) {
-    if (!graph) {
-        return kInvalidNodeRef;
-    }
-    gc_node_ref_t current = graph->returnNodeRef();
-    if (current == kInvalidNodeRef) {
-        current = graph->exitNodeRef();
-    }
-    while (current != kInvalidNodeRef) {
-        const auto *node = graph->node(current);
-        ASSERT(node != nullptr, "Taskflow tail-anchor resolution resolved to null.");
-        if (node->kind != GCNodeKind::Gate) {
-            break;
-        }
-        const auto normInputs = graph->normInputsOf(current);
-        if (!normInputs.empty()) {
-            current = normInputs.back();
-            continue;
-        }
-        const auto ctrlInputs = graph->ctrlInputsOf(current);
-        if (!ctrlInputs.empty()) {
-            current = ctrlInputs.back();
-            continue;
-        }
-        return kInvalidNodeRef;
-    }
-    return current;
-}
-
-bool outputsContain(const GCGraph *graph, gc_node_ref_t nodeRef, gc_node_ref_t targetRef) {
-    if (!graph || targetRef == kInvalidNodeRef) {
-        return false;
-    }
-    auto contains = [targetRef](std::span<const gc_node_ref_t> refs) {
-        return std::find(refs.begin(), refs.end(), targetRef) != refs.end();
-    };
-    return contains(graph->normOutputsOf(nodeRef)) || contains(graph->withOutputsOf(nodeRef)) ||
-           contains(graph->ctrlOutputsOf(nodeRef));
-}
-
-bool hasOnlyTrivialTailSuffixAfter(
-    const GCGraph *graph, std::span<const gc_node_ref_t> nodes, size_t anchorIndex) {
-    for (size_t j = anchorIndex + 1; j < nodes.size(); ++j) {
-        const auto *node = graph->node(nodes[j]);
-        ASSERT(node != nullptr, "Taskflow tail-suffix lookup resolved to null.");
-        if (node->kind != GCNodeKind::Gate) {
-            return false;
-        }
-    }
-    return true;
+    const auto *node = requireNode(graph, current);
+    ASSERT(node->dataIndex != 0, "Taskflow forwarded-value chain resolved to slot 0.");
+    return frame->get<slot_t>(node->dataIndex);
 }
 
 TaskflowHigherOrderCallSite makeHigherOrderCallSite(Function *func) {
@@ -150,38 +87,6 @@ TaskflowHigherOrderCallSite makeHigherOrderCallSite(Function *func) {
         .runtimeGraph = runtimeGraph,
         .closure      = func ? func->tuple() : nullptr,
     };
-}
-
-size_t selectBranchArm(GCGraph *graph, gc_node_ref_t brchRef, Frame *frame) {
-    const auto normInputs = graph->normInputsOf(brchRef);
-    const auto withInputs = graph->withInputsOf(brchRef);
-    ASSERT(normInputs.size() == 1, "Taskflow BRCH must have exactly one norm input.");
-
-    if (withInputs.empty()) {
-        return frame->get<bool>(dataIndexOf(graph, normInputs.front())) ? 0 : 1;
-    }
-
-    const auto condIndex    = dataIndexOf(graph, normInputs.front());
-    const TypeCode condType = frame->codeAt(condIndex);
-    if (camel::core::type::isGCTraced(condType)) {
-        Type *condTypePtr = frame->typeAt<Type>(condIndex);
-        Object *condData  = frame->get<Object *>(condIndex);
-        for (size_t i = 0; i < withInputs.size(); ++i) {
-            Object *caseData = frame->get<Object *>(dataIndexOf(graph, withInputs[i]));
-            if (condData->equals(caseData, condTypePtr, false)) {
-                return i;
-            }
-        }
-        return withInputs.size();
-    }
-
-    const slot_t condData = frame->get<slot_t>(condIndex);
-    for (size_t i = 0; i < withInputs.size(); ++i) {
-        if (condData == frame->get<slot_t>(dataIndexOf(graph, withInputs[i]))) {
-            return i;
-        }
-    }
-    return withInputs.size();
 }
 
 } // namespace
@@ -264,7 +169,7 @@ slot_t TaskflowExecSchedPass::evalGraphLinear(GCGraph *graph, Frame *frame) {
     gc_node_ref_t joinNode = kInvalidNodeRef;
 
 loop_start:
-    const gc_node_ref_t lastNode = resolveTailAnchorRef(currRuntimeGraph);
+    const gc_node_ref_t lastNode = camel::execute::resolveRuntimeTailValueRef(currRuntimeGraph);
     const bool lastNodeIsJoin =
         lastNode != kInvalidNodeRef && currRuntimeGraph->node(lastNode)->kind == GCNodeKind::Join;
 
@@ -285,7 +190,8 @@ loop_start:
         }
 
         if (node->kind == GCNodeKind::Brch) {
-            const size_t jumpIdx = selectBranchArm(currRuntimeGraph, nodeRef, currFrame);
+            const size_t jumpIdx =
+                camel::execute::selectRuntimeBranchArm(currRuntimeGraph, nodeRef, currFrame);
             currFrame->set(node->dataIndex, static_cast<Int32>(jumpIdx));
 
             const auto arms  = currRuntimeGraph->branchArmsOf(nodeRef);
@@ -309,12 +215,15 @@ loop_start:
                     break;
                 }
             }
-            const bool anchorOk =
-                anchorIdx < currNodes.size() &&
-                hasOnlyTrivialTailSuffixAfter(currRuntimeGraph, currNodes, anchorIdx);
+            const bool anchorOk = anchorIdx < currNodes.size() &&
+                                  camel::execute::hasOnlyTrivialRuntimeTailSuffixAfter(
+                                      currRuntimeGraph,
+                                      currNodes,
+                                      anchorIdx);
             const bool tailShape =
                 (nodeRef == lastNode) ||
-                (lastNodeIsJoin && outputsContain(currRuntimeGraph, nodeRef, lastNode));
+                (lastNodeIsJoin &&
+                 camel::execute::runtimeNodeOutputsContain(currRuntimeGraph, nodeRef, lastNode));
             const bool isTailCall = anchorOk && tailShape;
             if (isTailCall) {
                 Frame *lastFrame = currFrame;
@@ -455,8 +364,8 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
     case GCNodeKind::Copy: {
         const auto normInputs = graph->normInputsOf(nodeRef);
         ASSERT(!normInputs.empty(), "Taskflow linear COPY node must have one norm input.");
-        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        const TypeCode srcCode       = frame->codeAt(srcIdx);
+        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        const TypeCode srcCode          = frame->codeAt(srcIdx);
         if (camel::core::type::isGCTraced(srcCode)) {
             Object *srcData  = frame->get<Object *>(srcIdx);
             Type *srcTypePtr = frame->typeAt<Type>(srcIdx);
@@ -472,11 +381,11 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
     case GCNodeKind::Cast: {
         const auto normInputs = graph->normInputsOf(nodeRef);
         ASSERT(!normInputs.empty(), "Taskflow linear CAST node must have one norm input.");
-        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        Type *srcType                = frame->typeAt<Type>(srcIdx);
-        Type *tgtType                = node->dataType;
-        slot_t value                 = frame->get<slot_t>(srcIdx);
-        slot_t result                = tgtType->castSlotFrom(value, srcType);
+        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        Type *srcType                   = frame->typeAt<Type>(srcIdx);
+        Type *tgtType                   = node->dataType;
+        slot_t value                    = frame->get<slot_t>(srcIdx);
+        slot_t result                   = tgtType->castSlotFrom(value, srcType);
         frame->set(node->dataIndex, result);
         return result;
     }
@@ -485,9 +394,9 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
         const auto normInputs = graph->normInputsOf(nodeRef);
         const auto withInputs = graph->withInputsOf(nodeRef);
         ASSERT(!normInputs.empty(), "Taskflow linear FILL node must have one norm input.");
-        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        const TypeCode srcCode       = frame->codeAt(srcIdx);
-        Type *srcType                = frame->typeAt<Type>(srcIdx);
+        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        const TypeCode srcCode          = frame->codeAt(srcIdx);
+        Type *srcType                   = frame->typeAt<Type>(srcIdx);
         ASSERT(
             camel::core::type::isGCTraced(srcCode),
             "Taskflow linear FILL target must be GC-traced.");
@@ -541,8 +450,8 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
     case GCNodeKind::Accs: {
         const auto normInputs = graph->normInputsOf(nodeRef);
         ASSERT(!normInputs.empty(), "Taskflow linear ACCS node must have one norm input.");
-        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        const auto *body             = graph->nodeBodyAs<GCAccsBody>(nodeRef);
+        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        const auto *body                = graph->nodeBodyAs<GCAccsBody>(nodeRef);
         if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
             Tuple *tuple = frame->get<Tuple *>(srcIdx);
             ASSERT(body->value < tuple->size(), "Taskflow linear ACCS tuple index out of bounds.");
@@ -686,8 +595,8 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
             makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow"));
     }
 
-    std::vector<GIR::data_idx_t> withIndices;
-    std::vector<GIR::data_idx_t> normIndices;
+    std::vector<runtime_data_idx_t> withIndices;
+    std::vector<runtime_data_idx_t> normIndices;
     withIndices.reserve(graph->withInputsOf(nodeRef).size());
     normIndices.reserve(graph->normInputsOf(nodeRef).size());
     for (gc_node_ref_t inputRef : graph->withInputsOf(nodeRef)) {
@@ -773,8 +682,8 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
     case GCNodeKind::Copy: {
         const auto normInputs = graph->normInputsOf(nodeRef);
         ASSERT(!normInputs.empty(), "Taskflow COPY node must have one norm input.");
-        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        const TypeCode srcCode       = frame->codeAt(srcIdx);
+        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        const TypeCode srcCode          = frame->codeAt(srcIdx);
         if (camel::core::type::isGCTraced(srcCode)) {
             Object *srcData  = frame->get<Object *>(srcIdx);
             Type *srcTypePtr = frame->typeAt<Type>(srcIdx);
@@ -790,11 +699,11 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
     case GCNodeKind::Cast: {
         const auto normInputs = graph->normInputsOf(nodeRef);
         ASSERT(!normInputs.empty(), "Taskflow CAST node must have one norm input.");
-        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        Type *srcType                = frame->typeAt<Type>(srcIdx);
-        Type *tgtType                = node->dataType;
-        slot_t value                 = frame->get<slot_t>(srcIdx);
-        slot_t result                = tgtType->castSlotFrom(value, srcType);
+        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        Type *srcType                   = frame->typeAt<Type>(srcIdx);
+        Type *tgtType                   = node->dataType;
+        slot_t value                    = frame->get<slot_t>(srcIdx);
+        slot_t result                   = tgtType->castSlotFrom(value, srcType);
         frame->set(node->dataIndex, result);
         return result;
     }
@@ -803,9 +712,9 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         const auto normInputs = graph->normInputsOf(nodeRef);
         const auto withInputs = graph->withInputsOf(nodeRef);
         ASSERT(!normInputs.empty(), "Taskflow FILL node must have one norm input.");
-        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        const TypeCode srcCode       = frame->codeAt(srcIdx);
-        Type *srcType                = frame->typeAt<Type>(srcIdx);
+        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        const TypeCode srcCode          = frame->codeAt(srcIdx);
+        Type *srcType                   = frame->typeAt<Type>(srcIdx);
         ASSERT(camel::core::type::isGCTraced(srcCode), "Taskflow FILL target must be GC-traced.");
         Object *srcObj =
             frame->get<Object *>(srcIdx)->clone(camel::core::mm::autoSpace(), srcType, false);
@@ -854,8 +763,8 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
     case GCNodeKind::Accs: {
         const auto normInputs = graph->normInputsOf(nodeRef);
         ASSERT(!normInputs.empty(), "Taskflow ACCS node must have one norm input.");
-        const GIR::data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        const auto *body             = graph->nodeBodyAs<GCAccsBody>(nodeRef);
+        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
+        const auto *body                = graph->nodeBodyAs<GCAccsBody>(nodeRef);
         if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
             Tuple *tuple = frame->get<Tuple *>(srcIdx);
             ASSERT(body->value < tuple->size(), "Taskflow ACCS tuple index out of bounds.");
@@ -917,7 +826,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
     }
 
     case GCNodeKind::Brch: {
-        const size_t jumpIdx = selectBranchArm(graph, nodeRef, frame);
+        const size_t jumpIdx = camel::execute::selectRuntimeBranchArm(graph, nodeRef, frame);
         frame->set(node->dataIndex, static_cast<Int32>(jumpIdx));
         return executePreparedBranchArm(graph, nodeRef, jumpIdx, frame, sf, buildInfo);
     }
@@ -1150,21 +1059,22 @@ void TaskflowExecSchedPass::buildRuntimeBranchJoinRegion(
     const gc_node_ref_t joinRef = arms.front().joinIndex;
     ASSERT(joinRef != kInvalidNodeRef, "Taskflow BRCH region has no JOIN.");
 
-    auto selector = flowLike
-                        .emplace([this, runtimeGraph, brchRuntimeIndex, frame](tf::Subflow &sf) {
-                            const auto brchSlot = dataIndexOf(runtimeGraph, brchRuntimeIndex);
-                            const size_t jumpIdx =
-                                selectBranchArm(runtimeGraph, brchRuntimeIndex, frame);
-                            frame->set(brchSlot, static_cast<Int32>(jumpIdx));
-                            (void)executePreparedBranchArm(
-                                runtimeGraph,
-                                brchRuntimeIndex,
-                                jumpIdx,
-                                frame,
-                                sf,
-                                nullptr);
-                        })
-                        .name("BRCH");
+    auto selector =
+        flowLike
+            .emplace([this, runtimeGraph, brchRuntimeIndex, frame](tf::Subflow &sf) {
+                const auto brchSlot = dataIndexOf(runtimeGraph, brchRuntimeIndex);
+                const size_t jumpIdx =
+                    camel::execute::selectRuntimeBranchArm(runtimeGraph, brchRuntimeIndex, frame);
+                frame->set(brchSlot, static_cast<Int32>(jumpIdx));
+                (void)executePreparedBranchArm(
+                    runtimeGraph,
+                    brchRuntimeIndex,
+                    jumpIdx,
+                    frame,
+                    sf,
+                    nullptr);
+            })
+            .name("BRCH");
 
     auto joiner = flowLike
                       .emplace([this, runtimeGraph, joinRef, frame](tf::Subflow &sf) {

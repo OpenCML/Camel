@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,16 +22,9 @@
 #include "camel/core/type/composite/tuple.h"
 #include "tuple.h"
 
-// Forward declarations.
-namespace camel::compile::gir {
-class Graph;
-} // namespace camel::compile::gir
-
 namespace camel::runtime {
 class GCGraph;
 } // namespace camel::runtime
-
-namespace GIR = camel::compile::gir;
 
 namespace rtdata = camel::core::rtdata;
 namespace type   = camel::core::type;
@@ -41,8 +34,6 @@ class Function : public rtdata::Object {
     Function(const Function &)            = delete;
     Function &operator=(const Function &) = delete;
 
-    static Function *
-    create(GIR::Graph *graph, const type::Type *tupleType, camel::core::mm::IAllocator &allocator);
     static Function *create(
         camel::runtime::GCGraph *graph, const type::Type *tupleType,
         camel::core::mm::IAllocator &allocator);
@@ -51,14 +42,6 @@ class Function : public rtdata::Object {
     camel::runtime::GCGraph *graph() const { return runtimeGraph_; }
     camel::runtime::GCGraph *runtimeGraph() const { return runtimeGraph_; }
     bool hasRuntimeGraph() const { return runtimeGraph_ != nullptr; }
-    // Compile GIR access is a cold metadata bridge. Runtime execution must
-    // never depend on it for identity, and runtime-created Function objects
-    // may legitimately leave it null.
-    GIR::Graph *sourceGraph() const;
-    void setSourceGraph(GIR::Graph *graph) {
-        ASSERT(graph != nullptr, "Function source graph cannot be null.");
-        sourceGraph_ = graph;
-    }
     void setRuntimeGraph(camel::runtime::GCGraph *graph);
     Tuple *tuple() { return closure_; }
     const Tuple *tuple() const { return closure_; }
@@ -77,8 +60,6 @@ class Function : public rtdata::Object {
 
         if (runtimeGraph_ != fnOther->runtimeGraph_)
             return false;
-        if (runtimeGraph_ == nullptr && sourceGraph_ != fnOther->sourceGraph_)
-            return false;
 
         const type::TupleType *tupleTypePtr = tupleType();
         if (!closure_ && !fnOther->closure_)
@@ -96,7 +77,7 @@ class Function : public rtdata::Object {
         if (!mem)
             throw std::bad_alloc();
 
-        Function *fnNew = new (mem) Function(sourceGraph_, runtimeGraph_);
+        Function *fnNew = new (mem) Function(runtimeGraph_);
 
         if (closure_) {
             const type::TupleType *tupleTypePtr = tupleType();
@@ -125,14 +106,9 @@ class Function : public rtdata::Object {
     }
 
   private:
-    explicit Function(GIR::Graph *sourceGraph, camel::runtime::GCGraph *runtimeGraph = nullptr)
-        : sourceGraph_(sourceGraph), runtimeGraph_(runtimeGraph), closure_(nullptr) {}
+    explicit Function(camel::runtime::GCGraph *runtimeGraph)
+        : runtimeGraph_(runtimeGraph), closure_(nullptr) {}
 
-    // Compile-side static Function objects may only carry sourceGraph_.
-    // Runtime Function objects must carry runtimeGraph_. They may optionally
-    // keep sourceGraph_ as a cold metadata bridge, but runtime logic must not
-    // require it.
-    GIR::Graph *sourceGraph_;
     camel::runtime::GCGraph *runtimeGraph_;
     Tuple *closure_;
 };

@@ -13,15 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "macro.h"
 
-#include "camel/common/algo/topo.h"
-#include "camel/compile/gir/graph.h"
-#include "camel/compile/gir/nodes.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
@@ -41,11 +38,11 @@
 namespace mm = camel::core::mm;
 
 using namespace std;
-using namespace GIR;
 using namespace camel::core::context;
 using namespace camel::core::error;
 using namespace camel::core::rtdata;
 using namespace camel::core::type;
+using camel::compile::gir::data_idx_t;
 
 namespace {
 
@@ -413,55 +410,8 @@ class MacroExecutor {
             } break;
 
             case GCNodeKind::Brch: {
-                std::vector<data_idx_t> normIns;
-                std::vector<data_idx_t> withIns;
-                for (uint32_t inputIndex : runtimeGraph->normInputsOf(runtimeNodeIndex)) {
-                    const auto *inputRecord = runtimeGraph->node(inputIndex);
-                    ASSERT(
-                        inputRecord != nullptr,
-                        "Macro runtime BRCH norm input record is missing.");
-                    normIns.push_back(inputRecord->dataIndex);
-                }
-                for (uint32_t inputIndex : runtimeGraph->withInputsOf(runtimeNodeIndex)) {
-                    const auto *inputRecord = runtimeGraph->node(inputIndex);
-                    ASSERT(
-                        inputRecord != nullptr,
-                        "Macro runtime BRCH with input record is missing.");
-                    withIns.push_back(inputRecord->dataIndex);
-                }
-                ASSERT(normIns.size() == 1, "BRCH node must have exactly one norm input.");
-
-                size_t jumpIdx = 0;
-                if (withIns.empty()) {
-                    bool cond = frame->get<bool>(normIns.front());
-                    jumpIdx   = cond ? 0 : 1;
-                } else {
-                    TypeCode condType = frame->codeAt(normIns.front());
-                    size_t i          = 0;
-                    if (isGCTraced(condType)) {
-                        Type *condTypePtr = frame->typeAt<Type>(normIns.front());
-                        Object *condData  = frame->get<Object *>(normIns.front());
-                        for (; i < withIns.size(); ++i) {
-                            Object *caseData = frame->get<Object *>(withIns[i]);
-                            if (condData->equals(caseData, condTypePtr, false)) {
-                                jumpIdx = i;
-                                break;
-                            }
-                        }
-                    } else {
-                        slot_t condData = frame->get<slot_t>(normIns.front());
-                        for (; i < withIns.size(); ++i) {
-                            if (condData == frame->get<slot_t>(withIns[i])) {
-                                jumpIdx = i;
-                                break;
-                            }
-                        }
-                    }
-                    if (i == withIns.size()) {
-                        jumpIdx = withIns.size();
-                    }
-                }
-
+                const size_t jumpIdx =
+                    camel::execute::selectRuntimeBranchArm(runtimeGraph, runtimeNodeIndex, frame);
                 frame->set(node->dataIndex, fromSlot<Int32>(static_cast<Int32>(jumpIdx)));
             } break;
 

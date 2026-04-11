@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 06, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,6 @@
 
 #include "camel/execute/graph_runtime_support.h"
 
-#include "camel/common/algo/topo.h"
 #include "camel/core/rtdata/func.h"
 
 #include <format>
@@ -36,7 +35,6 @@
 #include <unordered_map>
 #include <unordered_set>
 
-using namespace GIR;
 using namespace camel::core::context;
 
 namespace camel::execute {
@@ -82,33 +80,6 @@ gc_node_ref_t findRuntimeMatchedJoinIndex(camel::runtime::GCGraph *graph, gc_nod
 
 } // namespace
 
-std::vector<Node *> buildReachableExecutionTopo(Graph *graph) {
-    ASSERT(
-        graph != nullptr && graph->finalized(),
-        std::format(
-            "Graph {} must be finalized before execution topo construction.",
-            graph ? graph->name() : "<null>"));
-
-    return findReachable(
-        graph->exitNode(),
-        [](Node *n) {
-            node_vec_t ins;
-            ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
-            for (const auto &in : n->ctrlInputs()) {
-                if (&in->graph() == &n->graph()) {
-                    ins.emplace_back(in);
-                }
-            }
-            for (const auto &in : n->dataInputs()) {
-                if (&in->graph() == &n->graph()) {
-                    ins.emplace_back(in);
-                }
-            }
-            return ins;
-        },
-        false);
-}
-
 std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime graph is null in execution topo construction.");
     ASSERT(
@@ -150,6 +121,86 @@ std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GC
         visit(graph->exitNodeRef());
     }
     return order;
+}
+
+gc_node_ref_t resolveRuntimeForwardedValueRef(camel::runtime::GCGraph *graph, gc_node_ref_t ref) {
+    ASSERT(graph != nullptr, "Runtime forwarded-value resolution requires a graph.");
+
+    gc_node_ref_t currentIndex = ref;
+    while (currentIndex != camel::runtime::kInvalidNodeRef) {
+        const auto *current = graph->node(currentIndex);
+        ASSERT(current != nullptr, "Runtime forwarded-value chain resolved to null.");
+        if (current->kind != camel::runtime::GCNodeKind::Gate) {
+            return currentIndex;
+        }
+        const auto normInputs = graph->normInputsOf(currentIndex);
+        if (!normInputs.empty()) {
+            currentIndex = normInputs.back();
+            continue;
+        }
+        const auto withInputs = graph->withInputsOf(currentIndex);
+        if (!withInputs.empty()) {
+            currentIndex = withInputs.back();
+            continue;
+        }
+        return camel::runtime::kInvalidNodeRef;
+    }
+    return camel::runtime::kInvalidNodeRef;
+}
+
+gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph *graph) {
+    if (!graph) {
+        return camel::runtime::kInvalidNodeRef;
+    }
+    auto current = graph->returnNodeRef();
+    if (current == camel::runtime::kInvalidNodeRef) {
+        current = graph->exitNodeRef();
+    }
+    while (current != camel::runtime::kInvalidNodeRef) {
+        const auto *node = graph->node(current);
+        ASSERT(node != nullptr, "Runtime tail-value lookup resolved to null.");
+        if (node->kind != camel::runtime::GCNodeKind::Gate) {
+            break;
+        }
+        const auto normInputs = graph->normInputsOf(current);
+        if (!normInputs.empty()) {
+            current = normInputs.back();
+            continue;
+        }
+        const auto ctrlInputs = graph->ctrlInputsOf(current);
+        if (!ctrlInputs.empty()) {
+            current = ctrlInputs.back();
+            continue;
+        }
+        return camel::runtime::kInvalidNodeRef;
+    }
+    return current;
+}
+
+bool runtimeNodeOutputsContain(
+    const camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, gc_node_ref_t targetRef) {
+    if (!graph || targetRef == camel::runtime::kInvalidNodeRef) {
+        return false;
+    }
+    auto contains = [targetRef](std::span<const gc_node_ref_t> refs) {
+        return std::find(refs.begin(), refs.end(), targetRef) != refs.end();
+    };
+    return contains(graph->normOutputsOf(nodeRef)) || contains(graph->withOutputsOf(nodeRef)) ||
+           contains(graph->ctrlOutputsOf(nodeRef));
+}
+
+bool hasOnlyTrivialRuntimeTailSuffixAfter(
+    const camel::runtime::GCGraph *graph, std::span<const gc_node_ref_t> topoOrder,
+    size_t anchorIndex) {
+    ASSERT(graph != nullptr, "Runtime tail-suffix check requires a graph.");
+    for (size_t i = anchorIndex + 1; i < topoOrder.size(); ++i) {
+        const auto *node = graph->node(topoOrder[i]);
+        ASSERT(node != nullptr, "Runtime tail-suffix lookup resolved to null.");
+        if (node->kind != camel::runtime::GCNodeKind::Gate) {
+            return false;
+        }
+    }
+    return true;
 }
 
 RuntimeBranchArmRegion collectRuntimeBranchArmRegion(
@@ -227,6 +278,123 @@ RuntimeBranchArmRegion collectRuntimeBranchArmRegion(
     return arm;
 }
 
+gc_node_ref_t resolveRuntimeBranchArmEntry(
+    camel::runtime::GCGraph *graph, gc_node_ref_t brchRef, size_t armIndex,
+    std::span<const gc_node_ref_t> topoOrder) {
+    ASSERT(graph != nullptr, "Runtime branch-arm entry resolution requires a graph.");
+
+    const auto branchArms = graph->branchArmsOf(brchRef);
+    ASSERT(armIndex < branchArms.size(), "Runtime BRCH arm index is out of range.");
+    const auto *brchBody = graph->nodeBodyAs<camel::runtime::GCBrchBody>(brchRef);
+    ASSERT(brchBody != nullptr, "Runtime BRCH body is missing.");
+
+    std::unordered_set<gc_node_ref_t> armRegion;
+    std::vector<gc_node_ref_t> worklist{branchArms[armIndex].head};
+    while (!worklist.empty()) {
+        const auto nodeRef = worklist.back();
+        worklist.pop_back();
+        if (nodeRef == camel::runtime::kInvalidNodeRef || nodeRef == brchRef ||
+            nodeRef == brchBody->join || !graph->containsNodeRef(nodeRef) ||
+            !armRegion.insert(nodeRef).second) {
+            continue;
+        }
+
+        auto pushOutputs = [&](std::span<const gc_node_ref_t> outputs) {
+            for (auto outputRef : outputs) {
+                if (outputRef != brchBody->join) {
+                    worklist.push_back(outputRef);
+                }
+            }
+        };
+        pushOutputs(graph->ctrlOutputsOf(nodeRef));
+        pushOutputs(graph->normOutputsOf(nodeRef));
+        pushOutputs(graph->withOutputsOf(nodeRef));
+    }
+
+    std::unordered_set<gc_node_ref_t> dependencyVisited;
+    std::function<void(gc_node_ref_t)> collectInputs = [&](gc_node_ref_t nodeRef) {
+        if (nodeRef == camel::runtime::kInvalidNodeRef || nodeRef == brchRef ||
+            nodeRef == brchBody->join || !graph->containsNodeRef(nodeRef) ||
+            !dependencyVisited.insert(nodeRef).second) {
+            return;
+        }
+        armRegion.insert(nodeRef);
+
+        for (auto inputRef : graph->ctrlInputsOf(nodeRef)) {
+            collectInputs(inputRef);
+        }
+        for (auto inputRef : graph->normInputsOf(nodeRef)) {
+            collectInputs(inputRef);
+        }
+        for (auto inputRef : graph->withInputsOf(nodeRef)) {
+            collectInputs(inputRef);
+        }
+    };
+
+    std::vector<gc_node_ref_t> regionNodes(armRegion.begin(), armRegion.end());
+    for (auto nodeRef : regionNodes) {
+        collectInputs(nodeRef);
+    }
+    for (auto nodeRef : topoOrder) {
+        if (!armRegion.contains(nodeRef)) {
+            continue;
+        }
+        const auto *node = graph->node(nodeRef);
+        if (node && node->kind != camel::runtime::GCNodeKind::Data &&
+            node->kind != camel::runtime::GCNodeKind::Port &&
+            node->kind != camel::runtime::GCNodeKind::Sync &&
+            node->kind != camel::runtime::GCNodeKind::Gate &&
+            node->kind != camel::runtime::GCNodeKind::Dref) {
+            return nodeRef;
+        }
+    }
+    return brchBody->join;
+}
+
+size_t selectRuntimeBranchArm(camel::runtime::GCGraph *graph, gc_node_ref_t brchRef, Frame *frame) {
+    ASSERT(graph != nullptr, "Runtime branch selection requires a graph.");
+    ASSERT(frame != nullptr, "Runtime branch selection requires a frame.");
+
+    const auto normInputs = graph->normInputsOf(brchRef);
+    const auto withInputs = graph->withInputsOf(brchRef);
+    ASSERT(normInputs.size() == 1, "Runtime BRCH must have exactly one norm input.");
+
+    const auto *condNode = graph->node(normInputs.front());
+    ASSERT(condNode != nullptr, "Runtime BRCH condition node is missing.");
+    const auto condIndex = condNode->dataIndex;
+
+    if (withInputs.empty()) {
+        return frame->get<bool>(condIndex) ? 0 : 1;
+    }
+
+    const camel::core::type::TypeCode condType = frame->codeAt(condIndex);
+    if (camel::core::type::isGCTraced(condType)) {
+        camel::core::type::Type *condTypePtr = frame->typeAt<camel::core::type::Type>(condIndex);
+        camel::core::rtdata::Object *condData =
+            frame->get<camel::core::rtdata::Object *>(condIndex);
+        for (size_t i = 0; i < withInputs.size(); ++i) {
+            const auto *caseNode = graph->node(withInputs[i]);
+            ASSERT(caseNode != nullptr, "Runtime BRCH case node is missing.");
+            camel::core::rtdata::Object *caseData =
+                frame->get<camel::core::rtdata::Object *>(caseNode->dataIndex);
+            if (condData->equals(caseData, condTypePtr, false)) {
+                return i;
+            }
+        }
+        return withInputs.size();
+    }
+
+    const slot_t condData = frame->get<slot_t>(condIndex);
+    for (size_t i = 0; i < withInputs.size(); ++i) {
+        const auto *caseNode = graph->node(withInputs[i]);
+        ASSERT(caseNode != nullptr, "Runtime BRCH case node is missing.");
+        if (condData == frame->get<slot_t>(caseNode->dataIndex)) {
+            return i;
+        }
+    }
+    return withInputs.size();
+}
+
 slot_t readRuntimeGraphReturn(camel::runtime::GCGraph *graph, Frame *frame) {
     ASSERT(graph != nullptr, "Runtime graph return read requires a graph.");
     ASSERT(frame != nullptr, "Runtime graph return read requires a frame.");
@@ -244,23 +412,8 @@ slot_t readRuntimeGraphReturn(camel::runtime::GCGraph *graph, Frame *frame) {
         return frame->get<slot_t>(returnNode->dataIndex);
     }
 
-    gc_node_ref_t currentIndex = returnNodeRef;
-    while (true) {
-        const auto *current = graph->node(currentIndex);
-        ASSERT(current != nullptr, "Runtime graph return forwarding chain resolved to null.");
-        if (current->kind != camel::runtime::GCNodeKind::Gate) {
-            break;
-        }
-        const auto normInputs = graph->normInputsOf(currentIndex);
-        if (!normInputs.empty()) {
-            currentIndex = normInputs.back();
-            continue;
-        }
-        const auto withInputs = graph->withInputsOf(currentIndex);
-        if (!withInputs.empty()) {
-            currentIndex = withInputs.back();
-            continue;
-        }
+    gc_node_ref_t currentIndex = resolveRuntimeForwardedValueRef(graph, returnNodeRef);
+    if (currentIndex == camel::runtime::kInvalidNodeRef) {
         return NullSlot;
     }
 
@@ -356,52 +509,6 @@ void fillFrameForIndirectCall(
         "Closure nodes and tuple size mismatch in runtime indirect call binding.");
     for (size_t i = 0; i < targetClosureNodes.size(); ++i) {
         dest->set(targetGraph->node(targetClosureNodes[i])->dataIndex, closure->get<slot_t>(i));
-    }
-}
-
-void fillFrameForDirectInvoke(Frame *from, Frame *dest, Graph *graph, Node *node) {
-    ASSERT(from != nullptr && dest != nullptr, "Frame pointer is null in direct invoke binding.");
-    ASSERT(graph != nullptr && node != nullptr, "Graph or node is null in direct invoke binding.");
-
-    const auto &normNodes = node->normInputs();
-    const auto &normPorts = graph->normPorts();
-    ASSERT(
-        normNodes.size() == normPorts.size(),
-        "Norm nodes and ports count mismatch in direct invoke binding.");
-    for (size_t i = 0; i < normNodes.size(); ++i) {
-        dest->set(normPorts[i]->index(), from->get<slot_t>(normNodes[i]->index()));
-    }
-
-    const auto &withNodes = node->withInputs();
-    const auto &withPorts = graph->withPorts();
-    ASSERT(
-        withNodes.size() == withPorts.size(),
-        "With nodes and ports count mismatch in direct invoke binding.");
-    for (size_t i = 0; i < withNodes.size(); ++i) {
-        dest->set(withPorts[i]->index(), from->get<slot_t>(withNodes[i]->index()));
-    }
-}
-
-void fillFrameForIndirectCall(Frame *from, Frame *dest, Graph *graph, CallNode *node) {
-    ASSERT(from != nullptr && dest != nullptr, "Frame pointer is null in indirect call binding.");
-    ASSERT(graph != nullptr && node != nullptr, "Graph or node is null in indirect call binding.");
-
-    const auto &normNodes = node->normInputs();
-    const auto &normPorts = graph->normPorts();
-    ASSERT(
-        normNodes.size() == normPorts.size(),
-        "Norm nodes and ports count mismatch in indirect call binding.");
-    for (size_t i = 0; i < normNodes.size(); ++i) {
-        dest->set(normPorts[i]->index(), from->get<slot_t>(normNodes[i]->index()));
-    }
-
-    const auto &withNodes = node->withInputs();
-    const auto &withPorts = graph->withPorts();
-    ASSERT(
-        withNodes.size() == withPorts.size() + 1,
-        "With nodes and ports count mismatch in indirect call binding.");
-    for (size_t i = 0; i < withPorts.size(); ++i) {
-        dest->set(withPorts[i]->index(), from->get<slot_t>(withNodes[i + 1]->index()));
     }
 }
 

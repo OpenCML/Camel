@@ -13,16 +13,24 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "mir_encode.h"
 #include "../regalloc/regalloc.h"
+#include "camel/core/context/frame.h"
 
+#include <climits>
 #include <vector>
 
 namespace camel::jit::x64 {
+
+namespace ctx = camel::core::context;
+
+static_assert(ctx::Frame::runtimeGraphOffset() <= INT8_MAX);
+static_assert(ctx::Frame::nextOffset() <= INT8_MAX);
+static_assert(ctx::Frame::dynamicAreaOffset() <= INT8_MAX);
 
 using ::camel::jit::kSpilled;
 using ::camel::jit::VRegAllocation;
@@ -627,7 +635,7 @@ void encodeMirBuffer(
 
             // ═══ Frame acquire check ═══
             enc.movR10FromRbx();
-            enc.movR11FromR10Disp8(8);
+            enc.movR11FromR10Disp8(static_cast<int8_t>(ctx::Frame::runtimeGraphOffset()));
             if (p->isSameGraph) {
                 enc.cmpR11R12();
             } else {
@@ -638,14 +646,14 @@ void encodeMirBuffer(
             size_t jneEnd    = enc.here();
 
             // ═══ FAST PATH: acquire frame from pool and enter compiled callee ═══
-            enc.movR11FromR10Disp8(16);
+            enc.movR11FromR10Disp8(static_cast<int8_t>(ctx::Frame::nextOffset()));
             enc.movRbxFromR11();
             // Match FramePool::acquire(): once the freelist head moves to the
             // next slot, clear the new sentinel/free-head graph identity so
             // later reuse checks never observe stale graph metadata.
             enc.movR11Disp8Imm0(0);
             enc.movR11Disp8Imm0(8);
-            enc.leaR11R10Disp8(40);
+            enc.leaR11R10Disp8(static_cast<int8_t>(ctx::Frame::dynamicAreaOffset()));
             enc.movR11FromR10Store();
             for (uint8_t ai = 0; ai < p->argsCnt; ++ai) {
                 enc.movRaxFromFrame(p->argSrcDisps[ai]);

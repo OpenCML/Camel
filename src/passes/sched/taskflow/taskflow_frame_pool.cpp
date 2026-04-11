@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 09, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,8 +21,6 @@
 
 #include <algorithm>
 #include <cstdlib>
-
-using namespace GIR;
 
 namespace camel::core::context {
 

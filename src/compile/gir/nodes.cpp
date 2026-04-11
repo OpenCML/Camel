@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,6 @@
 #include "camel/compile/gir/arena.h"
 #include "camel/compile/gir/builder.h"
 #include "camel/core/rtdata/base.h"
-#include "camel/core/rtdata/func.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 #include <functional>
@@ -30,16 +29,6 @@
 namespace camel::compile::gir {
 
 namespace {
-
-TupleType *currentClosureTupleType(const Graph *graph) {
-    ASSERT(graph != nullptr, "Closure tuple type source graph is null.");
-    type_vec_t closureTypes;
-    closureTypes.reserve(graph->closure().size());
-    for (Node *node : graph->closure()) {
-        closureTypes.push_back(node->dataType());
-    }
-    return TupleType::create(std::move(closureTypes));
-}
 
 inline void assertDraftMutable(const Node *node, const char *action) {
     ASSERT(node != nullptr, "Node is null.");
@@ -829,26 +818,18 @@ Node *BindNode::clone(Graph &graph) const { return BindNode::create(graph, dataT
 
 Node *FuncNode::create(Graph &graph, const graph_ptr_t &bodyGraph) {
     ASSERT(bodyGraph != nullptr, "Function graph is null for FunctionNode.");
-    auto *rtFunc = ::Function::create(
-        bodyGraph.get(),
-        currentClosureTupleType(bodyGraph.get()),
-        graph.arena()->allocator());
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = makeOwnedNode<FuncNode>(graph, graph, index, bodyGraph.get(), rtFunc);
+    Node *node       = makeOwnedNode<FuncNode>(graph, graph, index, bodyGraph.get());
     builder.addNode(node);
     return node;
 }
 
 Node *FuncNode::create(Graph &graph, Graph *bodyGraph) {
     ASSERT(bodyGraph != nullptr, "Function graph is null for FunctionNode.");
-    auto *rtFunc = ::Function::create(
-        bodyGraph,
-        currentClosureTupleType(bodyGraph),
-        graph.arena()->allocator());
     GraphBuilder builder(graph);
     data_idx_t index = builder.addRuntimeData();
-    Node *node       = makeOwnedNode<FuncNode>(graph, graph, index, bodyGraph, rtFunc);
+    Node *node       = makeOwnedNode<FuncNode>(graph, graph, index, bodyGraph);
     builder.addNode(node);
     return node;
 }

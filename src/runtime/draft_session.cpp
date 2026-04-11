@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -376,9 +376,7 @@ void retargetEncodedGraph(
         encoded->addDependency(body->calleeGraph);
     }
 
-    camel::compile::gir::static_slot_vec_t staticSlots(
-        draft.staticSlots().begin(),
-        draft.staticSlots().end());
+    std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
     if (auto *tupleType = const_cast<TupleType *>(encoded->staticDataType())) {
         if (staticSlots.size() < tupleType->size()) {
             staticSlots.resize(tupleType->size(), NullSlot);
@@ -498,7 +496,6 @@ GCGraph *RuntimeGraphDraftSession::commit() {
     }
 
     GCGraph *oldRuntimeRoot = runtimeRoot_;
-    context_->runtimeGraphManager().clear();
 
     GraphMap rewritten;
     rewritten.reserve(closure.size());
@@ -509,7 +506,7 @@ GCGraph *RuntimeGraphDraftSession::commit() {
         retargetEncodedGraph(context_, *drafts_.at(graph), rewritten.at(graph), rewritten);
     }
 
-    runtimeRoot_ = context_->adoptRuntimeRoot(rewritten.at(oldRuntimeRoot));
+    runtimeRoot_ = context_->installRuntimeRoot(rewritten.at(oldRuntimeRoot));
     drafts_.clear();
     return runtimeRoot_;
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <stdexcept>
 
 using namespace std;
 using namespace GIR;
@@ -62,113 +63,7 @@ runtimeDataIndexOf(const camel::runtime::GCGraph *graph, camel::runtime::gc_node
 }
 
 static camel::runtime::gc_node_ref_t resolveTailValueNode(camel::runtime::GCGraph *graph) {
-    if (!graph) {
-        return camel::runtime::kInvalidNodeRef;
-    }
-    auto current = graph->returnNodeRef();
-    if (current == camel::runtime::kInvalidNodeRef) {
-        current = graph->exitNodeRef();
-    }
-    while (current != camel::runtime::kInvalidNodeRef) {
-        const auto *node = graph->node(current);
-        ASSERT(node != nullptr, "FastVM tail-value lookup resolved to null.");
-        if (node->kind != camel::runtime::GCNodeKind::Gate) {
-            break;
-        }
-        const auto normInputs = graph->normInputsOf(current);
-        if (!normInputs.empty()) {
-            current = normInputs.back();
-            continue;
-        }
-        const auto ctrlInputs = graph->ctrlInputsOf(current);
-        if (!ctrlInputs.empty()) {
-            current = ctrlInputs.back();
-            continue;
-        }
-        return camel::runtime::kInvalidNodeRef;
-    }
-    return current;
-}
-
-static bool emitsRuntimeBytecode(camel::runtime::GCNodeKind kind) {
-    switch (kind) {
-    case camel::runtime::GCNodeKind::Data:
-    case camel::runtime::GCNodeKind::Port:
-    case camel::runtime::GCNodeKind::Sync:
-    case camel::runtime::GCNodeKind::Gate:
-    case camel::runtime::GCNodeKind::Dref:
-        return false;
-    default:
-        return true;
-    }
-}
-
-static camel::runtime::gc_node_ref_t resolveRuntimeBranchArmEntry(
-    camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef, size_t armIndex,
-    std::span<const camel::runtime::gc_node_ref_t> topoOrder) {
-    const auto branchArms = graph->branchArmsOf(brchRef);
-    ASSERT(armIndex < branchArms.size(), "Runtime BRCH arm index is out of range.");
-    const auto *brchBody = graph->nodeBodyAs<camel::runtime::GCBrchBody>(brchRef);
-    ASSERT(brchBody != nullptr, "Runtime BRCH body is missing.");
-
-    std::unordered_set<camel::runtime::gc_node_ref_t> armRegion;
-    std::vector<camel::runtime::gc_node_ref_t> worklist{branchArms[armIndex].head};
-    while (!worklist.empty()) {
-        const auto nodeRef = worklist.back();
-        worklist.pop_back();
-        if (nodeRef == camel::runtime::kInvalidNodeRef || nodeRef == brchRef ||
-            nodeRef == brchBody->join || !graph->containsNodeRef(nodeRef) ||
-            !armRegion.insert(nodeRef).second) {
-            continue;
-        }
-
-        auto pushOutputs = [&](std::span<const camel::runtime::gc_node_ref_t> outputs) {
-            for (auto outputRef : outputs) {
-                if (outputRef != brchBody->join) {
-                    worklist.push_back(outputRef);
-                }
-            }
-        };
-        pushOutputs(graph->ctrlOutputsOf(nodeRef));
-        pushOutputs(graph->normOutputsOf(nodeRef));
-        pushOutputs(graph->withOutputsOf(nodeRef));
-    }
-
-    std::unordered_set<camel::runtime::gc_node_ref_t> dependencyVisited;
-    std::function<void(camel::runtime::gc_node_ref_t)> collectInputs =
-        [&](camel::runtime::gc_node_ref_t nodeRef) {
-            if (nodeRef == camel::runtime::kInvalidNodeRef || nodeRef == brchRef ||
-                nodeRef == brchBody->join || !graph->containsNodeRef(nodeRef) ||
-                !dependencyVisited.insert(nodeRef).second) {
-                return;
-            }
-            armRegion.insert(nodeRef);
-
-            for (auto inputRef : graph->ctrlInputsOf(nodeRef)) {
-                collectInputs(inputRef);
-            }
-            for (auto inputRef : graph->normInputsOf(nodeRef)) {
-                collectInputs(inputRef);
-            }
-            for (auto inputRef : graph->withInputsOf(nodeRef)) {
-                collectInputs(inputRef);
-            }
-        };
-
-    std::vector<camel::runtime::gc_node_ref_t> regionNodes(armRegion.begin(), armRegion.end());
-    for (auto nodeRef : regionNodes) {
-        collectInputs(nodeRef);
-    }
-    for (auto nodeRef : topoOrder) {
-        if (!armRegion.contains(nodeRef)) {
-            continue;
-        }
-        const auto *node = graph->node(nodeRef);
-        if (node && emitsRuntimeBytecode(node->kind)) {
-            return nodeRef;
-        }
-    }
-    return brchBody->join;
+    return camel::execute::resolveRuntimeTailValueRef(graph);
 }
 
 const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() {
@@ -696,8 +591,38 @@ static bytecode_vec_t compileRuntimeGraph(
 
     auto topoSortedIndices   = camel::execute::buildReachableExecutionTopoIndices(graph);
     const auto returnNodeRef = graph->returnNodeRef();
-    ASSERT(graph->returnNode() != nullptr, "Runtime graph return node is null.");
-    ASSERT(graph->returnNode()->dataIndex != 0, "Runtime graph return slot is invalid.");
+    const auto *returnNode   = graph->returnNode();
+    if (returnNodeRef == camel::runtime::kInvalidNodeRef || returnNode == nullptr) {
+        throw std::runtime_error(
+            std::format(
+                "FastVM runtime compile requires a valid return node in graph '{}'.",
+                graph->name()));
+    }
+    if (returnNode->dataIndex == 0) {
+        throw std::runtime_error(
+            std::format(
+                "FastVM runtime compile resolved return slot 0 in graph '{}'.",
+                graph->name()));
+    }
+
+    auto requireInputCount = [&](std::string_view nodeKind,
+                                 camel::runtime::gc_node_ref_t nodeRef,
+                                 std::string_view inputKind,
+                                 size_t actual,
+                                 size_t expectedAtLeast) {
+        if (actual < expectedAtLeast) {
+            throw std::runtime_error(
+                std::format(
+                    "FastVM runtime compile requires at least {} {} inputs for {} node ref {} "
+                    "in graph '{}', but got {}.",
+                    expectedAtLeast,
+                    inputKind,
+                    nodeKind,
+                    nodeRef,
+                    graph->name(),
+                    actual));
+        }
+    };
 
     EXEC_WHEN_DEBUG({
         CAMEL_LOG_DEBUG_S("Topo", "Topologically sorted nodes for graph {}:", graph->name());
@@ -759,7 +684,7 @@ static bytecode_vec_t compileRuntimeGraph(
 
         switch (record->kind) {
         case camel::runtime::GCNodeKind::Cast: {
-            ASSERT(!normOps.empty(), "CAST node must have one norm input.");
+            requireInputCount("CAST", runtimeNodeIndex, "norm", normOps.size(), 1);
             Type *targetType = record->dataType;
             BytecodeExtra extra;
             extra.pType = targetType;
@@ -776,6 +701,7 @@ static bytecode_vec_t compileRuntimeGraph(
         }
 
         case camel::runtime::GCNodeKind::Copy:
+            requireInputCount("COPY", runtimeNodeIndex, "norm", normOps.size(), 1);
             appendBytecode(bytecodes, OpCode::COPY, record->dataIndex, {normOps.front()});
             break;
 
@@ -784,7 +710,7 @@ static bytecode_vec_t compileRuntimeGraph(
             break;
 
         case camel::runtime::GCNodeKind::Accs: {
-            ASSERT(!normOps.empty(), "ACCS node must have one norm input.");
+            requireInputCount("ACCS", runtimeNodeIndex, "norm", normOps.size(), 1);
             const auto sourceRef  = graph->normInputsOf(runtimeNodeIndex).front();
             const auto *srcRecord = graph->node(sourceRef);
             const auto *accBody   = graph->nodeBodyAs<camel::runtime::GCAccsBody>(runtimeNodeIndex);
@@ -843,7 +769,7 @@ static bytecode_vec_t compileRuntimeGraph(
             appendBytecode(bytecodes, OpCode::BRCH, record->dataIndex, {}, normOps, withOps);
             const auto branchArms = graph->branchArmsOf(runtimeNodeIndex);
             for (size_t armIndex = 0; armIndex < branchArms.size(); ++armIndex) {
-                const auto armEntry = resolveRuntimeBranchArmEntry(
+                const auto armEntry = camel::execute::resolveRuntimeBranchArmEntry(
                     graph,
                     runtimeNodeIndex,
                     armIndex,
@@ -929,6 +855,7 @@ static bytecode_vec_t compileRuntimeGraph(
                 const auto &inlineOpMap = getSupportedInlineOperatorsMap();
                 auto it                 = inlineOpMap.find(uri);
                 if (it != inlineOpMap.end()) {
+                    requireInputCount("OPER", runtimeNodeIndex, "norm", normOps.size(), 2);
                     appendBytecode(
                         bytecodes,
                         it->second,

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -97,12 +97,12 @@ GCGraph *TopoNodeSeqDumpPass::apply(GCGraph *graph, std::ostream &os) {
             }
             return text;
         };
-        auto describeRuntimeNode = [&](gc_node_ref_t nodeRef, const GCNode &node) {
+        auto describeRuntimeNode = [&](gc_node_ref_t nodeRef, const GCNode &node) -> string {
             switch (node.kind) {
             case GCNodeKind::Func: {
                 auto *callee          = runtimeGraph->directCalleeGraphOf(nodeRef);
                 string name           = callee ? callee->name() : "<null>";
-                string res            = format("CALL: {}", name);
+                string res            = format("CALL: {} slot={}", name, node.dataIndex);
                 const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
                 const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
                 if (!normInputs.empty()) {
@@ -114,7 +114,7 @@ GCGraph *TopoNodeSeqDumpPass::apply(GCGraph *graph, std::ostream &os) {
                 return res;
             }
             case GCNodeKind::Call: {
-                string res            = "CALL: <indirect>";
+                string res            = format("CALL: <indirect> slot={}", node.dataIndex);
                 const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
                 const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
                 if (!normInputs.empty()) {
@@ -126,8 +126,8 @@ GCGraph *TopoNodeSeqDumpPass::apply(GCGraph *graph, std::ostream &os) {
                 return res;
             }
             case GCNodeKind::Oper: {
-                const auto *body      = runtimeGraph->nodeBodyAs<GCOperBody>(nodeRef);
-                string res            = format("CALL: <{}>", std::string(body->uri()));
+                const auto *body = runtimeGraph->nodeBodyAs<GCOperBody>(nodeRef);
+                string res = format("CALL: <{}> slot={}", std::string(body->uri()), node.dataIndex);
                 const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
                 const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
                 if (!normInputs.empty()) {
@@ -141,9 +141,11 @@ GCGraph *TopoNodeSeqDumpPass::apply(GCGraph *graph, std::ostream &os) {
             case GCNodeKind::Brch: {
                 const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
                 const auto arms       = runtimeGraph->ctrlOutputsOf(nodeRef);
+                const auto armPairs   = runtimeGraph->branchArmsOf(nodeRef);
                 string res            = format(
-                    "BRCH: {}",
-                    normInputs.empty() ? "<missing-cond>" : formatNodeIdent(normInputs.front()));
+                    "BRCH: {} slot={}",
+                    normInputs.empty() ? "<missing-cond>" : formatNodeIdent(normInputs.front()),
+                    node.dataIndex);
                 if (!arms.empty()) {
                     res += " ? ";
                     for (size_t i = 0; i < arms.size(); ++i) {
@@ -153,12 +155,25 @@ GCGraph *TopoNodeSeqDumpPass::apply(GCGraph *graph, std::ostream &os) {
                         res += formatNodeIdent(arms[i]);
                     }
                 }
+                if (!armPairs.empty()) {
+                    res += " heads/tails=[";
+                    for (size_t i = 0; i < armPairs.size(); ++i) {
+                        if (i != 0) {
+                            res += ", ";
+                        }
+                        res += format(
+                            "{}->{}",
+                            formatNodeIdent(armPairs[i].head),
+                            formatNodeIdent(armPairs[i].tail));
+                    }
+                    res += "]";
+                }
                 return res;
             }
             case GCNodeKind::Join: {
                 const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
                 const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
-                string res            = "JOIN:";
+                string res            = format("JOIN: slot={}", node.dataIndex);
                 if (!normInputs.empty()) {
                     res += format(" brch={}", formatNodeIdent(normInputs.front()));
                 }

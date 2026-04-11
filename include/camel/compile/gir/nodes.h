@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,8 +23,6 @@
 #include "graph.h"
 
 #include <variant>
-
-class Function;
 
 namespace camel::compile::gir {
 
@@ -449,19 +447,17 @@ class BindNode : public Node {
 };
 
 class FuncNode : public Node {
-    ::Function *rtFunc_;
     Graph *graph_;
 
   public:
-    FuncNode(Graph &graph, data_idx_t index, Graph *bodyGraph, ::Function *rtFunc)
-        : Node(graph, NodeType::FUNC, bodyGraph->funcType()->exitType(), index), rtFunc_(rtFunc),
-          graph_(bodyGraph) {}
+    FuncNode(Graph &graph, data_idx_t index, Graph *bodyGraph)
+        : Node(graph, NodeType::FUNC, bodyGraph->funcType()->exitType(), index), graph_(bodyGraph) {
+    }
     ~FuncNode() = default;
 
     static Node *create(Graph &graph, const graph_ptr_t &bodyGraph);
     static Node *create(Graph &graph, Graph *bodyGraph);
 
-    ::Function *rtFunc() const { return rtFunc_; }
     Graph *bodyGraph() const { return graph_; }
     FunctionType *funcType() const;
     bool isMacro() const { return graph_ && graph_->isMacro(); }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,13 +23,14 @@
 #include <span>
 #include <vector>
 
-#include "camel/compile/gir/types.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
+#include "camel/core/operator.h"
 #include "camel/execute/pass/runtime_sched.h"
 #include "camel/runtime/graph.h"
 
-namespace ctx = camel::core::context;
+namespace ctx            = camel::core::context;
+using runtime_data_idx_t = camel::compile::gir::data_idx_t;
 
 struct NodeVMGraphCache {
     std::vector<camel::runtime::gc_node_ref_t> topoNodeRefs;
@@ -42,7 +43,7 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     size_t currRecursionDepth_ = 0;
     ctx::FramePool framePool_{1 * camel::core::mm::MB};
     std::vector<std::unique_ptr<NodeVMGraphCache>> graphCaches_;
-    std::vector<GIR::data_idx_t> operIndices_;
+    std::vector<runtime_data_idx_t> operIndices_;
 
     slot_t call(camel::runtime::GCGraph *runtimeGraph, ctx::Frame *rootFrame);
     std::span<const camel::runtime::gc_node_ref_t> buildTopoNodes(camel::runtime::GCGraph *graph);

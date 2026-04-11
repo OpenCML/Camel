@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/rtdata/conv.h"
+#include "camel/compile/gir/static_function.h"
 #include "camel/core/data/composite/array.h"
 #include "camel/core/data/composite/func.h"
 #include "camel/core/data/composite/struct.h"
@@ -148,10 +149,11 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
     }
 
     case TypeCode::Function: {
-        auto funcData    = tt::as_shared<camel::core::data::FunctionData>(data);
-        auto &graph      = funcData->graph();
-        Function *gcFunc = Function::create(&graph, graph.closureType(), allocator);
-        Tuple *gcTuple   = gcFunc->tuple();
+        auto funcData = tt::as_shared<camel::core::data::FunctionData>(data);
+        auto &graph   = funcData->graph();
+        auto *gcFunc =
+            camel::compile::gir::StaticFunction::create(&graph, graph.closureType(), allocator);
+        Tuple *gcTuple = gcFunc->tuple();
 
         if (gcTuple->size() == 0) {
             return gcFunc;

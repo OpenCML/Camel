@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/global_config.h"
 #include "camel/execute/executor.h"
+#include "runtime_support.h"
 #include <array>
 #include <iostream>
 
@@ -140,7 +141,6 @@ static thread_local size_t s_jit_save_depth = 0;
     }
 
 using namespace std;
-using namespace GIR;
 
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
     Frame *currFrame            = rootFrame;
@@ -311,49 +311,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
-        const data_arr_t nargs = bc->nargs();
-        const data_arr_t wargs = bc->wargs();
-
-        size_t jumpIdx = 0;
-        if (bc->withCnt() == 0) {
-            // Ordinary if-else branch; cond is a bool.
-            bool condData = currFrame->get<bool>(nargs[0]);
-            if (condData) {
-                jumpIdx = 0; // jump to true branch
-            } else {
-                jumpIdx = 1; // jump to false branch
-            }
-        } else {
-            // match-case; evaluate each branch in order.
-            size_t j          = 0;
-            TypeCode condType = currFrame->codeAt(nargs[0]);
-
-            if (isGCTraced(condType)) {
-                Type *condTypePtr = currFrame->typeAt<Type>(nargs[0]);
-                auto condData     = currFrame->get<Object *>(nargs[0]);
-                for (; j < bc->withCnt(); ++j) {
-                    auto caseData = currFrame->get<Object *>(wargs[j]);
-                    if (condData->equals(caseData, condTypePtr, false)) {
-                        jumpIdx = j; // jump to matched case
-                        break;
-                    }
-                }
-            } else {
-                auto condData = currFrame->get<slot_t>(nargs[0]);
-                for (; j < bc->withCnt(); ++j) {
-                    auto caseData = currFrame->get<slot_t>(wargs[j]);
-                    if (condData == caseData) {
-                        jumpIdx = j; // jump to matched case
-                        break;
-                    }
-                }
-            }
-
-            if (j == bc->withCnt()) {
-                // fallthrough to else case if no match
-                jumpIdx = bc->withCnt();
-            }
-        }
+        size_t jumpIdx = camel::passes::sched::fastvm::selectBranchArm(*bc, currFrame);
 
         currFrame->set(bc->result, fromSlot<Int32>(jumpIdx));
         pc += bc->opsize + jumpIdx;

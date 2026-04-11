@@ -13,12 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "nodevm.h"
-#include "camel/compile/gir/graph.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/global_config.h"
 #include "camel/core/module/module.h"
@@ -34,11 +33,11 @@
 #include <span>
 
 using namespace std;
-using namespace GIR;
 using namespace camel::core::context;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
 using namespace camel::core::error;
+using camel::compile::gir::data_idx_t;
 
 namespace {
 
@@ -64,66 +63,10 @@ inline void setNodeVmCacheOf(camel::runtime::GCGraph *graph, NodeVMGraphCache *c
     }
 }
 
-inline GIR::data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
+inline data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
     const auto *node = graph ? graph->node(nodeRef) : nullptr;
     ASSERT(node != nullptr, "NodeVM runtime node lookup resolved to null.");
     return node->dataIndex;
-}
-
-gc_node_ref_t resolveTailAnchorRef(const GCGraph *graph) {
-    if (!graph) {
-        return kInvalidNodeRef;
-    }
-    gc_node_ref_t current = graph->returnNodeRef();
-    if (current == kInvalidNodeRef) {
-        current = graph->exitNodeRef();
-    }
-    while (current != kInvalidNodeRef) {
-        const auto *node = graph->node(current);
-        ASSERT(node != nullptr, "NodeVM tail-anchor resolution resolved to null.");
-        if (node->kind != GCNodeKind::Gate) {
-            break;
-        }
-        const auto normInputs = graph->normInputsOf(current);
-        if (!normInputs.empty()) {
-            current = normInputs.back();
-            continue;
-        }
-        const auto ctrlInputs = graph->ctrlInputsOf(current);
-        if (!ctrlInputs.empty()) {
-            current = ctrlInputs.back();
-            continue;
-        }
-        return kInvalidNodeRef;
-    }
-    return current;
-}
-
-bool outputsContain(const GCGraph *graph, gc_node_ref_t nodeRef, gc_node_ref_t targetRef) {
-    if (!graph || targetRef == kInvalidNodeRef) {
-        return false;
-    }
-    auto contains = [targetRef](std::span<const gc_node_ref_t> refs) {
-        return std::find(refs.begin(), refs.end(), targetRef) != refs.end();
-    };
-    return contains(graph->normOutputsOf(nodeRef)) || contains(graph->withOutputsOf(nodeRef)) ||
-           contains(graph->ctrlOutputsOf(nodeRef));
-}
-
-// Match FastVM tail-shape detection: after the selected anchor, only GATE
-// nodes may remain. GATE carries exit-slot plumbing but no executable
-// semantics, so later side-effecting nodes do not accidentally qualify a graph
-// as tail-call safe.
-bool hasOnlyTrivialTailSuffixAfter(
-    const GCGraph *graph, std::span<const gc_node_ref_t> nodes, size_t anchorIndex) {
-    for (size_t j = anchorIndex + 1; j < nodes.size(); ++j) {
-        const auto *node = graph->node(nodes[j]);
-        ASSERT(node != nullptr, "NodeVM tail-suffix lookup resolved to null.");
-        if (node->kind != GCNodeKind::Gate) {
-            return false;
-        }
-    }
-    return true;
 }
 
 } // namespace
@@ -232,7 +175,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
     // Tail-call loop. Rebind currRuntimeGraph/currFrame instead of growing the C++ stack.
     loop_start: {
         const size_t nodesSize       = currNodes.size();
-        const gc_node_ref_t lastNode = resolveTailAnchorRef(currRuntimeGraph);
+        const gc_node_ref_t lastNode = camel::execute::resolveRuntimeTailValueRef(currRuntimeGraph);
         const bool lastNodeIsJoin    = lastNode != kInvalidNodeRef &&
                                        currRuntimeGraph->node(lastNode)->kind == GCNodeKind::Join;
 
@@ -286,7 +229,6 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     static_cast<int>(n->kind),
                     n->dataIndex);
             });
-
             switch (n->kind) {
             case GCNodeKind::Cast: {
                 const auto normInputs = currRuntimeGraph->normInputsOf(nodeRef);
@@ -398,43 +340,8 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             } break;
 
             case GCNodeKind::Brch: {
-                const auto normIns = currRuntimeGraph->normInputsOf(nodeRef);
-                const auto withIns = currRuntimeGraph->withInputsOf(nodeRef);
-                ASSERT(normIns.size() == 1, "Branch node must have exactly one norm input.");
-
-                size_t jumpIdx = 0;
-                if (withIns.empty()) {
-                    bool cond =
-                        currFrame->get<bool>(dataIndexOf(currRuntimeGraph, normIns.front()));
-                    jumpIdx = cond ? 0 : 1;
-                } else {
-                    const auto condIndex = dataIndexOf(currRuntimeGraph, normIns.front());
-                    TypeCode condType    = currFrame->codeAt(condIndex);
-                    size_t j             = 0;
-                    if (isGCTraced(condType)) {
-                        Type *condTypePtr = currFrame->typeAt<Type>(condIndex);
-                        Object *condData  = currFrame->get<Object *>(condIndex);
-                        for (; j < withIns.size(); ++j) {
-                            Object *caseData =
-                                currFrame->get<Object *>(dataIndexOf(currRuntimeGraph, withIns[j]));
-                            if (condData->equals(caseData, condTypePtr, false)) {
-                                jumpIdx = j;
-                                break;
-                            }
-                        }
-                    } else {
-                        slot_t condData = currFrame->get<slot_t>(condIndex);
-                        for (; j < withIns.size(); ++j) {
-                            if (condData ==
-                                currFrame->get<slot_t>(dataIndexOf(currRuntimeGraph, withIns[j]))) {
-                                jumpIdx = j;
-                                break;
-                            }
-                        }
-                    }
-                    if (j == withIns.size())
-                        jumpIdx = withIns.size();
-                }
+                const size_t jumpIdx =
+                    camel::execute::selectRuntimeBranchArm(currRuntimeGraph, nodeRef, currFrame);
                 currFrame->set(n->dataIndex, fromSlot<Int32>(static_cast<Int32>(jumpIdx)));
 
                 const auto arms  = currRuntimeGraph->branchArmsOf(nodeRef);
@@ -443,7 +350,6 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 tillNode = arms[jumpIdx].head;
                 skipNode = arms[jumpIdx].tail;
                 joinNode = body->join;
-
                 EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                     "NodeVM",
                     "BRCH ref {}: jumpIdx={}, branches={}, tillNode={}, skipNode={}, joinNode={}",
@@ -508,12 +414,16 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     }
                 }
                 const bool anchorOk =
-                    anchorIdx < nodesSize &&
-                    hasOnlyTrivialTailSuffixAfter(currRuntimeGraph, currNodes, anchorIdx);
-                const bool tailShape =
-                    (nodeRef == lastNode) ||
-                    (lastNodeIsJoin && outputsContain(currRuntimeGraph, nodeRef, lastNode));
-                bool isTailCall = anchorOk && tailShape;
+                    anchorIdx < nodesSize && camel::execute::hasOnlyTrivialRuntimeTailSuffixAfter(
+                                                 currRuntimeGraph,
+                                                 currNodes,
+                                                 anchorIdx);
+                const bool tailShape = (nodeRef == lastNode) ||
+                                       (lastNodeIsJoin && camel::execute::runtimeNodeOutputsContain(
+                                                              currRuntimeGraph,
+                                                              nodeRef,
+                                                              lastNode));
+                bool isTailCall      = anchorOk && tailShape;
                 if (isTailCall) {
                     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                         "NodeVM",
@@ -692,7 +602,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 ? makeGraphExecutionSite(sourceContext, faultRuntimeGraph, currRecursionDepth_)
                 : makeGraphExecutionSite(
                       sourceContext,
-                      static_cast<Graph *>(nullptr),
+                      static_cast<camel::runtime::GCGraph *>(nullptr),
                       currRecursionDepth_));
     } catch (Diagnostic &) {
         currRecursionDepth_--;

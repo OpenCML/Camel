@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,6 +36,7 @@ struct DraftInlineResult {
     gc_node_ref_t callNode  = kInvalidNodeRef;
     gc_node_ref_t valueExit = kInvalidNodeRef;
     gc_node_ref_t ctrlEntry = kInvalidNodeRef;
+    gc_node_ref_t ctrlExit  = kInvalidNodeRef;
 
     explicit operator bool() const { return valueExit != kInvalidNodeRef; }
 };

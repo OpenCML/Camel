@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 29, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/compile/gir/draft.h"
 
+#include "camel/compile/gir/static_function.h"
 #include "camel/core/rtdata/array.h"
-#include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 
@@ -70,14 +70,14 @@ bool retargetStaticSlotGraphs(
 
     switch (type->code()) {
     case TypeCode::Function: {
-        auto *funcObj = fromSlot<::Function *>(slot);
-        if (!funcObj || !funcObj->sourceGraph()) {
+        auto *funcObj = fromSlot<StaticFunction *>(slot);
+        if (!funcObj || !funcObj->graph()) {
             return false;
         }
         bool changed            = false;
-        graph_ptr_t mappedGraph = resolveTarget(funcObj->sourceGraph());
-        if (mappedGraph && mappedGraph.get() != funcObj->sourceGraph()) {
-            funcObj->setSourceGraph(mappedGraph.get());
+        graph_ptr_t mappedGraph = resolveTarget(funcObj->graph());
+        if (mappedGraph && mappedGraph.get() != funcObj->graph()) {
+            funcObj->setGraph(mappedGraph.get());
             if (ownerRaw != mappedGraph.get() && !ownerRaw->dependencies().contains(mappedGraph)) {
                 ownerBuilder.addDependency(mappedGraph);
             }

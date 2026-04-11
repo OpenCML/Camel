@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 06, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,6 @@
 
 #pragma once
 
-#include "camel/compile/gir.h"
 #include "camel/core/context/frame.h"
 #include "camel/runtime/graph.h"
 
@@ -43,11 +42,25 @@ struct RuntimeBranchArmRegion {
     std::vector<camel::runtime::gc_node_ref_t> topoIndices;
 };
 
-std::vector<GIR::Node *> buildReachableExecutionTopo(GIR::Graph *graph);
 std::vector<camel::runtime::gc_node_ref_t>
 buildReachableExecutionTopoIndices(camel::runtime::GCGraph *graph);
+camel::runtime::gc_node_ref_t
+resolveRuntimeForwardedValueRef(camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t ref);
+camel::runtime::gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph *graph);
+bool runtimeNodeOutputsContain(
+    const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
+    camel::runtime::gc_node_ref_t targetRef);
+bool hasOnlyTrivialRuntimeTailSuffixAfter(
+    const camel::runtime::GCGraph *graph, std::span<const camel::runtime::gc_node_ref_t> topoOrder,
+    size_t anchorIndex);
 RuntimeBranchArmRegion collectRuntimeBranchArmRegion(
     camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchIndex, size_t armIndex);
+camel::runtime::gc_node_ref_t resolveRuntimeBranchArmEntry(
+    camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef, size_t armIndex,
+    std::span<const camel::runtime::gc_node_ref_t> topoOrder);
+size_t selectRuntimeBranchArm(
+    camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef,
+    camel::core::context::Frame *frame);
 slot_t readRuntimeGraphReturn(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
 
 void fillFrameForDirectInvoke(
@@ -57,13 +70,5 @@ void fillFrameForDirectInvoke(
 void fillFrameForIndirectCall(
     camel::core::context::Frame *from, camel::core::context::Frame *dest,
     camel::runtime::GCGraph *callerGraph, camel::runtime::gc_node_ref_t callNodeRef);
-
-void fillFrameForDirectInvoke(
-    camel::core::context::Frame *from, camel::core::context::Frame *dest, GIR::Graph *graph,
-    GIR::Node *node);
-
-void fillFrameForIndirectCall(
-    camel::core::context::Frame *from, camel::core::context::Frame *dest, GIR::Graph *graph,
-    GIR::CallNode *node);
 
 } // namespace camel::execute

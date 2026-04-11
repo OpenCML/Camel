@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,6 @@
 #endif
 
 using namespace std;
-using namespace GIR;
 using namespace camel::core::error;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;

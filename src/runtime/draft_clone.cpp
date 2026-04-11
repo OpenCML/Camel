@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,6 +32,7 @@
 #include "camel/runtime/draft_clone.h"
 
 #include <cstring>
+#include <unordered_map>
 
 namespace camel::runtime {
 
@@ -116,6 +117,8 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGrap
     DraftGraphCloneResult result;
     result.sourceToCloned.assign(sourceGraph->nodeBlockCount(), kInvalidNodeRef);
     const gc_node_ref_t baseId = static_cast<gc_node_ref_t>(owner.nodeSlotCount());
+    std::unordered_map<gc_slot_idx_t, gc_slot_idx_t> slotMap;
+    std::unordered_map<gc_slot_idx_t, gc_slot_idx_t> staticSlotMap;
 
     gc_node_ref_t ordinal = 0;
     for (auto it = sourceGraph->nodes().begin(); it != sourceGraph->nodes().end(); ++it) {
@@ -138,8 +141,40 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGrap
         const std::vector<gc_node_ref_t> ctrlInputs =
             remapNodeSpan(sourceGraph->ctrlInputsOf(sourceRef), result.sourceToCloned);
 
+        gc_slot_idx_t mappedDataIndex = sourceNode->dataIndex;
+        if (mappedDataIndex > 0) {
+            auto [it, inserted] = slotMap.try_emplace(mappedDataIndex, 0);
+            if (inserted) {
+                ASSERT(
+                    sourceNode->dataType != nullptr,
+                    "Runtime draft clone cannot remap a positive slot without a data type.");
+                it->second = owner.allocateRuntimeSlot(sourceNode->dataType);
+            }
+            mappedDataIndex = it->second;
+        } else if (mappedDataIndex < 0) {
+            auto [it, inserted] = staticSlotMap.try_emplace(mappedDataIndex, 0);
+            if (inserted) {
+                const size_t staticIndex = static_cast<size_t>(-mappedDataIndex);
+                const auto staticSlots   = sourceGraph->staticSlots();
+                const auto *staticTypes  = sourceGraph->staticDataType();
+                ASSERT(
+                    staticTypes != nullptr && staticIndex < staticSlots.size() &&
+                        staticIndex < staticTypes->size(),
+                    "Runtime draft clone encountered an out-of-range static slot index.");
+                const size_t ownerStaticIndex = owner.appendStaticSlot(
+                    staticSlots[staticIndex],
+                    staticTypes->typeAt(staticIndex));
+                ASSERT(
+                    ownerStaticIndex <=
+                        static_cast<size_t>(std::numeric_limits<gc_slot_idx_t>::max()),
+                    "Runtime draft clone static-slot remap exceeds 16-bit data-index capacity.");
+                it->second = static_cast<gc_slot_idx_t>(-static_cast<int32_t>(ownerStaticIndex));
+            }
+            mappedDataIndex = it->second;
+        }
+
         DraftNodeInit init{
-            .dataIndex    = sourceNode->dataIndex,
+            .dataIndex    = mappedDataIndex,
             .dataType     = sourceNode->dataType,
             .kind         = sourceNode->kind,
             .runtimeFlags = sourceNode->flags,

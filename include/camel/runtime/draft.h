@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -180,10 +180,6 @@ class GraphDraft {
     GraphDraft &operator=(const GraphDraft &) = delete;
 
     const GCGraph *source() const { return source_; }
-    // Draft commit may tear down the old graph heap before re-encoding the new
-    // runtime closure. Keep the compile-graph handle as a cold snapshot so the
-    // resulting GCGraph metadata can still preserve stable debug identity.
-    const GIR::graph_ptr_t &sourceGraphHandle() const { return sourceGraph_; }
     const std::string &stableId() const { return stableId_; }
     const std::string &mangledName() const { return mangledName_; }
     const std::string &name() const { return name_; }
@@ -230,6 +226,10 @@ class GraphDraft {
     std::span<const gc_node_ref_t> normUsersOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> withUsersOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> ctrlUsersOf(gc_node_ref_t id) const;
+    bool isControlAnchor(gc_node_ref_t id) const;
+    bool isBranchArmAnchor(gc_node_ref_t id) const;
+    gc_node_ref_t resolveForwardedValueRef(gc_node_ref_t id) const;
+    gc_node_ref_t resolveForwardedCtrlRef(gc_node_ref_t id) const;
 
     gc_node_ref_t addNode(const DraftNodeInit &init);
     void eraseNode(gc_node_ref_t id);
@@ -240,6 +240,8 @@ class GraphDraft {
     void replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId);
+    void
+    retargetBranchArmAnchors(gc_node_ref_t oldId, gc_node_ref_t newHeadId, gc_node_ref_t newTailId);
     void setEntryNode(gc_node_ref_t id) { entry_ = id; }
     void setExitNode(gc_node_ref_t id) { exit_ = id; }
     void setOutputNode(gc_node_ref_t id) { output_ = id; }
@@ -247,6 +249,7 @@ class GraphDraft {
         returnNode_ = id;
         returnKind_ = kind;
     }
+    gc_slot_idx_t allocateRuntimeSlot(camel::core::type::Type *type);
     size_t appendStaticSlot(slot_t value, camel::core::type::Type *type);
     gc_node_ref_t
     materializeStaticValue(slot_t value, camel::core::type::Type *type, uint8_t runtimeFlags = 0);
@@ -269,14 +272,13 @@ class GraphDraft {
     void replaceNodeStorage(gc_node_ref_t id, DraftNode *node);
     void removeUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
     void appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
+    void replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
+    void replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceUsesInList(
         gc_node_ref_t ownerId, std::span<const gc_node_ref_t> users, gc_node_ref_t oldId,
         gc_node_ref_t newId, bool norm, bool with, bool ctrl);
 
     const GCGraph *source_ = nullptr;
-    // Cold metadata snapshot only. Runtime rewrites must not inspect compile
-    // GIR through this handle for semantics.
-    GIR::graph_ptr_t sourceGraph_;
     std::string stableId_;
     std::string mangledName_;
     std::string name_;

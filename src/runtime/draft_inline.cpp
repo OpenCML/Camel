@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -158,6 +158,75 @@ void bindPortValueUses(GraphDraft &draft, gc_node_ref_t portNodeId, gc_node_ref_
     draft.replaceAllValueUses(portNodeId, actualInputId);
 }
 
+gc_node_ref_t remapFormalNodeToActual(
+    gc_node_ref_t nodeId, const DraftGraphCloneResult &cloned,
+    std::span<const gc_node_ref_t> boundActualInputs) {
+    size_t actualIndex = 0;
+    for (gc_node_ref_t portId : cloned.normPorts) {
+        if (portId == nodeId) {
+            ASSERT(
+                actualIndex < boundActualInputs.size(),
+                "Runtime inline norm-port remap overflow.");
+            return boundActualInputs[actualIndex];
+        }
+        ++actualIndex;
+    }
+    for (gc_node_ref_t portId : cloned.withPorts) {
+        if (portId == nodeId) {
+            ASSERT(
+                actualIndex < boundActualInputs.size(),
+                "Runtime inline with-port remap overflow.");
+            return boundActualInputs[actualIndex];
+        }
+        ++actualIndex;
+    }
+    for (gc_node_ref_t closureId : cloned.closureNodes) {
+        if (closureId == nodeId) {
+            ASSERT(
+                actualIndex < boundActualInputs.size(),
+                "Runtime inline closure-node remap overflow.");
+            return boundActualInputs[actualIndex];
+        }
+        ++actualIndex;
+    }
+    return nodeId;
+}
+
+gc_node_ref_t resolveInlineValueExit(
+    const GraphDraft &draft, const DraftGraphCloneResult &cloned,
+    std::span<const gc_node_ref_t> boundActualInputs) {
+    gc_node_ref_t current = cloned.returnNode != kInvalidNodeRef   ? cloned.returnNode
+                            : cloned.outputNode != kInvalidNodeRef ? cloned.outputNode
+                                                                   : cloned.exitNode;
+    while (current != kInvalidNodeRef) {
+        current            = remapFormalNodeToActual(current, cloned, boundActualInputs);
+        const auto *header = draft.header(current);
+        if (!header) {
+            return kInvalidNodeRef;
+        }
+        if (header->kind == GCNodeKind::Gate &&
+            std::find(boundActualInputs.begin(), boundActualInputs.end(), current) !=
+                boundActualInputs.end()) {
+            return current;
+        }
+        return draft.resolveForwardedValueRef(current);
+    }
+    return kInvalidNodeRef;
+}
+
+gc_node_ref_t resolveInlineCtrlExit(
+    const GraphDraft &draft, const DraftGraphCloneResult &cloned,
+    std::span<const gc_node_ref_t> boundActualInputs) {
+    gc_node_ref_t current = cloned.exitNode != kInvalidNodeRef     ? cloned.exitNode
+                            : cloned.returnNode != kInvalidNodeRef ? cloned.returnNode
+                                                                   : cloned.outputNode;
+    while (current != kInvalidNodeRef) {
+        current = remapFormalNodeToActual(current, cloned, boundActualInputs);
+        return draft.resolveForwardedCtrlRef(current);
+    }
+    return kInvalidNodeRef;
+}
+
 } // namespace
 
 DraftInlineResult inlineCallableInDraft(GraphDraft &draft, gc_node_ref_t funcNodeId) {
@@ -191,7 +260,11 @@ DraftInlineResult inlineCallableInDraft(GraphDraft &draft, gc_node_ref_t funcNod
     const std::vector<gc_node_ref_t> ctrlPreds(
         draft.ctrlInputsOf(funcNodeId).begin(),
         draft.ctrlInputsOf(funcNodeId).end());
-    const bool needParameterGates = !ctrlPreds.empty() || !draft.ctrlUsersOf(funcNodeId).empty();
+    const bool needControlBridge  = !ctrlPreds.empty() || !draft.ctrlUsersOf(funcNodeId).empty() ||
+                                    draft.isBranchArmAnchor(funcNodeId) ||
+                                    draft.entryNode() == funcNodeId ||
+                                    draft.exitNode() == funcNodeId;
+    const bool needParameterGates = needControlBridge;
 
     DraftGraphCloneResult cloned = cloneRuntimeGraphIntoDraft(draft, funcBody->calleeGraph);
     const std::vector<gc_node_ref_t> entryRoots =
@@ -240,15 +313,11 @@ DraftInlineResult inlineCallableInDraft(GraphDraft &draft, gc_node_ref_t funcNod
         draft.eraseNode(closureId);
     }
 
-    result.valueExit = cloned.exitNode;
-    if (result.valueExit == kInvalidNodeRef) {
-        return DraftInlineResult{};
-    }
-
     std::vector<gc_node_ref_t> entryTargets =
         !parameterGateTargets.empty() ? parameterGateTargets : entryRoots;
-    if (entryTargets.empty()) {
-        entryTargets.push_back(result.valueExit);
+    if (entryTargets.empty() && cloned.entryNode != kInvalidNodeRef) {
+        entryTargets.push_back(
+            remapFormalNodeToActual(cloned.entryNode, cloned, boundActualInputs));
     }
     if (entryTargets.size() == 1) {
         result.ctrlEntry = entryTargets.front();
@@ -272,10 +341,38 @@ DraftInlineResult inlineCallableInDraft(GraphDraft &draft, gc_node_ref_t funcNod
         }
     }
 
+    result.valueExit = resolveInlineValueExit(draft, cloned, boundActualInputs);
+    if (result.valueExit == kInvalidNodeRef) {
+        return DraftInlineResult{};
+    }
+    result.ctrlExit = resolveInlineCtrlExit(draft, cloned, boundActualInputs);
+    if (result.ctrlExit == kInvalidNodeRef) {
+        result.ctrlExit = result.valueExit;
+    }
+    if (needControlBridge &&
+        (result.ctrlEntry == kInvalidNodeRef || !draft.isControlAnchor(result.ctrlEntry))) {
+        const DraftNodeHeader *valueHeader = draft.header(result.valueExit);
+        DraftNodeInit gateInit{
+            .dataIndex    = valueHeader ? valueHeader->dataIndex : static_cast<gc_slot_idx_t>(0),
+            .dataType     = valueHeader ? valueHeader->dataType : nullptr,
+            .kind         = GCNodeKind::Gate,
+            .runtimeFlags = 0,
+            .normInputs   = std::span<const gc_node_ref_t>(&result.valueExit, 1),
+            .ctrlInputs   = ctrlPreds,
+        };
+        const gc_node_ref_t bridgeGate = draft.addNode(gateInit);
+        result.ctrlEntry               = bridgeGate;
+        result.ctrlExit                = bridgeGate;
+        result.valueExit               = bridgeGate;
+    } else if (result.ctrlEntry == kInvalidNodeRef) {
+        result.ctrlEntry = result.ctrlExit;
+    }
+    draft.retargetBranchArmAnchors(funcNodeId, result.ctrlEntry, result.ctrlExit);
+
     // Value users and control users observing the call result now observe the
     // inlined output/completion anchor instead.
     draft.replaceAllValueUses(funcNodeId, result.valueExit);
-    draft.replaceAllCtrlUses(funcNodeId, result.valueExit);
+    draft.replaceAllCtrlUses(funcNodeId, result.ctrlExit);
 
     draft.eraseNode(funcNodeId);
     return result;

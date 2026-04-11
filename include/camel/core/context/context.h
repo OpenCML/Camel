@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -128,8 +128,8 @@ class Context : public std::enable_shared_from_this<Context> {
     camel::runtime::GCGraph *materializeRuntimeRoot(const GIR::graph_ptr_t &rootGraph);
     camel::runtime::GCGraph *adoptRuntimeRoot(camel::runtime::GCGraph *runtimeRoot);
     camel::runtime::GCGraph *installRuntimeRoot(camel::runtime::GCGraph *runtimeRoot);
-    camel::runtime::GCGraphManager &runtimeGraphManager();
-    const camel::runtime::GCGraphManager &runtimeGraphManager() const;
+    camel::runtime::GCGraph *currentRuntimeRoot() const;
+    void clearRuntimeGraphs();
     const ExecutorManager &execMgr() const { return *exeMgr_; }
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }
@@ -142,7 +142,6 @@ class Context : public std::enable_shared_from_this<Context> {
     void dumpAllModuleDiagnostics(std::ostream &os, bool json) const;
 
     void registerExecutorFactory(std::string name, std::function<std::shared_ptr<Executor>()> fact);
-    void eval(std::string uri, GIR::Node *self, Frame &frame);
 
     void clearProcessExitCode() { processExitCode_.reset(); }
     void captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t result);

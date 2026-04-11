@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -267,34 +267,3 @@ BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, ge
 executor_ptr_t BasicBuiltinExecutor::create(context_ptr_t ctx) {
     return std::make_shared<BasicBuiltinExecutor>(ctx);
 }
-
-void BasicBuiltinExecutor::eval(
-    std::string uri, GIR::Node *self, camel::core::context::Frame &frame) {
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("BasicExec", "Evaluating operator of URI: {}", uri));
-    auto it = opsMap_.find(uri);
-    if (it == opsMap_.end()) {
-        throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
-    }
-    std::vector<GIR::data_idx_t> normIndices;
-    for (const auto &in : self->normInputs()) {
-        normIndices.push_back(in->index());
-    }
-    std::vector<GIR::data_idx_t> withIndices;
-    for (const auto &in : self->withInputs()) {
-        withIndices.push_back(in->index());
-    }
-
-    data_arr_t nargs = data_arr_t{
-        normIndices.data(),
-        static_cast<GIR::arr_size_t>(normIndices.size()),
-    };
-    data_arr_t wargs = data_arr_t{
-        withIndices.data(),
-        static_cast<GIR::arr_size_t>(withIndices.size()),
-    };
-
-    FrameArgsView withView(frame, wargs);
-    FrameArgsView normView(frame, nargs);
-    slot_t result = it->second(withView, normView, *context_);
-    frame.set(self->index(), result);
-};

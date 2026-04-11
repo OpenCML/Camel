@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,6 +30,7 @@
 #include "camel/runtime/draft.h"
 
 #include "camel/compile/gir/nodes.h"
+#include "camel/compile/gir/static_function.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
@@ -58,7 +59,6 @@ using camel::core::type::Type;
 using camel::core::type::TypeCode;
 
 struct GCGraphMetadataRecord {
-    GIR::graph_ptr_t sourceGraph;
     std::string stableId;
     std::string mangledName;
     std::string name;
@@ -139,10 +139,6 @@ template <typename T, typename U> T narrowIntegral(U value, const char *what) {
         value <= static_cast<U>(std::numeric_limits<T>::max()),
         std::format("{} exceeds the target integral width.", what));
     return static_cast<T>(value);
-}
-
-GIR::graph_ptr_t ownerSourceGraphHandleForBridge(const GCGraph *owner) {
-    return owner && owner->sourceGraph() ? owner->sourceGraph() : GIR::graph_ptr_t{};
 }
 
 GCNodeKind toRuntimeNodeKind(GIR::NodeType type) {
@@ -231,28 +227,16 @@ GIR::graph_ptr_t resolveGraphHandle(const GIR::graph_ptr_t &owner, const GIR::Gr
     return nullptr;
 }
 
-GCGraph *resolveRuntimeFunctionGraphForMaterialization(
-    ::Function *funcObj, const GIR::graph_ptr_t &ownerSourceGraph,
+GCGraph *resolveCompileStaticFunctionGraph(
+    GIR::StaticFunction *funcObj, const GIR::graph_ptr_t &ownerSourceGraph,
     const std::function<GCGraph *(const GIR::graph_ptr_t &)> &materializeSourceGraph,
-    const std::function<GCGraph *(const GIR::Graph *)> &findRuntimeGraph, std::string_view context,
-    GCGraph *owner = nullptr) {
-    // This helper belongs strictly to the compile-to-runtime bridge. Runtime
-    // execution and runtime rewrites should already carry GCGraph identity
-    // directly through Function::runtimeGraph().
-    ASSERT(funcObj != nullptr, "Runtime Function graph resolution received a null function.");
-
-    if (GCGraph *runtimeGraph = funcObj->runtimeGraph()) {
-        return runtimeGraph;
-    }
-
-    GIR::Graph *sourceGraph = funcObj->sourceGraph();
+    std::string_view context, GCGraph *owner = nullptr) {
     ASSERT(
-        sourceGraph != nullptr,
-        "Function graph resolution requires runtimeGraph or sourceGraph.");
+        funcObj != nullptr,
+        "Compile-time static function graph resolution received a null function.");
 
-    if (GCGraph *runtimeGraph = findRuntimeGraph(sourceGraph)) {
-        return runtimeGraph;
-    }
+    GIR::Graph *sourceGraph = funcObj->graph();
+    ASSERT(sourceGraph != nullptr, "Compile-time static function must reference a graph.");
 
     GIR::graph_ptr_t targetGraph = resolveGraphHandle(ownerSourceGraph, sourceGraph);
     if (!targetGraph) {
@@ -869,6 +853,14 @@ GCGraphNativePayload buildNativePayload(const GraphDraft &draft) {
 
 } // namespace
 
+slot_t canonicalizeStaticSlotRecursive(
+    slot_t slot, Type *type, std::unordered_map<const GIR::Graph *, GCGraph *> &cache,
+    std::unordered_map<const Object *, Object *> &objectCache, const GIR::Graph *sourceOwner);
+void collectStaticGraphRefsRecursive(
+    GCGraph *owner, slot_t slot, Type *type,
+    std::unordered_map<const GIR::Graph *, GCGraph *> &cache,
+    std::unordered_set<const Object *> &visited);
+
 GCGraphMetadataRecord::~GCGraphMetadataRecord() {
     graphFreeOwned(ownedStaticArea);
     graphFreeArray(nativePayload.nodeBlocks);
@@ -880,8 +872,6 @@ GCGraphMetadataRecord::~GCGraphMetadataRecord() {
 }
 
 GCGraph::GCGraph(GCGraphMetadataRecord *metadata) : metadata_(metadata) {}
-
-const GIR::graph_ptr_t &GCGraph::sourceGraph() const { return metadata_->sourceGraph; }
 
 const std::string &GCGraph::stableId() const { return metadata_->stableId; }
 
@@ -1114,7 +1104,7 @@ void GCGraph::clearGraphRefs() {
     metadata_->staticGraphRefs.clear();
 }
 
-void GCGraph::setStaticSlots(camel::compile::gir::static_slot_vec_t slots) {
+void GCGraph::setStaticSlots(std::vector<slot_t> slots) {
     const TupleType *staticType = staticDataType();
     if (!staticType) {
         metadata_->ownedStaticArea = nullptr;
@@ -1172,20 +1162,6 @@ void GCGraph::updateRefs(
     }
 }
 
-GCGraph *GCGraphManager::materializeRoot(const GIR::graph_ptr_t &rootGraph) {
-    clear();
-    if (!rootGraph) {
-        return nullptr;
-    }
-    std::unordered_map<const GIR::Graph *, GCGraph *> cache;
-    root_ = materializeGraph(rootGraph, cache);
-    gcRoots_.reserve(graphs_.size());
-    for (GCGraph *graph : graphs_) {
-        gcRoots_.push_back(graph);
-    }
-    return root_;
-}
-
 void GCGraphManager::replaceRoot(GCGraph *rootGraph) {
     clear();
     adoptRoot(rootGraph);
@@ -1206,11 +1182,6 @@ void GCGraphManager::adoptRoot(GCGraph *rootGraph) {
         }
         gcRoots_.push_back(graph);
         metadataRecords_.push_back(graph->metadata_);
-        // Keep the compile-to-runtime bridge index coherent for cold metadata
-        // lookups and materialization bookkeeping only.
-        if (const GIR::graph_ptr_t &sourceGraph = graph->sourceGraph(); sourceGraph) {
-            bySource_[sourceGraph.get()] = graph;
-        }
     }
 }
 
@@ -1218,7 +1189,6 @@ GCGraphManager::~GCGraphManager() { clear(); }
 
 GCGraph *encodeGraphDraft(const GraphDraft &draft) {
     auto *metadataRecord            = new GCGraphMetadataRecord();
-    metadataRecord->sourceGraph     = draft.sourceGraphHandle();
     metadataRecord->stableId        = draft.stableId();
     metadataRecord->mangledName     = draft.mangledName();
     metadataRecord->name            = draft.name();
@@ -1243,18 +1213,9 @@ GCGraph *encodeGraphDraft(const GraphDraft &draft) {
         runtimeGraphRaw->addStaticGraphRef(ref);
     }
 
-    camel::compile::gir::static_slot_vec_t staticSlots(
-        draft.staticSlots().begin(),
-        draft.staticSlots().end());
+    std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
     runtimeGraphRaw->setStaticSlots(std::move(staticSlots));
     return runtimeGraphRaw;
-}
-
-GCGraph *GCGraphManager::find(const GIR::Graph *sourceGraph) const {
-    // Bridge-only lookup from compile graph identity to an already
-    // materialized runtime carrier.
-    auto it = bySource_.find(sourceGraph);
-    return it == bySource_.end() ? nullptr : it->second;
 }
 
 std::vector<GCGraph *> GCGraphManager::roots() const {
@@ -1279,12 +1240,11 @@ void GCGraphManager::clear() {
         delete record;
     }
     metadataRecords_.clear();
-    bySource_.clear();
     root_ = nullptr;
     mm::graphSpace().reset();
 }
 
-GCGraph *GCGraphManager::materializeGraph(
+GCGraph *materializeGraphRecursive(
     const GIR::graph_ptr_t &sourceGraph, std::unordered_map<const GIR::Graph *, GCGraph *> &cache) {
     if (!sourceGraph) {
         return nullptr;
@@ -1294,7 +1254,6 @@ GCGraph *GCGraphManager::materializeGraph(
     }
 
     auto *metadataRecord            = new GCGraphMetadataRecord();
-    metadataRecord->sourceGraph     = sourceGraph;
     metadataRecord->stableId        = sourceGraph->stableId();
     metadataRecord->mangledName     = sourceGraph->mangledName();
     metadataRecord->name            = sourceGraph->name();
@@ -1308,17 +1267,14 @@ GCGraph *GCGraphManager::materializeGraph(
     metadataRecord->isRoot          = sourceGraph->isRoot();
 
     GCGraph *runtimeGraphRaw = graphAllocObject<GCGraph>(metadataRecord);
-    metadataRecords_.push_back(metadataRecord);
-    graphs_.push_back(runtimeGraphRaw);
-    cache[sourceGraph.get()]     = runtimeGraphRaw;
-    bySource_[sourceGraph.get()] = runtimeGraphRaw;
+    cache[sourceGraph.get()] = runtimeGraphRaw;
 
     for (const auto &dep : sourceGraph->dependencies()) {
-        runtimeGraphRaw->addDependency(materializeGraph(dep, cache));
+        runtimeGraphRaw->addDependency(materializeGraphRecursive(dep, cache));
     }
     for (const auto &[_, subGraphs] : sourceGraph->subGraphs()) {
         for (const auto &subGraph : subGraphs) {
-            runtimeGraphRaw->addSubGraph(materializeGraph(subGraph, cache));
+            runtimeGraphRaw->addSubGraph(materializeGraphRecursive(subGraph, cache));
         }
     }
 
@@ -1335,7 +1291,7 @@ GCGraph *GCGraphManager::materializeGraph(
                     targetHandle = nullptr;
                 }
             }
-            return targetHandle ? materializeGraph(targetHandle, cache) : nullptr;
+            return targetHandle ? materializeGraphRecursive(targetHandle, cache) : nullptr;
         });
 
     for (GIR::Node *node : collectNativeNodes(sourceGraph)) {
@@ -1354,7 +1310,7 @@ GCGraph *GCGraphManager::materializeGraph(
                     }
                 }
                 if (targetGraph) {
-                    runtimeGraphRaw->addDependency(materializeGraph(targetGraph, cache));
+                    runtimeGraphRaw->addDependency(materializeGraphRecursive(targetGraph, cache));
                 }
             }
             continue;
@@ -1366,13 +1322,14 @@ GCGraph *GCGraphManager::materializeGraph(
         if (dataNode->dataType()->code() != TypeCode::Function) {
             continue;
         }
-        auto *funcObj = fromSlot<::Function *>(dataNode->dataSlot());
+        auto *funcObj = fromSlot<GIR::StaticFunction *>(dataNode->dataSlot());
         if (funcObj) {
-            GCGraph *runtimeRef = resolveRuntimeFunctionGraphForMaterialization(
+            GCGraph *runtimeRef = resolveCompileStaticFunctionGraph(
                 funcObj,
                 sourceGraph,
-                [&](const GIR::graph_ptr_t &target) { return materializeGraph(target, cache); },
-                [&](const GIR::Graph *target) { return find(target); },
+                [&](const GIR::graph_ptr_t &target) {
+                    return materializeGraphRecursive(target, cache);
+                },
                 "GCGraphManager::materializeGraph(static-function-ref)",
                 runtimeGraphRaw);
             if (runtimeRef) {
@@ -1381,14 +1338,12 @@ GCGraph *GCGraphManager::materializeGraph(
         }
     }
 
-    camel::compile::gir::static_slot_vec_t runtimeStaticSlots(
-        sourceGraph->staticDataSize(),
-        NullSlot);
+    std::vector<slot_t> runtimeStaticSlots(sourceGraph->staticDataSize(), NullSlot);
     const TupleType *staticType = sourceGraph->staticDataType();
     std::unordered_map<const Object *, Object *> objectCache;
     if (staticType) {
         for (size_t i = 1; i < sourceGraph->staticDataSize() && i < staticType->size(); ++i) {
-            runtimeStaticSlots[i] = canonicalizeStaticSlot(
+            runtimeStaticSlots[i] = canonicalizeStaticSlotRecursive(
                 sourceGraph->getStaticDataSlot(-static_cast<GIR::data_idx_t>(i)),
                 staticType->typeAt(i),
                 cache,
@@ -1402,7 +1357,7 @@ GCGraph *GCGraphManager::materializeGraph(
     if (staticType) {
         for (size_t i = 1; i < runtimeGraphRaw->staticSlots().size() && i < staticType->size();
              ++i) {
-            collectStaticGraphRefs(
+            collectStaticGraphRefsRecursive(
                 runtimeGraphRaw,
                 runtimeGraphRaw->staticSlots()[i],
                 staticType->typeAt(i),
@@ -1414,7 +1369,15 @@ GCGraph *GCGraphManager::materializeGraph(
     return runtimeGraphRaw;
 }
 
-slot_t GCGraphManager::canonicalizeStaticSlot(
+GCGraph *materializeRuntimeGraph(const GIR::graph_ptr_t &rootGraph) {
+    if (!rootGraph) {
+        return nullptr;
+    }
+    std::unordered_map<const GIR::Graph *, GCGraph *> cache;
+    return materializeGraphRecursive(rootGraph, cache);
+}
+
+slot_t canonicalizeStaticSlotRecursive(
     slot_t slot, Type *type, std::unordered_map<const GIR::Graph *, GCGraph *> &cache,
     std::unordered_map<const Object *, Object *> &objectCache, const GIR::Graph *sourceOwner) {
     if (!type || !type->isGCTraced() || slot == NullSlot) {
@@ -1431,16 +1394,17 @@ slot_t GCGraphManager::canonicalizeStaticSlot(
 
     switch (type->code()) {
     case TypeCode::Function: {
-        auto *funcObj = fromSlot<::Function *>(slot);
+        auto *funcObj = fromSlot<GIR::StaticFunction *>(slot);
         ASSERT(funcObj != nullptr, "Function static slot payload is null.");
-        GCGraph *runtimeGraph = resolveRuntimeFunctionGraphForMaterialization(
+        GCGraph *runtimeGraph = resolveCompileStaticFunctionGraph(
             funcObj,
             sourceOwner ? requireOwnedSourceGraphHandle(
                               const_cast<GIR::Graph *>(sourceOwner),
                               "GCGraphManager::canonicalizeStaticSlot(owner-source)")
                         : GIR::graph_ptr_t{},
-            [&](const GIR::graph_ptr_t &target) { return materializeGraph(target, cache); },
-            [&](const GIR::Graph *target) { return find(target); },
+            [&](const GIR::graph_ptr_t &target) {
+                return materializeGraphRecursive(target, cache);
+            },
             std::format(
                 "GCGraphManager::canonicalizeStaticSlot(owner='{}')",
                 sourceOwner ? sourceOwner->name() : "<null>"),
@@ -1454,7 +1418,7 @@ slot_t GCGraphManager::canonicalizeStaticSlot(
             for (size_t i = 0; i < runtimeClosureType->size(); ++i) {
                 runtimeClosure->set<slot_t>(
                     i,
-                    canonicalizeStaticSlot(
+                    canonicalizeStaticSlotRecursive(
                         closure->get<slot_t>(i),
                         runtimeClosureType->typeAt(i),
                         cache,
@@ -1474,13 +1438,14 @@ slot_t GCGraphManager::canonicalizeStaticSlot(
         for (size_t i = 0; i < tupleType->size(); ++i) {
             runtimeTuple->set<slot_t>(
                 i,
-                camel::core::type::isGCTraced(tupleType->codeAt(i)) ? canonicalizeStaticSlot(
-                                                                          tuple->get<slot_t>(i),
-                                                                          tupleType->typeAt(i),
-                                                                          cache,
-                                                                          objectCache,
-                                                                          sourceOwner)
-                                                                    : tuple->get<slot_t>(i));
+                camel::core::type::isGCTraced(tupleType->codeAt(i))
+                    ? canonicalizeStaticSlotRecursive(
+                          tuple->get<slot_t>(i),
+                          tupleType->typeAt(i),
+                          cache,
+                          objectCache,
+                          sourceOwner)
+                    : tuple->get<slot_t>(i));
         }
         return toSlot<Object *>(runtimeTuple);
     }
@@ -1494,7 +1459,7 @@ slot_t GCGraphManager::canonicalizeStaticSlot(
             runtimeArray->set<slot_t>(
                 i,
                 camel::core::type::isGCTraced(arrayType->elemTypeCode())
-                    ? canonicalizeStaticSlot(
+                    ? canonicalizeStaticSlotRecursive(
                           array->get<slot_t>(i),
                           arrayType->elemType(),
                           cache,
@@ -1513,13 +1478,14 @@ slot_t GCGraphManager::canonicalizeStaticSlot(
         for (size_t i = 0; i < structType->size(); ++i) {
             runtimeStruct->set<slot_t>(
                 i,
-                camel::core::type::isGCTraced(structType->codeAt(i)) ? canonicalizeStaticSlot(
-                                                                           st->get<slot_t>(i),
-                                                                           structType->typeAt(i),
-                                                                           cache,
-                                                                           objectCache,
-                                                                           sourceOwner)
-                                                                     : st->get<slot_t>(i));
+                camel::core::type::isGCTraced(structType->codeAt(i))
+                    ? canonicalizeStaticSlotRecursive(
+                          st->get<slot_t>(i),
+                          structType->typeAt(i),
+                          cache,
+                          objectCache,
+                          sourceOwner)
+                    : st->get<slot_t>(i));
         }
         return toSlot<Object *>(runtimeStruct);
     }
@@ -1531,7 +1497,7 @@ slot_t GCGraphManager::canonicalizeStaticSlot(
     }
 }
 
-void GCGraphManager::collectStaticGraphRefs(
+void collectStaticGraphRefsRecursive(
     GCGraph *owner, slot_t slot, Type *type,
     std::unordered_map<const GIR::Graph *, GCGraph *> &cache,
     std::unordered_set<const Object *> &visited) {
@@ -1550,13 +1516,10 @@ void GCGraphManager::collectStaticGraphRefs(
         if (!funcObj) {
             return;
         }
-        GCGraph *runtimeGraph = resolveRuntimeFunctionGraphForMaterialization(
-            funcObj,
-            ownerSourceGraphHandleForBridge(owner),
-            [&](const GIR::graph_ptr_t &target) { return materializeGraph(target, cache); },
-            [&](const GIR::Graph *target) { return find(target); },
-            "GCGraphManager::collectStaticGraphRefs",
-            owner);
+        GCGraph *runtimeGraph = funcObj->runtimeGraph();
+        ASSERT(
+            runtimeGraph != nullptr,
+            "Runtime static graph references must already point to GCGraph carriers.");
         owner->addStaticGraphRef(runtimeGraph);
 
         if (::Tuple *closure = funcObj->tuple()) {
@@ -1565,7 +1528,7 @@ void GCGraphManager::collectStaticGraphRefs(
                 if (!camel::core::type::isGCTraced(closureType->codeAt(i))) {
                     continue;
                 }
-                collectStaticGraphRefs(
+                collectStaticGraphRefsRecursive(
                     owner,
                     closure->get<slot_t>(i),
                     closureType->typeAt(i),
@@ -1581,7 +1544,7 @@ void GCGraphManager::collectStaticGraphRefs(
             if (!camel::core::type::isGCTraced(tupleType->codeAt(i))) {
                 continue;
             }
-            collectStaticGraphRefs(
+            collectStaticGraphRefsRecursive(
                 owner,
                 tuple->get<slot_t>(i),
                 tupleType->typeAt(i),
@@ -1596,7 +1559,7 @@ void GCGraphManager::collectStaticGraphRefs(
             return;
         }
         for (size_t i = 0; i < array->size(); ++i) {
-            collectStaticGraphRefs(
+            collectStaticGraphRefsRecursive(
                 owner,
                 array->get<slot_t>(i),
                 arrayType->elemType(),
@@ -1611,7 +1574,7 @@ void GCGraphManager::collectStaticGraphRefs(
             if (!camel::core::type::isGCTraced(structType->codeAt(i))) {
                 continue;
             }
-            collectStaticGraphRefs(
+            collectStaticGraphRefsRecursive(
                 owner,
                 st->get<slot_t>(i),
                 structType->typeAt(i),
