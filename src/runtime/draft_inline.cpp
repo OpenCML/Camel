@@ -27,8 +27,10 @@
  * - redirect value and control users of the FUNC node
  * - erase the original FUNC node
  *
- * This is the minimum reusable primitive needed before the large inline pass
- * itself can be migrated away from GIR-side GraphBuilder::inlineCallable.
+ * This
+ * is the minimum reusable primitive needed before the large inline pass
+ * fully consolidates
+ * around the runtime-native draft/session pipeline.
  */
 
 #include "camel/runtime/draft_inline.h"

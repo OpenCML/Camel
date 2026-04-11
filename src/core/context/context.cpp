@@ -508,14 +508,14 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
     return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
 }
 
-GIR::graph_ptr_t Context::rootGraph() const {
+GIR::graph_ptr_t Context::compileRootGraph() const {
     ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
     auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
     ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
     return gir;
 }
 
-GIR::graph_ptr_t Context::mainGraph() const {
+GIR::graph_ptr_t Context::compileMainGraph() const {
     ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
     auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
     ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
@@ -532,7 +532,7 @@ GIR::graph_ptr_t Context::mainGraph() const {
 }
 
 camel::runtime::GCGraph *Context::runtimeRootGraph() {
-    return currentRuntimeRoot() ? currentRuntimeRoot() : materializeRuntimeRoot(rootGraph());
+    return currentRuntimeRoot() ? currentRuntimeRoot() : materializeRuntimeRoot(compileRootGraph());
 }
 
 camel::runtime::GCGraph *Context::materializeRuntimeRoot(const GIR::graph_ptr_t &rootGraph) {

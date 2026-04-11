@@ -13,14 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "bytecode.h"
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/runtime/graph.h"
 #include "optimize.h"
@@ -46,10 +45,6 @@ struct LinkedBytecodeResult {
     std::vector<BytecodeIndex> graphs;
     std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap;
 };
-
-bytecode_vec_t compile(
-    const ctx::context_ptr_t &ctx, GIR::Graph *graph, const CompileStrategy &opt = {},
-    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins = nullptr);
 
 bytecode_vec_t compile(
     const ctx::context_ptr_t &ctx, camel::runtime::GCGraph *graph, const CompileStrategy &opt = {},

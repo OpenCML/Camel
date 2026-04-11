@@ -31,6 +31,8 @@
 
 #include "camel/compile/gir/nodes.h"
 #include "camel/compile/gir/static_function.h"
+#include "camel/compile/gir/validate.h"
+#include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
@@ -58,24 +60,25 @@ using camel::core::type::TupleType;
 using camel::core::type::Type;
 using camel::core::type::TypeCode;
 
-struct GCGraphMetadataRecord {
+struct GCGraphDebugRecord {
     std::string stableId;
     std::string mangledName;
     std::string name;
+};
+
+struct GCGraphStorageRecord {
+    GCGraphDebugRecord *debugRecord               = nullptr;
     camel::core::type::FunctionType *funcType     = nullptr;
     camel::core::type::TupleType *runtimeDataType = nullptr;
     camel::core::type::TupleType *staticDataType  = nullptr;
     camel::core::type::TupleType *closureType     = nullptr;
-    size_t frameSize                              = 0;
-    bool hasFrameLayout                           = false;
-    bool isMacro                                  = false;
     bool isRoot                                   = false;
     std::vector<GCGraph *> dependencies;
     std::vector<GCGraph *> subGraphs;
     std::vector<GCGraph *> staticGraphRefs;
     ::Tuple *ownedStaticArea = nullptr;
     GCGraphNativePayload nativePayload;
-    ~GCGraphMetadataRecord();
+    ~GCGraphStorageRecord();
 };
 
 namespace {
@@ -243,6 +246,80 @@ GCGraph *resolveCompileStaticFunctionGraph(
         targetGraph = requireOwnedSourceGraphHandle(sourceGraph, context, owner);
     }
     return materializeSourceGraph(targetGraph);
+}
+
+void validateRuntimeGraphPayload(const GCGraph *graph) {
+    if (!graph) {
+        return;
+    }
+    if (!graph->hasNodePayload()) {
+        throw std::runtime_error(
+            std::format("Runtime graph '{}' has no native node payload.", graph->name()));
+    }
+
+    const auto validateRef = [&](gc_node_ref_t ref, std::string_view what) {
+        if (ref == kInvalidNodeRef) {
+            return;
+        }
+        if (!graph->containsNodeRef(ref)) {
+            throw std::runtime_error(
+                std::format(
+                    "Runtime graph '{}' has invalid {} node ref {}.",
+                    graph->name(),
+                    what,
+                    ref));
+        }
+    };
+
+    validateRef(graph->entryNodeRef(), "entry");
+    validateRef(graph->exitNodeRef(), "exit");
+    validateRef(graph->outputNodeRef(), "output");
+    validateRef(graph->returnNodeRef(), "return");
+
+    for (gc_node_ref_t ref = 0; ref < graph->nodeBlockCount();) {
+        const GCNode *node = graph->node(ref);
+        if (!node) {
+            break;
+        }
+        if (node->blockCount == 0) {
+            throw std::runtime_error(
+                std::format(
+                    "Runtime graph '{}' has zero-sized node block at ref {}.",
+                    graph->name(),
+                    ref));
+        }
+        auto validateSlice = [&](Slice slice, std::string_view edgeKind) {
+            const auto refs = graph->edgeSlice(slice);
+            if (slice.count != refs.size()) {
+                throw std::runtime_error(
+                    std::format(
+                        "Runtime graph '{}' has out-of-range {} slice at ref {}.",
+                        graph->name(),
+                        edgeKind,
+                        ref));
+            }
+            for (gc_node_ref_t edgeRef : refs) {
+                validateRef(edgeRef, edgeKind);
+            }
+        };
+        validateSlice(node->normInputs, "norm-input");
+        validateSlice(node->withInputs, "with-input");
+        validateSlice(node->ctrlInputs, "ctrl-input");
+        validateSlice(node->normOutputs, "norm-output");
+        validateSlice(node->withOutputs, "with-output");
+        validateSlice(node->ctrlOutputs, "ctrl-output");
+        if (node->kind == GCNodeKind::Func) {
+            const auto *body = node->bodyAs<GCFuncBody>();
+            if (!body || !body->calleeGraph) {
+                throw std::runtime_error(
+                    std::format(
+                        "Runtime graph '{}' has FUNC node {} without callee graph.",
+                        graph->name(),
+                        ref));
+            }
+        }
+        ref = graph->nextNodeRef(ref);
+    }
 }
 
 size_t nodeBodyBytes(const GIR::Node *node) {
@@ -861,7 +938,8 @@ void collectStaticGraphRefsRecursive(
     std::unordered_map<const GIR::Graph *, GCGraph *> &cache,
     std::unordered_set<const Object *> &visited);
 
-GCGraphMetadataRecord::~GCGraphMetadataRecord() {
+GCGraphStorageRecord::~GCGraphStorageRecord() {
+    delete debugRecord;
     graphFreeOwned(ownedStaticArea);
     graphFreeArray(nativePayload.nodeBlocks);
     graphFreeArray(nativePayload.edges);
@@ -871,29 +949,46 @@ GCGraphMetadataRecord::~GCGraphMetadataRecord() {
     graphFreeArray(nativePayload.branchArms);
 }
 
-GCGraph::GCGraph(GCGraphMetadataRecord *metadata) : metadata_(metadata) {}
+GCGraph::GCGraph(GCGraphStorageRecord *storage) : storage_(storage) {}
 
-const std::string &GCGraph::stableId() const { return metadata_->stableId; }
+const std::string &GCGraph::stableId() const {
+    static const std::string kEmpty;
+    return storage_ && storage_->debugRecord ? storage_->debugRecord->stableId : kEmpty;
+}
 
-const std::string &GCGraph::mangledName() const { return metadata_->mangledName; }
+const std::string &GCGraph::mangledName() const {
+    static const std::string kEmpty;
+    return storage_ && storage_->debugRecord ? storage_->debugRecord->mangledName : kEmpty;
+}
 
-const std::string &GCGraph::name() const { return metadata_->name; }
+const std::string &GCGraph::name() const {
+    static const std::string kEmpty;
+    return storage_ && storage_->debugRecord ? storage_->debugRecord->name : kEmpty;
+}
 
-camel::core::type::FunctionType *GCGraph::funcType() const { return metadata_->funcType; }
+camel::core::type::FunctionType *GCGraph::funcType() const { return storage_->funcType; }
 
-const TupleType *GCGraph::runtimeDataType() const { return metadata_->runtimeDataType; }
+const TupleType *GCGraph::runtimeDataType() const { return storage_->runtimeDataType; }
 
-const TupleType *GCGraph::staticDataType() const { return metadata_->staticDataType; }
+const TupleType *GCGraph::staticDataType() const { return storage_->staticDataType; }
 
-const TupleType *GCGraph::closureType() const { return metadata_->closureType; }
+const TupleType *GCGraph::closureType() const { return storage_->closureType; }
 
-bool GCGraph::hasFrameLayout() const { return metadata_->hasFrameLayout; }
+bool GCGraph::hasFrameLayout() const {
+    return staticArea_ != nullptr && runtimeDataType() != nullptr;
+}
 
-size_t GCGraph::frameSize() const { return metadata_->frameSize; }
+size_t GCGraph::frameSize() const {
+    ASSERT(hasFrameLayout(), "Runtime graph frame layout is not available.");
+    return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeDataType()->size();
+}
 
-bool GCGraph::isMacro() const { return metadata_->isMacro; }
+bool GCGraph::isMacro() const {
+    auto *type = funcType();
+    return type != nullptr && type->modifiers().macro();
+}
 
-bool GCGraph::isRoot() const { return metadata_->isRoot; }
+bool GCGraph::isRoot() const { return storage_->isRoot; }
 
 uintptr_t GCGraph::extraSlot(size_t index) const {
     ASSERT(index < kExtraSlotCount, "GCGraph extra slot index out of range.");
@@ -911,53 +1006,51 @@ void GCGraph::clearExtraSlots() {
     }
 }
 
-const std::vector<GCGraph *> &GCGraph::dependencies() const { return metadata_->dependencies; }
+const std::vector<GCGraph *> &GCGraph::dependencies() const { return storage_->dependencies; }
 
-const std::vector<GCGraph *> &GCGraph::subGraphs() const { return metadata_->subGraphs; }
+const std::vector<GCGraph *> &GCGraph::subGraphs() const { return storage_->subGraphs; }
 
-const std::vector<GCGraph *> &GCGraph::staticGraphRefs() const {
-    return metadata_->staticGraphRefs;
-}
+const std::vector<GCGraph *> &GCGraph::staticGraphRefs() const { return storage_->staticGraphRefs; }
 
 std::span<const slot_t> GCGraph::staticSlots() const {
     return staticArea_ ? std::span<const slot_t>(staticArea_->data(), staticArea_->size())
                        : std::span<const slot_t>{};
 }
 
-bool GCGraph::hasNodePayload() const { return !metadata_->nativePayload.empty(); }
+bool GCGraph::hasNodePayload() const { return !storage_->nativePayload.empty(); }
 
 const GCGraphNativePayload *GCGraph::nodePayload() const {
-    return metadata_->nativePayload.empty() ? nullptr : &metadata_->nativePayload;
+    return storage_->nativePayload.empty() ? nullptr : &storage_->nativePayload;
 }
 
-gc_cnt_t GCGraph::nodeCount() const { return metadata_->nativePayload.nodeCount; }
+gc_cnt_t GCGraph::nodeCount() const { return storage_->nativePayload.nodeCount; }
 
-gc_cnt_t GCGraph::nodeBlockCount() const { return metadata_->nativePayload.nodeBlockCount; }
+gc_cnt_t GCGraph::nodeBlockCount() const { return storage_->nativePayload.nodeBlockCount; }
 
-gc_cnt_t GCGraph::edgeCount() const { return metadata_->nativePayload.edgeCount; }
+gc_cnt_t GCGraph::edgeCount() const { return storage_->nativePayload.edgeCount; }
 
-gc_cnt_t GCGraph::branchArmCount() const { return metadata_->nativePayload.branchArmCount; }
+gc_cnt_t GCGraph::branchArmCount() const { return storage_->nativePayload.branchArmCount; }
 
 const GCNode *GCGraph::entryNode() const { return node(entryNodeRef()); }
 
-gc_node_ref_t GCGraph::entryNodeRef() const { return metadata_->nativePayload.entryNode; }
+gc_node_ref_t GCGraph::entryNodeRef() const { return storage_->nativePayload.entryNode; }
 
 const GCNode *GCGraph::exitNode() const { return node(exitNodeRef()); }
 
-gc_node_ref_t GCGraph::exitNodeRef() const { return metadata_->nativePayload.exitNode; }
+gc_node_ref_t GCGraph::exitNodeRef() const { return storage_->nativePayload.exitNode; }
 
 const GCNode *GCGraph::outputNode() const { return node(outputNodeRef()); }
 
-gc_node_ref_t GCGraph::outputNodeRef() const { return metadata_->nativePayload.outputNode; }
+gc_node_ref_t GCGraph::outputNodeRef() const { return storage_->nativePayload.outputNode; }
 
 const GCNode *GCGraph::returnNode() const { return node(returnNodeRef()); }
 
-gc_node_ref_t GCGraph::returnNodeRef() const { return metadata_->nativePayload.returnNode; }
+gc_node_ref_t GCGraph::returnNodeRef() const { return storage_->nativePayload.returnNode; }
 
-GCReturnKind GCGraph::returnKind() const { return metadata_->nativePayload.returnKind; }
+GCReturnKind GCGraph::returnKind() const { return storage_->nativePayload.returnKind; }
 
 const GCNode *GCGraph::node(gc_node_ref_t ref) const {
-    const auto &payload = metadata_->nativePayload;
+    const auto &payload = storage_->nativePayload;
     if (!payload.nodeBlocks || ref == kInvalidNodeRef || ref >= payload.nodeBlockCount) {
         return nullptr;
     }
@@ -967,7 +1060,7 @@ const GCNode *GCGraph::node(gc_node_ref_t ref) const {
 bool GCGraph::containsNodeRef(gc_node_ref_t ref) const { return node(ref) != nullptr; }
 
 gc_node_ref_t GCGraph::nodeRef(const GCNode *nodePtr) const {
-    const auto &payload = metadata_->nativePayload;
+    const auto &payload = storage_->nativePayload;
     if (!payload.nodeBlocks || !nodePtr) {
         return kInvalidNodeRef;
     }
@@ -1020,7 +1113,7 @@ gc_node_ref_t GCGraph::nextNodeRef(gc_node_ref_t ref) const {
 const GCNode *GCGraph::nextNode(gc_node_ref_t ref) const { return node(nextNodeRef(ref)); }
 
 std::span<const gc_node_ref_t> GCGraph::edgeSlice(Slice slice) const {
-    const auto &payload = metadata_->nativePayload;
+    const auto &payload = storage_->nativePayload;
     return sliceView(payload.edges, slice, payload.edgeCount);
 }
 
@@ -1055,7 +1148,7 @@ std::span<const gc_node_ref_t> GCGraph::ctrlOutputsOf(gc_node_ref_t ref) const {
 }
 
 std::span<const gc_node_ref_t> GCGraph::normPorts() const {
-    const auto &payload = metadata_->nativePayload;
+    const auto &payload = storage_->nativePayload;
     if (!payload.normPorts) {
         return {};
     }
@@ -1063,7 +1156,7 @@ std::span<const gc_node_ref_t> GCGraph::normPorts() const {
 }
 
 std::span<const gc_node_ref_t> GCGraph::withPorts() const {
-    const auto &payload = metadata_->nativePayload;
+    const auto &payload = storage_->nativePayload;
     if (!payload.withPorts) {
         return {};
     }
@@ -1071,7 +1164,7 @@ std::span<const gc_node_ref_t> GCGraph::withPorts() const {
 }
 
 std::span<const gc_node_ref_t> GCGraph::closureNodes() const {
-    const auto &payload = metadata_->nativePayload;
+    const auto &payload = storage_->nativePayload;
     if (!payload.closure) {
         return {};
     }
@@ -1079,7 +1172,7 @@ std::span<const gc_node_ref_t> GCGraph::closureNodes() const {
 }
 
 std::span<const GCBranchArm> GCGraph::branchArmsOf(gc_node_ref_t brchRef) const {
-    const auto &payload = metadata_->nativePayload;
+    const auto &payload = storage_->nativePayload;
     const GCNode *n     = node(brchRef);
     if (!n || n->kind != GCNodeKind::Brch) {
         return {};
@@ -1092,35 +1185,35 @@ std::span<const GCBranchArm> GCGraph::branchArmsOf(gc_node_ref_t brchRef) const 
         payload.branchArmCount);
 }
 
-void GCGraph::addDependency(GCGraph *graph) { pushUnique(metadata_->dependencies, graph); }
+void GCGraph::addDependency(GCGraph *graph) { pushUnique(storage_->dependencies, graph); }
 
-void GCGraph::addSubGraph(GCGraph *graph) { pushUnique(metadata_->subGraphs, graph); }
+void GCGraph::addSubGraph(GCGraph *graph) { pushUnique(storage_->subGraphs, graph); }
 
-void GCGraph::addStaticGraphRef(GCGraph *graph) { pushUnique(metadata_->staticGraphRefs, graph); }
+void GCGraph::addStaticGraphRef(GCGraph *graph) { pushUnique(storage_->staticGraphRefs, graph); }
 
 void GCGraph::clearGraphRefs() {
-    metadata_->dependencies.clear();
-    metadata_->subGraphs.clear();
-    metadata_->staticGraphRefs.clear();
+    storage_->dependencies.clear();
+    storage_->subGraphs.clear();
+    storage_->staticGraphRefs.clear();
 }
 
 void GCGraph::setStaticSlots(std::vector<slot_t> slots) {
     const TupleType *staticType = staticDataType();
     if (!staticType) {
-        metadata_->ownedStaticArea = nullptr;
-        staticArea_                = nullptr;
+        storage_->ownedStaticArea = nullptr;
+        staticArea_               = nullptr;
         return;
     }
 
-    staticArea_                = ::Tuple::create(staticType->size(), mm::graphSpace());
-    metadata_->ownedStaticArea = staticArea_;
+    staticArea_               = ::Tuple::create(staticType->size(), mm::graphSpace());
+    storage_->ownedStaticArea = staticArea_;
     for (size_t i = 1; i < staticType->size() && i < slots.size(); ++i) {
         staticArea_->set<slot_t>(i, slots[i]);
     }
 }
 
 void GCGraph::setStaticDataType(camel::core::type::TupleType *type) {
-    metadata_->staticDataType = type;
+    storage_->staticDataType = type;
 }
 
 bool GCGraph::equals(
@@ -1129,7 +1222,7 @@ bool GCGraph::equals(
     (void)type;
     (void)deep;
     auto *otherGraph = dynamic_cast<const GCGraph *>(other);
-    return otherGraph != nullptr && otherGraph->metadata_ == metadata_;
+    return otherGraph != nullptr && otherGraph->storage_ == storage_;
 }
 
 camel::core::rtdata::Object *GCGraph::clone(
@@ -1140,7 +1233,7 @@ camel::core::rtdata::Object *GCGraph::clone(
     if (!mem) {
         throw std::bad_alloc();
     }
-    auto *graph        = new (mem) GCGraph(metadata_);
+    auto *graph        = new (mem) GCGraph(storage_);
     graph->staticArea_ = staticArea_;
     for (size_t i = 0; i < kExtraSlotCount; ++i) {
         graph->extraSlots_[i] = extraSlots_[i];
@@ -1175,34 +1268,34 @@ void GCGraphManager::adoptRoot(GCGraph *rootGraph) {
 
     graphs_ = collectReachableGraphs(root_);
     gcRoots_.reserve(graphs_.size());
-    metadataRecords_.reserve(graphs_.size());
+    storageRecords_.reserve(graphs_.size());
     for (GCGraph *graph : graphs_) {
         if (!graph) {
             continue;
         }
         gcRoots_.push_back(graph);
-        metadataRecords_.push_back(graph->metadata_);
+        storageRecords_.push_back(graph->storage_);
     }
 }
 
 GCGraphManager::~GCGraphManager() { clear(); }
 
 GCGraph *encodeGraphDraft(const GraphDraft &draft) {
-    auto *metadataRecord            = new GCGraphMetadataRecord();
-    metadataRecord->stableId        = draft.stableId();
-    metadataRecord->mangledName     = draft.mangledName();
-    metadataRecord->name            = draft.name();
-    metadataRecord->funcType        = draft.funcType();
-    metadataRecord->runtimeDataType = draft.runtimeDataType();
-    metadataRecord->staticDataType  = nullptr;
-    metadataRecord->closureType     = draft.closureType();
-    metadataRecord->frameSize       = draft.frameSize();
-    metadataRecord->hasFrameLayout  = draft.hasFrameLayout();
-    metadataRecord->isMacro         = draft.isMacroGraph();
-    metadataRecord->isRoot          = draft.isRootGraph();
-    metadataRecord->nativePayload   = buildNativePayload(draft);
+    auto *debugRecord        = new GCGraphDebugRecord();
+    debugRecord->stableId    = draft.stableId();
+    debugRecord->mangledName = draft.mangledName();
+    debugRecord->name        = draft.name();
 
-    GCGraph *runtimeGraphRaw = graphAllocObject<GCGraph>(metadataRecord);
+    auto *storageRecord            = new GCGraphStorageRecord();
+    storageRecord->debugRecord     = debugRecord;
+    storageRecord->funcType        = draft.funcType();
+    storageRecord->runtimeDataType = draft.runtimeDataType();
+    storageRecord->staticDataType  = nullptr;
+    storageRecord->closureType     = draft.closureType();
+    storageRecord->isRoot          = draft.isRootGraph();
+    storageRecord->nativePayload   = buildNativePayload(draft);
+
+    GCGraph *runtimeGraphRaw = graphAllocObject<GCGraph>(storageRecord);
     for (GCGraph *dep : draft.dependencies()) {
         runtimeGraphRaw->addDependency(dep);
     }
@@ -1232,14 +1325,14 @@ std::vector<GCGraph *> GCGraphManager::reachableFromRoots() const {
 void GCGraphManager::clear() {
     gcRoots_.clear();
     graphs_.clear();
-    for (auto *record : metadataRecords_) {
+    for (auto *record : storageRecords_) {
         if (record) {
             record->ownedStaticArea = nullptr;
             record->nativePayload   = GCGraphNativePayload{};
         }
         delete record;
     }
-    metadataRecords_.clear();
+    storageRecords_.clear();
     root_ = nullptr;
     mm::graphSpace().reset();
 }
@@ -1253,20 +1346,26 @@ GCGraph *materializeGraphRecursive(
         return it->second;
     }
 
-    auto *metadataRecord            = new GCGraphMetadataRecord();
-    metadataRecord->stableId        = sourceGraph->stableId();
-    metadataRecord->mangledName     = sourceGraph->mangledName();
-    metadataRecord->name            = sourceGraph->name();
-    metadataRecord->funcType        = sourceGraph->funcType();
-    metadataRecord->runtimeDataType = const_cast<TupleType *>(sourceGraph->runtimeDataType());
-    metadataRecord->staticDataType  = const_cast<TupleType *>(sourceGraph->staticDataType());
-    metadataRecord->closureType     = const_cast<TupleType *>(sourceGraph->closureType());
-    metadataRecord->frameSize       = sourceGraph->frameSize();
-    metadataRecord->hasFrameLayout  = sourceGraph->hasFrameLayout();
-    metadataRecord->isMacro         = sourceGraph->isMacro();
-    metadataRecord->isRoot          = sourceGraph->isRoot();
+    EXEC_WHEN_DEBUG({
+        GIR::validate::assertGraphSealingPreconditions(*sourceGraph);
+        GIR::validate::assertGraphTreeStaticReferences(sourceGraph);
+    });
+    sourceGraph->refreshDerivedLayout();
 
-    GCGraph *runtimeGraphRaw = graphAllocObject<GCGraph>(metadataRecord);
+    auto *debugRecord        = new GCGraphDebugRecord();
+    debugRecord->stableId    = sourceGraph->stableId();
+    debugRecord->mangledName = sourceGraph->mangledName();
+    debugRecord->name        = sourceGraph->name();
+
+    auto *storageRecord            = new GCGraphStorageRecord();
+    storageRecord->debugRecord     = debugRecord;
+    storageRecord->funcType        = sourceGraph->funcType();
+    storageRecord->runtimeDataType = const_cast<TupleType *>(sourceGraph->runtimeDataType());
+    storageRecord->staticDataType  = const_cast<TupleType *>(sourceGraph->staticDataType());
+    storageRecord->closureType     = const_cast<TupleType *>(sourceGraph->closureType());
+    storageRecord->isRoot          = sourceGraph->isRoot();
+
+    GCGraph *runtimeGraphRaw = graphAllocObject<GCGraph>(storageRecord);
     cache[sourceGraph.get()] = runtimeGraphRaw;
 
     for (const auto &dep : sourceGraph->dependencies()) {
@@ -1278,7 +1377,7 @@ GCGraph *materializeGraphRecursive(
         }
     }
 
-    metadataRecord->nativePayload =
+    storageRecord->nativePayload =
         buildNativePayload(sourceGraph, [&](const GIR::Graph *target) -> GCGraph * {
             if (!target) {
                 return nullptr;
@@ -1365,6 +1464,8 @@ GCGraph *materializeGraphRecursive(
                 visited);
         }
     }
+
+    validateRuntimeGraphPayload(runtimeGraphRaw);
 
     return runtimeGraphRaw;
 }

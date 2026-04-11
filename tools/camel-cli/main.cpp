@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -209,12 +209,12 @@ int main(int argc, char *argv[]) {
                 if (Inspect::dumpGCT && mainModule->gct()) {
                     mainModule->gct()->print(os);
                 }
-                if (Inspect::dumpGIR && ctx->rootGraph()) {
+                if (Inspect::dumpGIR && ctx->compileRootGraph()) {
                     GraphVizDumpPass pass(ctx);
                     auto *root = ctx->runtimeRootGraph();
                     (void)pass.apply(root, os);
                 }
-                if (Inspect::dumpTNS && ctx->rootGraph()) {
+                if (Inspect::dumpTNS && ctx->compileRootGraph()) {
                     auto *entry = ctx->runtimeRootGraph();
                     TopoNodeSeqDumpPass pass(ctx);
                     (void)pass.apply(entry, os);
@@ -228,7 +228,7 @@ int main(int argc, char *argv[]) {
             }
 
             {
-                auto rg = ctx->rootGraph();
+                auto rg = ctx->compileRootGraph();
                 CAMEL_LOG_INFO_S(
                     "Main",
                     "run | compile | graph={} | user_modules={}",

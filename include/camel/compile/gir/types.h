@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -78,7 +78,7 @@ using node_set_t      = std::unordered_set<Node *>;
 
 using data_idx_t = int16_t;
 
-/// Debug/content-addressed fingerprint for a sealed node (128-bit), materialized as the
+/// Debug/content-addressed fingerprint for a layout-stabilized node (128-bit), materialized as the
 /// `gnode:{word0}{word1}` entity ID.
 struct NodeDebugFingerprint {
     uint64_t word0 = 0;

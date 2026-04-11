@@ -101,7 +101,8 @@ class Context : public std::enable_shared_from_this<Context> {
     /** Collect lookup attempts for a missing module so error messages can report them. */
     std::vector<std::string> getModuleSearchDiagnostics(const std::string &moduleName) const;
     /** Return the base search paths that were actually consulted; for .cmo load failures we only
-     * list paths. */
+
+     * * list paths. */
     std::vector<std::string> getSearchPathBases() const;
 
     Context(const EntryConfig &entryConf, const error::DiagsConfig &diagConf);
@@ -122,8 +123,8 @@ class Context : public std::enable_shared_from_this<Context> {
         return runtimeErrorReporter_;
     }
     camel::source::source_context_ptr_t sourceContext() const { return sourceContext_; }
-    GIR::graph_ptr_t rootGraph() const;
-    GIR::graph_ptr_t mainGraph() const;
+    GIR::graph_ptr_t compileRootGraph() const;
+    GIR::graph_ptr_t compileMainGraph() const;
     camel::runtime::GCGraph *runtimeRootGraph();
     camel::runtime::GCGraph *materializeRuntimeRoot(const GIR::graph_ptr_t &rootGraph);
     camel::runtime::GCGraph *adoptRuntimeRoot(camel::runtime::GCGraph *runtimeRoot);

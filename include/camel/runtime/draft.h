@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include "camel/core/context/frame.h"
 #include "camel/runtime/graph.h"
 
 #include <cstddef>
@@ -186,9 +187,12 @@ class GraphDraft {
     camel::core::type::FunctionType *funcType() const { return funcType_; }
     camel::core::type::TupleType *runtimeDataType() const { return runtimeDataType_; }
     camel::core::type::TupleType *closureType() const { return closureType_; }
-    size_t frameSize() const { return frameSize_; }
-    bool hasFrameLayout() const { return hasFrameLayout_; }
-    bool isMacroGraph() const { return isMacro_; }
+    size_t frameSize() const {
+        ASSERT(hasFrameLayout(), "Runtime draft frame layout is not available.");
+        return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeDataType_->size();
+    }
+    bool hasFrameLayout() const { return runtimeDataType_ != nullptr && !staticSlots_.empty(); }
+    bool isMacroGraph() const { return funcType_ != nullptr && funcType_->modifiers().macro(); }
     bool isRootGraph() const { return isRoot_; }
     gc_cnt_t nodeCount() const { return liveNodeCount_; }
     size_t nodeSlotCount() const { return nodesById_.size(); }
@@ -285,9 +289,6 @@ class GraphDraft {
     camel::core::type::FunctionType *funcType_     = nullptr;
     camel::core::type::TupleType *runtimeDataType_ = nullptr;
     camel::core::type::TupleType *closureType_     = nullptr;
-    size_t frameSize_                              = 0;
-    bool hasFrameLayout_                           = false;
-    bool isMacro_                                  = false;
     bool isRoot_                                   = false;
     DraftNodePool pool_;
     std::vector<DraftNode *> nodesById_;

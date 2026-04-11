@@ -117,22 +117,10 @@ class Node {
     bool detach();
 
   protected:
-    void setDataType(Type *type) {
-        ASSERT(!graph_->finalized(), "Cannot mutate node type after graph is sealed.");
-        dataType_ = type;
-    }
-    void setIndex(data_idx_t index) {
-        ASSERT(!graph_->finalized(), "Cannot mutate node index after graph is sealed.");
-        dataIndex_ = index;
-    }
-    void setMacro(bool m) {
-        ASSERT(!graph_->finalized(), "Cannot mutate node flags after graph is sealed.");
-        macro_ = m;
-    }
-    void setConstant(bool c) {
-        ASSERT(!graph_->finalized(), "Cannot mutate node flags after graph is sealed.");
-        const_ = c;
-    }
+    void setDataType(Type *type) { dataType_ = type; }
+    void setIndex(data_idx_t index) { dataIndex_ = index; }
+    void setMacro(bool m) { macro_ = m; }
+    void setConstant(bool c) { const_ = c; }
 
     bool macro_  = false;
     bool const_  = false;
@@ -166,8 +154,6 @@ class Node {
 
   private:
     friend class Builder;
-    friend class GraphBuilder;
-    friend class GraphRewriteSession;
     friend class detail::NodeMutation;
 
     node_vec_t &mutableNormInputs() {
@@ -195,8 +181,7 @@ class Node {
         return ctrlOutputs_;
     }
 
-    /// Move draft adjacency vectors into arena-backed fixed arrays, then clear the vectors
-    /// and set frozen_ = true. Called by GraphBuilder::sealGraph() during freezing.
+    /// Move adjacency vectors into arena-backed fixed arrays for read-mostly encoded graphs.
     void freezeAdjacency(GraphArena &arena);
 
     static void link(LinkType type, Node *from, Node *to);
@@ -209,8 +194,7 @@ class Node {
 };
 
 namespace detail {
-// Internal node-rewrite bridge: only for GraphBuilder / GraphDraft / rewrite
-// paths, not a stable external API.
+// Internal node mutation bridge shared by compile lowering and graph encoding.
 class NodeMutation {
   public:
     static void setDataType(Node *node, Type *type) { node->setDataType(type); }
@@ -474,7 +458,6 @@ class FuncNode : public Node {
   private:
     void setBodyGraph(Graph *bodyGraph) {
         ASSERT(bodyGraph != nullptr, "FuncNode body graph cannot be null.");
-        ASSERT(!graph().finalized(), "Cannot retarget FuncNode after graph is sealed.");
         graph_ = bodyGraph;
         setDataType(bodyGraph->funcType()->exitType());
     }

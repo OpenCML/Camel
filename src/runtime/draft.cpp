@@ -577,9 +577,6 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
     draft->funcType_        = graph->funcType();
     draft->runtimeDataType_ = const_cast<camel::core::type::TupleType *>(graph->runtimeDataType());
     draft->closureType_     = const_cast<camel::core::type::TupleType *>(graph->closureType());
-    draft->frameSize_       = graph->frameSize();
-    draft->hasFrameLayout_  = graph->hasFrameLayout();
-    draft->isMacro_         = graph->isMacro();
     draft->isRoot_          = graph->isRoot();
     draft->returnKind_      = graph->returnKind();
     draft->staticSlots_.assign(graph->staticSlots().begin(), graph->staticSlots().end());
@@ -991,8 +988,6 @@ gc_slot_idx_t GraphDraft::allocateRuntimeSlot(camel::core::type::Type *type) {
     const gc_slot_idx_t slotIndex = static_cast<gc_slot_idx_t>(slotTypes.size());
     slotTypes.push_back(type);
     runtimeDataType_ = camel::core::type::TupleType::create(std::move(slotTypes));
-    frameSize_ = sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeDataType_->size();
-    hasFrameLayout_ = true;
     return slotIndex;
 }
 

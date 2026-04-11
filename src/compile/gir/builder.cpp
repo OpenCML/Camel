@@ -236,14 +236,10 @@ inline void bindGraphScopedFuncNodeDebug(
     }
 }
 
-// Build GIR graphs from GCT. The full flow has two stages:
-// 1. Construction: visit(gct) walks the GCT and uses GraphBuilder to create
-//    graphs and nodes incrementally. All graphs are non-finalized here and may
-//    be edited freely, including closure capture and parameterization.
-// 2. Sealing: sealGraphRecursively() computes slot numbers, layout, and the
-//    finalized frame layout for all graphs in one pass.
-//    After sealing, every graph is marked finalized and can no longer be edited
-//    directly.
+// Build GIR graphs from GCT. Compilation now keeps Graph mutable all the way
+// until runtime materialization. The compiler only constructs the graph tree
+// here; derived layout metadata is refreshed later when the runtime graph is
+// encoded.
 graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     waited_ = false;
     synced_ = false;
@@ -255,7 +251,7 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     nodeScope_      = node_scope_t::create();
     graphScope_     = graph_scope_t::create();
     decoratedScope_ = decorated_scope_t::create();
-    rootGraph_      = GraphBuilder::createGraph(FunctionType::create(), nullptr, "__root__");
+    rootGraph_      = Graph::create(FunctionType::create(), nullptr, "__root__");
     if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
         rootGraph_->setExtra<camel::source::SourceContext, kSourceContextExtraIndex>(
             sourceContext.get());
@@ -281,19 +277,17 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
             context_ && module_ && context_->mainModule() && context_->mainModule() == module_;
         if (entryGraph) {
             auto funcNode = createFuncDataNode(entryGraph, false, false);
-            GraphBuilder(rootGraph_).setOutput(funcNode);
+            rootGraph_->setOutput(funcNode);
         } else if (entryModule) {
             diags_->of(SemanticDiag::EntryModuleMissingMain).commit(module_->name());
             throw BuildAbortException();
         } else {
             // Non-entry library modules may omit main: keep a placeholder output
-            // to satisfy sealing invariants.
+            // so the graph remains encodable.
             auto zero               = std::make_shared<LongData>(static_cast<int64_t>(0));
             Node *const placeholder = DataNode::create(*rootGraph_, zero);
-            GraphBuilder(rootGraph_).setOutput(placeholder);
+            rootGraph_->setOutput(placeholder);
         }
-
-        GraphBuilder::sealGraphRecursively(rootGraph_);
     } catch (Diagnostic &d) {
         diags_->add(std::move(d));
         rootGraph_ = nullptr;
@@ -306,13 +300,13 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
 
 graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name) {
     if (name.empty()) {
-        currGraph_ = GraphBuilder::createGraph(funcType, currGraph_);
+        currGraph_ = Graph::create(funcType, currGraph_);
     } else {
         auto graphs = graphScope_->get(name);
         if (graphs.has_value() && !graphs.value()->empty()) {
             currGraph_ = graphs.value()->front();
         } else {
-            currGraph_ = GraphBuilder::createGraph(funcType, currGraph_, name);
+            currGraph_ = Graph::create(funcType, currGraph_, name);
             insertGraph(name, currGraph_);
         }
     }
@@ -362,9 +356,8 @@ bool Builder::insertDecoratedGraph(const std::string &name, const graph_ptr_t &g
 // Cross-graph reference resolution: when the current function graph references
 // nodes from an outer graph, insert PortNode hop by hop along the outer graph
 // chain as closure capture ports.
-// This mutates the closure sets on the path, but it happens during initial
-// compilation (before finalize), so GraphBuilder::addClosure is protected by
-// assertBuildable.
+// This mutates the closure sets on the path during initial compilation while
+// Graph is still the mutable compile-time carrier.
 Node *Builder::resolveCrossGraphRef(Node *node, const std::string &name) {
     Graph *curr            = currGraph_.get();
     node_scope_ptr_t scope = nodeScope_;
@@ -379,7 +372,7 @@ Node *Builder::resolveCrossGraphRef(Node *node, const std::string &name) {
 
         // Insert a Port node.
         Node *port = PortNode::create(*curr, node->dataType(), name, false);
-        GraphBuilder(curr).addClosure(port);
+        curr->addClosure(port);
         scope->insert(name, port);
 
         // Continue walking toward the outer graph and scope.
@@ -499,11 +492,11 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         Node *res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
         if (graph->exitNode_ == nullptr) {
             if (res) {
-                GraphBuilder(graph).setOutput(res);
+                graph->setOutput(res);
             } else {
                 // function with no return value, setting null by default
                 Node *resNode = DataNode::create(*graph, Data::null());
-                GraphBuilder(graph).setOutput(resNode);
+                graph->setOutput(resNode);
             }
         }
     } catch (...) {
@@ -746,18 +739,17 @@ Node *Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
 // Create a function-value node for a subgraph. When allowParameterization is
 // true, parametrizeClosure() may convert the subgraph's closure captures into
 // with parameters, which directly changes the subgraph's port structure. This
-// only happens during initial compilation (before finalize), and all graphs
-// are still unfinalized and protected by assertBuildable.
+// only happens during initial compilation while Graph is still the mutable
+// compile-time carrier.
 // Create a function-producing node for `graph` in the current owner graph.
 //
 // This helper is the canonical point where compile-time graph references become IR-level
 // dependencies. Every emitted FUNC node or static Function object must be backed by an explicit
-// dependency edge, except the self-recursive case which is encoded by GraphBuilder as the owner's
+// dependency edge, except the self-recursive case which is encoded by the owner graph's
 // `looped` bit.
 //
 // When `allowParameterization=true`, unresolved closure captures may be rewritten into explicit
-// with-ports on the target graph. That mutation is only valid during the build phase before any
-// graph is sealed.
+// with-ports on the target graph. That mutation is only valid during the build phase.
 Node *Builder::createFuncDataNode(
     const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
     ASSERT(
@@ -767,9 +759,9 @@ Node *Builder::createFuncDataNode(
     ASSERT(graph != nullptr, "Target graph is null when creating a function node.");
 
     // Centralize dependency bookkeeping here so every FUNC node and static Function value obeys
-    // the same graph-reference invariant. Self-dependency is intentional: GraphBuilder encodes it
-    // as the owner's `looped` flag for recursive graphs.
-    GraphBuilder(currGraph_).addDependency(graph);
+    // the same graph-reference invariant. Self-dependency is intentional: recursive graphs are
+    // represented by the owner's `looped` flag.
+    currGraph_->addDependency(graph);
 
     bool graphUsedBefore = usedGraphs_.find(graph.get()) != usedGraphs_.end();
     bool resolved        = graph->closure().empty();
@@ -797,7 +789,7 @@ Node *Builder::createFuncDataNode(
             for (Node *closureNode : graph->closure()) {
                 closureRefs.push_back(tt::as_ptr<PortNode>(closureNode)->name());
             }
-            GraphBuilder(graph).parametrizeClosure();
+            graph->parametrizeClosure();
             auto funcNode = FuncNode::create(*currGraph_, graph);
             markMacroNode(funcNode);
             for (const auto &ref : closureRefs) {
@@ -930,7 +922,7 @@ graph_ptr_t Builder::buildDecoratedGraph(
         throw BuildAbortException();
     }
 
-    GraphBuilder(decoratedGraph).setOutput(decoratedValue);
+    decoratedGraph->setOutput(decoratedValue);
     leaveScope();
     return decoratedGraph;
 }
@@ -946,7 +938,6 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     graph_ptr_t targetGraph       = nullptr;
     oper_idx_ptr_t targetOperator = nullptr;
     FunctionType *targetFuncType  = nullptr;
-    std::vector<Node *> inlineLaterNodes;
     node_vec_t withInputNodes, normInputNodes;
     type_vec_t withInputTypes, normInputTypes;
 
@@ -961,7 +952,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // The subtree returned a subgraph,
             // which means that a lambda function is passed as a parameter
             graph_ptr_t inputGraph = any_cast<graph_ptr_t>(dataRes);
-            GraphBuilder(currGraph_).addDependency(inputGraph);
+            currGraph_->addDependency(inputGraph);
             auto inputNode = createFuncDataNode(inputGraph, true, false);
             normInputNodes.push_back(inputNode);
             normInputTypes.push_back(inputNode->dataType());
@@ -971,7 +962,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 auto *argDref = tt::as_ptr<DrefNode>(inputNode);
                 if (std::holds_alternative<graph_ptr_t>(argDref->target())) {
                     auto decoratedGraph = std::get<graph_ptr_t>(argDref->target());
-                    GraphBuilder(currGraph_).addDependency(decoratedGraph);
+                    currGraph_->addDependency(decoratedGraph);
                     if (!decoratedGraph->funcType()->hasExitType() ||
                         decoratedGraph->funcType()->exitType()->code() != TypeCode::Function) {
                         diags_->of(SemanticDiag::ArgumentsMismatch)
@@ -981,17 +972,12 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                                 decoratedGraph->funcType()->toString());
                         throw BuildAbortException();
                     }
-                    Node *decoratorFactoryNode = createFuncDataNode(decoratedGraph, false, true);
-                    ASSERT(
-                        decoratorFactoryNode->type() == NodeType::FUNC,
-                        "Decorated graph should lower to a FUNC node before inlining.");
-                    FunctionType *factoryType =
-                        tt::as_ptr<FunctionType>(decoratedGraph->funcType()->exitType());
-                    (void)
-                        factoryType; // type info is used through decoratorFactoryNode->dataType().
-                    inlineLaterNodes.push_back(decoratorFactoryNode);
+                    Node *decoratorFactoryValue = createFuncDataNode(decoratedGraph, true, false);
+                    auto *decoratorInvoke =
+                        CallNode::create(*currGraph_, decoratedGraph->funcType()->exitType());
+                    Node::link(LinkType::With, decoratorFactoryValue, decoratorInvoke);
                     argDref->detach();
-                    inputNode = decoratorFactoryNode;
+                    inputNode = decoratorInvoke;
                 }
             }
             normInputNodes.push_back(inputNode);
@@ -1049,7 +1035,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     .commit(argTypesStr, overloadsStr);
                 throw BuildAbortException();
             }
-            GraphBuilder(currGraph_).addDependency(targetGraph);
+            currGraph_->addDependency(targetGraph);
             // If the target graph is a subgraph of the current graph, it was
             // defined in the current graph scope.
             // That means every closure capture can be resolved in the current
@@ -1086,7 +1072,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             targetFuncType = targetOperator->funcType();
         } else if (std::holds_alternative<graph_ptr_t>(drefNode->target())) {
             auto decoratedGraph = std::get<graph_ptr_t>(drefNode->target());
-            GraphBuilder(currGraph_).addDependency(decoratedGraph);
+            currGraph_->addDependency(decoratedGraph);
             if (!decoratedGraph->funcType()->hasExitType() ||
                 decoratedGraph->funcType()->exitType()->code() != TypeCode::Function) {
                 diags_->of(SemanticDiag::ArgumentsMismatch)
@@ -1098,19 +1084,17 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
 
             // 1) evaluate decorated graph itself (it should yield a function value)
-            Node *decoratorFactoryNode = createFuncDataNode(decoratedGraph, false, true);
-            ASSERT(
-                decoratorFactoryNode->type() == NodeType::FUNC,
-                "Decorated graph should lower to a FUNC node before inlining.");
+            Node *decoratorFactoryValue = createFuncDataNode(decoratedGraph, true, false);
+            auto *decoratorInvoke =
+                CallNode::create(*currGraph_, decoratedGraph->funcType()->exitType());
+            Node::link(LinkType::With, decoratorFactoryValue, decoratorInvoke);
 
-            FunctionType *factoryType =
-                tt::as_ptr<FunctionType>(decoratedGraph->funcType()->exitType());
-            inlineLaterNodes.push_back(decoratorFactoryNode);
+            FunctionType *factoryType = tt::as_ptr<FunctionType>(decoratorInvoke->dataType());
 
             // 2) call returned callable with user's args.
-            // The with-input is the decorator graph output after inlining.
+            // The with-input is the invoked decorator result.
             targetNode = CallNode::create(*currGraph_, factoryType->exitType());
-            Node::link(LinkType::With, decoratorFactoryNode, targetNode);
+            Node::link(LinkType::With, decoratorInvoke, targetNode);
             targetFuncType = factoryType;
         } else {
             ASSERT(false, "DrefNode must refer to graph(s), operator group, or inlined graph.");
@@ -1206,18 +1190,6 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
         lastSyncedNode_ = targetNode;
     }
-
-    // Inline decorated helper graphs after downstream links are fully established.
-    // This rewires the decorated graph output directly into the target inputs.
-    for (Node *inlineNode : inlineLaterNodes) {
-        InlineResult inlineResult = GraphBuilder(currGraph_).inlineCallable(inlineNode);
-        ASSERT(
-            inlineResult.valueExit != nullptr,
-            "Decorated helper inline must produce a value exit.");
-
-        GraphBuilder(currGraph_).eraseNode(inlineNode);
-    }
-
     LEAVE("LINK");
     return targetNode;
 }
@@ -1236,7 +1208,7 @@ Node *Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             // The subtree returned a subgraph,
             // which means that a lambda function is passed as a parameter
             graph_ptr_t subGraph = any_cast<graph_ptr_t>(dataRes);
-            GraphBuilder(currGraph_).addDependency(subGraph);
+            currGraph_->addDependency(subGraph);
             auto inputNode = createFuncDataNode(subGraph, true, false);
             inputs.push_back(inputNode);
         } else if (dataRes.type() == typeid(Node *)) {
@@ -1371,16 +1343,16 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         Node *resNode = visitExecNode(caseExecNode);
         if (subGraph->exitNode_ == nullptr) {
             if (resNode) {
-                GraphBuilder(subGraph).setOutput(resNode);
+                subGraph->setOutput(resNode);
             } else {
                 // function with no return value, setting null by default
                 Node *nullNode = DataNode::create(*subGraph, Data::null());
-                GraphBuilder(subGraph).setOutput(nullNode);
+                subGraph->setOutput(nullNode);
             }
         }
         leaveScope();
 
-        GraphBuilder(currGraph_).addDependency(subGraph);
+        currGraph_->addDependency(subGraph);
         Type *exitType = subGraph->funcType()->exitType();
 
         // Ensure all captured variables are ready before the BRCH node runs.
@@ -1443,7 +1415,7 @@ Node *Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
     }
     if (res.type() == typeid(graph_ptr_t)) {
         graph_ptr_t graph = any_cast<graph_ptr_t>(res);
-        GraphBuilder(currGraph_).addDependency(graph);
+        currGraph_->addDependency(graph);
         Node *node = createFuncDataNode(graph, true, false);
         LEAVE("ANNO");
         return node;
@@ -1461,7 +1433,7 @@ Node *Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         resNode = any_cast<Node *>(res);
     } else if (res.type() == typeid(graph_ptr_t)) {
         graph_ptr_t subGraph = any_cast<graph_ptr_t>(res);
-        GraphBuilder(currGraph_).addDependency(subGraph);
+        currGraph_->addDependency(subGraph);
         // Returning a function value should lower to a DATA(Function) static slot rather than an
         // eager call.
         resNode = createFuncDataNode(subGraph, true, false);
@@ -1494,7 +1466,7 @@ Node *Builder::visitExitNode(const GCT::node_ptr_t &gct) {
             Node::link(LinkType::Ctrl, ctrlInput, outputAnchor);
         }
     }
-    GraphBuilder(currGraph_).setOutput(outputAnchor);
+    currGraph_->setOutput(outputAnchor);
 
     LEAVE("EXIT");
     return resNode;

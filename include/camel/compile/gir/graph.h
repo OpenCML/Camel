@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include <unordered_map>
+#include <unordered_set>
 
 #include "arena.h"
 #include "camel/core/data.h"
@@ -43,7 +44,6 @@ class SourceContext;
 namespace camel::compile::gir {
 
 class Builder;
-class GraphBuilder;
 
 using Type              = camel::core::type::Type;
 using FunctionType      = camel::core::type::FunctionType;
@@ -52,39 +52,11 @@ using data_vec_t        = camel::core::data::data_vec_t;
 using data_ptr_t        = camel::core::data::data_ptr_t;
 using static_slot_vec_t = std::vector<slot_t>;
 
-struct GraphBuilderState {
-    std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> subGraphs;
-    std::unordered_set<graph_ptr_t> dependencies;
-    node_vec_t normPorts, withPorts, closure;
-    node_vec_t nodes;
-    static_slot_vec_t staticDataArr = {NullSlot};
-    FunctionType *funcType          = nullptr;
-    TupleType *staticDataType       = nullptr;
-    TupleType *runtimeDataType      = nullptr;
-    TupleType *closureType          = nullptr;
-    size_t runtimeDataSize          = 1;
-    Node *exitNode                  = nullptr;
-    bool looped                     = false;
-    bool parameterized              = false;
-};
-
-enum class SealState {
-    Draft,
-    Sealing,
-    Sealed,
-};
-
 // =============================================================================
-// Graph: the final read-only product for a GIR function/subgraph.
+// Graph: compile-time mutable graph carrier.
 //
-// Once GraphBuilder::sealGraph() seals a Graph, it becomes immutable.
-// All structural edits (node add/remove, edge rewiring, layout rearrangement)
-// happen in the GraphDraft / GraphBuilder draft state and are exported as a
-// sealed graph only once through sealGraph().
-//
-// After sealing, each node's adjacency vectors are moved to fixed-size arrays
-// in the arena (frozen mode), draft vectors are released, and structural edits
-// are no longer allowed.
+// Compilation now builds and mutates Graph directly. Runtime graph materialization
+// later derives slot numbering and frame layout from this mutable graph.
 //
 // extras_ provides O(1) graph-level cache slots (JIT entry, topo cache, etc.).
 // Each backend/tool defines its own index and invalidation protocol; Graph only
@@ -94,6 +66,8 @@ enum class SealState {
 class Graph : public std::enable_shared_from_this<Graph> {
   public:
     static std::string makeStableId(const std::string &name);
+    static graph_ptr_t create(
+        FunctionType *funcType, const graph_ptr_t &outer = nullptr, const std::string &name = "");
 
     Graph(const Graph &other)            = delete;
     Graph &operator=(const Graph &other) = delete;
@@ -115,50 +89,45 @@ class Graph : public std::enable_shared_from_this<Graph> {
     std::string mangledName() const { return name_ + std::format("<{}>", funcType()->mangle()); }
     const std::string &stableId() const { return stableId_; }
     std::string location() const;
-    bool looped() const { return activeState() ? activeState()->looped : looped_; }
-    bool empty() const { return (activeState() ? activeState()->nodes : nodes_).empty(); }
+    bool looped() const { return looped_; }
+    bool empty() const { return nodes_.empty(); }
     graph_ptr_t outer() const;
-    size_t inDegree() const {
-        return (activeState() ? activeState()->dependencies : dependencies_).size();
-    }
+    size_t inDegree() const { return dependencies_.size(); }
     size_t outDegree() const { return dependents_.size(); }
 
     std::string toString() const;
 
-    /// Sealed means this graph has passed sealGraph, has complete slot numbering,
-    /// layout, and runtime static data, and all node adjacency has been frozen
-    /// into FrozenRegion. The state machine is one-way:
-    /// Draft -> Sealing -> Sealed.
-    ///
-    /// Constraints:
-    /// - sealed graphs are read-only;
-    /// - the mutable draft view exists only in builderState_ (staging);
-    /// - Graph's "_" fields are mirrored caches in the draft phase, kept only
-    ///   for read-only compatibility.
-    bool finalized() const { return sealState_ == SealState::Sealed; }
-    bool hasDraftStaging() const { return builderState_ != nullptr; }
-    bool hasMutableDraftView() const { return hasDraftStaging() && !finalized(); }
+    // Compile-time editable graph operations. Graph is no longer a public
+    // cross-stage IR; during compilation it is the mutable carrier itself.
+    Node *ownNode(Node *node);
+    data_idx_t addStaticSlot(slot_t slot);
+    data_idx_t addStaticData(const data_ptr_t &data);
+    data_idx_t addRuntimeData();
+    void setStaticSlot(data_idx_t index, slot_t slot);
+    void setStaticData(data_idx_t index, const data_ptr_t &data);
+    void addNode(Node *node);
+    void eraseNode(Node *node);
+    void addPort(Node *node, bool isWith = false);
+    void addClosure(Node *node);
+    void parametrizeClosure();
+    void setOutput(Node *node);
+    void addSubGraph(const graph_ptr_t &subGraph);
+    void eraseSubGraph(const graph_ptr_t &subGraph);
+    void addDependency(const graph_ptr_t &dependency);
+    void eraseDependency(const graph_ptr_t &dependency);
+    void touch();
+    void refreshDerivedLayout();
 
-    FunctionType *funcType() const {
-        return activeState() ? activeState()->funcType : signature_.funcType;
-    }
+    FunctionType *funcType() const { return signature_.funcType; }
     graph_arena_ptr_t arena() const { return arena_; }
     size_t frameSize() const { return frameSize_; }
     ::Tuple *staticArea() const { return staticArea_; }
     bool hasFrameLayout() const { return frameSize_ != 0 && staticArea_ != nullptr; }
-    const TupleType *staticDataType() const {
-        return activeState() ? activeState()->staticDataType : signature_.staticDataType;
-    }
-    const TupleType *runtimeDataType() const {
-        return activeState() ? activeState()->runtimeDataType : signature_.runtimeDataType;
-    }
-    const TupleType *closureType() const {
-        return activeState() ? activeState()->closureType : signature_.closureType;
-    }
+    const TupleType *staticDataType() const { return signature_.staticDataType; }
+    const TupleType *runtimeDataType() const { return signature_.runtimeDataType; }
+    const TupleType *closureType() const { return signature_.closureType; }
 
-    const static_slot_vec_t &staticDataArr() const {
-        return activeState() ? activeState()->staticDataArr : staticDataArr_;
-    }
+    const static_slot_vec_t &staticDataArr() const { return staticDataArr_; }
     slot_t getStaticDataSlot(data_idx_t index) const;
     size_t staticDataSize() const {
         if (hasPackedStaticData_) {
@@ -166,30 +135,25 @@ class Graph : public std::enable_shared_from_this<Graph> {
         }
         return staticDataArr().size();
     }
-    size_t runtimeDataSize() const {
-        return activeState() ? activeState()->runtimeDataSize : signature_.runtimeDataSize;
-    }
+    size_t runtimeDataSize() const { return signature_.runtimeDataSize; }
 
     std::optional<std::unordered_set<graph_ptr_t>>
     getSubGraphsByName(const std::string &name) const;
     const std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> &subGraphs() const {
-        return activeState() ? activeState()->subGraphs : subGraphs_;
+        return subGraphs_;
     }
 
     const std::unordered_set<graph_wptr_t, WeakPtrHash, WeakPtrEqual> &dependents() const {
         return dependents_;
     }
-    const std::unordered_set<graph_ptr_t> &dependencies() const {
-        return activeState() ? activeState()->dependencies : dependencies_;
-    }
-    bool parameterized() const {
-        return activeState() ? activeState()->parameterized : parameterized_;
-    }
+    const std::unordered_set<graph_ptr_t> &dependencies() const { return dependencies_; }
+    bool parameterized() const { return parameterized_; }
 
+    bool hasOutput() const { return exitNode_ != nullptr; }
     Node *exitNode() const;
     Node *outputNode() const;
 
-    const node_vec_t &nodes() const { return activeState() ? activeState()->nodes : nodes_; }
+    const node_vec_t &nodes() const { return nodes_; }
     node_vec_t ports() const {
         const auto &norm = normPorts();
         const auto &with = withPorts();
@@ -201,13 +165,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
     }
     bool hasPorts() const { return !normPorts().empty() || !withPorts().empty(); }
     bool hasClosure() const { return !closure().empty(); }
-    const node_vec_t &normPorts() const {
-        return activeState() ? activeState()->normPorts : normPorts_;
-    }
-    const node_vec_t &withPorts() const {
-        return activeState() ? activeState()->withPorts : withPorts_;
-    }
-    const node_vec_t &closure() const { return activeState() ? activeState()->closure : closure_; }
+    const node_vec_t &normPorts() const { return normPorts_; }
+    const node_vec_t &withPorts() const { return withPorts_; }
+    const node_vec_t &closure() const { return closure_; }
     size_t argsCount() const { return normPorts().size() + withPorts().size() + closure().size(); }
 
     const std::string &nodeDebugEntityId(const Node *node) const;
@@ -229,23 +189,20 @@ class Graph : public std::enable_shared_from_this<Graph> {
     }
 
   private:
-    // Draft-phase reads go through staging; after sealing, staging is consumed
-    // and reads fall back to read-only frozen fields.
-    const GraphBuilderState *activeState() const { return builderState_.get(); }
+    void markMutated();
     friend class Node;
     friend class PortNode;
     friend class FuncNode;
     friend class OperNode;
     friend class AccsNode;
     friend class Builder;
-    friend class GraphBuilder;
 
-    /// After rearrange and before installing the runtime layout: write the
-    /// gnode: entity ID and promote the SourceContext debug mapping.
+    /// Legacy draft export helper: after rearrange and before installing the
+    /// runtime layout, write the gnode: entity ID and promote SourceContext debug mapping.
     void promoteNodeDebugIds(camel::source::SourceContext *sourceContext);
     NodeDebugFingerprint computeNodeDebugFingerprintForNode(Node *node, uint64_t tieBreaker) const;
-    /// Placeholder ID for draft nodes (pointer hex); replaced with a
-    /// content-addressed entity ID during sealing.
+    /// Placeholder ID for mutable compile nodes; runtime encoding later
+    /// promotes it to a content-addressed entity ID when debug metadata is emitted.
     static void installProvisionalNodeStableId(Graph &graph, const Node *node);
     void packStaticSlotsToFrozen();
     void installFinalFrameLayout();
@@ -296,14 +253,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
     node_vec_t nodes_;
     Node *exitNode_ = nullptr;
 
-    /// One-way terminal flag. Once sealGraph() sets it to true, it never goes back.
-    /// To modify a sealed graph, clone a draft copy first.
-    SealState sealState_ = SealState::Draft;
-
     bool looped_                     = false;
     bool parameterized_              = false;
     uint64_t provisionalDebugIdSeed_ = 0;
-    std::shared_ptr<GraphBuilderState> builderState_;
 
     mutable ExtraStorage<4> extras_;
 };

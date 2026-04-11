@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -71,7 +71,7 @@ std::pair<std::string, std::string> getGirJsonFromCurrentState(const std::string
         return {"", "run first"};
     if (!st.mainModule || !st.mainModule->loaded())
         return {"", "run first"};
-    auto graph = st.ctx->rootGraph();
+    auto graph = st.ctx->compileRootGraph();
     if (!graph)
         return {"", "no graph"};
     return getGirJson(graph, graphId);
@@ -90,7 +90,7 @@ getGirJsonByPath(const std::string &path, const std::string &graphId) {
         state.mainModule->compile(CompileStage::Done);
         if (!state.mainModule->loaded())
             return {"", "compile failed"};
-        auto graph = state.ctx->rootGraph();
+        auto graph = state.ctx->compileRootGraph();
         if (!graph)
             return {"", "no graph"};
         return getGirJson(graph, graphId);

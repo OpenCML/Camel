@@ -275,13 +275,14 @@ struct GCGraphNativePayload {
     constexpr bool empty() const { return nodeBlocks == nullptr || nodeBlockCount == 0; }
 };
 
-struct GCGraphMetadataRecord;
+struct GCGraphStorageRecord;
+struct GCGraphDebugRecord;
 
 class GCGraph : public camel::core::rtdata::Object {
   public:
     static constexpr size_t kExtraSlotCount = 8;
 
-    explicit GCGraph(GCGraphMetadataRecord *metadata);
+    explicit GCGraph(GCGraphStorageRecord *storage);
 
     // These accessors expose cold compile/debug metadata only. Runtime passes
     // should derive execution semantics from the native payload instead.
@@ -424,8 +425,8 @@ class GCGraph : public camel::core::rtdata::Object {
   private:
     friend class GCGraphManager;
 
-    GCGraphMetadataRecord *metadata_ = nullptr;
-    ::Tuple *staticArea_             = nullptr;
+    GCGraphStorageRecord *storage_ = nullptr;
+    ::Tuple *staticArea_           = nullptr;
     uintptr_t extraSlots_[kExtraSlotCount]{};
 };
 
@@ -446,7 +447,7 @@ class GCGraphManager {
 
   private:
     std::vector<GCGraph *> graphs_;
-    std::vector<GCGraphMetadataRecord *> metadataRecords_;
+    std::vector<GCGraphStorageRecord *> storageRecords_;
     std::vector<camel::core::rtdata::Object *> gcRoots_;
     GCGraph *root_ = nullptr;
 };

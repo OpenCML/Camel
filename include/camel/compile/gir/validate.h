@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 29, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,13 +23,12 @@
 
 namespace camel::compile::gir::validate {
 
-// Structural invariants that must hold before GraphBuilder::sealGraph()
-// (ASSERT; failure aborts).
-// No graph rewriting happens here; this is only for pre-seal validation and
-// rewrite-session seal().
+// Structural invariants for an encodable compile-time graph.
+// This remains a standalone debug utility rather than part of the Graph type.
 void assertGraphSealingPreconditions(const Graph &graph);
-// Depth-first over root and its subGraphs()/dependencies(), applying the same
-// assertions graph by graph.
+// Depth-first over root and its subGraphs()/dependencies(), applying the same assertions graph
+// by graph.
 void assertGraphTreeSealingPreconditions(const graph_ptr_t &graph);
+void assertGraphTreeStaticReferences(const graph_ptr_t &graph);
 
 } // namespace camel::compile::gir::validate

@@ -262,7 +262,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     return map;
 }
 
-BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsImplMap()) {};
+BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsImplMap()) {}
 
 executor_ptr_t BasicBuiltinExecutor::create(context_ptr_t ctx) {
     return std::make_shared<BasicBuiltinExecutor>(ctx);

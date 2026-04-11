@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 12, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -280,7 +280,7 @@ class GraphArena {
             metrics_.draftFreedBytes += usedInRegion(Region::Draft);
             runTrackedDestructors(draftTrackedDtors_);
             if (!recycleMemory) {
-                // The Draft region is logically released after sealing, but returning
+                // The Draft region is logically released after export, but returning
                 // the physical memory to metaSpace would let any dangling pointer
                 // immediately corrupt the free list. Defer this to GraphArena
                 // destruction and reclaim it there in one place.

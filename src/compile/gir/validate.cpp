@@ -18,7 +18,7 @@
  */
 
 #include "camel/compile/gir/validate.h"
-#include "camel/compile/gir/builder.h"
+#include "camel/compile/gir/nodes.h"
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/struct.h"
@@ -202,12 +202,6 @@ void validateStaticValueGraphRefs(
                 owner.name(),
                 static_cast<const void *>(funcGraph)));
         ASSERT(
-            funcGraph->finalized(),
-            std::format(
-                "Static function value in graph '{}' points to unsealed graph '{}'.",
-                owner.name(),
-                funcGraph->name()));
-        ASSERT(
             funcGraph->hasFrameLayout(),
             std::format(
                 "Static function value in graph '{}' points to graph '{}' without frame layout.",
@@ -309,9 +303,9 @@ void validateStaticValueGraphRefs(
 namespace validate {
 
 void assertGraphSealingPreconditions(const Graph &graph) {
-    // Every graph must have an output anchor before sealing. Builder::build writes a placeholder
-    // for library __root__ graphs without main.
-    if (graph.exitNode() == nullptr) {
+    // Every encodable graph must expose an output anchor. Builder::build writes
+    // a placeholder for library `__root__` graphs without `main`.
+    if (!graph.hasOutput()) {
         throw std::runtime_error(std::format("Graph '{}' has no output anchor.", graph.name()));
     }
 
@@ -405,15 +399,7 @@ void assertGraphTreeSealingPreconditions(const graph_ptr_t &graph) {
     dfs(graph);
 }
 
-} // namespace validate
-
-void GraphBuilder::validateGraph(const Graph &graph) {
-    validate::assertGraphSealingPreconditions(graph);
-}
-
-void GraphBuilder::validateGraphRecursively(const graph_ptr_t &graph) {
-    validate::assertGraphTreeSealingPreconditions(graph);
-
+void assertGraphTreeStaticReferences(const graph_ptr_t &graph) {
     if (!graph) {
         return;
     }
@@ -463,5 +449,7 @@ void GraphBuilder::validateGraphRecursively(const graph_ptr_t &graph) {
     };
     validateStaticRefs(graph);
 }
+
+} // namespace validate
 
 } // namespace camel::compile::gir

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -117,7 +117,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     {
-        auto rg = ctx->rootGraph();
+        auto rg = ctx->compileRootGraph();
         CAMEL_LOG_INFO_S(
             "codegen",
             "run | compile | graph={} | user_modules={}",

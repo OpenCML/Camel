@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,6 +49,7 @@ namespace camel::compile::gir {
 namespace {
 
 using namespace camel::core::rtdata;
+constexpr std::size_t kSourceContextExtraIndex = 3;
 
 uint64_t debugHashBytes(const void *data, size_t n) {
     uint64_t h    = 14695981039346656037ULL;
@@ -110,9 +111,6 @@ static std::string makeGraphStableId(const std::string &name) {
     return std::format("graph:{}#{}", name.empty() ? "<anonymous>" : name, id);
 }
 
-// GraphBuilder has been split into graph_builder.cpp, including seal/clone/
-// inline and staging synchronization.
-
 // =============================================================================
 // Graph creation and node management.
 // =============================================================================
@@ -145,19 +143,18 @@ Graph::~Graph() {
 // -----------------------------------------------------------------------------
 // Two phases of node debug entity IDs.
 //
-// 1) Construction time (draft): only a placeholder draft:{seq} string exists
-//    so Node::debugEntityId() can be queried at any time; the SourceContext
-//    draft binding (bindGirNodeDraftDebug) is keyed by Node* and does not rely
-//    on this string.
-// 2) After finalize/rearrange: layout and dataIndex are fixed, then we compute
-//    a content-addressed fingerprint and store it in nodeStableIds_ (like
-//    gnode:{032x}); sealPromoteGirNodeDebug moves DebugMap keys from draft to
-//    that entity ID.
+// 1) Construction time: only a placeholder draft:{seq} string exists so
+//    Node::debugEntityId() can be queried at any time; the SourceContext draft
+//    binding (bindGirNodeDraftDebug) is keyed by Node* and does not rely on
+//    this string.
+// 2) Once layout is refreshed for runtime encoding, indices are fixed and we
+//    compute a content-addressed fingerprint stored in nodeStableIds_ (like
+//    gnode:{032x}); the SourceContext binding is promoted to that stable ID.
 // -----------------------------------------------------------------------------
 
 void Graph::installProvisionalNodeStableId(Graph &graph, const Node *node) {
     // During the draft phase we only need a temporary in-graph entity ID; it
-    // will be promoted to a gnode: fingerprint during sealing.
+    // will be promoted to a gnode: fingerprint once layout is stabilized.
     const uint64_t seq = graph.provisionalDebugIdSeed_++;
     graph.nodeStableIds_[node] =
         std::format("draft:{}:{}", graph.stableId_, static_cast<unsigned long long>(seq));
@@ -269,9 +266,8 @@ void Graph::promoteNodeDebugIds(camel::source::SourceContext *sourceContext) {
 }
 
 Node *Graph::exitNode() const {
-    Node *exit = activeState() ? activeState()->exitNode : exitNode_;
-    ASSERT(exit != nullptr, std::format("Graph {} has no output node.", name_));
-    return exit;
+    ASSERT(exitNode_ != nullptr, std::format("Graph {} has no output node.", name_));
+    return exitNode_;
 }
 Node *Graph::outputNode() const { return exitNode(); }
 
@@ -311,6 +307,331 @@ std::shared_ptr<OperatorIndex> Graph::lookupOperIndex(const OperatorIndex *raw) 
     return it->second;
 }
 
+graph_ptr_t
+Graph::create(FunctionType *funcType, const graph_ptr_t &outer, const std::string &name) {
+    ASSERT(funcType->hasMetaInfo(), "Trying to create a Graph with incomplete FunctionType.");
+    static int anonymousIdx     = 0;
+    const std::string graphName = name.empty() ? std::format("__{}__", anonymousIdx++) : name;
+    auto graph                  = std::shared_ptr<Graph>(new Graph(funcType, outer, graphName));
+    if (outer) {
+        outer->addSubGraph(graph);
+    }
+    const size_t withCount = funcType->withTypesCount();
+    for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
+        Node *portNode = PortNode::create(
+            *graph,
+            funcType->normTypeAt(i),
+            std::string(funcType->argNameAt(withCount + i)),
+            funcType->normIsVarAt(i));
+        graph->addPort(portNode, false);
+    }
+    for (size_t i = 0; i < withCount; ++i) {
+        Node *portNode = PortNode::create(
+            *graph,
+            funcType->withTypeAt(i),
+            std::string(funcType->argNameAt(i)),
+            funcType->withIsVarAt(i));
+        graph->addPort(portNode, true);
+    }
+    return graph;
+}
+
+void Graph::markMutated() {
+    hasPackedStaticData_  = false;
+    packedStaticData_     = nullptr;
+    packedStaticDataSize_ = 0;
+    frameSize_            = 0;
+    staticArea_           = nullptr;
+}
+
+Node *Graph::ownNode(Node *node) {
+    ASSERT(node != nullptr, "Cannot own null node.");
+    ownedNodes_.push_back(node);
+    return node;
+}
+
+data_idx_t Graph::addStaticSlot(slot_t slot) {
+    staticDataArr_.push_back(slot);
+    if (staticDataArr_.size() > static_cast<size_t>(std::numeric_limits<arr_size_t>::max())) {
+        throw std::overflow_error("staticDataArr_ exceeds arr_size_t max value");
+    }
+    markMutated();
+    return -static_cast<data_idx_t>(staticDataArr_.size() - 1);
+}
+
+data_idx_t Graph::addStaticData(const data_ptr_t &data) {
+    ASSERT(data != nullptr, "Static data cannot be null.");
+    slot_t slot = NullSlot;
+    if (data->type()->isGCTraced()) {
+        Object *obj = makeGCRefFromGCTracedData(data, arena_->allocator());
+        slot        = toSlot<Object *>(obj);
+    } else if (data->type()->isPrimitive()) {
+        slot = makeSlotFromPrimitiveData(data);
+    } else {
+        ASSERT(
+            false,
+            std::format(
+                "Unsupported static data type '{}' for slot conversion.",
+                data->type()->toString()));
+    }
+    return addStaticSlot(slot);
+}
+
+data_idx_t Graph::addRuntimeData() {
+    if (signature_.runtimeDataSize > static_cast<size_t>(std::numeric_limits<arr_size_t>::max())) {
+        throw std::overflow_error("runtimeDataSize_ exceeds arr_size_t max value");
+    }
+    markMutated();
+    return static_cast<data_idx_t>(signature_.runtimeDataSize++);
+}
+
+void Graph::setStaticSlot(data_idx_t index, slot_t slot) {
+    ASSERT(index < 0, "Static data index must be negative.");
+    size_t idx = static_cast<size_t>(-index);
+    ASSERT(
+        idx < staticDataArr_.size(),
+        std::format(
+            "Static data index out of range when setting data of graph ({}) at index {}. "
+            "(total size: {})",
+            name_,
+            index,
+            staticDataArr_.size()));
+    staticDataArr_[idx] = slot;
+    markMutated();
+}
+
+void Graph::setStaticData(data_idx_t index, const data_ptr_t &data) {
+    ASSERT(data != nullptr, "Static data cannot be null.");
+    slot_t slot = NullSlot;
+    if (data->type()->isGCTraced()) {
+        Object *obj = makeGCRefFromGCTracedData(data, arena_->allocator());
+        slot        = toSlot<Object *>(obj);
+    } else if (data->type()->isPrimitive()) {
+        slot = makeSlotFromPrimitiveData(data);
+    } else {
+        ASSERT(
+            false,
+            std::format(
+                "Unsupported static data type '{}' for slot conversion.",
+                data->type()->toString()));
+    }
+    setStaticSlot(index, slot);
+}
+
+void Graph::addNode(Node *node) {
+    nodes_.push_back(node);
+    markMutated();
+}
+
+void Graph::eraseNode(Node *node) {
+    ASSERT(node != nullptr, "Cannot erase null node.");
+    if (auto *sc = getExtra<camel::source::SourceContext, kSourceContextExtraIndex>()) {
+        sc->unbindGirNodeDraftDebug(node);
+    }
+    node->detach();
+    nodes_.erase(std::remove(nodes_.begin(), nodes_.end(), node), nodes_.end());
+    nodeStableIds_.erase(node);
+    nodePortNames_.erase(node);
+    nodeAccsKeys_.erase(node);
+    markMutated();
+}
+
+void Graph::addPort(Node *node, bool isWith) {
+    if (isWith) {
+        ASSERT(
+            std::find(withPorts_.begin(), withPorts_.end(), node) == withPorts_.end(),
+            "With port node already exists in the graph.");
+        withPorts_.push_back(node);
+    } else {
+        ASSERT(
+            std::find(normPorts_.begin(), normPorts_.end(), node) == normPorts_.end(),
+            "Norm port node already exists in the graph.");
+        normPorts_.push_back(node);
+    }
+    markMutated();
+}
+
+void Graph::addClosure(Node *node) {
+    ASSERT(
+        std::find(closure_.begin(), closure_.end(), node) == closure_.end(),
+        "Closure node already exists in the graph.");
+    auto *portNode = tt::as_ptr<PortNode>(node);
+    closure_.push_back(node);
+    signature_.funcType->addClosureRef(portNode->name());
+    markMutated();
+}
+
+void Graph::parametrizeClosure() {
+    withPorts_.insert(withPorts_.begin(), closure_.begin(), closure_.end());
+    closure_.clear();
+    parameterized_ = true;
+    markMutated();
+}
+
+void Graph::setOutput(Node *node) {
+    ASSERT(exitNode_ == nullptr, std::format("Graph {} already has an output node.", name_));
+    Type *actualExitType = node->dataType();
+    if (signature_.funcType->hasExitType()) {
+        Type *declaredExitType = signature_.funcType->exitType();
+        if (!declaredExitType->assignableFrom(actualExitType)) {
+            throw DiagnosticBuilder::of(SemanticDiag::ReturnTypeMismatch)
+                .commit(
+                    actualExitType->toString(),
+                    declaredExitType->toString(),
+                    name_ + ": " + signature_.funcType->toString());
+        }
+    } else {
+        signature_.funcType->setExitType(actualExitType);
+    }
+    exitNode_ = node;
+    markMutated();
+}
+
+void Graph::addSubGraph(const graph_ptr_t &graph) {
+    ASSERT(graph.get() != this, "Cannot add itself as a subgraph.");
+    ASSERT(!graph->name().empty(), "Cannot add an anonymous graph as a subgraph.");
+    if (subGraphs_.find(graph->name()) == subGraphs_.end()) {
+        subGraphs_[graph->name()] = std::unordered_set<graph_ptr_t>({graph});
+    } else {
+        auto &existing = subGraphs_[graph->name()];
+        ASSERT(
+            existing.find(graph) == existing.end(),
+            std::format("Subgraph with name '{}' already exists.", graph->mangledName()));
+        existing.insert(graph);
+    }
+    try {
+        graph->outer_ = shared_from_this();
+    } catch (const std::bad_weak_ptr &) {
+        throw std::runtime_error(
+            std::format("Graph::addSubGraph owner '{}' is not managed by shared_ptr.", name_));
+    }
+    markMutated();
+}
+
+void Graph::eraseSubGraph(const graph_ptr_t &graph) {
+    ASSERT(graph.get() != this, "Cannot remove itself as a subgraph.");
+    ASSERT(!graph->name().empty(), "Cannot remove an anonymous graph as a subgraph.");
+    if (subGraphs_.find(graph->name()) != subGraphs_.end()) {
+        auto &existing = subGraphs_[graph->name()];
+        existing.erase(graph);
+        if (existing.empty()) {
+            subGraphs_.erase(graph->name());
+        }
+        if (const auto currentOuter = graph->outer(); currentOuter && currentOuter.get() == this) {
+            graph->outer_.reset();
+        }
+    }
+    markMutated();
+}
+
+void Graph::addDependency(const graph_ptr_t &graph) {
+    if (graph.get() == this) {
+        looped_ = true;
+        return;
+    }
+    dependencies_.insert(graph);
+    try {
+        graph->dependents_.insert(shared_from_this());
+    } catch (const std::bad_weak_ptr &) {
+        throw std::runtime_error(
+            std::format("Graph::addDependency owner '{}' is not managed by shared_ptr.", name_));
+    }
+    markMutated();
+}
+
+void Graph::eraseDependency(const graph_ptr_t &graph) {
+    dependencies_.erase(graph);
+    try {
+        graph->dependents_.erase(shared_from_this());
+    } catch (const std::bad_weak_ptr &) {
+        throw std::runtime_error(
+            std::format("Graph::eraseDependency owner '{}' is not managed by shared_ptr.", name_));
+    }
+    markMutated();
+}
+
+void Graph::touch() { markMutated(); }
+
+namespace {
+
+struct GraphLayoutSnapshot {
+    std::vector<std::pair<Node *, data_idx_t>> nodeIndices;
+    static_slot_vec_t staticDataArr = {NullSlot};
+    TupleType *staticDataType       = nullptr;
+    TupleType *runtimeDataType      = nullptr;
+    TupleType *closureType          = nullptr;
+    size_t runtimeDataSize          = 1;
+};
+
+GraphLayoutSnapshot computeGraphLayoutSnapshot(const Graph &graph) {
+    GraphLayoutSnapshot result;
+    data_idx_t stcIdx = -1;
+    data_idx_t rtmIdx = 1;
+    type_vec_t staticDataTypes{Type::Void()};
+    type_vec_t runtimeDataTypes{Type::Void()};
+    type_vec_t closureTypes;
+
+    auto assignIndex = [&](Node *node, data_idx_t idx) {
+        result.nodeIndices.emplace_back(node, idx);
+    };
+
+    for (Node *node : graph.normPorts()) {
+        assignIndex(node, rtmIdx++);
+        runtimeDataTypes.push_back(node->dataType());
+    }
+    for (Node *node : graph.withPorts()) {
+        assignIndex(node, rtmIdx++);
+        runtimeDataTypes.push_back(node->dataType());
+    }
+    for (Node *node : graph.closure()) {
+        assignIndex(node, rtmIdx++);
+        runtimeDataTypes.push_back(node->dataType());
+        closureTypes.push_back(node->dataType());
+    }
+    for (Node *node : graph.nodes()) {
+        const NodeType type = node->type();
+        ASSERT(
+            type != NodeType::DREF,
+            "DREF nodes should not exist in an encodable compile graph.");
+        if (type == NodeType::DATA) {
+            auto *dataNode = tt::as_ptr<DataNode>(node);
+            result.staticDataArr.push_back(dataNode->dataSlot());
+            assignIndex(dataNode, stcIdx--);
+            staticDataTypes.push_back(dataNode->dataType());
+            continue;
+        }
+        if (type == NodeType::SYNC || type == NodeType::GATE) {
+            continue;
+        }
+        assignIndex(node, rtmIdx++);
+        runtimeDataTypes.push_back(node->dataType());
+    }
+
+    result.runtimeDataSize = rtmIdx;
+    result.staticDataType  = TupleType::create(std::move(staticDataTypes));
+    result.runtimeDataType = TupleType::create(std::move(runtimeDataTypes));
+    result.closureType     = TupleType::create(std::move(closureTypes));
+    return result;
+}
+
+} // namespace
+
+void Graph::refreshDerivedLayout() {
+    const auto layout = computeGraphLayoutSnapshot(*this);
+    for (auto [node, idx] : layout.nodeIndices) {
+        detail::NodeMutation::setIndex(node, idx);
+    }
+    signature_.runtimeDataSize = layout.runtimeDataSize;
+    staticDataArr_             = layout.staticDataArr;
+    signature_.staticDataType  = layout.staticDataType;
+    signature_.runtimeDataType = layout.runtimeDataType;
+    signature_.closureType     = layout.closureType;
+    frameSize_                 = 0;
+    staticArea_                = nullptr;
+    packStaticSlotsToFrozen();
+    installFinalFrameLayout();
+}
+
 std::string Graph::location() const {
     if (outer_.expired()) {
         return name_.empty() ? "<anonymous>" : name_;
@@ -347,7 +668,7 @@ void Graph::packStaticSlotsToFrozen() {
         arena_->allocFrozen(sizeof(slot_t) * packedStaticDataSize_, alignof(slot_t)));
     std::memcpy(packedStaticData_, staticDataArr_.data(), sizeof(slot_t) * packedStaticDataSize_);
     hasPackedStaticData_ = true;
-    // Release build-time container capacity after sealing; runtime uses
+    // Release build-time container capacity after layout export; runtime uses
     // packedStaticData_ instead.
     staticDataArr_.clear();
     staticDataArr_.shrink_to_fit();

@@ -19,7 +19,6 @@
 
 #include "camel/compile/gir/nodes.h"
 #include "camel/compile/gir/arena.h"
-#include "camel/compile/gir/builder.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
@@ -33,14 +32,12 @@ namespace {
 inline void assertDraftMutable(const Node *node, const char *action) {
     ASSERT(node != nullptr, "Node is null.");
     (void)action;
-    ASSERT(!node->graph().finalized(), "Cannot mutate sealed graph node.");
 }
 template <typename T, typename... Args> T *makeOwnedNode(Graph &graph, Args &&...args) {
     auto arena = graph.arena();
     ASSERT(arena != nullptr, "Graph arena is null.");
-    // Put the Node body directly into FrozenRegion so releaseDraftRegion after
-    // sealing does not affect node lifetime.
-    Node *owned = GraphBuilder(graph).ownNode(arena->constructTrackedInRegion<T>(
+    // Compile-time nodes are arena-owned by the graph for the entire graph lifetime.
+    Node *owned = graph.ownNode(arena->constructTrackedInRegion<T>(
         GraphArena::Region::Frozen,
         std::forward<Args>(args)...));
     return tt::as_ptr<T>(owned);
@@ -612,18 +609,16 @@ bool Node::detach() {
 // =============================================================================
 
 Node *DataNode::create(Graph &graph, const data_ptr_t &data) {
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addStaticData(data);
+    data_idx_t index = graph.addStaticData(data);
     Node *node       = makeOwnedNode<DataNode>(graph, graph, data->type(), index);
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
 Node *DataNode::createStaticSlot(Graph &graph, Type *type, slot_t slot) {
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addStaticSlot(slot);
+    data_idx_t index = graph.addStaticSlot(slot);
     Node *node       = makeOwnedNode<DataNode>(graph, graph, type, index);
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
@@ -642,8 +637,7 @@ Node *DataNode::clone(Graph &graph) const {
 // =============================================================================
 
 Node *PortNode::create(Graph &graph, Type *type, const std::string &name, bool isVar) {
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addRuntimeData();
+    data_idx_t index = graph.addRuntimeData();
     return makeOwnedNode<PortNode>(graph, graph, type, index, name, isVar);
 }
 
@@ -665,10 +659,9 @@ Node *PortNode::clone(Graph &graph) const {
 // =============================================================================
 
 Node *CastNode::create(Graph &graph, Type *type) {
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addRuntimeData();
+    data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<CastNode>(graph, graph, type, index);
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
@@ -679,10 +672,9 @@ std::string CastNode::toString() const {
 Node *CastNode::clone(Graph &graph) const { return CastNode::create(graph, dataType_); }
 
 Node *CopyNode::create(Graph &graph, Type *type) {
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addRuntimeData();
+    data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<CopyNode>(graph, graph, type, index);
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
@@ -693,10 +685,9 @@ std::string CopyNode::toString() const {
 Node *CopyNode::clone(Graph &graph) const { return CopyNode::create(graph, dataType_); }
 
 Node *FillNode::create(Graph &graph, Type *type) {
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addRuntimeData();
+    data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<FillNode>(graph, graph, type, index);
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
@@ -711,15 +702,14 @@ Node *FillNode::clone(Graph &graph) const { return FillNode::create(graph, dataT
 // =============================================================================
 
 Node *AccsNode::create(Graph &graph, Type *type, const std::variant<std::string, size_t> &accsIdx) {
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addRuntimeData();
+    data_idx_t index = graph.addRuntimeData();
     Node *node;
     if (std::holds_alternative<size_t>(accsIdx)) {
         node = makeOwnedNode<AccsNode>(graph, graph, type, index, std::get<size_t>(accsIdx));
     } else {
         node = makeOwnedNode<AccsNode>(graph, graph, type, index, std::get<std::string>(accsIdx));
     }
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
@@ -743,10 +733,9 @@ Node *AccsNode::clone(Graph &graph) const {
 // =============================================================================
 
 Node *BrchNode::create(Graph &graph, Type *type) {
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addRuntimeData();
+    data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<BrchNode>(graph, graph, type, index);
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
@@ -764,10 +753,9 @@ JoinNode *BrchNode::matchedJoin() const {
 Node *BrchNode::clone(Graph &graph) const { return BrchNode::create(graph, dataType_); }
 
 Node *JoinNode::create(Graph &graph, Type *type) {
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addRuntimeData();
+    data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<JoinNode>(graph, graph, type, index);
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
@@ -785,10 +773,9 @@ BrchNode *JoinNode::matchedBranch() const {
 Node *JoinNode::clone(Graph &graph) const { return JoinNode::create(graph, dataType_); }
 
 Node *CallNode::create(Graph &graph, Type *type) {
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addRuntimeData();
+    data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<CallNode>(graph, graph, type, index);
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
@@ -799,10 +786,9 @@ std::string CallNode::toString() const {
 Node *CallNode::clone(Graph &graph) const { return CallNode::create(graph, dataType_); }
 
 Node *BindNode::create(Graph &graph, Type *type) {
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addRuntimeData();
+    data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<BindNode>(graph, graph, type, index);
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
@@ -818,19 +804,17 @@ Node *BindNode::clone(Graph &graph) const { return BindNode::create(graph, dataT
 
 Node *FuncNode::create(Graph &graph, const graph_ptr_t &bodyGraph) {
     ASSERT(bodyGraph != nullptr, "Function graph is null for FunctionNode.");
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addRuntimeData();
+    data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<FuncNode>(graph, graph, index, bodyGraph.get());
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
 Node *FuncNode::create(Graph &graph, Graph *bodyGraph) {
     ASSERT(bodyGraph != nullptr, "Function graph is null for FunctionNode.");
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addRuntimeData();
+    data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<FuncNode>(graph, graph, index, bodyGraph);
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
@@ -856,11 +840,10 @@ std::string FuncNode::toString() const {
 Node *FuncNode::clone(Graph &graph) const { return FuncNode::create(graph, graph_); }
 
 Node *OperNode::create(Graph &graph, oper_idx_ptr_t op) {
-    auto *raw = graph.registerOperIndex(op);
-    GraphBuilder builder(graph);
-    data_idx_t index = builder.addRuntimeData();
+    auto *raw        = graph.registerOperIndex(op);
+    data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<OperNode>(graph, graph, index, raw);
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
@@ -902,9 +885,8 @@ Node *DrefNode::clone(Graph &graph) const {
 }
 
 Node *SyncNode::create(Graph &graph) {
-    GraphBuilder builder(graph);
     Node *node = makeOwnedNode<SyncNode>(graph, graph);
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 
@@ -915,9 +897,8 @@ std::string SyncNode::toString() const {
 Node *SyncNode::clone(Graph &graph) const { return SyncNode::create(graph); }
 
 Node *GateNode::create(Graph &graph) {
-    GraphBuilder builder(graph);
     Node *node = makeOwnedNode<GateNode>(graph, graph);
-    builder.addNode(node);
+    graph.addNode(node);
     return node;
 }
 

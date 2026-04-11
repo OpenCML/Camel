@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1621,7 +1621,9 @@ bool GlobalsBuiltinModule::load() {
     if (loaded_) {
         return true;
     }
-    context_->registerExecutorFactory("", [&]() { return BasicBuiltinExecutor::create(context_); });
+    context_->registerExecutorFactory("", [ctx = context_]() {
+        return BasicBuiltinExecutor::create(ctx);
+    });
     loaded_ = true;
     return true;
 }
