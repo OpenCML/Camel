@@ -193,7 +193,6 @@ class GraphDraft {
     }
     bool hasFrameLayout() const { return runtimeDataType_ != nullptr && !staticSlots_.empty(); }
     bool isMacroGraph() const { return funcType_ != nullptr && funcType_->modifiers().macro(); }
-    bool isRootGraph() const { return isRoot_; }
     gc_cnt_t nodeCount() const { return liveNodeCount_; }
     size_t nodeSlotCount() const { return nodesById_.size(); }
     bool empty() const { return liveNodeCount_ == 0; }
@@ -289,7 +288,6 @@ class GraphDraft {
     camel::core::type::FunctionType *funcType_     = nullptr;
     camel::core::type::TupleType *runtimeDataType_ = nullptr;
     camel::core::type::TupleType *closureType_     = nullptr;
-    bool isRoot_                                   = false;
     DraftNodePool pool_;
     std::vector<DraftNode *> nodesById_;
     std::vector<gc_node_ref_t> sourceRefsById_;

@@ -39,7 +39,7 @@ using namespace camel::core::type;
 
 namespace {
 
-using runtime_data_idx_t = camel::compile::gir::data_idx_t;
+using runtime_data_idx_t = camel::runtime::gc_data_idx_t;
 
 using camel::execute::RuntimeBranchArmRegion;
 using camel::runtime::gc_node_ref_t;

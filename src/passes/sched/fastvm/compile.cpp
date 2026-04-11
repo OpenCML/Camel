@@ -34,7 +34,7 @@ using namespace std;
 using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::type;
-using data_idx_t = camel::compile::gir::data_idx_t;
+using data_idx_t = camel::runtime::gc_data_idx_t;
 
 static data_idx_t
 runtimeDataIndexOf(const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef) {

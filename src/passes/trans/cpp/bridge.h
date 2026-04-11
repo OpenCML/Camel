@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,9 +23,7 @@
 #include "camel/core/data/base.h"
 #include "camel/core/slot.h"
 #include "camel/core/type/base.h"
-#include "lower.h"
 
-#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -57,16 +55,11 @@ std::string cppTypeFor(camel::core::type::Type *type);
 std::optional<std::string> cppLiteralFor(const camel::core::data::data_ptr_t &data);
 std::optional<std::string> cppLiteralFor(slot_t slot, camel::core::type::Type *type);
 
-CppBridgePlan collectCppBridgePlan(
-    const camel::core::context::context_ptr_t &ctx, const std::vector<GraphLoweringPlan> &plans);
 std::string emitCppBridgePreamble(const CppBridgePlan &plan, bool includeIostream);
 std::string emitCppBridgeSupport(const CppBridgePlan &plan);
 std::string cppBridgeAccessorNameForUri(std::string_view uri);
 std::string cppBridgeTypeAccessorName(const CppBridgePlan &plan, camel::core::type::Type *type);
 bool isAtomicTypeForCpp(camel::core::type::Type *type);
 std::string cppBridgeTypeExprFor(const CppBridgePlan &plan, camel::core::type::Type *type);
-std::string emitCppRuntimeFallbackExpr(
-    const CppBridgePlan &plan, GIR::OperNode *node,
-    const std::function<std::string(GIR::Node *)> &emitExpr);
 /// Generate the initialize call in main; return empty when usesRuntimeBridge is false.
 std::string emitCppBridgeInitializeCall(const CppBridgePlan &plan);

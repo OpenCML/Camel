@@ -30,7 +30,7 @@
 #include "camel/runtime/graph.h"
 
 namespace ctx            = camel::core::context;
-using runtime_data_idx_t = camel::compile::gir::data_idx_t;
+using runtime_data_idx_t = camel::runtime::gc_data_idx_t;
 
 struct NodeVMGraphCache {
     std::vector<camel::runtime::gc_node_ref_t> topoNodeRefs;

@@ -28,8 +28,10 @@
  */
 
 #include "camel/runtime/draft.h"
+#include "runtime/graph_build.h"
 
 #include "camel/core/context/frame.h"
+#include "camel/core/mm.h"
 #include "camel/core/type/composite/tuple.h"
 
 #include <algorithm>
@@ -40,6 +42,8 @@
 #include <stdexcept>
 
 namespace camel::runtime {
+
+namespace mm = camel::core::mm;
 
 namespace {
 
@@ -577,7 +581,6 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
     draft->funcType_        = graph->funcType();
     draft->runtimeDataType_ = const_cast<camel::core::type::TupleType *>(graph->runtimeDataType());
     draft->closureType_     = const_cast<camel::core::type::TupleType *>(graph->closureType());
-    draft->isRoot_          = graph->isRoot();
     draft->returnKind_      = graph->returnKind();
     draft->staticSlots_.assign(graph->staticSlots().begin(), graph->staticSlots().end());
     if (const auto *staticType = graph->staticDataType()) {
@@ -585,9 +588,11 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
     } else {
         draft->staticSlotTypes_.clear();
     }
-    draft->dependencies_    = graph->dependencies();
-    draft->subGraphs_       = graph->subGraphs();
-    draft->staticGraphRefs_ = graph->staticGraphRefs();
+    draft->dependencies_.assign(graph->dependencies().begin(), graph->dependencies().end());
+    draft->subGraphs_.assign(graph->subGraphs().begin(), graph->subGraphs().end());
+    draft->staticGraphRefs_.assign(
+        graph->staticGraphRefs().begin(),
+        graph->staticGraphRefs().end());
     draft->draftIdsBySourceRef_.assign(graph->nodeBlockCount(), kInvalidNodeRef);
 
     std::vector<gc_node_ref_t> sourceToDraft(graph->nodeBlockCount(), kInvalidNodeRef);
@@ -1041,6 +1046,25 @@ void GraphDraft::addStaticGraphRef(GCGraph *graph) {
     }
 }
 
-GCGraph *GraphDraft::encode() const { return encodeGraphDraft(*this); }
+GCGraph *GraphDraft::encode() const {
+    auto *debugRecord = createGraphDebugRecord(stableId_, mangledName_, name_);
+    camel::core::type::TupleType *staticDataType = nullptr;
+    if (!staticSlotTypes_.empty()) {
+        staticDataType = camel::core::type::TupleType::create(staticSlotTypes_);
+    }
+
+    return GCGraphBuildAccess::create(
+        debugRecord,
+        funcType_,
+        runtimeDataType_,
+        staticDataType,
+        closureType_,
+        nullptr,
+        dependencies_,
+        subGraphs_,
+        staticGraphRefs_,
+        buildDraftNativePayload(*this),
+        staticSlots_);
+}
 
 } // namespace camel::runtime

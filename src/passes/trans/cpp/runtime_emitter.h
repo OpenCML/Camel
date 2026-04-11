@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 #include "camel/core/context/context.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
+#include "lower.h"
 
 #include <optional>
 #include <span>

@@ -39,12 +39,9 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <span>
 #include <string_view>
 #include <type_traits>
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace camel::runtime {
@@ -55,13 +52,13 @@ class GraphDraft;
 
 namespace camel::compile::gir {
 class Graph;
-using graph_ptr_t = std::shared_ptr<Graph>;
-} // namespace camel::compile::gir
+}
 
 namespace camel::runtime {
 
 using gc_node_ref_t = uint16_t;
 using gc_slot_idx_t = int16_t;
+using gc_data_idx_t = gc_slot_idx_t;
 using gc_off_t      = uint16_t;
 using gc_cnt_t      = uint16_t;
 using gc_block_t    = uint64_t;
@@ -251,8 +248,9 @@ struct GCOperBody {
 static_assert(std::is_trivially_copyable_v<GCOperBody>);
 
 struct GCGraphNativePayload {
-    // The payload itself stays plain and pointer-based. Cold metadata owns the
-    // backing arenas and republishes them through this view.
+    // The payload itself stays plain and pointer-based. The backing arenas live
+    // in the dedicated non-moving graph heap and are reclaimed when the graph
+    // closure is dropped as a unit.
     gc_block_t *nodeBlocks   = nullptr;
     gc_node_ref_t *edges     = nullptr;
     gc_node_ref_t *normPorts = nullptr;
@@ -275,14 +273,13 @@ struct GCGraphNativePayload {
     constexpr bool empty() const { return nodeBlocks == nullptr || nodeBlockCount == 0; }
 };
 
-struct GCGraphStorageRecord;
 struct GCGraphDebugRecord;
+struct GCGraphBuildAccess;
+class GCGraph;
 
 class GCGraph : public camel::core::rtdata::Object {
   public:
     static constexpr size_t kExtraSlotCount = 8;
-
-    explicit GCGraph(GCGraphStorageRecord *storage);
 
     // These accessors expose cold compile/debug metadata only. Runtime passes
     // should derive execution semantics from the native payload instead.
@@ -296,15 +293,16 @@ class GCGraph : public camel::core::rtdata::Object {
     bool hasFrameLayout() const;
     size_t frameSize() const;
     bool isMacro() const;
+    GCGraph *outerGraph() const;
     bool isRoot() const;
     ::Tuple *staticArea() const { return staticArea_; }
     uintptr_t extraSlot(size_t index) const;
     void setExtraSlot(size_t index, uintptr_t value);
     void clearExtraSlots();
 
-    const std::vector<GCGraph *> &dependencies() const;
-    const std::vector<GCGraph *> &subGraphs() const;
-    const std::vector<GCGraph *> &staticGraphRefs() const;
+    std::span<GCGraph *const> dependencies() const;
+    std::span<GCGraph *const> subGraphs() const;
+    std::span<GCGraph *const> staticGraphRefs() const;
     std::span<const slot_t> staticSlots() const;
 
     bool hasNodePayload() const;
@@ -385,13 +383,6 @@ class GCGraph : public camel::core::rtdata::Object {
 
     NodeRange nodes() const { return NodeRange(this); }
 
-    void addDependency(GCGraph *graph);
-    void addSubGraph(GCGraph *graph);
-    void addStaticGraphRef(GCGraph *graph);
-    void clearGraphRefs();
-    void setStaticSlots(std::vector<slot_t> slots);
-    void setStaticDataType(camel::core::type::TupleType *type);
-
     template <typename Visitor> void traceGraphs(Visitor &&visitor) const {
         for (GCGraph *graph : dependencies()) {
             if (graph) {
@@ -424,9 +415,32 @@ class GCGraph : public camel::core::rtdata::Object {
 
   private:
     friend class GCGraphManager;
+    friend class GraphDraft;
+    friend class camel::compile::gir::Graph;
+    friend struct GCGraphBuildAccess;
 
-    GCGraphStorageRecord *storage_ = nullptr;
-    ::Tuple *staticArea_           = nullptr;
+    GCGraph(
+        GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
+        camel::core::type::TupleType *runtimeDataType, camel::core::type::TupleType *staticDataType,
+        camel::core::type::TupleType *closureType, GCGraph *outerGraph, GCGraph **dependencies,
+        GCGraph **subGraphs, GCGraph **staticGraphRefs, gc_cnt_t dependencyCount,
+        gc_cnt_t subGraphCount, gc_cnt_t staticGraphRefCount, const GCGraphNativePayload &payload,
+        ::Tuple *staticArea);
+
+    GCGraphDebugRecord *debug_                     = nullptr;
+    camel::core::type::FunctionType *funcType_     = nullptr;
+    camel::core::type::TupleType *runtimeDataType_ = nullptr;
+    camel::core::type::TupleType *staticDataType_  = nullptr;
+    camel::core::type::TupleType *closureType_     = nullptr;
+    GCGraph *outerGraph_                           = nullptr;
+    GCGraph **dependencies_                        = nullptr;
+    GCGraph **subGraphs_                           = nullptr;
+    GCGraph **staticGraphRefs_                     = nullptr;
+    gc_cnt_t dependencyCount_                      = 0;
+    gc_cnt_t subGraphCount_                        = 0;
+    gc_cnt_t staticGraphRefCount_                  = 0;
+    GCGraphNativePayload nativePayload_{};
+    ::Tuple *staticArea_ = nullptr;
     uintptr_t extraSlots_[kExtraSlotCount]{};
 };
 
@@ -447,12 +461,9 @@ class GCGraphManager {
 
   private:
     std::vector<GCGraph *> graphs_;
-    std::vector<GCGraphStorageRecord *> storageRecords_;
+    std::vector<GCGraphDebugRecord *> debugRecords_;
     std::vector<camel::core::rtdata::Object *> gcRoots_;
     GCGraph *root_ = nullptr;
 };
-
-GCGraph *materializeRuntimeGraph(const camel::compile::gir::graph_ptr_t &rootGraph);
-GCGraph *encodeGraphDraft(const GraphDraft &draft);
 
 } // namespace camel::runtime

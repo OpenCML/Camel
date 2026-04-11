@@ -42,7 +42,6 @@ using namespace camel::core::context;
 using namespace camel::core::error;
 using namespace camel::core::rtdata;
 using namespace camel::core::type;
-using camel::compile::gir::data_idx_t;
 
 namespace {
 
@@ -54,6 +53,7 @@ class MacroExecutionError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
+using camel::runtime::gc_data_idx_t;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCAccsBody;
 using camel::runtime::GCGraph;
@@ -61,7 +61,7 @@ using camel::runtime::GCNode;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 
-inline data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
+inline gc_data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
     const auto *node = graph ? graph->node(nodeRef) : nullptr;
     ASSERT(node != nullptr, "Macro runtime node lookup resolved to null.");
     return node->dataIndex;
@@ -314,18 +314,18 @@ class MacroExecutor {
             case GCNodeKind::Cast: {
                 const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
                 ASSERT(!normInputs.empty(), "CAST node must have one norm input.");
-                data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
-                Type *srcType     = frame->typeAt<Type>(srcIdx);
-                Type *dstType     = node->dataType;
-                slot_t value      = frame->get<slot_t>(srcIdx);
+                gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
+                Type *srcType        = frame->typeAt<Type>(srcIdx);
+                Type *dstType        = node->dataType;
+                slot_t value         = frame->get<slot_t>(srcIdx);
                 frame->set(node->dataIndex, dstType->castSlotFrom(value, srcType));
             } break;
 
             case GCNodeKind::Copy: {
                 const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
                 ASSERT(!normInputs.empty(), "COPY node must have one norm input.");
-                data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
-                TypeCode srcCode  = frame->codeAt(srcIdx);
+                gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
+                TypeCode srcCode     = frame->codeAt(srcIdx);
                 if (isGCTraced(srcCode)) {
                     Object *srcData  = frame->get<Object *>(srcIdx);
                     Type *srcTypePtr = frame->typeAt<Type>(srcIdx);
@@ -339,9 +339,9 @@ class MacroExecutor {
                 const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
                 const auto dataInputs = runtimeGraph->withInputsOf(runtimeNodeIndex);
                 ASSERT(!normInputs.empty(), "FILL node must have one source input.");
-                data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
-                TypeCode srcCode  = frame->codeAt(srcIdx);
-                Type *srcType     = frame->typeAt<Type>(srcIdx);
+                gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
+                TypeCode srcCode     = frame->codeAt(srcIdx);
+                Type *srcType        = frame->typeAt<Type>(srcIdx);
                 ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced.");
                 Object *srcObj =
                     frame->get<Object *>(srcIdx)->clone(mm::autoSpace(), srcType, false);
@@ -395,8 +395,8 @@ class MacroExecutor {
             case GCNodeKind::Accs: {
                 const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
                 ASSERT(!normInputs.empty(), "ACCS node must have one source input.");
-                data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
-                const auto *body  = runtimeGraph->nodeBodyAs<GCAccsBody>(runtimeNodeIndex);
+                gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
+                const auto *body     = runtimeGraph->nodeBodyAs<GCAccsBody>(runtimeNodeIndex);
                 if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
                     size_t idx  = body->value;
                     auto *tuple = frame->get<::Tuple *>(srcIdx);
@@ -416,8 +416,8 @@ class MacroExecutor {
             } break;
 
             case GCNodeKind::Join: {
-                std::vector<data_idx_t> nargs;
-                std::vector<data_idx_t> wargs;
+                std::vector<gc_data_idx_t> nargs;
+                std::vector<gc_data_idx_t> wargs;
                 for (uint32_t inputIndex : runtimeGraph->normInputsOf(runtimeNodeIndex)) {
                     const auto *inputRecord = runtimeGraph->node(inputIndex);
                     ASSERT(
@@ -438,8 +438,8 @@ class MacroExecutor {
             } break;
 
             case GCNodeKind::Call: {
-                data_idx_t calleeSlot = 0;
-                const auto withInputs = runtimeGraph->withInputsOf(runtimeNodeIndex);
+                gc_data_idx_t calleeSlot = 0;
+                const auto withInputs    = runtimeGraph->withInputsOf(runtimeNodeIndex);
                 ASSERT(!withInputs.empty(), "Runtime CALL node must expose a callee input.");
                 const auto *calleeRecord = runtimeGraph->node(withInputs.front());
                 ASSERT(calleeRecord != nullptr, "Runtime CALL callee record is missing.");
@@ -533,7 +533,7 @@ class MacroExecutor {
 
                 const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
                 const auto withInputs = runtimeGraph->withInputsOf(runtimeNodeIndex);
-                std::vector<data_idx_t> indices;
+                std::vector<gc_data_idx_t> indices;
                 indices.reserve(normInputs.size() + withInputs.size());
                 for (gc_node_ref_t in : normInputs) {
                     indices.push_back(dataIndexOf(runtimeGraph, in));

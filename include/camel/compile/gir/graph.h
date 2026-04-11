@@ -37,6 +37,10 @@ class Tuple;
 
 namespace camel::core::context {}
 
+namespace camel::runtime {
+class GCGraph;
+}
+
 namespace camel::source {
 class SourceContext;
 }
@@ -117,6 +121,7 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void eraseDependency(const graph_ptr_t &dependency);
     void touch();
     void refreshDerivedLayout();
+    camel::runtime::GCGraph *encode();
 
     FunctionType *funcType() const { return signature_.funcType; }
     graph_arena_ptr_t arena() const { return arena_; }

@@ -28,6 +28,7 @@
  */
 
 #include "camel/runtime/draft_session.h"
+#include "runtime/graph_build.h"
 
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
@@ -35,6 +36,7 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 
+#include <algorithm>
 #include <queue>
 #include <unordered_set>
 
@@ -267,11 +269,18 @@ slot_t cloneStaticSlot(
     }
 }
 
-void collectStaticGraphRefs(
-    const camel::core::context::context_ptr_t &context, GCGraph *owner,
-    std::span<const slot_t> staticSlots, Type *staticType) {
-    if (!owner || !staticType || staticType->code() != TypeCode::Tuple) {
-        return;
+void pushUniqueGraph(std::vector<GCGraph *> &graphs, GCGraph *graph) {
+    if (graph && std::find(graphs.begin(), graphs.end(), graph) == graphs.end()) {
+        graphs.push_back(graph);
+    }
+}
+
+std::vector<GCGraph *> collectStaticGraphRefs(
+    const camel::core::context::context_ptr_t &context, std::span<const slot_t> staticSlots,
+    Type *staticType) {
+    std::vector<GCGraph *> refs;
+    if (!staticType || staticType->code() != TypeCode::Tuple) {
+        return refs;
     }
 
     auto *tupleType = static_cast<TupleType *>(staticType);
@@ -284,9 +293,10 @@ void collectStaticGraphRefs(
             context,
             staticSlots[i],
             tupleType->typeAt(i),
-            [&](GCGraph *graph) { owner->addStaticGraphRef(graph); },
+            [&](GCGraph *graph) { pushUniqueGraph(refs, graph); },
             visited);
     }
+    return refs;
 }
 
 void visitDraftGraphs(
@@ -335,12 +345,12 @@ void retargetEncodedGraph(
     const camel::core::context::context_ptr_t &context, const GraphDraft &draft, GCGraph *encoded,
     const GraphMap &rewritten) {
     ASSERT(encoded != nullptr, "Runtime draft commit cannot retarget a null graph.");
-    encoded->clearGraphRefs();
+    TupleType *staticDataType = const_cast<TupleType *>(encoded->staticDataType());
     if (!draft.staticSlotTypes().empty()) {
         std::vector<camel::core::type::Type *> staticTypes(
             draft.staticSlotTypes().begin(),
             draft.staticSlotTypes().end());
-        encoded->setStaticDataType(TupleType::create(std::move(staticTypes)));
+        staticDataType = TupleType::create(std::move(staticTypes));
     }
 
     auto remapGraph = [&](GCGraph *graph) -> GCGraph * {
@@ -352,14 +362,17 @@ void retargetEncodedGraph(
         return it->second;
     };
 
+    std::vector<GCGraph *> dependencies;
     for (GCGraph *graph : draft.dependencies()) {
-        encoded->addDependency(remapGraph(graph));
+        pushUniqueGraph(dependencies, remapGraph(graph));
     }
+    std::vector<GCGraph *> subGraphs;
     for (GCGraph *graph : draft.subGraphs()) {
-        encoded->addSubGraph(remapGraph(graph));
+        pushUniqueGraph(subGraphs, remapGraph(graph));
     }
+    std::vector<GCGraph *> staticGraphRefs;
     for (GCGraph *graph : draft.staticGraphRefs()) {
-        encoded->addStaticGraphRef(remapGraph(graph));
+        pushUniqueGraph(staticGraphRefs, remapGraph(graph));
     }
 
     const GCGraphNativePayload *payload = encoded->nodePayload();
@@ -373,11 +386,10 @@ void retargetEncodedGraph(
         auto *body = reinterpret_cast<GCFuncBody *>(
             mutableNodeStorage(nodeBlocks, it.ref()) + sizeof(GCNode));
         body->calleeGraph = remapGraph(body->calleeGraph);
-        encoded->addDependency(body->calleeGraph);
+        pushUniqueGraph(dependencies, body->calleeGraph);
     }
-
     std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
-    if (auto *tupleType = const_cast<TupleType *>(encoded->staticDataType())) {
+    if (auto *tupleType = staticDataType) {
         if (staticSlots.size() < tupleType->size()) {
             staticSlots.resize(tupleType->size(), NullSlot);
         }
@@ -394,12 +406,20 @@ void retargetEncodedGraph(
                 objectCache);
         }
     }
-    encoded->setStaticSlots(std::move(staticSlots));
-    collectStaticGraphRefs(
-        context,
+    for (GCGraph *graph : collectStaticGraphRefs(
+             context,
+             std::span<const slot_t>(staticSlots.data(), staticSlots.size()),
+             staticDataType)) {
+        pushUniqueGraph(staticGraphRefs, graph);
+    }
+    GCGraphBuildAccess::rewrite(
         encoded,
-        encoded->staticSlots(),
-        const_cast<TupleType *>(encoded->staticDataType()));
+        staticDataType,
+        nullptr,
+        dependencies,
+        subGraphs,
+        staticGraphRefs,
+        staticSlots);
 }
 
 } // namespace

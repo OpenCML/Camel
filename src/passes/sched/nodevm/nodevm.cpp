@@ -37,12 +37,12 @@ using namespace camel::core::context;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
 using namespace camel::core::error;
-using camel::compile::gir::data_idx_t;
 
 namespace {
 
 constexpr size_t kNodeVmCacheSlot = 0;
 
+using camel::runtime::gc_data_idx_t;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCAccsBody;
 using camel::runtime::GCBrchBody;
@@ -63,7 +63,7 @@ inline void setNodeVmCacheOf(camel::runtime::GCGraph *graph, NodeVMGraphCache *c
     }
 }
 
-inline data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
+inline gc_data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
     const auto *node = graph ? graph->node(nodeRef) : nullptr;
     ASSERT(node != nullptr, "NodeVM runtime node lookup resolved to null.");
     return node->dataIndex;
@@ -244,8 +244,8 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             case GCNodeKind::Copy: {
                 const auto normInputs = currRuntimeGraph->normInputsOf(nodeRef);
                 ASSERT(!normInputs.empty(), "COPY node must have one norm input.");
-                data_idx_t srcIdx = dataIndexOf(currRuntimeGraph, normInputs.front());
-                TypeCode srcCode  = currFrame->codeAt(srcIdx);
+                gc_data_idx_t srcIdx = dataIndexOf(currRuntimeGraph, normInputs.front());
+                TypeCode srcCode     = currFrame->codeAt(srcIdx);
                 if (isGCTraced(srcCode)) {
                     Object *srcData  = currFrame->get<Object *>(srcIdx);
                     Type *srcTypePtr = currFrame->typeAt<Type>(srcIdx);
@@ -324,8 +324,8 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             case GCNodeKind::Accs: {
                 const auto normInputs = currRuntimeGraph->normInputsOf(nodeRef);
                 ASSERT(!normInputs.empty(), "ACCS node must have one source input.");
-                data_idx_t srcIdx = dataIndexOf(currRuntimeGraph, normInputs.front());
-                const auto *body  = currRuntimeGraph->nodeBodyAs<GCAccsBody>(nodeRef);
+                gc_data_idx_t srcIdx = dataIndexOf(currRuntimeGraph, normInputs.front());
+                const auto *body     = currRuntimeGraph->nodeBodyAs<GCAccsBody>(nodeRef);
                 if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
                     size_t idx = body->value;
                     Tuple *t   = currFrame->get<Tuple *>(srcIdx);
