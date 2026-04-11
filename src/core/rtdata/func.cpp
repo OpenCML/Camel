@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 17, 2025
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,9 +36,6 @@ Function *Function::create(
     ASSERT(graph != nullptr, "Runtime Function graph cannot be null.");
     ASSERT(tupleType && tupleType->code() == type::TypeCode::Tuple, "Type must be TupleType");
     const type::TupleType *tt = static_cast<const type::TupleType *>(tupleType);
-    ASSERT(
-        tt->size() == graph->closureType()->size(),
-        "Runtime Function closure tuple size mismatch.");
 
     void *mem = allocator.alloc(sizeof(Function), alignof(Function));
     if (!mem)

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1052,6 +1052,7 @@ GCGraph *GraphDraft::encode() const {
     if (!staticSlotTypes_.empty()) {
         staticDataType = camel::core::type::TupleType::create(staticSlotTypes_);
     }
+    const auto payloadShape = describeDraftNativePayload(*this);
 
     return GCGraphBuildAccess::create(
         debugRecord,
@@ -1063,7 +1064,8 @@ GCGraph *GraphDraft::encode() const {
         dependencies_,
         subGraphs_,
         staticGraphRefs_,
-        buildDraftNativePayload(*this),
+        payloadShape,
+        [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(*this, payload); },
         staticSlots_);
 }
 

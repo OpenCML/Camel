@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,10 +57,6 @@ namespace {
 using GraphMap    = std::unordered_map<GCGraph *, GCGraph *>;
 using ObjectCache = std::unordered_map<const Object *, Object *>;
 using ObjectSet   = std::unordered_set<const Object *>;
-
-std::byte *mutableNodeStorage(gc_block_t *blocks, gc_node_ref_t ref) {
-    return reinterpret_cast<std::byte *>(blocks + ref);
-}
 
 GCGraph *resolveRuntimeGraphCarrier(
     const camel::core::context::context_ptr_t &context, const ::Function *func) {
@@ -341,18 +337,60 @@ void visitDraftGraphs(
     }
 }
 
-void retargetEncodedGraph(
-    const camel::core::context::context_ptr_t &context, const GraphDraft &draft, GCGraph *encoded,
-    const GraphMap &rewritten) {
-    ASSERT(encoded != nullptr, "Runtime draft commit cannot retarget a null graph.");
-    TupleType *staticDataType = const_cast<TupleType *>(encoded->staticDataType());
+std::vector<GCGraph *> collectDraftDependencyGraphs(const GraphDraft &draft) {
+    std::vector<GCGraph *> dependencies;
+    for (GCGraph *graph : draft.dependencies()) {
+        pushUniqueGraph(dependencies, graph);
+    }
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id)) {
+            continue;
+        }
+        const DraftNodeHeader *header = draft.header(id);
+        if (!header || header->kind != GCNodeKind::Func) {
+            continue;
+        }
+        auto payload = draft.payloadOf(id);
+        if (payload.size_bytes() < sizeof(GCFuncBody)) {
+            continue;
+        }
+        auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
+        pushUniqueGraph(dependencies, body->calleeGraph);
+    }
+    return dependencies;
+}
+
+TupleType *draftStaticDataType(const GraphDraft &draft, const GCGraph *fallback) {
+    TupleType *staticDataType =
+        fallback ? const_cast<TupleType *>(fallback->staticDataType()) : nullptr;
     if (!draft.staticSlotTypes().empty()) {
         std::vector<camel::core::type::Type *> staticTypes(
             draft.staticSlotTypes().begin(),
             draft.staticSlotTypes().end());
         staticDataType = TupleType::create(std::move(staticTypes));
     }
+    return staticDataType;
+}
 
+std::vector<GCGraph *> collectDraftStaticGraphRefs(
+    const camel::core::context::context_ptr_t &context, const GraphDraft &draft,
+    const TupleType *staticDataType) {
+    std::vector<GCGraph *> staticGraphRefs;
+    for (GCGraph *graph : draft.staticGraphRefs()) {
+        pushUniqueGraph(staticGraphRefs, graph);
+    }
+    for (GCGraph *graph : collectStaticGraphRefs(
+             context,
+             draft.staticSlots(),
+             const_cast<TupleType *>(staticDataType))) {
+        pushUniqueGraph(staticGraphRefs, graph);
+    }
+    return staticGraphRefs;
+}
+
+GCGraph *encodeDraftClosureGraph(
+    const camel::core::context::context_ptr_t &context, GCGraph *sourceGraph,
+    const GraphDraft &draft, const GraphMap &rewritten, size_t bytes) {
     auto remapGraph = [&](GCGraph *graph) -> GCGraph * {
         if (!graph) {
             return nullptr;
@@ -362,8 +400,10 @@ void retargetEncodedGraph(
         return it->second;
     };
 
+    TupleType *staticDataType = draftStaticDataType(draft, sourceGraph);
+
     std::vector<GCGraph *> dependencies;
-    for (GCGraph *graph : draft.dependencies()) {
+    for (GCGraph *graph : collectDraftDependencyGraphs(draft)) {
         pushUniqueGraph(dependencies, remapGraph(graph));
     }
     std::vector<GCGraph *> subGraphs;
@@ -371,23 +411,10 @@ void retargetEncodedGraph(
         pushUniqueGraph(subGraphs, remapGraph(graph));
     }
     std::vector<GCGraph *> staticGraphRefs;
-    for (GCGraph *graph : draft.staticGraphRefs()) {
+    for (GCGraph *graph : collectDraftStaticGraphRefs(context, draft, staticDataType)) {
         pushUniqueGraph(staticGraphRefs, remapGraph(graph));
     }
 
-    const GCGraphNativePayload *payload = encoded->nodePayload();
-    ASSERT(payload != nullptr, "Runtime draft commit produced a graph without native payload.");
-    auto *nodeBlocks = const_cast<gc_block_t *>(payload->nodeBlocks);
-    for (auto it = encoded->nodes().begin(); it != encoded->nodes().end(); ++it) {
-        const GCNode *node = *it;
-        if (!node || node->kind != GCNodeKind::Func) {
-            continue;
-        }
-        auto *body = reinterpret_cast<GCFuncBody *>(
-            mutableNodeStorage(nodeBlocks, it.ref()) + sizeof(GCNode));
-        body->calleeGraph = remapGraph(body->calleeGraph);
-        pushUniqueGraph(dependencies, body->calleeGraph);
-    }
     std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
     if (auto *tupleType = staticDataType) {
         if (staticSlots.size() < tupleType->size()) {
@@ -406,19 +433,22 @@ void retargetEncodedGraph(
                 objectCache);
         }
     }
-    for (GCGraph *graph : collectStaticGraphRefs(
-             context,
-             std::span<const slot_t>(staticSlots.data(), staticSlots.size()),
-             staticDataType)) {
-        pushUniqueGraph(staticGraphRefs, graph);
-    }
-    GCGraphBuildAccess::rewrite(
-        encoded,
+
+    const auto payloadShape = describeDraftNativePayload(draft);
+    return GCGraphBuildAccess::constructInPlace(
+        rewritten.at(sourceGraph),
+        bytes,
+        createGraphDebugRecord(draft.stableId(), draft.mangledName(), draft.name()),
+        draft.funcType(),
+        draft.runtimeDataType(),
         staticDataType,
+        draft.closureType(),
         nullptr,
         dependencies,
         subGraphs,
         staticGraphRefs,
+        payloadShape,
+        [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(draft, payload, remapGraph); },
         staticSlots);
 }
 
@@ -519,11 +549,44 @@ GCGraph *RuntimeGraphDraftSession::commit() {
 
     GraphMap rewritten;
     rewritten.reserve(closure.size());
+    std::unordered_map<GCGraph *, size_t> allocatedBytes;
+    allocatedBytes.reserve(closure.size());
     for (GCGraph *graph : closure) {
-        rewritten.emplace(graph, drafts_.at(graph).get()->encode());
+        const GraphDraft &draft   = *drafts_.at(graph);
+        TupleType *staticDataType = draftStaticDataType(draft, graph);
+        std::vector<GCGraph *> dependencyPlaceholders(
+            collectDraftDependencyGraphs(draft).size(),
+            nullptr);
+        std::vector<GCGraph *> subGraphPlaceholders(draft.subGraphs().size(), nullptr);
+        std::vector<GCGraph *> staticRefPlaceholders(
+            collectDraftStaticGraphRefs(context_, draft, staticDataType).size(),
+            nullptr);
+        std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
+        if (staticDataType && staticSlots.size() < staticDataType->size()) {
+            staticSlots.resize(staticDataType->size(), NullSlot);
+        }
+        auto payloadShape = describeDraftNativePayload(draft);
+        size_t bytes      = GCGraphBuildAccess::requiredBytes(
+            dependencyPlaceholders,
+            subGraphPlaceholders,
+            staticRefPlaceholders,
+            payloadShape,
+            staticSlots);
+        void *mem = mm::graphSpace().alloc(bytes, alignof(GCGraph));
+        if (!mem) {
+            throw std::bad_alloc();
+        }
+        rewritten.emplace(graph, reinterpret_cast<GCGraph *>(mem));
+        allocatedBytes.emplace(graph, bytes);
     }
-    for (GCGraph *graph : closure) {
-        retargetEncodedGraph(context_, *drafts_.at(graph), rewritten.at(graph), rewritten);
+    for (auto it = closure.rbegin(); it != closure.rend(); ++it) {
+        GCGraph *graph   = *it;
+        rewritten[graph] = encodeDraftClosureGraph(
+            context_,
+            graph,
+            *drafts_.at(graph),
+            rewritten,
+            allocatedBytes.at(graph));
     }
 
     runtimeRoot_ = context_->installRuntimeRoot(rewritten.at(oldRuntimeRoot));
