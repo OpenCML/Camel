@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,5 +49,6 @@ struct DraftGraphCloneResult {
 };
 
 DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGraph *sourceGraph);
+DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDraft &sourceDraft);
 
 } // namespace camel::runtime

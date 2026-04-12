@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,10 +93,30 @@ inline void copyOperandsToBuffer(slot_t *dst, Frame *frame, const Bytecode &bc, 
     }
 }
 
-inline void
-writeCallArgsToFrame(Frame *frame, const slot_t *args, size_t argsCnt, size_t dstOffset = 1) {
-    for (size_t i = 0; i < argsCnt; ++i) {
-        frame->set(dstOffset + i, args[i]);
+inline void writeDirectCallArgsToFrame(
+    Frame *frame, camel::runtime::GCGraph *targetGraph, const slot_t *args, size_t argsCnt) {
+    ASSERT(frame != nullptr, "JIT trampoline target frame is null.");
+    ASSERT(targetGraph != nullptr, "JIT trampoline target graph is null.");
+    const auto normPorts                       = targetGraph->normPorts();
+    const auto withPorts                       = targetGraph->withPorts();
+    [[maybe_unused]] const size_t expectedArgs = normPorts.size() + withPorts.size();
+    ASSERT(
+        argsCnt == expectedArgs,
+        std::format(
+            "JIT direct-call arity mismatch for graph '{}': expected {}, got {}.",
+            targetGraph->name(),
+            expectedArgs,
+            argsCnt));
+    size_t argIndex = 0;
+    for (auto portRef : normPorts) {
+        const auto *port = targetGraph->node(portRef);
+        ASSERT(port != nullptr, "JIT direct-call norm port is null.");
+        frame->set(port->dataIndex, args[argIndex++]);
+    }
+    for (auto portRef : withPorts) {
+        const auto *port = targetGraph->node(portRef);
+        ASSERT(port != nullptr, "JIT direct-call with port is null.");
+        frame->set(port->dataIndex, args[argIndex++]);
     }
 }
 
@@ -235,11 +255,9 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
             static_cast<void *>(reinterpret_cast<void *>(fn))));
         Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]); // slot[0] = Frame*
         Frame *newFrame    = vm->acquireFrameForCall(runtimeTarget);
-        for (size_t i = 0; i < argsCnt; ++i) {
-            newFrame->set(
-                i + 1,
-                callerFrame->get<slot_t>(bc.operands()[i])); // Operands may target static slots.
-        }
+        TailArgStorage args(argsCnt);
+        copyOperandsToBuffer(args.data(), callerFrame, bc, argsCnt);
+        writeDirectCallArgsToFrame(newFrame, runtimeTarget, args.data(), argsCnt);
 
         EXEC_WHEN_DEBUG({
             std::ostringstream os;
@@ -265,9 +283,9 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
             runtimeTarget ? runtimeTarget->name() : "<null>"));
     Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
     Frame *newFrame    = vm->acquireFrameForCall(runtimeTarget);
-    for (size_t i = 0; i < argsCnt; ++i) {
-        newFrame->set(i + 1, callerFrame->get<slot_t>(bc.operands()[i]));
-    }
+    TailArgStorage args(argsCnt);
+    copyOperandsToBuffer(args.data(), callerFrame, bc, argsCnt);
+    writeDirectCallArgsToFrame(newFrame, runtimeTarget, args.data(), argsCnt);
     (void)count;
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "JIT.Trampoline",
@@ -302,7 +320,7 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
         copyOperandsToBuffer(args.data(), callerFrame, bc, argsCnt);
         vm->releaseFrameForTail(callerFrame);
         Frame *newFrame = vm->acquireFrameForTail(runtimeTarget);
-        writeCallArgsToFrame(newFrame, args.data(), argsCnt);
+        writeDirectCallArgsToFrame(newFrame, runtimeTarget, args.data(), argsCnt);
         JitEntryFn fn = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc));
         if (fn) {
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
@@ -334,7 +352,7 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     copyOperandsToBuffer(args.data(), callerFrame, bc, argsCnt);
     vm->releaseFrameForTail(callerFrame);
     Frame *newFrame = vm->acquireFrameForTail(runtimeTarget);
-    writeCallArgsToFrame(newFrame, args.data(), argsCnt);
+    writeDirectCallArgsToFrame(newFrame, runtimeTarget, args.data(), argsCnt);
     (void)count;
     return vm->call(targetPc, newFrame);
 }
@@ -353,9 +371,9 @@ slot_t *prepareDirectJitCall(slot_t *callerSlots, void *ctx, const Bytecode *bc)
     size_t argsCnt     = bc->normCnt();
     Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
     Frame *newFrame    = vm->acquireFrameForCall(runtimeTarget);
-    for (size_t i = 0; i < argsCnt; ++i) {
-        newFrame->set(i + 1, callerFrame->get<slot_t>(bc->operands()[i]));
-    }
+    TailArgStorage args(argsCnt);
+    copyOperandsToBuffer(args.data(), callerFrame, *bc, argsCnt);
+    writeDirectCallArgsToFrame(newFrame, runtimeTarget, args.data(), argsCnt);
     newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
     return newFrame->slotBase();
 }
@@ -378,7 +396,7 @@ slot_t *prepareDirectJitTailCall(slot_t *callerSlots, void *ctx, const Bytecode 
 
     vm->releaseFrameForTail(callerFrame);
     Frame *newFrame = vm->acquireFrameForTail(runtimeTarget);
-    writeCallArgsToFrame(newFrame, args.data(), argsCnt);
+    writeDirectCallArgsToFrame(newFrame, runtimeTarget, args.data(), argsCnt);
     newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
     return newFrame->slotBase();
 }
@@ -412,9 +430,9 @@ slot_t directSelfFuncInvoke(slot_t *callerSlots, void *ctx, const Bytecode *bc) 
     size_t argsCnt     = bc->normCnt();
     Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
     Frame *newFrame    = vm->acquireFrameForCall(runtimeGraph);
-    for (size_t i = 0; i < argsCnt; ++i) {
-        newFrame->set(i + 1, callerFrame->get<slot_t>(bc->operands()[i]));
-    }
+    TailArgStorage args(argsCnt);
+    copyOperandsToBuffer(args.data(), callerFrame, *bc, argsCnt);
+    writeDirectCallArgsToFrame(newFrame, runtimeGraph, args.data(), argsCnt);
     slot_t *slots = newFrame->slotBase();
     slots[0]      = reinterpret_cast<slot_t>(newFrame);
     slot_t result;
@@ -497,7 +515,9 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
         } else {
             result = frame->get<slot_t>(srcIdx);
         }
-        frame->set(bc.result, result);
+        if (bc.result != 0) {
+            frame->set(bc.result, result);
+        }
         return result;
     }
     case OpCode::ACCS: {
@@ -526,7 +546,9 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
         } else {
             ASSERT(false, "Unsupported source type for ACCS in JIT trampoline.");
         }
-        frame->set(bc.result, result);
+        if (bc.result != 0) {
+            frame->set(bc.result, result);
+        }
         return result;
     }
     case OpCode::FILL: {
@@ -581,14 +603,17 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
         }
 
         slot_t result = reinterpret_cast<slot_t>(srcObj);
-        frame->set(bc.result, result);
+        if (bc.result != 0) {
+            frame->set(bc.result, result);
+        }
         return result;
     }
     case OpCode::CALL: {
         const data_arr_t nargs = bc.nargs();
         const data_arr_t wargs = bc.wargs();
         ASSERT(!wargs.empty(), "CALL requires with-arg[0] as Function.");
-        auto *function      = frame->get<Function *>(wargs[0]);
+        auto *function = frame->get<Function *>(wargs[0]);
+        ASSERT(function != nullptr, "JIT CALL resolved a null Function callee.");
         auto *runtimeTarget = function->graph();
         ASSERT(
             runtimeTarget != nullptr,
@@ -609,7 +634,9 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
         // JIT indirect-call path is proven against recursive closure-heavy
         // workloads such as perf::timeit.
         slot_t result = vm->call(vm->graphEntryPc(runtimeTarget), funcFrame);
-        frame->set(bc.result, result);
+        if (bc.result != 0) {
+            frame->set(bc.result, result);
+        }
         return result;
     }
     default:

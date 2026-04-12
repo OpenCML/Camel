@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -76,10 +76,10 @@ inline bool linkCheek(Node *from, Node *to) {
     if (from == to) {
         return false;
     }
-    // prevent linking nodes that are already linked
-    if (from->hasLinkedTo(to)) {
-        return false;
-    }
+    // Different edge lanes may legitimately coexist between the same pair
+    // (for example, a GATE needs both the value edge and the control anchor).
+    // Duplicate detection therefore belongs to the concrete lane-specific
+    // insertion path rather than this coarse pre-check.
     // prevent linking nodes that are already deeply linked reversely
     // which may cause cycles in the graph
     // note: this check can be expensive

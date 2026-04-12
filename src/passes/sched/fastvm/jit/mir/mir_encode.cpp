@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -586,10 +586,10 @@ void encodeMirBuffer(
                 enc.movRdiRsp();
                 enc.movToFrame(0, kRegR11);
 
-                // The callee frame uses the same slot layout as the current
-                // graph, so arguments can be copied into slots 1..N directly.
+                // Direct-call arguments must land on the callee's formal port
+                // slots, not on sequential slot numbers.
                 for (uint8_t ai = 0; ai < nArgs; ++ai)
-                    enc.movToFrame(static_cast<int>((ai + 1) * sizeof(slot_t)), actualArgRegs[ai]);
+                    enc.movToFrame(p->argDstDisps[ai], actualArgRegs[ai]);
 
                 patches.push_back({enc.here(), 0, 5, 0, 0});
 #if !defined(_WIN32) && !defined(_WIN64)
@@ -657,7 +657,7 @@ void encodeMirBuffer(
             enc.movR11FromR10Store();
             for (uint8_t ai = 0; ai < p->argsCnt; ++ai) {
                 enc.movRaxFromFrame(p->argSrcDisps[ai]);
-                enc.movR11Disp8FromRax(static_cast<int8_t>((ai + 1) * 8));
+                enc.movR11Disp8FromRax(static_cast<int8_t>(p->argDstDisps[ai]));
             }
             enc.movRdiR11();
 

@@ -34,6 +34,8 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/runtime/draft.h"
+#include "graph_builder.h"
 #include "runtime/graph_build.h"
 
 #include <algorithm>
@@ -59,6 +61,8 @@ using camel::core::rtdata::Object;
 using camel::core::rtdata::toSlot;
 using camel::runtime::collectStaticGraphRefsRecursive;
 using camel::runtime::createGraphDebugRecord;
+using camel::runtime::DraftBrchPayload;
+using camel::runtime::DraftNodeHeader;
 using camel::runtime::GCAccsBody;
 using camel::runtime::GCBranchArm;
 using camel::runtime::GCBrchBody;
@@ -75,102 +79,90 @@ using camel::runtime::GCOperBody;
 using camel::runtime::GCReturnKind;
 using camel::runtime::Slice;
 
+[[noreturn]] void throwEncodeError(std::string message) {
+    throw std::runtime_error(std::move(message));
+}
+
 template <typename T, typename U> T narrowIntegral(U value, const char *what) {
-    ASSERT(
-        value <= static_cast<U>(std::numeric_limits<T>::max()),
-        std::format("{} exceeds the target integral width.", what));
+    if (value > static_cast<U>(std::numeric_limits<T>::max())) {
+        throwEncodeError(std::format("{} exceeds the target integral width.", what));
+    }
     return static_cast<T>(value);
 }
 
-GCNodeKind toRuntimeNodeKind(NodeType type) {
-    switch (type) {
-    case NodeType::DATA:
-        return GCNodeKind::Data;
-    case NodeType::PORT:
-        return GCNodeKind::Port;
-    case NodeType::CAST:
-        return GCNodeKind::Cast;
-    case NodeType::COPY:
-        return GCNodeKind::Copy;
-    case NodeType::FILL:
-        return GCNodeKind::Fill;
-    case NodeType::ACCS:
-        return GCNodeKind::Accs;
-    case NodeType::BRCH:
-        return GCNodeKind::Brch;
-    case NodeType::JOIN:
-        return GCNodeKind::Join;
-    case NodeType::CALL:
-        return GCNodeKind::Call;
-    case NodeType::BIND:
-        return GCNodeKind::Bind;
-    case NodeType::FUNC:
-        return GCNodeKind::Func;
-    case NodeType::OPER:
-        return GCNodeKind::Oper;
-    case NodeType::SYNC:
-        return GCNodeKind::Sync;
-    case NodeType::GATE:
-        return GCNodeKind::Gate;
-    case NodeType::DREF:
-        return GCNodeKind::Dref;
+Node *requireDraftSourceNode(
+    std::span<Node *const> sourceNodesByDraftId, camel::runtime::gc_node_ref_t draftId,
+    NodeType expectedType, std::string_view what) {
+    if (draftId >= sourceNodesByDraftId.size()) {
+        throwEncodeError(std::format("{} draft id {} is out of range.", what, draftId));
     }
-    return GCNodeKind::Data;
+    Node *node = sourceNodesByDraftId[draftId];
+    if (!node) {
+        throwEncodeError(std::format("{} draft id {} has no source node binding.", what, draftId));
+    }
+    if (node->type() != expectedType) {
+        throwEncodeError(
+            std::format(
+                "{} draft id {} expected source node type {}, got {}.",
+                what,
+                draftId,
+                static_cast<int>(expectedType),
+                static_cast<int>(node->type())));
+    }
+    return node;
 }
 
-std::vector<Node *> collectNativeNodes(const graph_ptr_t &graph) {
-    std::vector<Node *> nodes;
-    const auto &normPorts = graph->normPorts();
-    const auto &withPorts = graph->withPorts();
-    const auto &closure   = graph->closure();
-    nodes.reserve(normPorts.size() + withPorts.size() + closure.size() + graph->nodes().size() + 2);
-    nodes.insert(nodes.end(), normPorts.begin(), normPorts.end());
-    nodes.insert(nodes.end(), withPorts.begin(), withPorts.end());
-    nodes.insert(nodes.end(), closure.begin(), closure.end());
-    nodes.insert(nodes.end(), graph->nodes().begin(), graph->nodes().end());
-
-    auto pushUniqueNode = [&](Node *node) {
-        if (node && std::ranges::find(nodes, node) == nodes.end()) {
-            nodes.push_back(node);
+Type *effectiveDraftNodeType(const runtime::GraphDraft &draft, const DraftNodeHeader &header) {
+    if (header.dataType != nullptr) {
+        return header.dataType;
+    }
+    if (header.dataIndex > 0) {
+        if (auto *runtimeType = draft.runtimeDataType();
+            runtimeType != nullptr && static_cast<size_t>(header.dataIndex) < runtimeType->size()) {
+            return runtimeType->typeAt(static_cast<size_t>(header.dataIndex));
         }
-    };
-
-    pushUniqueNode(graph->outputNode());
-    pushUniqueNode(graph->exitNode());
-    return nodes;
+    } else if (header.dataIndex < 0) {
+        const size_t staticIndex = static_cast<size_t>(-header.dataIndex);
+        const auto staticTypes   = draft.staticSlotTypes();
+        if (staticIndex < staticTypes.size()) {
+            return staticTypes[staticIndex];
+        }
+    }
+    return nullptr;
 }
 
-size_t nodeBodyBytes(const Node *node) {
-    ASSERT(node != nullptr, "Runtime node-body sizing received a null source node.");
-    switch (node->type()) {
-    case NodeType::FUNC:
+size_t draftNodeBodyBytes(
+    const runtime::GraphDraft &draft, const DraftGraphBuilder &builder,
+    camel::runtime::gc_node_ref_t draftId) {
+    const DraftNodeHeader *header = draft.header(draftId);
+    if (!header) {
+        throwEncodeError("Compile encode received a dead draft node.");
+    }
+    switch (header->kind) {
+    case GCNodeKind::Func:
         return sizeof(GCFuncBody);
-    case NodeType::CALL:
+    case GCNodeKind::Call:
         return sizeof(GCCallBody);
-    case NodeType::ACCS: {
-        auto *accsNode = tt::as_ptr<AccsNode>(const_cast<Node *>(node));
-        ASSERT(accsNode != nullptr, "Runtime ACCS layout sizing requires an ACCS node.");
-        return sizeof(GCAccsBody) + (accsNode->isNum() ? 0 : accsNode->strIndex().size());
-    }
-    case NodeType::FILL:
+    case GCNodeKind::Accs:
+        return draft.payloadOf(draftId).size_bytes();
+    case GCNodeKind::Fill:
         return sizeof(GCFillBody);
-    case NodeType::BRCH:
+    case GCNodeKind::Brch:
         return sizeof(GCBrchBody);
-    case NodeType::JOIN:
+    case GCNodeKind::Join:
         return sizeof(GCJoinBody);
-    case NodeType::OPER: {
-        auto *operNode = tt::as_ptr<OperNode>(const_cast<Node *>(node));
-        ASSERT(operNode != nullptr, "Runtime OPER layout sizing requires an OPER node.");
-        return sizeof(GCOperBody) + operNode->oper()->uri().size();
-    }
+    case GCNodeKind::Oper:
+        return sizeof(GCOperBody) + builder.operTarget(draftId)->uri().size();
     default:
         return 0;
     }
 }
 
-camel::runtime::gc_cnt_t nodeBlockCount(const Node *node) {
-    const size_t totalBytes = sizeof(GCNode) + nodeBodyBytes(node);
-    return camel::runtime::blocksForBytes(totalBytes);
+camel::runtime::gc_cnt_t draftNodeBlockCount(
+    const runtime::GraphDraft &draft, const DraftGraphBuilder &builder,
+    camel::runtime::gc_node_ref_t draftId) {
+    return camel::runtime::blocksForBytes(
+        sizeof(GCNode) + draftNodeBodyBytes(draft, builder, draftId));
 }
 
 std::byte *
@@ -199,7 +191,9 @@ void writeTrailingBytes(
 }
 
 camel::runtime::GCFillKind classifyFillKind(Type *type) {
-    ASSERT(type != nullptr, "Runtime FILL classification requires a target type.");
+    if (!type) {
+        throwEncodeError("Runtime FILL classification requires a target type.");
+    }
     switch (type->code()) {
     case TypeCode::Tuple:
         return camel::runtime::GCFillKind::Tuple;
@@ -210,20 +204,20 @@ camel::runtime::GCFillKind classifyFillKind(Type *type) {
     case TypeCode::Function:
         return camel::runtime::GCFillKind::FunctionClosure;
     default:
-        ASSERT(false, std::format("Unsupported runtime FILL target type '{}'.", type->toString()));
-        return camel::runtime::GCFillKind::Tuple;
+        throwEncodeError(
+            std::format("Unsupported runtime FILL target type '{}'.", type->toString()));
     }
 }
 
-struct PlannedNativeNode {
-    Node *source                        = nullptr;
-    camel::runtime::gc_node_ref_t ref   = camel::runtime::kInvalidNodeRef;
-    camel::runtime::gc_cnt_t blockCount = 0;
+struct PlannedDraftNode {
+    camel::runtime::gc_node_ref_t draftId = camel::runtime::kInvalidNodeRef;
+    camel::runtime::gc_node_ref_t ref     = camel::runtime::kInvalidNodeRef;
+    camel::runtime::gc_cnt_t blockCount   = 0;
 };
 
-struct NativePayloadPlan {
-    std::vector<PlannedNativeNode> nodes;
-    std::unordered_map<const Node *, camel::runtime::gc_node_ref_t> nodeRefs;
+struct CompileDraftPayloadPlan {
+    std::vector<PlannedDraftNode> nodes;
+    std::vector<camel::runtime::gc_node_ref_t> runtimeRefsByDraftId;
     camel::runtime::gc_cnt_t nodeBlockCount = 0;
     camel::runtime::gc_cnt_t edgeCount      = 0;
     camel::runtime::gc_cnt_t branchArmCount = 0;
@@ -232,56 +226,145 @@ struct NativePayloadPlan {
     camel::runtime::gc_cnt_t closureCount   = 0;
 };
 
-NativePayloadPlan planNativePayload(const graph_ptr_t &graph) {
-    NativePayloadPlan plan;
+std::vector<Node *> buildDraftSourceNodeMap(const graph_ptr_t &graph) {
+    std::vector<Node *> sourceNodes;
+    if (!graph) {
+        return sourceNodes;
+    }
+    sourceNodes.assign(graph->builder().draft().nodeSlotCount(), nullptr);
+    auto bind = [&](Node *node) {
+        if (!node || !graph->hasDraftNode(node)) {
+            return;
+        }
+        const auto draftId = graph->draftNodeId(node);
+        if (draftId < sourceNodes.size()) {
+            sourceNodes[draftId] = node;
+        }
+    };
+    for (Node *node : graph->normPorts())
+        bind(node);
+    for (Node *node : graph->withPorts())
+        bind(node);
+    for (Node *node : graph->closure())
+        bind(node);
+    for (Node *node : graph->nodes())
+        bind(node);
+    bind(graph->outputNode());
+    bind(graph->exitNode());
+    return sourceNodes;
+}
+
+CompileDraftPayloadPlan planCompileDraftPayload(const graph_ptr_t &graph) {
+    CompileDraftPayloadPlan plan;
     if (!graph) {
         return plan;
     }
 
-    std::vector<Node *> orderedNodes = collectNativeNodes(graph);
-    plan.nodes.reserve(orderedNodes.size());
-    plan.nodeRefs.reserve(orderedNodes.size());
+    const auto &draft               = graph->builder().draft();
+    const auto &builder             = graph->builder().draftBuilder();
+    const auto sourceNodesByDraftId = buildDraftSourceNodeMap(graph);
+    plan.runtimeRefsByDraftId.assign(draft.nodeSlotCount(), camel::runtime::kInvalidNodeRef);
     plan.normPortCount = narrowIntegral<camel::runtime::gc_cnt_t>(
-        graph->normPorts().size(),
-        "Runtime norm-port count");
+        draft.normPorts().size(),
+        "Compile draft norm-port count");
     plan.withPortCount = narrowIntegral<camel::runtime::gc_cnt_t>(
-        graph->withPorts().size(),
-        "Runtime with-port count");
+        draft.withPorts().size(),
+        "Compile draft with-port count");
     plan.closureCount = narrowIntegral<camel::runtime::gc_cnt_t>(
-        graph->closure().size(),
-        "Runtime closure-node count");
+        draft.closureNodes().size(),
+        "Compile draft closure-node count");
+
+    auto requireAlive = [&](camel::runtime::gc_node_ref_t owner,
+                            camel::runtime::gc_node_ref_t ref,
+                            std::string_view lane) {
+        if (ref == camel::runtime::kInvalidNodeRef) {
+            return;
+        }
+        if (!draft.alive(ref)) {
+            throw std::runtime_error(
+                std::format(
+                    "Compile draft payload planning found dead node ref {} in {} list of node {}.",
+                    ref,
+                    lane,
+                    owner));
+        }
+    };
 
     camel::runtime::gc_off_t currentNodeOffset = 0;
     size_t edgeCount                           = 0;
     size_t branchArmCount                      = 0;
-    for (Node *node : orderedNodes) {
-        const camel::runtime::gc_cnt_t blocks = nodeBlockCount(node);
+    for (camel::runtime::gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount(); ++draftId) {
+        if (!draft.alive(draftId)) {
+            continue;
+        }
+        for (auto ref : draft.normInputsOf(draftId))
+            requireAlive(draftId, ref, "norm-input");
+        for (auto ref : draft.withInputsOf(draftId))
+            requireAlive(draftId, ref, "with-input");
+        for (auto ref : draft.ctrlInputsOf(draftId))
+            requireAlive(draftId, ref, "ctrl-input");
+        for (auto ref : draft.normUsersOf(draftId))
+            requireAlive(draftId, ref, "norm-user");
+        for (auto ref : draft.withUsersOf(draftId))
+            requireAlive(draftId, ref, "with-user");
+        for (auto ref : draft.ctrlUsersOf(draftId))
+            requireAlive(draftId, ref, "ctrl-user");
+        if (draft.header(draftId)->kind == GCNodeKind::Brch) {
+            for (const GCBranchArm &arm : draft.branchArmsOf(draftId)) {
+                requireAlive(draftId, arm.head, "branch-head");
+                requireAlive(draftId, arm.tail, "branch-tail");
+            }
+        }
+
+        const camel::runtime::gc_cnt_t blocks = draftNodeBlockCount(draft, builder, draftId);
         plan.nodes.push_back(
-            PlannedNativeNode{.source = node, .ref = currentNodeOffset, .blockCount = blocks});
-        plan.nodeRefs.emplace(node, currentNodeOffset);
-        currentNodeOffset = narrowIntegral<camel::runtime::gc_off_t>(
+            PlannedDraftNode{.draftId = draftId, .ref = currentNodeOffset, .blockCount = blocks});
+        plan.runtimeRefsByDraftId[draftId] = currentNodeOffset;
+        currentNodeOffset                  = narrowIntegral<camel::runtime::gc_off_t>(
             static_cast<size_t>(currentNodeOffset) + blocks,
-            "Runtime node blob size");
-        edgeCount += node->normInputs().size() + node->withInputs().size() +
-                     node->ctrlInputs().size() + node->normOutputs().size() +
-                     node->withOutputs().size() + node->ctrlOutputs().size();
-        if (node->type() == NodeType::BRCH) {
-            auto *brchNode = tt::as_ptr<BrchNode>(node);
-            ASSERT(brchNode != nullptr, "Runtime BRCH plan requires BRCH metadata.");
-            branchArmCount += brchNode->armCount();
+            "Compile draft node blob size");
+        edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
+                     draft.ctrlInputsOf(draftId).size() + draft.normUsersOf(draftId).size() +
+                     draft.withUsersOf(draftId).size() + draft.ctrlUsersOf(draftId).size();
+        if (draft.header(draftId)->kind == GCNodeKind::Brch) {
+            if (draftId < sourceNodesByDraftId.size()) {
+                Node *sourceNode = sourceNodesByDraftId[draftId];
+                if (auto *brchNode = sourceNode && sourceNode->type() == NodeType::BRCH
+                                         ? tt::as_ptr<BrchNode>(sourceNode)
+                                         : nullptr) {
+                    branchArmCount += brchNode->armCount();
+                } else {
+                    branchArmCount += draft.branchArmsOf(draftId).size();
+                }
+            } else {
+                branchArmCount += draft.branchArmsOf(draftId).size();
+            }
         }
     }
 
+    for (auto ref : draft.normPorts())
+        requireAlive(camel::runtime::kInvalidNodeRef, ref, "norm-port");
+    for (auto ref : draft.withPorts())
+        requireAlive(camel::runtime::kInvalidNodeRef, ref, "with-port");
+    for (auto ref : draft.closureNodes())
+        requireAlive(camel::runtime::kInvalidNodeRef, ref, "closure");
+    requireAlive(camel::runtime::kInvalidNodeRef, draft.entryNode(), "entry");
+    requireAlive(camel::runtime::kInvalidNodeRef, draft.exitNode(), "exit");
+    requireAlive(camel::runtime::kInvalidNodeRef, draft.outputNode(), "output");
+    requireAlive(camel::runtime::kInvalidNodeRef, draft.returnNode(), "return");
+
     plan.nodeBlockCount = narrowIntegral<camel::runtime::gc_cnt_t>(
         currentNodeOffset,
-        "Runtime node-blob block count");
-    plan.edgeCount = narrowIntegral<camel::runtime::gc_cnt_t>(edgeCount, "Runtime edge arena size");
-    plan.branchArmCount =
-        narrowIntegral<camel::runtime::gc_cnt_t>(branchArmCount, "Runtime branch-arm arena size");
+        "Compile draft node-blob block count");
+    plan.edgeCount =
+        narrowIntegral<camel::runtime::gc_cnt_t>(edgeCount, "Compile draft edge arena size");
+    plan.branchArmCount = narrowIntegral<camel::runtime::gc_cnt_t>(
+        branchArmCount,
+        "Compile draft branch-arm arena size");
     return plan;
 }
 
-GCGraphPayloadShape describeNativePayload(const NativePayloadPlan &plan) {
+GCGraphPayloadShape describeNativePayload(const CompileDraftPayloadPlan &plan) {
     return GCGraphPayloadShape{
         .nodeCount =
             narrowIntegral<camel::runtime::gc_cnt_t>(plan.nodes.size(), "Runtime node count"),
@@ -296,7 +379,9 @@ GCGraphPayloadShape describeNativePayload(const NativePayloadPlan &plan) {
 
 graph_ptr_t
 requireSourceGraphHandle(Graph *graph, std::string_view context, GCGraph *owner = nullptr) {
-    ASSERT(graph != nullptr, "Compile graph encode received a null source graph.");
+    if (!graph) {
+        throwEncodeError("Compile graph encode received a null source graph.");
+    }
     try {
         return graph->shared_from_this();
     } catch (const std::bad_weak_ptr &) {
@@ -342,9 +427,13 @@ GCGraph *resolveCompileStaticFunctionGraph(
     StaticFunction *funcObj, const graph_ptr_t &ownerSourceGraph,
     const std::function<GCGraph *(const graph_ptr_t &)> &materializeSourceGraph,
     std::string_view context, GCGraph *owner = nullptr) {
-    ASSERT(funcObj != nullptr, "Compile graph encode received a null static function.");
+    if (!funcObj) {
+        throwEncodeError("Compile graph encode received a null static function.");
+    }
     Graph *sourceGraph = funcObj->graph();
-    ASSERT(sourceGraph != nullptr, "Compile-time static function must reference a graph.");
+    if (!sourceGraph) {
+        throwEncodeError("Compile-time static function must reference a graph.");
+    }
     graph_ptr_t targetGraph = resolveGraphHandle(ownerSourceGraph, sourceGraph);
     if (!targetGraph) {
         targetGraph = requireSourceGraphHandle(sourceGraph, context, owner);
@@ -353,155 +442,224 @@ GCGraph *resolveCompileStaticFunctionGraph(
 }
 
 void emitCompileGraphPayload(
-    const graph_ptr_t &graph, const NativePayloadPlan &plan,
+    const graph_ptr_t &graph, const CompileDraftPayloadPlan &plan,
     camel::runtime::GCGraphPayloadArena &payload,
-    const std::function<GCGraph *(const Graph *)> &resolveRuntimeGraph) {
-    ASSERT(
-        payload.nodeCount ==
-            narrowIntegral<camel::runtime::gc_cnt_t>(plan.nodes.size(), "Runtime node count"),
-        "Compile payload arena shape does not match the planned node count.");
+    const std::function<GCGraph *(const graph_ptr_t &)> &resolveRuntimeGraph) {
+    if (payload.nodeCount !=
+        narrowIntegral<camel::runtime::gc_cnt_t>(plan.nodes.size(), "Runtime node count")) {
+        throwEncodeError("Compile payload arena shape does not match the planned node count.");
+    }
+
+    const auto &draft               = graph->builder().draft();
+    const auto &builder             = graph->builder().draftBuilder();
+    const auto sourceNodesByDraftId = buildDraftSourceNodeMap(graph);
 
     camel::runtime::gc_off_t edgeCursor      = 0;
     camel::runtime::gc_off_t branchArmCursor = 0;
-    auto appendSlice                         = [&](node_span_t span) -> Slice {
+    auto appendSlice = [&](std::span<const camel::runtime::gc_node_ref_t> refs) -> Slice {
         Slice slice{.offset = edgeCursor, .count = 0};
-        for (Node *node : span) {
-            auto it = plan.nodeRefs.find(node);
-            ASSERT(
-                it != plan.nodeRefs.end(),
-                "Runtime edge emission encountered a node outside the payload plan.");
-            payload.edges[edgeCursor++] = it->second;
+        for (camel::runtime::gc_node_ref_t draftRef : refs) {
+            if (draftRef >= plan.runtimeRefsByDraftId.size()) {
+                throwEncodeError(
+                    std::format(
+                        "Compile payload emission encountered out-of-range draft ref {}.",
+                        draftRef));
+            }
+            const auto runtimeRef = plan.runtimeRefsByDraftId[draftRef];
+            if (runtimeRef == camel::runtime::kInvalidNodeRef) {
+                throwEncodeError(
+                    std::format(
+                        "Compile payload emission encountered dead draft ref {}.",
+                        draftRef));
+            }
+            payload.edges[edgeCursor++] = runtimeRef;
         }
         slice.count = narrowIntegral<camel::runtime::gc_cnt_t>(
             edgeCursor - slice.offset,
             "Runtime edge slice count");
         return slice;
     };
+    auto mapRuntimeRef = [&](camel::runtime::gc_node_ref_t draftRef, std::string_view what) {
+        if (draftRef >= plan.runtimeRefsByDraftId.size()) {
+            throwEncodeError(
+                std::format("Compile payload {} draft ref {} is out of range.", what, draftRef));
+        }
+        const auto runtimeRef = plan.runtimeRefsByDraftId[draftRef];
+        if (runtimeRef == camel::runtime::kInvalidNodeRef) {
+            throwEncodeError(
+                std::format("Compile payload {} draft ref {} is dead.", what, draftRef));
+        }
+        return runtimeRef;
+    };
+    auto sourceNodeForDraft = [&](camel::runtime::gc_node_ref_t draftId) -> Node * {
+        if (draftId >= sourceNodesByDraftId.size()) {
+            return nullptr;
+        }
+        return sourceNodesByDraftId[draftId];
+    };
+    auto resolvedDataIndexForDraft = [&](camel::runtime::gc_node_ref_t draftId,
+                                         const DraftNodeHeader &draftHeader) {
+        if (Node *sourceNode = sourceNodeForDraft(draftId)) {
+            return static_cast<camel::runtime::gc_slot_idx_t>(sourceNode->index());
+        }
+        return draftHeader.dataIndex;
+    };
+    auto resolvedDataTypeForDraft = [&](camel::runtime::gc_node_ref_t draftId,
+                                        const DraftNodeHeader &draftHeader) -> Type * {
+        if (Node *sourceNode = sourceNodeForDraft(draftId)) {
+            return sourceNode->dataType();
+        }
+        return effectiveDraftNodeType(draft, draftHeader);
+    };
 
-    for (const PlannedNativeNode &planned : plan.nodes) {
-        Node *sourceNode                        = planned.source;
+    for (const PlannedDraftNode &planned : plan.nodes) {
+        const DraftNodeHeader *draftHeader = draft.header(planned.draftId);
+        if (!draftHeader) {
+            throwEncodeError("Compile payload emission requires a live draft header.");
+        }
+        if (draftHeader->kind == GCNodeKind::Gate) {
+            Node *sourceNode = planned.draftId < sourceNodesByDraftId.size()
+                                   ? sourceNodesByDraftId[planned.draftId]
+                                   : nullptr;
+            if (sourceNode && sourceNode->type() == NodeType::GATE &&
+                sourceNode->ctrlInputs().size() != draft.ctrlInputsOf(planned.draftId).size()) {
+                throwEncodeError(
+                    std::format(
+                        "Compile payload GATE draft/source ctrl-input mismatch at draft id {}: "
+                        "source={}, draft={}.",
+                        planned.draftId,
+                        sourceNode->ctrlInputs().size(),
+                        draft.ctrlInputsOf(planned.draftId).size()));
+            }
+        }
         const camel::runtime::gc_node_ref_t ref = planned.ref;
         auto *header = reinterpret_cast<GCNode *>(mutableNodeStorage(payload.nodeBlocks, ref));
         *header      = GCNode{
-            .dataIndex   = static_cast<camel::runtime::gc_slot_idx_t>(sourceNode->index()),
+            .dataIndex   = resolvedDataIndexForDraft(planned.draftId, *draftHeader),
             .blockCount  = planned.blockCount,
-            .normInputs  = appendSlice(sourceNode->normInputs()),
-            .withInputs  = appendSlice(sourceNode->withInputs()),
-            .ctrlInputs  = appendSlice(sourceNode->ctrlInputs()),
-            .normOutputs = appendSlice(sourceNode->normOutputs()),
-            .withOutputs = appendSlice(sourceNode->withOutputs()),
-            .ctrlOutputs = appendSlice(sourceNode->ctrlOutputs()),
-            .dataType    = sourceNode->dataType(),
-            .kind        = toRuntimeNodeKind(sourceNode->type()),
-            .flags       = static_cast<uint8_t>(
-                (sourceNode->macro() ? camel::runtime::kGCNodeFlagMacro : 0) |
-                (sourceNode->constant() ? camel::runtime::kGCNodeFlagConstant : 0)),
+            .normInputs  = appendSlice(draft.normInputsOf(planned.draftId)),
+            .withInputs  = appendSlice(draft.withInputsOf(planned.draftId)),
+            .ctrlInputs  = appendSlice(draft.ctrlInputsOf(planned.draftId)),
+            .normOutputs = appendSlice(draft.normUsersOf(planned.draftId)),
+            .withOutputs = appendSlice(draft.withUsersOf(planned.draftId)),
+            .ctrlOutputs = appendSlice(draft.ctrlUsersOf(planned.draftId)),
+            .dataType    = resolvedDataTypeForDraft(planned.draftId, *draftHeader),
+            .kind        = draftHeader->kind,
+            .flags       = draftHeader->runtimeFlags,
         };
 
-        switch (sourceNode->type()) {
-        case NodeType::FUNC: {
-            auto *funcNode = tt::as_ptr<FuncNode>(sourceNode);
-            ASSERT(
-                funcNode != nullptr && funcNode->bodyGraph() != nullptr,
-                "Runtime FUNC node requires a body graph.");
-            writeBody(
-                payload.nodeBlocks,
-                ref,
-                GCFuncBody{.calleeGraph = resolveRuntimeGraph(funcNode->bodyGraph())});
-        } break;
-        case NodeType::CALL:
-            writeBody(payload.nodeBlocks, ref, GCCallBody{});
-            break;
-        case NodeType::ACCS: {
-            auto *accsNode = tt::as_ptr<AccsNode>(sourceNode);
-            ASSERT(accsNode != nullptr, "Runtime ACCS node layout requires ACCS metadata.");
-            GCAccsBody body{
-                .accsKind  = accsNode->isNum() ? camel::runtime::GCAccsKind::TupleIndex
-                                               : camel::runtime::GCAccsKind::StructKey,
-                .reserved0 = 0,
-                .keyBytes  = narrowIntegral<uint16_t>(
-                    accsNode->isNum() ? 0 : accsNode->strIndex().size(),
-                    "Runtime ACCS key length"),
-                .value = narrowIntegral<uint32_t>(
-                    accsNode->isNum() ? accsNode->numIndex() : 0,
-                    "Runtime ACCS numeric index"),
-            };
-            writeBody(payload.nodeBlocks, ref, body);
-            if (!accsNode->isNum()) {
-                writeTrailingBytes(
-                    payload.nodeBlocks,
-                    ref,
-                    sizeof(GCAccsBody),
-                    accsNode->strIndex());
+        const auto payloadBytes = draft.payloadOf(planned.draftId);
+        switch (draftHeader->kind) {
+        case GCNodeKind::Func: {
+            const auto &target = builder.funcTarget(planned.draftId);
+            if (!target) {
+                throwEncodeError("Compile payload FUNC node requires a callee graph.");
             }
-        } break;
-        case NodeType::FILL:
             writeBody(
                 payload.nodeBlocks,
                 ref,
-                GCFillBody{.fillKind = classifyFillKind(sourceNode->dataType())});
+                GCFuncBody{.calleeGraph = resolveRuntimeGraph(target)});
+        } break;
+        case GCNodeKind::Call:
+            writeBody(
+                payload.nodeBlocks,
+                ref,
+                payloadBytes.empty() ? GCCallBody{}
+                                     : *reinterpret_cast<const GCCallBody *>(payloadBytes.data()));
             break;
-        case NodeType::BRCH: {
-            auto *brchNode = tt::as_ptr<BrchNode>(sourceNode);
-            ASSERT(
-                brchNode != nullptr && brchNode->matchedJoin() != nullptr,
-                "Runtime BRCH node requires a matched JOIN.");
+        case GCNodeKind::Accs:
+            if (!payloadBytes.empty()) {
+                std::memcpy(
+                    mutableNodeStorage(payload.nodeBlocks, planned.ref) + sizeof(GCNode),
+                    payloadBytes.data(),
+                    payloadBytes.size_bytes());
+            }
+            break;
+        case GCNodeKind::Fill:
+            writeBody(
+                payload.nodeBlocks,
+                ref,
+                payloadBytes.empty() ? GCFillBody{}
+                                     : *reinterpret_cast<const GCFillBody *>(payloadBytes.data()));
+            break;
+        case GCNodeKind::Brch: {
+            auto *brchNode     = tt::as_ptr<BrchNode>(requireDraftSourceNode(
+                sourceNodesByDraftId,
+                planned.draftId,
+                NodeType::BRCH,
+                "Compile payload BRCH node"));
+            JoinNode *joinNode = brchNode->matchedJoin();
+            if (!joinNode) {
+                throwEncodeError("Compile payload BRCH node requires a matched JOIN.");
+            }
             const camel::runtime::gc_off_t armOffset = branchArmCursor;
-            const camel::runtime::gc_cnt_t armCount  = narrowIntegral<camel::runtime::gc_cnt_t>(
-                brchNode->armCount(),
-                "Runtime branch-arm count");
             for (size_t i = 0; i < brchNode->armCount(); ++i) {
+                Node *head = brchNode->armHead(i);
+                Node *tail = joinNode->armTail(i);
+                if (!graph->hasDraftNode(head)) {
+                    throwEncodeError(
+                        std::format(
+                            "Compile payload branch arm {} head is not bound to draft.",
+                            i));
+                }
+                if (!graph->hasDraftNode(tail)) {
+                    throwEncodeError(
+                        std::format(
+                            "Compile payload branch arm {} tail is not bound to draft.",
+                            i));
+                }
                 payload.branchArms[branchArmCursor++] = GCBranchArm{
-                    .head = plan.nodeRefs.at(brchNode->armHead(i)),
-                    .tail = plan.nodeRefs.at(brchNode->matchedJoin()->armTail(i)),
+                    .head = mapRuntimeRef(graph->draftNodeId(head), "branch-head"),
+                    .tail = mapRuntimeRef(graph->draftNodeId(tail), "branch-tail"),
                 };
+            }
+            if (!graph->hasDraftNode(joinNode)) {
+                throwEncodeError("Compile payload matched JOIN is not bound to draft.");
             }
             writeBody(
                 payload.nodeBlocks,
                 ref,
                 GCBrchBody{
-                    .join       = plan.nodeRefs.at(brchNode->matchedJoin()),
-                    .armOffset  = armOffset,
-                    .armCount   = armCount,
+                    .join      = mapRuntimeRef(graph->draftNodeId(joinNode), "branch-join"),
+                    .armOffset = armOffset,
+                    .armCount  = narrowIntegral<camel::runtime::gc_cnt_t>(
+                        brchNode->armCount(),
+                        "Compile payload branch-arm count"),
                     .defaultArm = camel::runtime::kInvalidNodeRef,
                 });
         } break;
-        case NodeType::JOIN: {
-            auto *joinNode = tt::as_ptr<JoinNode>(sourceNode);
-            ASSERT(joinNode != nullptr, "Runtime JOIN node layout requires JOIN metadata.");
+        case GCNodeKind::Join: {
+            auto *joinNode     = tt::as_ptr<JoinNode>(requireDraftSourceNode(
+                sourceNodesByDraftId,
+                planned.draftId,
+                NodeType::JOIN,
+                "Compile payload JOIN node"));
+            BrchNode *brchNode = joinNode->matchedBranch();
+            if (brchNode && !graph->hasDraftNode(brchNode)) {
+                throwEncodeError("Compile payload matched BRCH is not bound to draft.");
+            }
             GCJoinBody body{
-                .brch     = camel::runtime::kInvalidNodeRef,
+                .brch     = brchNode ? mapRuntimeRef(graph->draftNodeId(brchNode), "join-branch")
+                                     : camel::runtime::kInvalidNodeRef,
                 .armCount = narrowIntegral<camel::runtime::gc_cnt_t>(
                     joinNode->armCount(),
-                    "Runtime JOIN arm count"),
+                    "Compile payload JOIN arm count"),
                 .reserved = 0,
             };
-            for (Node *input : sourceNode->normInputs()) {
-                if (input && input->type() == NodeType::BRCH) {
-                    body.brch = plan.nodeRefs.at(input);
-                    break;
-                }
-            }
             writeBody(payload.nodeBlocks, ref, body);
         } break;
-        case NodeType::OPER: {
-            auto *operNode = tt::as_ptr<OperNode>(sourceNode);
-            ASSERT(
-                operNode != nullptr && operNode->oper() != nullptr,
-                "Runtime OPER node layout requires operator metadata.");
+        case GCNodeKind::Oper: {
+            const auto &oper = builder.operTarget(planned.draftId);
+            if (!oper) {
+                throwEncodeError("Compile payload OPER node requires operator metadata.");
+            }
             GCOperBody body{
-                .op       = operNode->getCachedOp(),
-                .uriBytes = narrowIntegral<uint16_t>(
-                    operNode->oper()->uri().size(),
-                    "Runtime OPER URI length"),
+                .op       = nullptr,
+                .uriBytes = narrowIntegral<uint16_t>(oper->uri().size(), "Runtime OPER URI length"),
                 .reserved = 0,
             };
             writeBody(payload.nodeBlocks, ref, body);
-            writeTrailingBytes(
-                payload.nodeBlocks,
-                ref,
-                sizeof(GCOperBody),
-                operNode->oper()->uri());
+            writeTrailingBytes(payload.nodeBlocks, ref, sizeof(GCOperBody), oper->uri());
         } break;
         default:
             break;
@@ -509,42 +667,66 @@ void emitCompileGraphPayload(
     }
 
     for (size_t i = 0; i < graph->normPorts().size(); ++i) {
-        payload.normPorts[i] = plan.nodeRefs.at(graph->normPorts()[i]);
+        payload.normPorts[i] =
+            mapRuntimeRef(graph->draftNodeId(graph->normPorts()[i]), "norm-port");
     }
     for (size_t i = 0; i < graph->withPorts().size(); ++i) {
-        payload.withPorts[i] = plan.nodeRefs.at(graph->withPorts()[i]);
+        payload.withPorts[i] =
+            mapRuntimeRef(graph->draftNodeId(graph->withPorts()[i]), "with-port");
     }
     for (size_t i = 0; i < graph->closure().size(); ++i) {
-        payload.closure[i] = plan.nodeRefs.at(graph->closure()[i]);
+        payload.closure[i] = mapRuntimeRef(graph->draftNodeId(graph->closure()[i]), "closure-node");
     }
 
     payload.entryNode =
-        plan.nodes.empty() ? camel::runtime::kInvalidNodeRef : plan.nodes.front().ref;
-    payload.exitNode =
-        graph->exitNode() ? plan.nodeRefs.at(graph->exitNode()) : camel::runtime::kInvalidNodeRef;
-    payload.outputNode =
-        graph->outputNode() ? plan.nodeRefs.at(graph->outputNode()) : payload.exitNode;
+        draft.entryNode() == camel::runtime::kInvalidNodeRef
+            ? (plan.nodes.empty() ? camel::runtime::kInvalidNodeRef : plan.nodes.front().ref)
+            : mapRuntimeRef(draft.entryNode(), "entry");
+    payload.exitNode   = draft.exitNode() == camel::runtime::kInvalidNodeRef
+                             ? camel::runtime::kInvalidNodeRef
+                             : mapRuntimeRef(draft.exitNode(), "exit");
+    payload.outputNode = draft.outputNode() == camel::runtime::kInvalidNodeRef
+                             ? payload.exitNode
+                             : mapRuntimeRef(draft.outputNode(), "output");
     payload.returnNode = payload.exitNode;
     payload.returnKind = GCReturnKind::None;
-    if (Node *exitNode = graph->exitNode()) {
-        if (exitNode->index() != 0) {
+    if (draft.exitNode() != camel::runtime::kInvalidNodeRef) {
+        const auto exitDraftId       = draft.exitNode();
+        const DraftNodeHeader *exitH = draft.header(exitDraftId);
+        if (!exitH) {
+            throwEncodeError("Compile payload exit node must stay alive.");
+        }
+        if (exitH->dataIndex != 0) {
+            payload.returnNode = mapRuntimeRef(exitDraftId, "return-self");
             payload.returnKind = GCReturnKind::Self;
-            payload.returnNode = plan.nodeRefs.at(exitNode);
-        } else if (!exitNode->dataInputs().empty()) {
-            payload.returnKind = GCReturnKind::LastDataInput;
-            payload.returnNode = plan.nodeRefs.at(exitNode->dataInputs().back());
-        } else if (!exitNode->ctrlInputs().empty()) {
-            payload.returnKind = GCReturnKind::LastCtrlInput;
-            payload.returnNode = plan.nodeRefs.at(exitNode->ctrlInputs().back());
+        } else {
+            auto dataInputs = draft.normInputsOf(exitDraftId);
+            if (!dataInputs.empty()) {
+                payload.returnNode = mapRuntimeRef(dataInputs.back(), "return-last-norm-input");
+                payload.returnKind = GCReturnKind::LastDataInput;
+            } else {
+                auto withInputs = draft.withInputsOf(exitDraftId);
+                if (!withInputs.empty()) {
+                    payload.returnNode = mapRuntimeRef(withInputs.back(), "return-last-with-input");
+                    payload.returnKind = GCReturnKind::LastDataInput;
+                } else {
+                    auto ctrlInputs = draft.ctrlInputsOf(exitDraftId);
+                    if (!ctrlInputs.empty()) {
+                        payload.returnNode =
+                            mapRuntimeRef(ctrlInputs.back(), "return-last-ctrl-input");
+                        payload.returnKind = GCReturnKind::LastCtrlInput;
+                    }
+                }
+            }
         }
     }
 
-    ASSERT(
-        edgeCursor == payload.edgeCount,
-        "Compile direct payload emission did not match edge count.");
-    ASSERT(
-        branchArmCursor == payload.branchArmCount,
-        "Compile direct payload emission did not match branch-arm count.");
+    if (edgeCursor != payload.edgeCount) {
+        throwEncodeError("Compile direct payload emission did not match edge count.");
+    }
+    if (branchArmCursor != payload.branchArmCount) {
+        throwEncodeError("Compile direct payload emission did not match branch-arm count.");
+    }
 }
 
 class GraphEncodeSession {
@@ -572,29 +754,24 @@ class GraphEncodeSession {
         runtimeGraphs_.emplace(sourceGraph.get(), nullptr);
         closure_.push_back(sourceGraph);
 
-        for (const auto &dep : sourceGraph->dependencies()) {
+        for (const auto &dep : sourceGraph->builder().draftBuilder().dependencyGraphs()) {
             collectClosure(dep);
         }
-        for (Node *node : sourceGraph->nodes()) {
-            if (!node || node->type() != NodeType::FUNC) {
+        const auto &draft   = sourceGraph->builder().draft();
+        const auto &builder = sourceGraph->builder().draftBuilder();
+        for (camel::runtime::gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount();
+             ++draftId) {
+            if (!draft.alive(draftId) || draft.header(draftId)->kind != GCNodeKind::Func) {
                 continue;
             }
-            auto *funcNode = tt::as_ptr<FuncNode>(node);
-            if (!funcNode || !funcNode->bodyGraph()) {
+            const auto &targetHandle = builder.funcTarget(draftId);
+            if (!targetHandle) {
                 continue;
             }
-            auto target = resolveGraphHandle(sourceGraph, funcNode->bodyGraph());
-            if (!target) {
-                target = requireSourceGraphHandle(
-                    funcNode->bodyGraph(),
-                    "Graph::encode(closure-func-body)");
-            }
-            collectClosure(target);
+            collectClosure(targetHandle);
         }
-        for (const auto &[_, nestedSubGraphs] : sourceGraph->subGraphs()) {
-            for (const auto &subGraph : nestedSubGraphs) {
-                collectClosure(subGraph);
-            }
+        for (const auto &subGraph : sourceGraph->builder().draftBuilder().subGraphs()) {
+            collectClosure(subGraph);
         }
         std::unordered_set<const Object *> visited;
         const TupleType *staticType = sourceGraph->staticDataType();
@@ -698,26 +875,23 @@ class GraphEncodeSession {
 
     std::vector<graph_ptr_t> collectDependencyHandles(const graph_ptr_t &sourceGraph) {
         std::vector<graph_ptr_t> dependencies;
-        for (const auto &dep : sourceGraph->dependencies()) {
+        for (const auto &dep : sourceGraph->builder().draftBuilder().dependencyGraphs()) {
             if (dep) {
                 dependencies.push_back(dep);
             }
         }
-        for (Node *node : sourceGraph->nodes()) {
-            if (!node || node->type() != NodeType::FUNC) {
+        const auto &draft   = sourceGraph->builder().draft();
+        const auto &builder = sourceGraph->builder().draftBuilder();
+        for (camel::runtime::gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount();
+             ++draftId) {
+            if (!draft.alive(draftId) || draft.header(draftId)->kind != GCNodeKind::Func) {
                 continue;
             }
-            auto *funcNode = tt::as_ptr<FuncNode>(node);
-            if (!funcNode || !funcNode->bodyGraph()) {
+            const auto &targetHandle = builder.funcTarget(draftId);
+            if (!targetHandle) {
                 continue;
             }
-            auto targetGraph = resolveGraphHandle(sourceGraph, funcNode->bodyGraph());
-            if (!targetGraph) {
-                targetGraph = requireSourceGraphHandle(
-                    funcNode->bodyGraph(),
-                    "Graph::encode(func-body)",
-                    nullptr);
-            }
+            auto targetGraph = targetHandle;
             if (targetGraph && std::find(dependencies.begin(), dependencies.end(), targetGraph) ==
                                    dependencies.end()) {
                 dependencies.push_back(targetGraph);
@@ -728,11 +902,9 @@ class GraphEncodeSession {
 
     std::vector<graph_ptr_t> collectSubGraphHandles(const graph_ptr_t &sourceGraph) {
         std::vector<graph_ptr_t> subGraphs;
-        for (const auto &[_, nestedSubGraphs] : sourceGraph->subGraphs()) {
-            for (const auto &subGraph : nestedSubGraphs) {
-                if (subGraph) {
-                    subGraphs.push_back(subGraph);
-                }
+        for (const auto &subGraph : sourceGraph->builder().draftBuilder().subGraphs()) {
+            if (subGraph) {
+                subGraphs.push_back(subGraph);
             }
         }
         return subGraphs;
@@ -866,30 +1038,6 @@ class GraphEncodeSession {
     std::vector<GCGraph *>
     collectStaticGraphRefs(const graph_ptr_t &sourceGraph, std::span<const slot_t> runtimeSlots) {
         std::vector<GCGraph *> staticGraphRefs;
-        for (Node *node : sourceGraph->nodes()) {
-            if (!node || node->type() != NodeType::DATA) {
-                continue;
-            }
-            auto *dataNode = tt::as_ptr<DataNode>(node);
-            if (!dataNode || dataNode->dataType()->code() != TypeCode::Function) {
-                continue;
-            }
-            auto *funcObj = fromSlot<StaticFunction *>(dataNode->dataSlot());
-            if (!funcObj) {
-                continue;
-            }
-            if (GCGraph *runtimeRef = resolveCompileStaticFunctionGraph(
-                    funcObj,
-                    sourceGraph,
-                    [&](const graph_ptr_t &target) { return runtimeGraphs_.at(target.get()); },
-                    "Graph::encode(static-function-ref)")) {
-                if (std::find(staticGraphRefs.begin(), staticGraphRefs.end(), runtimeRef) ==
-                    staticGraphRefs.end()) {
-                    staticGraphRefs.push_back(runtimeRef);
-                }
-            }
-        }
-
         const TupleType *staticType = sourceGraph->staticDataType();
         std::unordered_set<const Object *> visited;
         if (staticType) {
@@ -949,7 +1097,7 @@ class GraphEncodeSession {
                 nullptr);
             std::vector<slot_t> staticSlots(sourceGraph->staticDataSize(), NullSlot);
             auto [planIt, inserted] =
-                payloadPlans_.try_emplace(sourceGraph.get(), planNativePayload(sourceGraph));
+                payloadPlans_.try_emplace(sourceGraph.get(), planCompileDraftPayload(sourceGraph));
             ASSERT(inserted, "Compile payload plan should be recorded exactly once per graph.");
             const auto payloadShape = describeNativePayload(planIt->second);
             size_t bytes            = camel::runtime::GCGraphBuildAccess::requiredBytes(
@@ -970,31 +1118,6 @@ class GraphEncodeSession {
 
     size_t countStaticGraphHandleRefs(const graph_ptr_t &sourceGraph) {
         std::vector<graph_ptr_t> refs;
-        auto pushUniqueHandle = [&](const graph_ptr_t &graph) {
-            if (graph && std::find(refs.begin(), refs.end(), graph) == refs.end()) {
-                refs.push_back(graph);
-            }
-        };
-        for (Node *node : sourceGraph->nodes()) {
-            if (!node || node->type() != NodeType::DATA) {
-                continue;
-            }
-            auto *dataNode = tt::as_ptr<DataNode>(node);
-            if (!dataNode || dataNode->dataType()->code() != TypeCode::Function) {
-                continue;
-            }
-            auto *funcObj = fromSlot<StaticFunction *>(dataNode->dataSlot());
-            if (!funcObj) {
-                continue;
-            }
-            auto target = resolveGraphHandle(sourceGraph, funcObj->graph());
-            if (!target) {
-                target = requireSourceGraphHandle(
-                    funcObj->graph(),
-                    "Graph::encode(static-function-ref-count)");
-            }
-            pushUniqueHandle(target);
-        }
         std::unordered_set<const Object *> visited;
         const TupleType *staticType = sourceGraph->staticDataType();
         if (staticType) {
@@ -1141,17 +1264,11 @@ class GraphEncodeSession {
                         sourceGraph,
                         payloadPlan,
                         payload,
-                        [&](const Graph *target) -> GCGraph             *{
+                        [&](const graph_ptr_t &target) -> GCGraph             *{
                             if (!target) {
                                 return nullptr;
                             }
-                            auto targetHandle = resolveGraphHandle(sourceGraph, target);
-                            if (!targetHandle) {
-                                targetHandle = requireSourceGraphHandle(
-                                    const_cast<Graph *>(target),
-                                    "Graph::encode(payload-target)");
-                            }
-                            return runtimeGraphs_.at(targetHandle.get());
+                            return runtimeGraphs_.at(target.get());
                         });
                 },
                 runtimeSlots);
@@ -1164,16 +1281,16 @@ class GraphEncodeSession {
     std::vector<graph_ptr_t> closure_;
     std::unordered_map<const Graph *, GCGraph *> runtimeGraphs_;
     std::unordered_map<const Graph *, size_t> allocatedBytes_;
-    std::unordered_map<const Graph *, NativePayloadPlan> payloadPlans_;
+    std::unordered_map<const Graph *, CompileDraftPayloadPlan> payloadPlans_;
     bool allocated_ = false;
     bool emitted_   = false;
 };
 
 } // namespace
 
-camel::runtime::GCGraph *Graph::encode() {
+camel::runtime::GCGraph *encodeToRuntimeGraph(const graph_ptr_t &rootGraph) {
     GraphEncodeSession session;
-    return session.encode(shared_from_this());
+    return rootGraph ? session.encode(rootGraph) : nullptr;
 }
 
 } // namespace camel::compile::gir

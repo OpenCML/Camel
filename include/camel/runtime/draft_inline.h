@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,7 @@
 #pragma once
 
 #include "camel/runtime/draft.h"
+#include "camel/runtime/draft_session.h"
 
 namespace camel::runtime {
 
@@ -41,6 +42,9 @@ struct DraftInlineResult {
     explicit operator bool() const { return valueExit != kInvalidNodeRef; }
 };
 
-DraftInlineResult inlineCallableInDraft(GraphDraft &draft, gc_node_ref_t funcNodeId);
+DraftInlineResult inlineCallableInDraft(
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId);
+bool specializeDirectFuncInDraft(GraphDraft &draft, gc_node_ref_t funcNodeId);
+bool devirtualizeStaticCallInDraft(GraphDraft &draft, gc_node_ref_t callNodeId);
 
 } // namespace camel::runtime

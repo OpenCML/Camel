@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,12 +22,59 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
+#include "graph_builder.h"
 #include <functional>
 #include <sstream>
 
 namespace camel::compile::gir {
 
 namespace {
+
+graph_ptr_t resolveGraphHandle(Graph &owner, Graph *target) {
+    if (!target) {
+        return nullptr;
+    }
+    if (&owner == target) {
+        try {
+            return owner.shared_from_this();
+        } catch (const std::bad_weak_ptr &) {
+            return nullptr;
+        }
+    }
+    for (const auto &dep : owner.dependencies()) {
+        if (dep.get() == target) {
+            return dep;
+        }
+    }
+    for (const auto &[_, subGraphs] : owner.subGraphs()) {
+        for (const auto &subGraph : subGraphs) {
+            if (subGraph.get() == target) {
+                return subGraph;
+            }
+        }
+    }
+    if (auto outer = owner.outer(); outer && outer.get() == target) {
+        return outer;
+    }
+    try {
+        return target->shared_from_this();
+    } catch (const std::bad_weak_ptr &) {
+        return nullptr;
+    }
+}
+
+runtime::DraftEdgeKind toDraftEdgeKind(LinkType type) {
+    switch (type) {
+    case LinkType::Norm:
+        return runtime::DraftEdgeKind::Norm;
+    case LinkType::With:
+        return runtime::DraftEdgeKind::With;
+    case LinkType::Ctrl:
+        return runtime::DraftEdgeKind::Ctrl;
+    }
+    ASSERT(false, "Unsupported compile link type for draft bridge.");
+    return runtime::DraftEdgeKind::Norm;
+}
 
 inline void assertDraftMutable(const Node *node, const char *action) {
     ASSERT(node != nullptr, "Node is null.");
@@ -249,10 +296,18 @@ void Node::link(LinkType type, Node *from, Node *to) {
 
     switch (type) {
     case LinkType::With:
+        ASSERT(
+            std::find(from->withOutputs_.begin(), from->withOutputs_.end(), to) ==
+                from->withOutputs_.end(),
+            "Nodes are already linked (with).");
         from->withOutputs_.push_back(to);
         to->withInputs_.push_back(from);
         break;
     case LinkType::Norm:
+        ASSERT(
+            std::find(from->normOutputs_.begin(), from->normOutputs_.end(), to) ==
+                from->normOutputs_.end(),
+            "Nodes are already linked (norm).");
         from->normOutputs_.push_back(to);
         to->normInputs_.push_back(from);
         break;
@@ -264,6 +319,12 @@ void Node::link(LinkType type, Node *from, Node *to) {
         from->ctrlOutputs_.push_back(to);
         to->ctrlInputs_.push_back(from);
         break;
+    }
+    if (from->graph().hasDraftNode(from) && to->graph().hasDraftNode(to)) {
+        from->graph().builder().draftBuilder().link(
+            toDraftEdgeKind(type),
+            from->graph().draftNodeId(from),
+            to->graph().draftNodeId(to));
     }
 }
 
@@ -291,6 +352,12 @@ bool Node::unlink(Node *from, Node *to) {
         fromNormOutputs.erase(
             std::remove(fromNormOutputs.begin(), fromNormOutputs.end(), to),
             fromNormOutputs.end());
+        if (from->graph().hasDraftNode(from) && to->graph().hasDraftNode(to)) {
+            (void)from->graph().builder().draftBuilder().unlink(
+                runtime::DraftEdgeKind::Norm,
+                from->graph().draftNodeId(from),
+                to->graph().draftNodeId(to));
+        }
         return true;
     }
 
@@ -303,6 +370,12 @@ bool Node::unlink(Node *from, Node *to) {
         fromWithOutputs.erase(
             std::remove(fromWithOutputs.begin(), fromWithOutputs.end(), to),
             fromWithOutputs.end());
+        if (from->graph().hasDraftNode(from) && to->graph().hasDraftNode(to)) {
+            (void)from->graph().builder().draftBuilder().unlink(
+                runtime::DraftEdgeKind::With,
+                from->graph().draftNodeId(from),
+                to->graph().draftNodeId(to));
+        }
         return true;
     }
 
@@ -315,6 +388,12 @@ bool Node::unlink(Node *from, Node *to) {
         fromCtrlOutputs.erase(
             std::remove(fromCtrlOutputs.begin(), fromCtrlOutputs.end(), to),
             fromCtrlOutputs.end());
+        if (from->graph().hasDraftNode(from) && to->graph().hasDraftNode(to)) {
+            (void)from->graph().builder().draftBuilder().unlink(
+                runtime::DraftEdgeKind::Ctrl,
+                from->graph().draftNodeId(from),
+                to->graph().draftNodeId(to));
+        }
         return true;
     }
 
@@ -344,6 +423,12 @@ bool Node::unlinkCtrl(Node *from, Node *to) {
     fromCtrlOutputs.erase(
         std::remove(fromCtrlOutputs.begin(), fromCtrlOutputs.end(), to),
         fromCtrlOutputs.end());
+    if (from->graph().hasDraftNode(from) && to->graph().hasDraftNode(to)) {
+        (void)from->graph().builder().draftBuilder().unlink(
+            runtime::DraftEdgeKind::Ctrl,
+            from->graph().draftNodeId(from),
+            to->graph().draftNodeId(to));
+    }
     return true;
 }
 
@@ -612,6 +697,7 @@ Node *DataNode::create(Graph &graph, const data_ptr_t &data) {
     data_idx_t index = graph.addStaticData(data);
     Node *node       = makeOwnedNode<DataNode>(graph, graph, data->type(), index);
     graph.addNode(node);
+    graph.bindDraftNode(node, graph.builder().draftBuilder().addStaticDataNode(data));
     return node;
 }
 
@@ -619,6 +705,11 @@ Node *DataNode::createStaticSlot(Graph &graph, Type *type, slot_t slot) {
     data_idx_t index = graph.addStaticSlot(slot);
     Node *node       = makeOwnedNode<DataNode>(graph, graph, type, index);
     graph.addNode(node);
+    auto draftId = graph.builder().draft().addDataNode(
+        type,
+        index,
+        static_cast<uint8_t>(runtime::kGCNodeFlagConstant));
+    graph.bindDraftNode(node, draftId);
     return node;
 }
 
@@ -638,7 +729,9 @@ Node *DataNode::clone(Graph &graph) const {
 
 Node *PortNode::create(Graph &graph, Type *type, const std::string &name, bool isVar) {
     data_idx_t index = graph.addRuntimeData();
-    return makeOwnedNode<PortNode>(graph, graph, type, index, name, isVar);
+    Node *node       = makeOwnedNode<PortNode>(graph, graph, type, index, name, isVar);
+    graph.bindDraftNode(node, graph.builder().draft().addPortNode(type, index));
+    return node;
 }
 
 std::string PortNode::toString() const {
@@ -662,6 +755,7 @@ Node *CastNode::create(Graph &graph, Type *type) {
     data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<CastNode>(graph, graph, type, index);
     graph.addNode(node);
+    graph.bindDraftNode(node, graph.builder().draft().addCastNode(type, index));
     return node;
 }
 
@@ -675,6 +769,7 @@ Node *CopyNode::create(Graph &graph, Type *type) {
     data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<CopyNode>(graph, graph, type, index);
     graph.addNode(node);
+    graph.bindDraftNode(node, graph.builder().draft().addCopyNode(type, index));
     return node;
 }
 
@@ -688,6 +783,9 @@ Node *FillNode::create(Graph &graph, Type *type) {
     data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<FillNode>(graph, graph, type, index);
     graph.addNode(node);
+    graph.bindDraftNode(
+        node,
+        graph.builder().draft().addFillNode(type, runtime::GCFillBody{}, index));
     return node;
 }
 
@@ -706,8 +804,17 @@ Node *AccsNode::create(Graph &graph, Type *type, const std::variant<std::string,
     Node *node;
     if (std::holds_alternative<size_t>(accsIdx)) {
         node = makeOwnedNode<AccsNode>(graph, graph, type, index, std::get<size_t>(accsIdx));
+        graph.bindDraftNode(
+            node,
+            graph.builder().draft().addAccsNode(
+                type,
+                static_cast<uint32_t>(std::get<size_t>(accsIdx)),
+                index));
     } else {
         node = makeOwnedNode<AccsNode>(graph, graph, type, index, std::get<std::string>(accsIdx));
+        graph.bindDraftNode(
+            node,
+            graph.builder().draft().addAccsNode(type, std::get<std::string>(accsIdx), index));
     }
     graph.addNode(node);
     return node;
@@ -736,6 +843,11 @@ Node *BrchNode::create(Graph &graph, Type *type) {
     data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<BrchNode>(graph, graph, type, index);
     graph.addNode(node);
+    graph.bindDraftNode(
+        node,
+        graph.builder()
+            .draft()
+            .addBrchNode(type, runtime::kInvalidNodeRef, {}, runtime::kInvalidNodeRef, index));
     return node;
 }
 
@@ -756,6 +868,9 @@ Node *JoinNode::create(Graph &graph, Type *type) {
     data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<JoinNode>(graph, graph, type, index);
     graph.addNode(node);
+    graph.bindDraftNode(
+        node,
+        graph.builder().draft().addJoinNode(type, runtime::kInvalidNodeRef, 0, index));
     return node;
 }
 
@@ -776,6 +891,9 @@ Node *CallNode::create(Graph &graph, Type *type) {
     data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<CallNode>(graph, graph, type, index);
     graph.addNode(node);
+    graph.bindDraftNode(
+        node,
+        graph.builder().draft().addCallNode(type, runtime::GCCallBody{}, index));
     return node;
 }
 
@@ -789,6 +907,7 @@ Node *BindNode::create(Graph &graph, Type *type) {
     data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<BindNode>(graph, graph, type, index);
     graph.addNode(node);
+    graph.bindDraftNode(node, graph.builder().draft().addBindNode(type, index));
     return node;
 }
 
@@ -807,6 +926,7 @@ Node *FuncNode::create(Graph &graph, const graph_ptr_t &bodyGraph) {
     data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<FuncNode>(graph, graph, index, bodyGraph.get());
     graph.addNode(node);
+    graph.bindDraftNode(node, graph.builder().draftBuilder().addFuncNode(bodyGraph, index));
     return node;
 }
 
@@ -815,6 +935,9 @@ Node *FuncNode::create(Graph &graph, Graph *bodyGraph) {
     data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<FuncNode>(graph, graph, index, bodyGraph);
     graph.addNode(node);
+    graph_ptr_t handle = resolveGraphHandle(graph, bodyGraph);
+    ASSERT(handle != nullptr, "Function graph is not owned when binding draft FUNC node.");
+    graph.bindDraftNode(node, graph.builder().draftBuilder().addFuncNode(handle, index));
     return node;
 }
 
@@ -844,6 +967,7 @@ Node *OperNode::create(Graph &graph, oper_idx_ptr_t op) {
     data_idx_t index = graph.addRuntimeData();
     Node *node       = makeOwnedNode<OperNode>(graph, graph, index, raw);
     graph.addNode(node);
+    graph.bindDraftNode(node, graph.builder().draftBuilder().addOperNode(op, index));
     return node;
 }
 
@@ -872,7 +996,9 @@ Node *OperNode::clone(Graph &graph) const {
 // =============================================================================
 
 Node *DrefNode::create(Graph &graph, const dref_target_t &target) {
-    return makeOwnedNode<DrefNode>(graph, graph, target);
+    Node *node = makeOwnedNode<DrefNode>(graph, graph, target);
+    graph.bindDraftNode(node, graph.builder().draftBuilder().addDrefNode(target));
+    return node;
 }
 
 std::string DrefNode::toString() const {
@@ -887,6 +1013,7 @@ Node *DrefNode::clone(Graph &graph) const {
 Node *SyncNode::create(Graph &graph) {
     Node *node = makeOwnedNode<SyncNode>(graph, graph);
     graph.addNode(node);
+    graph.bindDraftNode(node, graph.builder().draft().addSyncNode());
     return node;
 }
 
@@ -899,6 +1026,7 @@ Node *SyncNode::clone(Graph &graph) const { return SyncNode::create(graph); }
 Node *GateNode::create(Graph &graph) {
     Node *node = makeOwnedNode<GateNode>(graph, graph);
     graph.addNode(node);
+    graph.bindDraftNode(node, graph.builder().draft().addGateNode(Type::Void()));
     return node;
 }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -189,6 +189,7 @@ struct NativeJitCallParams {
     int32_t resultDisp;      // [rdi + resultDisp]
     uint8_t argsCnt;
     int32_t argSrcDisps[8];
+    int32_t argDstDisps[8];
     uint8_t argVRegs[8]; // VReg IDs for pre-loaded args (frameless path); 0xFF = not pre-loaded
     uint8_t resultVReg = 0xFF; // VReg for call result (frameless); 0xFF = store inside call
     bool isSameGraph;          // true = call rel32, false = load fn from extra2 and call rax

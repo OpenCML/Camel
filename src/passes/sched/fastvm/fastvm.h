@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,7 @@
 #include "camel/execute/pass/runtime_sched.h"
 #include "camel/runtime/graph.h"
 #include "compile.h"
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -56,6 +57,10 @@ struct FastVMRuntimeRootCache {
     std::vector<camel::runtime::GCGraph *> callTargetsByPc;
 };
 
+struct FastVMCallLayoutCache {
+    std::vector<camel::runtime::gc_data_idx_t> portSlots;
+};
+
 class FastVMSchedPass : public RuntimeGraphSchedulePass {
   public:
     struct CallResult {
@@ -66,6 +71,25 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
   private:
     inline static const size_t maxRecursionDepth_ = 256; // default max recursion depth
 
+    inline void seedDirectCallFrame(
+        ctx::Frame *callerFrame, ctx::Frame *calleeFrame, camel::runtime::GCGraph *targetGraph,
+        const data_idx_t *args, size_t argsCnt) {
+        ASSERT(callerFrame != nullptr && calleeFrame != nullptr, "FastVM call frame is null.");
+        ASSERT(targetGraph != nullptr, "FastVM direct call target graph is null.");
+        const auto portSlots                       = directCallPortSlots(targetGraph);
+        [[maybe_unused]] const size_t expectedArgs = portSlots.size();
+        ASSERT(
+            argsCnt == expectedArgs,
+            std::format(
+                "FastVM direct call arity mismatch for graph '{}': expected {}, got {}.",
+                targetGraph->name(),
+                expectedArgs,
+                argsCnt));
+        for (size_t argIndex = 0; argIndex < argsCnt; ++argIndex) {
+            calleeFrame->set(portSlots[argIndex], callerFrame->get<slot_t>(args[argIndex]));
+        }
+    }
+
     // Frame pool used by the interpreter and JIT trampolines.
     ctx::FramePool framePool_{1 * camel::core::mm::MB};
 
@@ -73,6 +97,10 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap_;
     camel::runtime::GCGraph *runtimeRoot_ = nullptr;
     std::vector<std::unique_ptr<FastVMRuntimeRootCache>> runtimeRootCaches_;
+    std::vector<std::unique_ptr<FastVMCallLayoutCache>> callLayoutCaches_;
+
+    std::span<const camel::runtime::gc_data_idx_t>
+    directCallPortSlots(camel::runtime::GCGraph *targetGraph);
 
 #if ENABLE_FASTVM_JIT
     std::unique_ptr<jit::IJitBackend> jitBackend_;
@@ -88,9 +116,21 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
 
     template <typename ReadSlotFn>
     void populateCallFrame(
-        ctx::Frame *frame, const data_idx_t *args, size_t argsCnt, ReadSlotFn &&readSlot) {
-        for (size_t i = 0; i < argsCnt; ++i) {
-            frame->set(i + 1, readSlot(args[i]));
+        ctx::Frame *frame, camel::runtime::GCGraph *targetGraph, const data_idx_t *args,
+        size_t argsCnt, ReadSlotFn &&readSlot) {
+        ASSERT(frame != nullptr, "FastVM populated call frame is null.");
+        ASSERT(targetGraph != nullptr, "FastVM populated call target graph is null.");
+        const auto portSlots                       = directCallPortSlots(targetGraph);
+        [[maybe_unused]] const size_t expectedArgs = portSlots.size();
+        ASSERT(
+            argsCnt == expectedArgs,
+            std::format(
+                "FastVM direct call arity mismatch for graph '{}': expected {}, got {}.",
+                targetGraph->name(),
+                expectedArgs,
+                argsCnt));
+        for (size_t argIndex = 0; argIndex < argsCnt; ++argIndex) {
+            frame->set(portSlots[argIndex], readSlot(args[argIndex]));
         }
     }
 
@@ -104,9 +144,11 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     void setJitFailureReportedOf(camel::runtime::GCGraph *graph, bool reported);
 #endif
 
-    // Explicit interpreter stacks for nested program counters and frames.
-    std::vector<size_t> pcStack_{maxRecursionDepth_};
-    std::vector<ctx::Frame *> frameStack_{maxRecursionDepth_};
+    // Direct-call recursion depth is statically bounded, so the interpreter
+    // stack should stay fixed-size and allocation-free in the hot path.
+    std::array<size_t, maxRecursionDepth_> pcStack_{};
+    std::array<ctx::Frame *, maxRecursionDepth_> frameStack_{};
+    size_t stackDepth_ = 0;
 
     void precompile(camel::runtime::GCGraph *runtimeRoot);
 

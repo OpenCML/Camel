@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,8 +38,8 @@ enum class InlineTargetStrategy {
 };
 
 struct OptimizeRewriteConfig {
-    bool enableDevirtualization             = true;
-    bool enableSpecialization               = true;
+    bool enableDevirtualization             = false;
+    bool enableSpecialization               = false;
     bool enableInlining                     = true;
     InlineTargetStrategy inlineStrategy     = InlineTargetStrategy::Hybrid;
     size_t smallSubgraphMaxNonDataPortNodes = 8;

@@ -35,6 +35,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/utils/log.h"
 
 #include <algorithm>
 #include <queue>
@@ -57,6 +58,16 @@ namespace {
 using GraphMap    = std::unordered_map<GCGraph *, GCGraph *>;
 using ObjectCache = std::unordered_map<const Object *, Object *>;
 using ObjectSet   = std::unordered_set<const Object *>;
+
+RuntimeDraftIdentity makeRuntimeDraftIdentity(GCGraph *graph) {
+    ASSERT(graph != nullptr, "Runtime draft identity requires a non-null source graph.");
+    return RuntimeDraftIdentity{
+        .sourceGraph = graph,
+        .stableId    = graph->stableId(),
+        .mangledName = graph->mangledName(),
+        .name        = graph->name(),
+    };
+}
 
 GCGraph *resolveRuntimeGraphCarrier(
     const camel::core::context::context_ptr_t &context, const ::Function *func) {
@@ -389,7 +400,7 @@ std::vector<GCGraph *> collectDraftStaticGraphRefs(
 }
 
 GCGraph *encodeDraftClosureGraph(
-    const camel::core::context::context_ptr_t &context, GCGraph *sourceGraph,
+    const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
     const GraphDraft &draft, const GraphMap &rewritten, size_t bytes) {
     auto remapGraph = [&](GCGraph *graph) -> GCGraph * {
         if (!graph) {
@@ -400,7 +411,7 @@ GCGraph *encodeDraftClosureGraph(
         return it->second;
     };
 
-    TupleType *staticDataType = draftStaticDataType(draft, sourceGraph);
+    TupleType *staticDataType = draftStaticDataType(draft, identity.sourceGraph);
 
     std::vector<GCGraph *> dependencies;
     for (GCGraph *graph : collectDraftDependencyGraphs(draft)) {
@@ -436,9 +447,9 @@ GCGraph *encodeDraftClosureGraph(
 
     const auto payloadShape = describeDraftNativePayload(draft);
     return GCGraphBuildAccess::constructInPlace(
-        rewritten.at(sourceGraph),
+        rewritten.at(identity.sourceGraph),
         bytes,
-        createGraphDebugRecord(draft.stableId(), draft.mangledName(), draft.name()),
+        createGraphDebugRecord(identity.stableId, identity.mangledName, identity.name),
         draft.funcType(),
         draft.runtimeDataType(),
         staticDataType,
@@ -470,7 +481,7 @@ GraphDraft *RuntimeGraphDraftSession::tryDraft(const GCGraph *graph) {
         return nullptr;
     }
     if (auto it = drafts_.find(const_cast<GCGraph *>(graph)); it != drafts_.end()) {
-        return it->second.get();
+        return it->second->draft.get();
     }
     return nullptr;
 }
@@ -480,7 +491,7 @@ const GraphDraft *RuntimeGraphDraftSession::tryDraft(const GCGraph *graph) const
         return nullptr;
     }
     if (auto it = drafts_.find(const_cast<GCGraph *>(graph)); it != drafts_.end()) {
-        return it->second.get();
+        return it->second->draft.get();
     }
     return nullptr;
 }
@@ -489,9 +500,20 @@ GraphDraft &RuntimeGraphDraftSession::ensureDraft(GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime graph draft decode requires a non-null graph.");
     auto [it, inserted] = drafts_.try_emplace(graph);
     if (inserted) {
-        it->second = GraphDraft::decode(graph);
+        auto entry      = std::make_unique<DraftEntry>();
+        entry->identity = makeRuntimeDraftIdentity(graph);
+        CAMEL_LOG_INFO_S(
+            "DraftSession",
+            "Decoding runtime graph '{}' into editable draft.",
+            graph->name());
+        entry->draft = GraphDraft::decode(graph);
+        CAMEL_LOG_INFO_S(
+            "DraftSession",
+            "Decoded runtime graph '{}' into editable draft.",
+            graph->name());
+        it->second = std::move(entry);
     }
-    return *it->second;
+    return *it->second->draft;
 }
 
 GraphDraft &RuntimeGraphDraftSession::edit(GCGraph *graph) { return ensureDraft(graph); }
@@ -552,7 +574,8 @@ GCGraph *RuntimeGraphDraftSession::commit() {
     std::unordered_map<GCGraph *, size_t> allocatedBytes;
     allocatedBytes.reserve(closure.size());
     for (GCGraph *graph : closure) {
-        const GraphDraft &draft   = *drafts_.at(graph);
+        const DraftEntry &entry   = *drafts_.at(graph);
+        const GraphDraft &draft   = *entry.draft;
         TupleType *staticDataType = draftStaticDataType(draft, graph);
         std::vector<GCGraph *> dependencyPlaceholders(
             collectDraftDependencyGraphs(draft).size(),
@@ -583,10 +606,11 @@ GCGraph *RuntimeGraphDraftSession::commit() {
         GCGraph *graph   = *it;
         rewritten[graph] = encodeDraftClosureGraph(
             context_,
-            graph,
-            *drafts_.at(graph),
+            drafts_.at(graph)->identity,
+            *drafts_.at(graph)->draft,
             rewritten,
             allocatedBytes.at(graph));
+        validateRuntimeGraphPayload(rewritten[graph]);
     }
 
     runtimeRoot_ = context_->installRuntimeRoot(rewritten.at(oldRuntimeRoot));

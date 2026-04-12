@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -75,13 +75,13 @@ bool isSmallRuntimeSubgraphForInline(const GCGraph *bodyGraph, const InlineRewri
     return true;
 }
 
-bool isRuntimeBranchArmHead(const GCGraph *owner, gc_node_ref_t nodeRef) {
-    if (!owner || nodeRef == kInvalidNodeRef) {
+bool isDraftBranchArmHead(const camel::runtime::GraphDraft &draft, gc_node_ref_t nodeId) {
+    if (!draft.alive(nodeId)) {
         return false;
     }
-    for (gc_node_ref_t pred : owner->ctrlInputsOf(nodeRef)) {
-        const auto *predNode = owner->node(pred);
-        if (predNode && predNode->kind == GCNodeKind::Brch) {
+    for (gc_node_ref_t pred : draft.ctrlInputsOf(nodeId)) {
+        const auto *predHeader = draft.header(pred);
+        if (predHeader && predHeader->kind == GCNodeKind::Brch) {
             return true;
         }
     }
@@ -209,10 +209,15 @@ bool shouldSkipRecursiveInline(
     const auto callerIt = sccInfo.componentOf.find(caller);
     const auto calleeIt = sccInfo.componentOf.find(callee);
     if (callerIt == sccInfo.componentOf.end() || calleeIt == sccInfo.componentOf.end()) {
-        return true;
+        return false;
     }
 
     if (callerIt->second != calleeIt->second) {
+        // External callers must not inline a recursive graph wholesale into
+        // their own body. The profitable transformation is to compact helper
+        // graphs inside the recursive SCC itself so the recursive entry graph
+        // becomes scheduler/JIT-friendly, while keeping the recursive cycle
+        // encapsulated inside that graph.
         return true;
     }
 
@@ -227,24 +232,111 @@ bool applyRuntimeInline(
     const InlineRewriteConfig &config) {
     camel::runtime::RuntimeGraphDraftSession session(context, runtimeRoot);
     bool changed = false;
+    CAMEL_LOG_INFO_S("InlinePass", "Runtime inline session started.");
+    size_t appliedCount = 0;
 
     while (true) {
-        bool iterationChanged                = false;
         const std::vector<GCGraph *> closure = session.collectReachableRuntimeGraphs();
-        const auto sccInfo                   = analyzeRuntimeCallGraphScc(closure);
-        size_t appliedCount                  = 0;
-
+        CAMEL_LOG_INFO_S(
+            "InlinePass",
+            "Runtime inline collected reachable closure with {} graphs.",
+            closure.size());
+        std::unordered_set<GCGraph *> closureSet(closure.begin(), closure.end());
         for (GCGraph *runtimeGraph : closure) {
             if (!runtimeGraph) {
                 continue;
             }
-            camel::runtime::GraphDraft &draft = session.edit(runtimeGraph);
-            std::vector<gc_node_ref_t> candidates;
-            candidates.reserve(draft.nodeCount());
+            for (auto it = runtimeGraph->nodes().begin(); it != runtimeGraph->nodes().end(); ++it) {
+                const auto *node = *it;
+                if (!node || node->kind != GCNodeKind::Func) {
+                    continue;
+                }
+                const auto *body = runtimeGraph->nodeBodyAs<GCFuncBody>(it.ref());
+                if (!body || !body->calleeGraph) {
+                    continue;
+                }
+                if (!closureSet.contains(body->calleeGraph)) {
+                    throw std::runtime_error(
+                        std::format(
+                            "Runtime inline discovered FUNC node {} in graph '{}' with callee "
+                            "graph {:p} outside the reachable closure.",
+                            it.ref(),
+                            runtimeGraph->name(),
+                            static_cast<void *>(body->calleeGraph)));
+                }
+            }
+        }
+
+        const auto sccInfo = analyzeRuntimeCallGraphScc(closure);
+        CAMEL_LOG_INFO_S(
+            "InlinePass",
+            "Runtime inline SCC analysis finished: {} components, {} recursive graphs, {} entry "
+            "graphs.",
+            sccInfo.components.size(),
+            sccInfo.recursiveGraphs.size(),
+            sccInfo.componentEntryGraphs.size());
+
+        bool roundChanged = false;
+        for (auto it = closure.rbegin(); it != closure.rend(); ++it) {
+            GCGraph *nextGraph = *it;
+            if (!nextGraph) {
+                continue;
+            }
+
+            CAMEL_LOG_INFO_S(
+                "InlinePass",
+                "Runtime inline scanning graph '{}' for candidates.",
+                nextGraph->name());
+            camel::runtime::GraphDraft &draft = session.edit(nextGraph);
+            std::vector<gc_node_ref_t> funcNodes;
+            std::vector<gc_node_ref_t> callNodes;
+            funcNodes.reserve(draft.nodeCount());
+            callNodes.reserve(draft.nodeCount());
 
             for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
                 const auto *header = draft.header(id);
+                if (!header) {
+                    continue;
+                }
+                if (header->kind == GCNodeKind::Func) {
+                    funcNodes.push_back(id);
+                } else if (header->kind == GCNodeKind::Call) {
+                    callNodes.push_back(id);
+                }
+            }
+
+            if (config.enableSpecialization) {
+                for (gc_node_ref_t funcNodeId : funcNodes) {
+                    if (!draft.alive(funcNodeId)) {
+                        continue;
+                    }
+                    if (camel::runtime::specializeDirectFuncInDraft(draft, funcNodeId)) {
+                        changed      = true;
+                        roundChanged = true;
+                    }
+                }
+            }
+
+            if (config.enableDevirtualization) {
+                for (gc_node_ref_t callNodeId : callNodes) {
+                    if (!draft.alive(callNodeId)) {
+                        continue;
+                    }
+                    if (camel::runtime::devirtualizeStaticCallInDraft(draft, callNodeId)) {
+                        changed      = true;
+                        roundChanged = true;
+                    }
+                }
+            }
+
+            std::vector<gc_node_ref_t> candidates;
+            candidates.reserve(draft.nodeCount());
+            for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+                const auto *header = draft.header(id);
                 if (!header || header->kind != GCNodeKind::Func) {
+                    continue;
+                }
+                if (draft.sourceRefOf(id) == kInvalidNodeRef) {
                     continue;
                 }
                 const auto payload = draft.payloadOf(id);
@@ -252,30 +344,37 @@ bool applyRuntimeInline(
                     continue;
                 }
                 const auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
-                if (!body->calleeGraph || body->calleeGraph == runtimeGraph) {
+                if (!body->calleeGraph || body->calleeGraph == nextGraph) {
                     continue;
                 }
-                if (shouldSkipRecursiveInline(runtimeGraph, body->calleeGraph, sccInfo, config)) {
+                if (shouldSkipRecursiveInline(nextGraph, body->calleeGraph, sccInfo, config)) {
                     continue;
                 }
 
                 const bool isSmall = isSmallRuntimeSubgraphForInline(body->calleeGraph, config);
-                const bool isArm   = isRuntimeBranchArmHead(runtimeGraph, id);
+                const bool isArm   = isDraftBranchArmHead(draft, id);
                 if (shouldInlineTarget(isSmall, isArm, config)) {
                     candidates.push_back(id);
                 }
             }
 
+            CAMEL_LOG_INFO_S(
+                "InlinePass",
+                "Graph '{}' collected {} inline candidates.",
+                nextGraph->name(),
+                candidates.size());
+
             for (gc_node_ref_t funcNodeId : candidates) {
                 if (!draft.alive(funcNodeId)) {
                     continue;
                 }
-                const auto inlined = camel::runtime::inlineCallableInDraft(draft, funcNodeId);
+                const auto inlined =
+                    camel::runtime::inlineCallableInDraft(session, draft, funcNodeId);
                 if (!inlined) {
                     continue;
                 }
-                iterationChanged = true;
-                changed          = true;
+                changed      = true;
+                roundChanged = true;
                 appliedCount++;
                 if (appliedCount >= kRuntimeInlineApplyBudget) {
                     CAMEL_LOG_WARN_S(
@@ -290,7 +389,10 @@ bool applyRuntimeInline(
             }
         }
 
-        if (!iterationChanged) {
+        if (appliedCount >= kRuntimeInlineApplyBudget) {
+            break;
+        }
+        if (!roundChanged) {
             break;
         }
     }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,6 +51,7 @@ constexpr size_t kFastVmFlagsSlot              = 3;
 constexpr size_t kFastVmRootCacheSlot          = 4;
 constexpr size_t kFastVmIndirectCallCountSlot  = 5;
 constexpr size_t kFastVmGraphLengthSlot        = 6;
+constexpr size_t kFastVmCallLayoutSlot         = 7;
 constexpr uintptr_t kFastVmFlagCompileFailed   = 1u << 0;
 constexpr uintptr_t kFastVmFlagFailureReported = 1u << 1;
 
@@ -143,6 +144,18 @@ inline void setFastVmRootCacheOf(camel::runtime::GCGraph *graph, FastVMRuntimeRo
         graph->setExtraSlot(kFastVmRootCacheSlot, reinterpret_cast<uintptr_t>(cache));
 }
 
+inline FastVMCallLayoutCache *fastVmCallLayoutOf(camel::runtime::GCGraph *graph) {
+    return graph
+               ? reinterpret_cast<FastVMCallLayoutCache *>(graph->extraSlot(kFastVmCallLayoutSlot))
+               : nullptr;
+}
+
+inline void setFastVmCallLayoutOf(camel::runtime::GCGraph *graph, FastVMCallLayoutCache *cache) {
+    if (graph) {
+        graph->setExtraSlot(kFastVmCallLayoutSlot, reinterpret_cast<uintptr_t>(cache));
+    }
+}
+
 struct HigherOrderCallSite {
     camel::runtime::GCGraph *runtimeGraph = nullptr;
     size_t entryPc                        = 0;
@@ -180,6 +193,34 @@ inline void seedClosureSlots(Frame *frame, const HigherOrderCallSite &site, size
 
 FastVMSchedPass::~FastVMSchedPass() = default;
 
+std::span<const camel::runtime::gc_data_idx_t>
+FastVMSchedPass::directCallPortSlots(camel::runtime::GCGraph *targetGraph) {
+    ASSERT(targetGraph != nullptr, "FastVM direct-call target graph is null.");
+    if (auto *cache = fastVmCallLayoutOf(targetGraph)) {
+        return std::span<const camel::runtime::gc_data_idx_t>(cache->portSlots);
+    }
+
+    auto layout          = std::make_unique<FastVMCallLayoutCache>();
+    const auto normPorts = targetGraph->normPorts();
+    const auto withPorts = targetGraph->withPorts();
+    layout->portSlots.reserve(normPorts.size() + withPorts.size());
+    for (auto portRef : normPorts) {
+        const auto *port = targetGraph->node(portRef);
+        ASSERT(port != nullptr, "FastVM direct call norm port is null.");
+        layout->portSlots.push_back(port->dataIndex);
+    }
+    for (auto portRef : withPorts) {
+        const auto *port = targetGraph->node(portRef);
+        ASSERT(port != nullptr, "FastVM direct call with port is null.");
+        layout->portSlots.push_back(port->dataIndex);
+    }
+
+    FastVMCallLayoutCache *raw = layout.get();
+    callLayoutCaches_.push_back(std::move(layout));
+    setFastVmCallLayoutOf(targetGraph, raw);
+    return std::span<const camel::runtime::gc_data_idx_t>(raw->portSlots);
+}
+
 void FastVMSchedPass::precompile(camel::runtime::GCGraph *runtimeRoot) {
     ASSERT(runtimeRoot != nullptr, "Runtime root graph is null.");
     runtimeRoot_ = runtimeRoot;
@@ -215,21 +256,22 @@ void FastVMSchedPass::precompile(camel::runtime::GCGraph *runtimeRoot) {
 }
 
 void FastVMSchedPass::push(size_t pc, Frame *frame) {
-    pcStack_.push_back(pc);
-    frameStack_.push_back(frame);
-    if (frameStack_.size() >= maxRecursionDepth_) {
+    if (stackDepth_ >= maxRecursionDepth_) {
         throwRuntimeFault(
             RuntimeDiag::MaxRecursionDepthExceeded,
             frame->graphName(),
             maxRecursionDepth_);
     }
+    pcStack_[stackDepth_]    = pc;
+    frameStack_[stackDepth_] = frame;
+    ++stackDepth_;
 }
 
 std::pair<size_t, Frame *> FastVMSchedPass::pop() {
-    size_t pc = pcStack_.back();
-    pcStack_.pop_back();
-    Frame *frame = frameStack_.back();
-    frameStack_.pop_back();
+    ASSERT(stackDepth_ > 0, "FastVM call stack underflow.");
+    --stackDepth_;
+    size_t pc    = pcStack_[stackDepth_];
+    Frame *frame = frameStack_[stackDepth_];
     return {pc, frame};
 }
 
@@ -241,8 +283,7 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
     runtimeRootCaches_.clear();
     precompile(runtimeRoot);
 
-    pcStack_.clear();
-    frameStack_.clear();
+    stackDepth_ = 0;
 
 #if ENABLE_FASTVM_JIT
     if (jitConfig_.policy != JitPolicy::Disabled && !jitBackend_) {
@@ -293,8 +334,7 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
         slot_t result = call(pc, frame);
         context_->captureProcessExitCode(runtimeRoot, result);
     } catch (...) {
-        pcStack_.clear();
-        frameStack_.clear();
+        stackDepth_ = 0;
         throw;
     }
     opperf::stop();

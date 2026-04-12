@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,18 @@ using runtime_data_idx_t = camel::runtime::gc_data_idx_t;
 struct NodeVMGraphCache {
     std::vector<camel::runtime::gc_node_ref_t> topoNodeRefs;
     std::vector<camel::runtime::GCGraph *> directCallTargets;
+    std::vector<uint8_t> directCallTailEligible;
+    std::vector<uint8_t> directCallFeedsTailJoin;
+    std::vector<uint32_t> directCallArgOffsets;
+    std::vector<runtime_data_idx_t> directCallArgSlots;
+    std::vector<runtime_data_idx_t> dataIndexByRef;
+    camel::runtime::gc_node_ref_t tailValueRef = camel::runtime::kInvalidNodeRef;
+    size_t tailValueTopoIndex                  = 0;
+    bool tailValueIsJoin                       = false;
+};
+
+struct NodeVMCallLayoutCache {
+    std::vector<runtime_data_idx_t> calleePortSlots;
 };
 
 class NodeVMSchedPass : public RuntimeGraphSchedulePass {
@@ -43,6 +55,7 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     size_t currRecursionDepth_ = 0;
     ctx::FramePool framePool_{1 * camel::core::mm::MB};
     std::vector<std::unique_ptr<NodeVMGraphCache>> graphCaches_;
+    std::vector<std::unique_ptr<NodeVMCallLayoutCache>> callLayoutCaches_;
     std::vector<runtime_data_idx_t> operIndices_;
 
     slot_t call(camel::runtime::GCGraph *runtimeGraph, ctx::Frame *rootFrame);

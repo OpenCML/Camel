@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,6 +45,12 @@
 #include <vector>
 
 namespace camel::runtime {
+
+enum class DraftEdgeKind : uint8_t {
+    Norm,
+    With,
+    Ctrl,
+};
 
 enum class DraftNodeStorageClass : uint8_t {
     Slab64,
@@ -180,10 +186,6 @@ class GraphDraft {
     GraphDraft(const GraphDraft &)            = delete;
     GraphDraft &operator=(const GraphDraft &) = delete;
 
-    const GCGraph *source() const { return source_; }
-    const std::string &stableId() const { return stableId_; }
-    const std::string &mangledName() const { return mangledName_; }
-    const std::string &name() const { return name_; }
     camel::core::type::FunctionType *funcType() const { return funcType_; }
     camel::core::type::TupleType *runtimeDataType() const { return runtimeDataType_; }
     camel::core::type::TupleType *closureType() const { return closureType_; }
@@ -233,18 +235,71 @@ class GraphDraft {
     bool isBranchArmAnchor(gc_node_ref_t id) const;
     gc_node_ref_t resolveForwardedValueRef(gc_node_ref_t id) const;
     gc_node_ref_t resolveForwardedCtrlRef(gc_node_ref_t id) const;
+    std::span<std::byte> mutablePayloadOf(gc_node_ref_t id);
+
+    void setFuncType(camel::core::type::FunctionType *funcType) { funcType_ = funcType; }
+    void setRuntimeDataType(camel::core::type::TupleType *runtimeDataType) {
+        runtimeDataType_ = runtimeDataType;
+    }
+    void setClosureType(camel::core::type::TupleType *closureType) { closureType_ = closureType; }
 
     gc_node_ref_t addNode(const DraftNodeInit &init);
+    gc_node_ref_t
+    addDataNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex, uint8_t runtimeFlags = 0);
+    gc_node_ref_t
+    addPortNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex, uint8_t runtimeFlags = 0);
+    gc_node_ref_t addCastNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t addCopyNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t
+    addFillNode(camel::core::type::Type *type, const GCFillBody &body, gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t
+    addAccsNode(camel::core::type::Type *type, uint32_t tupleIndex, gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t addAccsNode(
+        camel::core::type::Type *type, std::string_view structKey, gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t addBrchNode(
+        camel::core::type::Type *type, gc_node_ref_t joinRef, std::span<const GCBranchArm> arms,
+        gc_node_ref_t defaultArm = kInvalidNodeRef, gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t addJoinNode(
+        camel::core::type::Type *type, gc_node_ref_t brchRef, gc_cnt_t armCount,
+        gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t addCallNode(
+        camel::core::type::Type *type, const GCCallBody &body = {}, gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t addBindNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t addFuncNode(
+        GCGraph *calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
+        gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t addOperNode(
+        camel::core::type::Type *type, operator_t op, std::string_view uri,
+        gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t addSyncNode();
+    gc_node_ref_t addGateNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t addDrefNode(camel::core::type::Type *type = nullptr, gc_slot_idx_t dataIndex = 0);
+
     void eraseNode(gc_node_ref_t id);
     void setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
     void setWithInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
     void setCtrlInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
+    void appendInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId);
+    bool unlinkInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId);
+    void replaceInput(
+        DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t oldInputId,
+        gc_node_ref_t newInputId);
     void replaceAllNormUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void
     retargetBranchArmAnchors(gc_node_ref_t oldId, gc_node_ref_t newHeadId, gc_node_ref_t newTailId);
+    void setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type);
+    void setNodeDataIndex(gc_node_ref_t id, gc_slot_idx_t dataIndex);
+    void setNodeRuntimeFlags(gc_node_ref_t id, uint8_t runtimeFlags);
+    void rewriteNode(gc_node_ref_t id, const DraftNodeInit &init);
+    void appendNormPort(gc_node_ref_t id);
+    void appendWithPort(gc_node_ref_t id);
+    void appendClosureNode(gc_node_ref_t id);
+    void removeNormPort(gc_node_ref_t id);
+    void removeWithPort(gc_node_ref_t id);
+    void removeClosureNode(gc_node_ref_t id);
     void setEntryNode(gc_node_ref_t id) { entry_ = id; }
     void setExitNode(gc_node_ref_t id) { exit_ = id; }
     void setOutputNode(gc_node_ref_t id) { output_ = id; }
@@ -261,7 +316,8 @@ class GraphDraft {
     void addSubGraph(GCGraph *graph);
     void addStaticGraphRef(GCGraph *graph);
 
-    GCGraph *encode() const;
+    GCGraph *encode(
+        const std::string &stableId, const std::string &mangledName, const std::string &name) const;
 
   private:
     static gc_node_ref_t
@@ -280,11 +336,8 @@ class GraphDraft {
     void replaceUsesInList(
         gc_node_ref_t ownerId, std::span<const gc_node_ref_t> users, gc_node_ref_t oldId,
         gc_node_ref_t newId, bool norm, bool with, bool ctrl);
+    void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
 
-    const GCGraph *source_ = nullptr;
-    std::string stableId_;
-    std::string mangledName_;
-    std::string name_;
     camel::core::type::FunctionType *funcType_     = nullptr;
     camel::core::type::TupleType *runtimeDataType_ = nullptr;
     camel::core::type::TupleType *closureType_     = nullptr;

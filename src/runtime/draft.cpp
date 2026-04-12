@@ -33,6 +33,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/utils/log.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -73,6 +74,29 @@ size_t adjacencyBytes(
             static_cast<size_t>(ctrlInputs) + static_cast<size_t>(normUsers) +
             static_cast<size_t>(withUsers) + static_cast<size_t>(ctrlUsers)) *
            sizeof(gc_node_ref_t);
+}
+
+camel::core::type::Type *resolveDraftNodeDataType(const GCGraph *graph, const GCNode *sourceNode) {
+    ASSERT(graph != nullptr, "Draft node type resolution requires a non-null graph.");
+    ASSERT(sourceNode != nullptr, "Draft node type resolution requires a non-null source node.");
+    if (sourceNode->dataType != nullptr) {
+        return sourceNode->dataType;
+    }
+
+    if (sourceNode->dataIndex > 0) {
+        const auto *runtimeTuple = graph->runtimeDataType();
+        if (runtimeTuple != nullptr &&
+            static_cast<size_t>(sourceNode->dataIndex) < runtimeTuple->size()) {
+            return runtimeTuple->typeAt(static_cast<size_t>(sourceNode->dataIndex));
+        }
+    } else if (sourceNode->dataIndex < 0) {
+        const auto *staticTuple  = graph->staticDataType();
+        const size_t staticIndex = static_cast<size_t>(-sourceNode->dataIndex);
+        if (staticTuple != nullptr && staticIndex < staticTuple->size()) {
+            return staticTuple->typeAt(staticIndex);
+        }
+    }
+    return nullptr;
 }
 
 DraftNodeInit makeInitFromNode(const DraftNode *node) {
@@ -521,7 +545,7 @@ DraftNode *GraphDraft::createDecodedNode(
     draftNode->header.dataIndex        = sourceNode->dataIndex;
     draftNode->header.payloadBytes     = payloadBytes;
     draftNode->header.capacityBytes    = capacityBytesForStorageClass(storageClass, tailBytes);
-    draftNode->header.dataType         = sourceNode->dataType;
+    draftNode->header.dataType         = resolveDraftNodeDataType(graph, sourceNode);
     draftNode->header.normInputCount   = static_cast<gc_cnt_t>(normInputs.size());
     draftNode->header.withInputCount   = static_cast<gc_cnt_t>(withInputs.size());
     draftNode->header.ctrlInputCount   = static_cast<gc_cnt_t>(ctrlInputs.size());
@@ -573,11 +597,12 @@ DraftNode *GraphDraft::createDecodedNode(
 
 std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime graph draft decode requires a non-null graph.");
+    CAMEL_LOG_INFO_S(
+        "GraphDraft",
+        "Decode begin for graph '{}' with {} nodes.",
+        graph->name(),
+        graph->nodeCount());
     auto draft              = std::make_unique<GraphDraft>();
-    draft->source_          = graph;
-    draft->stableId_        = graph->stableId();
-    draft->mangledName_     = graph->mangledName();
-    draft->name_            = graph->name();
     draft->funcType_        = graph->funcType();
     draft->runtimeDataType_ = const_cast<camel::core::type::TupleType *>(graph->runtimeDataType());
     draft->closureType_     = const_cast<camel::core::type::TupleType *>(graph->closureType());
@@ -611,7 +636,14 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
         const gc_node_ref_t sourceRef = it.ref();
         const gc_node_ref_t draftId   = sourceToDraft[sourceRef];
-        draft->nodesById_[draftId]    = draft->createDecodedNode(graph, sourceRef, sourceToDraft);
+        CAMEL_LOG_INFO_S(
+            "GraphDraft",
+            "Decode node graph='{}' sourceRef={} draftId={} kind={}.",
+            graph->name(),
+            sourceRef,
+            draftId,
+            static_cast<int>((*it)->kind));
+        draft->nodesById_[draftId] = draft->createDecodedNode(graph, sourceRef, sourceToDraft);
         draft->liveNodeCount_++;
     }
 
@@ -632,6 +664,7 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
     draft->exit_       = translateNodeRef(graph->exitNodeRef(), sourceToDraft);
     draft->output_     = translateNodeRef(graph->outputNodeRef(), sourceToDraft);
     draft->returnNode_ = translateNodeRef(graph->returnNodeRef(), sourceToDraft);
+    CAMEL_LOG_INFO_S("GraphDraft", "Decode finished for graph '{}'.", graph->name());
     return draft;
 }
 
@@ -778,18 +811,66 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot erase a missing draft node.");
 
-    for (gc_node_ref_t input : DraftNodeView::normInputs(draftNode)) {
+    const std::vector<gc_node_ref_t> normInputs(
+        DraftNodeView::normInputs(draftNode).begin(),
+        DraftNodeView::normInputs(draftNode).end());
+    const std::vector<gc_node_ref_t> withInputs(
+        DraftNodeView::withInputs(draftNode).begin(),
+        DraftNodeView::withInputs(draftNode).end());
+    const std::vector<gc_node_ref_t> ctrlInputs(
+        DraftNodeView::ctrlInputs(draftNode).begin(),
+        DraftNodeView::ctrlInputs(draftNode).end());
+    const std::vector<gc_node_ref_t> normUsers(
+        DraftNodeView::normUsers(draftNode).begin(),
+        DraftNodeView::normUsers(draftNode).end());
+    const std::vector<gc_node_ref_t> withUsers(
+        DraftNodeView::withUsers(draftNode).begin(),
+        DraftNodeView::withUsers(draftNode).end());
+    const std::vector<gc_node_ref_t> ctrlUsers(
+        DraftNodeView::ctrlUsers(draftNode).begin(),
+        DraftNodeView::ctrlUsers(draftNode).end());
+
+    for (gc_node_ref_t input : normInputs) {
         removeUserRef(input, id, true, false, false);
     }
-    for (gc_node_ref_t input : DraftNodeView::withInputs(draftNode)) {
+    for (gc_node_ref_t input : withInputs) {
         removeUserRef(input, id, false, true, false);
     }
-    for (gc_node_ref_t input : DraftNodeView::ctrlInputs(draftNode)) {
+    for (gc_node_ref_t input : ctrlInputs) {
         removeUserRef(input, id, false, false, true);
+    }
+    for (gc_node_ref_t userId : normUsers) {
+        (void)unlinkInput(DraftEdgeKind::Norm, userId, id);
+    }
+    for (gc_node_ref_t userId : withUsers) {
+        (void)unlinkInput(DraftEdgeKind::With, userId, id);
+    }
+    for (gc_node_ref_t userId : ctrlUsers) {
+        (void)unlinkInput(DraftEdgeKind::Ctrl, userId, id);
+    }
+    for (gc_node_ref_t otherId = 0; otherId < nodeSlotCount(); ++otherId) {
+        if (otherId == id || !alive(otherId)) {
+            continue;
+        }
+        while (std::find(normInputsOf(otherId).begin(), normInputsOf(otherId).end(), id) !=
+               normInputsOf(otherId).end()) {
+            (void)unlinkInput(DraftEdgeKind::Norm, otherId, id);
+        }
+        while (std::find(withInputsOf(otherId).begin(), withInputsOf(otherId).end(), id) !=
+               withInputsOf(otherId).end()) {
+            (void)unlinkInput(DraftEdgeKind::With, otherId, id);
+        }
+        while (std::find(ctrlInputsOf(otherId).begin(), ctrlInputsOf(otherId).end(), id) !=
+               ctrlInputsOf(otherId).end()) {
+            (void)unlinkInput(DraftEdgeKind::Ctrl, otherId, id);
+        }
     }
 
     nodesById_[id] = nullptr;
     liveNodeCount_--;
+    std::erase(normPorts_, id);
+    std::erase(withPorts_, id);
+    std::erase(closureNodes_, id);
     if (entry_ == id)
         entry_ = kInvalidNodeRef;
     if (exit_ == id)
@@ -977,10 +1058,19 @@ void GraphDraft::retargetBranchArmAnchors(
 
 gc_slot_idx_t GraphDraft::allocateRuntimeSlot(camel::core::type::Type *type) {
     ASSERT(type != nullptr, "Draft runtime slot allocation requires a non-null type.");
+    CAMEL_LOG_INFO_S(
+        "GraphDraft",
+        "Allocate runtime slot type={} currentRuntimeTuple={}.",
+        static_cast<const void *>(type),
+        static_cast<const void *>(runtimeDataType_));
 
     std::vector<camel::core::type::Type *> slotTypes;
     if (runtimeDataType_ != nullptr) {
         const auto currentTypes = runtimeDataType_->types();
+        CAMEL_LOG_INFO_S(
+            "GraphDraft",
+            "Allocate runtime slot existing tuple size={}.",
+            currentTypes.size());
         slotTypes.assign(currentTypes.begin(), currentTypes.end());
     }
     if (slotTypes.empty()) {
@@ -992,7 +1082,16 @@ gc_slot_idx_t GraphDraft::allocateRuntimeSlot(camel::core::type::Type *type) {
         "Draft runtime slot count exceeds 16-bit data-index capacity.");
     const gc_slot_idx_t slotIndex = static_cast<gc_slot_idx_t>(slotTypes.size());
     slotTypes.push_back(type);
+    CAMEL_LOG_INFO_S(
+        "GraphDraft",
+        "Allocate runtime slot rebuilding tuple newSize={}.",
+        slotTypes.size());
     runtimeDataType_ = camel::core::type::TupleType::create(std::move(slotTypes));
+    CAMEL_LOG_INFO_S(
+        "GraphDraft",
+        "Allocate runtime slot finished index={} newRuntimeTuple={}.",
+        slotIndex,
+        static_cast<const void *>(runtimeDataType_));
     return slotIndex;
 }
 
@@ -1046,8 +1145,9 @@ void GraphDraft::addStaticGraphRef(GCGraph *graph) {
     }
 }
 
-GCGraph *GraphDraft::encode() const {
-    auto *debugRecord = createGraphDebugRecord(stableId_, mangledName_, name_);
+GCGraph *GraphDraft::encode(
+    const std::string &stableId, const std::string &mangledName, const std::string &name) const {
+    auto *debugRecord = createGraphDebugRecord(stableId, mangledName, name);
     camel::core::type::TupleType *staticDataType = nullptr;
     if (!staticSlotTypes_.empty()) {
         staticDataType = camel::core::type::TupleType::create(staticSlotTypes_);

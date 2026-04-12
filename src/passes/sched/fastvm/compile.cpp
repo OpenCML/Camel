@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,7 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/reachable.h"
+#include "runtime/graph_build.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -510,6 +511,7 @@ compileAndLink(context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileS
 
     for (auto *runtimeGraph : uniqueGraphs) {
         ASSERT(runtimeGraph != nullptr, "Reachable runtime graph set contains null.");
+        camel::runtime::validateRuntimeGraphPayload(runtimeGraph);
         size_t start = linked.size();
         std::unordered_map<size_t, camel::source::origin_id_t> localPcOrigins;
         bytecode_vec_t codes = compile(ctx, runtimeGraph, opt, &localPcOrigins);

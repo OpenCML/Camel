@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -243,7 +243,7 @@ class PortNode : public Node {
   public:
     PortNode(Graph &graph, Type *type, data_idx_t index, const std::string &name, bool isVar)
         : Node(graph, NodeType::PORT, type, index), isVar_(isVar) {
-        graph.nodePortNames_[this] = name;
+        graph.registerNodePortName(this, name);
     }
     ~PortNode() = default;
 
@@ -302,7 +302,7 @@ class AccsNode : public Node {
         : Node(graph, NodeType::ACCS, type, index), isNum_(true), numIndex_(numIdx) {}
     AccsNode(Graph &graph, Type *type, data_idx_t index, const std::string &strKey)
         : Node(graph, NodeType::ACCS, type, index), isNum_(false), numIndex_(0) {
-        graph.nodeAccsKeys_[this] = strKey;
+        graph.registerNodeAccsKey(this, strKey);
     }
     ~AccsNode() = default;
 

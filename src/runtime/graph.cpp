@@ -94,6 +94,25 @@ template <typename T> size_t bytesForArray(size_t count) {
     return count == 0 ? 0 : sizeof(T) * count;
 }
 
+Type *effectiveDraftNodeType(const GraphDraft &draft, const DraftNodeHeader &header) {
+    if (header.dataType != nullptr) {
+        return header.dataType;
+    }
+    if (header.dataIndex > 0) {
+        if (auto *runtimeType = draft.runtimeDataType();
+            runtimeType != nullptr && static_cast<size_t>(header.dataIndex) < runtimeType->size()) {
+            return runtimeType->typeAt(static_cast<size_t>(header.dataIndex));
+        }
+    } else if (header.dataIndex < 0) {
+        const size_t staticIndex = static_cast<size_t>(-header.dataIndex);
+        const auto staticTypes   = draft.staticSlotTypes();
+        if (staticIndex < staticTypes.size()) {
+            return staticTypes[staticIndex];
+        }
+    }
+    return nullptr;
+}
+
 struct GraphArenaLayout {
     size_t graphBytes          = 0;
     size_t dependencyBytes     = 0;
@@ -184,9 +203,9 @@ template <typename T> void pushUnique(std::vector<T *> &items, T *value) {
 }
 
 template <typename T, typename U> T narrowIntegral(U value, const char *what) {
-    ASSERT(
-        value <= static_cast<U>(std::numeric_limits<T>::max()),
-        std::format("{} exceeds the target integral width.", what));
+    if (value > static_cast<U>(std::numeric_limits<T>::max())) {
+        throw std::runtime_error(std::format("{} exceeds the target integral width.", what));
+    }
     return static_cast<T>(value);
 }
 
@@ -217,6 +236,8 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
     validateRef(graph->exitNodeRef(), "exit");
     validateRef(graph->outputNodeRef(), "output");
     validateRef(graph->returnNodeRef(), "return");
+    const size_t runtimeSlotCount = graph->runtimeDataType() ? graph->runtimeDataType()->size() : 0;
+    const size_t staticSlotCount  = graph->staticSlots().size();
 
     for (gc_node_ref_t ref = 0; ref < graph->nodeBlockCount();) {
         const GCNode *node = graph->node(ref);
@@ -229,6 +250,26 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
                     "Runtime graph '{}' has zero-sized node block at ref {}.",
                     graph->name(),
                     ref));
+        }
+        if (node->dataIndex > 0 && static_cast<size_t>(node->dataIndex) >= runtimeSlotCount) {
+            throw std::runtime_error(
+                std::format(
+                    "Runtime graph '{}' has node {} with runtime slot {} outside runtime-data size "
+                    "{}.",
+                    graph->name(),
+                    ref,
+                    node->dataIndex,
+                    runtimeSlotCount));
+        }
+        if (node->dataIndex < 0 && static_cast<size_t>(-node->dataIndex) >= staticSlotCount) {
+            throw std::runtime_error(
+                std::format(
+                    "Runtime graph '{}' has node {} with static slot {} outside static-data size "
+                    "{}.",
+                    graph->name(),
+                    ref,
+                    -node->dataIndex,
+                    staticSlotCount));
         }
         auto validateSlice = [&](Slice slice, std::string_view edgeKind) {
             const auto refs = graph->edgeSlice(slice);
@@ -260,6 +301,93 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
                         ref));
             }
         }
+        if (node->kind == GCNodeKind::Call) {
+            const auto calleeInputs = graph->withInputsOf(ref);
+            if (calleeInputs.empty()) {
+                throw std::runtime_error(
+                    std::format(
+                        "Runtime graph '{}' has CALL node {} without callee input.",
+                        graph->name(),
+                        ref));
+            }
+        }
+        if (node->kind == GCNodeKind::Gate) {
+            const auto ctrlInputs = graph->ctrlInputsOf(ref);
+            if (ctrlInputs.empty()) {
+                throw std::runtime_error(
+                    std::format(
+                        "Runtime graph '{}' has GATE node {} without control input.",
+                        graph->name(),
+                        ref));
+            }
+        }
+        if (node->kind == GCNodeKind::Brch) {
+            const auto *body = node->bodyAs<GCBrchBody>();
+            if (!body) {
+                throw std::runtime_error(
+                    std::format(
+                        "Runtime graph '{}' has BRCH node {} without branch payload.",
+                        graph->name(),
+                        ref));
+            }
+            const auto selectorInputs = graph->normInputsOf(ref);
+            if (selectorInputs.size() != 1) {
+                throw std::runtime_error(
+                    std::format(
+                        "Runtime graph '{}' has BRCH node {} with {} selector inputs.",
+                        graph->name(),
+                        ref,
+                        selectorInputs.size()));
+            }
+            validateRef(body->join, "branch-join");
+            const auto arms = graph->branchArmsOf(ref);
+            if (arms.size() != body->armCount) {
+                throw std::runtime_error(
+                    std::format(
+                        "Runtime graph '{}' has BRCH node {} with mismatched arm count: body={}, "
+                        "slice={}.",
+                        graph->name(),
+                        ref,
+                        body->armCount,
+                        arms.size()));
+            }
+            for (size_t armIndex = 0; armIndex < arms.size(); ++armIndex) {
+                validateRef(arms[armIndex].head, "branch-arm-head");
+                validateRef(arms[armIndex].tail, "branch-arm-tail");
+            }
+        }
+        if (node->kind == GCNodeKind::Join) {
+            const auto *body = node->bodyAs<GCJoinBody>();
+            if (!body) {
+                throw std::runtime_error(
+                    std::format(
+                        "Runtime graph '{}' has JOIN node {} without join payload.",
+                        graph->name(),
+                        ref));
+            }
+            if (body->brch != kInvalidNodeRef) {
+                validateRef(body->brch, "join-branch");
+            }
+            const auto armInputs = graph->withInputsOf(ref);
+            if (armInputs.size() != body->armCount) {
+                throw std::runtime_error(
+                    std::format(
+                        "Runtime graph '{}' has JOIN node {} with mismatched arm count: body={}, "
+                        "inputs={}.",
+                        graph->name(),
+                        ref,
+                        body->armCount,
+                        armInputs.size()));
+            }
+            const auto normInputs = graph->normInputsOf(ref);
+            if (normInputs.empty()) {
+                throw std::runtime_error(
+                    std::format(
+                        "Runtime graph '{}' has JOIN node {} without branch-index input.",
+                        graph->name(),
+                        ref));
+            }
+        }
         ref = graph->nextNodeRef(ref);
     }
 }
@@ -285,9 +413,9 @@ sliceView(const gc_node_ref_t *storage, Slice slice, gc_cnt_t totalCount) {
     if (!storage || slice.count == 0) {
         return {};
     }
-    ASSERT(
-        static_cast<size_t>(slice.offset) + static_cast<size_t>(slice.count) <= totalCount,
-        "GCGraph edge slice is out of bounds.");
+    if (static_cast<size_t>(slice.offset) + static_cast<size_t>(slice.count) > totalCount) {
+        throw std::runtime_error("GCGraph edge slice is out of bounds.");
+    }
     return {storage + slice.offset, slice.count};
 }
 
@@ -296,9 +424,9 @@ branchSliceView(const GCBranchArm *storage, gc_off_t offset, gc_cnt_t count, gc_
     if (!storage || count == 0) {
         return {};
     }
-    ASSERT(
-        static_cast<size_t>(offset) + static_cast<size_t>(count) <= totalCount,
-        "GCGraph branch-arm slice is out of bounds.");
+    if (static_cast<size_t>(offset) + static_cast<size_t>(count) > totalCount) {
+        throw std::runtime_error("GCGraph branch-arm slice is out of bounds.");
+    }
     return {storage + offset, count};
 }
 
@@ -346,6 +474,23 @@ gc_cnt_t draftNodeBlockCount(const DraftNodeHeader &header) {
 }
 
 DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
+    auto requireAlive = [&](gc_node_ref_t owner, gc_node_ref_t ref, std::string_view lane) {
+        if (ref == kInvalidNodeRef) {
+            return;
+        }
+        if (!draft.alive(ref)) {
+            const auto *ownerHeader = owner == kInvalidNodeRef ? nullptr : draft.header(owner);
+            throw std::runtime_error(
+                std::format(
+                    "Draft payload planning found dead node ref {} in {} list of node {} "
+                    "(kind={}).",
+                    ref,
+                    lane,
+                    owner,
+                    ownerHeader ? static_cast<int>(ownerHeader->kind) : -1));
+        }
+    };
+
     DraftPayloadPlan plan;
     plan.runtimeRefsByDraftId.assign(draft.nodeSlotCount(), kInvalidNodeRef);
 
@@ -358,6 +503,30 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         }
         const DraftNodeHeader *header = draft.header(draftId);
         ASSERT(header != nullptr, "Draft payload plan requires a non-null node header.");
+        for (gc_node_ref_t ref : draft.normInputsOf(draftId)) {
+            requireAlive(draftId, ref, "norm-input");
+        }
+        for (gc_node_ref_t ref : draft.withInputsOf(draftId)) {
+            requireAlive(draftId, ref, "with-input");
+        }
+        for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
+            requireAlive(draftId, ref, "ctrl-input");
+        }
+        for (gc_node_ref_t ref : draft.normUsersOf(draftId)) {
+            requireAlive(draftId, ref, "norm-user");
+        }
+        for (gc_node_ref_t ref : draft.withUsersOf(draftId)) {
+            requireAlive(draftId, ref, "with-user");
+        }
+        for (gc_node_ref_t ref : draft.ctrlUsersOf(draftId)) {
+            requireAlive(draftId, ref, "ctrl-user");
+        }
+        if (header->kind == GCNodeKind::Brch) {
+            for (const GCBranchArm &arm : draft.branchArmsOf(draftId)) {
+                requireAlive(draftId, arm.head, "branch-head");
+                requireAlive(draftId, arm.tail, "branch-tail");
+            }
+        }
         const gc_cnt_t blockCount = draftNodeBlockCount(*header);
         plan.nodes.push_back(
             PlannedDraftNode{
@@ -376,6 +545,20 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
             branchArmCount += draft.branchArmsOf(draftId).size();
         }
     }
+
+    for (gc_node_ref_t ref : draft.normPorts()) {
+        requireAlive(kInvalidNodeRef, ref, "norm-port");
+    }
+    for (gc_node_ref_t ref : draft.withPorts()) {
+        requireAlive(kInvalidNodeRef, ref, "with-port");
+    }
+    for (gc_node_ref_t ref : draft.closureNodes()) {
+        requireAlive(kInvalidNodeRef, ref, "closure");
+    }
+    requireAlive(kInvalidNodeRef, draft.entryNode(), "entry");
+    requireAlive(kInvalidNodeRef, draft.exitNode(), "exit");
+    requireAlive(kInvalidNodeRef, draft.outputNode(), "output");
+    requireAlive(kInvalidNodeRef, draft.returnNode(), "return");
 
     plan.nodeBlockCount =
         narrowIntegral<gc_cnt_t>(currentNodeOffset, "Draft runtime node-blob block count");
@@ -438,7 +621,7 @@ void emitDraftPayload(
             .normOutputs = appendSlice(draft.normUsersOf(planned.draftId)),
             .withOutputs = appendSlice(draft.withUsersOf(planned.draftId)),
             .ctrlOutputs = appendSlice(draft.ctrlUsersOf(planned.draftId)),
-            .dataType    = draftHeader->dataType,
+            .dataType    = effectiveDraftNodeType(draft, *draftHeader),
             .kind        = draftHeader->kind,
             .flags       = draftHeader->runtimeFlags,
         };
@@ -1067,15 +1250,7 @@ std::vector<GCGraph *> GCGraphManager::reachableFromRoots() const {
 
 void GCGraphManager::clear() {
     gcRoots_.clear();
-    for (auto *record : debugRecords_) {
-        delete record;
-    }
     debugRecords_.clear();
-    for (GCGraph *graph : graphs_) {
-        if (graph) {
-            mm::graphSpace().free(graph);
-        }
-    }
     graphs_.clear();
     root_ = nullptr;
 }

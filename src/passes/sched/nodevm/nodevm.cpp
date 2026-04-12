@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,7 +40,8 @@ using namespace camel::core::error;
 
 namespace {
 
-constexpr size_t kNodeVmCacheSlot = 0;
+constexpr size_t kNodeVmCacheSlot      = 0;
+constexpr size_t kNodeVmCallLayoutSlot = 7;
 
 using camel::runtime::gc_data_idx_t;
 using camel::runtime::gc_node_ref_t;
@@ -63,10 +64,46 @@ inline void setNodeVmCacheOf(camel::runtime::GCGraph *graph, NodeVMGraphCache *c
     }
 }
 
+inline NodeVMCallLayoutCache *nodeVmCallLayoutOf(camel::runtime::GCGraph *graph) {
+    return graph
+               ? reinterpret_cast<NodeVMCallLayoutCache *>(graph->extraSlot(kNodeVmCallLayoutSlot))
+               : nullptr;
+}
+
+inline void setNodeVmCallLayoutOf(camel::runtime::GCGraph *graph, NodeVMCallLayoutCache *cache) {
+    if (graph) {
+        graph->setExtraSlot(kNodeVmCallLayoutSlot, reinterpret_cast<uintptr_t>(cache));
+    }
+}
+
 inline gc_data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
     const auto *node = graph ? graph->node(nodeRef) : nullptr;
     ASSERT(node != nullptr, "NodeVM runtime node lookup resolved to null.");
     return node->dataIndex;
+}
+
+inline gc_data_idx_t dataIndexOf(const NodeVMGraphCache *cache, gc_node_ref_t nodeRef) {
+    ASSERT(cache != nullptr, "NodeVM graph cache is null.");
+    ASSERT(
+        nodeRef < cache->dataIndexByRef.size(),
+        "NodeVM cached data-index lookup is out of range.");
+    return cache->dataIndexByRef[nodeRef];
+}
+
+inline std::span<const runtime_data_idx_t>
+directCallArgSlotsOf(const NodeVMGraphCache *cache, size_t topoIndex) {
+    ASSERT(cache != nullptr, "NodeVM direct-call cache is null.");
+    ASSERT(
+        topoIndex + 1 < cache->directCallArgOffsets.size(),
+        "NodeVM direct-call arg offset lookup is out of range.");
+    const uint32_t begin = cache->directCallArgOffsets[topoIndex];
+    const uint32_t end   = cache->directCallArgOffsets[topoIndex + 1];
+    ASSERT(
+        begin <= end && end <= cache->directCallArgSlots.size(),
+        "NodeVM direct-call cache is corrupt.");
+    return std::span<const runtime_data_idx_t>(
+        cache->directCallArgSlots.data() + begin,
+        end - begin);
 }
 
 } // namespace
@@ -94,19 +131,76 @@ NodeVMSchedPass::buildTopoNodes(camel::runtime::GCGraph *runtimeGraph) {
     auto cache          = std::make_unique<NodeVMGraphCache>();
     cache->topoNodeRefs = std::move(sortedNodeRefs);
     cache->directCallTargets.resize(cache->topoNodeRefs.size(), nullptr);
+    cache->directCallTailEligible.resize(cache->topoNodeRefs.size(), 0);
+    cache->directCallFeedsTailJoin.resize(cache->topoNodeRefs.size(), 0);
+    cache->directCallArgOffsets.resize(cache->topoNodeRefs.size() + 1, 0);
+    cache->dataIndexByRef.resize(runtimeGraph->nodeBlockCount(), 0);
+    cache->tailValueRef       = camel::execute::resolveRuntimeTailValueRef(runtimeGraph);
+    cache->tailValueIsJoin    = cache->tailValueRef != kInvalidNodeRef &&
+                                runtimeGraph->node(cache->tailValueRef)->kind == GCNodeKind::Join;
+    cache->tailValueTopoIndex = cache->topoNodeRefs.size();
+
     for (size_t idx = 0; idx < cache->topoNodeRefs.size(); ++idx) {
-        const auto *node = runtimeGraph->node(cache->topoNodeRefs[idx]);
+        if (cache->topoNodeRefs[idx] == cache->tailValueRef) {
+            cache->tailValueTopoIndex = idx;
+            break;
+        }
+    }
+    const bool anchorOk = cache->tailValueTopoIndex < cache->topoNodeRefs.size() &&
+                          camel::execute::hasOnlyTrivialRuntimeTailSuffixAfter(
+                              runtimeGraph,
+                              cache->topoNodeRefs,
+                              cache->tailValueTopoIndex);
+
+    for (size_t idx = 0; idx < cache->topoNodeRefs.size(); ++idx) {
+        const gc_node_ref_t nodeRef = cache->topoNodeRefs[idx];
+        const auto *node            = runtimeGraph->node(nodeRef);
+        if (node) {
+            cache->dataIndexByRef[nodeRef] = node->dataIndex;
+        }
+        cache->directCallArgOffsets[idx] = static_cast<uint32_t>(cache->directCallArgSlots.size());
         if (!node || node->kind != GCNodeKind::Func) {
             continue;
         }
-        cache->directCallTargets[idx] = runtimeGraph->directCalleeGraphOf(cache->topoNodeRefs[idx]);
+        cache->directCallTargets[idx] = runtimeGraph->directCalleeGraphOf(nodeRef);
         ASSERT(
             cache->directCallTargets[idx] != nullptr,
             "NodeVM direct FUNC target must be materialized into runtime metadata.");
+        for (gc_node_ref_t argRef : runtimeGraph->normInputsOf(nodeRef)) {
+            cache->directCallArgSlots.push_back(dataIndexOf(runtimeGraph, argRef));
+        }
+        for (gc_node_ref_t argRef : runtimeGraph->withInputsOf(nodeRef)) {
+            cache->directCallArgSlots.push_back(dataIndexOf(runtimeGraph, argRef));
+        }
+        cache->directCallTailEligible[idx] = anchorOk && (nodeRef == cache->tailValueRef);
+        if (anchorOk && cache->tailValueIsJoin) {
+            cache->directCallFeedsTailJoin[idx] = camel::execute::runtimeNodeOutputsContain(
+                runtimeGraph,
+                nodeRef,
+                cache->tailValueRef);
+        }
     }
+    cache->directCallArgOffsets[cache->topoNodeRefs.size()] =
+        static_cast<uint32_t>(cache->directCallArgSlots.size());
     NodeVMGraphCache *cacheRaw = cache.get();
     graphCaches_.push_back(std::move(cache));
     setNodeVmCacheOf(runtimeGraph, cacheRaw);
+
+    if (!nodeVmCallLayoutOf(runtimeGraph)) {
+        auto layout          = std::make_unique<NodeVMCallLayoutCache>();
+        const auto normPorts = runtimeGraph->normPorts();
+        const auto withPorts = runtimeGraph->withPorts();
+        layout->calleePortSlots.reserve(normPorts.size() + withPorts.size());
+        for (gc_node_ref_t portRef : normPorts) {
+            layout->calleePortSlots.push_back(dataIndexOf(runtimeGraph, portRef));
+        }
+        for (gc_node_ref_t portRef : withPorts) {
+            layout->calleePortSlots.push_back(dataIndexOf(runtimeGraph, portRef));
+        }
+        NodeVMCallLayoutCache *layoutRaw = layout.get();
+        callLayoutCaches_.push_back(std::move(layout));
+        setNodeVmCallLayoutOf(runtimeGraph, layoutRaw);
+    }
     return std::span<const gc_node_ref_t>(cacheRaw->topoNodeRefs);
 }
 
@@ -165,6 +259,8 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
         }
 
         std::span<const gc_node_ref_t> currNodes = topoNodesFor(currRuntimeGraph);
+        auto *currCache                          = nodeVmCacheOf(currRuntimeGraph);
+        ASSERT(currCache != nullptr, "NodeVM graph cache must be initialized before execution.");
 
         // Branch execution is implemented by skipping until the selected arm
         // head, executing through the arm tail, and then resuming at JOIN.
@@ -174,10 +270,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
 
     // Tail-call loop. Rebind currRuntimeGraph/currFrame instead of growing the C++ stack.
     loop_start: {
-        const size_t nodesSize       = currNodes.size();
-        const gc_node_ref_t lastNode = camel::execute::resolveRuntimeTailValueRef(currRuntimeGraph);
-        const bool lastNodeIsJoin    = lastNode != kInvalidNodeRef &&
-                                       currRuntimeGraph->node(lastNode)->kind == GCNodeKind::Join;
+        const size_t nodesSize = currNodes.size();
 
         size_t i = 0;
         for (; i < nodesSize; ++i) {
@@ -233,7 +326,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             case GCNodeKind::Cast: {
                 const auto normInputs = currRuntimeGraph->normInputsOf(nodeRef);
                 ASSERT(!normInputs.empty(), "CAST node must have one norm input.");
-                const auto srcIdx = dataIndexOf(currRuntimeGraph, normInputs.front());
+                const auto srcIdx = dataIndexOf(currCache, normInputs.front());
                 Type *srcType     = currFrame->typeAt<Type>(srcIdx);
                 Type *tgtType     = n->dataType;
                 slot_t value      = currFrame->get<slot_t>(srcIdx);
@@ -244,7 +337,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             case GCNodeKind::Copy: {
                 const auto normInputs = currRuntimeGraph->normInputsOf(nodeRef);
                 ASSERT(!normInputs.empty(), "COPY node must have one norm input.");
-                gc_data_idx_t srcIdx = dataIndexOf(currRuntimeGraph, normInputs.front());
+                gc_data_idx_t srcIdx = dataIndexOf(currCache, normInputs.front());
                 TypeCode srcCode     = currFrame->codeAt(srcIdx);
                 if (isGCTraced(srcCode)) {
                     Object *srcData  = currFrame->get<Object *>(srcIdx);
@@ -261,7 +354,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 const auto normInputs = currRuntimeGraph->normInputsOf(nodeRef);
                 const auto dataInputs = currRuntimeGraph->withInputsOf(nodeRef);
                 ASSERT(!normInputs.empty(), "FILL node must have one source input.");
-                const auto srcIdx = dataIndexOf(currRuntimeGraph, normInputs.front());
+                const auto srcIdx = dataIndexOf(currCache, normInputs.front());
                 TypeCode srcCode  = currFrame->codeAt(srcIdx);
                 Type *srcType     = currFrame->typeAt<Type>(srcIdx);
                 ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced in NodeVM.");
@@ -277,7 +370,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     for (size_t j = 0; j < dataInputs.size(); ++j) {
                         tup->set<slot_t>(
                             refs[j],
-                            currFrame->get<slot_t>(dataIndexOf(currRuntimeGraph, dataInputs[j])));
+                            currFrame->get<slot_t>(dataIndexOf(currCache, dataInputs[j])));
                     }
                 } break;
                 case TypeCode::Array: {
@@ -285,7 +378,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     for (size_t j = 0; j < dataInputs.size(); ++j) {
                         arr->set<slot_t>(
                             j,
-                            currFrame->get<slot_t>(dataIndexOf(currRuntimeGraph, dataInputs[j])));
+                            currFrame->get<slot_t>(dataIndexOf(currCache, dataInputs[j])));
                     }
                 } break;
                 case TypeCode::Struct: {
@@ -295,7 +388,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     for (size_t j = 0; j < dataInputs.size(); ++j) {
                         str->set<slot_t>(
                             refs[j],
-                            currFrame->get<slot_t>(dataIndexOf(currRuntimeGraph, dataInputs[j])));
+                            currFrame->get<slot_t>(dataIndexOf(currCache, dataInputs[j])));
                     }
                 } break;
                 case TypeCode::Function: {
@@ -308,7 +401,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     for (size_t j = 0; j < dataInputs.size(); ++j) {
                         closureData->set<slot_t>(
                             j,
-                            currFrame->get<slot_t>(dataIndexOf(currRuntimeGraph, dataInputs[j])));
+                            currFrame->get<slot_t>(dataIndexOf(currCache, dataInputs[j])));
                     }
                 } break;
                 default:
@@ -324,7 +417,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             case GCNodeKind::Accs: {
                 const auto normInputs = currRuntimeGraph->normInputsOf(nodeRef);
                 ASSERT(!normInputs.empty(), "ACCS node must have one source input.");
-                gc_data_idx_t srcIdx = dataIndexOf(currRuntimeGraph, normInputs.front());
+                gc_data_idx_t srcIdx = dataIndexOf(currCache, normInputs.front());
                 const auto *body     = currRuntimeGraph->nodeBodyAs<GCAccsBody>(nodeRef);
                 if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
                     size_t idx = body->value;
@@ -365,15 +458,14 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 const auto nargs = currRuntimeGraph->normInputsOf(nodeRef);
                 const auto wargs = currRuntimeGraph->withInputsOf(nodeRef);
                 ASSERT(!nargs.empty(), "JOIN must have norm input (branch index).");
-                int32_t brIndex =
-                    currFrame->get<int32_t>(dataIndexOf(currRuntimeGraph, nargs.front()));
+                int32_t brIndex = currFrame->get<int32_t>(dataIndexOf(currCache, nargs.front()));
                 ASSERT(
                     brIndex >= 0 && static_cast<size_t>(brIndex) < wargs.size(),
                     "JOIN branch index out of range in NodeVM.");
                 // The selected arm has already executed sequentially. Its tail
                 // slot now holds the branch result consumed by JOIN.
                 slot_t branchResult = currFrame->get<slot_t>(
-                    dataIndexOf(currRuntimeGraph, wargs[static_cast<size_t>(brIndex)]));
+                    dataIndexOf(currCache, wargs[static_cast<size_t>(brIndex)]));
                 currFrame->set(n->dataIndex, branchResult);
             } break;
 
@@ -381,7 +473,8 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 const auto withInputs = currRuntimeGraph->withInputsOf(nodeRef);
                 ASSERT(!withInputs.empty(), "CALL node must have exactly one callee input");
                 Function *func =
-                    currFrame->get<Function *>(dataIndexOf(currRuntimeGraph, withInputs.front()));
+                    currFrame->get<Function *>(dataIndexOf(currCache, withInputs.front()));
+                ASSERT(func != nullptr, "NodeVM CALL resolved a null Function callee.");
                 auto *funcRuntimeGraph = func->graph();
                 ASSERT(
                     funcRuntimeGraph != nullptr,
@@ -395,35 +488,20 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     nodeRef);
 
                 slot_t callResult = call(funcRuntimeGraph, funcFrame);
-                currFrame->set(n->dataIndex, callResult);
+                if (n->dataIndex != 0) {
+                    currFrame->set(n->dataIndex, callResult);
+                }
             } break;
 
             case GCNodeKind::Func: {
                 auto *callerRuntimeGraph = currRuntimeGraph;
-                auto *runtimeTarget      = nodeVmCacheOf(currRuntimeGraph)->directCallTargets[i];
+                auto *runtimeTarget      = currCache->directCallTargets[i];
                 ASSERT(
                     runtimeTarget != nullptr,
                     "NodeVM direct FUNC target must have a materialized runtime graph.");
 
-                // Tail-call optimization. See docs/technical/19_tail_call_optimization.md.
-                size_t anchorIdx = nodesSize;
-                for (size_t k = 0; k < nodesSize; ++k) {
-                    if (currNodes[k] == lastNode) {
-                        anchorIdx = k;
-                        break;
-                    }
-                }
-                const bool anchorOk =
-                    anchorIdx < nodesSize && camel::execute::hasOnlyTrivialRuntimeTailSuffixAfter(
-                                                 currRuntimeGraph,
-                                                 currNodes,
-                                                 anchorIdx);
-                const bool tailShape = (nodeRef == lastNode) ||
-                                       (lastNodeIsJoin && camel::execute::runtimeNodeOutputsContain(
-                                                              currRuntimeGraph,
-                                                              nodeRef,
-                                                              lastNode));
-                bool isTailCall      = anchorOk && tailShape;
+                const bool isTailCall = currCache->directCallTailEligible[i] != 0 ||
+                                        currCache->directCallFeedsTailJoin[i] != 0;
                 if (isTailCall) {
                     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                         "NodeVM",
@@ -447,6 +525,10 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                         // Switch to the callee graph and its topo sequence.
                         currRuntimeGraph = runtimeTarget;
                         currNodes        = topoNodesFor(currRuntimeGraph);
+                        currCache        = nodeVmCacheOf(currRuntimeGraph);
+                        ASSERT(
+                            currCache != nullptr,
+                            "NodeVM callee cache must be initialized before tail-call execution.");
 
                         // Mutual tail recursion is common because branches are
                         // compiled as subgraphs. Keep a twin frame and swap
@@ -466,11 +548,19 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                             twinFrame = currFrame;
 
                             Frame *funcFrame = framePool_.acquire(runtimeTarget);
-                            camel::execute::fillFrameForDirectInvoke(
-                                lastFrame,
-                                funcFrame,
-                                callerRuntimeGraph,
-                                nodeRef);
+                            const auto argSlots =
+                                directCallArgSlotsOf(nodeVmCacheOf(callerRuntimeGraph), i);
+                            topoNodesFor(runtimeTarget);
+                            auto *layout = nodeVmCallLayoutOf(runtimeTarget);
+                            ASSERT(layout != nullptr, "NodeVM call layout cache must exist.");
+                            ASSERT(
+                                argSlots.size() == layout->calleePortSlots.size(),
+                                "NodeVM direct-call cache arity mismatch.");
+                            for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
+                                funcFrame->set(
+                                    layout->calleePortSlots[argIndex],
+                                    lastFrame->get<slot_t>(argSlots[argIndex]));
+                            }
 
                             currFrame = funcFrame;
                             goto loop_start;
@@ -479,23 +569,40 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
 
                     // Self recursion and mutual recursion both land here to
                     // refresh the callee-visible argument slots.
-                    camel::execute::fillFrameForDirectInvoke(
-                        lastFrame,
-                        currFrame,
-                        callerRuntimeGraph,
-                        nodeRef);
+                    const auto argSlots =
+                        directCallArgSlotsOf(nodeVmCacheOf(callerRuntimeGraph), i);
+                    topoNodesFor(runtimeTarget);
+                    auto *layout = nodeVmCallLayoutOf(runtimeTarget);
+                    ASSERT(layout != nullptr, "NodeVM call layout cache must exist.");
+                    ASSERT(
+                        argSlots.size() == layout->calleePortSlots.size(),
+                        "NodeVM direct-call cache arity mismatch.");
+                    for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
+                        currFrame->set(
+                            layout->calleePortSlots[argIndex],
+                            lastFrame->get<slot_t>(argSlots[argIndex]));
+                    }
                     goto loop_start;
                 }
 
-                Frame *funcFrame = framePool_.acquire(runtimeTarget);
-                camel::execute::fillFrameForDirectInvoke(
-                    currFrame,
-                    funcFrame,
-                    callerRuntimeGraph,
-                    nodeRef);
+                Frame *funcFrame    = framePool_.acquire(runtimeTarget);
+                const auto argSlots = directCallArgSlotsOf(currCache, i);
+                topoNodesFor(runtimeTarget);
+                auto *layout = nodeVmCallLayoutOf(runtimeTarget);
+                ASSERT(layout != nullptr, "NodeVM call layout cache must exist.");
+                ASSERT(
+                    argSlots.size() == layout->calleePortSlots.size(),
+                    "NodeVM direct-call cache arity mismatch.");
+                for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
+                    funcFrame->set(
+                        layout->calleePortSlots[argIndex],
+                        currFrame->get<slot_t>(argSlots[argIndex]));
+                }
                 slot_t callResult = call(runtimeTarget, funcFrame);
 
-                currFrame->set(n->dataIndex, callResult);
+                if (n->dataIndex != 0) {
+                    currFrame->set(n->dataIndex, callResult);
+                }
             } break;
 
             case GCNodeKind::Oper: {
@@ -523,10 +630,10 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
 
                 operIndices_.clear();
                 for (gc_node_ref_t inputRef : currRuntimeGraph->normInputsOf(nodeRef))
-                    operIndices_.push_back(dataIndexOf(currRuntimeGraph, inputRef));
+                    operIndices_.push_back(dataIndexOf(currCache, inputRef));
                 size_t normCnt = operIndices_.size();
                 for (gc_node_ref_t inputRef : currRuntimeGraph->withInputsOf(nodeRef))
-                    operIndices_.push_back(dataIndexOf(currRuntimeGraph, inputRef));
+                    operIndices_.push_back(dataIndexOf(currCache, inputRef));
 
                 data_arr_t nargs{operIndices_.data(), normCnt};
                 data_arr_t wargs{operIndices_.data() + normCnt, operIndices_.size() - normCnt};

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -147,8 +147,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
     Frame *rootActiveFrame      = rootFrame;
     const Bytecode *base        = bytecodes_.data();
     const Bytecode *bc          = nullptr;
-    const size_t pcStackBase    = pcStack_.size();
-    const size_t frameStackBase = frameStack_.size();
+    const size_t stackDepthBase = stackDepth_;
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
     const size_t jitSaveBase = s_jit_save_depth;
 #endif
@@ -248,7 +247,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         Type *srcType     = currFrame->typeAt<Type>(srcIdx);
         slot_t value      = currFrame->get<slot_t>(srcIdx);
         slot_t result     = targetType->castSlotFrom(value, srcType);
-        currFrame->set(bc->result, result);
+        if (bc->result != 0) {
+            currFrame->set(bc->result, result);
+        }
 
         NEXT();
     }
@@ -397,7 +398,8 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         } break;
 
         case TypeCode::Function: {
-            auto func          = tt::as_ptr<Function>(srcObj);
+            auto *func = dynamic_cast<Function *>(srcObj);
+            ASSERT(func != nullptr, "FILL(Function) must clone a runtime Function object.");
             Tuple *closureData = func->tuple();
             for (size_t j = 0; j < bc->withCnt(); ++j) {
                 closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
@@ -425,7 +427,8 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         const data_arr_t nargs = bc->nargs();
         const data_arr_t wargs = bc->wargs();
         auto function          = currFrame->get<Function *>(wargs[0]);
-        auto *runtimeTarget    = function->graph();
+        ASSERT(function != nullptr, "GotoVM CALL resolved a null Function callee.");
+        auto *runtimeTarget = function->graph();
         ASSERT(
             runtimeTarget != nullptr,
             "FastVM indirect CALL requires a materialized runtime graph target.");
@@ -473,9 +476,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             Frame *funcFrame       = acquireFrameForCall(runtimeTarget);
             size_t argsCnt         = bc->normCnt();
             const data_idx_t *args = bc->operands();
-            for (size_t i = 0; i < argsCnt; ++i) {
-                funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
-            }
+            seedDirectCallFrame(currFrame, funcFrame, runtimeTarget, args, argsCnt);
             pc        = static_cast<size_t>(bc->fastop[1]);
             currFrame = funcFrame;
             JUMP();
@@ -492,20 +493,22 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             JitEntryFn fn    = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
             Frame *funcFrame = [&]() {
                 Frame *frame = framePool_.acquire(runtimeTarget);
-                populateCallFrame(frame, args, argsCnt, [&](data_idx_t idx) {
+                populateCallFrame(frame, runtimeTarget, args, argsCnt, [&](data_idx_t idx) {
                     return currFrame->get<slot_t>(idx);
                 });
                 return frame;
             }();
             slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
             JIT_RESTORE_PC_BC();
-            currFrame->set(bc->result, result);
+            if (bc->result != 0) {
+                currFrame->set(bc->result, result);
+            }
             NEXT();
         }
         push(pc, currFrame);
         Frame *funcFrame = [&]() {
             Frame *frame = framePool_.acquire(runtimeTarget);
-            populateCallFrame(frame, args, argsCnt, [&](data_idx_t idx) {
+            populateCallFrame(frame, runtimeTarget, args, argsCnt, [&](data_idx_t idx) {
                 return currFrame->get<slot_t>(idx);
             });
             return frame;
@@ -522,9 +525,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         Frame *funcFrame       = acquireFrameForCall(runtimeTarget);
         size_t argsCnt         = bc->normCnt();
         const data_idx_t *args = bc->operands();
-        for (size_t i = 0; i < argsCnt; ++i) {
-            funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
-        }
+        seedDirectCallFrame(currFrame, funcFrame, runtimeTarget, args, argsCnt);
         pc        = bc->fastop[1];
         currFrame = funcFrame;
         JUMP();
@@ -552,7 +553,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             const data_idx_t *args = bc->operands();
             Frame *newFrame        = [&]() {
                 Frame *frame = framePool_._acquire(runtimeTailTarget);
-                populateCallFrame(frame, args, argsCnt, [&](data_idx_t idx) {
+                populateCallFrame(frame, runtimeTailTarget, args, argsCnt, [&](data_idx_t idx) {
                     return lastFrame.get<slot_t>(idx);
                 });
                 framePool_._resetTop();
@@ -570,7 +571,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         const data_idx_t *args = bc->operands();
         currFrame              = [&]() {
             Frame *frame = framePool_._acquire(runtimeTailTarget);
-            populateCallFrame(frame, args, argsCnt, [&](data_idx_t idx) {
+            populateCallFrame(frame, runtimeTailTarget, args, argsCnt, [&](data_idx_t idx) {
                 return lastFrame.get<slot_t>(idx);
             });
             framePool_._resetTop();
@@ -590,9 +591,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         currFrame              = acquireFrameForTail(runtimeTailTarget);
         size_t argsCnt         = bc->normCnt();
         const data_idx_t *args = bc->operands();
-        for (size_t i = 0; i < argsCnt; ++i) {
-            currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
-        }
+        seedDirectCallFrame(&lastFrame, currFrame, runtimeTailTarget, args, argsCnt);
         if (targetGraph != lastGraph) {
             framePool_._resetTop();
         }
@@ -714,12 +713,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         if (currFrame != rootActiveFrame) {
             releaseFrame(rootActiveFrame);
         }
-        while (frameStack_.size() > frameStackBase) {
-            releaseFrame(frameStack_.back());
-            frameStack_.pop_back();
-        }
-        while (pcStack_.size() > pcStackBase) {
-            pcStack_.pop_back();
+        while (stackDepth_ > stackDepthBase) {
+            releaseFrame(frameStack_[stackDepth_ - 1]);
+            --stackDepth_;
         }
 
         throw reportRuntimeFault(
@@ -746,12 +742,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         if (currFrame != rootActiveFrame) {
             releaseFrame(rootActiveFrame);
         }
-        while (frameStack_.size() > frameStackBase) {
-            releaseFrame(frameStack_.back());
-            frameStack_.pop_back();
-        }
-        while (pcStack_.size() > pcStackBase) {
-            pcStack_.pop_back();
+        while (stackDepth_ > stackDepthBase) {
+            releaseFrame(frameStack_[stackDepth_ - 1]);
+            --stackDepth_;
         }
         throw;
     }

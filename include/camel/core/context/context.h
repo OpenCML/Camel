@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -126,7 +126,7 @@ class Context : public std::enable_shared_from_this<Context> {
     GIR::graph_ptr_t compileRootGraph() const;
     GIR::graph_ptr_t compileMainGraph() const;
     camel::runtime::GCGraph *runtimeRootGraph();
-    camel::runtime::GCGraph *materializeRuntimeRoot(const GIR::graph_ptr_t &rootGraph);
+    camel::runtime::GCGraph *materializeRuntimeRoot();
     camel::runtime::GCGraph *adoptRuntimeRoot(camel::runtime::GCGraph *runtimeRoot);
     camel::runtime::GCGraph *installRuntimeRoot(camel::runtime::GCGraph *runtimeRoot);
     camel::runtime::GCGraph *currentRuntimeRoot() const;

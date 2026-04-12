@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,6 +41,13 @@
 
 namespace camel::runtime {
 
+struct RuntimeDraftIdentity {
+    GCGraph *sourceGraph = nullptr;
+    std::string stableId;
+    std::string mangledName;
+    std::string name;
+};
+
 class RuntimeGraphDraftSession {
   public:
     RuntimeGraphDraftSession(
@@ -59,12 +66,17 @@ class RuntimeGraphDraftSession {
     GCGraph *commit();
 
   private:
+    struct DraftEntry {
+        std::unique_ptr<GraphDraft> draft;
+        RuntimeDraftIdentity identity;
+    };
+
     GraphDraft &ensureDraft(GCGraph *graph);
     std::vector<GCGraph *> collectCommitClosure() const;
 
     camel::core::context::context_ptr_t context_;
     GCGraph *runtimeRoot_ = nullptr;
-    std::unordered_map<GCGraph *, std::unique_ptr<GraphDraft>> drafts_;
+    std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
 };
 
 } // namespace camel::runtime

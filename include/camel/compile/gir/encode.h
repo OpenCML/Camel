@@ -1,7 +1,7 @@
 /**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
+ * You may use this software according to the terms and conditions of the
  * MIT license. You may obtain a copy of the MIT license at:
  * [https://opensource.org/license/mit]
  *
@@ -12,17 +12,29 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: May. 05, 2024
+ * Created: Apr. 12, 2026
  * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
+/*
+ * Compile-side Graph -> GCGraph export entrypoints.
+ *
+ * Runtime graph materialization is a compile-side responsibility. Keep the
+ * API here rather than on `Graph` itself so the mutable compile graph object
+ * does not own runtime-export behavior.
+ */
+
 #pragma once
 
-#include "gir/encode.h"
-#include "gir/graph.h"
-#include "gir/nodes.h"
-#include "gir/types.h"
+#include "types.h"
 
-namespace camel::compile::gir {}
-namespace GIR = camel::compile::gir;
+namespace camel::runtime {
+class GCGraph;
+}
+
+namespace camel::compile::gir {
+
+camel::runtime::GCGraph *encodeToRuntimeGraph(const graph_ptr_t &rootGraph);
+
+} // namespace camel::compile::gir

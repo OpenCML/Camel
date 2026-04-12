@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -67,7 +67,17 @@ int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result) {
 Context::Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
     : entryConfig_(entryConf), diagConfig_(diagConf) {}
 
-Context::~Context() = default;
+Context::~Context() {
+    // Runtime function objects stored inside modules may consult GCGraph-backed
+    // closure metadata during teardown. Release module-owned runtime data before
+    // dropping the graph closure so those metadata pointers stay valid for the
+    // whole object destruction cascade.
+    mainModule_.reset();
+    modules_.clear();
+    builtinModules_.clear();
+    exeMgr_.reset();
+    runtimeGraphMgr_.reset();
+}
 
 std::string EntryConfig::toString() const {
     std::ostringstream os;
@@ -532,13 +542,13 @@ GIR::graph_ptr_t Context::compileMainGraph() const {
 }
 
 camel::runtime::GCGraph *Context::runtimeRootGraph() {
-    return currentRuntimeRoot() ? currentRuntimeRoot() : materializeRuntimeRoot(compileRootGraph());
+    return currentRuntimeRoot() ? currentRuntimeRoot() : materializeRuntimeRoot();
 }
 
-camel::runtime::GCGraph *Context::materializeRuntimeRoot(const GIR::graph_ptr_t &rootGraph) {
+camel::runtime::GCGraph *Context::materializeRuntimeRoot() {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     runtimeGraphMgr_->clear();
-    camel::runtime::GCGraph *runtimeRoot = rootGraph ? rootGraph->encode() : nullptr;
+    camel::runtime::GCGraph *runtimeRoot = GIR::encodeToRuntimeGraph(compileRootGraph());
     runtimeGraphMgr_->adoptRoot(runtimeRoot);
     registerRuntimeGraphDebugInfo(runtimeRoot);
     return runtimeRoot;

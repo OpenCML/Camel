@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -221,6 +221,32 @@ bool X64Backend::compileBytecode(
     // recursive fib keep the hot-path JIT speedup.
     if (!canUseFramelessSelfFunc)
         return fail("graph requires interpreter fallback: " + framelessFailureReason);
+
+    auto fillDirectCallDstDisps =
+        [&](const camel::runtime::GCGraph *targetGraph, size_t argsCnt, int32_t *dstDisps) {
+            ASSERT(targetGraph != nullptr, "JIT direct call target graph is null.");
+            const auto normPorts                       = targetGraph->normPorts();
+            const auto withPorts                       = targetGraph->withPorts();
+            [[maybe_unused]] const size_t expectedArgs = normPorts.size() + withPorts.size();
+            ASSERT(
+                argsCnt == expectedArgs,
+                std::format(
+                    "JIT direct-call arity mismatch for graph '{}': expected {}, got {}.",
+                    targetGraph->name(),
+                    expectedArgs,
+                    argsCnt));
+            size_t argIndex = 0;
+            for (auto portRef : normPorts) {
+                const auto *port = targetGraph->node(portRef);
+                ASSERT(port != nullptr, "JIT direct-call norm port is null.");
+                dstDisps[argIndex++] = slotDisp(port->dataIndex);
+            }
+            for (auto portRef : withPorts) {
+                const auto *port = targetGraph->node(portRef);
+                ASSERT(port != nullptr, "JIT direct-call with port is null.");
+                dstDisps[argIndex++] = slotDisp(port->dataIndex);
+            }
+        };
 
     // Compare-Branch fusion state: when a comparison detects a following BRCH
     // using its result, it emits only VLoadFromFrame + VCmpRegImm (no setcc/store),
@@ -799,6 +825,10 @@ bool X64Backend::compileBytecode(
                     params->argsCnt                = static_cast<uint8_t>(bc.normCnt());
                     for (uint8_t ai = 0; ai < params->argsCnt; ++ai)
                         params->argSrcDisps[ai] = slotDisp(bc.operands()[ai]);
+                    fillDirectCallDstDisps(
+                        targetRuntimeGraph,
+                        params->argsCnt,
+                        params->argDstDisps);
                     std::memset(params->argVRegs, 0xFF, sizeof(params->argVRegs));
                     params->isSameGraph = sameGraph;
                     params->extra2Addr  = reinterpret_cast<uint64_t>(bc.extra2());
@@ -883,8 +913,10 @@ bool X64Backend::compileBytecode(
                     argRegs.push_back(v);
                     loadSlot(args[i], slotDisp(args[i]), v);
                 }
+                int32_t argDstDisps[8]{};
+                fillDirectCallDstDisps(unit.runtimeGraph, argsCnt, argDstDisps);
                 for (size_t i = 0; i < argsCnt; ++i)
-                    build.emitVStoreToFrame(slotDisp(static_cast<int>(i + 1)), argRegs[i]);
+                    build.emitVStoreToFrame(argDstDisps[i], argRegs[i]);
                 build.emitJmpRel32(static_cast<uint32_t>(entryPc));
                 break;
             }

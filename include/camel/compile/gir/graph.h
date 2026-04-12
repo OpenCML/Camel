@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@
 #include "camel/core/slot.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/runtime/draft.h"
 #include "camel/utils/debug.h"
 #include "camel/utils/exstore.h"
 #include "camel/utils/type.h"
@@ -48,6 +49,8 @@ class SourceContext;
 namespace camel::compile::gir {
 
 class Builder;
+struct GraphColdData;
+class GraphBuilder;
 
 using Type              = camel::core::type::Type;
 using FunctionType      = camel::core::type::FunctionType;
@@ -104,6 +107,10 @@ class Graph : public std::enable_shared_from_this<Graph> {
     // Compile-time editable graph operations. Graph is no longer a public
     // cross-stage IR; during compilation it is the mutable carrier itself.
     Node *ownNode(Node *node);
+    void bindDraftNode(Node *node, runtime::gc_node_ref_t draftId);
+    runtime::gc_node_ref_t draftNodeId(const Node *node) const;
+    runtime::gc_node_ref_t tryDraftNodeId(const Node *node) const;
+    bool hasDraftNode(const Node *node) const;
     data_idx_t addStaticSlot(slot_t slot);
     data_idx_t addStaticData(const data_ptr_t &data);
     data_idx_t addRuntimeData();
@@ -121,10 +128,10 @@ class Graph : public std::enable_shared_from_this<Graph> {
     void eraseDependency(const graph_ptr_t &dependency);
     void touch();
     void refreshDerivedLayout();
-    camel::runtime::GCGraph *encode();
 
     FunctionType *funcType() const { return signature_.funcType; }
-    graph_arena_ptr_t arena() const { return arena_; }
+    graph_arena_ptr_t arena() const;
+    GraphBuilder &builder() const;
     size_t frameSize() const { return frameSize_; }
     ::Tuple *staticArea() const { return staticArea_; }
     bool hasFrameLayout() const { return frameSize_ != 0 && staticArea_ != nullptr; }
@@ -132,14 +139,9 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const TupleType *runtimeDataType() const { return signature_.runtimeDataType; }
     const TupleType *closureType() const { return signature_.closureType; }
 
-    const static_slot_vec_t &staticDataArr() const { return staticDataArr_; }
+    const static_slot_vec_t &staticDataArr() const;
     slot_t getStaticDataSlot(data_idx_t index) const;
-    size_t staticDataSize() const {
-        if (hasPackedStaticData_) {
-            return packedStaticDataSize_;
-        }
-        return staticDataArr().size();
-    }
+    size_t staticDataSize() const;
     size_t runtimeDataSize() const { return signature_.runtimeDataSize; }
 
     std::optional<std::unordered_set<graph_ptr_t>>
@@ -178,6 +180,8 @@ class Graph : public std::enable_shared_from_this<Graph> {
     const std::string &nodeDebugEntityId(const Node *node) const;
     const std::string &nodePortName(const Node *node) const;
     const std::string &nodeAccsKey(const Node *node) const;
+    void registerNodePortName(const Node *node, std::string name);
+    void registerNodeAccsKey(const Node *node, std::string key);
 
     /// Register an OperatorIndex shared_ptr in this graph and return the raw
     /// pointer for OperNode to hold.
@@ -209,13 +213,15 @@ class Graph : public std::enable_shared_from_this<Graph> {
     /// Placeholder ID for mutable compile nodes; runtime encoding later
     /// promotes it to a content-addressed entity ID when debug metadata is emitted.
     static void installProvisionalNodeStableId(Graph &graph, const Node *node);
+    void setNodeDebugEntityId(const Node *node, std::string id);
+    void eraseNodeColdData(const Node *node);
     void packStaticSlotsToFrozen();
     void installFinalFrameLayout();
 
     std::string name_;
     std::string stableId_;
     graph_wptr_t outer_;
-    graph_arena_ptr_t arena_;
+    std::unique_ptr<GraphBuilder> builder_;
 
     std::unordered_map<std::string, std::unordered_set<graph_ptr_t>> subGraphs_;
     std::unordered_set<graph_ptr_t> dependencies_;
@@ -235,25 +241,6 @@ class Graph : public std::enable_shared_from_this<Graph> {
     size_t frameSize_                = 0;
     ::Tuple *staticArea_             = nullptr;
 
-    // --- Node ownership ---
-    // Node objects are constructed in GraphArena; tracked destructors let the
-    // arena destroy all node objects together when Graph is destroyed.
-    // Graph only records the node set for traversal, freezing, and debug-map maintenance.
-    std::vector<Node *> ownedNodes_;
-
-    // --- Centralized node attributes ---
-    // stableId and portName are not stored on Node itself; Graph manages them centrally.
-    // This keeps Node closer to trivial destruction (no std::string members)
-    // and avoids dynamic strings in frozen arena nodes.
-    std::unordered_map<const Node *, std::string> nodeStableIds_;
-    std::unordered_map<const Node *, std::string> nodePortNames_;
-    std::unordered_map<const Node *, std::string> nodeAccsKeys_;
-
-    // --- Centralized non-trivial data ownership ---
-    // OperNode holds a raw pointer; the actual shared_ptr ownership is managed by Graph.
-    // This keeps Node closer to trivial destruction and paves the way for arena-based allocation.
-    std::unordered_map<const ::OperatorIndex *, std::shared_ptr<::OperatorIndex>>
-        operIndexRegistry_;
     node_vec_t normPorts_, withPorts_, closure_;
     node_vec_t nodes_;
     Node *exitNode_ = nullptr;

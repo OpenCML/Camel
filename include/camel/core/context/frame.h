@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -390,11 +390,14 @@ class FramePool {
         if (top_ + frameSize > end_) {
             CAMEL_LOG_FATAL_S(
                 "FramePool",
-                "[{}] Out of memory: top = {}, need = {}, end = {}",
+                "[{}] Out of memory for runtime graph <{}>: top = {}, need = {}, end = {}, "
+                "runtimeDataSize = {}",
                 mm::formatAddress(this, true),
+                graph ? graph->name() : "(null)",
                 mm::formatAddress(top_, true),
                 frameSize,
-                mm::formatAddress(end_, true));
+                mm::formatAddress(end_, true),
+                graph && graph->runtimeDataType() ? graph->runtimeDataType()->size() : 0);
             throw std::bad_alloc{};
         }
         Frame *frame = new (top_) Frame(graph, graph->staticArea(), graph->runtimeDataType());

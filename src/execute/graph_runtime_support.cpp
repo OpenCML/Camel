@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 06, 2026
- * Updated: Apr. 11, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,7 +98,14 @@ std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GC
         if (state[index] == 2) {
             return;
         }
-        ASSERT(state[index] != 1, "Cycle detected while building runtime execution topo.");
+        if (state[index] == 1) {
+            throw std::runtime_error(
+                std::format(
+                    "Cycle detected while building runtime execution topo in graph '{}' at node "
+                    "ref {}.",
+                    graph->name(),
+                    index));
+        }
         state[index] = 1;
 
         for (gc_node_ref_t input : graph->ctrlInputsOf(index)) {
@@ -115,10 +122,16 @@ std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GC
         order.push_back(index);
     };
 
-    if (graph->returnNodeRef() != camel::runtime::kInvalidNodeRef) {
-        visit(graph->returnNodeRef());
-    } else if (graph->exitNodeRef() != camel::runtime::kInvalidNodeRef) {
+    // Execution reachability must start from the control-complete exit when it
+    // exists. For sync/effectful graphs the returned value is often forwarded
+    // from a trailing GATE whose norm input is the value and whose ctrl input
+    // encodes the side-effect chain. Starting from returnNodeRef alone drops
+    // that control suffix and causes schedulers to compile only the returned
+    // constant while silently skipping the observable work.
+    if (graph->exitNodeRef() != camel::runtime::kInvalidNodeRef) {
         visit(graph->exitNodeRef());
+    } else if (graph->returnNodeRef() != camel::runtime::kInvalidNodeRef) {
+        visit(graph->returnNodeRef());
     }
     return order;
 }
@@ -425,90 +438,141 @@ slot_t readRuntimeGraphReturn(camel::runtime::GCGraph *graph, Frame *frame) {
 
 void fillFrameForDirectInvoke(
     Frame *from, Frame *dest, camel::runtime::GCGraph *callerGraph, gc_node_ref_t callNodeIndex) {
-    ASSERT(
-        from != nullptr && dest != nullptr,
-        "Frame pointer is null in runtime direct invoke binding.");
-    ASSERT(
-        callerGraph != nullptr,
-        "Caller runtime graph is null in runtime direct invoke binding.");
+    if (from == nullptr || dest == nullptr) {
+        throw std::runtime_error("Frame pointer is null in runtime direct invoke binding.");
+    }
+    if (callerGraph == nullptr) {
+        throw std::runtime_error("Caller runtime graph is null in runtime direct invoke binding.");
+    }
     auto *targetGraph = dest->runtimeGraph();
-    ASSERT(
-        targetGraph != nullptr,
-        "Destination frame is missing runtime graph in runtime direct invoke binding.");
-    ASSERT(callerGraph->node(callNodeIndex) != nullptr, "Direct invoke call node record is null.");
+    if (targetGraph == nullptr) {
+        throw std::runtime_error(
+            "Destination frame is missing runtime graph in runtime direct invoke binding.");
+    }
+    if (callerGraph->node(callNodeIndex) == nullptr) {
+        throw std::runtime_error("Direct invoke call node record is null.");
+    }
 
     const auto callerNormInputs = callerGraph->normInputsOf(callNodeIndex);
     const auto targetNormPorts  = targetGraph->normPorts();
-    ASSERT(
-        callerNormInputs.size() == targetNormPorts.size(),
-        "Norm nodes and ports count mismatch in runtime direct invoke binding.");
+    if (callerNormInputs.size() != targetNormPorts.size()) {
+        throw std::runtime_error(
+            std::format(
+                "Runtime direct invoke norm-arity mismatch: caller graph '{}' node {} has {} args, "
+                "target graph '{}' has {} norm ports.",
+                callerGraph->name(),
+                callNodeIndex,
+                callerNormInputs.size(),
+                targetGraph->name(),
+                targetNormPorts.size()));
+    }
     for (size_t i = 0; i < callerNormInputs.size(); ++i) {
-        const auto *argRecord = callerGraph->node(callerNormInputs[i]);
-        ASSERT(argRecord != nullptr, "Direct invoke norm argument record is null.");
-        dest->set(
-            targetGraph->node(targetNormPorts[i])->dataIndex,
-            from->get<slot_t>(argRecord->dataIndex));
+        const auto *argRecord  = callerGraph->node(callerNormInputs[i]);
+        const auto *portRecord = targetGraph->node(targetNormPorts[i]);
+        if (argRecord == nullptr || portRecord == nullptr) {
+            throw std::runtime_error("Runtime direct invoke norm argument/port record is null.");
+        }
+        dest->set(portRecord->dataIndex, from->get<slot_t>(argRecord->dataIndex));
     }
 
     const auto callerWithInputs = callerGraph->withInputsOf(callNodeIndex);
     const auto targetWithPorts  = targetGraph->withPorts();
-    ASSERT(
-        callerWithInputs.size() == targetWithPorts.size(),
-        "With nodes and ports count mismatch in runtime direct invoke binding.");
+    if (callerWithInputs.size() != targetWithPorts.size()) {
+        throw std::runtime_error(
+            std::format(
+                "Runtime direct invoke with-arity mismatch: caller graph '{}' node {} has {} args, "
+                "target graph '{}' has {} with ports.",
+                callerGraph->name(),
+                callNodeIndex,
+                callerWithInputs.size(),
+                targetGraph->name(),
+                targetWithPorts.size()));
+    }
     for (size_t i = 0; i < callerWithInputs.size(); ++i) {
-        const auto *argRecord = callerGraph->node(callerWithInputs[i]);
-        ASSERT(argRecord != nullptr, "Direct invoke with argument record is null.");
-        dest->set(
-            targetGraph->node(targetWithPorts[i])->dataIndex,
-            from->get<slot_t>(argRecord->dataIndex));
+        const auto *argRecord  = callerGraph->node(callerWithInputs[i]);
+        const auto *portRecord = targetGraph->node(targetWithPorts[i]);
+        if (argRecord == nullptr || portRecord == nullptr) {
+            throw std::runtime_error("Runtime direct invoke with argument/port record is null.");
+        }
+        dest->set(portRecord->dataIndex, from->get<slot_t>(argRecord->dataIndex));
     }
 }
 
 void fillFrameForIndirectCall(
     Frame *from, Frame *dest, camel::runtime::GCGraph *callerGraph, gc_node_ref_t callNodeIndex) {
-    ASSERT(
-        from != nullptr && dest != nullptr,
-        "Frame pointer is null in runtime indirect call binding.");
-    ASSERT(
-        callerGraph != nullptr,
-        "Caller runtime graph is null in runtime indirect call binding.");
+    if (from == nullptr || dest == nullptr) {
+        throw std::runtime_error("Frame pointer is null in runtime indirect call binding.");
+    }
+    if (callerGraph == nullptr) {
+        throw std::runtime_error("Caller runtime graph is null in runtime indirect call binding.");
+    }
     auto *targetGraph = dest->runtimeGraph();
-    ASSERT(
-        targetGraph != nullptr,
-        "Destination frame is missing runtime graph in runtime indirect call binding.");
-    ASSERT(callerGraph->node(callNodeIndex) != nullptr, "Indirect call node record is null.");
+    if (targetGraph == nullptr) {
+        throw std::runtime_error(
+            "Destination frame is missing runtime graph in runtime indirect call binding.");
+    }
+    if (callerGraph->node(callNodeIndex) == nullptr) {
+        throw std::runtime_error("Indirect call node record is null.");
+    }
 
     const auto callerNormInputs = callerGraph->normInputsOf(callNodeIndex);
     const auto targetNormPorts  = targetGraph->normPorts();
-    ASSERT(
-        callerNormInputs.size() == targetNormPorts.size(),
-        "Norm nodes and ports count mismatch in runtime indirect call binding.");
+    if (callerNormInputs.size() != targetNormPorts.size()) {
+        throw std::runtime_error(
+            std::format(
+                "Runtime indirect call norm-arity mismatch: caller graph '{}' node {} has {} args, "
+                "target graph '{}' has {} norm ports.",
+                callerGraph->name(),
+                callNodeIndex,
+                callerNormInputs.size(),
+                targetGraph->name(),
+                targetNormPorts.size()));
+    }
     for (size_t i = 0; i < callerNormInputs.size(); ++i) {
-        const auto *argRecord = callerGraph->node(callerNormInputs[i]);
-        ASSERT(argRecord != nullptr, "Indirect call norm argument record is null.");
-        dest->set(
-            targetGraph->node(targetNormPorts[i])->dataIndex,
-            from->get<slot_t>(argRecord->dataIndex));
+        const auto *argRecord  = callerGraph->node(callerNormInputs[i]);
+        const auto *portRecord = targetGraph->node(targetNormPorts[i]);
+        if (argRecord == nullptr || portRecord == nullptr) {
+            throw std::runtime_error("Runtime indirect call norm argument/port record is null.");
+        }
+        dest->set(portRecord->dataIndex, from->get<slot_t>(argRecord->dataIndex));
     }
 
     const auto callerWithInputs = callerGraph->withInputsOf(callNodeIndex);
-    ASSERT(
-        !callerWithInputs.empty(),
-        "CALL node must have function input in runtime indirect call binding.");
+    if (callerWithInputs.empty()) {
+        throw std::runtime_error(
+            "CALL node must have function input in runtime indirect call binding.");
+    }
     const auto *calleeRecord = callerGraph->node(callerWithInputs.front());
-    ASSERT(calleeRecord != nullptr, "Indirect call callee record is null.");
-    Function *func                = from->get<Function *>(calleeRecord->dataIndex);
+    if (calleeRecord == nullptr) {
+        throw std::runtime_error("Indirect call callee record is null.");
+    }
+    Function *func = from->get<Function *>(calleeRecord->dataIndex);
+    if (func == nullptr) {
+        throw std::runtime_error("Indirect call callee slot resolved to null Function.");
+    }
     Tuple *closure                = func ? func->tuple() : nullptr;
     const auto targetClosureNodes = targetGraph->closureNodes();
     if (targetClosureNodes.empty()) {
         return;
     }
-    ASSERT(closure != nullptr, "Indirect call closure tuple is null.");
-    ASSERT(
-        closure->size() == targetClosureNodes.size(),
-        "Closure nodes and tuple size mismatch in runtime indirect call binding.");
+    if (closure == nullptr) {
+        throw std::runtime_error("Indirect call closure tuple is null.");
+    }
+    if (closure->size() != targetClosureNodes.size()) {
+        throw std::runtime_error(
+            std::format(
+                "Runtime indirect call closure-arity mismatch: target graph '{}' expects {}, "
+                "callee closure provides {}.",
+                targetGraph->name(),
+                targetClosureNodes.size(),
+                closure->size()));
+    }
     for (size_t i = 0; i < targetClosureNodes.size(); ++i) {
-        dest->set(targetGraph->node(targetClosureNodes[i])->dataIndex, closure->get<slot_t>(i));
+        const auto *closureRecord = targetGraph->node(targetClosureNodes[i]);
+        if (closureRecord == nullptr) {
+            throw std::runtime_error("Runtime indirect call closure node record is null.");
+        }
+        dest->set(closureRecord->dataIndex, closure->get<slot_t>(i));
     }
 }
 
