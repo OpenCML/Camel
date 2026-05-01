@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 12, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,7 +44,9 @@ struct DraftInlineResult {
 
 DraftInlineResult inlineCallableInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId);
-bool specializeDirectFuncInDraft(GraphDraft &draft, gc_node_ref_t funcNodeId);
-bool devirtualizeStaticCallInDraft(GraphDraft &draft, gc_node_ref_t callNodeId);
+bool specializeDirectFuncInDraft(
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId);
+bool devirtualizeStaticCallInDraft(
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId);
 
 } // namespace camel::runtime

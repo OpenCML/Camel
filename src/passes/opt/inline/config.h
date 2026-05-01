@@ -13,18 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 12, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * Shared runtime optimization pass configuration.
+ * Runtime rewrite pass configuration.
  *
- * The runtime-native rewrite stack is being split phase by phase. `std::inline`
- * already runs entirely on GCGraph/GraphDraft. The devirtualization and
- * specialization flags remain here because the long-term pass surface will stay
- * phase-addressable, but those phases are not yet implemented in the new
- * runtime-native engine.
+ * `std::inline` is intentionally an inline-only surface. `std::opt` is the
+ * aggregate rewrite pipeline that may also enable devirtualization and
+ * specialization before inlining. Keeping the two configuration types distinct
+ * prevents pass registration from accidentally collapsing back into the old
+ * "inline means all optimizations" behavior.
  */
 
 #pragma once
@@ -37,13 +37,15 @@ enum class InlineTargetStrategy {
     Hybrid,
 };
 
-struct OptimizeRewriteConfig {
-    bool enableDevirtualization             = false;
-    bool enableSpecialization               = false;
-    bool enableInlining                     = true;
+struct InlineRewriteConfig {
     InlineTargetStrategy inlineStrategy     = InlineTargetStrategy::Hybrid;
     size_t smallSubgraphMaxNonDataPortNodes = 8;
     bool blockCallsToSccEntryCallees        = true;
 };
 
-using InlineRewriteConfig = OptimizeRewriteConfig;
+struct OptimizeRewriteConfig {
+    bool enableDevirtualization = true;
+    bool enableSpecialization   = true;
+    bool enableInlining         = true;
+    InlineRewriteConfig inlineConfig{};
+};

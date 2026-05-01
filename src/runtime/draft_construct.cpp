@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: May. 01, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -88,7 +88,7 @@ std::vector<std::byte> bytesForBranchPayload(
 
 std::vector<gc_node_ref_t> mutatedInputs(
     std::span<const gc_node_ref_t> current, gc_node_ref_t nodeId, bool insert, bool replace,
-    gc_node_ref_t replacement) {
+    gc_node_ref_t replacement, bool dedupInsert = false) {
     std::vector<gc_node_ref_t> inputs(current.begin(), current.end());
     if (replace) {
         for (gc_node_ref_t &value : inputs) {
@@ -99,7 +99,7 @@ std::vector<gc_node_ref_t> mutatedInputs(
         return inputs;
     }
     if (insert) {
-        if (std::find(inputs.begin(), inputs.end(), nodeId) == inputs.end()) {
+        if (!dedupInsert || std::find(inputs.begin(), inputs.end(), nodeId) == inputs.end()) {
             inputs.push_back(nodeId);
         }
         return inputs;
@@ -116,7 +116,7 @@ ensureValueSlot(GraphDraft &draft, camel::core::type::Type *type, gc_slot_idx_t 
     if (dataIndex != 0) {
         return dataIndex;
     }
-    if (type == nullptr || type == camel::core::type::Type::Void()) {
+    if (type == nullptr) {
         return 0;
     }
     return draft.allocateRuntimeSlot(type);
@@ -328,20 +328,25 @@ void GraphDraft::appendInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_r
     ASSERT(node(inputId) != nullptr, "Cannot append a missing input draft node.");
     switch (kind) {
     case DraftEdgeKind::Norm: {
+        // Value inputs are positional and may legitimately repeat, e.g. `(x, x)`, `[x, x]`,
+        // or `x + x`. The runtime graph must preserve that multiplicity instead of collapsing
+        // repeated edges into a set.
         const auto inputs =
-            mutatedInputs(normInputsOf(userId), inputId, true, false, kInvalidNodeRef);
+            mutatedInputs(normInputsOf(userId), inputId, true, false, kInvalidNodeRef, false);
         setNormInputs(userId, inputs);
         break;
     }
     case DraftEdgeKind::With: {
+        // `with` inputs carry ordered payloads for FILL/JOIN/CALL and therefore need the same
+        // multiset semantics as norm inputs.
         const auto inputs =
-            mutatedInputs(withInputsOf(userId), inputId, true, false, kInvalidNodeRef);
+            mutatedInputs(withInputsOf(userId), inputId, true, false, kInvalidNodeRef, false);
         setWithInputs(userId, inputs);
         break;
     }
     case DraftEdgeKind::Ctrl: {
         const auto inputs =
-            mutatedInputs(ctrlInputsOf(userId), inputId, true, false, kInvalidNodeRef);
+            mutatedInputs(ctrlInputsOf(userId), inputId, true, false, kInvalidNodeRef, true);
         setCtrlInputs(userId, inputs);
         break;
     }

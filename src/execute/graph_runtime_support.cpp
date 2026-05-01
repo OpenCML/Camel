@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 06, 2026
- * Updated: May. 01, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -376,6 +376,33 @@ gc_node_ref_t resolveRuntimeBranchArmEntry(
     const auto *brchBody = graph->nodeBodyAs<camel::runtime::GCBrchBody>(brchRef);
     ASSERT(brchBody != nullptr, "Runtime BRCH body is missing.");
 
+    std::unordered_set<gc_node_ref_t> preBranchDeps;
+    std::function<void(gc_node_ref_t)> collectPreBranchDeps = [&](gc_node_ref_t nodeRef) {
+        if (nodeRef == camel::runtime::kInvalidNodeRef || nodeRef == brchRef ||
+            nodeRef == brchBody->join || !graph->containsNodeRef(nodeRef) ||
+            !preBranchDeps.insert(nodeRef).second) {
+            return;
+        }
+        for (auto inputRef : graph->ctrlInputsOf(nodeRef)) {
+            collectPreBranchDeps(inputRef);
+        }
+        for (auto inputRef : graph->normInputsOf(nodeRef)) {
+            collectPreBranchDeps(inputRef);
+        }
+        for (auto inputRef : graph->withInputsOf(nodeRef)) {
+            collectPreBranchDeps(inputRef);
+        }
+    };
+    for (auto inputRef : graph->ctrlInputsOf(brchRef)) {
+        collectPreBranchDeps(inputRef);
+    }
+    for (auto inputRef : graph->normInputsOf(brchRef)) {
+        collectPreBranchDeps(inputRef);
+    }
+    for (auto inputRef : graph->withInputsOf(brchRef)) {
+        collectPreBranchDeps(inputRef);
+    }
+
     std::unordered_set<gc_node_ref_t> armRegion;
     std::vector<gc_node_ref_t> worklist{branchArms[armIndex].head};
     while (!worklist.empty()) {
@@ -402,10 +429,14 @@ gc_node_ref_t resolveRuntimeBranchArmEntry(
     std::unordered_set<gc_node_ref_t> dependencyVisited;
     std::function<void(gc_node_ref_t)> collectInputs = [&](gc_node_ref_t nodeRef) {
         if (nodeRef == camel::runtime::kInvalidNodeRef || nodeRef == brchRef ||
-            nodeRef == brchBody->join || !graph->containsNodeRef(nodeRef) ||
-            !dependencyVisited.insert(nodeRef).second) {
+            nodeRef == brchBody->join || preBranchDeps.contains(nodeRef) ||
+            !graph->containsNodeRef(nodeRef) || !dependencyVisited.insert(nodeRef).second) {
             return;
         }
+        // Branch-arm bytecode must jump to the first executable node that still
+        // belongs to the selected arm. Inputs already needed to evaluate the
+        // BRCH selector have been executed before branch dispatch and therefore
+        // must not pull the arm entry back to the graph prefix.
         armRegion.insert(nodeRef);
 
         for (auto inputRef : graph->ctrlInputsOf(nodeRef)) {

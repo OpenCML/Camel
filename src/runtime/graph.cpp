@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: May. 01, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -460,10 +460,22 @@ struct PlannedDraftNode {
 struct DraftPayloadPlan {
     std::vector<PlannedDraftNode> nodes;
     std::vector<gc_node_ref_t> runtimeRefsByDraftId;
+    std::vector<std::vector<gc_node_ref_t>> normUsersByDraftId;
+    std::vector<std::vector<gc_node_ref_t>> withUsersByDraftId;
+    std::vector<std::vector<gc_node_ref_t>> ctrlUsersByDraftId;
     gc_cnt_t nodeBlockCount = 0;
     gc_cnt_t edgeCount      = 0;
     gc_cnt_t branchArmCount = 0;
 };
+
+void appendUniqueDraftUser(
+    std::vector<std::vector<gc_node_ref_t>> &usersByDraftId, gc_node_ref_t inputId,
+    gc_node_ref_t userId) {
+    auto &users = usersByDraftId[inputId];
+    if (std::find(users.begin(), users.end(), userId) == users.end()) {
+        users.push_back(userId);
+    }
+}
 
 gc_cnt_t draftNodeBlockCount(const DraftNodeHeader &header) {
     size_t bodyBytes = 0;
@@ -512,6 +524,27 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
 
     DraftPayloadPlan plan;
     plan.runtimeRefsByDraftId.assign(draft.nodeSlotCount(), kInvalidNodeRef);
+    plan.normUsersByDraftId.resize(draft.nodeSlotCount());
+    plan.withUsersByDraftId.resize(draft.nodeSlotCount());
+    plan.ctrlUsersByDraftId.resize(draft.nodeSlotCount());
+
+    for (gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount(); ++draftId) {
+        if (!draft.alive(draftId)) {
+            continue;
+        }
+        for (gc_node_ref_t ref : draft.normInputsOf(draftId)) {
+            requireAlive(draftId, ref, "norm-input");
+            appendUniqueDraftUser(plan.normUsersByDraftId, ref, draftId);
+        }
+        for (gc_node_ref_t ref : draft.withInputsOf(draftId)) {
+            requireAlive(draftId, ref, "with-input");
+            appendUniqueDraftUser(plan.withUsersByDraftId, ref, draftId);
+        }
+        for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
+            requireAlive(draftId, ref, "ctrl-input");
+            appendUniqueDraftUser(plan.ctrlUsersByDraftId, ref, draftId);
+        }
+    }
 
     gc_off_t currentNodeOffset = 0;
     size_t edgeCount           = 0;
@@ -522,22 +555,13 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         }
         const DraftNodeHeader *header = draft.header(draftId);
         ASSERT(header != nullptr, "Draft payload plan requires a non-null node header.");
-        for (gc_node_ref_t ref : draft.normInputsOf(draftId)) {
-            requireAlive(draftId, ref, "norm-input");
+        for (gc_node_ref_t ref : plan.normUsersByDraftId[draftId]) {
+            requireAlive(draftId, ref, "derived-norm-user");
         }
-        for (gc_node_ref_t ref : draft.withInputsOf(draftId)) {
-            requireAlive(draftId, ref, "with-input");
+        for (gc_node_ref_t ref : plan.withUsersByDraftId[draftId]) {
+            requireAlive(draftId, ref, "derived-with-user");
         }
-        for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
-            requireAlive(draftId, ref, "ctrl-input");
-        }
-        for (gc_node_ref_t ref : draft.normUsersOf(draftId)) {
-            requireAlive(draftId, ref, "norm-user");
-        }
-        for (gc_node_ref_t ref : draft.withUsersOf(draftId)) {
-            requireAlive(draftId, ref, "with-user");
-        }
-        for (gc_node_ref_t ref : draft.ctrlUsersOf(draftId)) {
+        for (gc_node_ref_t ref : plan.ctrlUsersByDraftId[draftId]) {
             requireAlive(draftId, ref, "ctrl-user");
         }
         if (header->kind == GCNodeKind::Brch) {
@@ -558,8 +582,9 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
             static_cast<size_t>(currentNodeOffset) + blockCount,
             "Draft runtime node blob size");
         edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
-                     draft.ctrlInputsOf(draftId).size() + draft.normUsersOf(draftId).size() +
-                     draft.withUsersOf(draftId).size() + draft.ctrlUsersOf(draftId).size();
+                     draft.ctrlInputsOf(draftId).size() + plan.normUsersByDraftId[draftId].size() +
+                     plan.withUsersByDraftId[draftId].size() +
+                     plan.ctrlUsersByDraftId[draftId].size();
         if (header->kind == GCNodeKind::Brch) {
             branchArmCount += draft.branchArmsOf(draftId).size();
         }
@@ -644,9 +669,9 @@ void emitDraftPayload(
             .normInputs  = appendSlice(draft.normInputsOf(planned.draftId)),
             .withInputs  = appendSlice(draft.withInputsOf(planned.draftId)),
             .ctrlInputs  = appendSlice(draft.ctrlInputsOf(planned.draftId)),
-            .normOutputs = appendSlice(draft.normUsersOf(planned.draftId)),
-            .withOutputs = appendSlice(draft.withUsersOf(planned.draftId)),
-            .ctrlOutputs = appendSlice(draft.ctrlUsersOf(planned.draftId)),
+            .normOutputs = appendSlice(plan.normUsersByDraftId[planned.draftId]),
+            .withOutputs = appendSlice(plan.withUsersByDraftId[planned.draftId]),
+            .ctrlOutputs = appendSlice(plan.ctrlUsersByDraftId[planned.draftId]),
             .dataType    = effectiveDraftNodeType(draft, *draftHeader),
             .kind        = draftHeader->kind,
             .flags       = draftHeader->runtimeFlags,

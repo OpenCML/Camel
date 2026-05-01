@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 01, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,6 +59,11 @@ namespace {
 using GraphMap    = std::unordered_map<GCGraph *, GCGraph *>;
 using ObjectCache = std::unordered_map<const Object *, Object *>;
 using ObjectSet   = std::unordered_set<const Object *>;
+
+template <typename T> void hashCombine(size_t &seed, const T &value) {
+    const size_t h = std::hash<T>{}(value);
+    seed ^= h + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2);
+}
 
 bool shouldTraverseStaticSlotType(Type *type) {
     if (type == nullptr || !type->isGCTraced() || type->code() == TypeCode::Ref) {
@@ -475,6 +480,19 @@ GCGraph *encodeDraftClosureGraph(
 
 } // namespace
 
+size_t RuntimeSpecializationKeyHasher::operator()(const RuntimeSpecializationKey &key) const {
+    size_t seed = 0;
+    hashCombine(seed, key.baseGraph);
+    for (const RuntimeSpecializationBindingKey &binding : key.bindings) {
+        hashCombine(seed, static_cast<uint8_t>(binding.kind));
+        hashCombine(seed, binding.index);
+        hashCombine(seed, binding.value);
+        hashCombine(seed, binding.type);
+        hashCombine(seed, binding.runtimeFlags);
+    }
+    return seed;
+}
+
 RuntimeGraphDraftSession::RuntimeGraphDraftSession(
     const camel::core::context::context_ptr_t &context, GCGraph *runtimeRoot)
     : context_(context), runtimeRoot_(runtimeRoot) {
@@ -529,6 +547,19 @@ GraphDraft &RuntimeGraphDraftSession::ensureDraft(GCGraph *graph) {
 GraphDraft &RuntimeGraphDraftSession::edit(GCGraph *graph) { return ensureDraft(graph); }
 
 GraphDraft &RuntimeGraphDraftSession::rootDraft() { return ensureDraft(runtimeRoot_); }
+
+GCGraph *RuntimeGraphDraftSession::findSpecialization(const RuntimeSpecializationKey &key) const {
+    if (auto it = specializationCache_.find(key); it != specializationCache_.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
+
+void RuntimeGraphDraftSession::rememberSpecialization(
+    RuntimeSpecializationKey key, GCGraph *graph) {
+    ASSERT(graph != nullptr, "Runtime specialization cache cannot store a null graph.");
+    specializationCache_.insert_or_assign(std::move(key), graph);
+}
 
 std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
     std::vector<GCGraph *> closure;

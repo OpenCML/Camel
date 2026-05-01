@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -403,7 +403,11 @@ class MacroExecutor {
                     wargs.push_back(inputRecord->dataIndex);
                 }
                 int32_t brIndex = frame->get<int32_t>(nargs.front());
-                if (node->dataIndex == 0 || node->dataType == Type::Void()) {
+                if (node->dataIndex == 0) {
+                    break;
+                }
+                if (node->dataType == Type::Void()) {
+                    frame->set(node->dataIndex, NullSlot);
                     break;
                 }
                 slot_t branchData = frame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 12, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,7 @@
 #include "camel/core/context/context.h"
 #include "camel/runtime/draft.h"
 
+#include <cstdint>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -46,6 +47,33 @@ struct RuntimeDraftIdentity {
     std::string stableId;
     std::string mangledName;
     std::string name;
+};
+
+enum class RuntimeSpecializationBindingKind : uint8_t {
+    Norm,
+    With,
+    Closure,
+};
+
+struct RuntimeSpecializationBindingKey {
+    RuntimeSpecializationBindingKind kind = RuntimeSpecializationBindingKind::Norm;
+    size_t index                          = 0;
+    slot_t value                          = NullSlot;
+    camel::core::type::Type *type         = nullptr;
+    uint8_t runtimeFlags                  = 0;
+
+    bool operator==(const RuntimeSpecializationBindingKey &other) const = default;
+};
+
+struct RuntimeSpecializationKey {
+    GCGraph *baseGraph = nullptr;
+    std::vector<RuntimeSpecializationBindingKey> bindings;
+
+    bool operator==(const RuntimeSpecializationKey &other) const = default;
+};
+
+struct RuntimeSpecializationKeyHasher {
+    size_t operator()(const RuntimeSpecializationKey &key) const;
 };
 
 class RuntimeGraphDraftSession {
@@ -62,6 +90,9 @@ class RuntimeGraphDraftSession {
     GraphDraft &edit(GCGraph *graph);
     GraphDraft &rootDraft();
 
+    GCGraph *findSpecialization(const RuntimeSpecializationKey &key) const;
+    void rememberSpecialization(RuntimeSpecializationKey key, GCGraph *graph);
+
     std::vector<GCGraph *> collectReachableRuntimeGraphs() const;
     GCGraph *commit();
 
@@ -77,6 +108,8 @@ class RuntimeGraphDraftSession {
     camel::core::context::context_ptr_t context_;
     GCGraph *runtimeRoot_ = nullptr;
     std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
+    std::unordered_map<RuntimeSpecializationKey, GCGraph *, RuntimeSpecializationKeyHasher>
+        specializationCache_;
 };
 
 } // namespace camel::runtime

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Apr. 10, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,10 @@
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "macro/macro.h"
+#include "passes/opt/devirtualize/devirtualize.h"
 #include "passes/opt/inline/inline.h"
+#include "passes/opt/opt/opt.h"
+#include "passes/opt/specialize/specialize.h"
 #include "passes/sched/fastvm/bcdump.h"
 #include "passes/sched/fastvm/fastvm.h"
 #include "passes/sched/fastvm/jit/dump/asmdump.h"
@@ -204,6 +207,9 @@ PassScopePtr initPassScope() {
                                       });
                               })},
                          })},
+                    {"devirtualize", def(PASS(DevirtualizeRewritePass))},
+                    {"specialize", def(PASS(SpecializeRewritePass))},
+                    {"opt", def(PASS(OptimizeRewritePass))},
                     {"taskflow", def(PASS(TaskflowExecSchedPass))},
                     {"tfdump", def(PASS(TfDumpPass))},
                 }),

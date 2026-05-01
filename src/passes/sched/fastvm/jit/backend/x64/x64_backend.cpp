@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: May. 01, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -743,7 +743,13 @@ bool X64Backend::compileBytecode(
             break;
         }
         case OpCode::JOIN: {
-            if (bc.result == 0 || bc.extra()->pType == camel::core::type::Type::Void()) {
+            if (bc.result == 0) {
+                break;
+            }
+            if (bc.extra()->pType == camel::core::type::Type::Void()) {
+                x64::VRegId vNull = nextVReg++;
+                build.emitVLoadImm64(vNull, 0);
+                build.emitVStoreToFrame(slotDisp(bc.result), vNull);
                 break;
             }
             if (bc.withCnt() != 2)

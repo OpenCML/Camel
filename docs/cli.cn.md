@@ -47,6 +47,17 @@
 - `-L`, `--stdlib <path>`：指定标准库路径（默认当前目录下的 `./stdlib`）
 - `-E`, `--error-format <text|json>`：错误输出格式，默认为 `text`
 
+### 常用 Passes
+
+- `std::inline`：仅负责 inline 的 rewrite pass；默认目标策略等价于 `std::inline::hybrid`
+- `std::inline::small` / `std::inline::arm` / `std::inline::hybrid`：显式指定 inline 目标策略
+- `std::devirtualize`：运行时原生 devirtualization pass
+- `std::specialize`：运行时原生 specialization pass
+- `std::opt`：聚合式运行时原生优化流水线（`devirtualize` + `specialize` + `inline`）
+- `std::fvm`：高性能字节码虚拟机调度器
+- `std::jit`：带 JIT 的高性能字节码虚拟机调度器
+- `std::gir`：打印当前图中间表示并停止
+
 ---
 
 ## 信息展示（Information）

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 01, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,6 +43,7 @@
 #include <array>
 #include <cstring>
 #include <format>
+#include <tuple>
 #include <unordered_set>
 
 namespace camel::runtime {
@@ -252,6 +253,19 @@ DraftNodeInit snapshotNodeInit(const GraphDraft &draft, gc_node_ref_t nodeId) {
     };
 }
 
+RuntimeSpecializationBindingKind toRuntimeSpecializationBindingKind(FormalKind kind) {
+    switch (kind) {
+    case FormalKind::Norm:
+        return RuntimeSpecializationBindingKind::Norm;
+    case FormalKind::With:
+        return RuntimeSpecializationBindingKind::With;
+    case FormalKind::Closure:
+        return RuntimeSpecializationBindingKind::Closure;
+    }
+    ASSERT(false, "Unsupported runtime specialization binding kind.");
+    return RuntimeSpecializationBindingKind::Norm;
+}
+
 std::vector<std::pair<FormalKind, gc_node_ref_t>>
 orderedDirectCallFormalNodes(const GCGraph *graph) {
     ASSERT(graph != nullptr, "Ordered direct-call formal collection requires a non-null graph.");
@@ -391,6 +405,20 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
         if (!staticValue.valid()) {
             continue;
         }
+        if (staticValue.type->isGCTraced()) {
+            // Direct-call specialization bakes the bound value into the callee
+            // as a new static carrier. That is correct for immutable primitive
+            // values, but it breaks runtime object identity for GC values. A
+            // common failure mode is `COPY(static [])`: the caller intentionally
+            // materializes a fresh mutable array, while specialization would
+            // incorrectly capture the original static template object and
+            // disconnect later mutations from the caller-visible runtime copy.
+            //
+            // Closure-bound Function specialization remains handled by the
+            // dedicated closure path below. Here we conservatively keep all
+            // GC-traced actuals dynamic.
+            continue;
+        }
         bindings.push_back(
             DraftFormalBinding{
                 .kind         = formals[i].first,
@@ -427,11 +455,43 @@ GCGraph *encodeSpecializedGraph(
     return draft.encode(stableId, mangledName, name);
 }
 
+RuntimeSpecializationKey makeRuntimeSpecializationKey(
+    const GCGraph *baseGraph, std::span<const DraftFormalBinding> bindings) {
+    RuntimeSpecializationKey key{
+        .baseGraph = const_cast<GCGraph *>(baseGraph),
+        .bindings  = {},
+    };
+    key.bindings.reserve(bindings.size());
+    for (const DraftFormalBinding &binding : bindings) {
+        key.bindings.push_back(
+            RuntimeSpecializationBindingKey{
+                .kind         = toRuntimeSpecializationBindingKind(binding.kind),
+                .index        = binding.index,
+                .value        = binding.staticValue.value,
+                .type         = binding.staticValue.type,
+                .runtimeFlags = binding.staticValue.runtimeFlags,
+            });
+    }
+    std::sort(
+        key.bindings.begin(),
+        key.bindings.end(),
+        [](const RuntimeSpecializationBindingKey &lhs, const RuntimeSpecializationBindingKey &rhs) {
+            return std::tie(lhs.kind, lhs.index, lhs.type, lhs.value, lhs.runtimeFlags) <
+                   std::tie(rhs.kind, rhs.index, rhs.type, rhs.value, rhs.runtimeFlags);
+        });
+    return key;
+}
+
 GCGraph *specializeGraphWithBindings(
-    const GCGraph *baseGraph, std::span<const DraftFormalBinding> bindings, std::string_view tag,
-    size_t nonce) {
+    RuntimeGraphDraftSession &session, const GCGraph *baseGraph,
+    std::span<const DraftFormalBinding> bindings, std::string_view tag, size_t nonce) {
     if (!baseGraph || bindings.empty()) {
         return const_cast<GCGraph *>(baseGraph);
+    }
+
+    RuntimeSpecializationKey cacheKey = makeRuntimeSpecializationKey(baseGraph, bindings);
+    if (GCGraph *cached = session.findSpecialization(cacheKey)) {
+        return cached;
     }
 
     auto draft = GraphDraft::decode(baseGraph);
@@ -447,10 +507,13 @@ GCGraph *specializeGraphWithBindings(
         draft->replaceAllValueUses(formalDraftId, staticNodeId);
         eraseFormalFromDraft(*draft, binding.kind, formalDraftId);
     }
-    return encodeSpecializedGraph(*draft, baseGraph, tag, nonce);
+    GCGraph *specialized = encodeSpecializedGraph(*draft, baseGraph, tag, nonce);
+    session.rememberSpecialization(std::move(cacheKey), specialized);
+    return specialized;
 }
 
-GCGraph *specializeClosureBoundGraph(const Function *function, size_t nonce) {
+GCGraph *specializeClosureBoundGraph(
+    RuntimeGraphDraftSession &session, const Function *function, size_t nonce) {
     if (!function || !function->runtimeGraph()) {
         return nullptr;
     }
@@ -485,7 +548,7 @@ GCGraph *specializeClosureBoundGraph(const Function *function, size_t nonce) {
                     },
             });
     }
-    return specializeGraphWithBindings(targetGraph, bindings, "closure", nonce);
+    return specializeGraphWithBindings(session, targetGraph, bindings, "closure", nonce);
 }
 
 void bindPortValueUses(GraphDraft &draft, gc_node_ref_t portNodeId, gc_node_ref_t actualInputId) {
@@ -590,7 +653,8 @@ gc_node_ref_t resolveInlineCtrlExit(
 
 } // namespace
 
-bool specializeDirectFuncInDraft(GraphDraft &draft, gc_node_ref_t funcNodeId) {
+bool specializeDirectFuncInDraft(
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId) {
     static size_t specializationNonce = 0;
 
     const DraftNodeHeader *funcHeader = draft.header(funcNodeId);
@@ -618,8 +682,12 @@ bool specializeDirectFuncInDraft(GraphDraft &draft, gc_node_ref_t funcNodeId) {
         return false;
     }
 
-    GCGraph *specializedGraph =
-        specializeGraphWithBindings(funcBody->calleeGraph, bindings, "spec", specializationNonce++);
+    GCGraph *specializedGraph = specializeGraphWithBindings(
+        session,
+        funcBody->calleeGraph,
+        bindings,
+        "spec",
+        specializationNonce++);
     ASSERT(specializedGraph != nullptr, "Direct FUNC specialization produced a null graph.");
 
     DraftNodeInit init = snapshotNodeInit(draft, funcNodeId);
@@ -652,7 +720,8 @@ bool specializeDirectFuncInDraft(GraphDraft &draft, gc_node_ref_t funcNodeId) {
     return true;
 }
 
-bool devirtualizeStaticCallInDraft(GraphDraft &draft, gc_node_ref_t callNodeId) {
+bool devirtualizeStaticCallInDraft(
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId) {
     static size_t specializationNonce = 0;
 
     const DraftNodeHeader *callHeader = draft.header(callNodeId);
@@ -688,7 +757,7 @@ bool devirtualizeStaticCallInDraft(GraphDraft &draft, gc_node_ref_t callNodeId) 
         return false;
     }
 
-    GCGraph *targetGraph = specializeClosureBoundGraph(function, specializationNonce++);
+    GCGraph *targetGraph = specializeClosureBoundGraph(session, function, specializationNonce++);
     if (!targetGraph) {
         return false;
     }
@@ -879,6 +948,7 @@ DraftInlineResult inlineCallableInDraft(
             calleeDraftView,
             boundActualInputs));
     }
+    std::vector<gc_node_ref_t> parameterCtrlInputs = ctrlPreds;
     if (entryTargets.size() == 1) {
         result.ctrlEntry = entryTargets.front();
         const std::vector<gc_node_ref_t> mergedCtrlInputs =
@@ -892,7 +962,8 @@ DraftInlineResult inlineCallableInDraft(
             .runtimeFlags = 0,
             .ctrlInputs   = ctrlPreds,
         };
-        result.ctrlEntry = draft.addNode(syncInit);
+        result.ctrlEntry    = draft.addNode(syncInit);
+        parameterCtrlInputs = {result.ctrlEntry};
         for (gc_node_ref_t targetId : entryTargets) {
             const std::vector<gc_node_ref_t> mergedCtrlInputs = appendUniqueRefs(
                 draft.ctrlInputsOf(targetId),
@@ -901,14 +972,19 @@ DraftInlineResult inlineCallableInDraft(
         }
     }
 
-    if (!parameterGateTargets.empty() && result.ctrlEntry != kInvalidNodeRef) {
+    if (!parameterGateTargets.empty() && !parameterCtrlInputs.empty()) {
         for (gc_node_ref_t gateId : parameterGateTargets) {
             if (gateId == result.ctrlEntry) {
                 continue;
             }
-            const std::vector<gc_node_ref_t> gateCtrlInputs = appendUniqueRefs(
-                draft.ctrlInputsOf(gateId),
-                std::span<const gc_node_ref_t>(&result.ctrlEntry, 1));
+            // Parameter gates must become ready before callee entry nodes consume
+            // them. Wiring a gate to the resolved entry node itself can form a
+            // data/control cycle when that entry node reads the same gate (for
+            // example recursive `timeit` specializations where `repeat - 1`
+            // feeds the next branch condition). Multi-entry splices still use
+            // the synthetic SYNC anchor because it precedes every entry root.
+            const std::vector<gc_node_ref_t> gateCtrlInputs =
+                appendUniqueRefs(draft.ctrlInputsOf(gateId), parameterCtrlInputs);
             draft.setCtrlInputs(gateId, gateCtrlInputs);
         }
     }

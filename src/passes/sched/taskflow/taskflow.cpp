@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -346,7 +346,11 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
         ASSERT(
             brIndex >= 0 && static_cast<size_t>(brIndex) < withInputs.size(),
             "Taskflow linear JOIN branch index is out of range.");
-        if (node->dataIndex == 0 || node->dataType == Type::Void()) {
+        if (node->dataIndex == 0) {
+            return NullSlot;
+        }
+        if (node->dataType == Type::Void()) {
+            frame->set(node->dataIndex, NullSlot);
             return NullSlot;
         }
         const slot_t result =
@@ -637,7 +641,11 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         ASSERT(
             brIndex >= 0 && static_cast<size_t>(brIndex) < withInputs.size(),
             "Taskflow JOIN branch index is out of range.");
-        if (node->dataIndex == 0 || node->dataType == Type::Void()) {
+        if (node->dataIndex == 0) {
+            return NullSlot;
+        }
+        if (node->dataType == Type::Void()) {
+            frame->set(node->dataIndex, NullSlot);
             return NullSlot;
         }
         const slot_t result =

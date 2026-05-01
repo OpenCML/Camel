@@ -47,6 +47,17 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `-L`, `--stdlib <path>`: Specify standard library path (default: `./stdlib` under current directory)  
 - `-E`, `--error-format <text|json>`: Error output format (default: `text`)
 
+### Common Passes
+
+- `std::inline`: inline-only rewrite pass; default target strategy is `std::inline::hybrid`
+- `std::inline::small` / `std::inline::arm` / `std::inline::hybrid`: explicit inline target strategies
+- `std::devirtualize`: runtime-native devirtualization pass
+- `std::specialize`: runtime-native specialization pass
+- `std::opt`: aggregate runtime-native optimization pipeline (`devirtualize` + `specialize` + `inline`)
+- `std::fvm`: high-performance bytecode VM scheduler
+- `std::jit`: JIT-enabled bytecode VM scheduler
+- `std::gir`: dump the current graph IR and stop
+
 ---
 
 ## Information Display

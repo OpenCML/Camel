@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -508,7 +508,11 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 ASSERT(
                     brIndex >= 0 && static_cast<size_t>(brIndex) < wargs.size(),
                     "JOIN branch index out of range in NodeVM.");
-                if (n->dataIndex == 0 || n->dataType == Type::Void()) {
+                if (n->dataIndex == 0) {
+                    break;
+                }
+                if (n->dataType == Type::Void()) {
+                    currFrame->set(n->dataIndex, NullSlot);
                     break;
                 }
                 // The selected arm has already executed sequentially. Its tail

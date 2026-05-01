@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -177,8 +177,12 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 ASSERT(
                     brIndex >= 0 && static_cast<size_t>(brIndex) < bc.withCnt(),
                     "JOIN opcode choosen index out of range in FastVM.");
-                slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
-                if (bc.result != 0 && bc.extra()->pType != Type::Void()) {
+                if (bc.result != 0) {
+                    if (bc.extra()->pType == Type::Void()) {
+                        currFrame->set(bc.result, NullSlot);
+                        break;
+                    }
+                    slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
                     currFrame->set(bc.result, result);
                 }
             } break;

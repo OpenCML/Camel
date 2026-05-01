@@ -33,6 +33,12 @@
 - `std::inline::arm`：分支 arm 小子图策略；
 - `std::inline::hybrid`：综合策略（满足 `small(non-arm)` 或 `arm` 条件即内联）。
 
+重要边界：
+
+- `std::inline*` 只负责 **inline target selection + inline rewrite**；
+- 若需要运行聚合优化流水线（如 **specialization / devirtualization / inlining**），
+  入口应使用 `std::opt`，而不是再把这些 phase 混回 `std::inline`。
+
 其中「小子图」当前定义为：目标 `bodyGraph` 中，除 `DATA/PORT` 外节点数 `<= 8`。
 
 ---

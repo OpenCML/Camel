@@ -13,16 +13,20 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 10, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * Shared runtime optimization engine entrypoint.
+ * Shared runtime rewrite engine entrypoint.
  *
- * At the moment this bridge only drives the runtime-native inline phase.
- * Devirtualization and specialization will move onto the same GCGraph-native
- * substrate later, but they are intentionally not claimed as implemented here.
+ * `std::inline` and `std::opt` both route
+ * through the same GCGraph-native
+ * rewrite substrate. The difference is purely configuration:
+ * `std::inline`
+ * enables only inlining, while `std::opt` may additionally enable
+ *
+ * devirtualization and specialization.
  */
 
 #pragma once
