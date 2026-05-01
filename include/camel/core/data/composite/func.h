@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Mar. 15, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,12 +23,9 @@
 #include "camel/core/type/composite/func.h"
 #include <list>
 
-namespace camel::compile::gir {
-class Graph;
-using graph_ptr_t = std::shared_ptr<Graph>;
-} // namespace camel::compile::gir
-
-namespace GIR = camel::compile::gir;
+namespace camel::runtime {
+class GCGraph;
+}
 
 namespace camel::core::data {
 
@@ -41,26 +38,27 @@ using func_vec_t  = std::vector<func_ptr_t>;
 using func_list_t = std::initializer_list<func_ptr_t>;
 
 class FunctionData : public CompositeData {
-    // graph_ 逃逸路径：FunctionData 持有对 Graph 的引用。
-    // 存活约束：FunctionData 作为 staticDataArr_ 的元素被 Graph 间接持有，
-    // 或在 cloneGraph 时被 remapDataGraphRefs 重映射到新图。
-    // 只要持有 FunctionData 的 Graph 存活，引用目标图即存活。
-    GIR::Graph &graph_;
+    // FunctionData is a compile-time boxed function value that already points at the materialized
+    // runtime graph carrier. It no longer depends on compile GIR ownership.
+    camel::runtime::GCGraph *graph_;
+    std::vector<std::string> closureRefs_;
     data_vec_t closure_;
 
   public:
-    FunctionData(GIR::Graph &graph);
+    FunctionData(camel::runtime::GCGraph *graph, std::vector<std::string> closureRefs = {});
     virtual ~FunctionData() = default;
 
-    static func_ptr_t create(GIR::Graph &graph);
+    static func_ptr_t
+    create(camel::runtime::GCGraph *graph, std::vector<std::string> closureRefs = {});
 
     std::string name() const;
-    GIR::Graph &graph() const { return graph_; }
+    camel::runtime::GCGraph *graph() const { return graph_; }
     type::FunctionType *funcType() const;
     bool isMacro() const { return funcType() && funcType()->modifiers().macro(); }
     const data_vec_t &closure() const { return closure_; }
 
     virtual std::vector<std::string> refs() const override;
+    virtual std::vector<size_t> holes() const override;
     virtual bool resolved() const override;
     virtual void resolve(const data_vec_t &dataList) override;
 

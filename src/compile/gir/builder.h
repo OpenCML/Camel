@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Apr. 01, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,18 +26,24 @@
 #include "camel/core/module/module.h"
 
 #include "camel/compile/gct.h"
-#include "camel/compile/gir.h"
+#include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/core/error/diagnostics.h"
 
 namespace camel::compile::gir {
 
-using void_ptr_t = void *;
+using void_ptr_t   = void *;
+using Type         = camel::core::type::Type;
+using FunctionType = camel::core::type::FunctionType;
 
-using node_scope_t          = Scope<std::string, Node *>;
+using compile_graph_ptr_t   = std::shared_ptr<DraftGraphBuilder>;
+using node_handle_t         = draft_node_t *;
+using node_scope_t          = Scope<std::string, node_handle_t>;
 using node_scope_ptr_t      = std::shared_ptr<node_scope_t>;
-using graph_scope_t         = Scope<std::string, std::shared_ptr<graph_vec_t>>;
+using graph_set_t           = std::vector<compile_graph_ptr_t>;
+using graph_set_ptr_t       = std::shared_ptr<graph_set_t>;
+using graph_scope_t         = Scope<std::string, graph_set_ptr_t>;
 using graph_scope_ptr_t     = std::shared_ptr<graph_scope_t>;
-using decorated_scope_t     = Scope<std::string, graph_ptr_t>;
+using decorated_scope_t     = Scope<std::string, compile_graph_ptr_t>;
 using decorated_scope_ptr_t = std::shared_ptr<decorated_scope_t>;
 
 class Builder {
@@ -47,13 +53,13 @@ class Builder {
         const camel::core::module::module_ptr_t &module)
         : context_(context), module_(module) {}
 
-    graph_ptr_t build(GCT::node_ptr_t &gct, camel::core::error::diagnostics_ptr_t diags);
+    compile_graph_ptr_t build(GCT::node_ptr_t &gct, camel::core::error::diagnostics_ptr_t diags);
 
-    graph_ptr_t rootGraph() const { return rootGraph_; }
+    compile_graph_ptr_t rootGraph() const { return rootGraph_; }
 
   private:
-    graph_ptr_t rootGraph_;
-    graph_ptr_t currGraph_;
+    compile_graph_ptr_t rootGraph_;
+    compile_graph_ptr_t currGraph_;
 
     node_scope_ptr_t nodeScope_;
     graph_scope_ptr_t graphScope_;
@@ -67,22 +73,35 @@ class Builder {
     bool synced_;
     bool varied_;
 
-    // 记录该 Graph 是否被已经被调用过（通过 createFuncDataNode 被使用）
-    // 已经被调用过的 Graph 不能再追加闭包捕获
-    std::unordered_set<Graph *> usedGraphs_;
-    std::unordered_map<Node *, Node *> nodeModifierMap_;
-    Node *lastSyncedNode_     = nullptr;
+    // Track whether this Graph has already been used (via createFuncDataNode).
+    // A used Graph can no longer accept additional closure captures.
+    using node_modifier_map_t = std::unordered_map<draft_node_ref_t, draft_node_ref_t>;
+
+    std::unordered_set<DraftGraphBuilder *> usedGraphs_;
+    std::unordered_map<DraftGraphBuilder *, node_modifier_map_t> nodeModifierMaps_;
+    node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
-    std::optional<Node *> nodeAt(const std::string &name) {
+    std::optional<node_handle_t> nodeAt(const std::string &name) {
         EXEC_WHEN_DEBUG({
             std::stringstream ss;
-            nodeScope_->dump(ss);
+            nodeScope_->dump(
+                ss,
+                [](std::ostream &os, const std::string &key, const node_handle_t &value) {
+                    os << "[" << key << "] ";
+                    if (value == nullptr) {
+                        os << "<invalid>";
+                        return;
+                    }
+                    auto *graph = DraftGraphBuilder::fromDraft(value->header.owner);
+                    os << (graph ? graph->name() : std::string{"<detached>"}) << "#"
+                       << value->header.selfId;
+                });
             CAMEL_LOG_DEBUG_S("GIR Builder", "Accessing node '{}' from scope {}", name, ss.str());
         });
         return nodeScope_->get(name);
     }
-    std::optional<std::shared_ptr<graph_vec_t>> graphsAt(const std::string &name) {
+    std::optional<graph_set_ptr_t> graphsAt(const std::string &name) {
         EXEC_WHEN_DEBUG({
             std::stringstream ss;
             graphScope_->dump(
@@ -92,51 +111,53 @@ class Builder {
                     const std::shared_ptr<graph_vec_t> &value) {
                     os << "[" << key << "]";
                     for (const auto &graph : *value) {
-                        os << graph->toString() << " ";
+                        os << " " << (graph ? graph->name() : std::string{"<null>"});
                     }
                 });
             CAMEL_LOG_DEBUG_S("GIR Builder", "Accessing graph '{}' from scope {}", name, ss.str());
         });
         return graphScope_->get(name);
     }
-    std::optional<graph_ptr_t> decoratedGraphAt(const std::string &name) {
+    std::optional<compile_graph_ptr_t> decoratedGraphAt(const std::string &name) {
         return decoratedScope_ ? decoratedScope_->get(name) : std::nullopt;
     }
 
-    bool insertNode(const std::string &name, Node *node);
-    bool insertGraph(const std::string &name, const graph_ptr_t &graph);
-    bool insertDecoratedGraph(const std::string &name, const graph_ptr_t &graph);
+    bool insertNode(const std::string &name, node_handle_t node);
+    bool insertGraph(const std::string &name, const compile_graph_ptr_t &graph);
+    bool insertDecoratedGraph(const std::string &name, const compile_graph_ptr_t &graph);
 
-    graph_ptr_t enterScope(FunctionType *funcType, const std::string &name = "");
+    compile_graph_ptr_t enterScope(FunctionType *funcType, const std::string &name = "");
     void leaveScope();
 
-    Node *
-    createFuncDataNode(const graph_ptr_t &graph, bool getCallableNode, bool allowParameterization);
-    graph_ptr_t buildDecoratedGraph(
-        const std::string &funcName, const graph_ptr_t &rawGraph,
+    node_handle_t createFuncDataNode(
+        const compile_graph_ptr_t &graph, bool getCallableNode, bool allowParameterization);
+    std::optional<node_handle_t> modifierOf(node_handle_t node) const;
+    void setModifier(node_handle_t input, node_handle_t modifier);
+    compile_graph_ptr_t buildDecoratedGraph(
+        const std::string &funcName, const compile_graph_ptr_t &rawGraph,
         const std::vector<GCT::node_ptr_t> &annoNodes);
-    Node *applyDecoratorAnno(const GCT::node_ptr_t &annoNode, Node *funcValueNode);
-    Node *resolveCrossGraphRef(Node *node, const std::string &name);
-    Node *resolveNodeByRef(const std::string &name);
+    node_handle_t applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcValueNode);
+    node_handle_t resolveCrossGraphRef(node_handle_t node, const std::string &name);
+    node_handle_t resolveNodeByRef(const std::string &name);
 
     std::any visit(const GCT::node_ptr_t &gct);
 
     void_ptr_t visitDeclNode(const GCT::node_ptr_t &gct);
-    graph_ptr_t visitFuncNode(const GCT::node_ptr_t &gct);
-    Node *visitDataNode(const GCT::node_ptr_t &gct);
+    compile_graph_ptr_t visitFuncNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitDataNode(const GCT::node_ptr_t &gct);
     Type *visitTypeNode(const GCT::node_ptr_t &gct);
-    Node *visitNRefNode(const GCT::node_ptr_t &gct);
-    Node *visitDRefNode(const GCT::node_ptr_t &gct);
-    Node *visitCastNode(const GCT::node_ptr_t &gct);
-    Node *visitVariNode(const GCT::node_ptr_t &gct);
-    Node *visitWaitNode(const GCT::node_ptr_t &gct);
-    Node *visitLinkNode(const GCT::node_ptr_t &gct);
-    Node *visitWithNode(const GCT::node_ptr_t &gct);
-    Node *visitAccsNode(const GCT::node_ptr_t &gct);
-    Node *visitBrchNode(const GCT::node_ptr_t &gct);
-    Node *visitAnnoNode(const GCT::node_ptr_t &gct);
-    Node *visitExitNode(const GCT::node_ptr_t &gct);
-    Node *visitExecNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitNRefNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitDRefNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitCastNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitVariNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitWaitNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitLinkNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitAnnoNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitExitNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitExecNode(const GCT::node_ptr_t &gct);
     void_ptr_t visitExptNode(const GCT::node_ptr_t &gct);
 };
 

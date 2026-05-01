@@ -13,60 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "lower.h"
 
-#include "bridge.h"
-
-#include "camel/common/algo/topo.h"
-#include "camel/utils/type.h"
-
 #include <array>
 
-using namespace GIR;
-using namespace camel::core::type;
-
 namespace {
-
-std::vector<Node *> buildTopoNodes(Graph *graph) {
-    Node *exitNode = graph->exitNode();
-    return findReachable(
-        exitNode,
-        [](Node *node) {
-            std::vector<Node *> inputs;
-            inputs.reserve(node->dataInputs().size() + node->ctrlInputs().size());
-            for (const auto &in : node->ctrlInputs()) {
-                if (&in->graph() == &node->graph()) {
-                    inputs.push_back(in);
-                }
-            }
-            for (const auto &in : node->dataInputs()) {
-                if (&in->graph() == &node->graph()) {
-                    inputs.push_back(in);
-                }
-            }
-            return inputs;
-        },
-        false);
-}
-
-void addIssue(GraphLoweringPlan &plan, const Node *node, std::string reason) {
-    plan.issues.push_back({node, std::move(reason)});
-}
-
-bool hasBridgeableInputs(const Node *node) {
-    for (const auto *input : node->dataInputs()) {
-        if (!isBridgeableTypeForCpp(input->dataType())) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool hasBridgeableOutput(const Node *node) { return isBridgeableTypeForCpp(node->dataType()); }
 
 using Spec = CppOperatorSpec;
 
@@ -140,153 +95,11 @@ constexpr std::array kOperatorSpecs = {
 
 } // namespace
 
-const CppOperatorSpec *findCppOperatorSpec(const OperNode *node) {
-    const std::string &uri = node->oper()->uri();
+const CppOperatorSpec *findCppOperatorSpec(std::string_view uri) {
     for (const auto &spec : kOperatorSpecs) {
         if (spec.uri == uri) {
             return &spec;
         }
     }
     return nullptr;
-}
-
-bool canRuntimeFallbackOperatorForCpp(const OperNode *node) {
-    if (findCppOperatorSpec(node) != nullptr) {
-        return true;
-    }
-    if (!hasBridgeableOutput(node) || !hasBridgeableInputs(node)) {
-        return false;
-    }
-    return true;
-}
-
-GraphLoweringPlan analyzeGraphForCpp(Graph *graph) {
-    GraphLoweringPlan plan;
-    plan.graph     = graph;
-    plan.topoNodes = buildTopoNodes(graph);
-
-    for (const auto &port : graph->normPorts()) {
-        if (!isPureScalarTypeForCpp(port->dataType())) {
-            addIssue(plan, port, "non-scalar norm port requires runtime frame");
-        }
-    }
-    for (const auto &port : graph->withPorts()) {
-        if (!isPureScalarTypeForCpp(port->dataType())) {
-            addIssue(plan, port, "non-scalar with port requires runtime frame");
-        }
-    }
-    for (const auto &port : graph->closure()) {
-        addIssue(plan, port, "closure capture is not supported by direct C++ lowering");
-    }
-    if (!isPureScalarTypeForCpp(graph->funcType()->exitType())) {
-        addIssue(plan, graph->exitNode(), "non-scalar return type requires runtime frame");
-    }
-
-    for (Node *node : plan.topoNodes) {
-        switch (node->type()) {
-        case NodeType::DATA: {
-            auto *dataNode = tt::as_ptr<DataNode>(node);
-            if (!cppLiteralFor(dataNode->dataSlot(), dataNode->dataType()).has_value()) {
-                addIssue(plan, node, "data literal cannot be emitted as a C++ literal");
-            }
-        } break;
-
-        case NodeType::PORT:
-            break;
-
-        case NodeType::OPER: {
-            auto *opNode = tt::as_ptr<OperNode>(node);
-            if (!hasBridgeableOutput(opNode) || !hasBridgeableInputs(opNode)) {
-                addIssue(
-                    plan,
-                    node,
-                    "operator uses types that cannot be bridged through C++ lowering");
-                break;
-            }
-            if (!canRuntimeFallbackOperatorForCpp(opNode)) {
-                addIssue(
-                    plan,
-                    node,
-                    "operator cannot be lowered or bridged through helper fallback");
-            }
-        } break;
-
-        case NodeType::BRCH:
-            if (!tt::as_ptr<BrchNode>(node)->hasSelectorInput() ||
-                !tt::as_ptr<BrchNode>(node)->caseInputs().empty() ||
-                tt::as_ptr<BrchNode>(node)->armCount() != 2) {
-                addIssue(plan, node, "only two-way scalar if-else branches are supported");
-            }
-            break;
-
-        case NodeType::JOIN:
-            if (!tt::as_ptr<JoinNode>(node)->hasBranchIndexInput() ||
-                !tt::as_ptr<JoinNode>(node)->hasMatchedBranch() ||
-                tt::as_ptr<JoinNode>(node)->armCount() != 2) {
-                addIssue(plan, node, "join must be driven by a matching two-way BRCH");
-            }
-            break;
-
-        case NodeType::FUNC: {
-            auto *funcNode = tt::as_ptr<FuncNode>(node);
-            Graph *callee  = funcNode->bodyGraph();
-            if (callee->hasClosure()) {
-                addIssue(plan, node, "direct function lowering does not support closures");
-                break;
-            }
-            for (const auto &port : callee->normPorts()) {
-                if (!isPureScalarTypeForCpp(port->dataType())) {
-                    addIssue(plan, node, "callee norm port is not scalar");
-                }
-            }
-            for (const auto &port : callee->withPorts()) {
-                if (!isPureScalarTypeForCpp(port->dataType())) {
-                    addIssue(plan, node, "callee with port is not scalar");
-                }
-            }
-            if (!isPureScalarTypeForCpp(callee->funcType()->exitType())) {
-                addIssue(plan, node, "callee return type is not scalar");
-            }
-        } break;
-
-        case NodeType::CAST:
-        case NodeType::COPY:
-            if (!hasBridgeableOutput(node) || !hasBridgeableInputs(node)) {
-                addIssue(plan, node, "COPY/CAST requires C++-bridgeable inputs and outputs");
-            }
-            break;
-
-        case NodeType::GATE:
-            if (!hasBridgeableOutput(node) || !hasBridgeableInputs(node)) {
-                addIssue(plan, node, "GATE requires C++-bridgeable inputs and outputs");
-                break;
-            }
-            if (node->normInputs().empty()) {
-                addIssue(plan, node, "GATE must have at least one Norm input");
-                break;
-            }
-            if (node->ctrlInputs().empty()) {
-                addIssue(plan, node, "GATE must have at least one Ctrl input");
-                break;
-            }
-            break;
-
-        case NodeType::FILL:
-        case NodeType::ACCS:
-        case NodeType::CALL:
-        case NodeType::BIND:
-        case NodeType::SYNC:
-        case NodeType::DREF:
-            addIssue(plan, node, "node type is not supported by the direct C++ path yet");
-            break;
-
-        default:
-            addIssue(plan, node, "unknown node type");
-            break;
-        }
-    }
-
-    plan.frameElidable  = plan.issues.empty();
-    plan.directCallable = plan.frameElidable;
-    return plan;
 }

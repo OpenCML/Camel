@@ -13,12 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 16, 2025
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/execute/executor.h"
-#include "camel/compile/gir.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
@@ -50,28 +49,6 @@ void ExecutorManager::registerExecutorFactory(std::string name, executor_factory
         executorFactories.find(name) == executorFactories.end(),
         "Executor factory for protocol '" + name + "' is already registered.");
     executorFactories[name] = fact;
-}
-
-void ExecutorManager::eval(std::string uri, GIR::Node *self, Frame &frame) const {
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("ExecMgr", "Evaluating operator of URI: {}", uri));
-    const size_t pos = uri.find(":");
-    if (pos == std::string::npos) {
-        throw DiagnosticBuilder::of(SemanticDiag::InvalidOperatorURI).commit(uri);
-    }
-    const std::string protocol = uri.substr(0, pos);
-    auto itExec                = loadedExecutors.find(protocol);
-    if (itExec != loadedExecutors.end()) {
-        itExec->second->eval(uri.substr(pos + 1), self, frame);
-        return;
-    }
-    auto itFact = executorFactories.find(protocol);
-    if (itFact == executorFactories.end()) {
-        throw DiagnosticBuilder::of(SemanticDiag::UnrecognizedExecutorProtocol).commit(protocol);
-    }
-    CAMEL_LOG_INFO_S("ExecMgr", "Loading executor for protocol <{}>", protocol);
-    auto executor = itFact->second();
-    loadedExecutors.emplace(protocol, executor);
-    executor->eval(uri.substr(pos + 1), self, frame);
 }
 
 std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {

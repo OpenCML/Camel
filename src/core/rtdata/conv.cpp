@@ -13,15 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/rtdata/conv.h"
+#include "camel/core/data.h"
 #include "camel/core/data/composite/array.h"
 #include "camel/core/data/composite/func.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/data/composite/tuple.h"
+#include "camel/core/rtdata/func.h"
+#include "camel/runtime/graph.h"
 
 using namespace camel::core::data;
 using namespace camel::core::type;
@@ -148,17 +151,18 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
     }
 
     case TypeCode::Function: {
-        auto funcData    = tt::as_shared<camel::core::data::FunctionData>(data);
-        auto &graph      = funcData->graph();
-        Function *gcFunc = Function::create(&graph, graph.closureType(), allocator);
-        Tuple *gcTuple   = gcFunc->tuple();
+        auto funcData = tt::as_shared<camel::core::data::FunctionData>(data);
+        auto *graph   = funcData->graph();
+        ASSERT(graph != nullptr, "FunctionData must carry a runtime graph.");
+        auto *gcFunc   = ::Function::create(graph, graph->closureType(), allocator);
+        Tuple *gcTuple = gcFunc->tuple();
 
         if (gcTuple->size() == 0) {
             return gcFunc;
         }
 
-        // 说明函数包含闭包
-        // 下面填充已捕获的闭包值
+        // The function carries closure data.
+        // Fill in the captured closure values below.
         const auto &closureData = funcData->closure();
 
         if (closureData.size() > 0) {
@@ -181,7 +185,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
                 }
             }
         } else {
-            // 没有已捕获的闭包值，则填充空值
+            // No closure values were captured, so fill with nulls.
             for (size_t i = 0; i < gcTuple->size(); ++i) {
                 gcTuple->set<slot_t>(i, NullSlot);
             }

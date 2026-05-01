@@ -283,11 +283,11 @@ struct NativeJitCallParams {
     int32_t  resultDisp;        // 结果存储的 frame 偏移
     uint8_t  argsCnt;           // 参数个数
     int32_t  argSrcDisps[8];    // 各参数在 caller frame 中的偏移
+    int32_t  argDstDisps[8];    // 各参数在 callee frame 中的目标槽偏移
     uint8_t  argVRegs[8];       // frameless 参数预加载得到的 vreg；0xFF 表示仍在 call 内部加载
     uint8_t  resultVReg;        // frameless 返回值承载 vreg；0xFF 表示仍在 call 内部写回 frame
     bool     isSameGraph;       // 是否同图调用
-    uint64_t extra2Addr;        // bc->extra2() 地址（跨图用）
-    uint64_t fastop1Addr;       // bc->fastop[1] 地址（跨图 JIT 状态检查）
+    uint64_t jitFnAddr;         // bc->extra3() 地址（跨图 JIT 入口指针）
     bool     frameless;         // 是否走 frameless 栈分配
     uint32_t calleeSlotBytes;   // frameless 时栈分配大小（16 字节对齐）
 };
@@ -313,7 +313,7 @@ mov rax, [rdi + argDisp]    ; (1) 从 caller frame 加载参数（或来自只�
 push rdi                     ; (2) 保存 caller frame 基址
 sub rsp, 80                  ; (3) 在栈上分配 callee 帧空间（80 = 10 slots × 8，16 对齐）
 mov rdi, rsp                 ; (4) callee slot 基址 = 栈顶
-mov [rdi + 8], rax           ; (5) 写入参数到 callee slot[1]
+mov [rdi + formalDisp], rax  ; (5) 写入参数到 callee 形式参数槽
 call body_start              ; (6) 直接 call rel32 到同函数 body 入口
 add rsp, 80                  ; (7) 释放 callee 帧空间
 pop rdi                      ; (8) 恢复 caller frame 基址
@@ -344,11 +344,9 @@ push rdi                         ; 保存 caller slot 基址
 
 ; ═══ 跨图：检查目标是否已 JIT 编译 ═══
 ; （仅 !isSameGraph 时生成）
-movzx eax, byte [fastop1Addr]   ; 加载 bc->fastop[1]
+mov rax, [jitFnAddr]             ; 加载跨图 JIT 入口指针
 test rax, rax
-jne slow_common                  ; 非零 = 目标未编译，跳慢路径
-mov rax, [extra2Addr]            ; 加载 JIT 入口指针
-shl rax, 16 ; shr rax, 16       ; 提取低 48 位（去掉 targetPc）
+je slow_common                   ; 空指针 = 目标未编译，跳慢路径
 push rax                         ; 保存 fn 到栈上
 
 ; ═══ Frame 获取检查 ═══
@@ -484,24 +482,30 @@ cmp rax, 1
 
 ---
 
-## 7. FUNC 字节码 Extra 打包与 JIT 状态标记
+## 7. FUNC 字节码直调布局与 JIT 状态
 
 ### 7.1 打包格式
 
-FUNC/TAIL 字节码有两个 extra 字段：
+FUNC/TAIL 字节码现在把“调用方源槽布局”和“被调方目标槽布局”都编码在同一条指令中：
+
+- `nargs()`：caller 源参数槽
+- `wargs()`：callee 目标参数槽（按目标图 `normPorts + withPorts` 的顺序预编译）
+
+这样解释器、computed goto、trampoline、NativeJitFuncCall 都直接消费字节码，不再回到 `GCGraph` 反推端口布局。
+
+extra 字段布局如下：
 
 | 字段 | 位域 | 用途 |
 |------|------|------|
-| `extra[0].graph` | 完整 64 位 | 目标 `GIR::Graph*` |
-| `extra2` (未 JIT) | 完整 64 位 | 调用计数 |
-| `extra2` (已 JIT) | 低 48 位 = JitEntryFn, 高 16 位 = targetPc | 打包后的 JIT 入口指针 |
-| `fastop[1]` | 1 字节 | 0 = 已 JIT 编译，非 0 = 目标 PC |
+| `extra[0].graph` | 完整 64 位 | 目标 runtime `GCGraph*` |
+| `extra2` | 高 16 位 = targetPc，低 48 位 = direct-call 热度计数 | 解释器入口 PC + JIT 触发计数 |
+| `extra3` | 完整 64 位 | JIT 入口指针；0 表示当前仍走解释器 |
 
 ### 7.2 JIT 编译触发
 
 1. 解释器/gotovm 在遇到 FUNC 字节码时调用 `incFuncExtraCount`，递增 `extra2` 中的计数。
 2. `invokeCallOrJit` 检查 `shouldJit(count)` 决定是否编译。
-3. 编译成功后，`compileAndCacheGraph` 遍历所有字节码，将目标图匹配的 FUNC/TAIL 的 `extra2` 设为打包后的 fn 指针，`fastop[1] = 0`。
+3. 编译成功后，`compileAndCacheGraph` 遍历所有字节码，将目标图匹配的 FUNC/TAIL 的 `extra3` 设为 JIT 入口指针。
 
 ### 7.3 Graph 上的 JIT 信息存储
 
@@ -524,10 +528,9 @@ Trampoline 是 JIT 代码与 C++ 运行时的桥接层，用于处理 JIT 无法
 
 **执行流程**：
 1. 从 `base[pc]` 取字节码元信息。
-2. 检查 `targetPc`：
-   - `targetPc == 0`（目标已 JIT）：从 extra2 提取 JitEntryFn，获取 Frame，调用 `fn(calleeSlots, ctx)`。
-   - `targetPc != 0`（目标未 JIT）：获取 Frame，调用 `vm->call(targetPc, newFrame)` 走解释执行。
-3. 释放 Frame，返回结果。
+2. 若 `extra3 != 0`：直接取 JIT 入口，按字节码里预编译好的目标槽布局写参后调用 `fn(calleeSlots, ctx)`。
+3. 若 `extra3 == 0`：读取 `extra2` 中的 `targetPc`，按同一份字节码布局写参后走解释器 / `invokeCallOrJit`。
+4. 释放 Frame，返回结果。
 
 ### 8.2 directSelfFuncInvoke
 

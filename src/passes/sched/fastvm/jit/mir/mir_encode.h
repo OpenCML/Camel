@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,11 +31,12 @@ namespace camel::jit::x64 {
 
 namespace jit = ::camel::jit;
 
-// 将 buf 编码到 code，并可选输出汇编到 asmOut。跳转目标由 buf 内 pc 解析为 MIR 下标，再以
-// startOffset[targetMirIndex] 修补 rel32。 vregAlloc 非空时，V*
-// 指令按分配结果编码为物理寄存器指令。
-// 若 instructionBoundaries 非空，填入每条指令的 (起始偏移, 长度, 汇编文本)。
-// debugTraceFn：Debug 构建下对 MirOp::DebugTrace 调用的函数指针（如 jitDebugTrace），null 则跳过。
+// Encode buf into code and optionally emit assembly to asmOut. Jump targets are resolved from the
+// pc in buf to MIR indices, then rel32 is patched via startOffset[targetMirIndex]. When vregAlloc
+// is non-null, V* instructions are encoded using the allocated physical registers. If
+// instructionBoundaries is non-null, fill each instruction's (start offset, length, assembly text).
+// debugTraceFn is the function pointer used for MirOp::DebugTrace calls in Debug builds (for
+// example jitDebugTrace); null skips them.
 void encodeMirBuffer(
     const MirBuffer &buf, std::vector<uint8_t> &code, std::ostream *asmOut, size_t baseOffset = 0,
     const jit::VRegAllocation *vregAlloc                                        = nullptr,

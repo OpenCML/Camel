@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 08, 2026
- * Updated: Mar. 30, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,18 +29,17 @@
 #include <unordered_map>
 #endif
 
-using namespace GIR;
 using namespace camel::core::context;
 #if ENABLE_FASTVM_JIT
 using namespace camel::jit;
 #endif
 
 #if ENABLE_FASTVM_JIT
-static graph_ptr_t applyMirDump(
-    const context_ptr_t &context, GIR::graph_ptr_t &graph, std::ostream &os, bool slotOnly) {
-    const auto &[bytecodes, _, offsetMap] = compileAndLink(
+static camel::runtime::GCGraph *applyMirDump(
+    const context_ptr_t &context, camel::runtime::GCGraph *graph, std::ostream &os, bool slotOnly) {
+    auto linked = compileAndLink(
         context,
-        graph.get(),
+        graph,
         {
             .enableTailCallDetection = true,
             .enableInlineOperators   = true,
@@ -50,22 +49,29 @@ static graph_ptr_t applyMirDump(
     auto backend = createBackend();
     if (!backend) {
         os << "[JIT] Backend not available, cannot dump MIR.\n";
-        return Graph::null();
+        return nullptr;
     }
 
     os << "[JIT MIR]  [pc][idx]  instruction  ; symbol/slot\n";
     os << "---\n";
 
-    std::span<const Bytecode> bcSpan(bytecodes.data(), bytecodes.size());
+    std::span<const Bytecode> bcSpan(linked.codes.data(), linked.codes.size());
     std::unordered_map<uint64_t, std::string> mirSymbolNames;
 
-    for (const auto &[g, entryPc] : offsetMap) {
+    std::unordered_map<camel::runtime::GCGraph *, size_t> graphLengths;
+    graphLengths.reserve(linked.graphs.size());
+    for (const auto &[offset, length, runtimeGraph] : linked.graphs) {
+        (void)offset;
+        if (runtimeGraph) {
+            graphLengths.emplace(runtimeGraph, length);
+        }
+    }
+
+    for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
+        ASSERT(runtimeGraph != nullptr, "JIT MIR dump requires a runtime graph.");
         ASSERT(
-            g->finalized(),
-            std::format("Graph '{}' must be sealed before JIT MIR dump.", g->name()));
-        ASSERT(
-            g->hasFrameLayout(),
-            std::format("Graph '{}' has no finalized frame layout.", g->name()));
+            runtimeGraph->hasFrameLayout(),
+            std::format("Graph '{}' has no finalized frame layout.", runtimeGraph->name()));
 
         mirSymbolNames.clear();
         mirSymbolNames[reinterpret_cast<uint64_t>(&trampolineFunc)]     = "trampolineFunc";
@@ -83,20 +89,22 @@ static graph_ptr_t applyMirDump(
         };
         static uint64_t dummyPoolTop = 0;
         CompilationUnit unit{
-            .graph                    = g,
-            .bytecodes                = bcSpan,
-            .entryPc                  = entryPc,
-            .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
-            .trampolineTail           = reinterpret_cast<void *>(&trampolineTail),
-            .trampolineOper           = reinterpret_cast<void *>(&trampolineOper),
-            .trampolineCast           = reinterpret_cast<void *>(&trampolineCast),
+            .runtimeGraph   = runtimeGraph,
+            .bytecodes      = bcSpan,
+            .entryPc        = entryPc,
+            .graphLength    = graphLengths.contains(runtimeGraph) ? graphLengths.at(runtimeGraph)
+                                                                  : static_cast<size_t>(0),
+            .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
+            .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
+            .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
+            .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
             .trampolineBytecode       = reinterpret_cast<void *>(&trampolineBytecode),
             .poolTopAddr              = &dummyPoolTop,
             .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
             .debug                    = &debugOptions,
         };
 
-        os << "\n" << g->mangledName() << ":\n";
+        os << "\n" << runtimeGraph->mangledName() << ":\n";
         std::string failureReason;
         if (!backend->compile(unit, &failureReason)) {
             os << "  [compile failed] " << (failureReason.empty() ? "(unknown)" : failureReason)
@@ -105,26 +113,26 @@ static graph_ptr_t applyMirDump(
         }
         os << "\n";
     }
-    return Graph::null();
+    return nullptr;
 }
 #endif
 
-graph_ptr_t JitRmirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+camel::runtime::GCGraph *JitRmirDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
     return applyMirDump(context_, graph, os, true);
 #else
     (void)graph;
     os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump rmir.\n";
-    return Graph::null();
+    return nullptr;
 #endif
 }
 
-graph_ptr_t JitMirDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+camel::runtime::GCGraph *JitMirDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
     return applyMirDump(context_, graph, os, false);
 #else
     (void)graph;
     os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump MIR.\n";
-    return Graph::null();
+    return nullptr;
 #endif
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 23, 2026
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,7 +41,7 @@
 namespace camel {
 namespace utils {
 
-/** 返回当前进程可执行文件所在目录；失败时返回空 path。 */
+/** Return the current process executable directory; return an empty path on failure. */
 inline std::filesystem::path getExecutableDirectory() {
 #ifdef _WIN32
     wchar_t path[MAX_PATH];
@@ -103,7 +103,7 @@ inline void addLibrarySearchPath(const std::filesystem::path &dir) {
 #endif
 }
 
-/// SDK 工具专用：使用统一 InstallRoot 推导库搜索路径。
+/// SDK tools only: derive library search paths from the unified InstallRoot.
 inline void setupLibrarySearchPathForHost() {
 #ifdef _WIN32
     if (!SetDefaultDllDirectories(
@@ -120,11 +120,14 @@ inline void setupLibrarySearchPathForHost() {
     }
 }
 
-/// 导出应用专用：以 CAMEL_HOME 为 base 设置库搜索路径。
-/// 适用于 camel-cpp 编译出的 exe，可能部署在任意位置，通过环境变量 CAMEL_HOME 定位 SDK 目录。
-/// CAMEL_HOME 指向 SDK 根目录（如 out/latest），其下应有 bin/、libs/ 等子目录。
-/// 若未设置 CAMEL_HOME，则 fallback 为 current_path()。
-/// 搜索顺序：exe 所在目录（优先）、CAMEL_HOME/libs、CAMEL_HOME/bin、CAMEL_HOME。
+/// App-side setup: use CAMEL_HOME as the base directory for library search paths.
+/// This is intended for camel-cpp-built executables that may be deployed
+/// anywhere and locate the SDK via the CAMEL_HOME environment variable.
+/// CAMEL_HOME should point to the SDK root (for example, out/latest), which
+/// should contain bin/ and libs/ subdirectories.
+/// If CAMEL_HOME is not set, fall back to current_path().
+/// Search order: executable directory first, then CAMEL_HOME/libs,
+/// CAMEL_HOME/bin, and CAMEL_HOME itself.
 inline void setupLibrarySearchPathForApp() {
 #ifdef _WIN32
     if (!SetDefaultDllDirectories(

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 01, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -139,7 +139,7 @@ bool Type::equals(Type *type) const {
 std::optional<CastSafety> Type::checkCastSafetyWithAny(TypeCode targetCode, Type *sourceType) {
     if (!sourceType)
         return CastSafety::Forbidden;
-    // 通用规则：任何类型 <-> Any 均为 Safe
+    // Generic rule: any type <-> Any is Safe.
     if (targetCode == TypeCode::Any || sourceType->code() == TypeCode::Any)
         return CastSafety::Safe;
     return std::nullopt;
@@ -157,13 +157,14 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
     if (!sourceType)
         return CastSafety::Forbidden;
 
-    // 这里要先排除掉辅助类型（Any 已由 checkCastSafetyWithAny 处理）
+    // Exclude auxiliary types first (Any is already handled by checkCastSafetyWithAny).
     if (camel::core::type::isAuxiliary(code_) ||
         camel::core::type::isAuxiliary(sourceType->code())) {
         return CastSafety::Forbidden;
     }
 
-    // 排除掉辅助类型后，原始类型只剩8个。矩阵 [from][to]，即 [sourceIndex][targetIndex]
+    // After excluding auxiliary types, only eight primitive types remain.
+    // The matrix is [from][to], i.e. [sourceIndex][targetIndex].
     if (camel::core::type::isPrimitive(code_) &&
         camel::core::type::isPrimitive(sourceType->code())) {
         const int sourceIndex = static_cast<int>(sourceType->code()) & 0b1111;
@@ -171,7 +172,7 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
         return static_cast<CastSafety>(primitiveTypeConvMatrix[sourceIndex][targetIndex]);
     }
 
-    // 剩余所有类型默认不允许转换
+    // All remaining conversions are disallowed by default.
     return CastSafety::Forbidden;
 }
 
@@ -180,7 +181,8 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
     ASSERT(
         castSafetyFrom(sourceType) == CastSafety::Safe,
         "castSlotFrom only allowed when castSafetyFrom returns Safe");
-    // Any 与任何类型互相转换时直接透传 slot 值（需在所有 ASSERT 之前，以支持 composite 等类型）
+    // When Any converts to or from any other type, pass the slot value through
+    // directly. This must happen before all ASSERTs to support composite types.
     if (code_ == TypeCode::Any || sourceType->code() == TypeCode::Any)
         return value;
 
@@ -395,37 +397,37 @@ bool Type::assignableFrom(Type *from) const {
     if (!from || to == from)
         return true;
 
-    // 内置类型，含有 Ref 类型的复合类型必须 resolve 后才能赋值给其他类型
+    // Built-in types: composite types containing Ref must be resolved before assignment.
     ASSERT(
         to->code_ != TypeCode::Ref && from->code_ != TypeCode::Ref,
         "Ref type cannot be assigned");
 
-    // Void 类型可以接受任何类型的赋值，但不可以赋值给其他类型
+    // Void can accept assignment from any type, but cannot be assigned to other types.
     if (to->code_ == TypeCode::Void)
         return true;
     if (from->code_ == TypeCode::Void)
         return false;
 
-    // 任何类型可赋给 Any（目标为 Any 时接受任意来源）
+    // Any can receive assignment from any type (Any as the target accepts any source).
     if (to->code_ == TypeCode::Any)
         return true;
-    // Any 不可赋给其他类型（来源为 Any 且目标非 Any）
+    // Any cannot be assigned to other types (source is Any while target is not Any).
     if (from->code_ == TypeCode::Any)
         return false;
 
-    // 复合类型需要重载 assignableFrom 方法处理
+    // Composite types must override assignableFrom.
     if (camel::core::type::isComposite(to->code_)) {
         const auto &self = static_cast<const CompositeType &>(*this);
         return self.assignableFrom(from);
     }
 
-    // 第三方类型交由第三方自己重载的 assignableFrom 方法处理
+    // Third-party types rely on their own overridden assignableFrom.
     if (camel::core::type::isOtherType(to->code_)) {
         const auto &self = static_cast<const OtherType &>(*this);
         return self.assignableFrom(from);
     }
 
-    // 剩余情况只能是基础类型之间的赋值，必须相同
+    // Remaining cases are assignments between primitive types, which must match exactly.
     return to->code_ == from->code_;
 }
 

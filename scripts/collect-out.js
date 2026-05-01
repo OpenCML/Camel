@@ -1,7 +1,9 @@
 /**
- * 将 build/debug/profile 构建产物收集到 out/tag/{bin,include,libs,stdlib}
+ * 将 build/debug/profile 构建产物收集到 out/latest/{bin,include,libs,stdlib}
  * 所有 tools 下的 exe 放到 bin/，libcamel.dll 放在 libs/（exe 会从 ./libs 查找）
- * tag: 当前 commit 若有 git tag 则使用该 tag，否则使用 "latest"
+ *
+ * 输出策略：始终写入 out/latest/（保证为本次编译产物）。若当前 HEAD 带有 git tag，
+ * 则在完成后将整棵 out/latest/ 再镜像一份到 out/<每个 tag>/（与 latest 内容相同）。
  *
  * 用法: node scripts/collect-out.js [build|debug|profile]
  *   build  -> Release, debug -> Debug, profile -> RelWithDebInfo
@@ -10,7 +12,19 @@
 import { execFileSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import { BASEDIR, libName, getTag, logStep, logDone, logWarn } from './common.js'
+import {
+    BASEDIR,
+    libName,
+    getGitTagsAtHead,
+    logStep,
+    logDone,
+    logWarn,
+    outArtifactRoot,
+    outArtifactBin,
+    outArtifactLibs,
+    outArtifactInclude,
+    outArtifactStdlib
+} from './common.js'
 
 const CONFIG_MAP = {
     build: 'Release',
@@ -166,13 +180,15 @@ function collectPythonRuntimeDlls(BASEDIR) {
     return [...files]
 }
 
+const COLLECT_PRIMARY_TAG = 'latest'
+
 function collect(config) {
-    const tag = getTag()
-    const outRoot = path.join(BASEDIR, 'out', tag)
-    const binDir = path.join(outRoot, 'bin')
-    const includeDir = path.join(outRoot, 'include')
-    const libsDir = path.join(outRoot, 'libs')
-    const stdlibDir = path.join(outRoot, 'stdlib')
+    const tag = COLLECT_PRIMARY_TAG
+    const outRoot = outArtifactRoot(tag)
+    const binDir = outArtifactBin(tag)
+    const includeDir = outArtifactInclude(tag)
+    const libsDir = outArtifactLibs(tag)
+    const stdlibDir = outArtifactStdlib(tag)
 
     logStep(`Collecting ${config} build artifacts to out/${tag}/`)
 
@@ -278,6 +294,20 @@ function collect(config) {
     }
 
     logDone(`Artifacts collected to out/${tag}/`)
+
+    const tagsAtHead = getGitTagsAtHead()
+    for (const mirrorTag of tagsAtHead) {
+        if (mirrorTag === COLLECT_PRIMARY_TAG) {
+            continue
+        }
+        const mirrorRoot = outArtifactRoot(mirrorTag)
+        logStep(`Mirroring out/${COLLECT_PRIMARY_TAG}/ to out/${mirrorTag}/`)
+        if (fs.existsSync(mirrorRoot)) {
+            fs.rmSync(mirrorRoot, { recursive: true })
+        }
+        fs.cpSync(outRoot, mirrorRoot, { recursive: true })
+        logDone(`Mirrored to out/${mirrorTag}/`)
+    }
 }
 
 const arg = process.argv[2] || 'build'

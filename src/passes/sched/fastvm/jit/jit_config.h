@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 30, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,15 +21,15 @@
 
 #include <cstddef>
 
-// ENABLE_FASTVM_JIT、ENABLE_FASTVM_COMPUTED_GOTO、JIT_TARGET_X64 由 CMake 统一设置。
-// 支持: cmake -DENABLE_FASTVM_JIT=OFF -DENABLE_FASTVM_COMPUTED_GOTO=OFF
+// ENABLE_FASTVM_JIT, ENABLE_FASTVM_COMPUTED_GOTO, and JIT_TARGET_X64 are set centrally by CMake.
+// Example: cmake -DENABLE_FASTVM_JIT=OFF -DENABLE_FASTVM_COMPUTED_GOTO=OFF
 
 namespace camel::jit {
 
 enum class JitPolicy {
-    Disabled, // 始终解释执行
-    OnDemand, // 热点触发 JIT
-    Always,   // 首次触达即 JIT（不做启动期全量编译）
+    Disabled, // Always interpret.
+    OnDemand, // Trigger JIT on hot spots.
+    Always,   // JIT on first hit (no full startup compilation).
 };
 
 struct JitConfig {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Apr. 01, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,8 @@
 
 #include "camel/core/error/runtime.h"
 #include "camel/core/global_config.h"
+#include "camel/execute/graph_runtime_support.h"
+#include "runtime_support.h"
 
 using namespace camel::core::error;
 #if ENABLE_FASTVM_JIT
@@ -58,8 +60,7 @@ using namespace camel::jit;
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
     Frame *currFrame            = rootFrame;
     Frame *rootActiveFrame      = rootFrame;
-    const size_t pcStackBase    = pcStack_.size();
-    const size_t frameStackBase = frameStack_.size();
+    const size_t stackDepthBase = stackDepth_;
 
     try {
         while (true) {
@@ -79,14 +80,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             if (bc.opcode == OpCode::OPER) {
                 tag = context_->execMgr().getNameOfAnOperator(bc.extra()->func);
             } else if (bc.opcode == OpCode::FUNC) {
-#if ENABLE_FASTVM_JIT
-                if (bc.fastop[1] >= 0)
-                    tag = getFuncExtraGraph(&bc)->name();
-                else
-                    tag = jitFnToGraph_[reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc))]->name();
-#else
-                tag = bc.extra()->graph->name();
-#endif
+                tag = getFuncExtraRuntimeGraph(&bc)->name();
             }
             opperf::ScopeTimer _timer(bc.opcode, tag);
 #else
@@ -95,7 +89,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
             switch (static_cast<OpCode>(bc.opcode)) {
             case OpCode::RETN: {
-                slot_t result = currFrame->get<slot_t>(bc.fastop[0]);
+                slot_t result = bc.fastop[0] == 0 ? NullSlot : currFrame->get<slot_t>(bc.fastop[0]);
 
                 if (currFrame == rootActiveFrame) {
                     return CallResult{result, currFrame};
@@ -110,7 +104,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 Bytecode &lbc = bytecodes_[pc];
                 currFrame->set(lbc.result, result);
 
-                // 从下一条指令继续执行
+                // Continue execution from the next instruction.
                 pc += lbc.opsize;
                 continue;
             } break;
@@ -121,7 +115,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 Type *srcType     = currFrame->typeAt<Type>(srcIdx);
                 slot_t value      = currFrame->get<slot_t>(srcIdx);
                 slot_t result     = targetType->castSlotFrom(value, srcType);
-                currFrame->set(bc.result, result);
+                if (bc.result != 0) {
+                    currFrame->set(bc.result, result);
+                }
             } break;
 
             case OpCode::COPY: {
@@ -161,48 +157,11 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             } break;
 
             case OpCode::BRCH: {
-                const data_arr_t nargs = bc.nargs();
-                const data_arr_t wargs = bc.wargs();
-
-                size_t jumpIdx = 0;
+                size_t jumpIdx;
                 if (bc.withCnt() == 0) {
-                    // 普通的 if-else 分支，cond 是 bool 类型
-                    bool condData = currFrame->get<bool>(nargs[0]);
-                    if (condData) {
-                        jumpIdx = 0; // jump to true branch
-                    } else {
-                        jumpIdx = 1; // jump to false branch
-                    }
+                    jumpIdx = currFrame->get<bool>(bc.operands()[0]) ? 0 : 1;
                 } else {
-                    // match-case，依次判断各分支
-                    size_t j          = 0;
-                    TypeCode condType = currFrame->typeAt(nargs[0]);
-
-                    if (isGCTraced(condType)) {
-                        auto condData = currFrame->get<Object *>(nargs[0]);
-                        for (; j < bc.withCnt(); ++j) {
-                            auto caseData     = currFrame->get<Object *>(wargs[j]);
-                            Type *condTypePtr = currFrame->typeAt<Type>(nargs[0]);
-                            if (condData->equals(caseData, condTypePtr, false)) {
-                                jumpIdx = j; // jump to matched case
-                                break;
-                            }
-                        }
-                    } else {
-                        auto condData = currFrame->get<slot_t>(nargs[0]);
-                        for (; j < bc.withCnt(); ++j) {
-                            auto caseData = currFrame->get<slot_t>(wargs[j]);
-                            if (condData == caseData) {
-                                jumpIdx = j; // jump to matched case
-                                break;
-                            }
-                        }
-                    }
-
-                    if (j == bc.withCnt()) {
-                        // fallthrough to else case if no match
-                        jumpIdx = bc.withCnt();
-                    }
+                    jumpIdx = camel::passes::sched::fastvm::selectBranchArm(bc, currFrame);
                 }
 
                 currFrame->set(bc.result, fromSlot<Int>(jumpIdx));
@@ -218,83 +177,35 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 ASSERT(
                     brIndex >= 0 && static_cast<size_t>(brIndex) < bc.withCnt(),
                     "JOIN opcode choosen index out of range in FastVM.");
-                slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
-                currFrame->set(bc.result, result);
+                if (bc.result != 0) {
+                    if (bc.extra()->pType == Type::Void()) {
+                        currFrame->set(bc.result, NullSlot);
+                        break;
+                    }
+                    slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
+                    currFrame->set(bc.result, result);
+                }
             } break;
 
             case OpCode::FILL: {
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
 
-                TypeCode srcCode = currFrame->codeAt(nargs[0]);
-                Type *srcType    = currFrame->typeAt<Type>(nargs[0]);
-                ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced in FastVM.");
-                Object *srcObj =
-                    currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace(), srcType, false);
+                Type *srcType = bc.extra()->pType;
+                auto *fillBody =
+                    *reinterpret_cast<const camel::runtime::GCFillBody *const *>(bc.extra2());
+                ASSERT(isGCTraced(srcType->code()), "FILL target type is not GC-traced in FastVM.");
+                Object *sourceObj = currFrame->get<Object *>(nargs[0]);
+                ASSERT(sourceObj != nullptr, "FILL source object is null in FastVM.");
+                Object *srcObj = sourceObj->clone(mm::autoSpace(), srcType, false);
 
                 ASSERT(srcObj != nullptr, "FILL target data is null.");
-
-                switch (srcCode) {
-                case TypeCode::Tuple: {
-                    auto type = tt::as_ptr<TupleType>(srcType);
-                    auto tup  = tt::as_ptr<Tuple>(srcObj);
-                    ASSERT(
-                        type->refCount() == bc.withCnt(),
-                        std::format(
-                            "Tuple layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
-                            bc.withCnt(),
-                            type->refCount()));
-                    const size_t *refs = type->refs();
-                    for (size_t j = 0; j < bc.withCnt(); ++j) {
-                        tup->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
-                    }
-                } break;
-
-                case TypeCode::Array: {
-                    auto type = tt::as_ptr<ArrayType>(srcType);
-                    auto arr  = tt::as_ptr<Array>(srcObj);
-                    // 对于数组，如果 elemType 是 Ref，所有元素都是 Ref，直接使用索引
-                    ASSERT(
-                        arr->size() >= bc.withCnt(),
-                        std::format(
-                            "Array size mismatch in FastVM. Expected at least {}, Actual: {}",
-                            bc.withCnt(),
-                            arr->size()));
-                    for (size_t j = 0; j < bc.withCnt(); ++j) {
-                        arr->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
-                    }
-                } break;
-
-                case TypeCode::Struct: {
-                    auto type = tt::as_ptr<StructType>(srcType);
-                    auto str  = tt::as_ptr<Struct>(srcObj);
-                    ASSERT(
-                        type->refCount() == bc.withCnt(),
-                        std::format(
-                            "Struct layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
-                            bc.withCnt(),
-                            type->refCount()));
-                    const size_t *refs = type->refs();
-                    for (size_t j = 0; j < bc.withCnt(); ++j) {
-                        str->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
-                    }
-                } break;
-
-                case TypeCode::Function: {
-                    auto func          = tt::as_ptr<Function>(srcObj);
-                    Tuple *closureData = func->tuple();
-                    for (size_t j = 0; j < bc.withCnt(); ++j) {
-                        closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
-                    }
-                } break;
-
-                default:
-                    ASSERT(
-                        false,
-                        std::format(
-                            "Unsupported FILL target type {} in FastVM.",
-                            typeCodeToString(srcCode)));
+                std::vector<slot_t> fillValues;
+                fillValues.reserve(bc.withCnt());
+                for (size_t j = 0; j < bc.withCnt(); ++j) {
+                    fillValues.push_back(currFrame->get<slot_t>(wargs[j]));
                 }
+                camel::execute::writeRuntimeFillSlots(srcObj, srcType, fillBody, fillValues);
 
                 currFrame->set(bc.result, srcObj);
             } break;
@@ -303,83 +214,109 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
                 auto function          = currFrame->get<Function *>(wargs[0]);
-                auto targetGraph       = function->graph();
+                ASSERT(function != nullptr, "FastVM CALL resolved a null Function callee.");
+                auto *runtimeTarget = function->graph();
+                ASSERT(
+                    runtimeTarget != nullptr,
+                    "FastVM indirect CALL requires a materialized runtime graph target.");
+                const uint32_t callCount = noteIndirectCall(runtimeTarget);
 
-                Frame *funcFrame = framePool_.acquire(targetGraph);
-
-                size_t i = 0;
-                for (; i < nargs.size(); ++i) {
-                    funcFrame->set(i + 1, currFrame->get<slot_t>(nargs[i]));
-                }
-
-                Tuple *closureData = function->tuple();
-                for (size_t j = 0; j < closureData->size(); ++j) {
-                    funcFrame->set(i + j + 1, closureData->get<slot_t>(j));
-                }
+                Frame *funcFrame = framePool_.acquire(runtimeTarget);
+                populateIndirectCallFrame(currFrame, funcFrame, function, nargs, wargs);
 
                 _timer.pause();
-                const auto &result = call(offsetMap_.at(targetGraph), funcFrame);
+                const auto &result = jitEnabled() ? invokeCallOrJit(
+                                                        graphEntryPc(runtimeTarget),
+                                                        runtimeTarget,
+                                                        funcFrame,
+                                                        currentJitCtx_,
+                                                        callCount)
+                                                  : call(graphEntryPc(runtimeTarget), funcFrame);
                 _timer.resume();
 
                 currFrame->set(bc.result, result);
             } break;
 
             case OpCode::FUNC: {
+                const data_arr_t srcArgs  = bc.directCallSrcArgs();
+                const data_arr_t dstSlots = bc.directCallDstSlots();
 #if ENABLE_FASTVM_JIT
-                const Bytecode *callBc = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
-                if (callBc->fastop[1] < 0) {
-                    GIR::Graph *g          = getFuncExtraGraph(callBc);
-                    JitEntryFn fn          = reinterpret_cast<JitEntryFn>(getFuncExtraFn(callBc));
-                    size_t argsCnt         = callBc->normCnt();
-                    const data_idx_t *args = callBc->operands();
-                    Frame *funcFrame =
-                        acquireCallFrameWithArgs(g, args, argsCnt, [&](data_idx_t idx) {
-                            return currFrame->get<slot_t>(idx);
-                        });
-                    slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
-                    currFrame->set(bc.result, result);
-                } else {
-                    GIR::Graph *targetGraph = getFuncExtraGraph(callBc);
-                    size_t targetPc         = static_cast<size_t>(callBc->fastop[1]);
+                if (!jitEnabled()) {
                     push(pc, currFrame);
-                    size_t argsCnt         = callBc->normCnt();
-                    const data_idx_t *args = callBc->operands();
-                    Frame *funcFrame =
-                        acquireCallFrameWithArgs(targetGraph, args, argsCnt, [&](data_idx_t idx) {
-                            return currFrame->get<slot_t>(idx);
-                        });
-                    pc        = targetPc;
+                    auto *runtimeTarget = getFuncExtraRuntimeGraph(&bc);
+                    ASSERT(
+                        runtimeTarget != nullptr,
+                        "FastVM direct FUNC target must have a materialized runtime graph.");
+                    Frame *funcFrame = acquireFrameForCall(runtimeTarget);
+                    populateDirectCallFrame(currFrame, funcFrame, srcArgs, dstSlots);
+                    pc        = getFuncExtraTargetPc(&bc);
                     currFrame = funcFrame;
                     continue;
                 }
+                const Bytecode *callBc = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
+                const data_arr_t callSrcArgs  = callBc->directCallSrcArgs();
+                const data_arr_t callDstSlots = callBc->directCallDstSlots();
+                auto *runtimeTarget           = getFuncExtraRuntimeGraph(callBc);
+                ASSERT(
+                    runtimeTarget != nullptr,
+                    "FastVM direct FUNC target must have a materialized runtime graph.");
+                if (getFuncExtraFn(callBc) != nullptr) {
+                    JitEntryFn fn    = reinterpret_cast<JitEntryFn>(getFuncExtraFn(callBc));
+                    Frame *funcFrame = [&]() {
+                        Frame *frame = framePool_.acquire(runtimeTarget);
+                        populateDirectCallFrame(currFrame, frame, callSrcArgs, callDstSlots);
+                        return frame;
+                    }();
+                    slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
+                    if (bc.result != 0) {
+                        currFrame->set(bc.result, result);
+                    }
+                    break;
+                }
+                push(pc, currFrame);
+                Frame *funcFrame = [&]() {
+                    Frame *frame = framePool_.acquire(runtimeTarget);
+                    populateDirectCallFrame(currFrame, frame, callSrcArgs, callDstSlots);
+                    return frame;
+                }();
+                pc        = getFuncExtraTargetPc(callBc);
+                currFrame = funcFrame;
+                continue;
 #else
                 push(pc, currFrame);
-                Frame *funcFrame       = framePool_.acquire(bc.extra()->graph);
-                size_t argsCnt         = bc.normCnt();
-                const data_idx_t *args = bc.operands();
-                for (size_t i = 0; i < argsCnt; ++i) {
-                    funcFrame->set(i + 1, currFrame->get<slot_t>(args[i]));
-                }
-                pc        = bc.fastop[1];
+                auto *runtimeTarget = getFuncExtraRuntimeGraph(&bc);
+                ASSERT(
+                    runtimeTarget != nullptr,
+                    "FastVM direct FUNC target must have a materialized runtime graph.");
+                Frame *funcFrame = acquireFrameForCall(runtimeTarget);
+                populateDirectCallFrame(currFrame, funcFrame, srcArgs, dstSlots);
+                pc        = getFuncExtraTargetPc(&bc);
                 currFrame = funcFrame;
                 continue;
 #endif
             } break;
 
             case OpCode::TAIL: {
+                const data_arr_t srcArgs  = bc.directCallSrcArgs();
+                const data_arr_t dstSlots = bc.directCallDstSlots();
 #if ENABLE_FASTVM_JIT
-                FrameView lastFrame(currFrame);
-                const Bytecode *tailBc = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
-                GIR::Graph *tailTargetGraph = getFuncExtraGraph(tailBc);
-                framePool_.release(currFrame);
-                if (tailBc->fastop[1] < 0) {
-                    size_t argsCnt         = tailBc->normCnt();
-                    const data_idx_t *args = tailBc->operands();
-                    Frame *newFrame        = acquireTailFrameWithArgs(
-                        tailTargetGraph,
-                        args,
-                        argsCnt,
-                        [&](data_idx_t idx) { return lastFrame.get<slot_t>(idx); });
+                const Bytecode *tailBc  = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
+                auto *runtimeTailTarget = getFuncExtraRuntimeGraph(tailBc);
+                auto *tailTargetGraph   = runtimeTailTarget;
+                ASSERT(
+                    runtimeTailTarget != nullptr,
+                    std::format(
+                        "FastVM direct TAIL target '{}' must have a materialized runtime graph.",
+                        tailTargetGraph->name()));
+                if (getFuncExtraFn(tailBc) != nullptr) {
+                    captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
+                    framePool_.release(currFrame);
+                    Frame *newFrame = [&]() {
+                        Frame *frame = framePool_._acquire(runtimeTailTarget);
+                        populateDirectCallFrameFromValues(frame, dstSlots, tailArgValuesScratch_);
+                        framePool_._resetTop();
+                        return frame;
+                    }();
                     if (currFrame == rootActiveFrame) {
                         rootActiveFrame = newFrame;
                     }
@@ -387,35 +324,36 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                     currFrame = newFrame;
                     continue;
                 }
-                GIR::Graph *targetGraph = tailTargetGraph;
-                size_t targetPc         = static_cast<size_t>(tailBc->fastop[1]);
-                size_t argsCnt          = tailBc->normCnt();
-                const data_idx_t *args  = tailBc->operands();
-                currFrame =
-                    acquireTailFrameWithArgs(targetGraph, args, argsCnt, [&](data_idx_t idx) {
-                        return lastFrame.get<slot_t>(idx);
-                    });
+                size_t targetPc = getFuncExtraTargetPc(tailBc);
+                captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
+                framePool_.release(currFrame);
+                currFrame = [&]() {
+                    Frame *frame = framePool_._acquire(runtimeTailTarget);
+                    populateDirectCallFrameFromValues(frame, dstSlots, tailArgValuesScratch_);
+                    framePool_._resetTop();
+                    return frame;
+                }();
                 pc = targetPc;
                 continue;
 #else
-                FrameView lastFrame(currFrame);
+                auto *runtimeTailTarget = getFuncExtraRuntimeGraph(&bc);
+                ASSERT(
+                    runtimeTailTarget != nullptr,
+                    "FastVM direct TAIL target must have a materialized runtime graph.");
+                captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
                 framePool_.release(currFrame);
-                currFrame              = framePool_._acquire(bc.extra()->graph);
-                size_t argsCnt         = bc.normCnt();
-                const data_idx_t *args = bc.operands();
-                for (size_t i = 0; i < argsCnt; ++i) {
-                    currFrame->set(i + 1, lastFrame.get<slot_t>(args[i]));
-                }
+                currFrame = acquireFrameForTail(runtimeTailTarget);
+                populateDirectCallFrameFromValues(currFrame, dstSlots, tailArgValuesScratch_);
                 framePool_._resetTop();
-                pc = bc.fastop[1];
+                pc = getFuncExtraTargetPc(&bc);
                 continue;
 #endif
             } break;
 
             case OpCode::OPER: {
-                const data_arr_t nargs = bc->nargs();
-                const data_arr_t wargs = bc->wargs();
-                auto func              = bc->extra()->func;
+                const data_arr_t nargs = bc.nargs();
+                const data_arr_t wargs = bc.wargs();
+                auto func              = bc.extra()->func;
                 EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                     "FastVM",
                     "Executing operator {}.",
@@ -429,7 +367,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                     throw reportRuntimeFault(
                         *context_,
                         fault,
-                        makePcExecutionSite(context_->sourceContext(), currFrame->graph(), pc));
+                        makePcExecutionSite(context_->sourceContext(), currFrame, pc));
                 }
                 currFrame->set(bc.result, result);
             } break;
@@ -512,24 +450,20 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             released.insert(frame);
         };
 
-        Graph *siteGraph =
-            currFrame ? currFrame->graph() : (rootActiveFrame ? rootActiveFrame->graph() : nullptr);
+        Frame *siteFrame = currFrame ? currFrame : rootActiveFrame;
         releaseFrame(currFrame);
         if (currFrame != rootActiveFrame) {
             releaseFrame(rootActiveFrame);
         }
-        while (frameStack_.size() > frameStackBase) {
-            releaseFrame(frameStack_.back());
-            frameStack_.pop_back();
-        }
-        while (pcStack_.size() > pcStackBase) {
-            pcStack_.pop_back();
+        while (stackDepth_ > stackDepthBase) {
+            releaseFrame(frameStack_[stackDepth_ - 1]);
+            --stackDepth_;
         }
 
         throw reportRuntimeFault(
             *context_,
             fault,
-            makePcExecutionSite(context_->sourceContext(), siteGraph, pc));
+            makePcExecutionSite(context_->sourceContext(), siteFrame, pc));
     } catch (Diagnostic &) {
         std::unordered_set<Frame *> released;
         auto releaseFrame = [&](Frame *frame) {
@@ -547,12 +481,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         if (currFrame != rootActiveFrame) {
             releaseFrame(rootActiveFrame);
         }
-        while (frameStack_.size() > frameStackBase) {
-            releaseFrame(frameStack_.back());
-            frameStack_.pop_back();
-        }
-        while (pcStack_.size() > pcStackBase) {
-            pcStack_.pop_back();
+        while (stackDepth_ > stackDepthBase) {
+            releaseFrame(frameStack_[stackDepth_ - 1]);
+            --stackDepth_;
         }
         throw;
     }

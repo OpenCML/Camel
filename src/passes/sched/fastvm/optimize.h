@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 16, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,7 +44,7 @@ struct OptimizationStrategyConfig {
 
 struct IOptimizeStrategy {
     virtual ~IOptimizeStrategy() = default;
-    // 返回下一次扫描的起始位置；若没有修改则返回 std::nullopt
+    // Returns the next scan position; std::nullopt if nothing changed.
     virtual std::optional<size_t> apply(
         bytecode_vec_t &codes, size_t curr,
         std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) = 0;
@@ -63,12 +63,38 @@ void removeop(
 size_t findPrev(bytecode_vec_t &codes, size_t index);
 size_t findNext(bytecode_vec_t &codes, size_t index);
 
+inline size_t brchArmDispatchCount(const Bytecode &bc) {
+    ASSERT(bc.opcode == OpCode::BRCH, "Dispatch-arm count query requires a BRCH opcode.");
+    return bc.withCnt() == 0 ? 2 : (bc.withCnt() + 1);
+}
+
+inline bool isBrchDispatchJump(bytecode_vec_t &codes, size_t index) {
+    if (index >= codes.size() || codes[index].opcode != OpCode::JUMP) {
+        return false;
+    }
+    for (size_t pc = 0; pc < codes.size();) {
+        const Bytecode &bc = codes[pc];
+        if (bc.opcode == OpCode::BRCH) {
+            const size_t dispatchBegin = pc + bc.opsize;
+            const size_t dispatchEnd   = dispatchBegin + brchArmDispatchCount(bc);
+            if (index >= dispatchBegin && index < dispatchEnd) {
+                return true;
+            }
+            if (pc >= index) {
+                break;
+            }
+        }
+        pc += bc.opsize;
+    }
+    return false;
+}
+
 /**
- * 若当前 JUMP 的目标也是一个 JUMP，则进行折叠
- * 删除被中间跳过的那个 JUMP，使第一个 JUMP 直接跳向第二个 JUMP 的目标
- * 例如：
- * JUMP 1 -> JUMP 2 -> JUMP 3
- * 删除 JUMP 2，使 JUMP 1 直接跳向 JUMP 3
+ * If this JUMP's target is another JUMP, fold the chain:
+ * remove the skipped middle JUMP so the first JUMP targets the final destination.
+ * Example:
+ *   JUMP 1 -> JUMP 2 -> JUMP 3
+ * Remove JUMP 2 so JUMP 1 jumps straight to JUMP 3's target.
  */
 class JumpToJumpStrategy : public IOptimizeStrategy {
   public:
@@ -77,16 +103,19 @@ class JumpToJumpStrategy : public IOptimizeStrategy {
     std::optional<size_t> apply(
         bytecode_vec_t &codes, size_t curr,
         std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) override {
+        if (isBrchDispatchJump(codes, curr)) {
+            return std::nullopt;
+        }
         Bytecode &bc  = codes[curr];
         size_t next   = bc.fastop[0];
         Bytecode &tbc = codes[next];
 
-        // 若当前 JUMP 的目标也是一个 JUMP，则进行折叠
+        // Fold when the target is also a JUMP
         if (tbc.opcode == OpCode::JUMP) {
-            // 修改目标为第二个跳转的目标
+            // Point at the second jump's target
             bc.fastop[0] = tbc.fastop[0];
 
-            // 删除被中间跳过的那个 JUMP
+            // Remove the skipped middle JUMP
             removeop(codes, next, pcOrigins);
             redirect(codes, curr, -1, pcOrigins);
 
@@ -98,7 +127,7 @@ class JumpToJumpStrategy : public IOptimizeStrategy {
 };
 
 /**
- * 若当前 JUMP 跳向的是下一条指令，则删除该 JUMP
+ * If this JUMP targets the next instruction, remove the redundant JUMP.
  */
 class JumpToNextStrategy : public IOptimizeStrategy {
   public:
@@ -107,10 +136,13 @@ class JumpToNextStrategy : public IOptimizeStrategy {
     std::optional<size_t> apply(
         bytecode_vec_t &codes, size_t curr,
         std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) override {
+        if (isBrchDispatchJump(codes, curr)) {
+            return std::nullopt;
+        }
         Bytecode &bc = codes[curr];
         size_t next  = bc.fastop[0];
 
-        // 若跳转目标刚好是下一条指令，说明此 JUMP 没有意义
+        // Target is fall-through; the JUMP is redundant
         if (next == curr + 1) {
             removeop(codes, curr, pcOrigins);
             redirect(codes, curr, -1, pcOrigins);
@@ -123,8 +155,7 @@ class JumpToNextStrategy : public IOptimizeStrategy {
 };
 
 /**
- * 若当前 JUMP 跳向的是一个 RETN，则将 RETN 复制到 JUMP 位置
- * 以免除一次跳转，提高执行效率
+ * If this JUMP targets a RETN, copy RETN to the JUMP site to avoid an extra branch.
  */
 class JumpToRetnStrategy : public IOptimizeStrategy {
   public:
@@ -133,16 +164,19 @@ class JumpToRetnStrategy : public IOptimizeStrategy {
     std::optional<size_t> apply(
         bytecode_vec_t &codes, size_t curr,
         std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) override {
+        if (isBrchDispatchJump(codes, curr)) {
+            return std::nullopt;
+        }
         Bytecode &bc = codes[curr];
         size_t next  = bc.fastop[0];
         if (next >= codes.size())
             return std::nullopt;
         Bytecode &tbc = codes[next];
 
-        // 如果 JUMP 跳向的是一个 RETN，直接替换为 RETN
+        // JUMP to RETN: replace with RETN in place
         if (tbc.opcode == OpCode::RETN) {
-            bc = tbc; // 覆盖当前字节码为 RETN
-            // 从下一条扫描
+            bc = tbc; // Overwrite current insn with RETN
+            // Resume scan at the following instruction
             return curr + 1;
         }
 
@@ -151,8 +185,8 @@ class JumpToRetnStrategy : public IOptimizeStrategy {
 };
 
 /**
- * 清理跳转到 JOIN 的 JUMP，使 JOIN 前面没有无意义的跳转
- * 如果所有的 JUMP 都被清理干净，则删除该 JOIN
+ * Clean up JUMPs that target a JOIN so useless branches before JOIN are removed.
+ * If no JUMPs target the JOIN anymore, drop the JOIN itself.
  */
 class JoinCleanupStrategy : public IOptimizeStrategy {
   public:
@@ -167,7 +201,7 @@ class JoinCleanupStrategy : public IOptimizeStrategy {
 
         bool hasJumpToSelf = false;
 
-        // 遍历所有 JUMP，查找是否有跳转到当前 JOIN 的
+        // Scan all JUMPs that target this JOIN
         for (size_t j = 0; j < codes.size(); j++) {
             Bytecode &nbc = codes[j];
             if (nbc.opcode != OpCode::JUMP)
@@ -175,41 +209,32 @@ class JoinCleanupStrategy : public IOptimizeStrategy {
 
             size_t next = nbc.fastop[0];
             if (next == curr) {
-                // 找到一个跳向自己的 JUMP，检查其前一条是否是 TAIL 或 RETN
+                // JUMP targets this JOIN: check whether the previous insn is TAIL or RETN
                 size_t prev   = findPrev(codes, j);
                 Bytecode &pbc = codes[prev];
 
-                // 如果前一条是 TAIL 或 RETN，则该 JUMP 无效，删除它
+                // After TAIL/RETN this JUMP is unreachable; remove it
                 if (pbc.opcode == OpCode::TAIL || pbc.opcode == OpCode::RETN) {
                     removeop(codes, j, pcOrigins);
                     redirect(codes, j, -1, pcOrigins);
 
-                    // 改动后需要重新从 JOIN 前一个位置开始扫描，
+                    // Rescan from just before the JOIN after the edit
                     return curr - 1;
                 } else {
-                    // 有至少一个有效的跳转指令 -> JOIN 不能删除
+                    // At least one live edge into JOIN; cannot delete JOIN yet
                     hasJumpToSelf = true;
                 }
             }
         }
 
-        // 如果没有跳向 JOIN 的 JUMP，可以安全删除此 JOIN
+        // No JUMPs target this JOIN; safe to remove it
         if (!hasJumpToSelf) {
             removeop(codes, curr, pcOrigins);
             redirect(codes, curr, -1, pcOrigins);
 
-            // 若删除后当前位置是 RETN，也一并删除它
-            // 因为如果前面还有直接跳转到 RETN 指令的地方，已经被优化掉了
-            // 这里的 RETN 一定是没用的
-            if (curr < codes.size()) {
-                Bytecode &tbc = codes[curr];
-                if (tbc.opcode == OpCode::RETN) {
-                    removeop(codes, curr, pcOrigins);
-                    redirect(codes, curr, -1, pcOrigins);
-                }
-            }
-
-            // 修改后从 curr 重新扫描
+            // Keep the trailing RETN intact. Optimization runs on one
+            // graph-local bytecode chunk before cross-graph linking, so RETN is
+            // still the boundary that prevents fallthrough into the next graph.
             return curr;
         }
 
@@ -217,8 +242,7 @@ class JoinCleanupStrategy : public IOptimizeStrategy {
     }
 };
 
-// 全局策略注册表
-// 懒加载
+// Global strategy registry (lazily initialized)
 const std::unordered_map<OptimizationStrategyCode, std::unique_ptr<IOptimizeStrategy>> &
 getGlobalOptimizationStrategyRegistry();
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,18 +29,18 @@
 
 namespace camel::jit {
 
-// 可分配的物理寄存器编号 (x64: rax=0, rcx=1, rdx=2, rbx=3, r8=4, r9=5, r10=6, r11=7)
+// Allocatable physical register IDs (x64: rax=0, rcx=1, rdx=2, rbx=3, r8=4, r9=5, r10=6, r11=7)
 inline constexpr int kNumAllocatableRegs = 8;
 inline constexpr int kSpilled            = -1;
 // rbx (index 3) is reserved for &FramePool::top_ caching in JIT internal convention
 inline constexpr int kReservedRegRbx = 3;
 
 /**
- * 分配结果：slot 索引 -> 物理寄存器 (0..7) 或 kSpilled
- * slotRegs_[i] 表示 slot i 在存活区间内分配的寄存器
+ * Allocation result: slot index -> physical register (0..7) or kSpilled.
+ * slotRegs_[i] stores the register assigned to slot i within its live range.
  */
 struct AllocationResult {
-    std::vector<int> slotToReg; // data_idx_t 范围，负索引不分配
+    std::vector<int> slotToReg; // data_idx_t range; negative indices are not allocated.
     int maxSlot() const { return static_cast<int>(slotToReg.size()) - 1; }
     int regForSlot(int slot) const {
         if (slot < 0 || slot >= static_cast<int>(slotToReg.size()))
@@ -50,28 +50,33 @@ struct AllocationResult {
 };
 
 /**
- * 对字节码序列进行线性扫描寄存器分配
- * @param bytecodes 字节码
- * @param entryPc 入口 pc
- * @param pcEnd 结束 pc (不包含)
- * @return 分配结果，失败返回空
+ * Perform linear-scan register allocation over a bytecode sequence.
+ * @param bytecodes bytecode sequence
+ * @param entryPc entry pc
+ * @param pcEnd end pc (exclusive)
+ * @return allocation result; empty on failure
  */
 AllocationResult
 linearScanAllocate(std::span<const Bytecode> bytecodes, size_t entryPc, size_t pcEnd);
 
 /**
- * 生成“全部溢出”的分配结果，用于 MIR 可读 dump（所有 slot 均从 [rdi+disp] 访问）
+ * Produce an "all spilled" allocation result for readable MIR dumps (all slots are accessed
+ * from
+ * [rdi+disp]).
  */
 AllocationResult
 makeAllSpilledAlloc(std::span<const Bytecode> bytecodes, size_t entryPc, size_t pcEnd);
 
 // -----------------------------------------------------------------------------
-// 虚拟寄存器分配：对 MIR 中的 V* 指令做统一寄存器分配，便于消除“经 rax 中转”等冗余
-// -----------------------------------------------------------------------------
+// Virtual register allocation: assign registers uniformly to MIR V* instructions to eliminate
+// redundant moves such as rax staging.
 
 /**
- * 约束（预留）：在指定指令处某 vreg 必须位于某物理寄存器，用于 idiv(rax)、cmov 等
- * 后续可在 linearScanVReg 中解析并插入 move 或优先分配。
+ * Constraint (reserved): at a given instruction, a vreg must reside in a specific physical
+ *
+ * register, for idiv(rax), cmov, etc. Later linearScanVReg can honor it by inserting moves or
+ *
+ * preferring that assignment.
  */
 struct VRegConstraint {
     size_t instrIndex;
@@ -80,11 +85,11 @@ struct VRegConstraint {
 };
 
 struct VRegAllocOptions {
-    std::vector<VRegConstraint> fixedAssignments; // 预留，当前未使用
+    std::vector<VRegConstraint> fixedAssignments; // Reserved; not used yet.
 };
 
 /**
- * 虚拟寄存器分配结果：vregToPreg[v] = 物理寄存器 0..7 或 kSpilled
+ * Virtual register allocation result: vregToPreg[v] = physical register 0..7 or kSpilled.
  */
 struct VRegAllocation {
     std::vector<int> vregToPreg;
@@ -97,11 +102,11 @@ struct VRegAllocation {
 };
 
 /**
- * 对 MIR buffer 中的 V* 指令做线性扫描寄存器分配
- * @param buf 含 VLoadFromFrame、VCopy、VTest、VCmove 等指令的 MIR
- * @param out 输出分配结果
- * @param opts 可选约束（预留）
- * @return 是否成功（当前恒为 true）
+ * Perform linear-scan register allocation for V* instructions in a MIR buffer.
+ * @param buf MIR containing VLoadFromFrame, VCopy, VTest, VMove, etc.
+ * @param out output allocation result
+ * @param opts optional constraints (reserved)
+ * @return whether allocation succeeded (currently always true)
  */
 bool linearScanVReg(
     const x64::MirBuffer &buf, VRegAllocation *out, const VRegAllocOptions *opts = nullptr);

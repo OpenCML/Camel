@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -63,7 +63,7 @@ bool myStrptime(const std::string &datetime, const std::string &format, std::tm 
     const char *c_datetime = datetime.c_str();
     const char *c_format   = sscanf_format.c_str();
 
-    // 使用 sscanf_s 替代 sscanf，注意：%d 不需要额外的 buffer size
+    // Use sscanf_s instead of sscanf; note that %d does not need an extra buffer size.
     switch (field_order.size()) {
     case 6:
         matched = sscanf_s(

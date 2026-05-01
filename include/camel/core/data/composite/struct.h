@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,14 +32,14 @@ class StructData : public CompositeData {
     friend class StructDataFactory;
 
   private:
-    std::vector<std::string> refIndices_;
-    // 按字典序存储字段
+    std::vector<std::string> holeFields_;
+    // Store fields in lexicographic order.
     std::map<std::string, data_ptr_t> data_;
 
-    // 仅由 StructDataFactory::build() 使用，避免重复计算 Type
+    // Used only by StructDataFactory::build() to avoid recomputing Type.
     StructData(
         type::Type *type, std::map<std::string, data_ptr_t> &&data,
-        std::vector<std::string> &&refIndices);
+        std::vector<std::string> &&holeFields);
 
   public:
     StructData();
@@ -56,7 +56,8 @@ class StructData : public CompositeData {
     const std::map<std::string, data_ptr_t> &raw() const { return data_; }
 
     virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override { return refIndices_.empty(); }
+    virtual std::vector<size_t> holes() const override;
+    virtual bool resolved() const override { return holeFields_.empty(); }
     virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;
@@ -65,7 +66,7 @@ class StructData : public CompositeData {
     virtual data_ptr_t convertTo(type::Type *type) override;
 };
 
-// 工厂：收集字段后一次构建 Type 与 StructData，避免重复计算
+// Factory: collect fields and build Type and StructData once to avoid recomputing Type.
 class StructDataFactory {
   public:
     StructDataFactory();

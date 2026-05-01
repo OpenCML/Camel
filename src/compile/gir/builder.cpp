@@ -13,18 +13,21 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Apr. 01, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builder.h"
 
-#include "camel/core/rtdata/func.h"
+#include "camel/compile/gir/static_function.h"
+#include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/str.h"
 #include "camel/utils/type.h"
+#include "core/module/entity_internal.h"
 
+#include <atomic>
 #define DEBUG_LEVEL -1
 
 using namespace std;
@@ -39,54 +42,292 @@ namespace camel::compile::gir {
 namespace {
 constexpr std::size_t kSourceContextExtraIndex = 3;
 
-camel::core::mm::IAllocator &runtimeFunctionAllocator(Graph &ownerGraph) {
-    return ownerGraph.arena()->allocator();
+bool isVoidGraphExitType(Type *type) {
+    return type == nullptr || type == Type::Void() || type->code() == TypeCode::Void;
 }
 
-TupleType *currentClosureTupleType(const graph_ptr_t &graph) {
+runtime::GCFillKind fillKindForType(Type *type) {
+    ASSERT(type != nullptr, "FILL type cannot be null.");
+    switch (type->code()) {
+    case TypeCode::Tuple:
+        return runtime::GCFillKind::Tuple;
+    case TypeCode::Array:
+        return runtime::GCFillKind::Array;
+    case TypeCode::Struct:
+        return runtime::GCFillKind::Struct;
+    case TypeCode::Function:
+        return runtime::GCFillKind::FunctionClosure;
+    default:
+        ASSERT(false, std::format("Unsupported FILL type '{}'.", type->toString()));
+        return runtime::GCFillKind::Tuple;
+    }
+}
+
+void setGraphReturnFromResult(
+    const compile_graph_ptr_t &graph, draft_node_ref_t outputNode, draft_node_ref_t valueNode,
+    Type *resultType) {
+    ASSERT(graph != nullptr, "Graph return setup requires a valid graph.");
+    graph->draft().setOutputNode(outputNode);
+    graph->draft().setExitNode(outputNode);
+    if (isVoidGraphExitType(resultType)) {
+        graph->draft().setReturnNode(runtime::kInvalidNodeRef, runtime::GCReturnKind::None);
+        if (!graph->funcType()->hasExitType()) {
+            graph->funcType()->setExitType(Type::Void());
+        }
+        return;
+    }
+
+    graph->draft().setReturnNode(valueNode, runtime::GCReturnKind::Self);
+    if (!graph->funcType()->hasExitType()) {
+        graph->funcType()->setExitType(resultType);
+    }
+}
+
+camel::source::gir_draft_node_key_t draftDebugKey(node_handle_t node) {
+    return node ? static_cast<camel::source::gir_draft_node_key_t>(node->header.selfId) : 0;
+}
+
+node_handle_t asCompileNode(camel::core::module::detail::EntityAccess::node_handle_t node) {
+    return static_cast<node_handle_t>(node);
+}
+
+compile_graph_ptr_t
+asCompileGraph(const camel::core::module::detail::EntityAccess::graph_handle_t &graph) {
+    return graph;
+}
+
+graph_set_ptr_t
+asCompileGraphSet(const camel::core::module::detail::EntityAccess::graph_set_ptr_t &graphs) {
+    auto result = std::make_shared<graph_set_t>();
+    if (!graphs) {
+        return result;
+    }
+    result->reserve(graphs->size());
+    for (const auto &graph : *graphs) {
+        auto typed = asCompileGraph(graph);
+        if (typed) {
+            result->push_back(typed);
+        }
+    }
+    return result;
+}
+
+graph_vec_ptr_t asCompileGraphVec(const DraftGraphBuilder::DrefTarget &target) {
+    return std::get<graph_vec_ptr_t>(target);
+}
+
+camel::core::module::detail::EntityAccess::graph_handle_t
+eraseCompileGraph(const compile_graph_ptr_t &graph) {
+    return graph;
+}
+
+camel::core::module::detail::EntityAccess::graph_set_ptr_t
+eraseCompileGraphSet(const graph_set_ptr_t &graphs) {
+    auto erased = std::make_shared<camel::core::module::detail::EntityAccess::graph_set_t>();
+    if (!graphs) {
+        return erased;
+    }
+    erased->reserve(graphs->size());
+    for (const auto &graph : *graphs) {
+        erased->push_back(eraseCompileGraph(graph));
+    }
+    return erased;
+}
+
+camel::core::mm::IAllocator &staticFunctionAllocator(const compile_graph_ptr_t &ownerGraph) {
+    return ownerGraph->arena()->allocator();
+}
+
+TupleType *currentClosureTupleType(const compile_graph_ptr_t &graph) {
     type_vec_t closureTypes;
-    closureTypes.reserve(graph->closure().size());
-    for (Node *node : graph->closure()) {
-        closureTypes.push_back(node->dataType());
+    auto &draft = graph->draft();
+    closureTypes.reserve(draft.closureNodes().size());
+    for (draft_node_ref_t nodeId : draft.closureNodes()) {
+        const auto *header = draft.header(nodeId);
+        closureTypes.push_back(header ? header->dataType : nullptr);
     }
     return TupleType::create(std::move(closureTypes));
 }
 
-::Function *createRuntimeFunction(Graph &ownerGraph, const graph_ptr_t &targetGraph) {
-    ASSERT(targetGraph != nullptr, "Target graph is null when materializing runtime Function.");
-    return ::Function::create(
-        targetGraph.get(),
+StaticFunction *createStaticFunction(
+    const compile_graph_ptr_t &ownerGraph, const compile_graph_ptr_t &targetGraph) {
+    ASSERT(
+        targetGraph != nullptr,
+        "Target graph is null when materializing compile-time function.");
+    return StaticFunction::create(
+        targetGraph,
         currentClosureTupleType(targetGraph),
-        runtimeFunctionAllocator(ownerGraph));
+        staticFunctionAllocator(ownerGraph));
+}
+
+runtime::DraftEdgeKind toDraftEdgeKind(LinkType type) {
+    switch (type) {
+    case LinkType::Norm:
+        return runtime::DraftEdgeKind::Norm;
+    case LinkType::With:
+        return runtime::DraftEdgeKind::With;
+    case LinkType::Ctrl:
+        return runtime::DraftEdgeKind::Ctrl;
+    }
+    ASSERT(false, "Unknown link type.");
+    return runtime::DraftEdgeKind::Norm;
+}
+
+runtime::GCNodeKind nodeKindOf(node_handle_t node) {
+    ASSERT(node != nullptr, "Draft node is null.");
+    return node->header.kind;
+}
+
+Type *nodeTypeOf(node_handle_t node) {
+    ASSERT(node != nullptr, "Draft node is null.");
+    return node->header.dataType;
+}
+
+const runtime::DraftNodeHeader *nodeHeaderOf(node_handle_t node) {
+    ASSERT(node != nullptr, "Draft node is null.");
+    return &node->header;
+}
+
+runtime::GraphDraft *nodeDraftOf(node_handle_t node) {
+    ASSERT(node != nullptr, "Draft node is null.");
+    return node->header.owner;
+}
+
+DraftGraphBuilder *nodeGraphOf(node_handle_t node) {
+    auto *builder = DraftGraphBuilder::fromDraft(nodeDraftOf(node));
+    ASSERT(builder != nullptr, "Draft node is not owned by a compile graph builder.");
+    return builder;
+}
+
+draft_node_ref_t nodeIdOf(node_handle_t node) {
+    ASSERT(node != nullptr, "Draft node is null.");
+    return node->header.selfId;
+}
+
+std::span<const draft_node_ref_t> normInputsOf(node_handle_t node) {
+    return nodeDraftOf(node)->normInputsOf(node);
+}
+
+std::span<const draft_node_ref_t> withInputsOf(node_handle_t node) {
+    return nodeDraftOf(node)->withInputsOf(node);
+}
+
+std::span<const draft_node_ref_t> ctrlInputsOf(node_handle_t node) {
+    return nodeDraftOf(node)->ctrlInputsOf(node);
+}
+
+std::span<const draft_node_ref_t> normUsersOf(node_handle_t node) {
+    return nodeDraftOf(node)->normUsersOf(node);
+}
+
+std::span<const draft_node_ref_t> withUsersOf(node_handle_t node) {
+    return nodeDraftOf(node)->withUsersOf(node);
+}
+
+std::span<const draft_node_ref_t> ctrlUsersOf(node_handle_t node) {
+    return nodeDraftOf(node)->ctrlUsersOf(node);
+}
+
+std::string_view nodeDebugEntityIdOf(node_handle_t node) {
+    return node ? nodeGraphOf(node)->nodeDebugEntityId(node) : std::string_view{};
+}
+
+bool nodeIsKind(node_handle_t node, runtime::GCNodeKind kind) {
+    return node != nullptr && nodeKindOf(node) == kind;
+}
+
+void setNodeType(node_handle_t node, Type *type) {
+    ASSERT(node != nullptr, "Cannot update type of null draft node.");
+    nodeDraftOf(node)->setNodeDataType(nodeIdOf(node), type);
+}
+
+void setNodeMacro(node_handle_t node, bool enabled) {
+    ASSERT(node != nullptr, "Cannot update runtime flags of null draft node.");
+    uint8_t flags = nodeHeaderOf(node)->runtimeFlags;
+    if (enabled) {
+        flags = static_cast<uint8_t>(flags | runtime::kGCNodeFlagMacro);
+    } else {
+        flags = static_cast<uint8_t>(flags & ~runtime::kGCNodeFlagMacro);
+    }
+    nodeDraftOf(node)->setNodeRuntimeFlags(nodeIdOf(node), flags);
+}
+
+bool isMacroGraph(const compile_graph_ptr_t &graph) {
+    return graph && graph->funcType() && graph->funcType()->modifiers().macro();
+}
+
+std::vector<std::string> closureRefNames(const compile_graph_ptr_t &graph) {
+    std::vector<std::string> refs;
+    if (!graph) {
+        return refs;
+    }
+    refs.reserve(graph->draft().closureNodes().size());
+    for (draft_node_ref_t portId : graph->draft().closureNodes()) {
+        refs.push_back(graph->nodePortName(graph->draft().node(portId)));
+    }
+    return refs;
+}
+
+bool sameGraph(node_handle_t lhs, const compile_graph_ptr_t &graph) {
+    return lhs != nullptr && nodeGraphOf(lhs) == graph.get();
+}
+
+void linkNodes(LinkType type, node_handle_t from, node_handle_t to) {
+    ASSERT(from != nullptr && to != nullptr, "Cannot link null draft nodes.");
+    ASSERT(nodeGraphOf(from) == nodeGraphOf(to), "Compile-time link must stay within one graph.");
+    nodeGraphOf(from)->link(toDraftEdgeKind(type), from, to);
+}
+
+std::string makeCompileGraphStableId(const std::string &name) {
+    static std::atomic<uint64_t> seq = 1;
+    return std::format("cgraph:{}:{}", name.empty() ? "anonymous" : name, seq++);
+}
+
+compile_graph_ptr_t createCompileGraph(
+    FunctionType *funcType, const compile_graph_ptr_t &outer, std::string name = "") {
+    auto graph = std::make_shared<DraftGraphBuilder>(funcType ? funcType : FunctionType::create());
+    if (name.empty()) {
+        name = std::format("__graph_{}", makeCompileGraphStableId("anon"));
+    }
+    graph->setName(std::move(name));
+    graph->setStableId(makeCompileGraphStableId(graph->name()));
+    if (outer) {
+        graph->setOuterGraph(outer);
+        outer->addSubGraph(graph);
+    }
+    if (funcType) {
+        for (size_t i = 0; i < funcType->withTypesCount(); ++i) {
+            const std::string portName = i < funcType->argNamesCount()
+                                             ? std::string(funcType->argNameAt(i))
+                                             : std::format("__with{}", i);
+            graph->addPortNode(funcType->withTypeAt(i), portName, true, funcType->withIsVarAt(i));
+        }
+        for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
+            const size_t argIndex      = funcType->withTypesCount() + i;
+            const std::string portName = argIndex < funcType->argNamesCount()
+                                             ? std::string(funcType->argNameAt(argIndex))
+                                             : std::format("__arg{}", i);
+            graph->addPortNode(funcType->normTypeAt(i), portName, false, funcType->normIsVarAt(i));
+        }
+    }
+    return graph;
 }
 } // namespace
 
-inline void tryRemoveCtrlLink(Node *from, Node *to) {
+inline void tryRemoveCtrlLink(node_handle_t from, node_handle_t to) {
     // if from has already linked to to by a ctrl link, remove it first
     // sometimes we may need to change a ctrl link (linked before) to a data link
     // because data link has higher priority than ctrl link
     // and we don't want to have duplicate links
-    (void)detail::NodeMutation::unlinkCtrl(from, to);
+    if (!from || !to || nodeGraphOf(from) != nodeGraphOf(to)) {
+        return;
+    }
+    (void)nodeGraphOf(from)->unlink(runtime::DraftEdgeKind::Ctrl, from, to);
 }
 
-inline bool linkCheek(Node *from, Node *to) {
+inline bool linkCheek(node_handle_t from, node_handle_t to) {
     // prevent linking a node to itself
-    if (from == to) {
-        return false;
-    }
-    // prevent linking nodes that are already linked
-    if (from->hasLinkedTo(to)) {
-        return false;
-    }
-    // prevent linking nodes that are already deeply linked reversely
-    // which may cause cycles in the graph
-    // note: this check can be expensive
-    if (to->hasDeepLinkedTo(from)) {
-        CAMEL_LOG_WARN_S(
-            "GIR",
-            "Prevent linking deeply linked nodes: {} -> {}",
-            from->toString(),
-            to->toString());
+    if (!from || !to || from == to) {
         return false;
     }
     return true;
@@ -114,9 +355,10 @@ gctSemantic(const context_ptr_t &context, const GCT::node_ptr_t &gct) {
 inline camel::source::origin_id_t deriveGirOrigin(
     const context_ptr_t &context, const GCT::node_ptr_t &gct, camel::source::OriginKind kind,
     const std::string &label, std::vector<camel::source::origin_id_t> inputs = {}) {
-    // GIR 是比 GCT 更“执行导向”的 lowering。
-    // 当前策略不尝试为每个 GIR 节点重建全新的源码区间，而是沿 GCT 的主 origin 继续派生，
-    // 因而一个 GCT 节点展开出的多个 GIR 节点通常共享同一个 primarySpan。
+    // GIR is a more execution-oriented lowering than GCT.
+    // We do not rebuild fresh source spans for every GIR node; instead, we keep
+    // deriving from the GCT primary origin, so multiple GIR nodes expanded from
+    // one GCT node usually share the same primarySpan.
     if (!context || !gct) {
         return camel::source::kInvalidOriginId;
     }
@@ -159,7 +401,7 @@ inline camel::source::SemanticBundle makeGirSemanticBundle(
 }
 
 inline void registerGraphOrigin(
-    const context_ptr_t &context, const graph_ptr_t &graph, const GCT::node_ptr_t &gct,
+    const context_ptr_t &context, const compile_graph_ptr_t &graph, const GCT::node_ptr_t &gct,
     const std::string &label                             = "gir.graph",
     std::vector<camel::source::SemanticPart> extraParts  = {},
     std::vector<camel::source::origin_id_t> mergedInputs = {}, bool synthetic = false,
@@ -189,11 +431,11 @@ inline void registerGraphOrigin(
 }
 
 inline void registerNodeOrigin(
-    const context_ptr_t &context, Node *node, const GCT::node_ptr_t &gct,
+    const context_ptr_t &context, node_handle_t node, const GCT::node_ptr_t &gct,
     const std::string &label = "gir.node", std::vector<camel::source::SemanticPart> extraParts = {},
     std::vector<camel::source::origin_id_t> mergedInputs = {}, bool synthetic = false,
     const std::string &syntheticReason = "") {
-    if (!context || !node) {
+    if (!context || node == nullptr) {
         return;
     }
     auto sourceContext = context->sourceContext();
@@ -204,7 +446,7 @@ inline void registerNodeOrigin(
         deriveGirOrigin(context, gct, camel::source::OriginKind::GirNode, label, mergedInputs);
     if (origin != camel::source::kInvalidOriginId) {
         sourceContext->bindGirNodeDraftDebug(
-            node,
+            draftDebugKey(node),
             origin,
             makeGirSemanticBundle(
                 origin,
@@ -219,27 +461,21 @@ inline void registerNodeOrigin(
 
 inline void bindGraphScopedFuncNodeDebug(
     const camel::source::source_context_ptr_t &sourceContext,
-    camel::source::origin_id_t graphOrigin, const graph_ptr_t &graph, Node *node) {
+    camel::source::origin_id_t graphOrigin, const compile_graph_ptr_t &graph, node_handle_t node) {
     camel::source::SourceContext *sc = sourceContext.get();
-    if (!sc || graphOrigin == camel::source::kInvalidOriginId || !node) {
+    if (!sc || graphOrigin == camel::source::kInvalidOriginId || node == nullptr) {
         return;
     }
     if (const auto *graphSemantic = sc->girGraphSemantic(graph->stableId())) {
-        sc->bindGirNodeDraftDebug(node, graphOrigin, *graphSemantic);
+        sc->bindGirNodeDraftDebug(draftDebugKey(node), graphOrigin, *graphSemantic);
     } else {
         camel::source::SemanticBundle bundle;
         bundle.mainOrigin = graphOrigin;
-        sc->bindGirNodeDraftDebug(node, graphOrigin, std::move(bundle));
+        sc->bindGirNodeDraftDebug(draftDebugKey(node), graphOrigin, std::move(bundle));
     }
 }
 
-// 从 GCT 构建 GIR 图。全过程分为两个阶段：
-// 1. 构造阶段：visit(gct) 遍历 GCT，通过 GraphBuilder 增量创建图和节点。
-//    此阶段所有图均为 non-finalized，可自由编辑（含闭包捕获、参数化等结构变形）。
-// 2. 封印阶段：sealGraphRecursively() 一次性为所有图计算 slot 编号、layout 与 finalized frame
-// layout。
-//    封印后所有图标记为 finalized，不再允许直接编辑。
-graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
+compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     waited_ = false;
     synced_ = false;
     varied_ = false;
@@ -250,7 +486,7 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     nodeScope_      = node_scope_t::create();
     graphScope_     = graph_scope_t::create();
     decoratedScope_ = decorated_scope_t::create();
-    rootGraph_      = GraphBuilder::createGraph(FunctionType::create(), nullptr, "__root__");
+    rootGraph_      = createCompileGraph(FunctionType::create(), nullptr, "__root__");
     if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
         rootGraph_->setExtra<camel::source::SourceContext, kSourceContextExtraIndex>(
             sourceContext.get());
@@ -260,34 +496,54 @@ graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
     try {
         visit(gct);
 
-        auto optMainGraph = currGraph_->getSubGraphsByName("main");
-        if (optMainGraph.has_value()) {
-            auto mainGraphSet = optMainGraph.value();
-            ASSERT(!mainGraphSet.empty(), "Main graph set is empty.");
-            ASSERT(mainGraphSet.size() == 1, "Multiple main graphs found.");
-            auto mainGraph = *mainGraphSet.begin();
-            auto funcNode  = createFuncDataNode(mainGraph, false, false);
-            GraphBuilder(currGraph_).setOutput(funcNode);
+        compile_graph_ptr_t entryGraph = nullptr;
+        if (auto decoratedMain = decoratedGraphAt("main")) {
+            entryGraph = *decoratedMain;
+        } else if (auto gv = graphsAt("main"); gv.has_value() && !gv.value()->empty()) {
+            entryGraph = gv.value()->front();
         }
-
-        GraphBuilder::sealGraphRecursively(rootGraph_);
+        const bool entryModule =
+            context_ && module_ && context_->mainModule() && context_->mainModule() == module_;
+        if (entryGraph) {
+            auto entryFuncValue = createFuncDataNode(entryGraph, true, false);
+            auto entryCall      = rootGraph_->addCallNode(entryGraph->funcType()->exitType());
+            linkNodes(LinkType::With, entryFuncValue, entryCall);
+            setGraphReturnFromResult(
+                rootGraph_,
+                nodeIdOf(entryCall),
+                nodeIdOf(entryCall),
+                entryGraph->funcType()->exitType());
+        } else if (entryModule) {
+            diags_->of(SemanticDiag::EntryModuleMissingMain).commit(module_->name());
+            throw BuildAbortException();
+        } else {
+            auto *placeholder =
+                rootGraph_->addStaticDataNode(std::make_shared<LongData>(static_cast<int64_t>(0)));
+            setGraphReturnFromResult(
+                rootGraph_,
+                nodeIdOf(placeholder),
+                nodeIdOf(placeholder),
+                Type::Int64());
+        }
     } catch (Diagnostic &d) {
         diags_->add(std::move(d));
+        rootGraph_ = nullptr;
+    } catch (const BuildAbortException &) {
         rootGraph_ = nullptr;
     }
 
     return rootGraph_;
 }
 
-graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name) {
+compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name) {
     if (name.empty()) {
-        currGraph_ = GraphBuilder::createGraph(funcType, currGraph_);
+        currGraph_ = createCompileGraph(funcType, currGraph_);
     } else {
         auto graphs = graphScope_->get(name);
         if (graphs.has_value() && !graphs.value()->empty()) {
             currGraph_ = graphs.value()->front();
         } else {
-            currGraph_ = GraphBuilder::createGraph(funcType, currGraph_, name);
+            currGraph_ = createCompileGraph(funcType, currGraph_, name);
             insertGraph(name, currGraph_);
         }
     }
@@ -305,10 +561,10 @@ void Builder::leaveScope() {
     nodeScope_      = nodeScope_->leave();
     graphScope_     = graphScope_->leave();
     decoratedScope_ = decoratedScope_->leave();
-    currGraph_      = currGraph_->outer();
+    currGraph_      = currGraph_ ? currGraph_->outerGraph() : nullptr;
 }
 
-bool Builder::insertNode(const std::string &name, Node *node) {
+bool Builder::insertNode(const std::string &name, node_handle_t node) {
     if (nodeScope_->has(name, false)) {
         return false;
     }
@@ -316,17 +572,16 @@ bool Builder::insertNode(const std::string &name, Node *node) {
     return true;
 }
 
-bool Builder::insertGraph(const std::string &name, const graph_ptr_t &graph) {
+bool Builder::insertGraph(const std::string &name, const compile_graph_ptr_t &graph) {
     if (graphScope_->has(name, false)) {
         auto graphs = graphScope_->get(name).value();
-        // TODO: check if the graph is already in the list
         graphs->push_back(graph);
     }
-    graphScope_->insert(name, std::make_shared<graph_vec_t>(1, graph));
+    graphScope_->insert(name, std::make_shared<graph_set_t>(1, graph));
     return true;
 }
 
-bool Builder::insertDecoratedGraph(const std::string &name, const graph_ptr_t &graph) {
+bool Builder::insertDecoratedGraph(const std::string &name, const compile_graph_ptr_t &graph) {
     if (!decoratedScope_) {
         return false;
     }
@@ -334,40 +589,49 @@ bool Builder::insertDecoratedGraph(const std::string &name, const graph_ptr_t &g
     return true;
 }
 
-// 跨图引用解析：当前函数图引用了外层图的节点时，
-// 沿外层图链逐层插入 PortNode 作为闭包捕获端口。
-// 这里直接修改沿途图的 closure 集合，但因为是在初始编译阶段（finalize 之前），
-// 所有图尚未 finalized，这些修改通过 GraphBuilder::addClosure 受 assertBuildable 保护。
-Node *Builder::resolveCrossGraphRef(Node *node, const std::string &name) {
-    Graph *curr            = currGraph_.get();
-    node_scope_ptr_t scope = nodeScope_;
+node_handle_t Builder::resolveCrossGraphRef(node_handle_t node, const std::string &name) {
+    compile_graph_ptr_t curr = currGraph_;
+    node_scope_ptr_t scope   = nodeScope_;
 
-    while (curr != &node->graph()) {
-        // 在沿途经过的所有中间图添加 Port 节点
-        if (usedGraphs_.find(curr) != usedGraphs_.end()) {
-            // 不能对已经使用过的图添加闭包捕获
+    while (curr && node && curr.get() != nodeGraphOf(node)) {
+        if (usedGraphs_.find(curr.get()) != usedGraphs_.end()) {
             diags_->of(SemanticDiag::ClosureCaptureAfterSelfCall).commit(name, curr->name());
             throw BuildAbortException();
         }
 
-        // 插入一个 Port 节点
-        Node *port = PortNode::create(*curr, node->dataType(), name, false);
-        GraphBuilder(curr).addClosure(port);
-        scope->insert(name, port);
+        auto *portNode = curr->addPortNode(nodeTypeOf(node), name, false, false);
+        curr->draft().removeNormPort(nodeIdOf(portNode));
+        curr->draft().appendClosureNode(nodeIdOf(portNode));
+        const auto closureRefs = curr->funcType()->closureRefs();
+        if (std::find(closureRefs.begin(), closureRefs.end(), name) == closureRefs.end()) {
+            curr->funcType()->addClosureRef(name);
+        }
+        scope->insert(name, portNode);
 
-        // 向外层图和作用域继续遍历
-        curr  = curr->outer().get();
+        curr  = curr->outerGraph();
         scope = scope->outer();
     }
 
-    // 再次获取新的节点引用
     return *nodeScope_->get(name);
 }
 
-Node *Builder::resolveNodeByRef(const std::string &name) {
+node_handle_t Builder::resolveNodeByRef(const std::string &name) {
     auto optSrcNode = nodeAt(name);
     if (!optSrcNode.has_value()) {
-        EXEC_WHEN_DEBUG({ nodeScope_->dump(std::cerr, 0); });
+        EXEC_WHEN_DEBUG({
+            nodeScope_->dump(
+                std::cerr,
+                [](std::ostream &os, const std::string &key, const node_handle_t &value) {
+                    os << "[" << key << "] ";
+                    if (value == nullptr) {
+                        os << "<invalid>";
+                        return;
+                    }
+                    auto *graph = nodeGraphOf(value);
+                    os << graph->name() << "#" << nodeIdOf(value);
+                },
+                0);
+        });
         auto sourceContext = context_ ? context_->sourceContext() : nullptr;
         auto origin        = (sourceContext && currGraph_)
                                  ? sourceContext->debugMap().graphOrigin(currGraph_->stableId())
@@ -375,12 +639,11 @@ Node *Builder::resolveNodeByRef(const std::string &name) {
         diags_->of(SemanticDiag::UnresolvedReference).atOrigin(origin).commit(name);
         throw BuildAbortException();
     }
-    Node *node = optSrcNode.value();
+    node_handle_t node = optSrcNode.value();
 
-    // 如果是跨图节点引用，处理闭包捕获
-    if (node->graph() != *currGraph_) {
+    if (!sameGraph(node, currGraph_)) {
         node = resolveCrossGraphRef(node, name);
-        ASSERT(node->graph() == *currGraph_, "Failed to resolve cross-graph reference.");
+        ASSERT(sameGraph(node, currGraph_), "Failed to resolve cross-graph reference.");
     }
 
     return node;
@@ -440,38 +703,40 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     Type *type               = typeNode->loadAs<GCT::TypeLoad>()->dataType();
     FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
 
-    graph_ptr_t graph = enterScope(funcType, declLoad->ref().ident());
+    compile_graph_ptr_t graph = enterScope(funcType, declLoad->ref().ident());
     leaveScope();
 
     LEAVE("DECL");
     return nullptr;
 }
 
-graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
+compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     ENTER("FUNC");
-    std::string name         = gct->loadAs<GCT::FuncLoad>()->name();
-    GCT::node_ptr_t typeLoad = gct->atAs<GCT::TypeLoad>(0);
-    Type *type               = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
-    FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
-    graph_ptr_t graph        = enterScope(funcType, name);
-    registerGraphOrigin(context_, graph, gct, "gir.func.graph");
-    for (const auto &port : graph->withPorts()) {
-        const auto &portNode = tt::as_ptr<PortNode>(port);
-        insertNode(portNode->name(), port);
-    }
-    for (const auto &port : graph->normPorts()) {
-        const auto &portNode = tt::as_ptr<PortNode>(port);
-        insertNode(portNode->name(), port);
-    }
-    Node *res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
-    if (graph->exitNode_ == nullptr) {
-        if (res) {
-            GraphBuilder(graph).setOutput(res);
-        } else {
-            // function with no return value, setting null by default
-            Node *resNode = DataNode::create(*graph, Data::null());
-            GraphBuilder(graph).setOutput(resNode);
+    std::string name          = gct->loadAs<GCT::FuncLoad>()->name();
+    GCT::node_ptr_t typeLoad  = gct->atAs<GCT::TypeLoad>(0);
+    Type *type                = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
+    FunctionType *funcType    = tt::as_ptr<FunctionType>(type);
+    compile_graph_ptr_t graph = enterScope(funcType, name);
+    try {
+        registerGraphOrigin(context_, graph, gct, "gir.func.graph");
+        for (draft_node_ref_t port : graph->draft().withPorts()) {
+            insertNode(graph->nodePortName(graph->draft().node(port)), graph->draft().node(port));
         }
+        for (draft_node_ref_t port : graph->draft().normPorts()) {
+            insertNode(graph->nodePortName(graph->draft().node(port)), graph->draft().node(port));
+        }
+        node_handle_t res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
+        if (graph->draft().exitNode() == runtime::kInvalidNodeRef) {
+            if (res != nullptr) {
+                setGraphReturnFromResult(graph, nodeIdOf(res), nodeIdOf(res), nodeTypeOf(res));
+            } else {
+                auto *resNode = graph->addStaticDataNode(Data::null());
+                setGraphReturnFromResult(graph, nodeIdOf(resNode), nodeIdOf(resNode), Type::Void());
+            }
+        }
+    } catch (...) {
+        leaveScope();
+        throw;
     }
     leaveScope();
 
@@ -491,34 +756,40 @@ graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     return graph;
 }
 
-Node *Builder::visitDataNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     ENTER("DATA");
     const auto &dataLoad   = gct->loadAs<GCT::DataLoad>();
     const data_ptr_t &data = dataLoad->data();
 
-    Node *node        = nullptr;
+    node_handle_t node{};
     TypeCode dataType = data->type()->code();
     if (isComposite(dataType)) {
         auto composedData = tt::as_shared<CompositeData>(data);
         if (!composedData->resolved()) {
-            Node *srcNode        = DataNode::create(*currGraph_, data);
             const auto &dataType = tt::as_ptr<CompositeType>(data->type());
+            auto holes           = composedData->holes();
             type_vec_t refTypes;
-            node_vec_t refNodes;
+            std::vector<node_handle_t> refNodes;
             for (const auto &ref : composedData->refs()) {
                 const auto &refNode = resolveNodeByRef(std::string(ref));
-                refTypes.push_back(refNode->dataType());
+                refTypes.push_back(nodeTypeOf(refNode));
                 refNodes.push_back(refNode);
             }
-            auto fillType   = tt::as_ptr<CompositeType>(dataType->clone());
-            auto filledType = fillType->resolve(refTypes);
-            node            = FillNode::create(*currGraph_, filledType);
-            Node::link(LinkType::Norm, srcNode, node);
+            ASSERT(
+                holes.size() == refNodes.size(),
+                "Composite holes must match unresolved reference count.");
+            auto filledType = dataType->resolved()
+                                  ? dataType
+                                  : tt::as_ptr<CompositeType>(dataType->clone())->resolve(refTypes);
+            auto payload    = runtime::makeFillPayload(fillKindForType(filledType), holes);
+            node_handle_t srcNode = currGraph_->addStaticDataNode(data, filledType);
+            node                  = currGraph_->addFillNode(filledType, payload);
+            linkNodes(LinkType::Norm, srcNode, node);
             std::vector<camel::source::origin_id_t> mergedInputs;
             for (const auto &refNode : refNodes) {
-                Node::link(LinkType::With, refNode, node);
+                linkNodes(LinkType::With, refNode, node);
                 if (auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr) {
-                    auto origin = sourceContext->resolveGirNodeOrigin(refNode);
+                    auto origin = sourceContext->resolveGirNodeOrigin(draftDebugKey(refNode), "");
                     if (origin != camel::source::kInvalidOriginId) {
                         mergedInputs.push_back(origin);
                     }
@@ -532,9 +803,10 @@ Node *Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                 {
                     semanticPart(
                         camel::source::SemanticRole::ValueProducer,
-                        context_->sourceContext()
-                            ? context_->sourceContext()->resolveGirNodeOrigin(srcNode)
-                            : camel::source::kInvalidOriginId,
+                        context_->sourceContext() ? context_->sourceContext()->resolveGirNodeOrigin(
+                                                        draftDebugKey(srcNode),
+                                                        "")
+                                                  : camel::source::kInvalidOriginId,
                         -1,
                         "base"),
                 },
@@ -545,13 +817,10 @@ Node *Builder::visitDataNode(const GCT::node_ptr_t &gct) {
         }
     }
 
-    node = DataNode::create(*currGraph_, data);
-    if (varied_ && currGraph_->outer() != nullptr) {
-        // If it is a global variable, no longer maintain a copy
-        // For local variables, still need to create a new copy for each call
-        // The mechanism of local shared variables is yet to be designed
-        Node *copyNode = CopyNode::create(*currGraph_, data->type());
-        Node::link(LinkType::Norm, node, copyNode);
+    node = currGraph_->addStaticDataNode(data);
+    if (varied_ && currGraph_->outerGraph().get() != nullptr) {
+        node_handle_t copyNode = currGraph_->addCopyNode(data->type());
+        linkNodes(LinkType::Norm, node, copyNode);
         node = copyNode;
     }
 
@@ -568,15 +837,15 @@ Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
     return type;
 }
 
-Node *Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     ENTER("NREF");
     const string &ident = gct->loadAs<GCT::NRefLoad>()->ref();
     const auto &res     = visit(gct->at(0));
     ASSERT(
-        res.type() == typeid(Node *),
+        res.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of NREF node.");
-    Node *node   = any_cast<Node *>(res);
-    bool success = insertNode(ident, node);
+    node_handle_t node = any_cast<node_handle_t>(res);
+    bool success       = insertNode(ident, node);
     if (!success) {
         diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->load()->origin()).commit(ident);
         throw BuildAbortException();
@@ -585,23 +854,49 @@ Node *Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     return node;
 }
 
-Node *Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
+std::optional<node_handle_t> Builder::modifierOf(node_handle_t node) const {
+    if (node == nullptr) {
+        return std::nullopt;
+    }
+    auto *graph  = nodeGraphOf(node);
+    auto graphIt = nodeModifierMaps_.find(graph);
+    if (graphIt == nodeModifierMaps_.end()) {
+        return std::nullopt;
+    }
+    auto it = graphIt->second.find(nodeIdOf(node));
+    if (it == graphIt->second.end()) {
+        return std::nullopt;
+    }
+    return graph->draft().node(it->second);
+}
+
+void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
+    ASSERT(input != nullptr && modifier != nullptr, "Cannot record modifier for a null node.");
+    auto *inputGraph = nodeGraphOf(input);
+    ASSERT(
+        inputGraph == nodeGraphOf(modifier),
+        "Modifier tracking must stay within a single compile graph.");
+    nodeModifierMaps_[inputGraph][nodeIdOf(input)] = nodeIdOf(modifier);
+}
+
+node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     ENTER("DREF");
     const string &name = gct->loadAs<GCT::DRefLoad>()->ref();
     auto optNode       = nodeAt(name);
     if (optNode.has_value()) {
-        Node *node = optNode.value();
-        if (node->graph() != *currGraph_) {
+        node_handle_t node = optNode.value();
+        if (!sameGraph(node, currGraph_)) {
             node = resolveCrossGraphRef(node, name);
-            ASSERT(node->graph() == *currGraph_, "Failed to resolve cross-graph reference.");
+            ASSERT(sameGraph(node, currGraph_), "Failed to resolve cross-graph reference.");
         }
         LEAVE("DREF");
         return node;
     }
-    graph_ptr_t &graph = currGraph_;
-    auto optDecorated  = decoratedGraphAt(name);
+    auto &graph       = currGraph_;
+    auto optDecorated = decoratedGraphAt(name);
     if (optDecorated.has_value()) {
-        Node *drefNode = DrefNode::create(*graph, optDecorated.value());
+        node_handle_t drefNode = graph->addDrefNode(
+            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{optDecorated.value()});
         registerNodeOrigin(context_, drefNode, gct, "gir.dref.decorated");
         LEAVE("DREF");
         return drefNode;
@@ -610,16 +905,17 @@ Node *Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     if (optGraphs.has_value()) {
         auto graphs = optGraphs.value();
         if (!graphs->empty()) {
-            Node *drefNode = DrefNode::create(*graph, graphs);
+            node_handle_t drefNode{graph->addDrefNode(
+                std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{graphs})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");
             LEAVE("DREF");
             return drefNode;
         }
     }
     if (module_->hasImportedRef(name)) {
-        // hasImportedRef 为 true 只说明用户声明了导入这个名字
-        // 但并不意味着被导入的模块中导出了这个名字
-        // 所以这里仍然要做一次检测
+        // hasImportedRef only means the user declared an import for this name.
+        // It does not imply the imported module exported that name, so we still
+        // need to check here.
         const auto &opt = module_->getImportedEntity(name);
         if (!opt.has_value()) {
             diags_->of(SemanticDiag::ImportNameNotExported)
@@ -627,26 +923,29 @@ Node *Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
                 .commit(name);
         }
         const auto &e = opt.value();
-        if (std::holds_alternative<Node *>(e)) {
+        if (camel::core::module::detail::EntityAccess::isNode(e)) {
             ASSERT(false, "Cannot import a data node directly.");
-            const auto &node = std::get<Node *>(e);
+            const auto node = asCompileNode(camel::core::module::detail::EntityAccess::node(e));
             LEAVE("DREF");
             return node;
-        } else if (std::holds_alternative<graph_vec_ptr_t>(e)) {
-            auto graphs    = std::get<graph_vec_ptr_t>(e);
-            Node *drefNode = DrefNode::create(*graph, graphs);
+        } else if (camel::core::module::detail::EntityAccess::isGraphSet(e)) {
+            auto graphs = asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(e));
+            node_handle_t drefNode{graph->addDrefNode(
+                std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{graphs})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");
             LEAVE("DREF");
             return drefNode;
-        } else if (std::holds_alternative<oper_group_ptr_t>(e)) {
-            auto ops       = std::get<oper_group_ptr_t>(e);
-            Node *drefNode = DrefNode::create(*graph, ops);
+        } else if (e.isOperGroup()) {
+            auto ops = e.operGroup();
+            node_handle_t drefNode{graph->addDrefNode(
+                std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{ops})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");
             LEAVE("DREF");
             return drefNode;
-        } else if (std::holds_alternative<graph_ptr_t>(e)) {
-            auto decorated = std::get<graph_ptr_t>(e);
-            Node *drefNode = DrefNode::create(*graph, decorated);
+        } else if (camel::core::module::detail::EntityAccess::isDecoratedGraph(e)) {
+            auto decorated = camel::core::module::detail::EntityAccess::decoratedGraph(e);
+            node_handle_t drefNode{graph->addDrefNode(
+                std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{decorated})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref.decorated");
             LEAVE("DREF");
             return drefNode;
@@ -656,98 +955,125 @@ Node *Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     throw BuildAbortException();
 }
 
-Node *Builder::visitCastNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ENTER("CAST");
     const auto &res = visit(gct->at(0));
-    ASSERT(res.type() == typeid(Node *), "Unexpected result type from child of CAST node.");
-    Node *valueNode = any_cast<Node *>(res);
+    ASSERT(res.type() == typeid(node_handle_t), "Unexpected result type from child of CAST node.");
+    node_handle_t valueNode = any_cast<node_handle_t>(res);
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     const auto &castLoad = gct->loadAs<GCT::CastLoad>();
     Type *targetType     = castLoad->targetType();
-    Type *sourceType     = valueNode->dataType();
+    Type *sourceType     = nodeTypeOf(valueNode);
     if (targetType->castSafetyFrom(sourceType) != CastSafety::Safe) {
         diags_->of(SemanticDiag::DynamicCastForbidden)
             .atOrigin(gct->load()->origin())
             .commit(sourceType->toString(), targetType->toString());
         throw BuildAbortException();
     }
-    Node *castNode = CastNode::create(*currGraph_, targetType);
-    Node::link(LinkType::Norm, valueNode, castNode);
+    node_handle_t castNode = currGraph_->addCastNode(targetType);
+    linkNodes(LinkType::Norm, valueNode, castNode);
     registerNodeOrigin(context_, castNode, gct, "gir.cast");
     LEAVE("CAST");
     return castNode;
 }
 
-Node *Builder::visitVariNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitVariNode(const GCT::node_ptr_t &gct) {
     ENTER("VARI");
     bool old        = varied_;
     varied_         = true;
     const auto &res = visit(gct->at(0));
     ASSERT(
-        res.type() == typeid(Node *),
+        res.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of VARI node.");
-    Node *node = any_cast<Node *>(res);
-    varied_    = old;
+    node_handle_t node = any_cast<node_handle_t>(res);
+    varied_            = old;
     LEAVE("VARI");
     return node;
 }
 
-Node *Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
     ENTER("WAIT");
     bool old        = waited_;
     waited_         = true;
     const auto &res = visit(gct->at(0));
     ASSERT(
-        res.type() == typeid(Node *),
+        res.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of WAIT node.");
-    Node *node = any_cast<Node *>(res);
-    waited_    = old;
+    node_handle_t node = any_cast<node_handle_t>(res);
+    waited_            = old;
     LEAVE("WAIT");
     return node;
 }
 
-// 为一个子图创建函数值节点。当 allowParameterization=true 时，
-// 可能会调用 parametrizeClosure() 将子图的闭包捕获转为 with 参数，
-// 这会直接修改子图的端口结构。此操作只在初始编译阶段（finalize 之前）发生，
-// 所有图尚未 finalized，由 assertBuildable 保护。
-Node *Builder::createFuncDataNode(
+// Create a function-value node for a subgraph. When allowParameterization is
+// true, parametrizeClosure() may convert the subgraph's closure captures into
+// with parameters, which directly changes the subgraph's port structure. This
+// only happens during initial compilation while Graph is still the mutable
+// compile-time carrier.
+// Create a function-producing node for `graph` in the current owner graph.
+//
+// This helper is the canonical point where compile-time graph references become IR-level
+// dependencies. Every emitted FUNC node or static Function object must be backed by an explicit
+// dependency edge, except the self-recursive case which is encoded by the owner graph's
+// `looped` bit.
+//
+// When `allowParameterization=true`, unresolved closure captures may be rewritten into explicit
+// with-ports on the target graph. That mutation is only valid during the build phase.
+node_handle_t Builder::createFuncDataNode(
     const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
     ASSERT(
         !(callableAsResult && allowParameterization),
         "Cannot enable both callableAsResult and allowParameterization options.");
+    ASSERT(currGraph_ != nullptr, "Current owner graph is null when creating a function node.");
+    ASSERT(graph != nullptr, "Target graph is null when creating a function node.");
+
+    // Centralize dependency bookkeeping here so every FUNC node and static Function value obeys
+    // the same graph-reference invariant. Self-dependency is intentional: recursive graphs are
+    // represented by the owner's `looped` flag.
+    currGraph_->addDependencyGraph(graph);
 
     bool graphUsedBefore = usedGraphs_.find(graph.get()) != usedGraphs_.end();
-    bool resolved        = graph->closure().empty();
-    auto *runtimeFunc    = createRuntimeFunction(*currGraph_, graph);
+    bool resolved        = graph->draft().closureNodes().empty();
+    auto *staticFunc     = createStaticFunction(currGraph_, graph);
 
-    Node *resultNode   = nullptr;
+    node_handle_t resultNode{};
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
     auto graphOrigin   = sourceContext ? sourceContext->debugMap().graphOrigin(graph->stableId())
                                        : camel::source::kInvalidOriginId;
 
-    auto markMacroNode = [&](Node *node) {
-        if (node && graph->isMacro()) {
-            detail::NodeMutation::setMacro(node, true);
+    auto markMacroNode = [&](node_handle_t node) {
+        if (node != nullptr && isMacroGraph(graph)) {
+            setNodeMacro(node, true);
         }
     };
 
     if (allowParameterization && !callableAsResult && !graphUsedBefore) {
         if (resolved) {
-            resultNode = FuncNode::create(*currGraph_, graph);
+            resultNode = currGraph_->addFuncNode(graph, 0);
             markMacroNode(resultNode);
             bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, resultNode);
         } else {
-            std::vector<std::string> closureRefs;
-            closureRefs.reserve(graph->closure().size());
-            for (Node *closureNode : graph->closure()) {
-                closureRefs.push_back(tt::as_ptr<PortNode>(closureNode)->name());
+            std::vector<draft_node_ref_t> closureNodes(
+                graph->draft().closureNodes().begin(),
+                graph->draft().closureNodes().end());
+            std::vector<std::string> closureRefs = closureRefNames(graph);
+            for (draft_node_ref_t closureId : closureNodes) {
+                graph->draft().removeNormPort(closureId);
+                graph->draft().appendWithPort(closureId);
+                graph->draft().removeClosureNode(closureId);
+                ASSERT(
+                    std::find(
+                        graph->draft().normPorts().begin(),
+                        graph->draft().normPorts().end(),
+                        closureId) == graph->draft().normPorts().end(),
+                    "Parameterized closure port must be removed from norm ports.");
             }
-            GraphBuilder(graph).parametrizeClosure();
-            auto funcNode = FuncNode::create(*currGraph_, graph);
+            graph->setParameterized(true);
+            auto funcNode = currGraph_->addFuncNode(graph, 0);
             markMacroNode(funcNode);
             for (const auto &ref : closureRefs) {
                 const auto &refNode = resolveNodeByRef(ref);
-                Node::link(LinkType::With, refNode, funcNode);
+                linkNodes(LinkType::With, refNode, funcNode);
             }
             resultNode = funcNode;
             bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, resultNode);
@@ -760,18 +1086,21 @@ Node *Builder::createFuncDataNode(
     // allowParameterization = false
     if (resolved) {
         if (callableAsResult) {
-            resultNode = DataNode::createStaticSlot(
-                *currGraph_,
+            const auto slotIndex = currGraph_->addStaticSlot(
+                camel::core::rtdata::toSlot<StaticFunction *>(staticFunc),
+                graph->funcType());
+            resultNode = currGraph_->draft().node(currGraph_->draft().addDataNode(
                 graph->funcType(),
-                camel::core::rtdata::toSlot<::Function *>(runtimeFunc));
+                slotIndex,
+                static_cast<uint8_t>(runtime::kGCNodeFlagConstant)));
             markMacroNode(resultNode);
         } else {
-            auto funcNode = FuncNode::create(*currGraph_, graph);
+            auto funcNode = currGraph_->addFuncNode(graph, 0);
             markMacroNode(funcNode);
             if (graph->parameterized()) {
                 for (const auto &ref : graph->funcType()->closureRefs()) {
                     const auto &refNode = resolveNodeByRef(std::string(ref));
-                    Node::link(LinkType::With, refNode, funcNode);
+                    linkNodes(LinkType::With, refNode, funcNode);
                 }
             }
             resultNode = funcNode;
@@ -783,43 +1112,53 @@ Node *Builder::createFuncDataNode(
     }
 
     // graph still carries unresolved closure captures while parameterization is disabled
-    auto dataNode = DataNode::createStaticSlot(
-        *currGraph_,
+    const auto slotIndex = currGraph_->addStaticSlot(
+        camel::core::rtdata::toSlot<StaticFunction *>(staticFunc),
+        graph->funcType());
+    auto dataNode = currGraph_->draft().node(currGraph_->draft().addDataNode(
         graph->funcType(),
-        camel::core::rtdata::toSlot<::Function *>(runtimeFunc));
+        slotIndex,
+        static_cast<uint8_t>(runtime::kGCNodeFlagConstant)));
     markMacroNode(dataNode);
     node_vec_t refNodes;
-    for (Node *closureNode : graph->closure()) {
-        const auto &refNode = resolveNodeByRef(tt::as_ptr<PortNode>(closureNode)->name());
+    for (draft_node_ref_t closureId : graph->draft().closureNodes()) {
+        const auto &refNode = resolveNodeByRef(graph->nodePortName(graph->draft().node(closureId)));
         refNodes.push_back(refNode);
     }
 
-    auto fillNode = FillNode::create(*currGraph_, graph->funcType());
+    std::vector<size_t> closureSlots;
+    closureSlots.reserve(refNodes.size());
+    for (size_t i = 0; i < refNodes.size(); ++i) {
+        closureSlots.push_back(i);
+    }
+    auto fillPayload = runtime::makeFillPayload(runtime::GCFillKind::FunctionClosure, closureSlots);
+    auto fillNode    = currGraph_->addFillNode(graph->funcType(), fillPayload);
     markMacroNode(fillNode);
-    Node::link(LinkType::Norm, dataNode, fillNode);
+    linkNodes(LinkType::Norm, dataNode, fillNode);
     for (const auto &refNode : refNodes) {
-        Node::link(LinkType::With, refNode, fillNode);
+        linkNodes(LinkType::With, refNode, fillNode);
     }
 
     if (callableAsResult) {
         resultNode = fillNode;
     } else {
-        auto callNode = CallNode::create(*currGraph_, graph->funcType()->exitType());
+        auto callNode = currGraph_->addCallNode(graph->funcType()->exitType());
         markMacroNode(callNode);
-        Node::link(LinkType::With, fillNode, callNode);
+        linkNodes(LinkType::With, fillNode, callNode);
         resultNode = callNode;
     }
     bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, resultNode);
 
-    // 保证在最后再更新 usedGraphs_
-    // 因为在构造过程中可能会更新图的闭包捕获
-    // 而在更新闭包捕获前会检查被更新的图是否已经被使用过
-    // 所以要等所有的更新完成再将此图设置为被使用过
+    // Update usedGraphs_ last.
+    // Closure captures may be updated during construction, and capture updates
+    // check whether the target graph has already been used. Mark the graph as
+    // used only after all updates finish.
     usedGraphs_.insert(graph.get());
     return resultNode;
 }
 
-Node *Builder::applyDecoratorAnno(const GCT::node_ptr_t &annoNode, Node *funcValueNode) {
+node_handle_t
+Builder::applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcValueNode) {
     ASSERT(annoNode && annoNode->type() == GCT::LoadType::ANNO, "Expected ANNO node.");
     ASSERT(annoNode->size() == 1, "ANNO node should have exactly one lowered expression child.");
     ASSERT(funcValueNode != nullptr, "Decorator input function value is null.");
@@ -837,13 +1176,13 @@ Node *Builder::applyDecoratorAnno(const GCT::node_ptr_t &annoNode, Node *funcVal
     *linkNode << std::make_shared<GCT::Node>(std::dynamic_pointer_cast<GCT::Load>(
         std::make_shared<GCT::DRefLoad>(Reference(tmpRefName))));
 
-    Node *decoratedValue = visitLinkNode(linkNode);
-    nodeScope_           = nodeScope_->leave();
+    node_handle_t decoratedValue = visitLinkNode(linkNode);
+    nodeScope_                   = nodeScope_->leave();
     return decoratedValue;
 }
 
-graph_ptr_t Builder::buildDecoratedGraph(
-    const std::string &funcName, const graph_ptr_t &rawGraph,
+compile_graph_ptr_t Builder::buildDecoratedGraph(
+    const std::string &funcName, const compile_graph_ptr_t &rawGraph,
     const std::vector<GCT::node_ptr_t> &annoNodes) {
     ASSERT(rawGraph != nullptr, "Raw function graph is null.");
     if (annoNodes.empty()) {
@@ -863,103 +1202,105 @@ graph_ptr_t Builder::buildDecoratedGraph(
         true);
 
     // Seed value is the original function object.
-    Node *decoratedValue = createFuncDataNode(rawGraph, true, false);
+    node_handle_t decoratedValue = createFuncDataNode(rawGraph, true, false);
     for (auto it = annoNodes.rbegin(); it != annoNodes.rend(); ++it) {
         decoratedValue = applyDecoratorAnno(*it, decoratedValue);
     }
 
-    if (decoratedValue->dataType()->code() != TypeCode::Function) {
+    if (nodeTypeOf(decoratedValue)->code() != TypeCode::Function) {
         diags_->of(SemanticDiag::ArgumentsMismatch)
             .atOrigin(annoNodes.front()->load()->origin())
-            .commit("decorator must return function", decoratedValue->dataType()->toString());
+            .commit("decorator must return function", nodeTypeOf(decoratedValue)->toString());
         throw BuildAbortException();
     }
 
-    GraphBuilder(decoratedGraph).setOutput(decoratedValue);
+    setGraphReturnFromResult(
+        decoratedGraph,
+        nodeIdOf(decoratedValue),
+        nodeIdOf(decoratedValue),
+        nodeTypeOf(decoratedValue));
     leaveScope();
     return decoratedGraph;
 }
 
-Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ENTER("LINK");
     any targetNodeRes = visit(gct->at(0));
     ASSERT(
-        targetNodeRes.type() == typeid(Node *),
+        targetNodeRes.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of LINK node.");
-    Node *targetNode = any_cast<Node *>(targetNodeRes);
+    node_handle_t targetNode = any_cast<node_handle_t>(targetNodeRes);
 
-    graph_ptr_t targetGraph       = nullptr;
-    oper_idx_ptr_t targetOperator = nullptr;
-    FunctionType *targetFuncType  = nullptr;
-    std::vector<Node *> inlineLaterNodes;
+    compile_graph_ptr_t targetGraph = nullptr;
+    oper_idx_ptr_t targetOperator   = nullptr;
+    FunctionType *targetFuncType    = nullptr;
     node_vec_t withInputNodes, normInputNodes;
     type_vec_t withInputTypes, normInputTypes;
 
-    for (const auto &withInputNode : targetNode->withInputs()) {
-        withInputNodes.push_back(withInputNode);
-        withInputTypes.push_back(withInputNode->dataType());
+    for (draft_node_ref_t inputId : withInputsOf(targetNode)) {
+        node_handle_t inputNode = nodeDraftOf(targetNode)->node(inputId);
+        withInputNodes.push_back(inputNode);
+        withInputTypes.push_back(nodeTypeOf(inputNode));
     }
+
+    auto callableValueType = [&](node_handle_t inputNode) -> Type * {
+        if (nodeIsKind(inputNode, runtime::GCNodeKind::Func)) {
+            auto callee = nodeGraphOf(inputNode)->funcTarget(inputNode);
+            ASSERT(callee != nullptr, "Compile FUNC node target is null.");
+            return callee->funcType()->exitType();
+        }
+        if (nodeIsKind(inputNode, runtime::GCNodeKind::Oper)) {
+            return nodeGraphOf(inputNode)->operTarget(inputNode)->funcType()->exitType();
+        }
+        return nodeTypeOf(inputNode);
+    };
+
+    auto lowerDecoratedGraphValue =
+        [&](const compile_graph_ptr_t &decoratedGraph) -> node_handle_t {
+        currGraph_->addDependencyGraph(decoratedGraph);
+        if (!decoratedGraph->funcType()->hasExitType() ||
+            decoratedGraph->funcType()->exitType()->code() != TypeCode::Function) {
+            diags_->of(SemanticDiag::ArgumentsMismatch)
+                .atOrigin(gct->load()->origin())
+                .commit(
+                    "decorated graph should return function",
+                    decoratedGraph->funcType()->toString());
+            throw BuildAbortException();
+        }
+        node_handle_t decoratorFactoryValue = createFuncDataNode(decoratedGraph, true, false);
+        node_handle_t decoratorInvoke =
+            currGraph_->addCallNode(decoratedGraph->funcType()->exitType());
+        linkNodes(LinkType::With, decoratorFactoryValue, decoratorInvoke);
+        return decoratorInvoke;
+    };
 
     for (size_t i = 1; i < gct->size(); i++) {
         any dataRes = visit(gct->at(i));
         if (dataRes.type() == typeid(graph_ptr_t)) {
-            // The subtree returned a subgraph,
-            // which means that a lambda function is passed as a parameter
             graph_ptr_t inputGraph = any_cast<graph_ptr_t>(dataRes);
-            GraphBuilder(currGraph_).addDependency(inputGraph);
+            currGraph_->addDependencyGraph(inputGraph);
             auto inputNode = createFuncDataNode(inputGraph, true, false);
             normInputNodes.push_back(inputNode);
-            normInputTypes.push_back(inputNode->dataType());
-        } else if (dataRes.type() == typeid(Node *)) {
-            Node *inputNode = any_cast<Node *>(dataRes);
-            if (inputNode->type() == NodeType::DREF) {
-                auto *argDref = tt::as_ptr<DrefNode>(inputNode);
-                if (std::holds_alternative<graph_ptr_t>(argDref->target())) {
-                    auto decoratedGraph = std::get<graph_ptr_t>(argDref->target());
-                    GraphBuilder(currGraph_).addDependency(decoratedGraph);
-                    if (!decoratedGraph->funcType()->hasExitType() ||
-                        decoratedGraph->funcType()->exitType()->code() != TypeCode::Function) {
-                        diags_->of(SemanticDiag::ArgumentsMismatch)
-                            .atOrigin(gct->load()->origin())
-                            .commit(
-                                "decorated graph should return function",
-                                decoratedGraph->funcType()->toString());
-                        throw BuildAbortException();
-                    }
-                    Node *decoratorFactoryNode = createFuncDataNode(decoratedGraph, false, true);
-                    ASSERT(
-                        decoratorFactoryNode->type() == NodeType::FUNC,
-                        "Decorated graph should lower to a FUNC node before inlining.");
-                    FunctionType *factoryType =
-                        tt::as_ptr<FunctionType>(decoratedGraph->funcType()->exitType());
-                    (void)
-                        factoryType; // type info is used through decoratorFactoryNode->dataType().
-                    inlineLaterNodes.push_back(decoratorFactoryNode);
-                    argDref->detach();
-                    inputNode = decoratorFactoryNode;
+            normInputTypes.push_back(nodeTypeOf(inputNode));
+        } else if (dataRes.type() == typeid(node_handle_t)) {
+            node_handle_t inputNode = any_cast<node_handle_t>(dataRes);
+            if (nodeIsKind(inputNode, runtime::GCNodeKind::Dref)) {
+                const auto &target = nodeGraphOf(inputNode)->drefTarget(inputNode);
+                if (std::holds_alternative<graph_ptr_t>(target)) {
+                    inputNode = lowerDecoratedGraphValue(std::get<graph_ptr_t>(target));
                 }
             }
             normInputNodes.push_back(inputNode);
-            if (inputNode->type() == NodeType::FUNC) {
-                const auto &funcNode = tt::as_ptr<FuncNode>(inputNode);
-                const auto &fType    = funcNode->funcType();
-                normInputTypes.push_back(fType->exitType());
-            } else if (inputNode->type() == NodeType::OPER) {
-                const auto &operNode = tt::as_ptr<OperNode>(inputNode);
-                const auto &fType    = operNode->funcType();
-                normInputTypes.push_back(fType->exitType());
-            } else {
-                normInputTypes.push_back(inputNode->dataType());
-            }
+            normInputTypes.push_back(callableValueType(inputNode));
         } else {
             ASSERT(false, std::format("Unexpected result type from the {} child of LINK node", i));
         }
     }
 
-    if (targetNode->type() == NodeType::DREF) {
-        const auto &drefNode = tt::as_ptr<DrefNode>(targetNode);
-        if (std::holds_alternative<graph_vec_ptr_t>(drefNode->target())) {
-            auto graphs = std::get<graph_vec_ptr_t>(drefNode->target());
+    if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+        const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
+        if (std::holds_alternative<graph_vec_ptr_t>(drefTarget)) {
+            auto graphs = asCompileGraphVec(drefTarget);
             for (const auto &g : *graphs) {
                 const auto &funcType = g->funcType();
                 if (!funcType->hasExitType()) {
@@ -969,8 +1310,7 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     throw BuildAbortException();
                 }
                 StaticFuncTypeResolver resolver(funcType);
-                const auto &res = resolver.resolve(withInputTypes, normInputTypes, Modifier::None);
-                if (res.has_value()) {
+                if (resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
                     targetGraph = g;
                     break;
                 }
@@ -994,15 +1334,11 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     .commit(argTypesStr, overloadsStr);
                 throw BuildAbortException();
             }
-            GraphBuilder(currGraph_).addDependency(targetGraph);
-            // 如果目标图是当前图的子图，说明其是在当前图作用域中定义的
-            // 这意味这它的闭包捕获在当前图中都能找到对应节点
-            // 因而可以允许将闭包捕获优化成参数传递
-            // 这样可以减少运行时对闭包捕获数据的维护开销
+            currGraph_->addDependencyGraph(targetGraph);
             targetNode     = createFuncDataNode(targetGraph, false, true);
             targetFuncType = targetGraph->funcType();
-        } else if (std::holds_alternative<oper_group_ptr_t>(drefNode->target())) {
-            auto ops        = std::get<oper_group_ptr_t>(drefNode->target());
+        } else if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
+            auto ops        = std::get<oper_group_ptr_t>(drefTarget);
             const auto &res = ops->resolve(withInputTypes, normInputTypes, Modifier::None);
             if (!res.has_value()) {
                 std::string argTypesStr = std::format(
@@ -1024,51 +1360,27 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
             targetOperator = *res;
-            Node *operNode = OperNode::create(*currGraph_, targetOperator);
-            registerNodeOrigin(context_, operNode, gct->at(0), "gir.link.oper");
-            targetNode     = operNode;
+            targetNode     = currGraph_->addOperNode(targetOperator, 0);
+            registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
             targetFuncType = targetOperator->funcType();
-        } else if (std::holds_alternative<graph_ptr_t>(drefNode->target())) {
-            auto decoratedGraph = std::get<graph_ptr_t>(drefNode->target());
-            GraphBuilder(currGraph_).addDependency(decoratedGraph);
-            if (!decoratedGraph->funcType()->hasExitType() ||
-                decoratedGraph->funcType()->exitType()->code() != TypeCode::Function) {
-                diags_->of(SemanticDiag::ArgumentsMismatch)
-                    .atOrigin(gct->load()->origin())
-                    .commit(
-                        "decorated graph should return function",
-                        decoratedGraph->funcType()->toString());
-                throw BuildAbortException();
-            }
-
-            // 1) evaluate decorated graph itself (it should yield a function value)
-            Node *decoratorFactoryNode = createFuncDataNode(decoratedGraph, false, true);
-            ASSERT(
-                decoratorFactoryNode->type() == NodeType::FUNC,
-                "Decorated graph should lower to a FUNC node before inlining.");
-
-            FunctionType *factoryType =
-                tt::as_ptr<FunctionType>(decoratedGraph->funcType()->exitType());
-            inlineLaterNodes.push_back(decoratorFactoryNode);
-
-            // 2) call returned callable with user's args.
-            // The with-input is the decorator graph output after inlining.
-            targetNode = CallNode::create(*currGraph_, factoryType->exitType());
-            Node::link(LinkType::With, decoratorFactoryNode, targetNode);
+        } else if (std::holds_alternative<graph_ptr_t>(drefTarget)) {
+            auto decoratedGraph           = std::get<graph_ptr_t>(drefTarget);
+            node_handle_t decoratorInvoke = lowerDecoratedGraphValue(decoratedGraph);
+            FunctionType *factoryType     = tt::as_ptr<FunctionType>(nodeTypeOf(decoratorInvoke));
+            targetNode                    = currGraph_->addCallNode(factoryType->exitType());
+            linkNodes(LinkType::With, decoratorInvoke, targetNode);
             targetFuncType = factoryType;
         } else {
-            ASSERT(false, "DrefNode must refer to graph(s), operator group, or inlined graph.");
+            ASSERT(false, "Dref target must be graph set, operator group, or decorated graph.");
         }
-        drefNode->detach();
     } else {
-        const auto &dataType = targetNode->dataType();
+        Type *dataType = nodeTypeOf(targetNode);
         ASSERT(
             dataType->code() == TypeCode::Function,
             "Target node of LINK must be a function or operator node.");
-        const auto &funcType = tt::as_ptr<FunctionType>(dataType);
+        auto *funcType = tt::as_ptr<FunctionType>(dataType);
         StaticFuncTypeResolver resolver(funcType);
-        const auto &res = resolver.resolve(withInputTypes, normInputTypes, Modifier::None);
-        if (!res.has_value()) {
+        if (!resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
             std::string argTypesStr = std::format(
                 "<{}> ({})",
                 strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
@@ -1078,11 +1390,13 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 .commit(funcType->toString(), argTypesStr);
             throw BuildAbortException();
         }
-        Node *invokeNode = CallNode::create(*currGraph_, funcType->exitType());
-        Node::link(LinkType::With, targetNode, invokeNode);
+        node_handle_t invokeNode = currGraph_->addCallNode(funcType->exitType());
+        linkNodes(LinkType::With, targetNode, invokeNode);
         std::vector<camel::source::origin_id_t> callInputs;
         if (auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr) {
-            auto calleeOrigin = sourceContext->resolveGirNodeOrigin(targetNode);
+            auto calleeOrigin = sourceContext->resolveGirNodeOrigin(
+                draftDebugKey(targetNode),
+                std::string(nodeDebugEntityIdOf(targetNode)));
             if (calleeOrigin != camel::source::kInvalidOriginId) {
                 callInputs.push_back(calleeOrigin);
             }
@@ -1099,15 +1413,14 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                                  : (targetOperator ? "<" + targetOperator->name() + ">" : "");
 
     for (size_t i = 0; i < withInputNodes.size(); i++) {
-        Node *inputNode = withInputNodes[i];
-        bool isVar      = (i < targetFuncType->withTypesCount()) &&
-                          targetFuncType->withIsVarAt(static_cast<size_t>(i));
+        node_handle_t inputNode = withInputNodes[i];
+        bool isVar              = (i < targetFuncType->withTypesCount()) &&
+                                  targetFuncType->withIsVarAt(static_cast<size_t>(i));
         tryRemoveCtrlLink(inputNode, targetNode);
-        Node::link(LinkType::With, inputNode, targetNode);
-        if (nodeModifierMap_.count(inputNode)) {
-            Node *modifierNode = nodeModifierMap_[inputNode];
-            if (modifierNode && linkCheek(modifierNode, targetNode)) {
-                Node::link(LinkType::Ctrl, modifierNode, targetNode);
+        linkNodes(LinkType::With, inputNode, targetNode);
+        if (auto modifierNode = modifierOf(inputNode); modifierNode.has_value()) {
+            if (sameGraph(*modifierNode, currGraph_) && linkCheek(*modifierNode, targetNode)) {
+                linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
             }
         }
         if (isVar) {
@@ -1116,22 +1429,18 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     .atOrigin(gct->load()->origin())
                     .commit(targetName + ": " + targetFuncType->toString());
             }
-            nodeModifierMap_[inputNode] = targetNode;
+            setModifier(inputNode, targetNode);
         }
     }
 
     for (size_t i = 0; i < normInputNodes.size(); i++) {
-        Node *inputNode = normInputNodes[i];
-        bool isVar      = false;
-        if (i < targetFuncType->normTypesCount()) {
-            isVar = targetFuncType->normIsVarAt(i);
-        }
+        node_handle_t inputNode = normInputNodes[i];
+        bool isVar = i < targetFuncType->normTypesCount() && targetFuncType->normIsVarAt(i);
         tryRemoveCtrlLink(inputNode, targetNode);
-        Node::link(LinkType::Norm, inputNode, targetNode);
-        if (nodeModifierMap_.count(inputNode)) {
-            Node *modifierNode = nodeModifierMap_[inputNode];
-            if (modifierNode && linkCheek(modifierNode, targetNode)) {
-                Node::link(LinkType::Ctrl, modifierNode, targetNode);
+        linkNodes(LinkType::Norm, inputNode, targetNode);
+        if (auto modifierNode = modifierOf(inputNode); modifierNode.has_value()) {
+            if (sameGraph(*modifierNode, currGraph_) && linkCheek(*modifierNode, targetNode)) {
+                linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
             }
         }
         if (isVar) {
@@ -1140,82 +1449,65 @@ Node *Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     .atOrigin(gct->load()->origin())
                     .commit(targetName + ": " + targetFuncType->toString());
             }
-            nodeModifierMap_[inputNode] = targetNode;
+            setModifier(inputNode, targetNode);
         }
     }
 
     if (synced_) {
-        if (lastSyncedNode_ && linkCheek(lastSyncedNode_, targetNode)) {
-            Node::link(LinkType::Ctrl, lastSyncedNode_, targetNode);
+        if (lastSyncedNode_ != nullptr && linkCheek(lastSyncedNode_, targetNode)) {
+            linkNodes(LinkType::Ctrl, lastSyncedNode_, targetNode);
         }
         lastSyncedNode_ = targetNode;
     }
-
-    // Inline decorated helper graphs after downstream links are fully established.
-    // This rewires the decorated graph output directly into the target inputs.
-    for (Node *inlineNode : inlineLaterNodes) {
-        InlineResult inlineResult = GraphBuilder(currGraph_).inlineCallable(inlineNode);
-        ASSERT(
-            inlineResult.valueExit != nullptr,
-            "Decorated helper inline must produce a value exit.");
-
-        GraphBuilder(currGraph_).eraseNode(inlineNode);
-    }
-
     LEAVE("LINK");
     return targetNode;
 }
 
-Node *Builder::visitWithNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     ENTER("WITH");
     any targetNodeRes = visit(gct->at(0));
     ASSERT(
-        targetNodeRes.type() == typeid(Node *),
+        targetNodeRes.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of WITH node.");
-    Node *targetNode = any_cast<Node *>(targetNodeRes);
-    vector<Node *> inputs;
+    node_handle_t targetNode = any_cast<node_handle_t>(targetNodeRes);
+    vector<node_handle_t> inputs;
     for (size_t i = 1; i < gct->size(); i++) {
         any dataRes = visit(gct->at(i));
         if (dataRes.type() == typeid(graph_ptr_t)) {
-            // The subtree returned a subgraph,
-            // which means that a lambda function is passed as a parameter
             graph_ptr_t subGraph = any_cast<graph_ptr_t>(dataRes);
-            GraphBuilder(currGraph_).addDependency(subGraph);
+            currGraph_->addDependencyGraph(subGraph);
             auto inputNode = createFuncDataNode(subGraph, true, false);
             inputs.push_back(inputNode);
-        } else if (dataRes.type() == typeid(Node *)) {
-            Node *inputNode = any_cast<Node *>(dataRes);
-            inputs.push_back(inputNode);
+        } else if (dataRes.type() == typeid(node_handle_t)) {
+            inputs.push_back(any_cast<node_handle_t>(dataRes));
         } else {
             ASSERT(false, std::format("Unexpected result type from the {} child of WITH node", i));
         }
     }
-    for (size_t i = 0; i < inputs.size(); i++) {
-        Node *inputNode = inputs[i];
+    for (node_handle_t inputNode : inputs) {
         tryRemoveCtrlLink(inputNode, targetNode);
-        Node::link(LinkType::With, inputNode, targetNode);
+        linkNodes(LinkType::With, inputNode, targetNode);
     }
-    // with 操作不属于调用，所以这里不处理synced_和lastCalledFuncNode_
     LEAVE("WITH");
     return targetNode;
 }
 
-Node *Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     ENTER("ACCS");
     any res = visit(gct->at(0));
     ASSERT(
-        res.type() == typeid(Node *),
+        res.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of ACCS node.");
-    Node *tgtNode = any_cast<Node *>(res);
+    node_handle_t tgtNode = any_cast<node_handle_t>(res);
     ASSERT(tgtNode != nullptr, "Access node target is null.");
-    if (!tgtNode->dataType()->isComposite()) {
+    if (!nodeTypeOf(tgtNode)->isComposite()) {
         diags_->of(SemanticDiag::TypeNotIndexable)
             .atOrigin(gct->load()->origin())
-            .commit(tgtNode->dataType()->toString());
+            .commit(nodeTypeOf(tgtNode)->toString());
         throw BuildAbortException();
     }
 
-    const auto tgtType   = tgtNode->dataType();
+    const auto tgtType   = nodeTypeOf(tgtNode);
     const auto &accsLoad = gct->loadAs<GCT::AccsLoad>();
     Type *elemType       = nullptr;
 
@@ -1246,23 +1538,28 @@ Node *Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         ASSERT(false, "Unexpected target type in ACCS node.");
     }
 
-    graph_ptr_t &graph = currGraph_;
-    Node *accsNode     = AccsNode::create(*graph, elemType, accsLoad->index());
-    Node::link(LinkType::Norm, tgtNode, accsNode);
+    node_handle_t accsNode{};
+    if (std::holds_alternative<size_t>(accsLoad->index())) {
+        accsNode =
+            currGraph_->addAccsNode(elemType, static_cast<uint32_t>(accsLoad->index<size_t>()));
+    } else {
+        accsNode = currGraph_->addAccsNode(elemType, accsLoad->index<std::string>());
+    }
+    linkNodes(LinkType::Norm, tgtNode, accsNode);
     registerNodeOrigin(context_, accsNode, gct, "gir.accs");
     LEAVE("ACCS");
     return accsNode;
 }
 
-Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     ENTER("BRCH");
     const auto &res = visit(gct->at(0));
     ASSERT(
-        res.type() == typeid(Node *),
+        res.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of BRCH node.");
-    Node *condNode = any_cast<Node *>(res);
-    Node *brchNode = BrchNode::create(*currGraph_, Type::Int64());
-    Node *joinNode = JoinNode::create(*currGraph_, nullptr);
+    node_handle_t condNode = any_cast<node_handle_t>(res);
+    node_handle_t joinNode = currGraph_->addJoinNode(nullptr, nullptr, 0);
+    node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, {}, nullptr);
     registerNodeOrigin(context_, brchNode, gct, "gir.brch");
     registerNodeOrigin(
         context_,
@@ -1278,7 +1575,9 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
     Type *joinType = nullptr;
 
-    Node::link(LinkType::Norm, condNode, brchNode);
+    linkNodes(LinkType::Norm, condNode, brchNode);
+    std::vector<runtime::GCBranchArm> branchArms;
+    std::vector<node_handle_t> branchFuncs;
 
     for (size_t i = 1; i < gct->size(); i++) {
         const auto &caseNode         = gct->atAs<GCT::CaseLoad>(i);
@@ -1299,10 +1598,10 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
             ASSERT(caseNode->size() == 2, "Value case should have two children.");
             any res = visit(caseNode->at(0));
             ASSERT(
-                res.type() == typeid(Node *),
+                res.type() == typeid(node_handle_t),
                 "Unexpected result type from visiting the case node.");
-            Node *valueNode = any_cast<Node *>(res);
-            Node::link(LinkType::With, valueNode, brchNode);
+            node_handle_t valueNode = any_cast<node_handle_t>(res);
+            linkNodes(LinkType::With, valueNode, brchNode);
             caseExecNode = caseNode->atAs<GCT::ExecLoad>(1);
             break;
         }
@@ -1312,61 +1611,162 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
         graph_ptr_t subGraph = enterScope(FunctionType::create());
         registerGraphOrigin(context_, subGraph, caseExecNode, "gir.brch.case.graph");
-        Node *resNode = visitExecNode(caseExecNode);
-        if (subGraph->exitNode_ == nullptr) {
-            if (resNode) {
-                GraphBuilder(subGraph).setOutput(resNode);
+        node_handle_t resNode = visitExecNode(caseExecNode);
+        if (subGraph->draft().exitNode() == runtime::kInvalidNodeRef) {
+            if (resNode != nullptr) {
+                setGraphReturnFromResult(
+                    subGraph,
+                    nodeIdOf(resNode),
+                    nodeIdOf(resNode),
+                    nodeTypeOf(resNode));
             } else {
-                // function with no return value, setting null by default
-                Node *nullNode = DataNode::create(*subGraph, Data::null());
-                GraphBuilder(subGraph).setOutput(nullNode);
+                node_handle_t nullNode = subGraph->addStaticDataNode(Data::null());
+                setGraphReturnFromResult(
+                    subGraph,
+                    nodeIdOf(nullNode),
+                    nodeIdOf(nullNode),
+                    Type::Void());
             }
         }
         leaveScope();
 
-        GraphBuilder(currGraph_).addDependency(subGraph);
+        currGraph_->addDependencyGraph(subGraph);
         Type *exitType = subGraph->funcType()->exitType();
 
-        // 保证所有捕获的变量都在 BRCH 节点执行之前准备好
-        // 这样的好处是，保证 BRCH 节点到 JOIN 节点之间的各条分支路径上
-        // 所有的节点在拓扑排序时会被紧密地排列在一起
-        // 而不会有其他外部节点插入到中间
-        // 进而便于图调度算法的实现（可以直接跳转而不需要频繁判断）
-        for (const auto &port : subGraph->closure()) {
-            const auto &portNode = tt::as_ptr<PortNode>(port);
-            const auto &refNode  = resolveNodeByRef(portNode->name());
+        // Ensure all captured variables are ready before the BRCH node runs.
+        // This keeps the nodes on every branch path between BRCH and JOIN
+        // tightly grouped in topological order, with no unrelated external
+        // nodes inserted in between.
+        // That makes the graph scheduler easier to implement because it can
+        // jump directly without frequent checks.
+        for (draft_node_ref_t portId : subGraph->draft().closureNodes()) {
+            const auto &refNode =
+                resolveNodeByRef(subGraph->nodePortName(subGraph->draft().node(portId)));
             if (linkCheek(refNode, brchNode)) {
-                Node::link(LinkType::Ctrl, refNode, brchNode);
+                linkNodes(LinkType::Ctrl, refNode, brchNode);
             }
         }
 
-        // 在分支中，默认允许闭包参数化
         auto funcNode = createFuncDataNode(subGraph, false, true);
+        branchFuncs.push_back(funcNode);
+        branchArms.push_back(
+            runtime::GCBranchArm{
+                .head = nodeIdOf(funcNode),
+                .tail = nodeIdOf(funcNode),
+            });
 
         if (joinType == nullptr) {
             joinType = exitType;
-            detail::NodeMutation::setDataType(joinNode, joinType);
+            setNodeType(joinNode, joinType);
         } else {
             if (!exitType->equals(joinType)) {
                 diags_->of(SemanticDiag::BranchReturnTypeMismatch)
                     .atOrigin(gct->load()->origin())
                     .commit(
-                        currGraph_->location() + ": " + currGraph_->funcType()->toString(),
+                        currGraph_->name() + ": " + currGraph_->funcType()->toString(),
                         joinType->toString(),
                         exitType->toString());
                 throw BuildAbortException();
             }
         }
 
-        Node::link(LinkType::Ctrl, brchNode, funcNode);
-        Node::link(LinkType::With, funcNode, joinNode);
+        linkNodes(LinkType::Ctrl, brchNode, funcNode);
+        linkNodes(LinkType::With, funcNode, joinNode);
     }
 
-    Node::link(LinkType::Norm, brchNode, joinNode);
+    runtime::DraftBrchPayload payload{
+        .join       = nodeIdOf(joinNode),
+        .armCount   = static_cast<runtime::gc_cnt_t>(branchArms.size()),
+        .defaultArm = runtime::kInvalidNodeRef};
+    std::vector<std::byte> brchBytes(
+        sizeof(runtime::DraftBrchPayload) + sizeof(runtime::GCBranchArm) * branchArms.size());
+    std::memcpy(brchBytes.data(), &payload, sizeof(payload));
+    if (!branchArms.empty()) {
+        std::memcpy(
+            brchBytes.data() + sizeof(payload),
+            branchArms.data(),
+            sizeof(runtime::GCBranchArm) * branchArms.size());
+    }
+    std::vector<draft_node_ref_t> brchNormInputs(
+        normInputsOf(brchNode).begin(),
+        normInputsOf(brchNode).end());
+    std::vector<draft_node_ref_t> brchWithInputs(
+        withInputsOf(brchNode).begin(),
+        withInputsOf(brchNode).end());
+    std::vector<draft_node_ref_t> brchCtrlInputs(
+        ctrlInputsOf(brchNode).begin(),
+        ctrlInputsOf(brchNode).end());
+    std::vector<draft_node_ref_t> brchNormUsers(
+        normUsersOf(brchNode).begin(),
+        normUsersOf(brchNode).end());
+    std::vector<draft_node_ref_t> brchWithUsers(
+        withUsersOf(brchNode).begin(),
+        withUsersOf(brchNode).end());
+    std::vector<draft_node_ref_t> brchCtrlUsers(
+        ctrlUsersOf(brchNode).begin(),
+        ctrlUsersOf(brchNode).end());
+    const auto *brchHeader   = nodeHeaderOf(brchNode);
+    const auto brchDataIndex = brchHeader->dataIndex != 0
+                                   ? brchHeader->dataIndex
+                                   : currGraph_->addRuntimeSlot(Type::Int64());
+    currGraph_->draft().rewriteNode(
+        nodeIdOf(brchNode),
+        runtime::DraftNodeInit{
+            .dataIndex    = brchDataIndex,
+            .dataType     = Type::Int64(),
+            .runtimeFlags = brchHeader->runtimeFlags,
+            .kind         = runtime::GCNodeKind::Brch,
+            .payload      = std::span<const std::byte>(brchBytes.data(), brchBytes.size()),
+            .normInputs   = brchNormInputs,
+            .withInputs   = brchWithInputs,
+            .ctrlInputs   = brchCtrlInputs,
+            .normUsers    = brchNormUsers,
+            .withUsers    = brchWithUsers,
+            .ctrlUsers    = brchCtrlUsers});
+    runtime::GCJoinBody joinBody{
+        .brch     = nodeIdOf(brchNode),
+        .armCount = static_cast<runtime::gc_cnt_t>(branchArms.size())};
+    std::vector<draft_node_ref_t> joinNormInputs(
+        normInputsOf(joinNode).begin(),
+        normInputsOf(joinNode).end());
+    std::vector<draft_node_ref_t> joinWithInputs(
+        withInputsOf(joinNode).begin(),
+        withInputsOf(joinNode).end());
+    std::vector<draft_node_ref_t> joinCtrlInputs(
+        ctrlInputsOf(joinNode).begin(),
+        ctrlInputsOf(joinNode).end());
+    std::vector<draft_node_ref_t> joinNormUsers(
+        normUsersOf(joinNode).begin(),
+        normUsersOf(joinNode).end());
+    std::vector<draft_node_ref_t> joinWithUsers(
+        withUsersOf(joinNode).begin(),
+        withUsersOf(joinNode).end());
+    std::vector<draft_node_ref_t> joinCtrlUsers(
+        ctrlUsersOf(joinNode).begin(),
+        ctrlUsersOf(joinNode).end());
+    const auto *joinHeader = nodeHeaderOf(joinNode);
+    const auto joinDataIndex =
+        joinHeader->dataIndex != 0 ? joinHeader->dataIndex : currGraph_->addRuntimeSlot(joinType);
+    currGraph_->draft().rewriteNode(
+        nodeIdOf(joinNode),
+        runtime::DraftNodeInit{
+            .dataIndex    = joinDataIndex,
+            .dataType     = joinType,
+            .runtimeFlags = joinHeader->runtimeFlags,
+            .kind         = runtime::GCNodeKind::Join,
+            .payload      = std::as_bytes(std::span{&joinBody, 1}),
+            .normInputs   = joinNormInputs,
+            .withInputs   = joinWithInputs,
+            .ctrlInputs   = joinCtrlInputs,
+            .normUsers    = joinNormUsers,
+            .withUsers    = joinWithUsers,
+            .ctrlUsers    = joinCtrlUsers});
+
+    linkNodes(LinkType::Norm, brchNode, joinNode);
 
     if (synced_) {
-        if (lastSyncedNode_ && linkCheek(lastSyncedNode_, brchNode)) {
-            Node::link(LinkType::Ctrl, lastSyncedNode_, brchNode);
+        if (lastSyncedNode_ != nullptr && linkCheek(lastSyncedNode_, brchNode)) {
+            linkNodes(LinkType::Ctrl, lastSyncedNode_, brchNode);
         }
         lastSyncedNode_ = joinNode;
     }
@@ -1375,87 +1775,80 @@ Node *Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     return joinNode;
 }
 
-Node *Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
     ENTER("ANNO");
     ASSERT(gct->size() == 1, "ANNO node should have exactly one child.");
     const auto &res = visit(gct->at(0));
-    if (res.type() == typeid(Node *)) {
-        Node *node = any_cast<Node *>(res);
+    if (res.type() == typeid(node_handle_t)) {
         LEAVE("ANNO");
-        return node;
+        return any_cast<node_handle_t>(res);
     }
     if (res.type() == typeid(graph_ptr_t)) {
         graph_ptr_t graph = any_cast<graph_ptr_t>(res);
-        GraphBuilder(currGraph_).addDependency(graph);
-        Node *node = createFuncDataNode(graph, true, false);
+        currGraph_->addDependencyGraph(graph);
         LEAVE("ANNO");
-        return node;
+        return createFuncDataNode(graph, true, false);
     }
     ASSERT(false, "Unexpected child result type in ANNO node.");
     LEAVE("ANNO");
-    return nullptr;
+    return {};
 }
 
-Node *Builder::visitExitNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
-    auto res      = visit(gct->at(0));
-    Node *resNode = nullptr;
-    if (res.type() == typeid(Node *)) {
-        resNode = any_cast<Node *>(res);
+    auto res = visit(gct->at(0));
+    node_handle_t resNode{};
+    if (res.type() == typeid(node_handle_t)) {
+        resNode = any_cast<node_handle_t>(res);
     } else if (res.type() == typeid(graph_ptr_t)) {
         graph_ptr_t subGraph = any_cast<graph_ptr_t>(res);
-        GraphBuilder(currGraph_).addDependency(subGraph);
-        // Returning a function value should lower to a DATA(Function) static slot rather than an
-        // eager call.
+        currGraph_->addDependencyGraph(subGraph);
         resNode = createFuncDataNode(subGraph, true, false);
     } else {
         ASSERT(false, "Unexpected result type from Enter child of EXIT node.");
     }
-    Node *outputAnchor = resNode;
+    node_handle_t outputAnchor = resNode;
     node_vec_t pendingCtrlInputs;
-    if (nodeModifierMap_.count(resNode)) {
-        Node *modifier = nodeModifierMap_[resNode];
-        if (modifier) {
-            pendingCtrlInputs.push_back(modifier);
-        }
+    if (auto modifier = modifierOf(resNode); modifier.has_value()) {
+        pendingCtrlInputs.push_back(*modifier);
     }
-    if (synced_ && lastSyncedNode_) {
+    if (synced_ && lastSyncedNode_ != nullptr) {
         pendingCtrlInputs.push_back(lastSyncedNode_);
     }
 
-    // Decide output anchor first, then validate Ctrl links against that anchor.
-    // This avoids false negatives such as `tail -> JOIN` (cycle-prone) where
-    // the correct lowering should be `tail -> GATE`, with EXIT anchored on GATE.
-    if (!pendingCtrlInputs.empty() && resNode->type() != NodeType::GATE) {
-        auto *gatedValue = GateNode::create(*currGraph_);
-        detail::NodeMutation::setDataType(gatedValue, resNode->dataType());
-        Node::link(LinkType::Norm, resNode, gatedValue);
+    if (!pendingCtrlInputs.empty() && !nodeIsKind(resNode, runtime::GCNodeKind::Gate)) {
+        node_handle_t gatedValue = currGraph_->addGateNode(nodeTypeOf(resNode));
+        linkNodes(LinkType::Norm, resNode, gatedValue);
         outputAnchor = gatedValue;
     }
-    for (Node *ctrlInput : pendingCtrlInputs) {
-        if (ctrlInput && linkCheek(ctrlInput, outputAnchor)) {
-            Node::link(LinkType::Ctrl, ctrlInput, outputAnchor);
+    for (node_handle_t ctrlInput : pendingCtrlInputs) {
+        if (ctrlInput != nullptr && linkCheek(ctrlInput, outputAnchor)) {
+            linkNodes(LinkType::Ctrl, ctrlInput, outputAnchor);
         }
     }
-    GraphBuilder(currGraph_).setOutput(outputAnchor);
+    setGraphReturnFromResult(
+        currGraph_,
+        nodeIdOf(outputAnchor),
+        nodeIdOf(resNode),
+        nodeTypeOf(resNode));
 
     LEAVE("EXIT");
     return resNode;
 }
 
-Node *Builder::visitExecNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     ENTER("EXEC");
-    const auto &execLoad = gct->loadAs<GCT::ExecLoad>();
-    bool old             = synced_;
-    Node *oldFuncNode    = lastSyncedNode_;
-    synced_              = execLoad->synced();
-    lastSyncedNode_      = nullptr;
-    Node *res            = nullptr;
+    const auto &execLoad      = gct->loadAs<GCT::ExecLoad>();
+    bool old                  = synced_;
+    node_handle_t oldFuncNode = lastSyncedNode_;
+    synced_                   = execLoad->synced();
+    lastSyncedNode_           = {};
+    node_handle_t res{};
     for (size_t i = 0; i < gct->size(); i++) {
         try {
             any result = visit(gct->at(i));
-            if (result.has_value() && result.type() == typeid(Node *)) {
-                res = any_cast<Node *>(result);
+            if (result.has_value() && result.type() == typeid(node_handle_t)) {
+                res = any_cast<node_handle_t>(result);
             }
         } catch (const BuildAbortException &e) {
             continue;
@@ -1474,17 +1867,28 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
     for (const Reference &ref : exports) {
         auto optDecorated = decoratedGraphAt(ref.toString());
         if (optDecorated.has_value()) {
-            module_->exportEntity(ref, optDecorated.value());
+            module_->exportEntity(
+                ref,
+                camel::core::module::detail::EntityAccess::makeDecoratedGraph(
+                    eraseCompileGraph(optDecorated.value())));
             continue;
         }
         auto optNode = nodeAt(ref);
         if (optNode.has_value()) {
-            module_->exportEntity(ref, optNode.value());
+            auto *exportedNode = new node_handle_t(optNode.value());
+            module_->exportEntity(
+                ref,
+                camel::core::module::detail::EntityAccess::makeNode(
+                    static_cast<camel::core::module::detail::EntityAccess::node_handle_t>(
+                        exportedNode)));
             continue;
         }
         auto optGraph = graphsAt(ref);
         if (optGraph.has_value()) {
-            module_->exportEntity(ref, optGraph.value());
+            module_->exportEntity(
+                ref,
+                camel::core::module::detail::EntityAccess::makeGraphSet(
+                    eraseCompileGraphSet(optGraph.value())));
             continue;
         }
         diags_->of(SemanticDiag::UnresolvedReference)

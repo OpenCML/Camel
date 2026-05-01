@@ -13,13 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 14, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/utils/windows_parser_guard.h"
 
-#include "camel/compile/gir.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/execute/pass/base.h"
 #include "camel/utils/log.h"
@@ -96,7 +95,7 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
 
         std::vector<std::string> passes = getState().runPasses;
         static const std::vector<std::string> defaultFallback{"std::default"};
-        auto graph  = st.ctx->rootGraph();
+        auto *graph = st.ctx->runtimeRootGraph();
         auto result = applyPassesDetailed(graph, passes, st.ctx, std::cout);
         graph       = result.graph;
         if (result.failed()) {

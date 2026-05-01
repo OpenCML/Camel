@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -66,8 +66,8 @@ class OtherTypeRegistry {
     static std::atomic<uint32_t> counter;
 };
 
-/** 供外部模块（如 python.cmo）注册 Other 类型，避免直接引用 OtherTypeRegistry
- * 的静态数据导致链接失败。 */
+/** Allow external modules (for example python.cmo) to register Other types without directly
+ * depending on OtherTypeRegistry's static data and risking link failures. */
 TypeCode registerOtherType(const std::string &typeName, TypeFlag flags);
 
 class OtherType : public Type {
@@ -97,7 +97,9 @@ class OtherType : public Type {
     OtherType(TypeCode code, size_t paramCount, Type **params)
         : Type(code), paramCount_(paramCount), params_(params) {}
 
-    /** 子类实现 cloneWithParams 时可用：在 permSpace 分配并拷贝 params 数组，返回指针。 */
+    /** Helper for subclass cloneWithParams: allocate in permSpace and copy the params array,
+     *
+     * returning the new pointer. */
     static Type **copyParams(std::span<Type *const> params);
 
   protected:

@@ -13,33 +13,43 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 17, 2025
- * Updated: Mar. 29, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/rtdata/func.h"
-#include "camel/compile/gir/graph.h"
+#include "camel/runtime/graph.h"
 
-const type::TupleType *Function::tupleType() const { return graph_->closureType(); }
+void Function::setRuntimeGraph(camel::runtime::GCGraph *graph) {
+    ASSERT(graph != nullptr, "Runtime Function graph cannot be null.");
+    runtimeGraph_ = graph;
+}
+
+const type::TupleType *Function::tupleType() const {
+    ASSERT(runtimeGraph_ != nullptr, "Runtime Function graph cannot be null.");
+    return tupleType_;
+}
 
 Function *Function::create(
-    GIR::Graph *graph, const type::Type *tupleType, camel::core::mm::IAllocator &allocator) {
+    camel::runtime::GCGraph *graph, const type::Type *tupleType,
+    camel::core::mm::IAllocator &allocator) {
+    ASSERT(graph != nullptr, "Runtime Function graph cannot be null.");
     ASSERT(tupleType && tupleType->code() == type::TypeCode::Tuple, "Type must be TupleType");
     const type::TupleType *tt = static_cast<const type::TupleType *>(tupleType);
-    ASSERT(graph != nullptr, "Function graph cannot be null.");
-    ASSERT(tt->size() == graph->closure().size(), "Function closure tuple size mismatch.");
 
     void *mem = allocator.alloc(sizeof(Function), alignof(Function));
     if (!mem)
         throw std::bad_alloc();
 
-    auto *fn     = new (mem) Function(graph);
+    auto *fn     = new (mem) Function(graph, tt);
     fn->closure_ = Tuple::create(tt->size(), allocator);
     return fn;
 }
 
 void Function::print(std::ostream &os, const type::Type *type) const {
-    os << "Function(graph=" << graph_->name() << ", tupleSlots=";
+    (void)type;
+    ASSERT(runtimeGraph_ != nullptr, "Function print requires graph identity.");
+    os << "Function(graph=" << runtimeGraph_->name() << ", tupleSlots=";
     os << (closure_ ? std::to_string(closure_->size()) : "null");
     os << ")";
 }

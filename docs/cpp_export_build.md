@@ -171,6 +171,7 @@ build\cpp_gen\Release\cpp_gen.exe
     - `node scripts/sync-python-sdks.js <python-archive-root>`
   - 构建优先从 `modules/python/sdks/` 查找；若不存在则回退当前激活 venv。
   - 若两者都缺失，仅跳过 `python.cmo` 编译，不影响其它模块。
+- **PyPI 打包（与日常 `npm run build` 的差异、多 SDK 多 wheel、`CAMEL_PYPI_SINGLE_SDK_MM`）**：见 [pypi-packaging.md](pypi-packaging.md)。
 - **链接错误**：检查 Conan 依赖和 CMake 配置是否与主工程一致
 - **模块未找到**：`-L` 指向的目录需包含对应 `.cmo` 文件（如 `time.cmo`）
 - **UTF-16 BOM 错误**：PowerShell 重定向默认 UTF-16，Clang 会报错，请用文档中的 UTF-8 写入方式

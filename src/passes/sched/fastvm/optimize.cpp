@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 16, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -112,17 +112,18 @@ void removeop(
 }
 
 size_t findPrev(bytecode_vec_t &codes, size_t index) {
-    // 必须从头开始查找，因为字节码是变长的
+    // Must search from the beginning because bytecode is variable length.
     for (size_t i = 0; i < index;) {
         Bytecode &bc = codes[i];
         size_t next  = i + bc.opsize;
         if (next == index) {
-            return i; // 如果找到，则返回该指令的索引，表示该指令就是前一个指令
+            return i; // Found: return the instruction index, meaning it is the previous
+                      // instruction.
         } else {
             i = next;
         }
     }
-    return index; // 如果找不到，则返回 index，表示当前指令就是第一个指令
+    return index; // Not found: return index, meaning the current instruction is the first one.
 }
 
 size_t findNext(bytecode_vec_t &codes, size_t index) { return index + codes[index].opsize; }

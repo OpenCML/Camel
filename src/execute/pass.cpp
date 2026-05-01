@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Apr. 01, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,10 @@
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "macro/macro.h"
+#include "passes/opt/devirtualize/devirtualize.h"
 #include "passes/opt/inline/inline.h"
+#include "passes/opt/opt/opt.h"
+#include "passes/opt/specialize/specialize.h"
 #include "passes/sched/fastvm/bcdump.h"
 #include "passes/sched/fastvm/fastvm.h"
 #include "passes/sched/fastvm/jit/dump/asmdump.h"
@@ -37,15 +40,17 @@
 #include "camel/utils/log.h"
 
 #include <format>
+#include <memory>
 #include <sstream>
 
-using namespace GIR;
 using namespace camel::core::error;
 using namespace camel::core::context;
+using camel::runtime::GCGraph;
 
-graph_ptr_t NullGraphIRPass::apply(graph_ptr_t &graph, std::ostream &os) {
-    // Do nothing
-    return Graph::null();
+GCGraph *NullGraphIRPass::apply(GCGraph *graph, std::ostream &os) {
+    (void)graph;
+    (void)os;
+    return nullptr;
 }
 
 using PassFactory  = std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>;
@@ -99,10 +104,14 @@ void collectPassPaths(
     });
 }
 
-// 嵌套初始化列表：def(factory) 叶子节点，def(factory, {...}) 带子域，scope({...}) 纯子域
+// Nested pass registry initializer helpers: `def(factory)` creates a leaf,
+// `def(factory, {...})` creates a node with both a factory and children, and
+// `scope({...})` creates a pure namespace node.
 struct PassDef {
     std::optional<PassFactory> value;
-    std::vector<std::pair<std::string, PassDef>> children;
+    // shared_ptr: vector<pair<..., PassDef>> would instantiate vector while PassDef is still
+    // incomplete; Clang + libstdc++ reject that ([vector] requires a complete element type).
+    std::vector<std::pair<std::string, std::shared_ptr<PassDef>>> children;
 };
 
 PassDef def(PassFactory f) { return PassDef{.value = std::move(f), .children = {}}; }
@@ -110,19 +119,20 @@ PassDef def(PassFactory f) { return PassDef{.value = std::move(f), .children = {
 PassDef def(PassFactory f, std::initializer_list<std::pair<const char *, PassDef>> list) {
     PassDef r{.value = std::move(f), .children = {}};
     for (const auto &[k, v] : list)
-        r.children.emplace_back(k, v);
+        r.children.emplace_back(k, std::make_shared<PassDef>(v));
     return r;
 }
 
 PassDef scope(std::initializer_list<std::pair<const char *, PassDef>> list) {
     PassDef r;
     for (const auto &[k, v] : list)
-        r.children.emplace_back(k, v);
+        r.children.emplace_back(k, std::make_shared<PassDef>(v));
     return r;
 }
 
 void buildPassScope(PassScopePtr s, const PassDef &def) {
-    for (const auto &[name, child] : def.children) {
+    for (const auto &[name, childPtr] : def.children) {
+        const PassDef &child = *childPtr;
         if (child.value)
             s->insert(name, *child.value);
         if (!child.children.empty()) {
@@ -179,24 +189,27 @@ PassScopePtr initPassScope() {
                                   return std::make_unique<InlineRewritePass>(
                                       ctx,
                                       InlineRewriteConfig{
-                                          .strategy = InlineTargetStrategy::Small,
+                                          .inlineStrategy = InlineTargetStrategy::Small,
                                       });
                               })},
                              {"arm", def([](const context_ptr_t &ctx) {
                                   return std::make_unique<InlineRewritePass>(
                                       ctx,
                                       InlineRewriteConfig{
-                                          .strategy = InlineTargetStrategy::Arm,
+                                          .inlineStrategy = InlineTargetStrategy::Arm,
                                       });
                               })},
                              {"hybrid", def([](const context_ptr_t &ctx) {
                                   return std::make_unique<InlineRewritePass>(
                                       ctx,
                                       InlineRewriteConfig{
-                                          .strategy = InlineTargetStrategy::Hybrid,
+                                          .inlineStrategy = InlineTargetStrategy::Hybrid,
                                       });
                               })},
                          })},
+                    {"devirtualize", def(PASS(DevirtualizeRewritePass))},
+                    {"specialize", def(PASS(SpecializeRewritePass))},
+                    {"opt", def(PASS(OptimizeRewritePass))},
                     {"taskflow", def(PASS(TaskflowExecSchedPass))},
                     {"tfdump", def(PASS(TfDumpPass))},
                 }),
@@ -211,12 +224,12 @@ PassScopePtr initPassScope() {
 const PassScopePtr passScope = initPassScope();
 
 std::unordered_map<std::string, std::string> passAliases = {
-    // 标准调度器
+    // Standard scheduler aliases
     {"std::default", "std::nodevm"},
     {"std::linear", "std::nodevm"},
     {"std::parallel", "std::taskflow"},
 
-    // 常用vm缩写
+    // Common VM aliases
     {"std::lnr", "std::fastvm"},
     {"std::prl", "std::taskflow"},
     {"std::fvm", "std::fastvm"},
@@ -224,8 +237,8 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::nvm", "std::nodevm"},
     {"std::svm", "std::stackvm"},
     {"std::tf", "std::taskflow"},
-
-    // 常用转译遍缩写
+    // Common translation and dump aliases
+    // Common translation and dump aliases
     {"std::dot", "std::graphviz"},
     {"std::gir", "std::graphviz"},
     {"std::cxx", "std::cpp"},
@@ -245,14 +258,14 @@ std::unordered_map<std::string, std::string> passAliases = {
 } // namespace
 
 PassFactory findPassFactory(const std::string &name, std::ostream &os) {
-    // 1. 解析别名
+    // 1. Resolve aliases
     std::string resolved = name;
     auto aliasIt         = passAliases.find(name);
     if (aliasIt != passAliases.end()) {
         resolved = aliasIt->second;
     }
 
-    // 2. 含 :: 的完整路径：按域分级查找
+    // 2. Full paths with :: search by scope hierarchy
     if (resolved.find("::") != std::string::npos) {
         auto path = splitPath(resolved);
         if (!path.empty()) {
@@ -261,7 +274,7 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
                 return factory;
         }
     } else {
-        // 3. 无 ::：先查 std::name，再查全局 name
+        // 3. No :: try std::name first, then the global name
         auto stdPath = splitPath("std::" + resolved);
         auto factory = lookupInScope(passScope, stdPath);
         if (factory)
@@ -272,7 +285,7 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
             return factory;
     }
 
-    // 未找到，输出可用 pass 列表
+    // Not found; print the list of available passes
     os << std::format("Pass <{}> not found, available passes are:\n", name);
     std::vector<std::string> allPaths;
     collectPassPaths(passScope, "", allPaths);
@@ -289,7 +302,7 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
 }
 
 PassApplyResult applyPassesDetailed(
-    GIR::graph_ptr_t graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
+    GCGraph *graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
     std::ostream &os) {
     if (!passes.empty() && Logger::ShouldEmit(LogLevel::Info, "Pass")) {
         std::ostringstream seq;
@@ -304,25 +317,22 @@ PassApplyResult applyPassesDetailed(
             std::format("run | passes | plan ({}): {}", passes.size(), seq.str()));
     }
     for (const auto &p : passes) {
-        if (graph == nullptr || graph == Graph::null()) {
-            return {Graph::null(), PassApplyStatus::Consumed};
+        if (graph == nullptr) {
+            return {nullptr, PassApplyStatus::Consumed};
         }
-        ASSERT(
-            graph->finalized(),
-            std::format("Graph {} is not finalized before pass execution.", graph->name()));
 
         auto factory = findPassFactory(p, os);
         if (factory) {
-            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), graph.get()); });
+            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), graph); });
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
             if (ctx->rtmDiags()->hasErrors()) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (see diagnostics)", p);
                 return {nullptr, PassApplyStatus::Failed};
             }
-            if (!graph || graph == Graph::null()) {
+            if (!graph) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> consumed", p);
-                return {Graph::null(), PassApplyStatus::Consumed};
+                return {nullptr, PassApplyStatus::Consumed};
             }
             CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> next graph '{}'", p, graph->name());
         } else {
@@ -330,12 +340,12 @@ PassApplyResult applyPassesDetailed(
         }
     }
 
-    EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GIR-Z", graph ? graph.get() : nullptr); });
+    EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GIR-Z", graph); });
     return {graph, PassApplyStatus::Transformed};
 }
 
-GIR::graph_ptr_t applyPasses(
-    GIR::graph_ptr_t graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
+GCGraph *applyPasses(
+    GCGraph *graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
     std::ostream &os) {
-    return applyPassesDetailed(std::move(graph), passes, ctx, os).graph;
+    return applyPassesDetailed(graph, passes, ctx, os).graph;
 }

@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Apr. 01, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,6 @@
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/listener.h"
@@ -209,15 +208,15 @@ int main(int argc, char *argv[]) {
                 if (Inspect::dumpGCT && mainModule->gct()) {
                     mainModule->gct()->print(os);
                 }
-                if (Inspect::dumpGIR && ctx->rootGraph()) {
+                if (Inspect::dumpGIR) {
                     GraphVizDumpPass pass(ctx);
-                    auto root = ctx->rootGraph();
-                    auto res  = pass.apply(root, os);
+                    auto *root = ctx->runtimeRootGraph();
+                    (void)pass.apply(root, os);
                 }
-                if (Inspect::dumpTNS && ctx->rootGraph()) {
-                    auto entry = ctx->rootGraph();
+                if (Inspect::dumpTNS) {
+                    auto *entry = ctx->runtimeRootGraph();
                     TopoNodeSeqDumpPass pass(ctx);
-                    auto res = pass.apply(entry, os);
+                    (void)pass.apply(entry, os);
                 }
                 return 0;
             }
@@ -227,14 +226,11 @@ int main(int argc, char *argv[]) {
                 return selectedCommand == Command::Check ? 0 : 1;
             }
 
-            {
-                auto rg = ctx->rootGraph();
-                CAMEL_LOG_INFO_S(
-                    "Main",
-                    "run | compile | graph={} | user_modules={}",
-                    rg ? rg->name() : std::string{"<none>"},
-                    ctx->allUserModules().size());
-            }
+            CAMEL_LOG_INFO_S(
+                "Main",
+                "run | compile | runtime_root={} | user_modules={}",
+                ctx->runtimeRootGraph() ? ctx->runtimeRootGraph()->name() : std::string{"<none>"},
+                ctx->allUserModules().size());
 
             if (selectedCommand == Command::Run) {
                 ctx->clearProcessExitCode();
@@ -255,7 +251,7 @@ int main(int argc, char *argv[]) {
 
                 try {
                     try {
-                        auto graph  = ctx->rootGraph();
+                        auto *graph = ctx->runtimeRootGraph();
                         auto result = applyPassesDetailed(graph, Run::resolvedPassList, ctx, os);
                         graph       = result.graph;
                         if (result.failed()) {

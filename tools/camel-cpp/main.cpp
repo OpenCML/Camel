@@ -13,11 +13,10 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Apr. 01, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
@@ -191,8 +190,8 @@ int main(int argc, char *argv[]) {
 
         std::cerr << "[camel-cpp] Applying std::cpp..." << std::endl;
         std::stringstream cppOutput;
-        auto graph = ctx->rootGraph();
-        graph      = applyPasses(graph, {"std::cpp"}, ctx, cppOutput);
+        auto *graph = ctx->runtimeRootGraph();
+        graph       = applyPasses(graph, {"std::cpp"}, ctx, cppOutput);
         if (ctx->rtmDiags()->hasErrors()) {
             ctx->runtimeDiagSink()->dump(std::cerr, false);
             return 1;

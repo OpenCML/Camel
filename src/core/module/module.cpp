@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 18, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/resolver.h"
+#include "core/module/entity_internal.h"
 
 #include <algorithm>
 
@@ -29,38 +30,41 @@ using resolver_ptr_t = camel::core::type::resolver_ptr_t;
 
 namespace {
 
-/// 将多个模块导出的同名 entity 合并为一个，用于支持多模块下的函数/算子重载。
-/// - graph_vec_ptr_t: 合并所有图的向量
-/// - oper_group_ptr_t: 合并所有算子组的 resolvers（按同名 group 合并）
-/// - node_ptr_t: 仅取第一个
+/// Merge identically named entities exported by multiple modules so function
+/// and operator overloading work across module boundaries.
+/// - graph_vec_ptr_t: merge all graphs into one vector
+/// - oper_group_ptr_t: merge all operator resolvers by name
+/// - node_ptr_t: keep the first one only
 std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities) {
     if (entities.empty()) {
         return std::nullopt;
     }
     const entity &first = entities.front();
-    if (std::holds_alternative<GIR::graph_vec_ptr_t>(first)) {
-        auto merged = std::make_shared<GIR::graph_vec_t>();
+    if (detail::EntityAccess::isGraphSet(first)) {
+        auto merged = std::make_shared<detail::EntityAccess::graph_set_t>();
         for (const auto &ent : entities) {
-            if (auto *pv = std::get_if<GIR::graph_vec_ptr_t>(&ent)) {
-                if (*pv) {
-                    for (const auto &g : **pv) {
+            if (detail::EntityAccess::isGraphSet(ent)) {
+                const auto &graphs = detail::EntityAccess::graphSet(ent);
+                if (graphs) {
+                    for (const auto &g : *graphs) {
                         merged->push_back(g);
                     }
                 }
             }
         }
-        return merged;
+        return detail::EntityAccess::makeGraphSet(std::move(merged));
     }
-    if (std::holds_alternative<oper_group_ptr_t>(first)) {
+    if (first.isOperGroup()) {
         std::string name;
         std::vector<std::pair<std::string, resolver_ptr_t>> allResolvers;
         for (const auto &ent : entities) {
-            if (auto *pg = std::get_if<oper_group_ptr_t>(&ent)) {
-                if (*pg) {
+            if (ent.isOperGroup()) {
+                const auto &group = ent.operGroup();
+                if (group) {
                     if (name.empty()) {
-                        name = (*pg)->name();
+                        name = group->name();
                     }
-                    for (const auto &r : (*pg)->resolvers()) {
+                    for (const auto &r : group->resolvers()) {
                         allResolvers.push_back(r);
                     }
                 }
@@ -71,17 +75,17 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
         }
         return OperatorGroup::create(name, std::move(allResolvers));
     }
-    if (std::holds_alternative<GIR::graph_ptr_t>(first)) {
+    if (detail::EntityAccess::isDecoratedGraph(first)) {
         for (const auto &ent : entities) {
-            if (auto *pg = std::get_if<GIR::graph_ptr_t>(&ent)) {
-                if (*pg) {
-                    return *pg;
-                }
+            if (detail::EntityAccess::isDecoratedGraph(ent) &&
+                detail::EntityAccess::decoratedGraph(ent)) {
+                return detail::EntityAccess::makeDecoratedGraph(
+                    detail::EntityAccess::decoratedGraph(ent));
             }
         }
         return std::nullopt;
     }
-    // node_ptr_t 或其它：返回第一个
+    // node_ptr_t or anything else: return the first one.
     return first;
 }
 
@@ -163,7 +167,7 @@ std::optional<Type *> Module::getImportedType(const Reference &ref) const {
     if (it == importedRefModMap_.end() || it->second.empty()) {
         return std::nullopt;
     }
-    // Type 无重载语义，取第一个提供该 ref 的模块即可
+    // Types are not overloaded; the first module providing this ref wins.
     auto &mod = it->second.front();
     if (!mod->loaded()) {
         mod->load();
@@ -176,7 +180,7 @@ std::optional<entity> Module::getImportedEntity(const Reference &ref) const {
     if (it == importedRefModMap_.end() || it->second.empty()) {
         return std::nullopt;
     }
-    // 命中缓存则直接返回，避免重复合并
+    // Return the cached result directly to avoid repeated merges.
     auto cacheIt = importedEntityCache_.find(ref);
     if (cacheIt != importedEntityCache_.end()) {
         return cacheIt->second;

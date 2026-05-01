@@ -1,18 +1,19 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "camel-lang"
 version = "0.1.20"
 description = "Camel: A Next-Generation Language for AI and High-Performance Computing"
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["language", "camel", "ai", "dsl", "graph", "opencml"]
 authors = [{ name = "Zhenjie Wei", email = "kogler_s@outlook.com" }]
 maintainers = [{ name = "Zhenjie Wei", email = "kogler_s@outlook.com" }]
 readme = "README.md"
 classifiers = [
     "Development Status :: 1 - Planning",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
@@ -23,22 +24,19 @@ classifiers = [
     "Topic :: Software Development :: Interpreters",
 ]
 
-[project.license]
-file = "LICENSE"
-
 [project.urls]
 Homepage = "https://www.opencml.com"
 Documentation = "https://docs.opencml.com"
 Repository = "https://github.com/OpenCML/Camel"
 Issues = "https://github.com/OpenCML/Camel/issues"
 
-# camel 通过 setup.py scripts 直接安装为原生二进制，不再经 cli.py
+# .cmlenv mirrors out/<tag>/ in full; wrapper-dist/* is one launcher per bin tool (.cmd per .exe on Windows)
 [project.scripts]
 cpm = "camel.cli:cpm"
 
 [tool.setuptools]
 include-package-data = true
-# script-files 由 pypi_rollup 在构建前按平台注入，将 camel 可执行文件直接安装到 PATH
+# script-files injected by pypi-rollup before wheel build; keep empty in git
 script-files = []
 
 [tool.setuptools.package-data]

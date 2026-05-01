@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 09, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,7 +52,7 @@ class LargeObjectAllocator : public IAllocator {
         std::lock_guard<std::mutex> lock(mutex_);
         ASSERT(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
 
-        // total_size 向上对齐到 slot_t
+        // Round total_size up to slot_t alignment.
         size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
         EXEC_WHEN_DEBUG({
             if (debugRegion_) {
@@ -62,7 +62,7 @@ class LargeObjectAllocator : public IAllocator {
         std::byte *raw = reinterpret_cast<std::byte *>(
             ::operator new(total_size, std::align_val_t(alignof(slot_t))));
 
-        // 安装对象头，记录对齐后的 total_size
+        // Install the object header and record the aligned total_size.
         installHeader(raw, total_size);
 
         std::byte *result = raw + sizeof(ObjectHeader);
@@ -124,7 +124,7 @@ class LargeObjectAllocator : public IAllocator {
     void iterateAllocated(const std::function<void(ObjectHeader *)> &visitor) const override {
         std::lock_guard<std::mutex> lock(mutex_);
         for (auto *hdr : allocated_) {
-            // 验证 header 的合法性
+            // Validate the header.
             ASSERT(hdr->size() >= sizeof(ObjectHeader), "Invalid object size");
             ASSERT(hdr->size() % alignof(slot_t) == 0, "Object size not aligned");
 
@@ -133,7 +133,7 @@ class LargeObjectAllocator : public IAllocator {
     }
 
   private:
-    const char *debugRegion_{nullptr}; // Debug 模式下用于 hook
+    const char *debugRegion_{nullptr}; // Used for debug hooks.
     std::unordered_set<ObjectHeader *> allocated_;
     mutable std::mutex mutex_;
 };

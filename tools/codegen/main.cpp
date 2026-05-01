@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Apr. 01, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -116,14 +116,11 @@ int main(int argc, char *argv[]) {
         mainModule->diagnostics()->dump(std::cerr, false);
         return 1;
     }
-    {
-        auto rg = ctx->rootGraph();
-        CAMEL_LOG_INFO_S(
-            "codegen",
-            "run | compile | graph={} | user_modules={}",
-            rg ? rg->name() : std::string{"<none>"},
-            ctx->allUserModules().size());
-    }
+    CAMEL_LOG_INFO_S(
+        "codegen",
+        "run | compile | module={} | user_modules={}",
+        mainModule->name(),
+        ctx->allUserModules().size());
 
     auto ast = parser->ast();
     if (!ast) {

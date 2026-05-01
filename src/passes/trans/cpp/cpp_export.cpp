@@ -13,16 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "cpp_export.h"
 
-#include "emitter.h"
+#include "runtime_emitter.h"
 
-GIR::graph_ptr_t CppDumpPass::apply(GIR::graph_ptr_t &graph, std::ostream &os) {
-    CppEmitter emitter(context_, mode_);
+camel::runtime::GCGraph *CppDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+    ASSERT(graph != nullptr, "C++ dump requires a non-null runtime root graph.");
+
+    RuntimeCppEmitter emitter(context_, mode_);
     os << emitter.emit(graph);
-    return GIR::Graph::null();
+    return nullptr;
 }
