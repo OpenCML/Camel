@@ -355,9 +355,8 @@ void FastVMSchedPass::evalMarkedOperator(
 
 void FastVMSchedPass::evalMarkedOperator_map_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr                     = currFrame.get<Array *>(nargs[0]);
-    Function *func                 = currFrame.get<Function *>(wargs[0]);
-    const HigherOrderCallSite site = makeHigherOrderCallSite(func);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
 
     Array *res = Array::create(mm::autoSpace(), arr->size());
     currFrame.set(self, res);
@@ -381,9 +380,8 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
 
 void FastVMSchedPass::evalMarkedOperator_apply_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr                     = currFrame.get<Array *>(nargs[0]);
-    Function *func                 = currFrame.get<Function *>(wargs[0]);
-    const HigherOrderCallSite site = makeHigherOrderCallSite(func);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
 
     for (size_t i = 0; i < arr->size(); ++i) {
         arr                            = currFrame.get<Array *>(nargs[0]);
@@ -405,9 +403,8 @@ void FastVMSchedPass::evalMarkedOperator_apply_arr(
 
 void FastVMSchedPass::evalMarkedOperator_filter_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr                     = currFrame.get<Array *>(nargs[0]);
-    Function *func                 = currFrame.get<Function *>(wargs[0]);
-    const HigherOrderCallSite site = makeHigherOrderCallSite(func);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
 
     Array *filtered = Array::create(mm::autoSpace(), arr->size());
     currFrame.set(self, filtered);
@@ -436,10 +433,9 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr                     = currFrame.get<Array *>(nargs[0]);
-    Function *func                 = currFrame.get<Function *>(wargs[0]);
-    slot_t init                    = currFrame.get<slot_t>(wargs[1]);
-    const HigherOrderCallSite site = makeHigherOrderCallSite(func);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
+    slot_t init    = currFrame.get<slot_t>(wargs[1]);
 
     // Preserve left-fold semantics: an empty array returns the initial value immediately.
     if (arr->size() == 0) {
@@ -469,9 +465,8 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
 
 void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr                     = currFrame.get<Array *>(nargs[0]);
-    Function *func                 = currFrame.get<Function *>(wargs[0]);
-    const HigherOrderCallSite site = makeHigherOrderCallSite(func);
+    Array *arr     = currFrame.get<Array *>(nargs[0]);
+    Function *func = currFrame.get<Function *>(wargs[0]);
 
     for (size_t i = 0; i < arr->size(); ++i) {
         arr                            = currFrame.get<Array *>(nargs[0]);

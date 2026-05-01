@@ -142,15 +142,14 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
             calleeFrame->set(port->dataIndex, callerFrame->get<slot_t>(nargs[i]));
         }
 
-        const auto withPorts           = targetGraph->withPorts();
-        const size_t explicitWithCount = wargs.size() - 1;
+        const auto withPorts = targetGraph->withPorts();
         ASSERT(
-            explicitWithCount == withPorts.size(),
+            wargs.size() - 1 == withPorts.size(),
             std::format(
                 "FastVM indirect call with-arity mismatch for graph '{}': expected {}, got {}.",
                 targetGraph->name(),
                 withPorts.size(),
-                explicitWithCount));
+                wargs.size() - 1));
         for (size_t i = 0; i < withPorts.size(); ++i) {
             const auto *port = targetGraph->node(withPorts[i]);
             ASSERT(port != nullptr, "FastVM indirect call with port is null.");

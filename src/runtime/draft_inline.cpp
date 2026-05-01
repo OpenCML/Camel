@@ -923,14 +923,14 @@ DraftInlineResult inlineCallableInDraft(
         return DraftInlineResult{};
     }
     {
-        const DraftNodeHeader *valueExitHeader = draft.header(result.valueExit);
         ASSERT(
-            valueExitHeader != nullptr && valueExitHeader->dataIndex != 0,
+            draft.header(result.valueExit) != nullptr &&
+                draft.header(result.valueExit)->dataIndex != 0,
             std::format(
                 "Runtime inline resolved value exit {} with slot {} in caller '{}' while "
                 "inlining callee '{}'.",
                 result.valueExit,
-                valueExitHeader ? valueExitHeader->dataIndex : 0,
+                draft.header(result.valueExit) ? draft.header(result.valueExit)->dataIndex : 0,
                 "<draft>",
                 funcBody->calleeGraph ? funcBody->calleeGraph->name() : "<null>"));
     }

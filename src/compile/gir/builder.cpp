@@ -872,10 +872,9 @@ std::optional<node_handle_t> Builder::modifierOf(node_handle_t node) const {
 
 void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
     ASSERT(input != nullptr && modifier != nullptr, "Cannot record modifier for a null node.");
-    auto *inputGraph    = nodeGraphOf(input);
-    auto *modifierGraph = nodeGraphOf(modifier);
+    auto *inputGraph = nodeGraphOf(input);
     ASSERT(
-        inputGraph == modifierGraph,
+        inputGraph == nodeGraphOf(modifier),
         "Modifier tracking must stay within a single compile graph.");
     nodeModifierMaps_[inputGraph][nodeIdOf(input)] = nodeIdOf(modifier);
 }

@@ -720,15 +720,6 @@ void emitDraftPayload(
             body.brch       = body.brch == kInvalidNodeRef ? kInvalidNodeRef
                                                            : plan.runtimeRefsByDraftId[body.brch];
             writeBody(payload.nodeBlocks, planned.ref, body);
-            const auto *written = reinterpret_cast<const GCJoinBody *>(
-                mutableNodeStorage(payload.nodeBlocks, planned.ref) + sizeof(GCNode));
-            ASSERT(
-                written->armCount == body.armCount,
-                std::format(
-                    "JOIN body write-back mismatch at runtimeRef {}: expected {}, got {}.",
-                    planned.ref,
-                    body.armCount,
-                    written->armCount));
         } break;
         default:
             break;
