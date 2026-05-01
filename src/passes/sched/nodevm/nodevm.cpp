@@ -358,16 +358,6 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             const gc_node_ref_t nodeRef = currNodes[i];
             const GCNode *n             = currRuntimeGraph->node(nodeRef);
             ASSERT(n != nullptr, "NodeVM execution resolved to a null runtime node.");
-            if (currRuntimeGraph->name() != "fib" && n->kind != GCNodeKind::Data &&
-                n->kind != GCNodeKind::Port) {
-                CAMEL_LOG_WARN_S(
-                    "NodeVMProbe",
-                    "graph='{}' ref={} kind={} slot={}",
-                    currRuntimeGraph->name(),
-                    nodeRef,
-                    static_cast<int>(n->kind),
-                    n->dataIndex);
-            }
 
             if (tillNode != kInvalidNodeRef) {
                 if (tillNode == nodeRef) {
@@ -446,62 +436,22 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 const auto dataInputs = currRuntimeGraph->withInputsOf(nodeRef);
                 ASSERT(!normInputs.empty(), "FILL node must have one source input.");
                 const auto srcIdx = dataIndexOf(currCache, normInputs.front());
-                TypeCode srcCode  = currFrame->codeAt(srcIdx);
-                Type *srcType     = currFrame->typeAt<Type>(srcIdx);
-                ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced in NodeVM.");
-                Object *srcObj =
-                    currFrame->get<Object *>(srcIdx)->clone(mm::autoSpace(), srcType, false);
+                Type *srcType     = n->dataType;
+                ASSERT(isGCTraced(srcType->code()), "FILL target type is not GC-traced in NodeVM.");
+                Object *sourceObj = currFrame->get<Object *>(srcIdx);
+                ASSERT(sourceObj != nullptr, "FILL source object is null in NodeVM.");
+                Object *srcObj = sourceObj->clone(mm::autoSpace(), srcType, false);
                 ASSERT(srcObj != nullptr, "FILL target data is null.");
-
-                switch (srcCode) {
-                case TypeCode::Tuple: {
-                    auto type          = tt::as_ptr<TupleType>(srcType);
-                    auto tup           = tt::as_ptr<Tuple>(srcObj);
-                    const size_t *refs = type->refs();
-                    for (size_t j = 0; j < dataInputs.size(); ++j) {
-                        tup->set<slot_t>(
-                            refs[j],
-                            currFrame->get<slot_t>(dataIndexOf(currCache, dataInputs[j])));
-                    }
-                } break;
-                case TypeCode::Array: {
-                    auto arr = tt::as_ptr<Array>(srcObj);
-                    for (size_t j = 0; j < dataInputs.size(); ++j) {
-                        arr->set<slot_t>(
-                            j,
-                            currFrame->get<slot_t>(dataIndexOf(currCache, dataInputs[j])));
-                    }
-                } break;
-                case TypeCode::Struct: {
-                    auto type          = tt::as_ptr<StructType>(srcType);
-                    auto str           = tt::as_ptr<Struct>(srcObj);
-                    const size_t *refs = type->refs();
-                    for (size_t j = 0; j < dataInputs.size(); ++j) {
-                        str->set<slot_t>(
-                            refs[j],
-                            currFrame->get<slot_t>(dataIndexOf(currCache, dataInputs[j])));
-                    }
-                } break;
-                case TypeCode::Function: {
-                    auto func          = tt::as_ptr<Function>(srcObj);
-                    Tuple *closureData = func->tuple();
-                    ASSERT(closureData != nullptr, "Closure data is null in FILL.");
-                    ASSERT(
-                        closureData->size() == dataInputs.size(),
-                        "Closure data size mismatch in FILL.");
-                    for (size_t j = 0; j < dataInputs.size(); ++j) {
-                        closureData->set<slot_t>(
-                            j,
-                            currFrame->get<slot_t>(dataIndexOf(currCache, dataInputs[j])));
-                    }
-                } break;
-                default:
-                    ASSERT(
-                        false,
-                        std::format(
-                            "Unsupported FILL target type {} in NodeVM.",
-                            typeCodeToString(srcCode)));
+                std::vector<slot_t> fillValues;
+                fillValues.reserve(dataInputs.size());
+                for (auto input : dataInputs) {
+                    fillValues.push_back(currFrame->get<slot_t>(dataIndexOf(currCache, input)));
                 }
+                camel::execute::writeRuntimeFillSlots(
+                    srcObj,
+                    srcType,
+                    currRuntimeGraph->nodeBodyAs<camel::runtime::GCFillBody>(nodeRef),
+                    fillValues);
                 currFrame->set(n->dataIndex, srcObj);
             } break;
 
@@ -520,9 +470,10 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     ASSERT(
                         body->keyBytes <= n->bodyBytes() - sizeof(GCAccsBody),
                         "NodeVM ACCS struct-key payload exceeds the node body.");
-                    std::string key  = std::string(body->key());
-                    Struct *s        = currFrame->get<Struct *>(srcIdx);
-                    Type *structType = currFrame->typeAt<Type>(srcIdx);
+                    const std::string_view keyView = body->key();
+                    std::string key                = std::string(keyView.data(), keyView.size());
+                    Struct *s                      = currFrame->get<Struct *>(srcIdx);
+                    Type *structType               = currFrame->typeAt<Type>(srcIdx);
                     currFrame->set(n->dataIndex, s->get<slot_t>(key, structType));
                 }
             } break;
@@ -557,6 +508,9 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 ASSERT(
                     brIndex >= 0 && static_cast<size_t>(brIndex) < wargs.size(),
                     "JOIN branch index out of range in NodeVM.");
+                if (n->dataIndex == 0 || n->dataType == Type::Void()) {
+                    break;
+                }
                 // The selected arm has already executed sequentially. Its tail
                 // slot now holds the branch result consumed by JOIN.
                 slot_t branchResult = currFrame->get<slot_t>(

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,14 +32,14 @@ class StructData : public CompositeData {
     friend class StructDataFactory;
 
   private:
-    std::vector<std::string> refIndices_;
+    std::vector<std::string> holeFields_;
     // Store fields in lexicographic order.
     std::map<std::string, data_ptr_t> data_;
 
     // Used only by StructDataFactory::build() to avoid recomputing Type.
     StructData(
         type::Type *type, std::map<std::string, data_ptr_t> &&data,
-        std::vector<std::string> &&refIndices);
+        std::vector<std::string> &&holeFields);
 
   public:
     StructData();
@@ -56,7 +56,8 @@ class StructData : public CompositeData {
     const std::map<std::string, data_ptr_t> &raw() const { return data_; }
 
     virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override { return refIndices_.empty(); }
+    virtual std::vector<size_t> holes() const override;
+    virtual bool resolved() const override { return holeFields_.empty(); }
     virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;

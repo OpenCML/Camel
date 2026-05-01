@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 09, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,7 +30,7 @@ using namespace camel::core::error;
 
 struct ArrayDataFactory::Impl {
     Type *elemType = nullptr;
-    std::vector<size_t> refs;
+    std::vector<size_t> holeIndices;
     std::vector<data_ptr_t> data;
 };
 
@@ -41,8 +41,8 @@ ArrayDataFactory &ArrayDataFactory::add(const data_ptr_t &e) {
     if (!impl_->elemType) {
         impl_->elemType = e->type();
     } else if (impl_->elemType->code() == TypeCode::Ref && e->type()->code() != TypeCode::Ref) {
-        // When an array literal mixes dynamic expressions (refs) and static values, prefer the
-        // concrete element type; refs_ only records which positions need backfilling later.
+        // When an array literal mixes dynamic expressions and static values, prefer the concrete
+        // element type; holeIndices only records which positions need backfilling later.
         impl_->elemType = e->type();
     } else if (impl_->elemType->code() != TypeCode::Ref && e->type()->code() == TypeCode::Ref) {
         // Keep the known concrete element type and only mark this position as a deferred reference.
@@ -51,7 +51,7 @@ ArrayDataFactory &ArrayDataFactory::add(const data_ptr_t &e) {
             .commit("Array", e->type()->toString(), impl_->elemType->toString());
     }
     if (e->type()->code() == TypeCode::Ref) {
-        impl_->refs.push_back(impl_->data.size());
+        impl_->holeIndices.push_back(impl_->data.size());
     }
     impl_->data.push_back(e);
     return *this;
@@ -60,18 +60,17 @@ ArrayDataFactory &ArrayDataFactory::add(const data_ptr_t &e) {
 std::shared_ptr<ArrayData> ArrayDataFactory::build() {
     ArrayTypeFactory typeFactory;
     typeFactory.setElemType(impl_->elemType ? impl_->elemType : Type::Void());
-    for (size_t r : impl_->refs) {
-        typeFactory.addRef(r);
-    }
     Type *type = typeFactory.build();
     return std::shared_ptr<ArrayData>(new ArrayData(type, std::move(impl_->data)));
 }
 
 ArrayData::ArrayData(Type *arrayType, data_vec_t &&data)
     : CompositeData(arrayType), data_(std::move(data)) {
-    const auto *arr = tt::as_ptr<ArrayType>(arrayType);
-    if (arr && arr->refCount() > 0) {
-        refs_.assign(arr->refs(), arr->refs() + arr->refCount());
+    holeIndices_.clear();
+    for (size_t i = 0; i < data_.size(); ++i) {
+        if (data_[i] && data_[i]->type()->code() == TypeCode::Ref) {
+            holeIndices_.push_back(i);
+        }
     }
 }
 
@@ -84,10 +83,10 @@ ArrayData::ArrayData(Type *elemType, data_list_t data) : CompositeData(nullptr) 
     for (const auto &e : data) {
         f.add(e);
     }
-    auto p = f.build();
-    type_  = p->type_;
-    data_  = std::move(p->data_);
-    refs_  = std::move(p->refs_);
+    auto p       = f.build();
+    type_        = p->type_;
+    data_        = std::move(p->data_);
+    holeIndices_ = std::move(p->holeIndices_);
 }
 
 ArrayData::ArrayData(Type *elemType, const data_vec_t &data) : CompositeData(nullptr) {
@@ -99,10 +98,10 @@ ArrayData::ArrayData(Type *elemType, const data_vec_t &data) : CompositeData(nul
     for (const auto &e : data) {
         f.add(e);
     }
-    auto p = f.build();
-    type_  = p->type_;
-    data_  = std::move(p->data_);
-    refs_  = std::move(p->refs_);
+    auto p       = f.build();
+    type_        = p->type_;
+    data_        = std::move(p->data_);
+    holeIndices_ = std::move(p->holeIndices_);
 }
 
 std::shared_ptr<ArrayData> ArrayData::create(Type *elemType, data_list_t data) {
@@ -134,8 +133,8 @@ bool ArrayData::equals(const data_ptr_t &other) const {
 
 vector<string> ArrayData::refs() const {
     vector<string> res;
-    res.reserve(refs_.size());
-    for (const auto &idx : refs_) {
+    res.reserve(holeIndices_.size());
+    for (const auto &idx : holeIndices_) {
         data_ptr_t ref = data_[idx];
         res.push_back(tt::as_shared<RefData>(ref)->ref());
     }
@@ -143,15 +142,15 @@ vector<string> ArrayData::refs() const {
 }
 
 void ArrayData::resolve(const data_vec_t &dataList) {
-    if (refs_.empty()) {
+    if (holeIndices_.empty()) {
         return;
     }
-    ASSERT(refs_.size() == dataList.size(), "DataList size mismatch");
-    for (size_t i = 0; i < refs_.size(); i++) {
-        size_t idx = refs_[i];
+    ASSERT(holeIndices_.size() == dataList.size(), "DataList size mismatch");
+    for (size_t i = 0; i < holeIndices_.size(); i++) {
+        size_t idx = holeIndices_[i];
         data_[idx] = dataList[i];
     }
-    refs_.clear();
+    holeIndices_.clear();
 }
 
 data_ptr_t ArrayData::clone(bool deep) const {

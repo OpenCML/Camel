@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,8 @@ class ArrayData : public CompositeData {
     friend class ArrayDataFactory;
 
   private:
-    std::vector<size_t> refs_;
+    // Value-level hole positions for unresolved elements in the array literal.
+    std::vector<size_t> holeIndices_;
     std::vector<data_ptr_t> data_;
 
     // Used only by ArrayDataFactory::build() to avoid recomputing Type.
@@ -48,7 +49,8 @@ class ArrayData : public CompositeData {
     const std::vector<data_ptr_t> &raw() const { return data_; }
 
     virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override { return refs_.empty(); }
+    virtual std::vector<size_t> holes() const override { return holeIndices_; }
+    virtual bool resolved() const override { return holeIndices_.empty(); }
     virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;

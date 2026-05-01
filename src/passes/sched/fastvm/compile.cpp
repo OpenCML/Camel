@@ -230,9 +230,21 @@ static bytecode_vec_t compileRuntimeGraph(
             appendBytecode(bytecodes, OpCode::COPY, record->dataIndex, {normOps.front()});
             break;
 
-        case camel::runtime::GCNodeKind::Fill:
-            appendBytecode(bytecodes, OpCode::FILL, record->dataIndex, {}, normOps, withOps);
+        case camel::runtime::GCNodeKind::Fill: {
+            auto *bc = appendBytecode(
+                bytecodes,
+                OpCode::FILL,
+                record->dataIndex,
+                {},
+                normOps,
+                withOps,
+                true,
+                {.pType = record->dataType},
+                2);
+            *reinterpret_cast<const camel::runtime::GCFillBody **>(bc->extra2()) =
+                graph->nodeBodyAs<camel::runtime::GCFillBody>(runtimeNodeIndex);
             break;
+        }
 
         case camel::runtime::GCNodeKind::Accs: {
             requireInputCount("ACCS", runtimeNodeIndex, "norm", normOps.size(), 1);
@@ -263,7 +275,8 @@ static bytecode_vec_t compileRuntimeGraph(
                 ASSERT(
                     accBody->accsKind == camel::runtime::GCAccsKind::StructKey,
                     "ACCS struct access must be keyed.");
-                const std::string key(accBody->key());
+                const std::string_view keyView = accBody->key();
+                const std::string key(keyView.data(), keyView.size());
                 const auto *structType =
                     tt::as_ptr<camel::core::type::StructType>(srcRecord->dataType);
                 const auto &optIndex = structType->findField(key);
@@ -330,7 +343,15 @@ static bytecode_vec_t compileRuntimeGraph(
                 joinTargetMap.erase(runtimeNodeIndex);
             }
 
-            appendBytecode(bytecodes, OpCode::JOIN, record->dataIndex, {}, normOps, withOps);
+            appendBytecode(
+                bytecodes,
+                OpCode::JOIN,
+                record->dataIndex,
+                {},
+                normOps,
+                withOps,
+                true,
+                {.pType = record->dataType});
 
             break;
         }

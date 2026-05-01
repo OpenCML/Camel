@@ -759,6 +759,9 @@ bool X64Backend::compileBytecode(
             break;
         }
         case OpCode::JOIN: {
+            if (bc.result == 0 || bc.extra()->pType == camel::core::type::Type::Void()) {
+                break;
+            }
             if (bc.withCnt() != 2)
                 return fail(
                     "pc=" + std::to_string(pc) +

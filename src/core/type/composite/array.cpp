@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,71 +34,51 @@ ArrayType *ArrayTypeFactory::build() {
     return ArrayType::fromFactory(*this);
 }
 
-ArrayType::ArrayType(Type *elemType, size_t refCount, const size_t *refs)
-    : CompositeType(TypeCode::Array), elemType_(elemType), elemTypeCode_(elemType->code()),
-      refCount_(refCount) {
-    // Copy refs into the flexible array.
-    for (size_t i = 0; i < refCount; ++i) {
-        refs_[i] = refs[i];
-    }
-}
+ArrayType::ArrayType(Type *elemType)
+    : CompositeType(TypeCode::Array), elemType_(elemType), elemTypeCode_(elemType->code()) {}
 
 ArrayType *ArrayType::create(Type *elemType) {
     if (!elemType) {
         elemType = Type::Void();
     }
-    // Compute the required memory size.
-    size_t baseSize  = sizeof(ArrayType);
-    size_t totalSize = baseSize; // With no refs, refCount_ = 0.
 
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "ArrayType",
         "Allocating ArrayType: {}[], size: {} bytes",
         elemType->toString(),
-        totalSize));
+        sizeof(ArrayType)));
 
-    void *mem = mm::permSpace().alloc(totalSize, alignof(ArrayType));
+    void *mem = mm::permSpace().alloc(sizeof(ArrayType), alignof(ArrayType));
     ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
-    return new (mem) ArrayType(elemType, 0, nullptr);
+    return new (mem) ArrayType(elemType);
 }
 
 ArrayType *ArrayType::fromFactory(ArrayTypeFactory &factory) {
     if (!factory.elemType_) {
         factory.elemType_ = Type::Void();
     }
-    return fromData(factory.elemType_, factory.refs_.size(), factory.refs_.data());
+    return fromData(factory.elemType_);
 }
 
-ArrayType *ArrayType::fromData(Type *elemType, size_t refCount, const size_t *refs) {
+ArrayType *ArrayType::fromData(Type *elemType) {
     if (!elemType) {
         elemType = Type::Void();
     }
-
-    // Compute the required memory size: base size + refs array.
-    size_t baseSize  = sizeof(ArrayType);
-    size_t refsSize  = refCount * sizeof(size_t);
-    size_t totalSize = baseSize + refsSize;
 
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "ArrayType",
         "Allocating ArrayType: {}[], size: {} bytes",
         elemType->toString(),
-        totalSize));
+        sizeof(ArrayType)));
 
-    void *mem = mm::permSpace().alloc(totalSize, alignof(ArrayType));
+    void *mem = mm::permSpace().alloc(sizeof(ArrayType), alignof(ArrayType));
     ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
-
-    const size_t *refsPtr = refCount > 0 ? refs : nullptr;
-    return new (mem) ArrayType(elemType, refCount, refsPtr);
+    return new (mem) ArrayType(elemType);
 }
 
 Type *ArrayType::resolve(const type_vec_t &typeList) const {
     ASSERT(typeList.size() > 0, "Type list is empty");
     ASSERT(!resolved(), "ArrayType is already resolved");
-
-    ASSERT(
-        typeList.size() == refCount_,
-        "Type list size does not match the number of references in ArrayType");
 
     Type *newElemType = elemType_;
     for (const auto &type : typeList) {
@@ -115,7 +95,7 @@ Type *ArrayType::resolve(const type_vec_t &typeList) const {
     return newArray;
 }
 
-bool ArrayType::resolved() const { return refCount_ == 0; }
+bool ArrayType::resolved() const { return elemType_->code() != TypeCode::Ref; }
 
 string ArrayType::toString() const { return elemType_->toString() + "[]"; }
 
@@ -127,8 +107,7 @@ std::string ArrayType::mangle() const {
 
 Type *ArrayType::clone(bool deep /* = false */) const {
     Type *newElemType = deep ? elemType_->clone(true) : elemType_;
-    // All information is known, so build directly from fromData.
-    return fromData(newElemType, refCount_, refs_);
+    return fromData(newElemType);
 }
 
 bool ArrayType::equals(Type *other) const {

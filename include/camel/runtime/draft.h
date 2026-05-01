@@ -276,6 +276,9 @@ class GraphDraft {
     gc_node_ref_t addCopyNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t
     addFillNode(camel::core::type::Type *type, const GCFillBody &body, gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t addFillNode(
+        camel::core::type::Type *type, std::span<const std::byte> payload,
+        gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t
     addAccsNode(camel::core::type::Type *type, uint32_t tupleIndex, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addAccsNode(

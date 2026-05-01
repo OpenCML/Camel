@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,7 +30,7 @@ using namespace camel::core::type;
 struct StructDataFactory::Impl {
     StructTypeFactory typeFactory;
     std::map<std::string, data_ptr_t> data;
-    std::vector<std::string> refIndices;
+    std::vector<std::string> holeFields;
 };
 
 StructDataFactory::StructDataFactory() : impl_(std::make_unique<Impl>()) {}
@@ -42,7 +42,7 @@ StructDataFactory &StructDataFactory::add(const std::string &key, const data_ptr
     }
     impl_->data[key] = val;
     if (val->type()->code() == TypeCode::Ref) {
-        impl_->refIndices.push_back(key);
+        impl_->holeFields.push_back(key);
     }
     return *this;
 }
@@ -50,12 +50,12 @@ StructDataFactory &StructDataFactory::add(const std::string &key, const data_ptr
 std::shared_ptr<StructData> StructDataFactory::build() {
     Type *type = impl_->typeFactory.build();
     return std::shared_ptr<StructData>(
-        new StructData(type, std::move(impl_->data), std::move(impl_->refIndices)));
+        new StructData(type, std::move(impl_->data), std::move(impl_->holeFields)));
 }
 
 StructData::StructData(
-    Type *type, std::map<std::string, data_ptr_t> &&data, std::vector<std::string> &&refIndices)
-    : CompositeData(type), refIndices_(std::move(refIndices)), data_(std::move(data)) {}
+    Type *type, std::map<std::string, data_ptr_t> &&data, std::vector<std::string> &&holeFields)
+    : CompositeData(type), holeFields_(std::move(holeFields)), data_(std::move(data)) {}
 
 StructData::StructData() : CompositeData(StructType::create()) {}
 
@@ -67,7 +67,7 @@ StructData::StructData(initializer_list<pair<string, data_ptr_t>> data) : Compos
     auto p      = f.build();
     type_       = p->type_;
     data_       = std::move(p->data_);
-    refIndices_ = std::move(p->refIndices_);
+    holeFields_ = std::move(p->holeFields_);
 }
 
 std::shared_ptr<StructData>
@@ -87,7 +87,7 @@ StructData::StructData(std::map<std::string, data_ptr_t> &&data) : CompositeData
     auto p      = f.build();
     type_       = p->type_;
     data_       = std::move(p->data_);
-    refIndices_ = std::move(p->refIndices_);
+    holeFields_ = std::move(p->holeFields_);
 }
 
 std::shared_ptr<StructData> StructData::create(std::map<std::string, data_ptr_t> &&data) {
@@ -131,25 +131,38 @@ bool StructData::equals(const data_ptr_t &other) const {
 
 vector<string> StructData::refs() const {
     vector<string> res;
-    res.reserve(refIndices_.size());
-    for (const auto &e : refIndices_) {
+    res.reserve(holeFields_.size());
+    for (const auto &e : holeFields_) {
         const auto &refData = tt::as_shared<RefData>(data_.at(e));
         res.push_back(refData->ref());
     }
     return res;
 }
 
+vector<size_t> StructData::holes() const {
+    auto *structType = tt::as_ptr<StructType>(type_);
+    ASSERT(structType != nullptr, "StructData holes require StructType.");
+    vector<size_t> slots;
+    slots.reserve(holeFields_.size());
+    for (const auto &fieldName : holeFields_) {
+        auto fieldIndex = structType->findField(fieldName);
+        ASSERT(fieldIndex.has_value(), "StructData hole field is absent from StructType.");
+        slots.push_back(*fieldIndex);
+    }
+    return slots;
+}
+
 void StructData::resolve(const data_vec_t &dataList) {
-    if (refIndices_.empty()) {
+    if (holeFields_.empty()) {
         return;
     }
-    ASSERT(refIndices_.size() == dataList.size(), "DataList size mismatch");
-    for (size_t i = 0; i < refIndices_.size(); i++) {
-        const string &key = refIndices_[i];
+    ASSERT(holeFields_.size() == dataList.size(), "DataList size mismatch");
+    for (size_t i = 0; i < holeFields_.size(); i++) {
+        const string &key = holeFields_[i];
         data_ptr_t data   = dataList[i];
         data_[key]        = data;
     }
-    refIndices_.clear();
+    holeFields_.clear();
 }
 
 data_ptr_t StructData::clone(bool deep) const {

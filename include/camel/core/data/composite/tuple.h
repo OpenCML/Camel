@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,11 +31,11 @@ class TupleData : public CompositeData {
     friend class TupleDataFactory;
 
   private:
-    std::vector<size_t> refIndices_;
+    std::vector<size_t> holeIndices_;
     std::vector<data_ptr_t> data_;
 
     // Used only by TupleDataFactory::build() to avoid recomputing Type.
-    TupleData(type::Type *type, data_vec_t &&data, std::vector<size_t> &&refIndices);
+    TupleData(type::Type *type, data_vec_t &&data, std::vector<size_t> &&holeIndices);
 
   public:
     TupleData(data_list_t data = {});
@@ -50,7 +50,8 @@ class TupleData : public CompositeData {
     size_t size() const { return data_.size(); }
 
     virtual std::vector<std::string> refs() const override;
-    virtual bool resolved() const override { return refIndices_.empty(); }
+    virtual std::vector<size_t> holes() const override { return holeIndices_; }
+    virtual bool resolved() const override { return holeIndices_.empty(); }
     virtual void resolve(const data_vec_t &dataList) override;
 
     virtual bool equals(const data_ptr_t &other) const override;

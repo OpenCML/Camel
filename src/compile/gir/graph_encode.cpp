@@ -365,8 +365,13 @@ class EncodeSession {
                         graph->draft().payloadOf(sourceId).begin(),
                         graph->draft().payloadOf(sourceId).end());
                 } else {
+                    std::vector<size_t> slots;
+                    slots.reserve(graph->draft().withInputsOf(sourceId).size());
+                    for (size_t i = 0; i < graph->draft().withInputsOf(sourceId).size(); ++i) {
+                        slots.push_back(i);
+                    }
                     payloadStorage =
-                        toPayloadBytes(GCFillBody{.fillKind = classifyFillKind(header->dataType)});
+                        camel::runtime::makeFillPayload(classifyFillKind(header->dataType), slots);
                 }
             } break;
             case GCNodeKind::Brch: {

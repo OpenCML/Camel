@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Apr. 11, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -185,7 +185,8 @@ GCGraph *TopoNodeSeqDumpPass::apply(GCGraph *graph, std::ostream &os) {
             case GCNodeKind::Accs: {
                 const auto *body = runtimeGraph->nodeBodyAs<GCAccsBody>(nodeRef);
                 if (body->accsKind == camel::runtime::GCAccsKind::StructKey) {
-                    return format("ACCS: .{}", std::string(body->key()));
+                    const std::string_view key = body->key();
+                    return format("ACCS: .{}", std::string(key.data(), key.size()));
                 }
                 return format("ACCS: .{}", body->value);
             }

@@ -41,6 +41,15 @@ FunctionType *FunctionData::funcType() const { return tt::as_ptr<FunctionType>(t
 
 std::vector<std::string> FunctionData::refs() const { return closureRefs_; }
 
+std::vector<size_t> FunctionData::holes() const {
+    std::vector<size_t> slots;
+    slots.reserve(closureRefs_.size());
+    for (size_t i = 0; i < closureRefs_.size(); ++i) {
+        slots.push_back(i);
+    }
+    return slots;
+}
+
 bool FunctionData::resolved() const { return closureRefs_.empty() || !closure_.empty(); }
 
 void FunctionData::resolve(const data_vec_t &dataList) {

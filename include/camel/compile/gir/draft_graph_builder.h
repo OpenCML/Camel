@@ -37,7 +37,9 @@
 #include "camel/runtime/draft.h"
 #include "camel/utils/exstore.h"
 
+#include <cstddef>
 #include <memory>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <variant>
@@ -87,17 +89,21 @@ class DraftGraphBuilder {
 
     runtime::gc_slot_idx_t addStaticSlot(slot_t slot);
     runtime::gc_slot_idx_t addStaticSlot(slot_t slot, camel::core::type::Type *type);
-    runtime::gc_slot_idx_t addStaticData(const camel::core::data::data_ptr_t &data);
+    runtime::gc_slot_idx_t addStaticData(
+        const camel::core::data::data_ptr_t &data, camel::core::type::Type *runtimeType = nullptr);
     runtime::gc_slot_idx_t addRuntimeSlot(camel::core::type::Type *type);
     void setStaticSlot(runtime::gc_slot_idx_t index, slot_t slot);
     void setStaticData(runtime::gc_slot_idx_t index, const camel::core::data::data_ptr_t &data);
 
-    runtime::DraftNode *addStaticDataNode(const camel::core::data::data_ptr_t &data);
+    runtime::DraftNode *addStaticDataNode(
+        const camel::core::data::data_ptr_t &data, camel::core::type::Type *runtimeType = nullptr);
     runtime::DraftNode *
     addPortNode(camel::core::type::Type *type, std::string name, bool isWith, bool isVar);
     runtime::DraftNode *addCastNode(camel::core::type::Type *type);
     runtime::DraftNode *addCopyNode(camel::core::type::Type *type);
     runtime::DraftNode *addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body);
+    runtime::DraftNode *
+    addFillNode(camel::core::type::Type *type, std::span<const std::byte> payload);
     runtime::DraftNode *addAccsNode(camel::core::type::Type *type, uint32_t tupleIndex);
     runtime::DraftNode *addAccsNode(camel::core::type::Type *type, std::string key);
     runtime::DraftNode *addBrchNode(

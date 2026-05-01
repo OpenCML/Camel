@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,7 +32,7 @@ using namespace camel::core::type;
 struct TupleDataFactory::Impl {
     TupleTypeFactory typeFactory;
     std::vector<data_ptr_t> data;
-    std::vector<size_t> refIndices;
+    std::vector<size_t> holeIndices;
 };
 
 TupleDataFactory::TupleDataFactory() : impl_(std::make_unique<Impl>()) {}
@@ -42,7 +42,7 @@ TupleDataFactory &TupleDataFactory::add(const data_ptr_t &e) {
     impl_->typeFactory.add(e->type());
     impl_->data.push_back(e);
     if (e->type()->code() == TypeCode::Ref) {
-        impl_->refIndices.push_back(impl_->data.size() - 1);
+        impl_->holeIndices.push_back(impl_->data.size() - 1);
     }
     return *this;
 }
@@ -50,29 +50,29 @@ TupleDataFactory &TupleDataFactory::add(const data_ptr_t &e) {
 std::shared_ptr<TupleData> TupleDataFactory::build() {
     Type *type = impl_->typeFactory.build();
     return std::shared_ptr<TupleData>(
-        new TupleData(type, std::move(impl_->data), std::move(impl_->refIndices)));
+        new TupleData(type, std::move(impl_->data), std::move(impl_->holeIndices)));
 }
 
-TupleData::TupleData(Type *type, data_vec_t &&data, std::vector<size_t> &&refIndices)
-    : CompositeData(type), refIndices_(std::move(refIndices)), data_(std::move(data)) {}
+TupleData::TupleData(Type *type, data_vec_t &&data, std::vector<size_t> &&holeIndices)
+    : CompositeData(type), holeIndices_(std::move(holeIndices)), data_(std::move(data)) {}
 
 TupleData::TupleData(data_list_t data) : CompositeData(nullptr) {
     TupleDataFactory f;
     for (const auto &e : data) {
         f.add(e);
     }
-    auto p      = f.build();
-    type_       = p->type_;
-    data_       = std::move(p->data_);
-    refIndices_ = std::move(p->refIndices_);
+    auto p       = f.build();
+    type_        = p->type_;
+    data_        = std::move(p->data_);
+    holeIndices_ = std::move(p->holeIndices_);
 }
 
 TupleData::TupleData(Type *type, data_vec_t &&data) : CompositeData(type), data_(std::move(data)) {
     ASSERT(type->code() == TypeCode::Tuple, "Type is not TupleType");
-    refIndices_.clear();
+    holeIndices_.clear();
     for (size_t i = 0; i < data_.size(); i++) {
         if (data_[i] && data_[i]->type()->code() == TypeCode::Ref) {
-            refIndices_.push_back(i);
+            holeIndices_.push_back(i);
         }
     }
 }
@@ -104,8 +104,8 @@ bool TupleData::equals(const data_ptr_t &other) const {
 
 vector<string> TupleData::refs() const {
     vector<string> res;
-    res.reserve(refIndices_.size());
-    for (const auto &idx : refIndices_) {
+    res.reserve(holeIndices_.size());
+    for (const auto &idx : holeIndices_) {
         data_ptr_t ref = data_[idx];
         res.push_back(tt::as_shared<RefData>(ref)->ref());
     }
@@ -113,15 +113,15 @@ vector<string> TupleData::refs() const {
 }
 
 void TupleData::resolve(const data_vec_t &dataList) {
-    if (refIndices_.empty()) {
+    if (holeIndices_.empty()) {
         return;
     }
-    ASSERT(refIndices_.size() == dataList.size(), "DataList size mismatch");
-    for (size_t i = 0; i < refIndices_.size(); i++) {
-        size_t idx = refIndices_[i];
+    ASSERT(holeIndices_.size() == dataList.size(), "DataList size mismatch");
+    for (size_t i = 0; i < holeIndices_.size(); i++) {
+        size_t idx = holeIndices_[i];
         data_[idx] = dataList[i];
     }
-    refIndices_.clear();
+    holeIndices_.clear();
 }
 
 data_ptr_t TupleData::clone(bool deep) const {

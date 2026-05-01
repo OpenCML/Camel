@@ -27,7 +27,12 @@
 
 #include "camel/execute/graph_runtime_support.h"
 
+#include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/struct.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/utils/log.h"
 
 #include <format>
@@ -482,6 +487,12 @@ slot_t readRuntimeGraphReturn(camel::runtime::GCGraph *graph, Frame *frame) {
     ASSERT(graph != nullptr, "Runtime graph return read requires a graph.");
     ASSERT(frame != nullptr, "Runtime graph return read requires a frame.");
 
+    if (const auto *funcType = graph->funcType();
+        funcType == nullptr || !funcType->hasExitType() ||
+        funcType->exitType() == camel::core::type::Type::Void()) {
+        return NullSlot;
+    }
+
     const auto returnKind    = graph->returnKind();
     const auto returnNodeRef = graph->returnNodeRef();
     const auto *returnNode   = graph->returnNode();
@@ -504,6 +515,50 @@ slot_t readRuntimeGraphReturn(camel::runtime::GCGraph *graph, Frame *frame) {
     ASSERT(current != nullptr, "Runtime graph return forwarding chain resolved to null.");
     ASSERT(current->dataIndex != 0, "Runtime graph return forwarding chain resolved to slot 0.");
     return frame->get<slot_t>(current->dataIndex);
+}
+
+void writeRuntimeFillSlots(
+    camel::core::rtdata::Object *target, camel::core::type::Type *targetType,
+    const camel::runtime::GCFillBody *fillBody, std::span<const slot_t> values) {
+    ASSERT(target != nullptr, "Runtime FILL target object is null.");
+    ASSERT(targetType != nullptr, "Runtime FILL target type is null.");
+    ASSERT(fillBody != nullptr, "Runtime FILL payload is missing.");
+
+    const auto slots = fillBody->slots();
+    ASSERT(
+        slots.size() == values.size(),
+        "Runtime FILL slot mapping must match the number of with-input values.");
+
+    switch (targetType->code()) {
+    case camel::core::type::TypeCode::Tuple: {
+        auto *tuple = tt::as_ptr<Tuple>(target);
+        for (size_t i = 0; i < values.size(); ++i) {
+            tuple->set<slot_t>(slots[i], values[i]);
+        }
+    } break;
+    case camel::core::type::TypeCode::Array: {
+        auto *array = tt::as_ptr<Array>(target);
+        for (size_t i = 0; i < values.size(); ++i) {
+            array->set<slot_t>(slots[i], values[i]);
+        }
+    } break;
+    case camel::core::type::TypeCode::Struct: {
+        auto *str = tt::as_ptr<Struct>(target);
+        for (size_t i = 0; i < values.size(); ++i) {
+            str->set<slot_t>(slots[i], values[i]);
+        }
+    } break;
+    case camel::core::type::TypeCode::Function: {
+        auto *func         = tt::as_ptr<Function>(target);
+        Tuple *closureData = func->tuple();
+        ASSERT(closureData != nullptr, "Runtime FILL function closure storage is null.");
+        for (size_t i = 0; i < values.size(); ++i) {
+            closureData->set<slot_t>(slots[i], values[i]);
+        }
+    } break;
+    default:
+        ASSERT(false, "Runtime FILL target type is not a supported GC container.");
+    }
 }
 
 void fillFrameForDirectInvoke(

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,15 +37,12 @@ class ArrayTypeFactory {
     explicit ArrayTypeFactory(Type *elemType) : elemType_(elemType) {}
 
     void setElemType(Type *elemType) { elemType_ = elemType; }
-    void addRef(size_t index) { refs_.push_back(index); }
-    void setRefs(const std::vector<size_t> &refs) { refs_ = refs; }
 
     // Build an immutable ArrayType object.
     ArrayType *build();
 
   private:
     Type *elemType_ = nullptr;
-    std::vector<size_t> refs_;
 };
 
 // Immutable ArrayType: type information is embedded directly in the object.
@@ -57,19 +54,17 @@ class ArrayType : public CompositeType {
     ArrayType(const ArrayType &)            = delete;
     ArrayType &operator=(const ArrayType &) = delete;
 
-    // Create a resolved ArrayType (no refs).
+    // Create an ArrayType whose only unresolved state is the element type itself.
     static ArrayType *create(Type *elemType = nullptr);
 
     // Build from a factory.
     static ArrayType *fromFactory(ArrayTypeFactory &factory);
 
     // Build directly from data (internal use, e.g. clone).
-    static ArrayType *fromData(Type *elemType, size_t refCount, const size_t *refs);
+    static ArrayType *fromData(Type *elemType);
 
     Type *elemType() const { return elemType_; }
     TypeCode elemTypeCode() const { return elemTypeCode_; }
-    size_t refCount() const { return refCount_; }
-    const size_t *refs() const { return refs_; } // Return a pointer to the internal array.
 
     virtual Type *resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;
@@ -82,12 +77,10 @@ class ArrayType : public CompositeType {
 
   private:
     // Private constructor: called by the factory or create.
-    ArrayType(Type *elemType, size_t refCount, const size_t *refs);
+    explicit ArrayType(Type *elemType);
 
     Type *elemType_;        // Element type pointer (used by the type system).
     TypeCode elemTypeCode_; // Element type code (used at runtime).
-    size_t refCount_;       // Number of reference indices.
-    size_t refs_[];         // Flexible array: list of reference indices.
 };
 
 } // namespace camel::core::type

@@ -39,6 +39,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <span>
 #include <string_view>
 #include <type_traits>
@@ -214,10 +215,32 @@ static_assert(std::is_trivially_copyable_v<GCAccsBody>);
 struct GCFillBody {
     GCFillKind fillKind = GCFillKind::Tuple;
     uint8_t reserved0   = 0;
-    uint16_t reserved1  = 0;
+    uint16_t slotCount  = 0;
     uint32_t reserved2  = 0;
+
+    std::span<const gc_slot_idx_t> slots() const {
+        const auto *data = reinterpret_cast<const gc_slot_idx_t *>(
+            reinterpret_cast<const std::byte *>(this) + sizeof(GCFillBody));
+        return {data, slotCount};
+    }
 };
 static_assert(std::is_trivially_copyable_v<GCFillBody>);
+
+inline std::vector<std::byte> makeFillPayload(GCFillKind kind, std::span<const size_t> slots) {
+    GCFillBody body{
+        .fillKind  = kind,
+        .reserved0 = 0,
+        .slotCount = static_cast<uint16_t>(slots.size()),
+        .reserved2 = 0,
+    };
+    std::vector<std::byte> bytes(sizeof(GCFillBody) + sizeof(gc_slot_idx_t) * slots.size());
+    std::memcpy(bytes.data(), &body, sizeof(body));
+    auto *encodedSlots = reinterpret_cast<gc_slot_idx_t *>(bytes.data() + sizeof(GCFillBody));
+    for (size_t i = 0; i < slots.size(); ++i) {
+        encodedSlots[i] = static_cast<gc_slot_idx_t>(slots[i]);
+    }
+    return bytes;
+}
 
 struct GCBrchBody {
     gc_node_ref_t join       = kInvalidNodeRef;

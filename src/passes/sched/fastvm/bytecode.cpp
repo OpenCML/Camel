@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Apr. 09, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -184,6 +184,8 @@ std::string BytecodeExtra::toString(OpCode opcode) const {
         return std::format("{}", reinterpret_cast<void *>(func));
     case OpCode::SCHD:
         return std::format("{}", to_string(mark));
+    case OpCode::FILL:
+        return std::format("{}", pType ? pType->toString() : "null");
     default:
         return "";
     }

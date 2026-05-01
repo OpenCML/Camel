@@ -33,7 +33,8 @@ namespace type = camel::core::type;
 
 namespace camel::runtime {
 class GCGraph;
-}
+struct GCFillBody;
+} // namespace camel::runtime
 
 // Densely packed bytecode instruction set.
 // Used to speed up switch dispatch and reduce CPU branch misprediction.
@@ -248,38 +249,44 @@ struct BytecodeHeader {                  // 8 bytes
     }
 
     inline BytecodeExtra *extra() {
-#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
-        if (opcode == OpCode::FUNC || opcode == OpCode::TAIL)
+        if (hasLeadingExtraWord())
             return reinterpret_cast<BytecodeExtra *>(this + opsize - 2);
-#endif
         return reinterpret_cast<BytecodeExtra *>(this + opsize - 1);
     }
 
     inline const BytecodeExtra *extra() const {
-#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
-        if (opcode == OpCode::FUNC || opcode == OpCode::TAIL)
+        if (hasLeadingExtraWord())
             return reinterpret_cast<const BytecodeExtra *>(this + opsize - 2);
-#endif
         return reinterpret_cast<const BytecodeExtra *>(this + opsize - 1);
     }
 
+    bool hasLeadingExtraWord() const {
+        if (opcode == OpCode::FILL) {
+            return true;
+        }
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
-    // Only valid for FUNC/TAIL: the second extra word (count or JitEntryFn).
+        return opcode == OpCode::FUNC || opcode == OpCode::TAIL;
+#else
+        return false;
+#endif
+    }
+
+    // FUNC/TAIL/FILL use two extra words. extra() returns the first word.
     inline uint64_t *extra2() { return reinterpret_cast<uint64_t *>(this + opsize - 1); }
     inline const uint64_t *extra2() const {
         return reinterpret_cast<const uint64_t *>(this + opsize - 1);
     }
-#endif
 };
 
 using Bytecode = BytecodeHeader;
 
-union BytecodeExtra {                      // 8 bytes
-    type::Type *pType;                     // for CAST
-    camel::runtime::GCGraph *runtimeGraph; // runtime FUNC/TAIL target
-    operator_t func;                       // for OPER
-    MarkOpCode mark;                       // for SCHD
-    uint64_t raw;                          // generic
+union BytecodeExtra {                           // 8 bytes
+    type::Type *pType;                          // for CAST
+    camel::runtime::GCGraph *runtimeGraph;      // runtime FUNC/TAIL target
+    const camel::runtime::GCFillBody *fillBody; // FILL slot mapping payload
+    operator_t func;                            // for OPER
+    MarkOpCode mark;                            // for SCHD
+    uint64_t raw;                               // generic
 
     std::string toString(OpCode opcode) const;
 };

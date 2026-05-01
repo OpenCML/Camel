@@ -342,55 +342,22 @@ class MacroExecutor {
                 const auto dataInputs = runtimeGraph->withInputsOf(runtimeNodeIndex);
                 ASSERT(!normInputs.empty(), "FILL node must have one source input.");
                 gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
-                TypeCode srcCode     = frame->codeAt(srcIdx);
-                Type *srcType        = frame->typeAt<Type>(srcIdx);
-                ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced.");
-                Object *srcObj =
-                    frame->get<Object *>(srcIdx)->clone(mm::autoSpace(), srcType, false);
+                Type *srcType        = node->dataType;
+                ASSERT(isGCTraced(srcType->code()), "FILL target type is not GC-traced.");
+                Object *sourceObj = frame->get<Object *>(srcIdx);
+                ASSERT(sourceObj != nullptr, "FILL source object is null.");
+                Object *srcObj = sourceObj->clone(mm::autoSpace(), srcType, false);
                 ASSERT(srcObj != nullptr, "FILL target data is null.");
-
-                switch (srcCode) {
-                case TypeCode::Tuple: {
-                    auto *type         = tt::as_ptr<TupleType>(srcType);
-                    auto *tuple        = tt::as_ptr<::Tuple>(srcObj);
-                    const size_t *refs = type->refs();
-                    for (size_t i = 0; i < dataInputs.size(); ++i) {
-                        tuple->set<slot_t>(
-                            refs[i],
-                            frame->get<slot_t>(dataIndexOf(runtimeGraph, dataInputs[i])));
-                    }
-                } break;
-                case TypeCode::Array: {
-                    auto *array = tt::as_ptr<::Array>(srcObj);
-                    for (size_t i = 0; i < dataInputs.size(); ++i) {
-                        array->set<slot_t>(
-                            i,
-                            frame->get<slot_t>(dataIndexOf(runtimeGraph, dataInputs[i])));
-                    }
-                } break;
-                case TypeCode::Struct: {
-                    auto *type         = tt::as_ptr<StructType>(srcType);
-                    auto *st           = tt::as_ptr<::Struct>(srcObj);
-                    const size_t *refs = type->refs();
-                    for (size_t i = 0; i < dataInputs.size(); ++i) {
-                        st->set<slot_t>(
-                            refs[i],
-                            frame->get<slot_t>(dataIndexOf(runtimeGraph, dataInputs[i])));
-                    }
-                } break;
-                case TypeCode::Function: {
-                    auto *func  = tt::as_ptr<::Function>(srcObj);
-                    auto *tuple = func->tuple();
-                    for (size_t i = 0; i < dataInputs.size(); ++i) {
-                        tuple->set<slot_t>(
-                            i,
-                            frame->get<slot_t>(dataIndexOf(runtimeGraph, dataInputs[i])));
-                    }
-                } break;
-                default:
-                    throw MacroExecutionError(
-                        std::format("Unsupported FILL target type '{}'.", srcType->toString()));
+                std::vector<slot_t> fillValues;
+                fillValues.reserve(dataInputs.size());
+                for (auto input : dataInputs) {
+                    fillValues.push_back(frame->get<slot_t>(dataIndexOf(runtimeGraph, input)));
                 }
+                camel::execute::writeRuntimeFillSlots(
+                    srcObj,
+                    srcType,
+                    runtimeGraph->nodeBodyAs<camel::runtime::GCFillBody>(runtimeNodeIndex),
+                    fillValues);
                 frame->set(node->dataIndex, srcObj);
             } break;
 
@@ -404,9 +371,10 @@ class MacroExecutor {
                     auto *tuple = frame->get<::Tuple *>(srcIdx);
                     frame->set(node->dataIndex, tuple->get<slot_t>(idx));
                 } else {
-                    auto key         = std::string(body->key());
-                    auto *st         = frame->get<::Struct *>(srcIdx);
-                    Type *structType = frame->typeAt<Type>(srcIdx);
+                    const std::string_view keyView = body->key();
+                    auto key                       = std::string(keyView.data(), keyView.size());
+                    auto *st                       = frame->get<::Struct *>(srcIdx);
+                    Type *structType               = frame->typeAt<Type>(srcIdx);
                     frame->set(node->dataIndex, st->get<slot_t>(key, structType));
                 }
             } break;
@@ -434,7 +402,10 @@ class MacroExecutor {
                         "Macro runtime JOIN with input record is missing.");
                     wargs.push_back(inputRecord->dataIndex);
                 }
-                int32_t brIndex   = frame->get<int32_t>(nargs.front());
+                int32_t brIndex = frame->get<int32_t>(nargs.front());
+                if (node->dataIndex == 0 || node->dataType == Type::Void()) {
+                    break;
+                }
                 slot_t branchData = frame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
                 frame->set(node->dataIndex, branchData);
             } break;

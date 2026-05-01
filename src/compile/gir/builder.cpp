@@ -46,6 +46,23 @@ bool isVoidGraphExitType(Type *type) {
     return type == nullptr || type == Type::Void() || type->code() == TypeCode::Void;
 }
 
+runtime::GCFillKind fillKindForType(Type *type) {
+    ASSERT(type != nullptr, "FILL type cannot be null.");
+    switch (type->code()) {
+    case TypeCode::Tuple:
+        return runtime::GCFillKind::Tuple;
+    case TypeCode::Array:
+        return runtime::GCFillKind::Array;
+    case TypeCode::Struct:
+        return runtime::GCFillKind::Struct;
+    case TypeCode::Function:
+        return runtime::GCFillKind::FunctionClosure;
+    default:
+        ASSERT(false, std::format("Unsupported FILL type '{}'.", type->toString()));
+        return runtime::GCFillKind::Tuple;
+    }
+}
+
 void setGraphReturnFromResult(
     const compile_graph_ptr_t &graph, draft_node_ref_t outputNode, draft_node_ref_t valueNode,
     Type *resultType) {
@@ -749,8 +766,8 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     if (isComposite(dataType)) {
         auto composedData = tt::as_shared<CompositeData>(data);
         if (!composedData->resolved()) {
-            node_handle_t srcNode = currGraph_->addStaticDataNode(data);
-            const auto &dataType  = tt::as_ptr<CompositeType>(data->type());
+            const auto &dataType = tt::as_ptr<CompositeType>(data->type());
+            auto holes           = composedData->holes();
             type_vec_t refTypes;
             std::vector<node_handle_t> refNodes;
             for (const auto &ref : composedData->refs()) {
@@ -758,9 +775,15 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                 refTypes.push_back(nodeTypeOf(refNode));
                 refNodes.push_back(refNode);
             }
-            auto fillType   = tt::as_ptr<CompositeType>(dataType->clone());
-            auto filledType = fillType->resolve(refTypes);
-            node            = currGraph_->addFillNode(filledType, runtime::GCFillBody{});
+            ASSERT(
+                holes.size() == refNodes.size(),
+                "Composite holes must match unresolved reference count.");
+            auto filledType = dataType->resolved()
+                                  ? dataType
+                                  : tt::as_ptr<CompositeType>(dataType->clone())->resolve(refTypes);
+            auto payload    = runtime::makeFillPayload(fillKindForType(filledType), holes);
+            node_handle_t srcNode = currGraph_->addStaticDataNode(data, filledType);
+            node                  = currGraph_->addFillNode(filledType, payload);
             linkNodes(LinkType::Norm, srcNode, node);
             std::vector<camel::source::origin_id_t> mergedInputs;
             for (const auto &refNode : refNodes) {
@@ -1104,9 +1127,13 @@ node_handle_t Builder::createFuncDataNode(
         refNodes.push_back(refNode);
     }
 
-    auto fillNode = currGraph_->addFillNode(
-        graph->funcType(),
-        runtime::GCFillBody{.fillKind = runtime::GCFillKind::FunctionClosure});
+    std::vector<size_t> closureSlots;
+    closureSlots.reserve(refNodes.size());
+    for (size_t i = 0; i < refNodes.size(); ++i) {
+        closureSlots.push_back(i);
+    }
+    auto fillPayload = runtime::makeFillPayload(runtime::GCFillKind::FunctionClosure, closureSlots);
+    auto fillNode    = currGraph_->addFillNode(graph->funcType(), fillPayload);
     markMacroNode(fillNode);
     linkNodes(LinkType::Norm, dataNode, fillNode);
     for (const auto &refNode : refNodes) {

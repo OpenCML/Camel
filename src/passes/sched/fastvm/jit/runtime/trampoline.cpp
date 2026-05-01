@@ -49,6 +49,7 @@ using namespace camel::core::context;
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator.h"
+#include "camel/execute/graph_runtime_support.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 #include "jit_debug_trace.h"
@@ -556,51 +557,19 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
         const data_arr_t wargs = bc.wargs();
         ASSERT(!nargs.empty(), "FILL requires one norm input as destination template.");
         const data_idx_t srcIdx = nargs[0];
-        TypeCode srcCode        = frame->codeAt(srcIdx);
-        Type *srcType           = frame->typeAt<Type>(srcIdx);
-        ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced in JIT trampoline.");
-        Object *srcObj =
-            frame->get<Object *>(srcIdx)->clone(camel::core::mm::autoSpace(), srcType, false);
+        Type *srcType           = bc.extra()->pType;
+        auto *fillBody = *reinterpret_cast<const camel::runtime::GCFillBody *const *>(bc.extra2());
+        ASSERT(isGCTraced(srcType->code()), "FILL target type is not GC-traced in JIT trampoline.");
+        Object *sourceObj = frame->get<Object *>(srcIdx);
+        ASSERT(sourceObj != nullptr, "FILL source object is null in JIT trampoline.");
+        Object *srcObj = sourceObj->clone(camel::core::mm::autoSpace(), srcType, false);
         ASSERT(srcObj != nullptr, "FILL target data is null in JIT trampoline.");
-
-        switch (srcCode) {
-        case TypeCode::Tuple: {
-            auto *type          = tt::as_ptr<TupleType>(srcType);
-            auto *tup           = tt::as_ptr<Tuple>(srcObj);
-            const size_t *refs  = type->refs();
-            const size_t nField = wargs.size();
-            for (size_t j = 0; j < nField; ++j) {
-                tup->set<slot_t>(refs[j], frame->get<slot_t>(wargs[j]));
-            }
-        } break;
-        case TypeCode::Array: {
-            auto *arr = tt::as_ptr<Array>(srcObj);
-            for (size_t j = 0; j < wargs.size(); ++j) {
-                arr->set<slot_t>(j, frame->get<slot_t>(wargs[j]));
-            }
-        } break;
-        case TypeCode::Struct: {
-            auto *type          = tt::as_ptr<StructType>(srcType);
-            auto *str           = tt::as_ptr<Struct>(srcObj);
-            const size_t *refs  = type->refs();
-            const size_t nField = wargs.size();
-            for (size_t j = 0; j < nField; ++j) {
-                str->set<slot_t>(refs[j], frame->get<slot_t>(wargs[j]));
-            }
-        } break;
-        case TypeCode::Function: {
-            auto *func          = tt::as_ptr<Function>(srcObj);
-            Tuple *closureData  = func->tuple();
-            const size_t nField = wargs.size();
-            ASSERT(closureData != nullptr, "Closure data is null in FILL.");
-            ASSERT(closureData->size() == nField, "Closure data size mismatch in FILL.");
-            for (size_t j = 0; j < nField; ++j) {
-                closureData->set<slot_t>(j, frame->get<slot_t>(wargs[j]));
-            }
-        } break;
-        default:
-            ASSERT(false, "Unsupported FILL target type in JIT trampoline.");
+        std::vector<slot_t> fillValues;
+        fillValues.reserve(wargs.size());
+        for (size_t j = 0; j < wargs.size(); ++j) {
+            fillValues.push_back(frame->get<slot_t>(wargs[j]));
         }
+        camel::execute::writeRuntimeFillSlots(srcObj, srcType, fillBody, fillValues);
 
         slot_t result = reinterpret_cast<slot_t>(srcObj);
         if (bc.result != 0) {

@@ -58,6 +58,7 @@ class FunctionData : public CompositeData {
     const data_vec_t &closure() const { return closure_; }
 
     virtual std::vector<std::string> refs() const override;
+    virtual std::vector<size_t> holes() const override;
     virtual bool resolved() const override;
     virtual void resolve(const data_vec_t &dataList) override;
 

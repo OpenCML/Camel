@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Apr. 11, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
@@ -345,11 +346,12 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
         ASSERT(
             brIndex >= 0 && static_cast<size_t>(brIndex) < withInputs.size(),
             "Taskflow linear JOIN branch index is out of range.");
+        if (node->dataIndex == 0 || node->dataType == Type::Void()) {
+            return NullSlot;
+        }
         const slot_t result =
             frame->get<slot_t>(dataIndexOf(graph, withInputs[static_cast<size_t>(brIndex)]));
-        if (node->dataIndex != 0) {
-            frame->set(node->dataIndex, result);
-        }
+        frame->set(node->dataIndex, result);
         return result;
     }
 
@@ -395,53 +397,24 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
         const auto withInputs = graph->withInputsOf(nodeRef);
         ASSERT(!normInputs.empty(), "Taskflow linear FILL node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        const TypeCode srcCode          = frame->codeAt(srcIdx);
-        Type *srcType                   = frame->typeAt<Type>(srcIdx);
+        Type *srcType                   = node->dataType;
         ASSERT(
-            camel::core::type::isGCTraced(srcCode),
+            camel::core::type::isGCTraced(srcType->code()),
             "Taskflow linear FILL target must be GC-traced.");
-        Object *srcObj =
-            frame->get<Object *>(srcIdx)->clone(camel::core::mm::autoSpace(), srcType, false);
-        ASSERT(srcObj != nullptr, "Taskflow linear FILL source object is null.");
-
-        switch (srcCode) {
-        case TypeCode::Tuple: {
-            auto *type         = tt::as_ptr<TupleType>(srcType);
-            auto *tuple        = tt::as_ptr<Tuple>(srcObj);
-            const size_t *refs = type->refs();
-            for (size_t i = 0; i < withInputs.size(); ++i) {
-                tuple->set<slot_t>(refs[i], frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
-            }
-        } break;
-        case TypeCode::Array: {
-            auto *array = tt::as_ptr<Array>(srcObj);
-            for (size_t i = 0; i < withInputs.size(); ++i) {
-                array->set<slot_t>(i, frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
-            }
-        } break;
-        case TypeCode::Struct: {
-            auto *type         = tt::as_ptr<StructType>(srcType);
-            auto *st           = tt::as_ptr<Struct>(srcObj);
-            const size_t *refs = type->refs();
-            for (size_t i = 0; i < withInputs.size(); ++i) {
-                st->set<slot_t>(refs[i], frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
-            }
-        } break;
-        case TypeCode::Function: {
-            auto *func         = tt::as_ptr<Function>(srcObj);
-            Tuple *closureData = func->tuple();
-            ASSERT(closureData != nullptr, "Taskflow linear FILL function closure is null.");
-            for (size_t i = 0; i < withInputs.size(); ++i) {
-                closureData->set<slot_t>(i, frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
-            }
-        } break;
-        default:
-            ASSERT(
-                false,
-                std::format(
-                    "Unsupported Taskflow linear FILL type {}.",
-                    typeCodeToString(srcCode)));
+        Object *sourceObj = frame->get<Object *>(srcIdx);
+        ASSERT(sourceObj != nullptr, "Taskflow linear FILL source object is null.");
+        Object *srcObj = sourceObj->clone(camel::core::mm::autoSpace(), srcType, false);
+        ASSERT(srcObj != nullptr, "Taskflow linear FILL target clone is null.");
+        std::vector<slot_t> fillValues;
+        fillValues.reserve(withInputs.size());
+        for (auto input : withInputs) {
+            fillValues.push_back(frame->get<slot_t>(dataIndexOf(graph, input)));
         }
+        camel::execute::writeRuntimeFillSlots(
+            srcObj,
+            srcType,
+            graph->nodeBodyAs<camel::runtime::GCFillBody>(nodeRef),
+            fillValues);
 
         frame->set(node->dataIndex, srcObj);
         return toSlot(srcObj);
@@ -459,9 +432,10 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
             frame->set(node->dataIndex, value);
             return value;
         }
-        Struct *st   = frame->get<Struct *>(srcIdx);
-        Type *stType = frame->typeAt<Type>(srcIdx);
-        slot_t value = st->get<slot_t>(std::string(body->key()), stType);
+        Struct *st                 = frame->get<Struct *>(srcIdx);
+        Type *stType               = frame->typeAt<Type>(srcIdx);
+        const std::string_view key = body->key();
+        slot_t value               = st->get<slot_t>(std::string(key.data(), key.size()), stType);
         frame->set(node->dataIndex, value);
         return value;
     }
@@ -663,11 +637,12 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         ASSERT(
             brIndex >= 0 && static_cast<size_t>(brIndex) < withInputs.size(),
             "Taskflow JOIN branch index is out of range.");
+        if (node->dataIndex == 0 || node->dataType == Type::Void()) {
+            return NullSlot;
+        }
         const slot_t result =
             frame->get<slot_t>(dataIndexOf(graph, withInputs[static_cast<size_t>(brIndex)]));
-        if (node->dataIndex != 0) {
-            frame->set(node->dataIndex, result);
-        }
+        frame->set(node->dataIndex, result);
         return result;
     }
 
@@ -713,49 +688,24 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         const auto withInputs = graph->withInputsOf(nodeRef);
         ASSERT(!normInputs.empty(), "Taskflow FILL node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        const TypeCode srcCode          = frame->codeAt(srcIdx);
-        Type *srcType                   = frame->typeAt<Type>(srcIdx);
-        ASSERT(camel::core::type::isGCTraced(srcCode), "Taskflow FILL target must be GC-traced.");
-        Object *srcObj =
-            frame->get<Object *>(srcIdx)->clone(camel::core::mm::autoSpace(), srcType, false);
-        ASSERT(srcObj != nullptr, "Taskflow FILL source object is null.");
-
-        switch (srcCode) {
-        case TypeCode::Tuple: {
-            auto *type         = tt::as_ptr<TupleType>(srcType);
-            auto *tuple        = tt::as_ptr<Tuple>(srcObj);
-            const size_t *refs = type->refs();
-            for (size_t i = 0; i < withInputs.size(); ++i) {
-                tuple->set<slot_t>(refs[i], frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
-            }
-        } break;
-        case TypeCode::Array: {
-            auto *array = tt::as_ptr<Array>(srcObj);
-            for (size_t i = 0; i < withInputs.size(); ++i) {
-                array->set<slot_t>(i, frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
-            }
-        } break;
-        case TypeCode::Struct: {
-            auto *type         = tt::as_ptr<StructType>(srcType);
-            auto *st           = tt::as_ptr<Struct>(srcObj);
-            const size_t *refs = type->refs();
-            for (size_t i = 0; i < withInputs.size(); ++i) {
-                st->set<slot_t>(refs[i], frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
-            }
-        } break;
-        case TypeCode::Function: {
-            auto *func         = tt::as_ptr<Function>(srcObj);
-            Tuple *closureData = func->tuple();
-            ASSERT(closureData != nullptr, "Taskflow FILL function closure is null.");
-            for (size_t i = 0; i < withInputs.size(); ++i) {
-                closureData->set<slot_t>(i, frame->get<slot_t>(dataIndexOf(graph, withInputs[i])));
-            }
-        } break;
-        default:
-            ASSERT(
-                false,
-                std::format("Unsupported Taskflow FILL type {}.", typeCodeToString(srcCode)));
+        Type *srcType                   = node->dataType;
+        ASSERT(
+            camel::core::type::isGCTraced(srcType->code()),
+            "Taskflow FILL target must be GC-traced.");
+        Object *sourceObj = frame->get<Object *>(srcIdx);
+        ASSERT(sourceObj != nullptr, "Taskflow FILL source object is null.");
+        Object *srcObj = sourceObj->clone(camel::core::mm::autoSpace(), srcType, false);
+        ASSERT(srcObj != nullptr, "Taskflow FILL target clone is null.");
+        std::vector<slot_t> fillValues;
+        fillValues.reserve(withInputs.size());
+        for (auto input : withInputs) {
+            fillValues.push_back(frame->get<slot_t>(dataIndexOf(graph, input)));
         }
+        camel::execute::writeRuntimeFillSlots(
+            srcObj,
+            srcType,
+            graph->nodeBodyAs<camel::runtime::GCFillBody>(nodeRef),
+            fillValues);
         frame->set(node->dataIndex, srcObj);
         return toSlot(srcObj);
     }
@@ -772,9 +722,10 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
             frame->set(node->dataIndex, value);
             return value;
         }
-        Struct *st   = frame->get<Struct *>(srcIdx);
-        Type *stType = frame->typeAt<Type>(srcIdx);
-        slot_t value = st->get<slot_t>(std::string(body->key()), stType);
+        Struct *st                 = frame->get<Struct *>(srcIdx);
+        Type *stType               = frame->typeAt<Type>(srcIdx);
+        const std::string_view key = body->key();
+        slot_t value               = st->get<slot_t>(std::string(key.data(), key.size()), stType);
         frame->set(node->dataIndex, value);
         return value;
     }

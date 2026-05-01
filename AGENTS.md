@@ -12,7 +12,11 @@
 - Never modify or replace build artifacts manually.
 - Use only the commands above. They handle artifact synchronization and ensure you run the latest binaries.
 
-## 3. Runtime Prerequisites
+## 3. Commit Messages
+- Use Conventional Commits style prefixes for commit subjects, for example `feat:`, `fix:`, `refactor:`, `docs:`, or `chore:`.
+- Keep the subject concise and specific to the primary change.
+
+## 4. Runtime Prerequisites
 - Required dynamic library: `libcamel.dll`
 - `CAMEL_HOME` must point to the installation root (including `bin`, `lib`, etc.).
 - Environment variable roles:
@@ -46,7 +50,7 @@ $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 - During debugging, start with small inputs (for example, `fib 3`, `fib 4`) and scale incrementally.
 - Use `Select-Object` when output throttling is required.
 
-## 4. Pass Execution Model
+## 5. Pass Execution Model
 - Canonical syntax: `camel xxx.cml pass1 pass2 ...`
 - `std::nvm` is the fallback pass:
   - when no pass is specified, or
@@ -69,13 +73,13 @@ camel fib.cml std::gir               # Print GIR only
 camel fib.cml std::inline std::fvm   # Inline first, then execute on high-performance VM
 ```
 
-## 5. Agent Engineering Standards
+## 6. Agent Engineering Standards
 - Prefer TDD: write tests before implementation whenever feasible.
 - Place test cases under `test/`.
 - For substantial refactors, update `docs/` in the same change set.
 - Add comments for non-trivial or opaque logic, explicitly documenting intent and critical constraints.
 
-## 6. Development Preferences and Quality Bar
+## 7. Development Preferences and Quality Bar
 - Target language standard: C++23. Prefer modern C++ idioms and features where appropriate.
 - Maintain strong commentary and documentation discipline in English. New code should be commented intentionally and sufficiently, especially for non-trivial logic, implicit assumptions, edge cases, and design decisions; do not mirror legacy under-commented areas, and do not trade clarity for minimal code churn.
 - Favor elegant, correctness-first designs. Avoid short-term bypasses introduced solely to minimize code churn.

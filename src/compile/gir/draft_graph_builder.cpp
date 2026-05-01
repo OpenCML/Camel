@@ -101,8 +101,11 @@ DraftGraphBuilder::addStaticSlot(slot_t slot, camel::core::type::Type *type) {
     return static_cast<runtime::gc_slot_idx_t>(-static_cast<int32_t>(slotIndex));
 }
 
-runtime::gc_slot_idx_t DraftGraphBuilder::addStaticData(const camel::core::data::data_ptr_t &data) {
-    return addStaticSlot(makeStaticSlot(data, arena_->allocator()), data->type());
+runtime::gc_slot_idx_t DraftGraphBuilder::addStaticData(
+    const camel::core::data::data_ptr_t &data, camel::core::type::Type *runtimeType) {
+    return addStaticSlot(
+        makeStaticSlot(data, arena_->allocator()),
+        runtimeType ? runtimeType : data->type());
 }
 
 runtime::gc_slot_idx_t DraftGraphBuilder::addRuntimeSlot(camel::core::type::Type *type) {
@@ -119,11 +122,12 @@ void DraftGraphBuilder::setStaticData(
     setStaticSlot(index, makeStaticSlot(data, arena_->allocator()));
 }
 
-runtime::DraftNode *
-DraftGraphBuilder::addStaticDataNode(const camel::core::data::data_ptr_t &data) {
-    const auto slotIndex = addStaticData(data);
+runtime::DraftNode *DraftGraphBuilder::addStaticDataNode(
+    const camel::core::data::data_ptr_t &data, camel::core::type::Type *runtimeType) {
+    auto *nodeType       = runtimeType ? runtimeType : data->type();
+    const auto slotIndex = addStaticData(data, nodeType);
     const auto id        = draft_->addDataNode(
-        data->type(),
+        nodeType,
         slotIndex,
         static_cast<uint8_t>(runtime::kGCNodeFlagConstant));
     return draft_->node(id);
@@ -155,6 +159,11 @@ runtime::DraftNode *DraftGraphBuilder::addCopyNode(camel::core::type::Type *type
 runtime::DraftNode *
 DraftGraphBuilder::addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body) {
     return draft_->node(draft_->addFillNode(type, body));
+}
+
+runtime::DraftNode *
+DraftGraphBuilder::addFillNode(camel::core::type::Type *type, std::span<const std::byte> payload) {
+    return draft_->node(draft_->addFillNode(type, payload));
 }
 
 runtime::DraftNode *
@@ -278,8 +287,14 @@ void DraftGraphBuilder::eraseStaticGraphRef(const graph_ptr_t &graph) {
 }
 
 const std::string &DraftGraphBuilder::nodeDebugEntityId(const runtime::DraftNode *node) const {
+    static const std::string kMissingDebugEntityId;
     auto it = nodeDebugIds_.find(node);
-    ASSERT(it != nodeDebugIds_.end(), "DraftGraphBuilder node debug id not found.");
+    if (it == nodeDebugIds_.end()) {
+        // Rewritten/decorated function values may synthesize intermediate nodes without a stable
+        // source debug entity. Source-origin recovery should degrade to "unknown" instead of
+        // returning an invalid map iterator in release builds.
+        return kMissingDebugEntityId;
+    }
     return it->second;
 }
 

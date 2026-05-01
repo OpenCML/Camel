@@ -476,10 +476,8 @@ gc_cnt_t draftNodeBlockCount(const DraftNodeHeader &header) {
         break;
     case GCNodeKind::Accs:
     case GCNodeKind::Oper:
-        bodyBytes = header.payloadBytes;
-        break;
     case GCNodeKind::Fill:
-        bodyBytes = sizeof(GCFillBody);
+        bodyBytes = header.payloadBytes;
         break;
     case GCNodeKind::Brch:
         bodyBytes = sizeof(GCBrchBody);
@@ -684,19 +682,13 @@ void emitDraftPayload(
             break;
         case GCNodeKind::Accs:
         case GCNodeKind::Oper:
+        case GCNodeKind::Fill:
             if (!payloadBytes.empty()) {
                 std::memcpy(
                     mutableNodeStorage(payload.nodeBlocks, planned.ref) + sizeof(GCNode),
                     payloadBytes.data(),
                     payloadBytes.size_bytes());
             }
-            break;
-        case GCNodeKind::Fill:
-            writeBody(
-                payload.nodeBlocks,
-                planned.ref,
-                payloadBytes.empty() ? GCFillBody{}
-                                     : *reinterpret_cast<const GCFillBody *>(payloadBytes.data()));
             break;
         case GCNodeKind::Brch: {
             const auto *draftBody = reinterpret_cast<const DraftBrchPayload *>(payloadBytes.data());

@@ -180,6 +180,21 @@ gc_node_ref_t GraphDraft::addFillNode(
         });
 }
 
+gc_node_ref_t GraphDraft::addFillNode(
+    camel::core::type::Type *type, std::span<const std::byte> payload, gc_slot_idx_t dataIndex) {
+    dataIndex = ensureValueSlot(*this, type, dataIndex);
+    ASSERT(
+        payload.empty() || payload.size_bytes() >= sizeof(GCFillBody),
+        "FILL payload must contain at least GCFillBody.");
+    return addNode(
+        DraftNodeInit{
+            .dataIndex = dataIndex,
+            .dataType  = type,
+            .kind      = GCNodeKind::Fill,
+            .payload   = std::vector<std::byte>(payload.begin(), payload.end()),
+        });
+}
+
 gc_node_ref_t GraphDraft::addAccsNode(
     camel::core::type::Type *type, uint32_t tupleIndex, gc_slot_idx_t dataIndex) {
     dataIndex = ensureValueSlot(*this, type, dataIndex);

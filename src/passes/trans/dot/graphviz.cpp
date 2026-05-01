@@ -79,7 +79,8 @@ string recordLabel(
             ASSERT(
                 body->keyBytes <= record.bodyBytes() - sizeof(camel::runtime::GCAccsBody),
                 "GraphViz ACCS struct-key payload exceeds the node body.");
-            return "." + std::string(body->key());
+            const std::string_view key = body->key();
+            return "." + std::string(key.data(), key.size());
         }
         return std::format(".{}", body->value);
     }

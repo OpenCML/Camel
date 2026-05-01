@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 06, 2026
- * Updated: Apr. 11, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,9 @@
 #pragma once
 
 #include "camel/core/context/frame.h"
+#include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/rtdata/base.h"
+#include "camel/core/type/base.h"
 #include "camel/runtime/graph.h"
 
 #include <vector>
@@ -62,6 +65,10 @@ size_t selectRuntimeBranchArm(
     camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef,
     camel::core::context::Frame *frame);
 slot_t readRuntimeGraphReturn(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
+
+void writeRuntimeFillSlots(
+    camel::core::rtdata::Object *target, camel::core::type::Type *targetType,
+    const camel::runtime::GCFillBody *fillBody, std::span<const slot_t> values);
 
 void fillFrameForDirectInvoke(
     camel::core::context::Frame *from, camel::core::context::Frame *dest,

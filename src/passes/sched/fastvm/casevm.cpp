@@ -21,6 +21,7 @@
 
 #include "camel/core/error/runtime.h"
 #include "camel/core/global_config.h"
+#include "camel/execute/graph_runtime_support.h"
 #include "runtime_support.h"
 
 using namespace camel::core::error;
@@ -180,83 +181,30 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                     brIndex >= 0 && static_cast<size_t>(brIndex) < bc.withCnt(),
                     "JOIN opcode choosen index out of range in FastVM.");
                 slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
-                currFrame->set(bc.result, result);
+                if (bc.result != 0 && bc.extra()->pType != Type::Void()) {
+                    currFrame->set(bc.result, result);
+                }
             } break;
 
             case OpCode::FILL: {
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
 
-                TypeCode srcCode = currFrame->codeAt(nargs[0]);
-                Type *srcType    = currFrame->typeAt<Type>(nargs[0]);
-                ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced in FastVM.");
-                Object *srcObj =
-                    currFrame->get<Object *>(nargs[0])->clone(mm::autoSpace(), srcType, false);
+                Type *srcType = bc.extra()->pType;
+                auto *fillBody =
+                    *reinterpret_cast<const camel::runtime::GCFillBody *const *>(bc.extra2());
+                ASSERT(isGCTraced(srcType->code()), "FILL target type is not GC-traced in FastVM.");
+                Object *sourceObj = currFrame->get<Object *>(nargs[0]);
+                ASSERT(sourceObj != nullptr, "FILL source object is null in FastVM.");
+                Object *srcObj = sourceObj->clone(mm::autoSpace(), srcType, false);
 
                 ASSERT(srcObj != nullptr, "FILL target data is null.");
-
-                switch (srcCode) {
-                case TypeCode::Tuple: {
-                    auto type = tt::as_ptr<TupleType>(srcType);
-                    auto tup  = tt::as_ptr<Tuple>(srcObj);
-                    ASSERT(
-                        type->refCount() == bc.withCnt(),
-                        std::format(
-                            "Tuple layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
-                            bc.withCnt(),
-                            type->refCount()));
-                    const size_t *refs = type->refs();
-                    for (size_t j = 0; j < bc.withCnt(); ++j) {
-                        tup->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
-                    }
-                } break;
-
-                case TypeCode::Array: {
-                    auto type = tt::as_ptr<ArrayType>(srcType);
-                    auto arr  = tt::as_ptr<Array>(srcObj);
-                    // For arrays, if elemType is Ref, all elements are Ref and we can use the index
-                    // directly.
-                    ASSERT(
-                        arr->size() >= bc.withCnt(),
-                        std::format(
-                            "Array size mismatch in FastVM. Expected at least {}, Actual: {}",
-                            bc.withCnt(),
-                            arr->size()));
-                    for (size_t j = 0; j < bc.withCnt(); ++j) {
-                        arr->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
-                    }
-                } break;
-
-                case TypeCode::Struct: {
-                    auto type = tt::as_ptr<StructType>(srcType);
-                    auto str  = tt::as_ptr<Struct>(srcObj);
-                    ASSERT(
-                        type->refCount() == bc.withCnt(),
-                        std::format(
-                            "Struct layout refs size mismatch in FastVM. Expected: {}, Actual: {}",
-                            bc.withCnt(),
-                            type->refCount()));
-                    const size_t *refs = type->refs();
-                    for (size_t j = 0; j < bc.withCnt(); ++j) {
-                        str->set<slot_t>(refs[j], currFrame->get<slot_t>(wargs[j]));
-                    }
-                } break;
-
-                case TypeCode::Function: {
-                    auto func          = tt::as_ptr<Function>(srcObj);
-                    Tuple *closureData = func->tuple();
-                    for (size_t j = 0; j < bc.withCnt(); ++j) {
-                        closureData->set<slot_t>(j, currFrame->get<slot_t>(wargs[j]));
-                    }
-                } break;
-
-                default:
-                    ASSERT(
-                        false,
-                        std::format(
-                            "Unsupported FILL target type {} in FastVM.",
-                            typeCodeToString(srcCode)));
+                std::vector<slot_t> fillValues;
+                fillValues.reserve(bc.withCnt());
+                for (size_t j = 0; j < bc.withCnt(); ++j) {
+                    fillValues.push_back(currFrame->get<slot_t>(wargs[j]));
                 }
+                camel::execute::writeRuntimeFillSlots(srcObj, srcType, fillBody, fillValues);
 
                 currFrame->set(bc.result, srcObj);
             } break;

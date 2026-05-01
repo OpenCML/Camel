@@ -931,7 +931,7 @@ DraftInlineResult inlineCallableInDraft(
                 "inlining callee '{}'.",
                 result.valueExit,
                 valueExitHeader ? valueExitHeader->dataIndex : 0,
-                draft.name(),
+                "<draft>",
                 funcBody->calleeGraph ? funcBody->calleeGraph->name() : "<null>"));
     }
     result.ctrlExit = resolveInlineCtrlExit(
