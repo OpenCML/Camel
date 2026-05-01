@@ -53,12 +53,14 @@ struct FastVMConfig {
     bool enableJitTraceMir = false;
 };
 
-struct FastVMRuntimeRootCache {
-    std::vector<camel::runtime::GCGraph *> callTargetsByPc;
-};
-
 struct FastVMCallLayoutCache {
     std::vector<camel::runtime::gc_data_idx_t> portSlots;
+};
+
+struct FastVMRuntimeRootCache {
+    std::vector<camel::runtime::GCGraph *> callTargetsByPc;
+    std::vector<FastVMCallLayoutCache *> callLayoutsByPc;
+    std::vector<camel::runtime::gc_data_idx_t> singleArgPortByPc;
 };
 
 class FastVMSchedPass : public RuntimeGraphSchedulePass {
@@ -90,6 +92,32 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
         }
     }
 
+    inline void seedDirectCallFrameWithPorts(
+        ctx::Frame *callerFrame, ctx::Frame *calleeFrame,
+        std::span<const camel::runtime::gc_data_idx_t> portSlots, const data_idx_t *args,
+        size_t argsCnt) {
+        ASSERT(callerFrame != nullptr && calleeFrame != nullptr, "FastVM call frame is null.");
+        ASSERT(argsCnt == portSlots.size(), "FastVM cached direct-call arity mismatch.");
+        for (size_t argIndex = 0; argIndex < argsCnt; ++argIndex) {
+            calleeFrame->set(portSlots[argIndex], callerFrame->get<slot_t>(args[argIndex]));
+        }
+    }
+
+    inline bool trySeedSingleArgDirectCallFrameAtPc(
+        ctx::Frame *callerFrame, ctx::Frame *calleeFrame, size_t pc, const data_idx_t *args,
+        size_t argsCnt) {
+        if (argsCnt != 1 || !runtimeRootCache_ ||
+            pc >= runtimeRootCache_->singleArgPortByPc.size()) {
+            return false;
+        }
+        const auto dstPort = runtimeRootCache_->singleArgPortByPc[pc];
+        if (dstPort == 0) {
+            return false;
+        }
+        calleeFrame->set(dstPort, callerFrame->get<slot_t>(args[0]));
+        return true;
+    }
+
     inline void captureDirectCallArgs(
         ctx::Frame *callerFrame, const data_idx_t *args, size_t argsCnt, std::vector<slot_t> &out) {
         ASSERT(callerFrame != nullptr, "FastVM direct call source frame is null.");
@@ -115,6 +143,30 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
         for (size_t argIndex = 0; argIndex < argValues.size(); ++argIndex) {
             calleeFrame->set(portSlots[argIndex], argValues[argIndex]);
         }
+    }
+
+    inline void seedDirectCallFrameFromSlotsWithPorts(
+        ctx::Frame *calleeFrame, std::span<const camel::runtime::gc_data_idx_t> portSlots,
+        std::span<const slot_t> argValues) {
+        ASSERT(calleeFrame != nullptr, "FastVM direct call target frame is null.");
+        ASSERT(argValues.size() == portSlots.size(), "FastVM cached tail-call arity mismatch.");
+        for (size_t argIndex = 0; argIndex < argValues.size(); ++argIndex) {
+            calleeFrame->set(portSlots[argIndex], argValues[argIndex]);
+        }
+    }
+
+    inline bool trySeedSingleArgDirectCallFrameFromSlotsAtPc(
+        ctx::Frame *calleeFrame, size_t pc, std::span<const slot_t> argValues) {
+        if (argValues.size() != 1 || !runtimeRootCache_ ||
+            pc >= runtimeRootCache_->singleArgPortByPc.size()) {
+            return false;
+        }
+        const auto dstPort = runtimeRootCache_->singleArgPortByPc[pc];
+        if (dstPort == 0) {
+            return false;
+        }
+        calleeFrame->set(dstPort, argValues[0]);
+        return true;
     }
 
   public:
@@ -240,13 +292,23 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
 
     bytecode_vec_t bytecodes_;
     std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap_;
-    camel::runtime::GCGraph *runtimeRoot_ = nullptr;
+    camel::runtime::GCGraph *runtimeRoot_     = nullptr;
+    FastVMRuntimeRootCache *runtimeRootCache_ = nullptr;
     std::vector<std::unique_ptr<FastVMRuntimeRootCache>> runtimeRootCaches_;
     std::vector<std::unique_ptr<FastVMCallLayoutCache>> callLayoutCaches_;
     std::vector<slot_t> tailArgScratch_;
 
     std::span<const camel::runtime::gc_data_idx_t>
     directCallPortSlots(camel::runtime::GCGraph *targetGraph);
+    inline std::span<const camel::runtime::gc_data_idx_t>
+    directCallPortSlotsAtPc(size_t pc, camel::runtime::GCGraph *targetGraph) {
+        if (runtimeRootCache_ && pc < runtimeRootCache_->callLayoutsByPc.size()) {
+            if (auto *layout = runtimeRootCache_->callLayoutsByPc[pc]) {
+                return std::span<const camel::runtime::gc_data_idx_t>(layout->portSlots);
+            }
+        }
+        return directCallPortSlots(targetGraph);
+    }
 
 #if ENABLE_FASTVM_JIT
     std::unique_ptr<jit::IJitBackend> jitBackend_;

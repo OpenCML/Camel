@@ -231,15 +231,24 @@ void FastVMSchedPass::precompile(camel::runtime::GCGraph *runtimeRoot) {
     }
     auto rootCache = std::make_unique<FastVMRuntimeRootCache>();
     rootCache->callTargetsByPc.resize(bytecodes_.size(), nullptr);
+    rootCache->callLayoutsByPc.resize(bytecodes_.size(), nullptr);
+    rootCache->singleArgPortByPc.resize(bytecodes_.size(), 0);
     for (size_t pc = 0; pc < bytecodes_.size();) {
         const Bytecode &bc = bytecodes_[pc];
         if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
-            rootCache->callTargetsByPc[pc] = getFuncExtraRuntimeGraph(&bc);
+            auto *target                   = getFuncExtraRuntimeGraph(&bc);
+            rootCache->callTargetsByPc[pc] = target;
+            const auto portSlots           = directCallPortSlots(target);
+            rootCache->callLayoutsByPc[pc] = fastVmCallLayoutOf(target);
+            if (portSlots.size() == 1) {
+                rootCache->singleArgPortByPc[pc] = portSlots[0];
+            }
         }
         pc += bc.opsize;
     }
     FastVMRuntimeRootCache *rootCacheRaw = rootCache.get();
     runtimeRootCaches_.push_back(std::move(rootCache));
+    runtimeRootCache_ = rootCacheRaw;
     setFastVmRootCacheOf(runtimeRoot_, rootCacheRaw);
 }
 

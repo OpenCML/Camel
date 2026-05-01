@@ -373,11 +373,7 @@ class FramePool {
         camel::core::mm::autoSpace().registerExternalRootTracer(
             this,
             [this](const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) {
-                for (Frame *frame : activeFrames_) {
-                    if (frame) {
-                        frame->updateRefs(relocate, nullptr);
-                    }
-                }
+                traceActiveFrames(relocate);
             });
         gcTracerRegistered_ = true;
     }
@@ -405,7 +401,7 @@ class FramePool {
 
         Frame *lastFrame = reinterpret_cast<Frame *>(top_);
         if (LIKELY(lastFrame->runtimeGraph_ == graph)) {
-            std::fill_n(lastFrame->dynamicArea_, graph->runtimeDataType()->size(), NullSlot);
+            clearGcSlots(lastFrame);
             EXEC_WHEN_DEBUG({
                 CAMEL_LOG_INFO_S(
                     "FramePool",
@@ -417,7 +413,6 @@ class FramePool {
             });
 
             top_ = reinterpret_cast<std::byte *>(lastFrame->next_);
-            activeFrames_.push_back(lastFrame);
             return lastFrame;
         }
 
@@ -439,7 +434,7 @@ class FramePool {
             throw std::bad_alloc{};
         }
         Frame *frame = new (top_) Frame(graph, graph->staticArea(), graph->runtimeDataType());
-        std::fill_n(frame->dynamicArea_, graph->runtimeDataType()->size(), NullSlot);
+        clearGcSlots(frame);
 
         EXEC_WHEN_DEBUG({
             CAMEL_LOG_INFO_S(
@@ -452,7 +447,6 @@ class FramePool {
         });
 
         top_ += frameSize;
-        activeFrames_.push_back(frame);
 
         EXEC_WHEN_DEBUG({ frames_.push_back(frame); });
 
@@ -488,7 +482,6 @@ class FramePool {
 
         frame->next_ = reinterpret_cast<Frame *>(top_);
         top_         = reinterpret_cast<std::byte *>(frame);
-        activeFrames_.pop_back();
 
         EXEC_WHEN_DEBUG({
             frames_.pop_back();
@@ -511,17 +504,45 @@ class FramePool {
     }
 
     void foreach (const std::function<void(Frame *)> &fn) const {
-        for (Frame *frame = reinterpret_cast<Frame *>(base_); frame != nullptr;
-             frame        = frame->next_) {
-            fn(frame);
-        }
+        forEachActiveFrame([&](Frame *frame) { fn(frame); });
     }
 
   private:
+    template <typename Visitor> void forEachActiveFrame(Visitor &&visitor) const {
+        for (std::byte *cursor = base_; cursor < top_;) {
+            Frame *frame = reinterpret_cast<Frame *>(cursor);
+            if (!frame->runtimeGraph_ || !frame->dynamicAreaType_) {
+                break;
+            }
+            visitor(frame);
+            cursor += frame->runtimeGraph_->frameSize();
+        }
+    }
+
+    void clearGcSlots(Frame *frame) {
+        ASSERT(frame != nullptr, "Cannot clear a null frame.");
+        const type::TupleType *layout = frame->dynamicAreaType_;
+        if (!layout || layout->refCount() == 0) {
+            return;
+        }
+        const size_t *refs = layout->refs();
+        for (size_t i = 0; i < layout->refCount(); ++i) {
+            frame->dynamicArea_[refs[i]] = NullSlot;
+        }
+    }
+
+    void traceActiveFrames(
+        const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) const {
+        forEachActiveFrame([&](Frame *frame) {
+            if (frame->dynamicAreaType_ && frame->dynamicAreaType_->refCount() != 0) {
+                frame->updateRefs(relocate, nullptr);
+            }
+        });
+    }
+
     std::byte *base_;
     std::byte *top_;
     std::byte *end_;
-    std::vector<Frame *> activeFrames_;
     bool gcTracerRegistered_ = false;
 #ifndef NDEBUG
     std::vector<Frame *> frames_;
