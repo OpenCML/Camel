@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -992,9 +992,13 @@ bool X64Backend::compileBytecode(
             break;
         }
         case OpCode::RETN: {
-            int d0         = slotDisp(bc.fastop[0]);
             x64::VRegId v0 = nextVReg++;
-            loadSlot(bc.fastop[0], d0, v0);
+            if (bc.fastop[0] == 0) {
+                build.emitVLoadImm64(v0, 0);
+            } else {
+                int d0 = slotDisp(bc.fastop[0]);
+                loadSlot(bc.fastop[0], d0, v0);
+            }
             build.emitVRet(v0);
             break;
         }

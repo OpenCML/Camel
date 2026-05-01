@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,6 +52,50 @@ using camel::runtime::GCNode;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::kInvalidNodeRef;
+
+void bindMarkedFunctionFrame(
+    Frame *frame, Function *func, std::span<const slot_t> normArgs,
+    std::span<const slot_t> withArgs = {}) {
+    ASSERT(frame != nullptr, "Marked operator call frame is null.");
+    ASSERT(func != nullptr && func->graph() != nullptr, "Marked operator callee is null.");
+    auto *graph             = func->graph();
+    const auto normPorts    = graph->normPorts();
+    const auto withPorts    = graph->withPorts();
+    const auto closureNodes = graph->closureNodes();
+    ASSERT(normArgs.size() == normPorts.size(), "Marked operator norm-arity mismatch.");
+    ASSERT(withArgs.size() == withPorts.size(), "Marked operator with-arity mismatch.");
+
+    Tuple *closure = func->tuple();
+    ASSERT(closureNodes.empty() || closure != nullptr, "Marked operator closure tuple is null.");
+    ASSERT(
+        closure == nullptr || closure->size() == closureNodes.size(),
+        "Marked operator closure-arity mismatch.");
+
+    for (size_t i = 0; i < normPorts.size(); ++i) {
+        const auto *port = graph->node(normPorts[i]);
+        ASSERT(port != nullptr, "Marked operator norm port is missing.");
+        frame->set(port->dataIndex, normArgs[i]);
+    }
+    for (size_t i = 0; i < withPorts.size(); ++i) {
+        const auto *port = graph->node(withPorts[i]);
+        ASSERT(port != nullptr, "Marked operator with port is missing.");
+        frame->set(port->dataIndex, withArgs[i]);
+    }
+    if (closure != nullptr) {
+        for (size_t i = 0; i < closureNodes.size(); ++i) {
+            const auto *port = graph->node(closureNodes[i]);
+            ASSERT(port != nullptr, "Marked operator closure node is missing.");
+            frame->set(port->dataIndex, closure->get<slot_t>(i));
+        }
+    }
+}
+
+void validateVariableBodyBytes(const GCNode *node, size_t headerBytes, const char *what) {
+    ASSERT(node != nullptr, "NodeVM variable-body validation received a null node.");
+    ASSERT(
+        node->bodyBytes() >= headerBytes,
+        std::format("NodeVM {} payload is smaller than its fixed header.", what));
+}
 
 inline NodeVMGraphCache *nodeVmCacheOf(camel::runtime::GCGraph *graph) {
     return graph ? reinterpret_cast<NodeVMGraphCache *>(graph->extraSlot(kNodeVmCacheSlot))
@@ -106,6 +150,34 @@ directCallArgSlotsOf(const NodeVMGraphCache *cache, size_t topoIndex) {
         end - begin);
 }
 
+void bindDirectCallFrameSlots(
+    Frame *sourceFrame, Frame *targetFrame, const NodeVMCallLayoutCache *layout,
+    std::span<const runtime_data_idx_t> argSlots, std::vector<slot_t> &scratch) {
+    ASSERT(sourceFrame != nullptr, "NodeVM direct-call source frame is null.");
+    ASSERT(targetFrame != nullptr, "NodeVM direct-call target frame is null.");
+    ASSERT(layout != nullptr, "NodeVM direct-call layout cache is null.");
+    ASSERT(
+        argSlots.size() == layout->calleePortSlots.size(),
+        "NodeVM direct-call cache arity mismatch.");
+
+    if (sourceFrame == targetFrame) {
+        scratch.resize(argSlots.size());
+        for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
+            scratch[argIndex] = sourceFrame->get<slot_t>(argSlots[argIndex]);
+        }
+        for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
+            targetFrame->set(layout->calleePortSlots[argIndex], scratch[argIndex]);
+        }
+        return;
+    }
+
+    for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
+        targetFrame->set(
+            layout->calleePortSlots[argIndex],
+            sourceFrame->get<slot_t>(argSlots[argIndex]));
+    }
+}
+
 } // namespace
 
 NodeVMSchedPass::~NodeVMSchedPass() = default;
@@ -113,7 +185,10 @@ NodeVMSchedPass::~NodeVMSchedPass() = default;
 std::span<const gc_node_ref_t>
 NodeVMSchedPass::buildTopoNodes(camel::runtime::GCGraph *runtimeGraph) {
     ASSERT(runtimeGraph != nullptr, "NodeVM runtime graph is null.");
-    auto sortedNodeRefs = camel::execute::buildReachableExecutionTopoIndices(runtimeGraph);
+    auto sortedNodeRefs       = camel::execute::buildReachableExecutionTopoIndices(runtimeGraph);
+    const bool hasValueReturn = runtimeGraph->funcType() != nullptr &&
+                                runtimeGraph->funcType()->hasExitType() &&
+                                runtimeGraph->funcType()->exitType() != Type::Void();
 
     EXEC_WHEN_DEBUG({
         CAMEL_LOG_DEBUG_S("Topo", "Topologically sorted nodes for graph {}:", runtimeGraph->name());
@@ -135,9 +210,15 @@ NodeVMSchedPass::buildTopoNodes(camel::runtime::GCGraph *runtimeGraph) {
     cache->directCallFeedsTailJoin.resize(cache->topoNodeRefs.size(), 0);
     cache->directCallArgOffsets.resize(cache->topoNodeRefs.size() + 1, 0);
     cache->dataIndexByRef.resize(runtimeGraph->nodeBlockCount(), 0);
-    cache->tailValueRef       = camel::execute::resolveRuntimeTailValueRef(runtimeGraph);
-    cache->tailValueIsJoin    = cache->tailValueRef != kInvalidNodeRef &&
-                                runtimeGraph->node(cache->tailValueRef)->kind == GCNodeKind::Join;
+    cache->tailValueRef =
+        hasValueReturn ? camel::execute::resolveRuntimeTailValueRef(runtimeGraph) : kInvalidNodeRef;
+    const auto *tailValueNode =
+        cache->tailValueRef != kInvalidNodeRef ? runtimeGraph->node(cache->tailValueRef) : nullptr;
+    if (!tailValueNode || tailValueNode->dataIndex == 0) {
+        cache->tailValueRef = kInvalidNodeRef;
+        tailValueNode       = nullptr;
+    }
+    cache->tailValueIsJoin    = tailValueNode != nullptr && tailValueNode->kind == GCNodeKind::Join;
     cache->tailValueTopoIndex = cache->topoNodeRefs.size();
 
     for (size_t idx = 0; idx < cache->topoNodeRefs.size(); ++idx) {
@@ -268,7 +349,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
         gc_node_ref_t skipNode = kInvalidNodeRef;
         gc_node_ref_t joinNode = kInvalidNodeRef;
 
-    // Tail-call loop. Rebind currRuntimeGraph/currFrame instead of growing the C++ stack.
+        // Tail-call loop. Rebind currRuntimeGraph/currFrame instead of growing the C++ stack.
     loop_start: {
         const size_t nodesSize = currNodes.size();
 
@@ -277,6 +358,16 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             const gc_node_ref_t nodeRef = currNodes[i];
             const GCNode *n             = currRuntimeGraph->node(nodeRef);
             ASSERT(n != nullptr, "NodeVM execution resolved to a null runtime node.");
+            if (currRuntimeGraph->name() != "fib" && n->kind != GCNodeKind::Data &&
+                n->kind != GCNodeKind::Port) {
+                CAMEL_LOG_WARN_S(
+                    "NodeVMProbe",
+                    "graph='{}' ref={} kind={} slot={}",
+                    currRuntimeGraph->name(),
+                    nodeRef,
+                    static_cast<int>(n->kind),
+                    n->dataIndex);
+            }
 
             if (tillNode != kInvalidNodeRef) {
                 if (tillNode == nodeRef) {
@@ -419,12 +510,16 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 ASSERT(!normInputs.empty(), "ACCS node must have one source input.");
                 gc_data_idx_t srcIdx = dataIndexOf(currCache, normInputs.front());
                 const auto *body     = currRuntimeGraph->nodeBodyAs<GCAccsBody>(nodeRef);
+                validateVariableBodyBytes(n, sizeof(GCAccsBody), "ACCS");
                 if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
                     size_t idx = body->value;
                     Tuple *t   = currFrame->get<Tuple *>(srcIdx);
                     ASSERT(idx < t->size(), "Tuple index out of bounds in NodeVM.");
                     currFrame->set(n->dataIndex, t->get<slot_t>(idx));
                 } else {
+                    ASSERT(
+                        body->keyBytes <= n->bodyBytes() - sizeof(GCAccsBody),
+                        "NodeVM ACCS struct-key payload exceeds the node body.");
                     std::string key  = std::string(body->key());
                     Struct *s        = currFrame->get<Struct *>(srcIdx);
                     Type *structType = currFrame->typeAt<Type>(srcIdx);
@@ -499,7 +594,6 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 ASSERT(
                     runtimeTarget != nullptr,
                     "NodeVM direct FUNC target must have a materialized runtime graph.");
-
                 const bool isTailCall = currCache->directCallTailEligible[i] != 0 ||
                                         currCache->directCallFeedsTailJoin[i] != 0;
                 if (isTailCall) {
@@ -553,14 +647,12 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                             topoNodesFor(runtimeTarget);
                             auto *layout = nodeVmCallLayoutOf(runtimeTarget);
                             ASSERT(layout != nullptr, "NodeVM call layout cache must exist.");
-                            ASSERT(
-                                argSlots.size() == layout->calleePortSlots.size(),
-                                "NodeVM direct-call cache arity mismatch.");
-                            for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
-                                funcFrame->set(
-                                    layout->calleePortSlots[argIndex],
-                                    lastFrame->get<slot_t>(argSlots[argIndex]));
-                            }
+                            bindDirectCallFrameSlots(
+                                lastFrame,
+                                funcFrame,
+                                layout,
+                                argSlots,
+                                callArgScratch_);
 
                             currFrame = funcFrame;
                             goto loop_start;
@@ -574,14 +666,12 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     topoNodesFor(runtimeTarget);
                     auto *layout = nodeVmCallLayoutOf(runtimeTarget);
                     ASSERT(layout != nullptr, "NodeVM call layout cache must exist.");
-                    ASSERT(
-                        argSlots.size() == layout->calleePortSlots.size(),
-                        "NodeVM direct-call cache arity mismatch.");
-                    for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
-                        currFrame->set(
-                            layout->calleePortSlots[argIndex],
-                            lastFrame->get<slot_t>(argSlots[argIndex]));
-                    }
+                    bindDirectCallFrameSlots(
+                        lastFrame,
+                        currFrame,
+                        layout,
+                        argSlots,
+                        callArgScratch_);
                     goto loop_start;
                 }
 
@@ -590,14 +680,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 topoNodesFor(runtimeTarget);
                 auto *layout = nodeVmCallLayoutOf(runtimeTarget);
                 ASSERT(layout != nullptr, "NodeVM call layout cache must exist.");
-                ASSERT(
-                    argSlots.size() == layout->calleePortSlots.size(),
-                    "NodeVM direct-call cache arity mismatch.");
-                for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
-                    funcFrame->set(
-                        layout->calleePortSlots[argIndex],
-                        currFrame->get<slot_t>(argSlots[argIndex]));
-                }
+                bindDirectCallFrameSlots(currFrame, funcFrame, layout, argSlots, callArgScratch_);
                 slot_t callResult = call(runtimeTarget, funcFrame);
 
                 if (n->dataIndex != 0) {
@@ -608,6 +691,10 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             case GCNodeKind::Oper: {
                 auto *body =
                     const_cast<GCOperBody *>(currRuntimeGraph->nodeBodyAs<GCOperBody>(nodeRef));
+                validateVariableBodyBytes(n, sizeof(GCOperBody), "OPER");
+                ASSERT(
+                    body->uriBytes <= n->bodyBytes() - sizeof(GCOperBody),
+                    "NodeVM OPER uri payload exceeds the node body.");
                 operator_t opFunc = body->op;
                 if (!opFunc) {
                     const std::string uri(body->uri());
@@ -678,13 +765,11 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
         result = camel::execute::readRuntimeGraphReturn(currRuntimeGraph, currFrame);
 
         // Release frames in the documented order from the header comment above.
-        if (twinFrame != nullptr) {
-            if (currFrame != rootFrame) {
-                framePool_.release(currFrame);
-            }
-            if (twinFrame != rootFrame) {
-                framePool_.release(twinFrame);
-            }
+        if (currFrame != nullptr && currFrame != rootFrame) {
+            framePool_.release(currFrame);
+        }
+        if (twinFrame != nullptr && twinFrame != rootFrame && twinFrame != currFrame) {
+            framePool_.release(twinFrame);
         }
         framePool_.release(rootFrame);
 
@@ -730,7 +815,6 @@ camel::runtime::GCGraph *NodeVMSchedPass::apply(camel::runtime::GCGraph *graph, 
     (void)os;
     ASSERT(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
     graphCaches_.clear();
-
     Frame *rootFrame = framePool_.acquire(graph);
     slot_t result    = call(graph, rootFrame);
     context_->captureProcessExitCode(graph, result);
@@ -762,22 +846,21 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(
     ASSERT(
         !normInputs.empty() && !withInputs.empty(),
         "map_arr requires array and function inputs.");
-    Array *arr     = currFrame.get<Array *>(dataIndexOf(graph, normInputs.front()));
-    Function *func = currFrame.get<Function *>(dataIndexOf(graph, withInputs.front()));
-    Tuple *closure = func->tuple();
-
-    Array *res   = Array::create(mm::autoSpace(), arr->size());
-    slot_t *from = arr->data();
-    slot_t *to   = res->data();
+    const auto arrSlot  = dataIndexOf(graph, normInputs.front());
+    const auto funcSlot = dataIndexOf(graph, withInputs.front());
+    Array *arr          = currFrame.get<Array *>(arrSlot);
+    Array *res          = Array::create(mm::autoSpace(), arr->size());
+    currFrame.set(dataIndexOf(graph, nodeRef), res);
 
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(func->graph());
-        frame->set(1, from[i]);
-        for (size_t j = 0; j < closure->size(); ++j)
-            frame->set(j + 2, closure->get<slot_t>(j));
-        to[i] = call(func->graph(), frame);
+        arr            = currFrame.get<Array *>(arrSlot);
+        Function *func = currFrame.get<Function *>(funcSlot);
+        slot_t element = arr->data()[i];
+        Frame *frame   = framePool_.acquire(func->graph());
+        bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
+        Array *target     = currFrame.get<Array *>(dataIndexOf(graph, nodeRef));
+        target->data()[i] = call(func->graph(), frame);
     }
-    currFrame.set(dataIndexOf(graph, nodeRef), res);
 }
 
 void NodeVMSchedPass::evalMarkedOperator_apply_arr(
@@ -787,19 +870,19 @@ void NodeVMSchedPass::evalMarkedOperator_apply_arr(
     ASSERT(
         !normInputs.empty() && !withInputs.empty(),
         "apply_arr requires array and function inputs.");
-    Array *arr     = currFrame.get<Array *>(dataIndexOf(graph, normInputs.front()));
-    Function *func = currFrame.get<Function *>(dataIndexOf(graph, withInputs.front()));
-    Tuple *closure = func->tuple();
-    slot_t *data   = arr->data();
+    const auto arrSlot  = dataIndexOf(graph, normInputs.front());
+    const auto funcSlot = dataIndexOf(graph, withInputs.front());
+    Array *arr          = currFrame.get<Array *>(arrSlot);
 
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(func->graph());
-        frame->set(1, data[i]);
-        for (size_t j = 0; j < closure->size(); ++j)
-            frame->set(j + 2, closure->get<slot_t>(j));
-        data[i] = call(func->graph(), frame);
+        arr            = currFrame.get<Array *>(arrSlot);
+        Function *func = currFrame.get<Function *>(funcSlot);
+        slot_t element = arr->data()[i];
+        Frame *frame   = framePool_.acquire(func->graph());
+        bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
+        arr->data()[i] = call(func->graph(), frame);
     }
-    currFrame.set(dataIndexOf(graph, nodeRef), arr);
+    currFrame.set(dataIndexOf(graph, nodeRef), currFrame.get<Array *>(arrSlot));
 }
 
 void NodeVMSchedPass::evalMarkedOperator_filter_arr(
@@ -809,23 +892,25 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(
     ASSERT(
         !normInputs.empty() && !withInputs.empty(),
         "filter_arr requires array and function inputs.");
-    Array *arr      = currFrame.get<Array *>(dataIndexOf(graph, normInputs.front()));
-    Function *func  = currFrame.get<Function *>(dataIndexOf(graph, withInputs.front()));
-    Tuple *closure  = func->tuple();
-    Array *filtered = Array::create(mm::autoSpace(), arr->size());
-    slot_t *from    = arr->data();
+    const auto arrSlot  = dataIndexOf(graph, normInputs.front());
+    const auto funcSlot = dataIndexOf(graph, withInputs.front());
+    Array *arr          = currFrame.get<Array *>(arrSlot);
+    Array *filtered     = Array::create(mm::autoSpace(), arr->size());
+    currFrame.set(dataIndexOf(graph, nodeRef), filtered);
 
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(func->graph());
-        frame->set(1, from[i]);
-        for (size_t j = 0; j < closure->size(); ++j)
-            frame->set(j + 2, closure->get<slot_t>(j));
+        arr            = currFrame.get<Array *>(arrSlot);
+        Function *func = currFrame.get<Function *>(funcSlot);
+        slot_t element = arr->data()[i];
+        Frame *frame   = framePool_.acquire(func->graph());
+        bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
         slot_t result = call(func->graph(), frame);
-        if (fromSlot<bool>(result))
-            filtered->append(from[i]);
+        if (fromSlot<bool>(result)) {
+            Array *target = currFrame.get<Array *>(dataIndexOf(graph, nodeRef));
+            target->append(arr->data()[i]);
+        }
     }
-    filtered->shrinkToFit();
-    currFrame.set(dataIndexOf(graph, nodeRef), filtered);
+    currFrame.get<Array *>(dataIndexOf(graph, nodeRef))->shrinkToFit();
 }
 
 void NodeVMSchedPass::evalMarkedOperator_reduce_arr(
@@ -835,27 +920,27 @@ void NodeVMSchedPass::evalMarkedOperator_reduce_arr(
     ASSERT(
         !normInputs.empty() && withInputs.size() >= 2,
         "reduce_arr requires array, function, and initial value inputs.");
-    Array *arr     = currFrame.get<Array *>(dataIndexOf(graph, normInputs.front()));
-    Function *func = currFrame.get<Function *>(dataIndexOf(graph, withInputs[0]));
-    slot_t init    = currFrame.get<slot_t>(dataIndexOf(graph, withInputs[1]));
-    Tuple *closure = func->tuple();
+    const auto arrSlot    = dataIndexOf(graph, normInputs.front());
+    const auto funcSlot   = dataIndexOf(graph, withInputs[0]);
+    const auto initSlot   = dataIndexOf(graph, withInputs[1]);
+    const auto resultSlot = dataIndexOf(graph, nodeRef);
+    Array *arr            = currFrame.get<Array *>(arrSlot);
+    slot_t init           = currFrame.get<slot_t>(initSlot);
 
     if (arr->size() == 0) {
-        currFrame.set(dataIndexOf(graph, nodeRef), init);
+        currFrame.set(resultSlot, init);
         return;
     }
-    slot_t acc   = init;
-    slot_t *from = arr->data();
+    currFrame.set(resultSlot, init);
 
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(func->graph());
-        frame->set(1, acc);
-        frame->set(2, from[i]);
-        for (size_t j = 0; j < closure->size(); ++j)
-            frame->set(j + 3, closure->get<slot_t>(j));
-        acc = call(func->graph(), frame);
+        arr                 = currFrame.get<Array *>(arrSlot);
+        Function *func      = currFrame.get<Function *>(funcSlot);
+        const slot_t args[] = {currFrame.get<slot_t>(resultSlot), arr->data()[i]};
+        Frame *frame        = framePool_.acquire(func->graph());
+        bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(args, 2));
+        currFrame.set(resultSlot, call(func->graph(), frame));
     }
-    currFrame.set(dataIndexOf(graph, nodeRef), acc);
 }
 
 void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
@@ -865,16 +950,16 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
     ASSERT(
         !normInputs.empty() && !withInputs.empty(),
         "foreach_arr requires array and function inputs.");
-    Array *arr     = currFrame.get<Array *>(dataIndexOf(graph, normInputs.front()));
-    Function *func = currFrame.get<Function *>(dataIndexOf(graph, withInputs.front()));
-    Tuple *closure = func->tuple();
-    slot_t *from   = arr->data();
+    const auto arrSlot  = dataIndexOf(graph, normInputs.front());
+    const auto funcSlot = dataIndexOf(graph, withInputs.front());
+    Array *arr          = currFrame.get<Array *>(arrSlot);
 
     for (size_t i = 0; i < arr->size(); ++i) {
-        Frame *frame = framePool_.acquire(func->graph());
-        frame->set(1, from[i]);
-        for (size_t j = 0; j < closure->size(); ++j)
-            frame->set(j + 2, closure->get<slot_t>(j));
+        arr            = currFrame.get<Array *>(arrSlot);
+        Function *func = currFrame.get<Function *>(funcSlot);
+        slot_t element = arr->data()[i];
+        Frame *frame   = framePool_.acquire(func->graph());
+        bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
         call(func->graph(), frame);
     }
     currFrame.set(dataIndexOf(graph, nodeRef), NullSlot);

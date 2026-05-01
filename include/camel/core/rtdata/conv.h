@@ -13,14 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "./base.h"
-#include "camel/compile/gir.h"
 #include "camel/core/data/base.h"
 
 namespace data = camel::core::data;

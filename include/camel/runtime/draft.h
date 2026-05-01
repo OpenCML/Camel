@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,15 +21,22 @@
  * Runtime graph draft model.
  *
  * `GCGraph` is the immutable execution layout. `GraphDraft` is the editable
- * decode form used by runtime rewrites. The draft intentionally keeps node-
- * centric adjacency and stable 16-bit node ids so passes can mutate the graph
- * without invalidating external handles whenever node storage grows.
- *
- * The draft node header stays structurally close to `GCNode`, but the storage
- * model is different:
+ * decode form used by
+ * runtime rewrites. The draft intentionally keeps node-
+ * centric adjacency and stable 16-bit node
+ * ids so passes can mutate the graph
+ * without invalidating external node pointers.
+ * The draft
+ * node header stays structurally close to `GCNode`, but the storage model is different:
  * - one draft node owns its payload bytes and all six adjacency lists
- * - nodes live in a pool of small slabs plus oversize fallback blocks
- * - ids are stable while pointers may move during reallocation
+ * - the node header address
+ * is stable for the lifetime of the draft
+ * - payload bytes and adjacency arrays live in a tail
+ * block that may be
+ *   replaced internally without moving the node header
+ * - both node headers
+ * and tail blocks come from slab-backed arenas with
+ *   oversize fallback blocks
  */
 
 #pragma once
@@ -68,6 +75,8 @@ struct DraftBrchPayload {
 static_assert(std::is_trivially_copyable_v<DraftBrchPayload>);
 
 struct DraftNodeHeader {
+    class GraphDraft *owner           = nullptr;
+    gc_node_ref_t selfId              = kInvalidNodeRef;
     gc_slot_idx_t dataIndex           = 0;
     uint16_t payloadBytes             = 0;
     uint16_t capacityBytes            = 0;
@@ -95,6 +104,7 @@ struct DraftNodeHeader {
 
 struct DraftNode {
     DraftNodeHeader header;
+    std::byte *tail = nullptr;
 };
 
 struct DraftNodeInit {
@@ -151,10 +161,8 @@ class DraftNodePool {
     DraftNodePool(const DraftNodePool &)            = delete;
     DraftNodePool &operator=(const DraftNodePool &) = delete;
 
-    DraftNode *alloc(size_t tailBytes, DraftNodeStorageClass *storageClass = nullptr);
-    DraftNode *realloc(
-        DraftNode *node, size_t oldTailBytes, size_t newTailBytes,
-        DraftNodeStorageClass *storageClass = nullptr);
+    DraftNode *allocNode();
+    std::byte *allocTail(size_t tailBytes, DraftNodeStorageClass *storageClass = nullptr);
     void clear();
 
   private:
@@ -167,9 +175,10 @@ class DraftNodePool {
     static constexpr size_t kPageBytes = 4096;
 
     static size_t capacityForStorageClass(DraftNodeStorageClass storageClass);
-    static DraftNodeStorageClass classify(size_t totalBytes);
-    DraftNode *allocFromArena(SlabArena &arena);
+    static DraftNodeStorageClass classify(size_t tailBytes);
+    std::byte *allocFromArena(SlabArena &arena);
 
+    SlabArena nodeArena_{sizeof(DraftNode), 0, {}};
     SlabArena slab64_{64, 0, {}};
     SlabArena slab96_{96, 0, {}};
     SlabArena slab128_{128, 0, {}};
@@ -200,14 +209,20 @@ class GraphDraft {
     bool empty() const { return liveNodeCount_ == 0; }
 
     bool containsNode(gc_node_ref_t id) const;
+    bool containsNode(const DraftNode *node) const;
     bool alive(gc_node_ref_t id) const;
+    bool alive(const DraftNode *node) const;
     const DraftNode *node(gc_node_ref_t id) const;
     DraftNode *node(gc_node_ref_t id);
+    gc_node_ref_t nodeId(const DraftNode *node) const;
     const DraftNodeHeader *header(gc_node_ref_t id) const;
+    const DraftNodeHeader *header(const DraftNode *node) const;
     gc_node_ref_t draftIdOfSourceRef(gc_node_ref_t sourceRef) const;
     gc_node_ref_t sourceRefOf(gc_node_ref_t draftId) const;
     std::span<const std::byte> payloadOf(gc_node_ref_t id) const;
+    std::span<const std::byte> payloadOf(const DraftNode *node) const;
     std::span<const GCBranchArm> branchArmsOf(gc_node_ref_t id) const;
+    std::span<const GCBranchArm> branchArmsOf(const DraftNode *node) const;
 
     gc_node_ref_t entryNode() const { return entry_; }
     gc_node_ref_t exitNode() const { return exit_; }
@@ -226,16 +241,25 @@ class GraphDraft {
     const std::vector<GCGraph *> &staticGraphRefs() const { return staticGraphRefs_; }
 
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> normInputsOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> withInputsOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> ctrlInputsOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> ctrlInputsOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> normUsersOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> normUsersOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> withUsersOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> withUsersOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> ctrlUsersOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> ctrlUsersOf(const DraftNode *node) const;
     bool isControlAnchor(gc_node_ref_t id) const;
+    bool isControlAnchor(const DraftNode *node) const;
     bool isBranchArmAnchor(gc_node_ref_t id) const;
+    bool isBranchArmAnchor(const DraftNode *node) const;
     gc_node_ref_t resolveForwardedValueRef(gc_node_ref_t id) const;
     gc_node_ref_t resolveForwardedCtrlRef(gc_node_ref_t id) const;
     std::span<std::byte> mutablePayloadOf(gc_node_ref_t id);
+    std::span<std::byte> mutablePayloadOf(DraftNode *node);
 
     void setFuncType(camel::core::type::FunctionType *funcType) { funcType_ = funcType; }
     void setRuntimeDataType(camel::core::type::TupleType *runtimeDataType) {

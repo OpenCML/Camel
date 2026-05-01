@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -90,6 +90,152 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
         }
     }
 
+    inline void captureDirectCallArgs(
+        ctx::Frame *callerFrame, const data_idx_t *args, size_t argsCnt, std::vector<slot_t> &out) {
+        ASSERT(callerFrame != nullptr, "FastVM direct call source frame is null.");
+        out.resize(argsCnt);
+        for (size_t argIndex = 0; argIndex < argsCnt; ++argIndex) {
+            out[argIndex] = callerFrame->get<slot_t>(args[argIndex]);
+        }
+    }
+
+    inline void seedDirectCallFrameFromSlots(
+        ctx::Frame *calleeFrame, camel::runtime::GCGraph *targetGraph,
+        std::span<const slot_t> argValues) {
+        ASSERT(calleeFrame != nullptr, "FastVM direct call target frame is null.");
+        ASSERT(targetGraph != nullptr, "FastVM direct call target graph is null.");
+        const auto portSlots = directCallPortSlots(targetGraph);
+        ASSERT(
+            argValues.size() == portSlots.size(),
+            std::format(
+                "FastVM direct call arity mismatch for graph '{}': expected {}, got {}.",
+                targetGraph->name(),
+                portSlots.size(),
+                argValues.size()));
+        for (size_t argIndex = 0; argIndex < argValues.size(); ++argIndex) {
+            calleeFrame->set(portSlots[argIndex], argValues[argIndex]);
+        }
+    }
+
+  public:
+    inline void seedIndirectCallFrame(
+        ctx::Frame *callerFrame, ctx::Frame *calleeFrame, Function *func, data_arr_t nargs,
+        data_arr_t wargs) {
+        ASSERT(callerFrame != nullptr, "FastVM indirect call source frame is null.");
+        ASSERT(calleeFrame != nullptr, "FastVM indirect call target frame is null.");
+        ASSERT(func != nullptr, "FastVM indirect call callee Function is null.");
+        auto *targetGraph = func->graph();
+        ASSERT(targetGraph != nullptr, "FastVM indirect call target graph is null.");
+        ASSERT(!wargs.empty(), "FastVM indirect CALL requires with-arg[0] as Function.");
+
+        const auto normPorts = targetGraph->normPorts();
+        ASSERT(
+            nargs.size() == normPorts.size(),
+            std::format(
+                "FastVM indirect call norm-arity mismatch for graph '{}': expected {}, got {}.",
+                targetGraph->name(),
+                normPorts.size(),
+                nargs.size()));
+        for (size_t i = 0; i < normPorts.size(); ++i) {
+            const auto *port = targetGraph->node(normPorts[i]);
+            ASSERT(port != nullptr, "FastVM indirect call norm port is null.");
+            calleeFrame->set(port->dataIndex, callerFrame->get<slot_t>(nargs[i]));
+        }
+
+        const auto withPorts           = targetGraph->withPorts();
+        const size_t explicitWithCount = wargs.size() - 1;
+        ASSERT(
+            explicitWithCount == withPorts.size(),
+            std::format(
+                "FastVM indirect call with-arity mismatch for graph '{}': expected {}, got {}.",
+                targetGraph->name(),
+                withPorts.size(),
+                explicitWithCount));
+        for (size_t i = 0; i < withPorts.size(); ++i) {
+            const auto *port = targetGraph->node(withPorts[i]);
+            ASSERT(port != nullptr, "FastVM indirect call with port is null.");
+            calleeFrame->set(port->dataIndex, callerFrame->get<slot_t>(wargs[i + 1]));
+        }
+
+        const auto closureNodes = targetGraph->closureNodes();
+        if (closureNodes.empty()) {
+            return;
+        }
+
+        Tuple *closure = func->tuple();
+        ASSERT(closure != nullptr, "FastVM indirect call closure tuple is null.");
+        ASSERT(
+            closure->size() == closureNodes.size(),
+            std::format(
+                "FastVM indirect call closure-arity mismatch for graph '{}': expected {}, got {}.",
+                targetGraph->name(),
+                closureNodes.size(),
+                closure->size()));
+        for (size_t i = 0; i < closureNodes.size(); ++i) {
+            const auto *port = targetGraph->node(closureNodes[i]);
+            ASSERT(port != nullptr, "FastVM indirect call closure port is null.");
+            calleeFrame->set(port->dataIndex, closure->get<slot_t>(i));
+        }
+    }
+
+    inline void seedMarkedFunctionFrame(
+        ctx::Frame *calleeFrame, Function *func, std::span<const slot_t> normArgs,
+        std::span<const slot_t> withArgs = {}) {
+        ASSERT(calleeFrame != nullptr, "FastVM marked call target frame is null.");
+        ASSERT(func != nullptr, "FastVM marked call Function is null.");
+        auto *targetGraph = func->graph();
+        ASSERT(targetGraph != nullptr, "FastVM marked call target graph is null.");
+
+        const auto normPorts = targetGraph->normPorts();
+        const auto withPorts = targetGraph->withPorts();
+        ASSERT(
+            normArgs.size() == normPorts.size(),
+            std::format(
+                "FastVM marked call norm-arity mismatch for graph '{}': expected {}, got {}.",
+                targetGraph->name(),
+                normPorts.size(),
+                normArgs.size()));
+        ASSERT(
+            withArgs.size() == withPorts.size(),
+            std::format(
+                "FastVM marked call with-arity mismatch for graph '{}': expected {}, got {}.",
+                targetGraph->name(),
+                withPorts.size(),
+                withArgs.size()));
+
+        for (size_t i = 0; i < normPorts.size(); ++i) {
+            const auto *port = targetGraph->node(normPorts[i]);
+            ASSERT(port != nullptr, "FastVM marked call norm port is null.");
+            calleeFrame->set(port->dataIndex, normArgs[i]);
+        }
+        for (size_t i = 0; i < withPorts.size(); ++i) {
+            const auto *port = targetGraph->node(withPorts[i]);
+            ASSERT(port != nullptr, "FastVM marked call with port is null.");
+            calleeFrame->set(port->dataIndex, withArgs[i]);
+        }
+
+        const auto closureNodes = targetGraph->closureNodes();
+        if (closureNodes.empty()) {
+            return;
+        }
+
+        Tuple *closure = func->tuple();
+        ASSERT(closure != nullptr, "FastVM marked call closure tuple is null.");
+        ASSERT(
+            closure->size() == closureNodes.size(),
+            std::format(
+                "FastVM marked call closure-arity mismatch for graph '{}': expected {}, got {}.",
+                targetGraph->name(),
+                closureNodes.size(),
+                closure->size()));
+        for (size_t i = 0; i < closureNodes.size(); ++i) {
+            const auto *port = targetGraph->node(closureNodes[i]);
+            ASSERT(port != nullptr, "FastVM marked call closure port is null.");
+            calleeFrame->set(port->dataIndex, closure->get<slot_t>(i));
+        }
+    }
+
+  private:
     // Frame pool used by the interpreter and JIT trampolines.
     ctx::FramePool framePool_{1 * camel::core::mm::MB};
 
@@ -98,6 +244,7 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     camel::runtime::GCGraph *runtimeRoot_ = nullptr;
     std::vector<std::unique_ptr<FastVMRuntimeRootCache>> runtimeRootCaches_;
     std::vector<std::unique_ptr<FastVMCallLayoutCache>> callLayoutCaches_;
+    std::vector<slot_t> tailArgScratch_;
 
     std::span<const camel::runtime::gc_data_idx_t>
     directCallPortSlots(camel::runtime::GCGraph *targetGraph);
@@ -194,6 +341,7 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
           enableJitTraceMir_(config.enableJitTraceMir)
 #endif
     {
+        framePool_.registerGcTracer();
     }
     virtual ~FastVMSchedPass();
 

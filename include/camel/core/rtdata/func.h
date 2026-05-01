@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Apr. 11, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -77,7 +77,7 @@ class Function : public rtdata::Object {
         if (!mem)
             throw std::bad_alloc();
 
-        Function *fnNew = new (mem) Function(runtimeGraph_);
+        Function *fnNew = new (mem) Function(runtimeGraph_, tupleType_);
 
         if (closure_) {
             const type::TupleType *tupleTypePtr = tupleType();
@@ -106,9 +106,10 @@ class Function : public rtdata::Object {
     }
 
   private:
-    explicit Function(camel::runtime::GCGraph *runtimeGraph)
-        : runtimeGraph_(runtimeGraph), closure_(nullptr) {}
+    explicit Function(camel::runtime::GCGraph *runtimeGraph, const type::TupleType *tupleType)
+        : runtimeGraph_(runtimeGraph), closure_(nullptr), tupleType_(tupleType) {}
 
     camel::runtime::GCGraph *runtimeGraph_;
     Tuple *closure_;
+    const type::TupleType *tupleType_ = nullptr;
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,6 @@
 #include <sstream>
 
 using namespace std;
-using namespace GIR;
 using namespace camel::core::context;
 
 namespace {
@@ -73,7 +72,13 @@ string recordLabel(
         return "FILL";
     case camel::runtime::GCNodeKind::Accs: {
         const auto *body = graph->nodeBodyAs<camel::runtime::GCAccsBody>(nodeRef);
+        ASSERT(
+            record.bodyBytes() >= sizeof(camel::runtime::GCAccsBody),
+            "GraphViz ACCS payload is smaller than its fixed header.");
         if (body->accsKind == camel::runtime::GCAccsKind::StructKey) {
+            ASSERT(
+                body->keyBytes <= record.bodyBytes() - sizeof(camel::runtime::GCAccsBody),
+                "GraphViz ACCS struct-key payload exceeds the node body.");
             return "." + std::string(body->key());
         }
         return std::format(".{}", body->value);
@@ -91,6 +96,13 @@ string recordLabel(
         return callee ? callee->name() : "FUNC";
     }
     case camel::runtime::GCNodeKind::Oper:
+        ASSERT(
+            record.bodyBytes() >= sizeof(camel::runtime::GCOperBody),
+            "GraphViz OPER payload is smaller than its fixed header.");
+        ASSERT(
+            graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uriBytes <=
+                record.bodyBytes() - sizeof(camel::runtime::GCOperBody),
+            "GraphViz OPER uri payload exceeds the node body.");
         return std::string(graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uri());
     case camel::runtime::GCNodeKind::Sync:
         return "SYNC";

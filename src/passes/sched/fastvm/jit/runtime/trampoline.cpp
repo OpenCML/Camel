@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -619,15 +619,7 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
             runtimeTarget != nullptr,
             "FastVM JIT indirect CALL requires a materialized runtime graph target.");
         Frame *funcFrame = vm->acquireFrameForCall(runtimeTarget);
-
-        size_t i = 0;
-        for (; i < nargs.size(); ++i) {
-            funcFrame->set(i + 1, frame->get<slot_t>(nargs[i]));
-        }
-        Tuple *closureData = function->tuple();
-        for (size_t j = 0; j < closureData->size(); ++j) {
-            funcFrame->set(i + j + 1, closureData->get<slot_t>(j));
-        }
+        vm->seedIndirectCallFrame(frame, funcFrame, function, nargs, wargs);
 
         // Indirect CALL still crosses a runtime Function carrier and closure
         // object. Keep this path on the interpreter entry for now until the

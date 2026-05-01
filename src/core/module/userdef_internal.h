@@ -12,23 +12,27 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Mar. 29, 2026
- * Updated: May. 01, 2026
+ * Created: Apr. 12, 2026
+ * Updated: Apr. 12, 2026
  * Supported by: National Key Research and Development Program of China
+ */
+
+/*
+ * Internal helpers for bridging UserDefinedModule to compile/runtime graph
+ * carriers. These APIs are intentionally kept out of the public module
+ * surface so runtime-facing code does not learn about compile-graph details.
  */
 
 #pragma once
 
-#include "draft_graph_builder.h"
+#include "camel/core/module/userdef.h"
 
-namespace camel::compile::gir::validate {
+namespace camel::core::module::detail {
 
-// Structural invariants for an encodable compile-time graph.
-// This remains a standalone debug utility rather than part of the Graph type.
-void assertGraphSealingPreconditions(const DraftGraphBuilder &graph);
-// Depth-first over root and its subGraphs()/dependencies(), applying the same assertions graph
-// by graph.
-void assertGraphTreeSealingPreconditions(const graph_ptr_t &graph);
-void assertGraphTreeStaticReferences(const graph_ptr_t &graph);
+class UserDefinedModuleAccess {
+  public:
+    static const void *compileGraphOpaque(const UserDefinedModule &module);
+    static camel::runtime::GCGraph *encodeRuntimeGraph(const UserDefinedModule &module);
+};
 
-} // namespace camel::compile::gir::validate
+} // namespace camel::core::module::detail

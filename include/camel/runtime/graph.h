@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: Apr. 11, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -416,7 +416,6 @@ class GCGraph : public camel::core::rtdata::Object {
   private:
     friend class GCGraphManager;
     friend class GraphDraft;
-    friend class camel::compile::gir::Graph;
     friend struct GCGraphBuildAccess;
 
     GCGraph(

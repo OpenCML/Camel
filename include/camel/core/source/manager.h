@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 07, 2026
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,11 +32,9 @@
 #include <utility>
 #include <vector>
 
-namespace camel::compile::gir {
-class Node;
-}
-
 namespace camel::source {
+
+using gir_draft_node_key_t = uintptr_t;
 
 /// Mark which compilation stage an origin came from, for diagnostics and debugger traces.
 enum class OriginStage : uint8_t {
@@ -282,27 +280,28 @@ class SourceContext {
     const SemanticBundle *astSemantic(origin_id_t origin) const;
     const SemanticBundle *gctSemantic(origin_id_t origin) const;
     const SemanticBundle *girGraphSemantic(const std::string &graphId) const;
-    /// GIR node semantics: draft-time uses the origin side, while sealed entities use the stable
-    /// entity ID side (`Node::debugEntityId()`, e.g. `gnode:...`).
-    const SemanticBundle *girNodeSemantic(const camel::compile::gir::Node *node) const;
+    /// GIR node semantics: draft-time uses draft-node keys, while sealed entities use the stable
+    /// entity ID side (`gnode:...`).
+    const SemanticBundle *girNodeSemantic(const std::string &entityId) const;
 
     void cloneGirGraphDebugInfo(const std::string &fromGraphId, const std::string &toGraphId);
     /// Copy debug bindings during GIR clone / inline; the source node may be draft or already
     /// sealed.
     void cloneGirNodeDebugBinding(
-        const camel::compile::gir::Node *fromNode, const camel::compile::gir::Node *toNode);
+        gir_draft_node_key_t fromKey, const std::string &fromEntityId, gir_draft_node_key_t toKey);
 
     /// Draft-stage binding: do not write string keys into DebugMap before sealing.
     void bindGirNodeDraftDebug(
-        const camel::compile::gir::Node *node, origin_id_t origin, SemanticBundle bundle);
-    void unbindGirNodeDraftDebug(const camel::compile::gir::Node *node);
+        gir_draft_node_key_t draftNodeKey, origin_id_t origin, SemanticBundle bundle);
+    void unbindGirNodeDraftDebug(gir_draft_node_key_t draftNodeKey);
 
     /// After rearrange, bind the draft origin to `entityId` in both DebugMap and the sealed
     /// semantic table.
-    void sealPromoteGirNodeDebug(const camel::compile::gir::Node *node, std::string entityId);
+    void sealPromoteGirNodeDebug(gir_draft_node_key_t draftNodeKey, std::string entityId);
 
-    origin_id_t girNodeDraftOrigin(const camel::compile::gir::Node *node) const;
-    origin_id_t resolveGirNodeOrigin(const camel::compile::gir::Node *node) const;
+    origin_id_t girNodeDraftOrigin(gir_draft_node_key_t draftNodeKey) const;
+    origin_id_t
+    resolveGirNodeOrigin(gir_draft_node_key_t draftNodeKey, const std::string &entityId = "") const;
 
     void setCurrentRuntimeOrigin(origin_id_t origin);
     origin_id_t currentRuntimeOrigin() const;
@@ -317,10 +316,10 @@ class SourceContext {
     EntitySemanticMap girGraphs_;   // GIR graph-level semantic source side table.
     EntitySemanticMap
         girNodes_; // GIR node-level semantic source side table (stable ID after sealing).
-    /// GIR node semantics indexed by origin, matching the draft Node* mapping to avoid depending on
-    /// constructor-time string IDs.
+    /// GIR node semantics indexed by origin, matching the draft-node-key mapping to avoid
+    /// depending on constructor-time string IDs.
     OriginSemanticMap girNodeByOrigin_;
-    std::unordered_map<const camel::compile::gir::Node *, origin_id_t> girDraftNodeOrigins_;
+    std::unordered_map<gir_draft_node_key_t, origin_id_t> girDraftNodeOrigins_;
 
     mutable std::mutex runtimeOriginMutex_;
     origin_id_t currentRuntimeOrigin_ =

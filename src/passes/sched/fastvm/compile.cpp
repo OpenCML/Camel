@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,7 +45,18 @@ runtimeDataIndexOf(const camel::runtime::GCGraph *graph, camel::runtime::gc_node
 }
 
 static camel::runtime::gc_node_ref_t resolveTailValueNode(camel::runtime::GCGraph *graph) {
-    return camel::execute::resolveRuntimeTailValueRef(graph);
+    const bool hasValueReturn = graph != nullptr && graph->funcType() != nullptr &&
+                                graph->funcType()->hasExitType() &&
+                                graph->funcType()->exitType() != Type::Void();
+    if (!hasValueReturn) {
+        return camel::runtime::kInvalidNodeRef;
+    }
+    const auto tailRef = camel::execute::resolveRuntimeTailValueRef(graph);
+    const auto *tail   = graph ? graph->node(tailRef) : nullptr;
+    if (!tail || tail->dataIndex == 0) {
+        return camel::runtime::kInvalidNodeRef;
+    }
+    return tailRef;
 }
 
 const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() {
@@ -91,20 +102,32 @@ static bytecode_vec_t compileRuntimeGraph(
         graph->hasNodePayload(),
         std::format("Runtime graph '{}' has no node payload.", graph->name()));
 
-    auto topoSortedIndices   = camel::execute::buildReachableExecutionTopoIndices(graph);
-    const auto returnNodeRef = graph->returnNodeRef();
-    const auto *returnNode   = graph->returnNode();
-    if (returnNodeRef == camel::runtime::kInvalidNodeRef || returnNode == nullptr) {
+    auto topoSortedIndices        = camel::execute::buildReachableExecutionTopoIndices(graph);
+    const auto returnNodeRef      = graph->returnNodeRef();
+    const auto *returnNode        = graph->returnNode();
+    const bool expectsValueReturn = graph->funcType() && graph->funcType()->hasExitType() &&
+                                    graph->funcType()->exitType() != Type::Void();
+    const bool hasValueReturn     = returnNodeRef != camel::runtime::kInvalidNodeRef &&
+                                    returnNode != nullptr && returnNode->dataIndex != 0;
+    if (expectsValueReturn && !hasValueReturn) {
         throw std::runtime_error(
             std::format(
-                "FastVM runtime compile requires a valid return node in graph '{}'.",
+                "FastVM runtime compile requires a value return node in graph '{}'.",
                 graph->name()));
     }
-    if (returnNode->dataIndex == 0) {
+    if (!expectsValueReturn && returnNodeRef != camel::runtime::kInvalidNodeRef && returnNode &&
+        returnNode->dataIndex != 0) {
+        // Void-return graphs may still keep a non-observable value anchor as
+        // output/exit plumbing. The VM ignores it and returns NullSlot.
+    } else if (
+        returnNodeRef != camel::runtime::kInvalidNodeRef && returnNode != nullptr &&
+        returnNode->dataIndex == 0 && expectsValueReturn) {
         throw std::runtime_error(
             std::format(
-                "FastVM runtime compile resolved return slot 0 in graph '{}'.",
-                graph->name()));
+                "FastVM runtime compile resolved return slot 0 in graph '{}' (ref={}, kind={}).",
+                graph->name(),
+                returnNodeRef,
+                static_cast<int>(returnNode->kind)));
     }
 
     auto requireInputCount = [&](std::string_view nodeKind,
@@ -478,7 +501,7 @@ static bytecode_vec_t compileRuntimeGraph(
         bytecodes,
         OpCode::RETN,
         0,
-        {static_cast<data_idx_t>(runtimeDataIndexOf(graph, returnNodeRef))});
+        {static_cast<data_idx_t>(hasValueReturn ? runtimeDataIndexOf(graph, returnNodeRef) : 0)});
 
     ASSERT(
         brchTargetMap.empty(),
@@ -514,7 +537,15 @@ compileAndLink(context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileS
         camel::runtime::validateRuntimeGraphPayload(runtimeGraph);
         size_t start = linked.size();
         std::unordered_map<size_t, camel::source::origin_id_t> localPcOrigins;
-        bytecode_vec_t codes = compile(ctx, runtimeGraph, opt, &localPcOrigins);
+        bytecode_vec_t codes;
+        try {
+            codes = compile(ctx, runtimeGraph, opt, &localPcOrigins);
+        } catch (const std::bad_alloc &) {
+            throw std::runtime_error(
+                std::format(
+                    "FastVM compile ran out of memory while compiling graph '{}'.",
+                    runtimeGraph->name()));
+        }
 
         offsetMap[runtimeGraph] = start;
         graphs.push_back({start, codes.size(), runtimeGraph});

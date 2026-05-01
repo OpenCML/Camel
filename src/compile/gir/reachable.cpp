@@ -12,49 +12,29 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Apr. 08, 2026
- * Updated: Apr. 11, 2026
+ * Created: Apr. 12, 2026
+ * Updated: Apr. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * This file owns the canonical compile-time GIR graph reachability rules.
- * Any tool that needs to enumerate a graph tree should reuse this traversal
- * instead of open-coding another DFS with slightly different edge semantics.
+ * Compile-time reachable-graph traversal based directly on DraftGraphBuilder.
  */
 
 #include "camel/compile/gir/reachable.h"
 
-#include "camel/compile/gir/graph.h"
-#include "camel/compile/gir/nodes.h"
+#include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/compile/gir/static_function.h"
+#include "camel/core/rtdata/conv.h"
+#include "camel/core/type/base.h"
 
 #include <unordered_set>
 
 namespace camel::compile::gir {
 
-namespace {
-
-graph_ptr_t requireOwnedGraphHandle(Graph *graph, const Graph *owner, const char *context) {
-    ASSERT(graph != nullptr, "Graph handle request received a null graph.");
-    try {
-        return graph->shared_from_this();
-    } catch (const std::bad_weak_ptr &) {
-        throw std::runtime_error(
-            std::format(
-                "{} encountered non-owned graph '{}' ({:p}) while traversing owner '{}'.",
-                context,
-                graph->name(),
-                static_cast<void *>(graph),
-                owner ? owner->name() : "<null>"));
-    }
-}
-
-} // namespace
-
 void forEachReachableGraph(
     const graph_ptr_t &root, const std::function<void(const graph_ptr_t &)> &visitor) {
-    std::unordered_set<Graph *> visited;
+    std::unordered_set<DraftGraphBuilder *> visited;
 
     std::function<void(const graph_ptr_t &)> visit = [&](const graph_ptr_t &curr) {
         if (!curr || !visited.insert(curr.get()).second) {
@@ -63,44 +43,34 @@ void forEachReachableGraph(
 
         visitor(curr);
 
-        for (const auto &[_, subGraphs] : curr->subGraphs()) {
-            for (const auto &subGraph : subGraphs) {
-                visit(subGraph);
-            }
+        for (const auto &subGraph : curr->subGraphs()) {
+            visit(subGraph);
         }
 
-        for (const auto &dep : curr->dependencies()) {
+        for (const auto &dep : curr->dependencyGraphs()) {
             visit(dep);
         }
 
-        for (Node *node : curr->nodes()) {
-            if (node->type() == NodeType::FUNC) {
-                auto *funcNode = tt::as_ptr<FuncNode>(node);
-                if (funcNode->bodyGraph()) {
-                    visit(requireOwnedGraphHandle(
-                        funcNode->bodyGraph(),
-                        curr.get(),
-                        "compile::gir::reachable"));
-                }
+        const auto staticSlots = curr->draft().staticSlots();
+        const auto staticTypes = curr->draft().staticSlotTypes();
+        for (size_t i = 0; i < staticSlots.size() && i < staticTypes.size(); ++i) {
+            auto *type = staticTypes[i];
+            if (!type || type->code() != camel::core::type::TypeCode::Function) {
                 continue;
             }
-
-            if (node->type() != NodeType::DATA) {
-                continue;
-            }
-
-            auto *dataNode = tt::as_ptr<DataNode>(node);
-            if (dataNode->dataType()->code() != camel::core::type::TypeCode::Function) {
-                continue;
-            }
-
-            auto *funcObj = camel::core::rtdata::fromSlot<StaticFunction *>(dataNode->dataSlot());
+            auto *funcObj = camel::core::rtdata::fromSlot<StaticFunction *>(staticSlots[i]);
             if (funcObj && funcObj->graph()) {
-                visit(requireOwnedGraphHandle(
-                    funcObj->graph(),
-                    curr.get(),
-                    "compile::gir::reachable"));
+                visit(funcObj->graph());
             }
+        }
+
+        const auto &draft = curr->draft();
+        for (draft_node_ref_t nodeId = 0; nodeId < draft.nodeSlotCount(); ++nodeId) {
+            const auto *header = draft.header(nodeId);
+            if (!header || header->kind != runtime::GCNodeKind::Func) {
+                continue;
+            }
+            visit(curr->funcTarget(nodeId));
         }
     };
 

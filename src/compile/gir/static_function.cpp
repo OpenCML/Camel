@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 11, 2026
- * Updated: Apr. 11, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,25 +28,21 @@
 
 #include "camel/compile/gir/static_function.h"
 
-#include "camel/compile/gir/graph.h"
-
 namespace camel::compile::gir {
 
 using camel::core::rtdata::isOfSameCls;
 namespace type = camel::core::type;
 
-const type::TupleType *StaticFunction::tupleType() const {
-    ASSERT(graph_ != nullptr, "Compile-time static function graph cannot be null.");
-    return graph_->closureType();
-}
+const type::TupleType *StaticFunction::tupleType() const { return tupleType_; }
 
 StaticFunction *StaticFunction::create(
-    Graph *graph, const type::Type *tupleType, camel::core::mm::IAllocator &allocator) {
+    const std::shared_ptr<DraftGraphBuilder> &graph, const type::Type *tupleType,
+    camel::core::mm::IAllocator &allocator) {
     ASSERT(graph != nullptr, "Compile-time static function graph cannot be null.");
     ASSERT(tupleType && tupleType->code() == type::TypeCode::Tuple, "Type must be TupleType");
     const auto *tt = static_cast<const type::TupleType *>(tupleType);
     ASSERT(
-        tt->size() == graph->closure().size(),
+        tt->size() == graph->draft().closureNodes().size(),
         "Compile-time function closure tuple size mismatch.");
 
     void *mem = allocator.alloc(sizeof(StaticFunction), alignof(StaticFunction));
@@ -54,7 +50,7 @@ StaticFunction *StaticFunction::create(
         throw std::bad_alloc();
     }
 
-    auto *fn     = new (mem) StaticFunction(graph);
+    auto *fn     = new (mem) StaticFunction(graph, tt);
     fn->closure_ = ::Tuple::create(tt->size(), allocator);
     return fn;
 }
@@ -69,7 +65,7 @@ bool StaticFunction::equals(
     }
 
     const auto *fnOther = reinterpret_cast<const StaticFunction *>(other);
-    if (graph_ != fnOther->graph_) {
+    if (graph_.get() != fnOther->graph_.get()) {
         return false;
     }
 
@@ -92,7 +88,7 @@ camel::core::rtdata::Object *StaticFunction::clone(
         throw std::bad_alloc();
     }
 
-    auto *fnNew = new (mem) StaticFunction(graph_);
+    auto *fnNew = new (mem) StaticFunction(graph_, tupleType_);
     if (closure_) {
         const type::TupleType *tupleTypePtr = tupleType();
         fnNew->closure_ = static_cast<::Tuple *>(closure_->clone(allocator, tupleTypePtr, deep));

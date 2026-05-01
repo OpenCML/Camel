@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Apr. 11, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -124,7 +124,9 @@ inline void bindRuntimeGraphArgs(
 class MacroExecutor {
   public:
     explicit MacroExecutor(const context_ptr_t &context)
-        : context_(context), framePool_(kMacroFramePoolSize) {}
+        : context_(context), framePool_(kMacroFramePoolSize) {
+        framePool_.registerGcTracer();
+    }
 
     std::optional<slot_t>
     tryExecute(GCGraph *runtimeGraph, gc_node_ref_t nodeRef, std::ostream &os) {

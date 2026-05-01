@@ -13,13 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 07, 2026
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/source/manager.h"
-
-#include "camel/compile/gir/nodes.h"
 
 #include <algorithm>
 
@@ -461,14 +459,11 @@ const SemanticBundle *SourceContext::girGraphSemantic(const std::string &graphId
     return girGraphs_.bundle(graphId);
 }
 
-const SemanticBundle *SourceContext::girNodeSemantic(const camel::compile::gir::Node *node) const {
-    if (node == nullptr) {
+const SemanticBundle *SourceContext::girNodeSemantic(const std::string &entityId) const {
+    if (entityId.empty()) {
         return nullptr;
     }
-    if (origin_id_t o = girNodeDraftOrigin(node); o != kInvalidOriginId) {
-        return girNodeByOrigin_.bundle(o);
-    }
-    return girNodes_.bundle(node->graph().nodeDebugEntityId(node));
+    return girNodes_.bundle(entityId);
 }
 
 void SourceContext::cloneGirGraphDebugInfo(
@@ -485,45 +480,46 @@ void SourceContext::cloneGirGraphDebugInfo(
 }
 
 void SourceContext::bindGirNodeDraftDebug(
-    const camel::compile::gir::Node *node, origin_id_t origin, SemanticBundle bundle) {
-    if (node == nullptr || origin == kInvalidOriginId) {
+    gir_draft_node_key_t draftNodeKey, origin_id_t origin, SemanticBundle bundle) {
+    if (draftNodeKey == 0 || origin == kInvalidOriginId) {
         return;
     }
-    girDraftNodeOrigins_[node] = origin;
+    girDraftNodeOrigins_[draftNodeKey] = origin;
     girNodeByOrigin_.registerBundle(origin, std::move(bundle));
 }
 
-void SourceContext::unbindGirNodeDraftDebug(const camel::compile::gir::Node *node) {
-    if (node == nullptr) {
+void SourceContext::unbindGirNodeDraftDebug(gir_draft_node_key_t draftNodeKey) {
+    if (draftNodeKey == 0) {
         return;
     }
-    girDraftNodeOrigins_.erase(node);
+    girDraftNodeOrigins_.erase(draftNodeKey);
 }
 
-origin_id_t SourceContext::girNodeDraftOrigin(const camel::compile::gir::Node *node) const {
-    if (node == nullptr) {
+origin_id_t SourceContext::girNodeDraftOrigin(gir_draft_node_key_t draftNodeKey) const {
+    if (draftNodeKey == 0) {
         return kInvalidOriginId;
     }
-    auto it = girDraftNodeOrigins_.find(node);
+    auto it = girDraftNodeOrigins_.find(draftNodeKey);
     return it == girDraftNodeOrigins_.end() ? kInvalidOriginId : it->second;
 }
 
-origin_id_t SourceContext::resolveGirNodeOrigin(const camel::compile::gir::Node *node) const {
-    if (node == nullptr) {
-        return kInvalidOriginId;
-    }
-    if (origin_id_t o = girNodeDraftOrigin(node); o != kInvalidOriginId) {
+origin_id_t SourceContext::resolveGirNodeOrigin(
+    gir_draft_node_key_t draftNodeKey, const std::string &entityId) const {
+    if (origin_id_t o = girNodeDraftOrigin(draftNodeKey); o != kInvalidOriginId) {
         return o;
     }
-    return debugMap_.nodeOrigin(node->graph().nodeDebugEntityId(node));
+    if (!entityId.empty()) {
+        return debugMap_.nodeOrigin(entityId);
+    }
+    return kInvalidOriginId;
 }
 
 void SourceContext::sealPromoteGirNodeDebug(
-    const camel::compile::gir::Node *node, std::string entityId) {
-    if (node == nullptr) {
+    gir_draft_node_key_t draftNodeKey, std::string entityId) {
+    if (draftNodeKey == 0) {
         return;
     }
-    origin_id_t o = girNodeDraftOrigin(node);
+    origin_id_t o = girNodeDraftOrigin(draftNodeKey);
     if (o == kInvalidOriginId) {
         return;
     }
@@ -534,22 +530,24 @@ void SourceContext::sealPromoteGirNodeDebug(
 }
 
 void SourceContext::cloneGirNodeDebugBinding(
-    const camel::compile::gir::Node *fromNode, const camel::compile::gir::Node *toNode) {
-    if (fromNode == nullptr || toNode == nullptr || fromNode == toNode) {
+    gir_draft_node_key_t fromKey, const std::string &fromEntityId, gir_draft_node_key_t toKey) {
+    if (fromKey == 0 || toKey == 0 || fromKey == toKey) {
         return;
     }
-    origin_id_t o = resolveGirNodeOrigin(fromNode);
+    origin_id_t o = resolveGirNodeOrigin(fromKey, fromEntityId);
     if (o == kInvalidOriginId) {
         return;
     }
-    const SemanticBundle *bundlePtr = girNodeSemantic(fromNode);
+    const SemanticBundle *bundlePtr = girNodeDraftOrigin(fromKey) != kInvalidOriginId
+                                          ? girNodeByOrigin_.bundle(o)
+                                          : girNodeSemantic(fromEntityId);
     SemanticBundle bundle;
     if (bundlePtr != nullptr) {
         bundle = *bundlePtr;
     } else {
         bundle.mainOrigin = o;
     }
-    bindGirNodeDraftDebug(toNode, o, std::move(bundle));
+    bindGirNodeDraftDebug(toKey, o, std::move(bundle));
 }
 
 void SourceContext::setCurrentRuntimeOrigin(origin_id_t origin) {

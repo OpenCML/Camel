@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: Apr. 11, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include <compare>
 #include <cstdint>
 #include <list>
 #include <memory>
@@ -26,6 +27,12 @@
 #include <string>
 #include <unordered_set>
 #include <vector>
+
+#include "camel/runtime/graph.h"
+
+namespace camel::runtime {
+struct DraftNode;
+}
 
 namespace camel::compile::gir {
 
@@ -64,17 +71,19 @@ std::string to_string(LinkType type);
 // Forward declarations and type aliases
 // =============================================================================
 
-class Graph;
-class Node;
+class DraftGraphBuilder;
+using draft_node_ref_t = camel::runtime::gc_node_ref_t;
+using draft_node_t     = camel::runtime::DraftNode;
 
-using graph_ptr_t     = std::shared_ptr<Graph>;
-using graph_wptr_t    = std::weak_ptr<Graph>;
+using graph_ptr_t     = std::shared_ptr<DraftGraphBuilder>;
+using graph_wptr_t    = std::weak_ptr<DraftGraphBuilder>;
 using graph_vec_t     = std::vector<graph_ptr_t>;
 using graph_vec_ptr_t = std::shared_ptr<graph_vec_t>;
-using node_lst_t      = std::list<Node *>;
-using node_vec_t      = std::vector<Node *>;
-using node_span_t     = std::span<Node *const>;
-using node_set_t      = std::unordered_set<Node *>;
+using node_handle_t   = draft_node_t *;
+using node_lst_t      = std::list<node_handle_t>;
+using node_vec_t      = std::vector<node_handle_t>;
+using node_span_t     = std::span<const node_handle_t>;
+using node_set_t      = std::unordered_set<node_handle_t>;
 
 using data_idx_t = int16_t;
 

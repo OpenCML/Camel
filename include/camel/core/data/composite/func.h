@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 08, 2024
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,12 +23,9 @@
 #include "camel/core/type/composite/func.h"
 #include <list>
 
-namespace camel::compile::gir {
-class Graph;
-using graph_ptr_t = std::shared_ptr<Graph>;
-} // namespace camel::compile::gir
-
-namespace GIR = camel::compile::gir;
+namespace camel::runtime {
+class GCGraph;
+}
 
 namespace camel::core::data {
 
@@ -41,21 +38,21 @@ using func_vec_t  = std::vector<func_ptr_t>;
 using func_list_t = std::initializer_list<func_ptr_t>;
 
 class FunctionData : public CompositeData {
-    // graph_ escape path: FunctionData holds a reference to the Graph.
-    // Liveness constraint: FunctionData is indirectly held by a Graph as an element of
-    // staticDataArr_, or remapped to the new graph by remapDataGraphRefs during cloneGraph. As long
-    // as the Graph holding the FunctionData is alive, the referenced target graph is alive.
-    GIR::Graph &graph_;
+    // FunctionData is a compile-time boxed function value that already points at the materialized
+    // runtime graph carrier. It no longer depends on compile GIR ownership.
+    camel::runtime::GCGraph *graph_;
+    std::vector<std::string> closureRefs_;
     data_vec_t closure_;
 
   public:
-    FunctionData(GIR::Graph &graph);
+    FunctionData(camel::runtime::GCGraph *graph, std::vector<std::string> closureRefs = {});
     virtual ~FunctionData() = default;
 
-    static func_ptr_t create(GIR::Graph &graph);
+    static func_ptr_t
+    create(camel::runtime::GCGraph *graph, std::vector<std::string> closureRefs = {});
 
     std::string name() const;
-    GIR::Graph &graph() const { return graph_; }
+    camel::runtime::GCGraph *graph() const { return graph_; }
     type::FunctionType *funcType() const;
     bool isMacro() const { return funcType() && funcType()->modifiers().macro(); }
     const data_vec_t &closure() const { return closure_; }

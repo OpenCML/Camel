@@ -13,18 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "macro.h"
 
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
 #include "camel/utils/assert.h"
 
-using namespace GIR;
 using namespace camel::core::context;
 
 slot_t __cmp__(ArgsView &with, ArgsView &norm, Context &ctx) { return NullSlot; }

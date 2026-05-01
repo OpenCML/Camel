@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 17, 2025
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,7 @@ void Function::setRuntimeGraph(camel::runtime::GCGraph *graph) {
 
 const type::TupleType *Function::tupleType() const {
     ASSERT(runtimeGraph_ != nullptr, "Runtime Function graph cannot be null.");
-    return runtimeGraph_->closureType();
+    return tupleType_;
 }
 
 Function *Function::create(
@@ -41,7 +41,7 @@ Function *Function::create(
     if (!mem)
         throw std::bad_alloc();
 
-    auto *fn     = new (mem) Function(graph);
+    auto *fn     = new (mem) Function(graph, tt);
     fn->closure_ = Tuple::create(tt->size(), allocator);
     return fn;
 }

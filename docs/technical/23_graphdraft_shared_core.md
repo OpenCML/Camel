@@ -55,7 +55,7 @@ as:
 
 Those belong to outer controllers:
 
-- compile-time: `GraphBuilder`
+- compile-time: `DraftGraphBuilder`
 - runtime: `GraphRewriteSession`
 
 ## 4. Encode / Decode Contract

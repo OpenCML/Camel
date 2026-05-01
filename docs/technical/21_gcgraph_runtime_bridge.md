@@ -1,17 +1,17 @@
 # `GCGraph` Runtime Bridge
 
-This document records the current graph split after the compile-side staging
-model was removed.
+This document records the current compile/runtime graph split after the legacy
+compile-side `Graph/Node` implementation was deleted from the active build.
 
 ## Current Architecture
 
 Camel now has two graph domains with a strict boundary:
 
-- `compile::gir::Graph`
-  - mutable compile-time carrier used only during lowering
-  - owns compile-time nodes in `GraphArena`
-  - derives slot layout and frame layout through `refreshDerivedLayout()`
-  - is not used as a rewrite/session object anymore
+- `compile::gir::DraftGraphBuilder + runtime::GraphDraft`
+  - the only active compile-time editable graph stack
+  - `DraftGraphBuilder` owns compile-only cold metadata and transient allocation
+  - `GraphDraft` owns mutable graph semantics: nodes, edges, ports, closure nodes,
+    static slots, and graph-to-graph references
 - `runtime::GCGraph`
   - runtime heap object consumed by execution passes and runtime rewrite
   - contains only runtime-shared data and plain GC-managed references
@@ -19,29 +19,30 @@ Camel now has two graph domains with a strict boundary:
 
 The compile boundary is now:
 
-- front-end lowering builds `compile::gir::Graph`
+- front-end lowering builds `DraftGraphBuilder`
 - runtime materialization encodes a pruned reachable closure into `runtime::GCGraph`
 - all post-compile passes and VMs operate on `GCGraph`
 
-There is no longer any compile-side `GraphBuilder`, `GraphDraft`, or
-`GraphRewriteSession`.
+There is no longer any active compile-side `Graph` / `Node` implementation.
+Compile-side graph identity is strongly typed as `graph_ptr_t`
+(`std::shared_ptr<DraftGraphBuilder>`); the old `shared_ptr<void>` graph erasure
+path has been removed from active code paths.
 
 ## Compile-Side Rules
 
-`compile::gir::Graph` is now single-state.
+Compile-time graph construction now centers on `DraftGraphBuilder`, not a
+separate compile-only graph object.
 
-- No shadow staging state
-- No draft/seal lifecycle
-- No alternate read surface during export
-- All mutators update the real graph fields directly
-- `refreshDerivedLayout()` is the single place that recomputes runtime/static
-  slot numbering before runtime encoding
+- `GraphDraft` is the single mutable graph surface
+- `DraftGraphBuilder` carries compile-only metadata keyed by draft node id
+- compile-side graph references are strongly typed `graph_ptr_t`
+- no active compile path is allowed to reintroduce `Graph` / `Node`
 
 This keeps compile lowering simple:
 
-- build nodes directly into the graph
-- register dependencies/subgraphs directly on the graph
-- compute derived layout once before encoding
+- build nodes directly into the draft
+- register dependencies/subgraphs directly on the builder
+- export directly from builder/draft to `GCGraph`
 
 ## Runtime-Side Rules
 
@@ -75,6 +76,8 @@ The bridge layer still has real work to do:
 3. canonicalize static function references so runtime closures point at
    `GCGraph`
 4. register cold debug/source metadata for runtime diagnostics
+5. keep compile-side graph handles strongly typed so bridge code cannot silently
+   reintroduce erased compile graph payloads
 
 These are bridge responsibilities, not excuses to let runtime hot paths depend
 on compile-time graph objects.
@@ -85,11 +88,13 @@ The next cleanup targets are:
 
 1. keep shrinking runtime metadata records so `GCGraph` carries only universal
    runtime state
-2. move remaining scheduler/JIT consumers to runtime-native graph/node access
+2. make compile-time lowering depend only on `DraftGraphBuilder`/`GraphDraft`
+   semantics instead of legacy node-handle conventions
+3. move remaining scheduler/JIT consumers to runtime-native graph/node access
    only
-3. continue replacing compile-graph-keyed cold metadata with runtime-graph-keyed
+4. continue replacing compile-graph-keyed cold metadata with runtime-graph-keyed
    stores
-4. delete compile-time GIR APIs that still expose post-compile assumptions
+5. delete compile-time GIR APIs that still expose post-compile assumptions
 
 ## Acceptance Criteria
 

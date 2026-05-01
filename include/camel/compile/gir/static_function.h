@@ -13,17 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 11, 2026
- * Updated: Apr. 11, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/core/rtdata/tuple.h"
 
 namespace camel::compile::gir {
-
-class Graph;
 
 /*
  * Compile-time static function carrier.
@@ -39,13 +38,13 @@ class StaticFunction : public camel::core::rtdata::Object {
     StaticFunction &operator=(const StaticFunction &) = delete;
 
     static StaticFunction *create(
-        Graph *graph, const camel::core::type::Type *tupleType,
+        const std::shared_ptr<DraftGraphBuilder> &graph, const camel::core::type::Type *tupleType,
         camel::core::mm::IAllocator &allocator);
 
-    Graph *graph() const { return graph_; }
-    void setGraph(Graph *graph) {
+    const std::shared_ptr<DraftGraphBuilder> &graph() const { return graph_; }
+    void setGraph(std::shared_ptr<DraftGraphBuilder> graph) {
         ASSERT(graph != nullptr, "Compile-time static function graph cannot be null.");
-        graph_ = graph;
+        graph_ = std::move(graph);
     }
     ::Tuple *tuple() { return closure_; }
     const ::Tuple *tuple() const { return closure_; }
@@ -64,10 +63,13 @@ class StaticFunction : public camel::core::rtdata::Object {
         const camel::core::type::Type *type) override;
 
   private:
-    explicit StaticFunction(Graph *graph) : graph_(graph), closure_(nullptr) {}
+    explicit StaticFunction(
+        std::shared_ptr<DraftGraphBuilder> graph, const camel::core::type::TupleType *tupleType)
+        : graph_(std::move(graph)), closure_(nullptr), tupleType_(tupleType) {}
 
-    Graph *graph_     = nullptr;
-    ::Tuple *closure_ = nullptr;
+    std::shared_ptr<DraftGraphBuilder> graph_;
+    ::Tuple *closure_                              = nullptr;
+    const camel::core::type::TupleType *tupleType_ = nullptr;
 };
 
 } // namespace camel::compile::gir

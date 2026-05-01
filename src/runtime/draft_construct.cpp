@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -111,11 +111,27 @@ std::vector<gc_node_ref_t> mutatedInputs(
     return inputs;
 }
 
+gc_slot_idx_t
+ensureValueSlot(GraphDraft &draft, camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
+    if (dataIndex != 0) {
+        return dataIndex;
+    }
+    if (type == nullptr || type == camel::core::type::Type::Void()) {
+        return 0;
+    }
+    return draft.allocateRuntimeSlot(type);
+}
+
 } // namespace
 
 std::span<std::byte> GraphDraft::mutablePayloadOf(gc_node_ref_t id) {
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot get mutable payload view from a missing draft node.");
+    return DraftNodeView::payload(draftNode);
+}
+
+std::span<std::byte> GraphDraft::mutablePayloadOf(DraftNode *draftNode) {
+    ASSERT(containsNode(draftNode), "Cannot get mutable payload view from a foreign draft node.");
     return DraftNodeView::payload(draftNode);
 }
 
@@ -140,17 +156,20 @@ gc_node_ref_t GraphDraft::addPortNode(
 }
 
 gc_node_ref_t GraphDraft::addCastNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
+    dataIndex = ensureValueSlot(*this, type, dataIndex);
     return addNode(
         DraftNodeInit{.dataIndex = dataIndex, .dataType = type, .kind = GCNodeKind::Cast});
 }
 
 gc_node_ref_t GraphDraft::addCopyNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
+    dataIndex = ensureValueSlot(*this, type, dataIndex);
     return addNode(
         DraftNodeInit{.dataIndex = dataIndex, .dataType = type, .kind = GCNodeKind::Copy});
 }
 
 gc_node_ref_t GraphDraft::addFillNode(
     camel::core::type::Type *type, const GCFillBody &body, gc_slot_idx_t dataIndex) {
+    dataIndex          = ensureValueSlot(*this, type, dataIndex);
     const auto payload = bytesForStruct(body);
     return addNode(
         DraftNodeInit{
@@ -163,6 +182,7 @@ gc_node_ref_t GraphDraft::addFillNode(
 
 gc_node_ref_t GraphDraft::addAccsNode(
     camel::core::type::Type *type, uint32_t tupleIndex, gc_slot_idx_t dataIndex) {
+    dataIndex = ensureValueSlot(*this, type, dataIndex);
     GCAccsBody body;
     body.accsKind      = GCAccsKind::TupleIndex;
     body.value         = tupleIndex;
@@ -178,6 +198,7 @@ gc_node_ref_t GraphDraft::addAccsNode(
 
 gc_node_ref_t GraphDraft::addAccsNode(
     camel::core::type::Type *type, std::string_view structKey, gc_slot_idx_t dataIndex) {
+    dataIndex          = ensureValueSlot(*this, type, dataIndex);
     const auto payload = bytesForAccsStructKey(structKey);
     return addNode(
         DraftNodeInit{
@@ -191,6 +212,7 @@ gc_node_ref_t GraphDraft::addAccsNode(
 gc_node_ref_t GraphDraft::addBrchNode(
     camel::core::type::Type *type, gc_node_ref_t joinRef, std::span<const GCBranchArm> arms,
     gc_node_ref_t defaultArm, gc_slot_idx_t dataIndex) {
+    dataIndex          = ensureValueSlot(*this, type, dataIndex);
     const auto payload = bytesForBranchPayload(joinRef, arms, defaultArm);
     return addNode(
         DraftNodeInit{
@@ -204,6 +226,7 @@ gc_node_ref_t GraphDraft::addBrchNode(
 gc_node_ref_t GraphDraft::addJoinNode(
     camel::core::type::Type *type, gc_node_ref_t brchRef, gc_cnt_t armCount,
     gc_slot_idx_t dataIndex) {
+    dataIndex = ensureValueSlot(*this, type, dataIndex);
     GCJoinBody body;
     body.brch          = brchRef;
     body.armCount      = armCount;
@@ -219,6 +242,7 @@ gc_node_ref_t GraphDraft::addJoinNode(
 
 gc_node_ref_t GraphDraft::addCallNode(
     camel::core::type::Type *type, const GCCallBody &body, gc_slot_idx_t dataIndex) {
+    dataIndex          = ensureValueSlot(*this, type, dataIndex);
     const auto payload = bytesForStruct(body);
     return addNode(
         DraftNodeInit{
@@ -230,6 +254,7 @@ gc_node_ref_t GraphDraft::addCallNode(
 }
 
 gc_node_ref_t GraphDraft::addBindNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
+    dataIndex = ensureValueSlot(*this, type, dataIndex);
     return addNode(
         DraftNodeInit{.dataIndex = dataIndex, .dataType = type, .kind = GCNodeKind::Bind});
 }
@@ -237,6 +262,7 @@ gc_node_ref_t GraphDraft::addBindNode(camel::core::type::Type *type, gc_slot_idx
 gc_node_ref_t GraphDraft::addFuncNode(
     GCGraph *calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags,
     gc_slot_idx_t dataIndex) {
+    dataIndex = ensureValueSlot(*this, type, dataIndex);
     GCFuncBody body{.calleeGraph = calleeGraph};
     const auto payload = bytesForStruct(body);
     return addNode(
@@ -251,6 +277,7 @@ gc_node_ref_t GraphDraft::addFuncNode(
 
 gc_node_ref_t GraphDraft::addOperNode(
     camel::core::type::Type *type, operator_t op, std::string_view uri, gc_slot_idx_t dataIndex) {
+    dataIndex          = ensureValueSlot(*this, type, dataIndex);
     const auto payload = bytesForOperPayload(op, uri);
     return addNode(
         DraftNodeInit{
@@ -266,11 +293,13 @@ gc_node_ref_t GraphDraft::addSyncNode() {
 }
 
 gc_node_ref_t GraphDraft::addGateNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
+    dataIndex = ensureValueSlot(*this, type, dataIndex);
     return addNode(
         DraftNodeInit{.dataIndex = dataIndex, .dataType = type, .kind = GCNodeKind::Gate});
 }
 
 gc_node_ref_t GraphDraft::addDrefNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
+    dataIndex = ensureValueSlot(*this, type, dataIndex);
     return addNode(
         DraftNodeInit{
             .dataIndex = dataIndex,

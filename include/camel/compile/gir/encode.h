@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: Apr. 12, 2026
+ * Updated: Apr. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,7 @@ class GCGraph;
 
 namespace camel::compile::gir {
 
+const void *compileGraphOpaque(const graph_ptr_t &graph);
 camel::runtime::GCGraph *encodeToRuntimeGraph(const graph_ptr_t &rootGraph);
 
 } // namespace camel::compile::gir

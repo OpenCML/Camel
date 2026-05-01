@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,10 +21,13 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <limits>
+#include <span>
 
-#include "camel/compile/gir.h"
+#include "camel/core/operator.h"
 #include "camel/core/type/base.h"
+#include "camel/utils/assert.h"
 
 namespace type = camel::core::type;
 

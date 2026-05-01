@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,13 +57,16 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     std::vector<std::unique_ptr<NodeVMGraphCache>> graphCaches_;
     std::vector<std::unique_ptr<NodeVMCallLayoutCache>> callLayoutCaches_;
     std::vector<runtime_data_idx_t> operIndices_;
+    std::vector<slot_t> callArgScratch_;
 
     slot_t call(camel::runtime::GCGraph *runtimeGraph, ctx::Frame *rootFrame);
     std::span<const camel::runtime::gc_node_ref_t> buildTopoNodes(camel::runtime::GCGraph *graph);
     std::span<const camel::runtime::gc_node_ref_t> topoNodesFor(camel::runtime::GCGraph *graph);
 
   public:
-    NodeVMSchedPass(const ctx::context_ptr_t &ctx) : RuntimeGraphSchedulePass(ctx) {}
+    NodeVMSchedPass(const ctx::context_ptr_t &ctx) : RuntimeGraphSchedulePass(ctx) {
+        framePool_.registerGcTracer();
+    }
     ~NodeVMSchedPass() override;
 
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;

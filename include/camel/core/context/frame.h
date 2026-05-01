@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -62,7 +62,7 @@ class Frame : public rtdata::Object {
         return runtimeGraph_->name();
     }
 
-    type::TypeCode codeAt(GIR::data_idx_t index) const {
+    type::TypeCode codeAt(data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
@@ -87,7 +87,7 @@ class Frame : public rtdata::Object {
         }
     }
 
-    template <typename T> T *typeAt(GIR::data_idx_t index) const {
+    template <typename T> T *typeAt(data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
@@ -116,7 +116,7 @@ class Frame : public rtdata::Object {
         }
     }
 
-    template <typename T> T get(GIR::data_idx_t index) const {
+    template <typename T> T get(data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
         T res;
         if (index > 0) {
@@ -165,8 +165,14 @@ class Frame : public rtdata::Object {
         return res;
     }
 
-    template <typename T> void set(GIR::data_idx_t index, T value) {
-        ASSERT(index != 0, "Data index is invalid.");
+    template <typename T> void set(data_idx_t index, T value) {
+        if (index == 0) {
+            // Slot 0 is the canonical "no runtime storage" sentinel. Void-return
+            // calls and control-only nodes may still flow through generic write
+            // paths, so setting slot 0 must be a no-op rather than a hard error.
+            (void)value;
+            return;
+        }
         EXEC_WHEN_DEBUG({
             std::ostringstream oss;
             rtdata::printSlot(oss, rtdata::toSlot(value), typeAt<type::Type>(index));
@@ -282,7 +288,7 @@ class FrameView {
         : staticArea_(frame->staticArea_), dynamicArea_(const_cast<slot_t *>(frame->dynamicArea_)) {
     }
 
-    template <typename T> T get(GIR::data_idx_t index) const {
+    template <typename T> T get(data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
         T res;
         if (index > 0) {
@@ -308,8 +314,11 @@ class FrameView {
         return res;
     }
 
-    template <typename T> void set(GIR::data_idx_t index, T value) {
-        ASSERT(index != 0, "Data index is invalid.");
+    template <typename T> void set(data_idx_t index, T value) {
+        if (index == 0) {
+            (void)value;
+            return;
+        }
         if (index > 0) {
             size_t idx        = static_cast<size_t>(index);
             dynamicArea_[idx] = rtdata::toSlot(value);
@@ -352,7 +361,34 @@ class FramePool {
         reinterpret_cast<Frame *>(top_)->runtimeGraph_ = nullptr;
     }
 
-    ~FramePool() { std::free(base_); }
+    ~FramePool() {
+        unregisterGcTracer();
+        std::free(base_);
+    }
+
+    void registerGcTracer() {
+        if (gcTracerRegistered_) {
+            return;
+        }
+        camel::core::mm::autoSpace().registerExternalRootTracer(
+            this,
+            [this](const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) {
+                for (Frame *frame : activeFrames_) {
+                    if (frame) {
+                        frame->updateRefs(relocate, nullptr);
+                    }
+                }
+            });
+        gcTracerRegistered_ = true;
+    }
+
+    void unregisterGcTracer() {
+        if (!gcTracerRegistered_) {
+            return;
+        }
+        camel::core::mm::autoSpace().unregisterExternalRootTracer(this);
+        gcTracerRegistered_ = false;
+    }
 
     inline void _resetTop() { reinterpret_cast<Frame *>(top_)->runtimeGraph_ = nullptr; }
 
@@ -369,6 +405,7 @@ class FramePool {
 
         Frame *lastFrame = reinterpret_cast<Frame *>(top_);
         if (LIKELY(lastFrame->runtimeGraph_ == graph)) {
+            std::fill_n(lastFrame->dynamicArea_, graph->runtimeDataType()->size(), NullSlot);
             EXEC_WHEN_DEBUG({
                 CAMEL_LOG_INFO_S(
                     "FramePool",
@@ -380,6 +417,7 @@ class FramePool {
             });
 
             top_ = reinterpret_cast<std::byte *>(lastFrame->next_);
+            activeFrames_.push_back(lastFrame);
             return lastFrame;
         }
 
@@ -401,6 +439,7 @@ class FramePool {
             throw std::bad_alloc{};
         }
         Frame *frame = new (top_) Frame(graph, graph->staticArea(), graph->runtimeDataType());
+        std::fill_n(frame->dynamicArea_, graph->runtimeDataType()->size(), NullSlot);
 
         EXEC_WHEN_DEBUG({
             CAMEL_LOG_INFO_S(
@@ -413,6 +452,7 @@ class FramePool {
         });
 
         top_ += frameSize;
+        activeFrames_.push_back(frame);
 
         EXEC_WHEN_DEBUG({ frames_.push_back(frame); });
 
@@ -448,6 +488,7 @@ class FramePool {
 
         frame->next_ = reinterpret_cast<Frame *>(top_);
         top_         = reinterpret_cast<std::byte *>(frame);
+        activeFrames_.pop_back();
 
         EXEC_WHEN_DEBUG({
             frames_.pop_back();
@@ -480,6 +521,8 @@ class FramePool {
     std::byte *base_;
     std::byte *top_;
     std::byte *end_;
+    std::vector<Frame *> activeFrames_;
+    bool gcTracerRegistered_ = false;
 #ifndef NDEBUG
     std::vector<Frame *> frames_;
 #endif
@@ -497,25 +540,25 @@ class FrameArgsView : public ArgsView {
 
     slot_t slot(size_t index) const override {
         ASSERT(index < indices_.size(), "ArgsView index out of range");
-        GIR::data_idx_t dataIdx = indices_[index];
+        data_idx_t dataIdx = indices_[index];
         return frame_.get<slot_t>(dataIdx);
     }
 
     void setSlot(size_t index, slot_t value) override {
         ASSERT(index < indices_.size(), "ArgsView index out of range");
-        GIR::data_idx_t dataIdx = indices_[index];
+        data_idx_t dataIdx = indices_[index];
         frame_.set(dataIdx, value);
     }
 
     type::TypeCode code(size_t index) const override {
         ASSERT(index < indices_.size(), "ArgsView index out of range");
-        GIR::data_idx_t dataIdx = indices_[index];
+        data_idx_t dataIdx = indices_[index];
         return frame_.codeAt(dataIdx);
     }
 
     type::Type *type(size_t index) const override {
         ASSERT(index < indices_.size(), "ArgsView index out of range");
-        GIR::data_idx_t dataIdx = indices_[index];
+        data_idx_t dataIdx = indices_[index];
         return frame_.typeAt<type::Type>(dataIdx);
     }
 };
@@ -542,7 +585,7 @@ class SlotArgsView : public ArgsView {
 
     slot_t slot(size_t index) const override {
         ASSERT(index < indices_.size(), "ArgsView index out of range");
-        GIR::data_idx_t dataIdx = indices_[index];
+        data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             return slots_[dataIdx];
         return staticArea_->get<slot_t>(static_cast<size_t>(-dataIdx));
@@ -550,7 +593,7 @@ class SlotArgsView : public ArgsView {
 
     void setSlot(size_t index, slot_t value) override {
         ASSERT(index < indices_.size(), "ArgsView index out of range");
-        GIR::data_idx_t dataIdx = indices_[index];
+        data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             slots_[dataIdx] = value;
         else
@@ -559,7 +602,7 @@ class SlotArgsView : public ArgsView {
 
     type::TypeCode code(size_t index) const override {
         ASSERT(index < indices_.size(), "ArgsView index out of range");
-        GIR::data_idx_t dataIdx = indices_[index];
+        data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             return runtimeDataType_->codeAt(static_cast<size_t>(dataIdx));
         return staticDataType_->codeAt(static_cast<size_t>(-dataIdx));
@@ -567,7 +610,7 @@ class SlotArgsView : public ArgsView {
 
     type::Type *type(size_t index) const override {
         ASSERT(index < indices_.size(), "ArgsView index out of range");
-        GIR::data_idx_t dataIdx = indices_[index];
+        data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             return runtimeDataType_->typeAt(static_cast<size_t>(dataIdx));
         return staticDataType_->typeAt(static_cast<size_t>(-dataIdx));

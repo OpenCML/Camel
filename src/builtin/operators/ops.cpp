@@ -13,12 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "ops.h"
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
 #include "camel/utils/assert.h"
@@ -27,8 +26,7 @@
 
 #include "camel/core/error/runtime.h"
 
-namespace GIR = camel::compile::gir;
-namespace mm  = camel::core::mm;
+namespace mm = camel::core::mm;
 using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::type;

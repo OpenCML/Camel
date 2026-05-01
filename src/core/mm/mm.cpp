@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 10, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,13 +25,17 @@ namespace camel::core::mm {
 GenerationalAllocatorWithGC &autoSpace() {
     static auto *allocator = new GenerationalAllocatorWithGC(
         GenerationalAllocatorWithGC::Config{
-            .birthSize             = 32 * MB, // 32 MB
-            .havenSize             = 4 * MB,  // 4 MB
-            .elderGenSize          = 64 * MB, // 64 MB
-            .promotionAgeThreshold = 4,       // Promotion threshold.
-            .largeObjThreshold     = 4 * KB,  // Large-object threshold.
-            .minorGCTriggerRatio   = 0.9f,    // Minor GC trigger ratio.
-            .majorGCTriggerRatio   = 0.8f     // Major GC trigger ratio.
+            .birthSize =
+                512 *
+                MB, // Temporarily oversized to suppress GC churn during runtime-graph refactors.
+            .havenSize             = 64 * MB,
+            .elderGenSize          = 512 * MB,
+            .promotionAgeThreshold = 4,      // Promotion threshold.
+            .largeObjThreshold     = 4 * KB, // Large-object threshold.
+            .minorGCTriggerRatio   = 0.9f,   // Minor GC trigger ratio.
+            .majorGCTriggerRatio   = 0.8f,   // Major GC trigger ratio.
+            .enableYoungGenCopying =
+                false // Runtime execution keeps raw pointers across allocations.
         });
     return *allocator;
 }

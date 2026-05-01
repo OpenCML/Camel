@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,7 +38,9 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/composite.h"
 #include "camel/runtime/reachable.h"
+#include "camel/utils/log.h"
 
 #include <algorithm>
 #include <cstring>
@@ -209,6 +211,16 @@ template <typename T, typename U> T narrowIntegral(U value, const char *what) {
     return static_cast<T>(value);
 }
 
+bool shouldTraverseStaticSlotType(Type *type) {
+    if (type == nullptr || !type->isGCTraced() || type->code() == TypeCode::Ref) {
+        return false;
+    }
+    if (type->isComposite() && !static_cast<camel::core::type::CompositeType *>(type)->resolved()) {
+        return false;
+    }
+    return true;
+}
+
 void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
     if (!graph) {
         return;
@@ -236,6 +248,15 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
     validateRef(graph->exitNodeRef(), "exit");
     validateRef(graph->outputNodeRef(), "output");
     validateRef(graph->returnNodeRef(), "return");
+    for (gc_node_ref_t ref : graph->normPorts()) {
+        validateRef(ref, "norm-port");
+    }
+    for (gc_node_ref_t ref : graph->withPorts()) {
+        validateRef(ref, "with-port");
+    }
+    for (gc_node_ref_t ref : graph->closureNodes()) {
+        validateRef(ref, "closure-node");
+    }
     const size_t runtimeSlotCount = graph->runtimeDataType() ? graph->runtimeDataType()->size() : 0;
     const size_t staticSlotCount  = graph->staticSlots().size();
 
@@ -610,6 +631,13 @@ void emitDraftPayload(
     for (const PlannedDraftNode &planned : plan.nodes) {
         const DraftNodeHeader *draftHeader = draft.header(planned.draftId);
         ASSERT(draftHeader != nullptr, "Draft payload emission requires a non-null node header.");
+        CAMEL_LOG_INFO_S(
+            "GCGraphBuild",
+            "Emit node draftId={} runtimeRef={} kind={} payloadBytes={}.",
+            planned.draftId,
+            planned.ref,
+            static_cast<int>(draftHeader->kind),
+            draft.payloadOf(planned.draftId).size_bytes());
         auto *header =
             reinterpret_cast<GCNode *>(mutableNodeStorage(payload.nodeBlocks, planned.ref));
         *header = GCNode{
@@ -631,9 +659,19 @@ void emitDraftPayload(
         case GCNodeKind::Func:
             if (!payloadBytes.empty()) {
                 GCFuncBody body = *reinterpret_cast<const GCFuncBody *>(payloadBytes.data());
+                CAMEL_LOG_INFO_S(
+                    "GCGraphBuild",
+                    "FUNC node runtimeRef={} placeholder before resolve={}.",
+                    planned.ref,
+                    static_cast<const void *>(body.calleeGraph));
                 if (resolveRuntimeGraph) {
                     body.calleeGraph = resolveRuntimeGraph(body.calleeGraph);
                 }
+                CAMEL_LOG_INFO_S(
+                    "GCGraphBuild",
+                    "FUNC node runtimeRef={} callee after resolve={}.",
+                    planned.ref,
+                    static_cast<const void *>(body.calleeGraph));
                 writeBody(payload.nodeBlocks, planned.ref, body);
             }
             break;
@@ -690,6 +728,15 @@ void emitDraftPayload(
             body.brch       = body.brch == kInvalidNodeRef ? kInvalidNodeRef
                                                            : plan.runtimeRefsByDraftId[body.brch];
             writeBody(payload.nodeBlocks, planned.ref, body);
+            const auto *written = reinterpret_cast<const GCJoinBody *>(
+                mutableNodeStorage(payload.nodeBlocks, planned.ref) + sizeof(GCNode));
+            ASSERT(
+                written->armCount == body.armCount,
+                std::format(
+                    "JOIN body write-back mismatch at runtimeRef {}: expected {}, got {}.",
+                    planned.ref,
+                    body.armCount,
+                    written->armCount));
         } break;
         default:
             break;
@@ -719,6 +766,31 @@ void emitDraftPayload(
                              ? kInvalidNodeRef
                              : plan.runtimeRefsByDraftId[draft.returnNode()];
     payload.returnKind = draft.returnKind();
+
+    for (const PlannedDraftNode &planned : plan.nodes) {
+        const DraftNodeHeader *draftHeader = draft.header(planned.draftId);
+        if (draftHeader == nullptr || draftHeader->kind != GCNodeKind::Join) {
+            continue;
+        }
+        const auto payloadBytes = draft.payloadOf(planned.draftId);
+        if (payloadBytes.size_bytes() < sizeof(GCJoinBody)) {
+            throw std::runtime_error(
+                "Draft JOIN payload became truncated during runtime payload verification.");
+        }
+        const auto *expected = reinterpret_cast<const GCJoinBody *>(payloadBytes.data());
+        const auto *written  = reinterpret_cast<const GCJoinBody *>(
+            mutableNodeStorage(payload.nodeBlocks, planned.ref) + sizeof(GCNode));
+        if (expected->armCount != written->armCount) {
+            throw std::runtime_error(
+                std::format(
+                    "JOIN payload corruption after emit: draftId={} runtimeRef={} "
+                    "expectedArmCount={} writtenArmCount={}.",
+                    planned.draftId,
+                    planned.ref,
+                    expected->armCount,
+                    written->armCount));
+        }
+    }
 
     ASSERT(
         edgeCursor == payload.edgeCount,
@@ -854,6 +926,19 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     const std::function<void(GCGraphPayloadArena &)> &emitPayload,
     std::span<const slot_t> staticSlots) {
     ASSERT(memory != nullptr, "GCGraph in-place construction requires valid memory.");
+    CAMEL_LOG_INFO_S(
+        "GCGraphBuild",
+        "constructInPlace begin: name='{}' bytes={} deps={} subs={} staticRefs={} staticSlots={} "
+        "nodes={} blocks={} edges={}.",
+        debugRecord ? debugRecord->name : std::string{"<null>"},
+        bytes,
+        dependencies.size(),
+        subGraphs.size(),
+        staticGraphRefs.size(),
+        staticSlots.size(),
+        payloadShape.nodeCount,
+        payloadShape.nodeBlockCount,
+        payloadShape.edgeCount);
     FixedBufferAllocator arena(memory, bytes);
     void *graphMem = arena.alloc(sizeof(GCGraph), alignof(GCGraph));
     ASSERT(graphMem == memory, "Graph arena must place GCGraph at the start of its owned block.");
@@ -864,7 +949,24 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     ::Tuple *staticArea               = buildStaticAreaInArena(arena, staticDataType, staticSlots);
     GCGraphNativePayload ownedPayload = allocPayloadInArena(arena, payloadShape);
     GCGraphPayloadArena payloadArena  = makePayloadArenaView(ownedPayload);
+    CAMEL_LOG_INFO_S(
+        "GCGraphBuild",
+        "constructInPlace allocated arenas: name='{}' staticArea={} nodeBlocks={} edges={} "
+        "branchArms={}.",
+        debugRecord ? debugRecord->name : std::string{"<null>"},
+        static_cast<const void *>(staticArea),
+        static_cast<const void *>(ownedPayload.nodeBlocks),
+        static_cast<const void *>(ownedPayload.edges),
+        static_cast<const void *>(ownedPayload.branchArms));
     emitPayload(payloadArena);
+    CAMEL_LOG_INFO_S(
+        "GCGraphBuild",
+        "constructInPlace payload emitted: name='{}' entry={} exit={} output={} return={}.",
+        debugRecord ? debugRecord->name : std::string{"<null>"},
+        payloadArena.entryNode,
+        payloadArena.exitNode,
+        payloadArena.outputNode,
+        payloadArena.returnNode);
     syncPayloadArenaView(ownedPayload, payloadArena);
 
     auto *graph = new (graphMem) GCGraph(
@@ -888,7 +990,37 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
             subGraph->outerGraph_ = graph;
         }
     }
+    for (gc_node_ref_t ref = 0; ref < graph->nodeBlockCount();) {
+        const GCNode *node = graph->node(ref);
+        if (node == nullptr) {
+            throw std::runtime_error(
+                "Constructed graph exposes a null node inside its node-block range.");
+        }
+        if (node->kind == GCNodeKind::Join) {
+            const auto *body     = node->bodyAs<GCJoinBody>();
+            const auto armInputs = graph->withInputsOf(ref);
+            if (body->armCount != armInputs.size()) {
+                throw std::runtime_error(
+                    std::format(
+                        "Constructed graph '{}' has corrupted JOIN node {} immediately after "
+                        "construction: armCount={} inputs={} graph={} nodeBlocks={} nodePtr={}.",
+                        graph->name(),
+                        ref,
+                        body->armCount,
+                        armInputs.size(),
+                        static_cast<const void *>(graph),
+                        static_cast<const void *>(ownedPayload.nodeBlocks),
+                        static_cast<const void *>(node)));
+            }
+        }
+        ref = graph->nextNodeRef(ref);
+    }
     ASSERT(arena.available() == 0, "Graph arena planning did not match graph emission.");
+    CAMEL_LOG_INFO_S(
+        "GCGraphBuild",
+        "constructInPlace finished: name='{}' graph={}.",
+        debugRecord ? debugRecord->name : std::string{"<null>"},
+        static_cast<const void *>(graph));
     return graph;
 }
 
@@ -1258,7 +1390,7 @@ void GCGraphManager::clear() {
 void collectStaticGraphRefsRecursive(
     std::vector<GCGraph *> &refs, slot_t slot, Type *type,
     std::unordered_set<const Object *> &visited) {
-    if (!type || !type->isGCTraced() || slot == NullSlot) {
+    if (!shouldTraverseStaticSlotType(type) || slot == NullSlot) {
         return;
     }
 
@@ -1282,7 +1414,7 @@ void collectStaticGraphRefsRecursive(
         if (::Tuple *closure = funcObj->tuple()) {
             TupleType *closureType = const_cast<TupleType *>(funcObj->tupleType());
             for (size_t i = 0; i < closureType->size(); ++i) {
-                if (!camel::core::type::isGCTraced(closureType->codeAt(i))) {
+                if (!shouldTraverseStaticSlotType(closureType->typeAt(i))) {
                     continue;
                 }
                 collectStaticGraphRefsRecursive(
@@ -1297,7 +1429,7 @@ void collectStaticGraphRefsRecursive(
         auto *tuple     = fromSlot<::Tuple *>(slot);
         auto *tupleType = static_cast<TupleType *>(type);
         for (size_t i = 0; i < tupleType->size(); ++i) {
-            if (!camel::core::type::isGCTraced(tupleType->codeAt(i))) {
+            if (!shouldTraverseStaticSlotType(tupleType->typeAt(i))) {
                 continue;
             }
             collectStaticGraphRefsRecursive(
@@ -1310,7 +1442,7 @@ void collectStaticGraphRefsRecursive(
     case TypeCode::Array: {
         auto *array     = fromSlot<::Array *>(slot);
         auto *arrayType = static_cast<ArrayType *>(type);
-        if (!camel::core::type::isGCTraced(arrayType->elemTypeCode())) {
+        if (!shouldTraverseStaticSlotType(arrayType->elemType())) {
             return;
         }
         for (size_t i = 0; i < array->size(); ++i) {
@@ -1325,7 +1457,7 @@ void collectStaticGraphRefsRecursive(
         auto *st         = fromSlot<::Struct *>(slot);
         auto *structType = static_cast<StructType *>(type);
         for (size_t i = 0; i < structType->size(); ++i) {
-            if (!camel::core::type::isGCTraced(structType->codeAt(i))) {
+            if (!shouldTraverseStaticSlotType(structType->typeAt(i))) {
                 continue;
             }
             collectStaticGraphRefsRecursive(

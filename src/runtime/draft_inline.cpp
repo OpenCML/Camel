@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -514,29 +514,58 @@ gc_node_ref_t remapFormalNodeToActual(
     return nodeId;
 }
 
+gc_node_ref_t resolveValueCandidate(
+    const GraphDraft &draft, gc_node_ref_t candidate,
+    std::span<const gc_node_ref_t> boundActualInputs) {
+    if (candidate == kInvalidNodeRef) {
+        return kInvalidNodeRef;
+    }
+
+    const auto *header = draft.header(candidate);
+    if (!header) {
+        return kInvalidNodeRef;
+    }
+
+    if (header->kind == GCNodeKind::Gate &&
+        std::find(boundActualInputs.begin(), boundActualInputs.end(), candidate) !=
+            boundActualInputs.end()) {
+        return header->dataIndex != 0 ? candidate : kInvalidNodeRef;
+    }
+
+    const gc_node_ref_t resolved = draft.resolveForwardedValueRef(candidate);
+    if (resolved == kInvalidNodeRef) {
+        return kInvalidNodeRef;
+    }
+
+    const auto *resolvedHeader = draft.header(resolved);
+    if (!resolvedHeader || resolvedHeader->dataIndex == 0) {
+        return kInvalidNodeRef;
+    }
+    return resolved;
+}
+
 gc_node_ref_t resolveInlineValueExit(
     const GraphDraft &draft, const DraftGraphCloneResult &cloned, const GCGraph *calleeGraph,
     const GraphDraft *calleeDraftView, std::span<const gc_node_ref_t> boundActualInputs) {
-    gc_node_ref_t current = cloned.returnNode != kInvalidNodeRef   ? cloned.returnNode
-                            : cloned.outputNode != kInvalidNodeRef ? cloned.outputNode
-                                                                   : cloned.exitNode;
-    while (current != kInvalidNodeRef) {
+    std::array<gc_node_ref_t, 3> candidates{
+        cloned.returnNode,
+        cloned.outputNode,
+        cloned.exitNode,
+    };
+    for (gc_node_ref_t current : candidates) {
+        if (current == kInvalidNodeRef) {
+            continue;
+        }
         current = remapFormalNodeToActual(
             current,
             cloned,
             calleeGraph,
             calleeDraftView,
             boundActualInputs);
-        const auto *header = draft.header(current);
-        if (!header) {
-            return kInvalidNodeRef;
+        if (const gc_node_ref_t resolved = resolveValueCandidate(draft, current, boundActualInputs);
+            resolved != kInvalidNodeRef) {
+            return resolved;
         }
-        if (header->kind == GCNodeKind::Gate &&
-            std::find(boundActualInputs.begin(), boundActualInputs.end(), current) !=
-                boundActualInputs.end()) {
-            return current;
-        }
-        return draft.resolveForwardedValueRef(current);
     }
     return kInvalidNodeRef;
 }
@@ -892,6 +921,18 @@ DraftInlineResult inlineCallableInDraft(
         boundActualInputs);
     if (result.valueExit == kInvalidNodeRef) {
         return DraftInlineResult{};
+    }
+    {
+        const DraftNodeHeader *valueExitHeader = draft.header(result.valueExit);
+        ASSERT(
+            valueExitHeader != nullptr && valueExitHeader->dataIndex != 0,
+            std::format(
+                "Runtime inline resolved value exit {} with slot {} in caller '{}' while "
+                "inlining callee '{}'.",
+                result.valueExit,
+                valueExitHeader ? valueExitHeader->dataIndex : 0,
+                draft.name(),
+                funcBody->calleeGraph ? funcBody->calleeGraph->name() : "<null>"));
     }
     result.ctrlExit = resolveInlineCtrlExit(
         draft,

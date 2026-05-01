@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,6 @@
 #include <tuple>
 #include <vector>
 
-#include "camel/compile/gir.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/rtdata.h"
 #include "passes/sched/fastvm/bytecode.h"

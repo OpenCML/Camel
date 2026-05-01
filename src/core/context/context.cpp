@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <cstdio>
 #include <filesystem>
 #include <unordered_set>
 
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/builtin.h"
@@ -31,6 +31,7 @@
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
 #include "camel/utils/str.h"
+#include "core/module/userdef_internal.h"
 
 namespace fs = std::filesystem;
 using namespace strutil;
@@ -518,29 +519,6 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
     return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
 }
 
-GIR::graph_ptr_t Context::compileRootGraph() const {
-    ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
-    auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
-    ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
-    return gir;
-}
-
-GIR::graph_ptr_t Context::compileMainGraph() const {
-    ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
-    auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
-    ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
-    const auto optMainGraphSet = gir->getSubGraphsByName("main");
-    if (!optMainGraphSet.has_value()) {
-        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
-            .commit("Main graph not found in GraphIR of main module.");
-    }
-    if (optMainGraphSet->empty()) {
-        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
-            .commit("Main graph set is empty in GraphIR of main module.");
-    }
-    return *optMainGraphSet.value().begin();
-}
-
 camel::runtime::GCGraph *Context::runtimeRootGraph() {
     return currentRuntimeRoot() ? currentRuntimeRoot() : materializeRuntimeRoot();
 }
@@ -548,7 +526,10 @@ camel::runtime::GCGraph *Context::runtimeRootGraph() {
 camel::runtime::GCGraph *Context::materializeRuntimeRoot() {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     runtimeGraphMgr_->clear();
-    camel::runtime::GCGraph *runtimeRoot = GIR::encodeToRuntimeGraph(compileRootGraph());
+    ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
+    auto rootModule = tt::as_shared<UserDefinedModule>(mainModule_);
+    camel::runtime::GCGraph *runtimeRoot =
+        camel::core::module::detail::UserDefinedModuleAccess::encodeRuntimeGraph(*rootModule);
     runtimeGraphMgr_->adoptRoot(runtimeRoot);
     registerRuntimeGraphDebugInfo(runtimeRoot);
     return runtimeRoot;

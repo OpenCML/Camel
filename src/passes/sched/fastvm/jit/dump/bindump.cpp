@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,7 +33,6 @@
 #include <tuple>
 #include <vector>
 
-using namespace GIR;
 using namespace camel::core::context;
 #if ENABLE_FASTVM_JIT
 using namespace camel::jit;

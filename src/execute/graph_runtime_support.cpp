@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 06, 2026
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,7 @@
 #include "camel/execute/graph_runtime_support.h"
 
 #include "camel/core/rtdata/func.h"
+#include "camel/utils/log.h"
 
 #include <format>
 #include <functional>
@@ -42,6 +43,45 @@ namespace camel::execute {
 namespace {
 
 using camel::runtime::gc_node_ref_t;
+
+std::string formatRefList(std::span<const gc_node_ref_t> refs) {
+    std::string out = "[";
+    for (size_t i = 0; i < refs.size(); ++i) {
+        if (i > 0) {
+            out += ",";
+        }
+        out += std::to_string(refs[i]);
+    }
+    out += "]";
+    return out;
+}
+
+std::string describeNode(const camel::runtime::GCGraph *graph, gc_node_ref_t ref) {
+    const auto *node = graph->node(ref);
+    if (!node) {
+        return std::format("{}(null)", ref);
+    }
+    std::string extra;
+    switch (node->kind) {
+    case camel::runtime::GCNodeKind::Oper:
+        extra = std::format(",op={}", graph->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri());
+        break;
+    case camel::runtime::GCNodeKind::Func: {
+        const auto *callee = graph->directCalleeGraphOf(ref);
+        extra = std::format(",callee={}", callee ? callee->name() : std::string{"<null>"});
+    } break;
+    default:
+        break;
+    }
+    return std::format(
+        "{}(k={}{} ctrl={} norm={} with={})",
+        ref,
+        static_cast<int>(node->kind),
+        extra,
+        formatRefList(graph->ctrlInputsOf(ref)),
+        formatRefList(graph->normInputsOf(ref)),
+        formatRefList(graph->withInputsOf(ref)));
+}
 
 gc_node_ref_t findRuntimeMatchedJoinIndex(camel::runtime::GCGraph *graph, gc_node_ref_t headIndex) {
     ASSERT(graph != nullptr, "Runtime matched-JOIN lookup requires a graph.");
@@ -90,6 +130,8 @@ std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GC
     order.reserve(graph->nodeCount());
     std::unordered_map<gc_node_ref_t, uint8_t> state;
     state.reserve(graph->nodeCount());
+    std::vector<gc_node_ref_t> stack;
+    stack.reserve(graph->nodeCount());
 
     std::function<void(gc_node_ref_t)> visit = [&](gc_node_ref_t index) {
         if (!graph->containsNodeRef(index)) {
@@ -99,14 +141,41 @@ std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GC
             return;
         }
         if (state[index] == 1) {
+            const auto *cycleNode = graph->node(index);
+            std::string stackDump;
+            std::string detailDump;
+            for (gc_node_ref_t ref : stack) {
+                if (!stackDump.empty()) {
+                    stackDump += " -> ";
+                }
+                stackDump += std::to_string(ref);
+                if (const auto *node = graph->node(ref); node != nullptr) {
+                    if (!detailDump.empty()) {
+                        detailDump += " | ";
+                    }
+                    detailDump += describeNode(graph, ref);
+                }
+            }
+            if (!stackDump.empty()) {
+                stackDump += " -> ";
+            }
+            stackDump += std::to_string(index);
             throw std::runtime_error(
                 std::format(
                     "Cycle detected while building runtime execution topo in graph '{}' at node "
-                    "ref {}.",
+                    "ref {}. kind={} ctrlInputs={} normInputs={} withInputs={} stack=[{}] "
+                    "details=[{}].",
                     graph->name(),
-                    index));
+                    index,
+                    cycleNode ? static_cast<int>(cycleNode->kind) : -1,
+                    cycleNode ? graph->ctrlInputsOf(index).size() : 0,
+                    cycleNode ? graph->normInputsOf(index).size() : 0,
+                    cycleNode ? graph->withInputsOf(index).size() : 0,
+                    stackDump,
+                    detailDump));
         }
         state[index] = 1;
+        stack.push_back(index);
 
         for (gc_node_ref_t input : graph->ctrlInputsOf(index)) {
             visit(input);
@@ -119,6 +188,7 @@ std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GC
         }
 
         state[index] = 2;
+        stack.pop_back();
         order.push_back(index);
     };
 
@@ -455,6 +525,18 @@ void fillFrameForDirectInvoke(
 
     const auto callerNormInputs = callerGraph->normInputsOf(callNodeIndex);
     const auto targetNormPorts  = targetGraph->normPorts();
+    CAMEL_LOG_INFO_S(
+        "GraphExec",
+        "Direct invoke bind: caller='{}' node={} target='{}' callerNorm={} callerWith={} "
+        "targetNorm={} targetWith={} targetClosure={}",
+        callerGraph->name(),
+        callNodeIndex,
+        targetGraph->name(),
+        callerNormInputs.size(),
+        callerGraph->withInputsOf(callNodeIndex).size(),
+        targetNormPorts.size(),
+        targetGraph->withPorts().size(),
+        targetGraph->closureNodes().size());
     if (callerNormInputs.size() != targetNormPorts.size()) {
         throw std::runtime_error(
             std::format(
@@ -550,6 +632,44 @@ void fillFrameForIndirectCall(
     if (func == nullptr) {
         throw std::runtime_error("Indirect call callee slot resolved to null Function.");
     }
+    CAMEL_LOG_INFO_S(
+        "GraphExec",
+        "Indirect call bind: caller='{}' node={} target='{}' callerNorm={} callerWith={} "
+        "targetNorm={} targetWith={} targetClosure={}",
+        callerGraph->name(),
+        callNodeIndex,
+        targetGraph->name(),
+        callerNormInputs.size(),
+        callerWithInputs.size(),
+        targetNormPorts.size(),
+        targetGraph->withPorts().size(),
+        targetGraph->closureNodes().size());
+
+    // Indirect calls reserve with-input slot 0 for the callee function object itself.
+    // Any remaining caller with-inputs are explicit with-arguments and must be copied
+    // into the target graph's with-ports before closure tuple materialization.
+    const auto targetWithPorts        = targetGraph->withPorts();
+    const size_t explicitWithArgCount = callerWithInputs.empty() ? 0 : callerWithInputs.size() - 1;
+    if (explicitWithArgCount != targetWithPorts.size()) {
+        throw std::runtime_error(
+            std::format(
+                "Runtime indirect call with-arity mismatch: caller graph '{}' node {} has {} "
+                "explicit with args, target graph '{}' has {} with ports.",
+                callerGraph->name(),
+                callNodeIndex,
+                explicitWithArgCount,
+                targetGraph->name(),
+                targetWithPorts.size()));
+    }
+    for (size_t i = 0; i < targetWithPorts.size(); ++i) {
+        const auto *argRecord  = callerGraph->node(callerWithInputs[i + 1]);
+        const auto *portRecord = targetGraph->node(targetWithPorts[i]);
+        if (argRecord == nullptr || portRecord == nullptr) {
+            throw std::runtime_error("Runtime indirect call with argument/port record is null.");
+        }
+        dest->set(portRecord->dataIndex, from->get<slot_t>(argRecord->dataIndex));
+    }
+
     Tuple *closure                = func ? func->tuple() : nullptr;
     const auto targetClosureNodes = targetGraph->closureNodes();
     if (targetClosureNodes.empty()) {

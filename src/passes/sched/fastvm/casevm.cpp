@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -95,7 +95,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
             switch (static_cast<OpCode>(bc.opcode)) {
             case OpCode::RETN: {
-                slot_t result = currFrame->get<slot_t>(bc.fastop[0]);
+                slot_t result = bc.fastop[0] == 0 ? NullSlot : currFrame->get<slot_t>(bc.fastop[0]);
 
                 if (currFrame == rootActiveFrame) {
                     return CallResult{result, currFrame};
@@ -273,16 +273,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 const uint32_t callCount = noteIndirectCall(runtimeTarget);
 
                 Frame *funcFrame = framePool_.acquire(runtimeTarget);
-
-                size_t i = 0;
-                for (; i < nargs.size(); ++i) {
-                    funcFrame->set(i + 1, currFrame->get<slot_t>(nargs[i]));
-                }
-
-                Tuple *closureData = function->tuple();
-                for (size_t j = 0; j < closureData->size(); ++j) {
-                    funcFrame->set(i + j + 1, closureData->get<slot_t>(j));
-                }
+                seedIndirectCallFrame(currFrame, funcFrame, function, nargs, wargs);
 
                 _timer.pause();
                 const auto &result = jitEnabled() ? invokeCallOrJit(
@@ -364,7 +355,6 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
             case OpCode::TAIL: {
 #if ENABLE_FASTVM_JIT
-                FrameView lastFrame(currFrame);
                 const Bytecode *tailBc  = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
                 auto *tailTargetGraph   = runtimeCallTarget(pc);
                 auto *runtimeTailTarget = runtimeCallTarget(pc);
@@ -373,18 +363,14 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                     std::format(
                         "FastVM direct TAIL target '{}' must have a materialized runtime graph.",
                         tailTargetGraph->name()));
-                framePool_.release(currFrame);
                 if (tailBc->fastop[1] < 0) {
                     size_t argsCnt         = tailBc->normCnt();
                     const data_idx_t *args = tailBc->operands();
-                    Frame *newFrame        = [&]() {
+                    captureDirectCallArgs(currFrame, args, argsCnt, tailArgScratch_);
+                    framePool_.release(currFrame);
+                    Frame *newFrame = [&]() {
                         Frame *frame = framePool_._acquire(runtimeTailTarget);
-                        populateCallFrame(
-                            frame,
-                            runtimeTailTarget,
-                            args,
-                            argsCnt,
-                            [&](data_idx_t idx) { return lastFrame.get<slot_t>(idx); });
+                        seedDirectCallFrameFromSlots(frame, runtimeTailTarget, tailArgScratch_);
                         framePool_._resetTop();
                         return frame;
                     }();
@@ -399,27 +385,27 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 size_t targetPc        = static_cast<size_t>(tailBc->fastop[1]);
                 size_t argsCnt         = tailBc->normCnt();
                 const data_idx_t *args = tailBc->operands();
-                currFrame              = [&]() {
+                captureDirectCallArgs(currFrame, args, argsCnt, tailArgScratch_);
+                framePool_.release(currFrame);
+                currFrame = [&]() {
                     Frame *frame = framePool_._acquire(runtimeTailTarget);
-                    populateCallFrame(frame, runtimeTailTarget, args, argsCnt, [&](data_idx_t idx) {
-                        return lastFrame.get<slot_t>(idx);
-                    });
+                    seedDirectCallFrameFromSlots(frame, runtimeTailTarget, tailArgScratch_);
                     framePool_._resetTop();
                     return frame;
                 }();
                 pc = targetPc;
                 continue;
 #else
-                FrameView lastFrame(currFrame);
-                framePool_.release(currFrame);
                 auto *runtimeTailTarget = runtimeCallTarget(pc);
                 ASSERT(
                     runtimeTailTarget != nullptr,
                     "FastVM direct TAIL target must have a materialized runtime graph.");
-                currFrame              = acquireFrameForTail(runtimeTailTarget);
                 size_t argsCnt         = bc.normCnt();
                 const data_idx_t *args = bc.operands();
-                seedDirectCallFrame(&lastFrame, currFrame, runtimeTailTarget, args, argsCnt);
+                captureDirectCallArgs(currFrame, args, argsCnt, tailArgScratch_);
+                framePool_.release(currFrame);
+                currFrame = acquireFrameForTail(runtimeTailTarget);
+                seedDirectCallFrameFromSlots(currFrame, runtimeTailTarget, tailArgScratch_);
                 framePool_._resetTop();
                 pc = bc.fastop[1];
                 continue;

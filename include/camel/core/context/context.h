@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,13 +30,6 @@
 #include <ostream>
 #include <unordered_map>
 #include <vector>
-
-namespace camel::compile::gir {
-class Graph;
-using graph_ptr_t = std::shared_ptr<Graph>;
-} // namespace camel::compile::gir
-
-namespace GIR = camel::compile::gir;
 
 namespace camel::runtime {
 class GCGraph;
@@ -123,8 +116,6 @@ class Context : public std::enable_shared_from_this<Context> {
         return runtimeErrorReporter_;
     }
     camel::source::source_context_ptr_t sourceContext() const { return sourceContext_; }
-    GIR::graph_ptr_t compileRootGraph() const;
-    GIR::graph_ptr_t compileMainGraph() const;
     camel::runtime::GCGraph *runtimeRootGraph();
     camel::runtime::GCGraph *materializeRuntimeRoot();
     camel::runtime::GCGraph *adoptRuntimeRoot(camel::runtime::GCGraph *runtimeRoot);

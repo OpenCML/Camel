@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/composite.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -58,6 +59,16 @@ namespace {
 using GraphMap    = std::unordered_map<GCGraph *, GCGraph *>;
 using ObjectCache = std::unordered_map<const Object *, Object *>;
 using ObjectSet   = std::unordered_set<const Object *>;
+
+bool shouldTraverseStaticSlotType(Type *type) {
+    if (type == nullptr || !type->isGCTraced() || type->code() == TypeCode::Ref) {
+        return false;
+    }
+    if (type->isComposite() && !static_cast<camel::core::type::CompositeType *>(type)->resolved()) {
+        return false;
+    }
+    return true;
+}
 
 RuntimeDraftIdentity makeRuntimeDraftIdentity(GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime draft identity requires a non-null source graph.");
@@ -83,7 +94,7 @@ GCGraph *resolveRuntimeGraphCarrier(
 void visitGraphsInStaticSlot(
     const camel::core::context::context_ptr_t &context, slot_t slot, Type *type,
     const std::function<void(GCGraph *)> &visitor, ObjectSet &visited) {
-    if (!type || !type->isGCTraced() || slot == NullSlot) {
+    if (!shouldTraverseStaticSlotType(type) || slot == NullSlot) {
         return;
     }
 
@@ -102,7 +113,7 @@ void visitGraphsInStaticSlot(
         if (::Tuple *closure = func->tuple()) {
             auto *closureType = const_cast<TupleType *>(func->tupleType());
             for (size_t i = 0; i < closureType->size(); ++i) {
-                if (!camel::core::type::isGCTraced(closureType->codeAt(i))) {
+                if (!shouldTraverseStaticSlotType(closureType->typeAt(i))) {
                     continue;
                 }
                 visitGraphsInStaticSlot(
@@ -119,7 +130,7 @@ void visitGraphsInStaticSlot(
         auto *tuple     = fromSlot<::Tuple *>(slot);
         auto *tupleType = static_cast<TupleType *>(type);
         for (size_t i = 0; i < tupleType->size(); ++i) {
-            if (!camel::core::type::isGCTraced(tupleType->codeAt(i))) {
+            if (!shouldTraverseStaticSlotType(tupleType->typeAt(i))) {
                 continue;
             }
             visitGraphsInStaticSlot(
@@ -134,7 +145,7 @@ void visitGraphsInStaticSlot(
     case TypeCode::Array: {
         auto *array     = fromSlot<::Array *>(slot);
         auto *arrayType = static_cast<ArrayType *>(type);
-        if (!camel::core::type::isGCTraced(arrayType->elemTypeCode())) {
+        if (!shouldTraverseStaticSlotType(arrayType->elemType())) {
             return;
         }
         for (size_t i = 0; i < array->size(); ++i) {
@@ -151,7 +162,7 @@ void visitGraphsInStaticSlot(
         auto *st         = fromSlot<::Struct *>(slot);
         auto *structType = static_cast<StructType *>(type);
         for (size_t i = 0; i < structType->size(); ++i) {
-            if (!camel::core::type::isGCTraced(structType->codeAt(i))) {
+            if (!shouldTraverseStaticSlotType(structType->typeAt(i))) {
                 continue;
             }
             visitGraphsInStaticSlot(
@@ -171,7 +182,7 @@ void visitGraphsInStaticSlot(
 slot_t cloneStaticSlot(
     const camel::core::context::context_ptr_t &context, slot_t slot, Type *type,
     const GraphMap &rewritten, ObjectCache &objectCache) {
-    if (!type || !type->isGCTraced() || slot == NullSlot) {
+    if (!shouldTraverseStaticSlotType(type) || slot == NullSlot) {
         return slot;
     }
 
@@ -201,7 +212,7 @@ slot_t cloneStaticSlot(
             for (size_t i = 0; i < closureType->size(); ++i) {
                 clonedClosure->set<slot_t>(
                     i,
-                    camel::core::type::isGCTraced(closureType->codeAt(i))
+                    shouldTraverseStaticSlotType(closureType->typeAt(i))
                         ? cloneStaticSlot(
                               context,
                               closure->get<slot_t>(i),
@@ -221,13 +232,13 @@ slot_t cloneStaticSlot(
         for (size_t i = 0; i < tupleType->size(); ++i) {
             clonedTuple->set<slot_t>(
                 i,
-                camel::core::type::isGCTraced(tupleType->codeAt(i)) ? cloneStaticSlot(
-                                                                          context,
-                                                                          tuple->get<slot_t>(i),
-                                                                          tupleType->typeAt(i),
-                                                                          rewritten,
-                                                                          objectCache)
-                                                                    : tuple->get<slot_t>(i));
+                shouldTraverseStaticSlotType(tupleType->typeAt(i)) ? cloneStaticSlot(
+                                                                         context,
+                                                                         tuple->get<slot_t>(i),
+                                                                         tupleType->typeAt(i),
+                                                                         rewritten,
+                                                                         objectCache)
+                                                                   : tuple->get<slot_t>(i));
         }
         return toSlot<Object *>(clonedTuple);
     }
@@ -239,14 +250,13 @@ slot_t cloneStaticSlot(
         for (size_t i = 0; i < array->size(); ++i) {
             clonedArray->set<slot_t>(
                 i,
-                camel::core::type::isGCTraced(arrayType->elemTypeCode())
-                    ? cloneStaticSlot(
-                          context,
-                          array->get<slot_t>(i),
-                          arrayType->elemType(),
-                          rewritten,
-                          objectCache)
-                    : array->get<slot_t>(i));
+                shouldTraverseStaticSlotType(arrayType->elemType()) ? cloneStaticSlot(
+                                                                          context,
+                                                                          array->get<slot_t>(i),
+                                                                          arrayType->elemType(),
+                                                                          rewritten,
+                                                                          objectCache)
+                                                                    : array->get<slot_t>(i));
         }
         return toSlot<Object *>(clonedArray);
     }
@@ -258,13 +268,13 @@ slot_t cloneStaticSlot(
         for (size_t i = 0; i < structType->size(); ++i) {
             clonedStruct->set<slot_t>(
                 i,
-                camel::core::type::isGCTraced(structType->codeAt(i)) ? cloneStaticSlot(
-                                                                           context,
-                                                                           st->get<slot_t>(i),
-                                                                           structType->typeAt(i),
-                                                                           rewritten,
-                                                                           objectCache)
-                                                                     : st->get<slot_t>(i));
+                shouldTraverseStaticSlotType(structType->typeAt(i)) ? cloneStaticSlot(
+                                                                          context,
+                                                                          st->get<slot_t>(i),
+                                                                          structType->typeAt(i),
+                                                                          rewritten,
+                                                                          objectCache)
+                                                                    : st->get<slot_t>(i));
         }
         return toSlot<Object *>(clonedStruct);
     }
@@ -293,7 +303,7 @@ std::vector<GCGraph *> collectStaticGraphRefs(
     auto *tupleType = static_cast<TupleType *>(staticType);
     ObjectSet visited;
     for (size_t i = 1; i < staticSlots.size() && i < tupleType->size(); ++i) {
-        if (!camel::core::type::isGCTraced(tupleType->codeAt(i))) {
+        if (!shouldTraverseStaticSlotType(tupleType->typeAt(i))) {
             continue;
         }
         visitGraphsInStaticSlot(
@@ -340,7 +350,7 @@ void visitDraftGraphs(
         for (size_t i = 1; i < draft.staticSlots().size(); ++i) {
             camel::core::type::Type *slotType =
                 i < staticSlotTypes.size() ? staticSlotTypes[i] : nullptr;
-            if (!slotType || !slotType->isGCTraced()) {
+            if (!shouldTraverseStaticSlotType(slotType)) {
                 continue;
             }
             visitGraphsInStaticSlot(context, draft.staticSlots()[i], slotType, visitor, visited);
@@ -433,7 +443,7 @@ GCGraph *encodeDraftClosureGraph(
         }
         ObjectCache objectCache;
         for (size_t i = 1; i < tupleType->size(); ++i) {
-            if (!camel::core::type::isGCTraced(tupleType->codeAt(i))) {
+            if (!shouldTraverseStaticSlotType(tupleType->typeAt(i))) {
                 continue;
             }
             staticSlots[i] = cloneStaticSlot(
@@ -597,7 +607,11 @@ GCGraph *RuntimeGraphDraftSession::commit() {
             staticSlots);
         void *mem = mm::graphSpace().alloc(bytes, alignof(GCGraph));
         if (!mem) {
-            throw std::bad_alloc();
+            throw std::runtime_error(
+                std::format(
+                    "Runtime draft commit failed to allocate {} bytes for graph '{}'.",
+                    bytes,
+                    graph ? graph->name() : "<null>"));
         }
         rewritten.emplace(graph, reinterpret_cast<GCGraph *>(mem));
         allocatedBytes.emplace(graph, bytes);

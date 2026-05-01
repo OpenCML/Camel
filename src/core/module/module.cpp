@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/resolver.h"
+#include "core/module/entity_internal.h"
 
 #include <algorithm>
 
@@ -39,29 +40,31 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
         return std::nullopt;
     }
     const entity &first = entities.front();
-    if (std::holds_alternative<GIR::graph_vec_ptr_t>(first)) {
-        auto merged = std::make_shared<GIR::graph_vec_t>();
+    if (detail::EntityAccess::isGraphSet(first)) {
+        auto merged = std::make_shared<detail::EntityAccess::graph_set_t>();
         for (const auto &ent : entities) {
-            if (auto *pv = std::get_if<GIR::graph_vec_ptr_t>(&ent)) {
-                if (*pv) {
-                    for (const auto &g : **pv) {
+            if (detail::EntityAccess::isGraphSet(ent)) {
+                const auto &graphs = detail::EntityAccess::graphSet(ent);
+                if (graphs) {
+                    for (const auto &g : *graphs) {
                         merged->push_back(g);
                     }
                 }
             }
         }
-        return merged;
+        return detail::EntityAccess::makeGraphSet(std::move(merged));
     }
-    if (std::holds_alternative<oper_group_ptr_t>(first)) {
+    if (first.isOperGroup()) {
         std::string name;
         std::vector<std::pair<std::string, resolver_ptr_t>> allResolvers;
         for (const auto &ent : entities) {
-            if (auto *pg = std::get_if<oper_group_ptr_t>(&ent)) {
-                if (*pg) {
+            if (ent.isOperGroup()) {
+                const auto &group = ent.operGroup();
+                if (group) {
                     if (name.empty()) {
-                        name = (*pg)->name();
+                        name = group->name();
                     }
-                    for (const auto &r : (*pg)->resolvers()) {
+                    for (const auto &r : group->resolvers()) {
                         allResolvers.push_back(r);
                     }
                 }
@@ -72,12 +75,12 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
         }
         return OperatorGroup::create(name, std::move(allResolvers));
     }
-    if (std::holds_alternative<GIR::graph_ptr_t>(first)) {
+    if (detail::EntityAccess::isDecoratedGraph(first)) {
         for (const auto &ent : entities) {
-            if (auto *pg = std::get_if<GIR::graph_ptr_t>(&ent)) {
-                if (*pg) {
-                    return *pg;
-                }
+            if (detail::EntityAccess::isDecoratedGraph(ent) &&
+                detail::EntityAccess::decoratedGraph(ent)) {
+                return detail::EntityAccess::makeDecoratedGraph(
+                    detail::EntityAccess::decoratedGraph(ent));
             }
         }
         return std::nullopt;

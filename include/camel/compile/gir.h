@@ -13,15 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include "gir/draft_graph_builder.h"
 #include "gir/encode.h"
-#include "gir/graph.h"
-#include "gir/nodes.h"
 #include "gir/types.h"
 
 namespace camel::compile::gir {}

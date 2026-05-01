@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Apr. 11, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,7 @@
 #include "camel/parse/parse.h"
 #include "camel/utils/install_layout.h"
 #include "camel/utils/windows_parser_guard.h"
+#include "core/module/userdef_internal.h"
 #include "gir_json.h"
 
 #include <filesystem>
@@ -71,10 +72,11 @@ std::pair<std::string, std::string> getGirJsonFromCurrentState(const std::string
         return {"", "run first"};
     if (!st.mainModule || !st.mainModule->loaded())
         return {"", "run first"};
-    auto graph = st.ctx->compileRootGraph();
+    auto graph =
+        camel::core::module::detail::UserDefinedModuleAccess::compileGraphOpaque(*st.mainModule);
     if (!graph)
         return {"", "no graph"};
-    return getGirJson(graph, graphId);
+    return getGirJsonFromCompileGraph(graph, graphId);
 }
 
 std::pair<std::string, std::string>
@@ -90,10 +92,11 @@ getGirJsonByPath(const std::string &path, const std::string &graphId) {
         state.mainModule->compile(CompileStage::Done);
         if (!state.mainModule->loaded())
             return {"", "compile failed"};
-        auto graph = state.ctx->compileRootGraph();
+        auto graph = camel::core::module::detail::UserDefinedModuleAccess::compileGraphOpaque(
+            *state.mainModule);
         if (!graph)
             return {"", "no graph"};
-        return getGirJson(graph, graphId);
+        return getGirJsonFromCompileGraph(graph, graphId);
     } catch (const std::exception &e) {
         return {"", std::string(e.what())};
     }

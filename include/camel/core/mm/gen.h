@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@
 #include "camel/utils/assert.h"
 #include "camel/utils/brpred.h"
 
+#include <functional>
 #include <mutex>
 
 // ============================================================================
@@ -186,6 +187,9 @@ namespace rtdata = camel::core::rtdata;
 
 class GenerationalAllocatorWithGC : public IAllocator {
   public:
+    using RefRelocator       = std::function<rtdata::Object *(rtdata::Object *)>;
+    using ExternalRootTracer = std::function<void(const RefRelocator &)>;
+
     struct Config {
         size_t birthSize;
         size_t havenSize;
@@ -194,6 +198,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         size_t largeObjThreshold;
         float minorGCTriggerRatio;
         float majorGCTriggerRatio;
+        bool enableYoungGenCopying;
     };
 
     GenerationalAllocatorWithGC(const Config &config)
@@ -203,7 +208,8 @@ class GenerationalAllocatorWithGC : public IAllocator {
           promotionAgeThreshold_(config.promotionAgeThreshold),
           largeObjThreshold_(config.largeObjThreshold),
           minorGCTriggerRatio_(config.minorGCTriggerRatio),
-          majorGCTriggerRatio_(config.majorGCTriggerRatio) {}
+          majorGCTriggerRatio_(config.majorGCTriggerRatio),
+          enableYoungGenCopying_(config.enableYoungGenCopying) {}
 
     void *alloc(size_t payloadSize, size_t align = alignof(slot_t)) override {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -220,8 +226,33 @@ class GenerationalAllocatorWithGC : public IAllocator {
         rootObjectSet_ = rootSet;
     }
 
+    void registerExternalRootTracer(const void *owner, ExternalRootTracer tracer) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ASSERT(owner != nullptr, "External GC root tracer owner cannot be null.");
+        ASSERT(static_cast<bool>(tracer), "External GC root tracer cannot be empty.");
+        auto it = std::find_if(
+            externalRootTracers_.begin(),
+            externalRootTracers_.end(),
+            [owner](const auto &entry) { return entry.first == owner; });
+        if (it != externalRootTracers_.end()) {
+            it->second = std::move(tracer);
+            return;
+        }
+        externalRootTracers_.emplace_back(owner, std::move(tracer));
+    }
+
+    void unregisterExternalRootTracer(const void *owner) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::erase_if(externalRootTracers_, [owner](const auto &entry) {
+            return entry.first == owner;
+        });
+    }
+
     void recordOldToYoungRef(void *oldObj, void *youngObj) {
         (void)youngObj;
+        if (!enableYoungGenCopying_) {
+            return;
+        }
         std::lock_guard<std::mutex> lock(mutex_);
         ObjectHeader *header = headerOf(oldObj);
         rememberedSet_.insert(header);
@@ -264,6 +295,20 @@ class GenerationalAllocatorWithGC : public IAllocator {
             return ptr;
         }
 
+        if (!enableYoungGenCopying_) {
+            void *ptr = elderGenSpace_.alloc(payloadSize, align);
+            if (UNLIKELY(!ptr)) {
+                majorGCUnlocked();
+                ptr = elderGenSpace_.alloc(payloadSize, align);
+                if (!ptr)
+                    throw std::bad_alloc();
+            }
+
+            auto *header = headerOf(ptr);
+            header->setRegion(AllocRegion::ElderGen);
+            return ptr;
+        }
+
         // Try allocating in the birth space first.
         void *ptr = birthSpace_.alloc(payloadSize, align);
         if (UNLIKELY(!ptr)) {
@@ -283,6 +328,9 @@ class GenerationalAllocatorWithGC : public IAllocator {
     }
 
     void minorGCUnlocked() {
+        if (!enableYoungGenCopying_) {
+            return;
+        }
         if (inGC_)
             return; // Reentrancy guard
         inGC_ = true;
@@ -303,6 +351,18 @@ class GenerationalAllocatorWithGC : public IAllocator {
                 if (inYoungGenSpace(header)) {
                     rootObj = forward(rootObj);
                 }
+            }
+            for (const auto &[_, tracer] : externalRootTracers_) {
+                tracer([this](rtdata::Object *ref) -> rtdata::Object * {
+                    if (!ref) {
+                        return nullptr;
+                    }
+                    ObjectHeader *refHeader = headerOf(ref);
+                    if (inYoungGenSpace(refHeader)) {
+                        return forward(ref);
+                    }
+                    return ref;
+                });
             }
 
             // 3. Process old-to-young references (remembered set)
@@ -412,12 +472,14 @@ class GenerationalAllocatorWithGC : public IAllocator {
     size_t largeObjThreshold_;     // Objects larger than this go to large-object space
     float minorGCTriggerRatio_;    // Reserved: minor GC trigger ratio (e.g. when birth is full)
     float majorGCTriggerRatio_;    // Major GC trigger ratio (old-gen utilization)
+    bool enableYoungGenCopying_;   // The runtime currently assumes stable raw object pointers.
 
     // ============================================================================
     // GC state and roots
     // ============================================================================
-    bool inGC_ = false;                                // Reentrancy guard for nested GC
-    std::vector<rtdata::Object *> *rootObjectSet_{};   // Roots: stack, globals, etc.
+    bool inGC_ = false;                              // Reentrancy guard for nested GC
+    std::vector<rtdata::Object *> *rootObjectSet_{}; // Roots: stack, globals, etc.
+    std::vector<std::pair<const void *, ExternalRootTracer>> externalRootTracers_;
     std::unordered_set<ObjectHeader *> rememberedSet_; // Remembered set: old→young edges
     mutable std::mutex mutex_;
 
@@ -562,6 +624,14 @@ class GenerationalAllocatorWithGC : public IAllocator {
             if (root) {
                 markObject(root);
             }
+        }
+        for (const auto &[_, tracer] : externalRootTracers_) {
+            tracer([this](rtdata::Object *ref) -> rtdata::Object * {
+                if (ref) {
+                    markObject(ref);
+                }
+                return ref;
+            });
         }
     }
 
