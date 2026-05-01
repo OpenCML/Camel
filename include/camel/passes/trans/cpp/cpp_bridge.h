@@ -5,7 +5,6 @@
 #include "camel/core/rtdata/string.h"
 #include "camel/execute/executor.h"
 #include "camel/utils/dll_path.h"
-#include "camel/utils/env.h"
 
 #include <filesystem>
 #include <initializer_list>
@@ -88,19 +87,20 @@ struct ArgsScratch {
 
 class RuntimeBridge;
 
-/// 基础初始化（context + 搜索路径），必须在 main 开头调用；已初始化则忽略。
+/// Basic initialization (context + search paths). Must be called at the start of main; repeated
+/// calls are ignored.
 void initialize(const std::string &entryDir = "");
 
-/// 导入依赖模块（.cmo），需在 initialize 之后调用。
+/// Import a dependency module (.cmo). Call this after initialize.
 void importModules(const std::vector<std::string> &modules);
 
-/// 清理全局单例，应在 main 结束前调用。
+/// Clean up the global singleton. Call this before main exits.
 void finalize();
 
-/// 获取全局 bridge，未初始化时返回 nullptr。
+/// Get the global bridge; returns nullptr when uninitialized.
 RuntimeBridge *getBridge();
 
-/// 返回全局 bridge 引用，未初始化时抛出异常。
+/// Get the global bridge by reference; throws if uninitialized.
 inline RuntimeBridge &bridge() {
     auto *p = getBridge();
     if (!p)
@@ -110,44 +110,30 @@ inline RuntimeBridge &bridge() {
     return *p;
 }
 
-/// 返回标准模块搜索路径，供导出的 C++ 可执行程序（如 cpp_gen.exe）加载 .cmo。
-/// 此处的「可执行文件」指生成并编译后的程序本身，而非 camel 解释器。
-/// entryDir 为空时使用可执行文件所在目录，若获取失败则用 current_path()。
+/// Return the standard module search paths, used by exported C++ executables (such as
+/// cpp_gen.exe) to load .cmo files.
+/// Here "executable" means the generated and compiled program itself, not the Camel interpreter.
+/// When entryDir is empty, use the executable's directory; if that fails, fall back to
+/// current_path().
 inline std::vector<std::string> getStandardModuleSearchPaths(const std::string &entryDir = "") {
-    namespace fs = std::filesystem;
-    std::vector<std::string> searchPaths;
-
+    namespace fs        = std::filesystem;
     std::string baseDir = entryDir;
     if (baseDir.empty()) {
         auto exeDir = camel::utils::getExecutableDirectory();
         baseDir     = exeDir.empty() ? fs::current_path().string() : exeDir.string();
     }
-    searchPaths.push_back(fs::path(baseDir).string());
-
-    auto addIfNonEmpty = [&](const std::string &s) {
-        if (!s.empty())
-            searchPaths.push_back(fs::absolute(fs::path(s)).string());
-    };
-    addIfNonEmpty(::getEnv("CAMEL_PACKAGES"));
-    addIfNonEmpty(::getEnv("CAMEL_STD_LIB"));
-
-    // 可执行文件（如 cpp_gen.exe）所在目录及其相对 stdlib 路径
+    auto searchPaths = camel::utils::buildModuleSearchPaths(baseDir);
+    // When the executable lives under a subdirectory such as build/Release, add a compatibility
+    // stdlib path rooted at the project directory.
     auto exeDir = camel::utils::getExecutableDirectory();
-    if (exeDir.empty())
+    if (exeDir.empty()) {
         exeDir = fs::current_path();
-    auto absExe = fs::absolute(exeDir);
-    searchPaths.push_back(absExe.string());
-    searchPaths.push_back((absExe / "stdlib").string());
-    searchPaths.push_back((absExe.parent_path() / "stdlib").string());
-    // 可执行文件在 build/Release 等子目录时，需包含项目根下的 stdlib
-    searchPaths.push_back((absExe.parent_path().parent_path() / "stdlib").string());
-
-    addIfNonEmpty(::getEnv("CAMEL_MODULE_PATH"));
-
+    }
+    searchPaths.push_back(fs::absolute(exeDir.parent_path().parent_path() / "stdlib").string());
     return searchPaths;
 }
 
-/// 使用标准搜索路径创建 Context，完成与 camel-cli 一致的初始化。
+/// Create a Context using the standard search paths and match camel-cli initialization.
 inline camel::core::context::context_ptr_t
 createContextWithStandardConfig(const std::string &entryDir = "") {
     using namespace camel::core::context;
@@ -194,8 +180,8 @@ class RuntimeBridge {
         return RuntimeBridge(std::move(context));
     }
 
-    /// 使用标准模块搜索路径创建，与 camel-cli 一致，可正确加载 .cmo 动态模块。
-    /// entryDir 为空时使用可执行文件所在目录。
+    /// Create with standard module search paths, matching camel-cli, so .cmo dynamic modules load
+    /// correctly. When entryDir is empty, use the executable's directory.
     static RuntimeBridge createWithStandardConfig(
         const std::vector<std::string> &modules, const std::string &entryDir = "") {
         auto context = createContextWithStandardConfig(entryDir);

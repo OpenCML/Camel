@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 29, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,6 @@
 
 #include "nlohmann/json.hpp"
 
-#include "camel/compile/gir.h"
 #include "camel/init.h"
 #include "camel/utils/log.h"
 #include "command/commands.h"
@@ -190,14 +189,12 @@ int runWorkerMode(int argc, char *argv[]) {
                 return;
             }
             if (std::strcmp(type, "gir_node") == 0 && ctx != nullptr) {
-                auto *node           = static_cast<const GIR::Node *>(ctx);
-                uintptr_t ptr        = reinterpret_cast<uintptr_t>(node);
-                std::string stableId = getDebugNodeId(node);
+                uintptr_t ptr        = reinterpret_cast<uintptr_t>(ctx);
+                std::string stableId = getDebugNodeIdFromCompileNode(ctx);
                 if (getServer().isGirBreakpointNode(ptr) ||
                     getServer().isGirBreakpointNodeStable(stableId)) {
-                    std::string nodeId = std::format("0x{:x}", ptr);
-                    std::string graphId =
-                        std::format("0x{:x}", reinterpret_cast<uintptr_t>(&node->graph()));
+                    std::string nodeId  = std::format("0x{:x}", ptr);
+                    std::string graphId = getDebugGraphIdFromCompileNode(ctx);
                     getServer().pauseAndWaitForGirBreakpoint(nodeId, graphId);
                 }
                 return;

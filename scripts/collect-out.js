@@ -1,16 +1,30 @@
 /**
- * 将 build/debug/profile 构建产物收集到 out/tag/{bin,include,libs,stdlib}
+ * 将 build/debug/profile 构建产物收集到 out/latest/{bin,include,libs,stdlib}
  * 所有 tools 下的 exe 放到 bin/，libcamel.dll 放在 libs/（exe 会从 ./libs 查找）
- * tag: 当前 commit 若有 git tag 则使用该 tag，否则使用 "latest"
+ *
+ * 输出策略：始终写入 out/latest/（保证为本次编译产物）。若当前 HEAD 带有 git tag，
+ * 则在完成后将整棵 out/latest/ 再镜像一份到 out/<每个 tag>/（与 latest 内容相同）。
  *
  * 用法: node scripts/collect-out.js [build|debug|profile]
  *   build  -> Release, debug -> Debug, profile -> RelWithDebInfo
  *   默认 build (Release)
  */
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import { BASEDIR, libName, getTag, logStep, logDone, logWarn } from './common.js'
+import {
+    BASEDIR,
+    libName,
+    getGitTagsAtHead,
+    logStep,
+    logDone,
+    logWarn,
+    outArtifactRoot,
+    outArtifactBin,
+    outArtifactLibs,
+    outArtifactInclude,
+    outArtifactStdlib
+} from './common.js'
 
 const CONFIG_MAP = {
     build: 'Release',
@@ -26,13 +40,155 @@ function ensureDir(dir) {
 
 const isWindows = process.platform === 'win32'
 
+/** python3xx.dll / python.dll — required to consider the pack complete */
+function isPythonRuntimeDllName(lowerName) {
+    return (
+        (lowerName.startsWith('python3') && lowerName.endsWith('.dll')) ||
+        lowerName === 'python.dll'
+    )
+}
+
+/** Same layout as sync-python-sdks: interpreters + common MSVC runtimes next to them */
+function isWindowsPythonPackDll(lowerName) {
+    if (isPythonRuntimeDllName(lowerName)) return true
+    if (lowerName === 'vcruntime140.dll' || lowerName === 'vcruntime140_1.dll') return true
+    return false
+}
+
+function hasPythonInterpreterDllInSet(files) {
+    for (const p of files) {
+        const n = path.basename(p).toLowerCase()
+        if (n === 'python.dll') return true
+        if (/^python3\d+\.dll$/.test(n)) return true
+    }
+    return false
+}
+
+/** Flat directory: files matching predicate (basename lowercased) */
+function addMatchingDllsFromFlatDir(dir, intoSet, predicate) {
+    if (!dir || !fs.existsSync(dir)) return
+    try {
+        for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (!ent.isFile()) continue
+            const name = ent.name.toLowerCase()
+            if (predicate(name)) {
+                intoSet.add(path.join(dir, ent.name))
+            }
+        }
+    } catch {
+        // ignore unreadable dirs
+    }
+}
+
+/**
+ * Windows: discover DLLs next to the interpreter (base_prefix, venv Scripts parent, DLLs/).
+ * Merged with folder scan — venv root often has no .dll files.
+ */
+function addPythonDllsFromInterpreter(BASEDIR, intoSet) {
+    const pyCode = `
+import sys, pathlib
+roots = [pathlib.Path(sys.base_prefix), pathlib.Path(sys.executable).resolve().parent]
+ex = roots[-1]
+if sys.platform == "win32" and ex.name.lower() == "scripts":
+    roots.append(ex.parent)
+    roots.append(ex.parent / "DLLs")
+seen = set()
+for r in roots:
+    if not r.is_dir():
+        continue
+    try:
+        for p in r.iterdir():
+            if not p.is_file():
+                continue
+            n = p.name.lower()
+            if (n.startswith("python3") and n.endswith(".dll")) or n == "python.dll":
+                seen.add(str(p.resolve()))
+    except OSError:
+        pass
+for line in sorted(seen):
+    print(line)
+`.trim()
+
+    const tries = [
+        ['python', ['-c', pyCode]],
+        ['py', ['-3', '-c', pyCode]]
+    ]
+    for (const [cmd, args] of tries) {
+        try {
+            const out = execFileSync(cmd, args, {
+                encoding: 'utf-8',
+                cwd: BASEDIR,
+                stdio: ['ignore', 'pipe', 'ignore']
+            })
+            for (const line of out.split(/\r?\n/)) {
+                const t = line.trim()
+                if (t && fs.existsSync(t)) {
+                    intoSet.add(t)
+                }
+            }
+            return
+        } catch {
+            // try next launcher
+        }
+    }
+}
+
+function addPythonDllsFromSdks(BASEDIR, intoSet) {
+    const sdksRoot = path.join(BASEDIR, 'modules', 'python', 'sdks')
+    if (!fs.existsSync(sdksRoot)) return
+    try {
+        for (const ent of fs.readdirSync(sdksRoot, { withFileTypes: true })) {
+            if (!ent.isDirectory()) continue
+            const low = ent.name.toLowerCase()
+            if (!/^python3\d+$/.test(low)) continue
+            const sdkRoot = path.join(sdksRoot, ent.name)
+            addMatchingDllsFromFlatDir(sdkRoot, intoSet, isWindowsPythonPackDll)
+            addMatchingDllsFromFlatDir(path.join(sdkRoot, 'DLLs'), intoSet, isWindowsPythonPackDll)
+        }
+    } catch {
+        // ignore
+    }
+}
+
+/** When sdks did not supply an interpreter DLL, copy from venv / conda / active python. */
+function addPythonDllsFromVenvFallback(BASEDIR, intoSet) {
+    if (process.env.VIRTUAL_ENV) {
+        const v = process.env.VIRTUAL_ENV
+        addMatchingDllsFromFlatDir(v, intoSet, isWindowsPythonPackDll)
+        addMatchingDllsFromFlatDir(path.join(v, 'Scripts'), intoSet, isWindowsPythonPackDll)
+        addMatchingDllsFromFlatDir(path.join(v, 'DLLs'), intoSet, isWindowsPythonPackDll)
+    }
+    if (process.env.CONDA_PREFIX) {
+        const c = process.env.CONDA_PREFIX
+        addMatchingDllsFromFlatDir(c, intoSet, isWindowsPythonPackDll)
+        addMatchingDllsFromFlatDir(path.join(c, 'Library', 'bin'), intoSet, isWindowsPythonPackDll)
+    }
+    if (isWindows) {
+        addPythonDllsFromInterpreter(BASEDIR, intoSet)
+    }
+}
+
+function collectPythonRuntimeDlls(BASEDIR) {
+    const files = new Set()
+
+    addPythonDllsFromSdks(BASEDIR, files)
+
+    if (!hasPythonInterpreterDllInSet(files)) {
+        addPythonDllsFromVenvFallback(BASEDIR, files)
+    }
+
+    return [...files]
+}
+
+const COLLECT_PRIMARY_TAG = 'latest'
+
 function collect(config) {
-    const tag = getTag()
-    const outRoot = path.join(BASEDIR, 'out', tag)
-    const binDir = path.join(outRoot, 'bin')
-    const includeDir = path.join(outRoot, 'include')
-    const libsDir = path.join(outRoot, 'libs')
-    const stdlibDir = path.join(outRoot, 'stdlib')
+    const tag = COLLECT_PRIMARY_TAG
+    const outRoot = outArtifactRoot(tag)
+    const binDir = outArtifactBin(tag)
+    const includeDir = outArtifactInclude(tag)
+    const libsDir = outArtifactLibs(tag)
+    const stdlibDir = outArtifactStdlib(tag)
 
     logStep(`Collecting ${config} build artifacts to out/${tag}/`)
 
@@ -84,19 +240,17 @@ function collect(config) {
         logWarn(`Library not found: ${libPath}`)
     }
 
-    // Python DLL：python/pyplot 模块共享，复制到 libs 便于 .cmo 加载
+    // Python runtime DLLs: modules/python/sdks/python3xx/ (sync-python-sdks); else venv / conda / python on PATH.
     if (process.platform === 'win32') {
-        try {
-            const pyDllPath = execSync(
-                'python -c "import sys, pathlib; p=pathlib.Path(sys.base_prefix); print(p / (\'python\' + str(sys.version_info.major) + str(sys.version_info.minor) + \'.dll\'))"',
-                { encoding: 'utf-8', cwd: BASEDIR }
-            ).trim()
-            if (pyDllPath && fs.existsSync(pyDllPath)) {
-                const pyDllName = path.basename(pyDllPath)
-                fs.copyFileSync(pyDllPath, path.join(libsDir, pyDllName))
-            }
-        } catch {
-            // 忽略，Python 可能未安装或不在 PATH
+        const dlls = collectPythonRuntimeDlls(BASEDIR)
+        if (dlls.length === 0) {
+            logWarn(
+                'No Python runtime DLL found. Run sync-python-sdks into modules/python/sdks/, or activate a venv with python3xx.dll discoverable.'
+            )
+        }
+        for (const dllPath of dlls) {
+            const dllName = path.basename(dllPath)
+            fs.copyFileSync(dllPath, path.join(libsDir, dllName))
         }
     }
 
@@ -127,7 +281,33 @@ function collect(config) {
         }
     }
 
+    // Copy Python bridge DLLs to out/<tag>/libs for runtime routing.
+    const bridgeDir = path.join(BASEDIR, 'build', 'modules', 'python', config)
+    if (fs.existsSync(bridgeDir)) {
+        const files = fs.readdirSync(bridgeDir)
+        for (const f of files) {
+            const lower = f.toLowerCase()
+            if (lower.startsWith('py_bridge') && (lower.endsWith('.dll') || lower.endsWith('.pdb'))) {
+                fs.copyFileSync(path.join(bridgeDir, f), path.join(libsDir, f))
+            }
+        }
+    }
+
     logDone(`Artifacts collected to out/${tag}/`)
+
+    const tagsAtHead = getGitTagsAtHead()
+    for (const mirrorTag of tagsAtHead) {
+        if (mirrorTag === COLLECT_PRIMARY_TAG) {
+            continue
+        }
+        const mirrorRoot = outArtifactRoot(mirrorTag)
+        logStep(`Mirroring out/${COLLECT_PRIMARY_TAG}/ to out/${mirrorTag}/`)
+        if (fs.existsSync(mirrorRoot)) {
+            fs.rmSync(mirrorRoot, { recursive: true })
+        }
+        fs.cpSync(outRoot, mirrorRoot, { recursive: true })
+        logDone(`Mirrored to out/${mirrorTag}/`)
+    }
 }
 
 const arg = process.argv[2] || 'build'

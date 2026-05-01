@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 05, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,5 +26,6 @@ class GraphSchedulePass : public GraphIRPass {
     GraphSchedulePass(const camel::core::context::context_ptr_t &ctx) : GraphIRPass(ctx) {};
     virtual ~GraphSchedulePass() = default;
 
-    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override = 0;
+    virtual camel::runtime::GCGraph *
+    apply(camel::runtime::GCGraph *graph, std::ostream &os) override = 0;
 };

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,6 +30,7 @@ class CompositeData : public Data {
     virtual ~CompositeData() = default;
 
     virtual std::vector<std::string> refs() const { return std::vector<std::string>(); }
+    virtual std::vector<size_t> holes() const { return {}; }
     virtual bool resolved() const { return true; }
     virtual void resolve(const data_vec_t &dataList) {}
 

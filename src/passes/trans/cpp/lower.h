@@ -13,36 +13,20 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "camel/compile/gir.h"
-
 #include <string>
 #include <string_view>
-#include <vector>
 
 enum class CppEmitMode {
     Plain,
     Module,
     Inspect,
     Bench,
-};
-
-struct LoweringIssue {
-    const GIR::Node *node;
-    std::string reason;
-};
-
-struct GraphLoweringPlan {
-    GIR::Graph *graph = nullptr;
-    std::vector<GIR::Node *> topoNodes;
-    bool frameElidable  = false;
-    bool directCallable = false;
-    std::vector<LoweringIssue> issues;
 };
 
 enum class CppOperatorEmitKind {
@@ -60,6 +44,4 @@ struct CppOperatorSpec {
     std::string_view symbol;
 };
 
-GraphLoweringPlan analyzeGraphForCpp(GIR::Graph *graph);
-const CppOperatorSpec *findCppOperatorSpec(const GIR::OperNode *node);
-bool canRuntimeFallbackOperatorForCpp(const GIR::OperNode *node);
+const CppOperatorSpec *findCppOperatorSpec(std::string_view uri);

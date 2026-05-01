@@ -13,15 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Feb. 20, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "../jit_config.h"
-
-#include "camel/compile/gir.h"
 
 #include <cstdint>
 

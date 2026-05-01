@@ -13,21 +13,25 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Mar. 14, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <cstdio>
 #include <filesystem>
 #include <unordered_set>
 
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/mm.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/module/dynamic.h"
 #include "camel/core/module/userdef.h"
 #include "camel/execute/executor.h"
+#include "camel/runtime/graph.h"
+#include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
 #include "camel/utils/str.h"
+#include "core/module/userdef_internal.h"
 
 namespace fs = std::filesystem;
 using namespace strutil;
@@ -39,7 +43,7 @@ namespace camel::core::context {
 
 namespace {
 
-int deriveProcessExitCode(GIR::Graph *graph, slot_t result) {
+int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result) {
     if (!graph || !graph->funcType() || !graph->funcType()->hasExitType())
         return 0;
 
@@ -64,7 +68,17 @@ int deriveProcessExitCode(GIR::Graph *graph, slot_t result) {
 Context::Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
     : entryConfig_(entryConf), diagConfig_(diagConf) {}
 
-Context::~Context() = default;
+Context::~Context() {
+    // Runtime function objects stored inside modules may consult GCGraph-backed
+    // closure metadata during teardown. Release module-owned runtime data before
+    // dropping the graph closure so those metadata pointers stay valid for the
+    // whole object destruction cascade.
+    mainModule_.reset();
+    modules_.clear();
+    builtinModules_.clear();
+    exeMgr_.reset();
+    runtimeGraphMgr_.reset();
+}
 
 std::string EntryConfig::toString() const {
     std::ostringstream os;
@@ -95,8 +109,7 @@ inline bool fileExists(const std::string &path) {
 }
 
 std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("Context").debug("Looking for built-in module: <{}>", name));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Looking for built-in module: <{}>", name));
     auto it = builtinModules_.find(name);
     if (it != builtinModules_.end()) {
         return it->second;
@@ -104,8 +117,7 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 
     auto factoryIt = builtinModuleFactories.find(name);
     if (factoryIt != builtinModuleFactories.end()) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("Context").debug("Loading built-in module: <{}>", name));
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Loading built-in module: <{}>", name));
         module_ptr_t module = factoryIt->second(shared_from_this());
         module->load(); // instantly load the builtin module
         builtinModules_[name] = module;
@@ -118,16 +130,27 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &diagConf) {
     context_ptr_t ctx     = std::shared_ptr<Context>(new Context(entryConf, diagConf));
     ctx->exeMgr_          = std::make_unique<ExecutorManager>(ctx);
+    ctx->runtimeGraphMgr_ = std::make_unique<camel::runtime::GCGraphManager>();
+    camel::core::mm::autoSpace().setObjectRootSet(&ctx->runtimeGraphMgr_->gcRoots());
     ctx->sourceContext_   = std::make_shared<camel::source::SourceContext>();
     ctx->runtimeDiagSink_ = std::make_shared<DiagnosticSink>("", "", ctx->sourceContext_);
     ctx->runtimeDiagSink_->setConfig(diagConf);
     ctx->runtimeErrorReporter_ =
         std::make_shared<RuntimeErrorReporter>(ctx->runtimeDiagSink_, ctx->sourceContext_);
     ctx->modules_[""] = ctx->getBuiltinModule("").value();
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("Context").info(
-            "Context initialized using entry config {}",
-            entryConf.toString()));
+    {
+        size_t nPaths = 0;
+        for (const auto &sp : entryConf.searchPaths) {
+            if (!sp.empty())
+                ++nPaths;
+        }
+        CAMEL_LOG_INFO_S(
+            "Context",
+            "run | context | entry={} | cwd={} | module_path_slots={}",
+            entryConf.entryFile,
+            entryConf.entryDir,
+            nPaths);
+    }
     return ctx;
 }
 
@@ -140,19 +163,23 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
             modsErr.push_back(mod);
         }
     }
-    if (json && !modsErr.empty()) {
-        os << "[\n";
-        bool first = true;
-        for (const auto &mod : modsErr) {
-            auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
-            if (!ud || !ud->diagnostics())
-                continue;
-            if (!first)
-                os << ",\n";
-            ud->diagnostics()->dump(os, true, false);
-            first = false;
+    if (json) {
+        if (modsErr.empty()) {
+            os << "[]\n" << std::flush;
+        } else {
+            os << "[\n";
+            bool first = true;
+            for (const auto &mod : modsErr) {
+                auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
+                if (!ud || !ud->diagnostics())
+                    continue;
+                if (!first)
+                    os << ",\n";
+                ud->diagnostics()->dump(os, true, false);
+                first = false;
+            }
+            os << "\n]\n" << std::flush;
         }
-        os << "\n]\n" << std::flush;
     } else {
         for (const auto &mod : modsErr) {
             auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
@@ -171,10 +198,16 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
             }
             ud->diagnostics()->dump(os, false);
         }
+        if (modsErr.empty()) {
+            os << "[camel] Compilation failed but no diagnostics were collected. Try `npm run "
+                  "debug` for assertions, or verify camel.exe and libcamel.dll are the same build "
+                  "flavor (Release vs Debug).\n"
+               << std::flush;
+        }
     }
 }
 
-void Context::captureProcessExitCode(GIR::Graph *graph, slot_t result) {
+void Context::captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t result) {
     processExitCode_ = deriveProcessExitCode(graph, result);
 }
 
@@ -208,42 +241,43 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         return modules_[""]; // builtin module already loaded
     }
 
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger().in("Context").info(
-            "Importing module '{}' from current module '{}'.",
-            rawModuleName,
-            currentModuleName));
+    CAMEL_LOG_INFO_S(
+        "Context",
+        "Importing module '{}' from current module '{}'.",
+        rawModuleName,
+        currentModuleName);
     lastCmoLoadError_.clear();
     auto candidates = getModuleNameCandidates(currentModuleName, rawModuleName);
 
     for (const auto &name : candidates) {
         auto it = modules_.find(name);
         if (it != modules_.end()) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("Context").debug("Module '{}' found in cache.", name));
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Module '{}' found in cache.", name));
             return it->second;
         }
 
         module_ptr_t module = tryLoadModule(name);
         if (module) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("Context").debug(
-                    "Module '{}' loaded from file '{}'.",
-                    name,
-                    module->path()));
-            if (!module->loaded()) {
-                module->load();
-            }
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "Context",
+                "Module '{}' loaded from file '{}'.",
+                name,
+                module->path()));
+            // Register before load so compile failures remain visible to dumpAllModuleDiagnostics.
             modules_[name] = module;
+            if (!module->loaded()) {
+                if (!module->load()) {
+                    throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound)
+                        .commit(name, "failed to compile or load module from " + module->path());
+                }
+            }
             return module;
         }
 
         auto builtin = getBuiltinModule(name);
         if (builtin.has_value()) {
             EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("Context").debug(
-                    "Module '{}' found in built-in modules.",
-                    name));
+                CAMEL_LOG_DEBUG_S("Context", "Module '{}' found in built-in modules.", name));
             modules_[name] = builtin.value();
             return builtin.value();
         }
@@ -351,8 +385,9 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
     if (stem.empty())
         stem = relPath.string();
 
-    /// 在给定目录 D 中的查找顺序：1) D/xx.cmo  2) D/xx.*（任意同名文本/源文件）
-    /// 若 D/xx 为目录，则再查：3) D/xx/xx.cmo  4) D/xx/xx.*
+    /// Lookup order within directory D: 1) D/xx.cmo  2) D/xx.* (any text/source file with the
+    /// same name)
+    /// If D/xx is a directory, also search: 3) D/xx/xx.cmo  4) D/xx/xx.*
     auto findModuleInDir = [&](const fs::path &dir) -> std::pair<std::string, bool> {
         if (!fs::exists(dir) || !fs::is_directory(dir))
             return {"", false};
@@ -484,35 +519,64 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
     return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
 }
 
-GIR::graph_ptr_t Context::rootGraph() const {
-    ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
-    auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
-    ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
-    return gir;
+camel::runtime::GCGraph *Context::runtimeRootGraph() {
+    return currentRuntimeRoot() ? currentRuntimeRoot() : materializeRuntimeRoot();
 }
 
-GIR::graph_ptr_t Context::mainGraph() const {
+camel::runtime::GCGraph *Context::materializeRuntimeRoot() {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->clear();
     ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
-    auto gir = tt::as_shared<UserDefinedModule>(mainModule_)->gir();
-    ASSERT(gir != nullptr, "GraphIR of main module is not built yet.");
-    const auto optMainGraphSet = gir->getSubGraphsByName("main");
-    if (!optMainGraphSet.has_value()) {
-        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
-            .commit("Main graph not found in GraphIR of main module.");
-    }
-    if (optMainGraphSet->empty()) {
-        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
-            .commit("Main graph set is empty in GraphIR of main module.");
-    }
-    return *optMainGraphSet.value().begin();
+    auto rootModule = tt::as_shared<UserDefinedModule>(mainModule_);
+    camel::runtime::GCGraph *runtimeRoot =
+        camel::core::module::detail::UserDefinedModuleAccess::encodeRuntimeGraph(*rootModule);
+    runtimeGraphMgr_->adoptRoot(runtimeRoot);
+    registerRuntimeGraphDebugInfo(runtimeRoot);
+    return runtimeRoot;
+}
+
+camel::runtime::GCGraph *Context::installRuntimeRoot(camel::runtime::GCGraph *runtimeRoot) {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->replaceRoot(runtimeRoot);
+    registerRuntimeGraphDebugInfo(runtimeRoot);
+    return runtimeRoot;
+}
+
+camel::runtime::GCGraph *Context::adoptRuntimeRoot(camel::runtime::GCGraph *runtimeRoot) {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->adoptRoot(runtimeRoot);
+    registerRuntimeGraphDebugInfo(runtimeRoot);
+    return runtimeRoot;
+}
+
+camel::runtime::GCGraph *Context::currentRuntimeRoot() const {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    return runtimeGraphMgr_->root();
+}
+
+void Context::clearRuntimeGraphs() {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->clear();
 }
 
 void Context::registerExecutorFactory(std::string name, executor_factory_t fact) {
     exeMgr_->registerExecutorFactory(name, fact);
 }
 
-void Context::eval(std::string uri, GIR::Node *self, Frame &frame) {
-    return exeMgr_->eval(uri, self, frame);
+void Context::registerRuntimeGraphDebugInfo(camel::runtime::GCGraph *runtimeRoot) {
+    if (!runtimeRoot || !sourceContext_) {
+        return;
+    }
+    auto &debugMap = sourceContext_->debugMap();
+    camel::runtime::forEachReachableGraph(runtimeRoot, [&](camel::runtime::GCGraph *graph) {
+        if (!graph) {
+            return;
+        }
+        camel::source::origin_id_t origin = debugMap.graphOrigin(graph->stableId());
+        if (origin != camel::source::kInvalidOriginId) {
+            debugMap.registerRuntimeGraphOrigin(reinterpret_cast<uintptr_t>(graph), origin);
+        }
+    });
 }
 
 } // namespace camel::core::context

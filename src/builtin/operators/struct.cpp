@@ -13,15 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: Mar. 07, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "struct.h"
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/utils/type.h"
 
 namespace mm = camel::core::mm;
 using namespace camel::core::error;

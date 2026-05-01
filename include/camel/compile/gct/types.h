@@ -13,13 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-/** GCT 枚举与基础类型：LoadType、类型别名。 */
+/** GCT enums and basic types: LoadType and aliases. */
 
 #include <memory>
 #include <string>

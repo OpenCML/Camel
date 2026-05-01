@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,10 +30,10 @@
 
 namespace camel::core::type {
 
-// 前向声明
+// Forward declaration.
 class StructType;
 
-// 布局信息：一次计算，避免重复
+// Layout information: compute once to avoid duplication.
 struct StructTypeLayout {
     size_t totalSize;
     size_t size;
@@ -65,8 +65,8 @@ struct StructTypeLayout {
         return {t, tc, no, r, fn};
     }
 };
-
-// 工厂类：用于构造 StructType（可以使用 STL）
+// Factory: collect fields and build Type and StructData once to avoid recomputing Type.
+// Factory for constructing StructType (may use STL).
 class StructTypeFactory {
     friend class StructType;
 
@@ -90,7 +90,7 @@ class StructTypeFactory {
         });
     }
 
-    // 构建不可变的 StructType 对象
+    // Build an immutable StructType object.
     StructType *build();
 
   private:
@@ -98,19 +98,19 @@ class StructTypeFactory {
     std::vector<std::string> refs_;
 };
 
-// 不可变的 StructType：类型信息直接嵌入对象
+// Immutable StructType: type information is embedded directly in the object.
 class StructType : public CompositeType {
     friend class StructTypeFactory;
 
   public:
-    // 禁止直接构造，使用工厂或 create 方法
+    // Direct construction is forbidden; use the factory or create methods.
     StructType(const StructType &)            = delete;
     StructType &operator=(const StructType &) = delete;
 
-    // 创建已解析的 StructType
+    // Create a resolved StructType.
     static StructType *create();
 
-    // 从工厂构建
+    // Build from a factory.
     static StructType *fromFactory(StructTypeFactory &factory);
 
     size_t size() const { return size_; }
@@ -147,43 +147,47 @@ class StructType : public CompositeType {
     virtual bool assignableFrom(Type *sourceType) const override;
 
   private:
-    // 从预计算 layout + 数据一次拷贝
+    // Copy once from the precomputed layout and data.
     StructType(
         const StructTypeLayout &layout, const Type *const *types, const TypeCode *typeCodes,
         const size_t *nameOffsets, const char *fieldNamesData, const size_t *refs);
 
-    // 辅助方法：从数据构建（内部使用）
+    // Helper: build from raw data (internal use).
     static StructType *fromFactoryData(
         const std::vector<std::pair<std::string, Type *>> &fields,
         const std::vector<std::string> &refs);
 
-    size_t size_;                   // 字段数量
-    size_t refCount_;               // 引用索引数量
-    Type **typesPtr_;               // 指向 types 数组的指针（构造时计算）
-    TypeCode *typeCodesPtr_;        // 指向 typeCodes 数组的指针（构造时计算）
-    size_t *nameOffsetsPtr_;        // 指向 nameOffsets 数组的指针（构造时计算）
-    size_t *refsPtr_;               // 指向 refs 数组的指针（构造时计算）
-    const char *fieldNamesBasePtr_; // 指向 fieldNames 字符串数据的指针（构造时计算）
-    // 灵活数组：存储 types_[size_], typeCodes_[size_], nameOffsets_[size_], refs_[refCount_],
-    // fieldNames字符串数据 内存布局：[StructType
-    // base][size_][refCount_][typesPtr_][typeCodesPtr_][nameOffsetsPtr_][refsPtr_][fieldNamesBasePtr_][types_[size_]][typeCodes_[size_]][nameOffsets_[size_]][refs_[refCount_]][fieldNames字符串数据]
-    uint8_t data_[]; // 灵活数组：存储所有数据
+    size_t size_;            // Field count.
+    size_t refCount_;        // Number of reference indices.
+    Type **typesPtr_;        // Pointer to the types array (computed at construction).
+    TypeCode *typeCodesPtr_; // Pointer to the typeCodes array (computed at construction).
+    size_t *nameOffsetsPtr_; // Pointer to the nameOffsets array (computed at construction).
+    size_t *refsPtr_;        // Pointer to the refs array (computed at construction).
+    const char
+        *fieldNamesBasePtr_; // Pointer to the field-name string data (computed at construction).
+    // Flexible array: stores types_[size_], typeCodes_[size_], nameOffsets_[size_],
+    // refs_[refCount_], and the field-name string data. Layout: [StructType
+    // base][size_][refCount_][typesPtr_][typeCodesPtr_][nameOffsetsPtr_]
+    // [refsPtr_][fieldNamesBasePtr_][types_[size_]][typeCodes_[size_]][nameOffsets_[size_]]
+    // [refs_[refCount_]][field-name string data]
+    uint8_t data_[]; // Flexible array: stores all data.
 
-    // 访问方法（现在直接返回存储的指针）
+    // Accessors (return the stored pointers directly).
     const Type **typesPtr() const { return const_cast<const Type **>(typesPtr_); }
     const TypeCode *typeCodesPtr() const { return typeCodesPtr_; }
     const size_t *nameOffsetsPtr() const { return nameOffsetsPtr_; }
     const size_t *refsPtr() const { return refsPtr_; }
     const char *fieldNamesBasePtr() const { return fieldNamesBasePtr_; }
-    // 通过偏移量获取字段名称
+    // Resolve a field name via its offset.
     std::string_view fieldNameAt(size_t index) const {
         size_t offset = nameOffsetsPtr_[index];
         if (index + 1 < size_) {
-            // 下一个字段的偏移量减去当前偏移量，再减1（去掉null terminator）
+            // Subtract the current offset from the next field offset, then subtract 1 to remove the
+            // null terminator.
             size_t length = nameOffsetsPtr_[index + 1] - offset - 1;
             return std::string_view(fieldNamesBasePtr_ + offset, length);
         } else {
-            // 最后一个字段：从偏移量开始到字符串结束
+            // Last field: from the offset to the end of the string.
             return std::string_view(fieldNamesBasePtr_ + offset);
         }
     }

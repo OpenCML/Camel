@@ -13,13 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2024
- * Updated: Feb. 20, 2026
+ * Updated: Apr. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include <cctype>
+#include <cmath>
+#include <limits>
+#include <stdexcept>
 #include <string>
+#include <type_traits>
 
 template <typename T> T parseNumber(const std::string &input) {
     static_assert(

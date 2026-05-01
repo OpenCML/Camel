@@ -13,16 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "str.h"
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/utils/type.h"
 
 #include "fmt/args.h"
 #include "fmt/core.h"

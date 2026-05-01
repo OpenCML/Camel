@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -152,11 +152,11 @@ class String : public rtdata::Object {
 
         const String *rhs = reinterpret_cast<const String *>(other);
 
-        // 长度不同直接判不等
+        // Different lengths mean inequality.
         if (size_ != rhs->size_)
             return false;
 
-        // 比较内容
+        // Compare contents.
         return std::memcmp(data_, rhs->data_, size_) == 0;
     }
 

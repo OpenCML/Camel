@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 30, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,11 +36,11 @@ struct JitContext {
 
 // C linkage for JIT call from machine code
 //
-// 调用约定：callerSlots/slots 为动态区基址；slot[0] 恒存 Frame*（见 trampoline.cpp 头部注释）。
-// trampolineFunc/TrampolineTail：callerSlots[0]=caller Frame，用于 get(operand)
-// 支持静态区（负索引）。 trampolineOper：slots[0]=当前 Frame，直接使用 FrameArgsView，无需传
-// Graph。
-//
+// Calling convention: callerSlots/slots point to the dynamic-area base; slot[0] always stores
+// Frame* (see the trampoline.cpp header comment).
+// trampolineFunc/TrampolineTail: callerSlots[0] = caller Frame, used by get(operand).
+// Supports the static area (negative indices). trampolineOper: slots[0] = current Frame, uses
+// FrameArgsView directly, no Graph copy required.
 extern "C" slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc);
 extern "C" slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc);
 extern "C" slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc);
@@ -48,8 +48,7 @@ extern "C" slot_t trampolineCast(slot_t *slots, void *ctx, size_t pc);
 extern "C" slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc);
 extern "C" slot_t *prepareDirectJitCall(slot_t *callerSlots, void *ctx, const Bytecode *bc);
 extern "C" slot_t *prepareDirectJitTailCall(slot_t *callerSlots, void *ctx, const Bytecode *bc);
-extern "C" slot_t
-finishDirectJitCall(slot_t result, slot_t *calleeSlots, void *ctx, GIR::Graph *owner);
+extern "C" slot_t finishDirectJitCall(slot_t result, slot_t *calleeSlots, void *ctx);
 extern "C" slot_t finishDirectJitCallFast(slot_t *calleeSlots, void *ctx, slot_t result);
 extern "C" slot_t directSelfFuncInvoke(slot_t *callerSlots, void *ctx, const Bytecode *bc);
 

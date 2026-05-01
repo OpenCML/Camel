@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 20, 2025
- * Updated: Feb. 23, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,11 +37,10 @@ class ProfilingCleanup {
   public:
     ~ProfilingCleanup() {
         if (g_profiling_enabled && !g_profiling_stopped) {
-            GetDefaultLogger()
-                .in("Profiler")
-                .warn(
-                    "Profiling was enabled but not properly stopped with enable(false). "
-                    "Performance data may not have been saved.");
+            CAMEL_LOG_WARN_S(
+                "Profiler",
+                "Profiling was enabled but not properly stopped with enable(false). "
+                "Performance data may not have been saved.");
         }
     }
 };
@@ -388,12 +387,10 @@ void generate_advanced_report(const std::string &output_file) {
     bool is_full_profile     = (profile_mode && std::string(profile_mode) == "FULL");
 #endif
     if (is_full_profile) {
-        GetDefaultLogger()
-            .in("Profiler")
-            .info("Full profiling mode detected, opening Perfetto UI...");
+        CAMEL_LOG_INFO_S("Profiler", "Full profiling mode detected, opening Perfetto UI...");
         AdvancedTracer::getInstance().openPerfettoUI();
     }
-    GetDefaultLogger().in("Profiler").info("Advanced profiling report generation completed.");
+    CAMEL_LOG_INFO_S("Profiler", "Advanced profiling report generation completed.");
 }
 
 } // namespace profiler

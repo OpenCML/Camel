@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 24, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,8 +52,9 @@ class DebugBreakpoint {
     /// Return list of registered known type names; for API/UI.
     static std::vector<std::string> GetKnownTypes();
 
-    /// Call from埋点: if type is enabled and handler set, invokes handler(type, context). In NDEBUG
-    /// this is a no-op with zero cost.
+    /// Call from instrumentation sites: if the type is enabled and a handler
+    /// is set, invoke handler(type, context). In NDEBUG this is a no-op with
+    /// zero cost.
     static void Hit(const char *type, const void *context);
 };
 

@@ -13,25 +13,66 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Mar. 29, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "compile.h"
-#include "camel/common/algo/topo.h"
+#include "camel/compile/gir/types.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/graph_runtime_support.h"
+#include "camel/runtime/reachable.h"
+#include "runtime/graph_build.h"
 
 #include <algorithm>
 #include <cstddef>
+#include <stdexcept>
 
 using namespace std;
-using namespace GIR;
 using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::type;
+using data_idx_t = camel::runtime::gc_data_idx_t;
+
+static data_idx_t
+runtimeDataIndexOf(const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef) {
+    const auto *node = graph ? graph->node(nodeRef) : nullptr;
+    ASSERT(node != nullptr, "FastVM runtime node lookup resolved to null.");
+    return node->dataIndex;
+}
+
+static camel::runtime::gc_node_ref_t resolveTailValueNode(camel::runtime::GCGraph *graph) {
+    const bool hasValueReturn = graph != nullptr && graph->funcType() != nullptr &&
+                                graph->funcType()->hasExitType() &&
+                                graph->funcType()->exitType() != Type::Void();
+    if (!hasValueReturn) {
+        return camel::runtime::kInvalidNodeRef;
+    }
+    const auto tailRef = camel::execute::resolveRuntimeTailValueRef(graph);
+    const auto *tail   = graph ? graph->node(tailRef) : nullptr;
+    if (!tail || tail->dataIndex == 0) {
+        return camel::runtime::kInvalidNodeRef;
+    }
+    return tailRef;
+}
+
+static std::vector<data_idx_t> directCallDstSlotsOf(camel::runtime::GCGraph *targetRuntimeGraph) {
+    ASSERT(targetRuntimeGraph != nullptr, "FastVM direct-call target graph is null.");
+    std::vector<data_idx_t> dstSlots;
+    const auto normPorts = targetRuntimeGraph->normPorts();
+    const auto withPorts = targetRuntimeGraph->withPorts();
+    dstSlots.reserve(normPorts.size() + withPorts.size());
+    for (auto portRef : normPorts) {
+        dstSlots.push_back(runtimeDataIndexOf(targetRuntimeGraph, portRef));
+    }
+    for (auto portRef : withPorts) {
+        dstSlots.push_back(runtimeDataIndexOf(targetRuntimeGraph, portRef));
+    }
+    return dstSlots;
+}
 
 const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() {
     static const std::unordered_map<std::string, OpCode> supportedInlineOperators = {
@@ -68,103 +109,104 @@ const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() 
     return supportedInlineOperators;
 }
 
-bytecode_vec_t compile(
-    const context_ptr_t &ctx, Graph *graph, const CompileStrategy &opt,
+static bytecode_vec_t compileRuntimeGraph(
+    const context_ptr_t &ctx, camel::runtime::GCGraph *graph, const CompileStrategy &opt,
     std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins) {
-    // 从图的出口节点开始反向拓扑排序（逆序 DFS）
-    Node *exitNode = graph->exitNode();
+    ASSERT(graph != nullptr, "FastVM compile requires a non-null runtime graph.");
+    ASSERT(
+        graph->hasNodePayload(),
+        std::format("Runtime graph '{}' has no node payload.", graph->name()));
 
-    auto topoSortedNodes = findReachable(
-        exitNode,
-        [](Node *node) {
-            vector<Node *> inputs;
-            inputs.reserve(node->dataInputs().size() + node->ctrlInputs().size());
-
-            // 控制输入优先（用于控制流）
-            for (const auto &in : node->ctrlInputs()) {
-                if (&in->graph() == &node->graph())
-                    inputs.push_back(in);
-            }
-
-            // 数据输入后添加（用于计算依赖）
-            for (const auto &in : node->dataInputs()) {
-                if (&in->graph() == &node->graph())
-                    inputs.push_back(in);
-            }
-
-            return inputs;
-        },
-        false // 包含值出口锚点本身
-    );
-
-    // Debug 模式下打印拓扑排序结果并检查不可达节点
-    EXEC_WHEN_DEBUG({
-        GetDefaultLogger().in("Topo").debug(
-            "Topologically sorted nodes for graph {}:",
-            graph->name());
-        for (const auto &node : topoSortedNodes) {
-            GetDefaultLogger().in("Topo").debug("  {}", node->toString());
-        }
-
-        size_t totalNodeCount =
-            graph->nodes().size() + graph->ports().size() + graph->closure().size();
-        auto contains = [](node_span_t nodes, Node *target) {
-            return std::find(nodes.begin(), nodes.end(), target) != nodes.end();
-        };
-        const bool exitCounted =
-            contains(graph->nodes(), exitNode) || contains(graph->normPorts(), exitNode) ||
-            contains(graph->withPorts(), exitNode) || contains(graph->closure(), exitNode);
-        const size_t expectedTopoCount = totalNodeCount + (exitCounted ? 0 : 1);
-        if (topoSortedNodes.size() != expectedTopoCount) {
-            node_vec_t unreachableNodes;
-            for (Node *node : graph->nodes()) {
-                if (node != exitNode &&
-                    find(topoSortedNodes.begin(), topoSortedNodes.end(), node) ==
-                        topoSortedNodes.end()) {
-                    unreachableNodes.push_back(node);
-                }
-            }
-
-            string unreachableInfo;
-            for (const auto &node : unreachableNodes) {
-                if (!unreachableInfo.empty())
-                    unreachableInfo += ", ";
-                unreachableInfo += node->toString();
-            }
-
-            GetDefaultLogger().in("Topo").warn(
-                "Unreachable nodes in graph {} detected: {}",
+    auto topoSortedIndices        = camel::execute::buildReachableExecutionTopoIndices(graph);
+    const auto returnNodeRef      = graph->returnNodeRef();
+    const auto *returnNode        = graph->returnNode();
+    const bool expectsValueReturn = graph->funcType() && graph->funcType()->hasExitType() &&
+                                    graph->funcType()->exitType() != Type::Void();
+    const bool hasValueReturn     = returnNodeRef != camel::runtime::kInvalidNodeRef &&
+                                    returnNode != nullptr && returnNode->dataIndex != 0;
+    if (expectsValueReturn && !hasValueReturn) {
+        throw std::runtime_error(
+            std::format(
+                "FastVM runtime compile requires a value return node in graph '{}'.",
+                graph->name()));
+    }
+    if (!expectsValueReturn && returnNodeRef != camel::runtime::kInvalidNodeRef && returnNode &&
+        returnNode->dataIndex != 0) {
+        // Void-return graphs may still keep a non-observable value anchor as
+        // output/exit plumbing. The VM ignores it and returns NullSlot.
+    } else if (
+        returnNodeRef != camel::runtime::kInvalidNodeRef && returnNode != nullptr &&
+        returnNode->dataIndex == 0 && expectsValueReturn) {
+        throw std::runtime_error(
+            std::format(
+                "FastVM runtime compile resolved return slot 0 in graph '{}' (ref={}, kind={}).",
                 graph->name(),
-                unreachableInfo);
+                returnNodeRef,
+                static_cast<int>(returnNode->kind)));
+    }
+
+    auto requireInputCount = [&](std::string_view nodeKind,
+                                 camel::runtime::gc_node_ref_t nodeRef,
+                                 std::string_view inputKind,
+                                 size_t actual,
+                                 size_t expectedAtLeast) {
+        if (actual < expectedAtLeast) {
+            throw std::runtime_error(
+                std::format(
+                    "FastVM runtime compile requires at least {} {} inputs for {} node ref {} "
+                    "in graph '{}', but got {}.",
+                    expectedAtLeast,
+                    inputKind,
+                    nodeKind,
+                    nodeRef,
+                    graph->name(),
+                    actual));
+        }
+    };
+
+    EXEC_WHEN_DEBUG({
+        CAMEL_LOG_DEBUG_S("Topo", "Topologically sorted nodes for graph {}:", graph->name());
+        for (auto nodeRef : topoSortedIndices) {
+            const auto *node = graph->node(nodeRef);
+            CAMEL_LOG_DEBUG_S(
+                "Topo",
+                "  ref={} kind={} slot={}",
+                nodeRef,
+                static_cast<int>(node ? node->kind : camel::runtime::GCNodeKind::Data),
+                node ? node->dataIndex : 0);
         }
     });
 
     auto bytecodes = bytecode_vec_t();
-    bytecodes.reserve(topoSortedNodes.size() * 3); // 预估容量
-    std::unordered_set<Node *> topoNodeSet(topoSortedNodes.begin(), topoSortedNodes.end());
+    bytecodes.reserve(topoSortedIndices.size() * 3);
+    std::unordered_set<camel::runtime::gc_node_ref_t> topoNodeSet(
+        topoSortedIndices.begin(),
+        topoSortedIndices.end());
+    const auto tailValueNode       = resolveTailValueNode(graph);
+    auto hasOnlyTrivialSuffixAfter = [&](size_t index) {
+        for (size_t j = index + 1; j < topoSortedIndices.size(); ++j) {
+            const auto *suffixNode = graph->node(topoSortedIndices[j]);
+            if (!suffixNode || suffixNode->kind != camel::runtime::GCNodeKind::Gate) {
+                return false;
+            }
+        }
+        return true;
+    };
 
-    // 用于回填跳转地址的映射表。
-    //
-    // 为什么同一个目标节点会被多个 BRCH arm 共享？
-    // 1) 多个 arm 的控制流在重写/优化后直接收敛到同一控制头节点；
-    // 2) arm 头节点不可达时会回退到 matched JOIN，多个 arm 可能回退到同一个 JOIN；
-    // 3) BRCH/JOIN 的槽位语义允许不同 arm 槽位引用同一节点（按槽位区分语义，而非按指针唯一）。
-    //
-    // 因此目标 -> 占位索引必须是一对多映射，否则后写会覆盖先写，导致部分 JUMP 无法回填。
-    unordered_map<Node *, vector<size_t>> brchTargetMap;
-    // JOIN*, FROM*
-    unordered_map<Node *, vector<pair<size_t, size_t>>> joinTargetMap;
+    unordered_map<camel::runtime::gc_node_ref_t, vector<size_t>> brchTargetMap;
+    unordered_map<camel::runtime::gc_node_ref_t, vector<pair<size_t, size_t>>> joinTargetMap;
+    unordered_map<camel::runtime::gc_node_ref_t, size_t> valueProducerMap;
 
-    for (size_t i = 0; i < topoSortedNodes.size(); ++i) {
-        auto &node = topoSortedNodes[i];
+    for (size_t i = 0; i < topoSortedIndices.size(); ++i) {
+        const auto runtimeNodeIndex = topoSortedIndices[i];
+        const auto *record          = graph->node(runtimeNodeIndex);
+        ASSERT(record != nullptr, "Runtime topo node is missing runtime metadata.");
 
-        size_t currIdx     = bytecodes.size();
-        auto sourceContext = ctx ? ctx->sourceContext() : nullptr;
-        auto nodeOrigin    = sourceContext ? sourceContext->resolveGirNodeOrigin(node)
-                                           : camel::source::kInvalidOriginId;
+        size_t currIdx             = bytecodes.size();
+        const size_t bytecodeStart = bytecodes.size();
+        const auto nodeOrigin      = camel::source::kInvalidOriginId;
 
-        // 回填之前记录的 JUMP 跳转地址
-        if (auto it = brchTargetMap.find(node); it != brchTargetMap.end()) {
+        if (auto it = brchTargetMap.find(runtimeNodeIndex); it != brchTargetMap.end()) {
             for (size_t jumpIndex : it->second) {
                 auto &header     = bytecodes[jumpIndex];
                 header.fastop[0] = as_index(bytecodes.size());
@@ -173,25 +215,24 @@ bytecode_vec_t compile(
         }
 
         vector<data_idx_t> normOps, withOps;
-        for (const auto &in : node->normInputs()) {
-            normOps.push_back(in->index());
+        for (auto inputRef : graph->normInputsOf(runtimeNodeIndex)) {
+            normOps.push_back(runtimeDataIndexOf(graph, inputRef));
         }
-        for (const auto &in : node->withInputs()) {
-            withOps.push_back(in->index());
+        for (auto inputRef : graph->withInputsOf(runtimeNodeIndex)) {
+            withOps.push_back(runtimeDataIndexOf(graph, inputRef));
         }
 
-        // 根据节点类型设置操作码和额外信息
-        switch (node->type()) {
-        case NodeType::CAST: {
-            const auto &inputNode = node->normInputs().front();
-            Type *targetType      = node->dataType();
+        switch (record->kind) {
+        case camel::runtime::GCNodeKind::Cast: {
+            requireInputCount("CAST", runtimeNodeIndex, "norm", normOps.size(), 1);
+            Type *targetType = record->dataType;
             BytecodeExtra extra;
             extra.pType = targetType;
             appendBytecode(
                 bytecodes,
                 OpCode::CAST,
-                node->index(),
-                {inputNode->index()},
+                record->dataIndex,
+                {normOps.front()},
                 {},
                 {},
                 true,
@@ -199,31 +240,46 @@ bytecode_vec_t compile(
             break;
         }
 
-        case NodeType::COPY:
-            appendBytecode(
+        case camel::runtime::GCNodeKind::Copy:
+            requireInputCount("COPY", runtimeNodeIndex, "norm", normOps.size(), 1);
+            appendBytecode(bytecodes, OpCode::COPY, record->dataIndex, {normOps.front()});
+            break;
+
+        case camel::runtime::GCNodeKind::Fill: {
+            auto *bc = appendBytecode(
                 bytecodes,
-                OpCode::COPY,
-                node->index(),
-                {node->normInputs().front()->index()});
+                OpCode::FILL,
+                record->dataIndex,
+                {},
+                normOps,
+                withOps,
+                true,
+                {.pType = record->dataType},
+                2);
+            *reinterpret_cast<const camel::runtime::GCFillBody **>(bc->extra2()) =
+                graph->nodeBodyAs<camel::runtime::GCFillBody>(runtimeNodeIndex);
             break;
+        }
 
-        case NodeType::FILL:
-            appendBytecode(bytecodes, OpCode::FILL, node->index(), {}, normOps, withOps);
-            break;
-
-        case NodeType::ACCS: {
-            auto *accNode           = tt::as_ptr<AccsNode>(node);
-            const auto &srcNode     = node->normInputs().front();
-            const auto &srcDataType = srcNode->dataType();
-            ASSERT(srcDataType->isComposite(), "ACCS source node must be composite.");
+        case camel::runtime::GCNodeKind::Accs: {
+            requireInputCount("ACCS", runtimeNodeIndex, "norm", normOps.size(), 1);
+            const auto sourceRef  = graph->normInputsOf(runtimeNodeIndex).front();
+            const auto *srcRecord = graph->node(sourceRef);
+            const auto *accBody   = graph->nodeBodyAs<camel::runtime::GCAccsBody>(runtimeNodeIndex);
+            ASSERT(
+                srcRecord != nullptr && srcRecord->dataType != nullptr,
+                "ACCS source node must exist.");
+            ASSERT(srcRecord->dataType->isComposite(), "ACCS source node must be composite.");
 
             size_t index = 0;
 
-            switch (srcDataType->code()) {
+            switch (srcRecord->dataType->code()) {
             case TypeCode::Tuple: {
-                ASSERT(accNode->isNum(), "ACCS index must be numeric.");
-                index                 = accNode->numIndex();
-                const auto &tupleType = tt::as_ptr<TupleType>(srcDataType);
+                ASSERT(
+                    accBody->accsKind == camel::runtime::GCAccsKind::TupleIndex,
+                    "ACCS tuple access must be numeric.");
+                index                 = accBody->value;
+                const auto &tupleType = tt::as_ptr<TupleType>(srcRecord->dataType);
                 if (index >= tupleType->size()) {
                     ctx->rtmDiags()->of(SemanticDiag::InvalidAccessIndex).commit(to_string(index));
                     index = 0;
@@ -231,15 +287,20 @@ bytecode_vec_t compile(
                 break;
             }
             case TypeCode::Struct: {
-                ASSERT(!accNode->isNum(), "ACCS index must be string.");
-                const auto *structType = tt::as_ptr<camel::core::type::StructType>(srcDataType);
-                const auto &optIndex   = structType->findField(accNode->strIndex());
+                ASSERT(
+                    accBody->accsKind == camel::runtime::GCAccsKind::StructKey,
+                    "ACCS struct access must be keyed.");
+                const std::string_view keyView = accBody->key();
+                const std::string key(keyView.data(), keyView.size());
+                const auto *structType =
+                    tt::as_ptr<camel::core::type::StructType>(srcRecord->dataType);
+                const auto &optIndex = structType->findField(key);
                 if (!optIndex.has_value()) {
-                    ctx->rtmDiags()
-                        ->of(SemanticDiag::InvalidAccessIndex)
-                        .commit(accNode->strIndex());
+                    ctx->rtmDiags()->of(SemanticDiag::InvalidAccessIndex).commit(key);
+                    index = 0;
+                } else {
+                    index = optIndex.value();
                 }
-                index = optIndex.value();
                 break;
             }
             default:
@@ -249,86 +310,30 @@ bytecode_vec_t compile(
             appendBytecode(
                 bytecodes,
                 OpCode::ACCS,
-                node->index(),
+                record->dataIndex,
                 {
-                    srcNode->index(),
+                    normOps.front(),
                     as_index(index),
                 });
             break;
         }
 
-        case NodeType::BRCH: {
-            auto *brch = tt::as_ptr<BrchNode>(node);
-            appendBytecode(bytecodes, OpCode::BRCH, node->index(), {}, normOps, withOps);
-
-            // BRCH 语义 arm 数与 JOIN 的 with 槽位一一对应：
-            // - if/else: withCnt == 0, armCount == 2
-            // - match:  armCount == withCnt + 1 (最后一个是 default/else)
-            const size_t expectedArmCount = withOps.empty() ? 2 : withOps.size() + 1;
-            Node *joinFallbackTarget      = nullptr;
-            if (brch->hasMatchedJoin() && topoNodeSet.contains(brch->matchedJoin())) {
-                joinFallbackTarget = brch->matchedJoin();
-            }
-
-            vector<Node *> armHeads;
-            armHeads.reserve(expectedArmCount);
-
-            // 优先使用 matched JOIN 的 ctrlInputs 顺序作为 arm 顺序来源，确保与 JOIN 槽位对齐。
-            // 某些图形态下 JOIN 可能暂时不显式携带 ctrlInputs（例如历史图或部分重写中间态），
-            // 此时回退到 BRCH.ctrlOutputs 顺序。
-            if (brch->hasMatchedJoin() &&
-                brch->matchedJoin()->ctrlInputs().size() == expectedArmCount) {
-                auto *joinNode = brch->matchedJoin();
-                auto joinCtrls = joinNode->ctrlInputs();
-                for (size_t armIdx = 0; armIdx < expectedArmCount; ++armIdx) {
-                    Node *head = joinCtrls[armIdx];
-                    if (!topoNodeSet.contains(head)) {
-                        ASSERT(
-                            joinFallbackTarget != nullptr,
-                            std::format(
-                                "BRCH arm head is unreachable and no JOIN fallback exists in "
-                                "compile for graph '{}': brch={}, arm={}, head={}.",
-                                graph->name(),
-                                brch->toString(),
-                                armIdx,
-                                head ? head->toString() : "<null>"));
-                        head = joinFallbackTarget;
-                    }
-                    armHeads.push_back(head);
-                }
-            } else {
-                // 兜底路径：无 matched JOIN 时回退到 BRCH 的 ctrlOutputs 顺序。
-                auto ctrlOuts = brch->ctrlOutputs();
+        case camel::runtime::GCNodeKind::Brch: {
+            appendBytecode(bytecodes, OpCode::BRCH, record->dataIndex, {}, normOps, withOps);
+            const auto branchArms = graph->branchArmsOf(runtimeNodeIndex);
+            for (size_t armIndex = 0; armIndex < branchArms.size(); ++armIndex) {
+                const auto armEntry = camel::execute::resolveRuntimeBranchArmEntry(
+                    graph,
+                    runtimeNodeIndex,
+                    armIndex,
+                    topoSortedIndices);
                 ASSERT(
-                    ctrlOuts.size() >= expectedArmCount,
+                    armEntry != camel::runtime::kInvalidNodeRef,
                     std::format(
-                        "BRCH ctrl output count is insufficient in compile for graph '{}': "
-                        "brch={}, expectedArms={}, ctrlOuts={}.",
-                        graph->name(),
-                        brch->toString(),
-                        expectedArmCount,
-                        ctrlOuts.size()));
-                for (size_t armIdx = 0; armIdx < expectedArmCount; ++armIdx) {
-                    Node *head = ctrlOuts[armIdx];
-                    if (!topoNodeSet.contains(head)) {
-                        ASSERT(
-                            joinFallbackTarget != nullptr,
-                            std::format(
-                                "BRCH ctrl output arm is unreachable and no JOIN fallback exists "
-                                "in compile for graph '{}': brch={}, arm={}, head={}.",
-                                graph->name(),
-                                brch->toString(),
-                                armIdx,
-                                head ? head->toString() : "<null>"));
-                        head = joinFallbackTarget;
-                    }
-                    armHeads.push_back(head);
-                }
-            }
-
-            // 为每个语义 arm 生成固定一条 JUMP 占位，保证 BRCH jumpIdx 与 arm slot 严格一致。
-            for (Node *armHead : armHeads) {
-                brchTargetMap[armHead].push_back(bytecodes.size());
+                        "FastVM runtime compile cannot resolve BRCH arm {} entry in graph '{}'.",
+                        armIndex,
+                        graph->name()));
+                brchTargetMap[armEntry].push_back(bytecodes.size());
                 appendBytecode(bytecodes, OpCode::JUMP, 0, {0});
             }
             if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
@@ -338,15 +343,11 @@ bytecode_vec_t compile(
             continue;
         }
 
-        case NodeType::JOIN: {
-            // 注意，这里除了要求 JOIN 节点是执行序列的最后一个节点之外
-            // 还必须保证 JOIN 节点的返回值就是 Graph 的返回值
-            // 如果 Graph 选择返回的值不是 JOIN 节点的产生值，不能做尾调用优化
-            // 因为尾调用优化之后，原 Frame 就会被释放，这样 Graph 无法返回正确的值
-            bool isTail = i == topoSortedNodes.size() - 1 && graph->outputNode() == node;
+        case camel::runtime::GCNodeKind::Join: {
+            bool isTail = runtimeNodeIndex == tailValueNode && hasOnlyTrivialSuffixAfter(i);
 
-            if (joinTargetMap.find(node) != joinTargetMap.end()) {
-                for (const auto &[jumpIdx, fromIdx] : joinTargetMap[node]) {
+            if (joinTargetMap.find(runtimeNodeIndex) != joinTargetMap.end()) {
+                for (const auto &[jumpIdx, fromIdx] : joinTargetMap[runtimeNodeIndex]) {
                     auto &jump     = bytecodes[jumpIdx];
                     auto &from     = bytecodes[fromIdx];
                     jump.fastop[0] = as_index(bytecodes.size());
@@ -354,59 +355,82 @@ bytecode_vec_t compile(
                         from.opcode = OpCode::TAIL;
                     }
                 }
-                joinTargetMap.erase(node);
+                joinTargetMap.erase(runtimeNodeIndex);
             }
 
-            appendBytecode(bytecodes, OpCode::JOIN, node->index(), {}, normOps, withOps);
+            appendBytecode(
+                bytecodes,
+                OpCode::JOIN,
+                record->dataIndex,
+                {},
+                normOps,
+                withOps,
+                true,
+                {.pType = record->dataType});
 
             break;
         }
 
-        case NodeType::CALL:
-            appendBytecode(bytecodes, OpCode::CALL, node->index(), {}, normOps, withOps);
+        case camel::runtime::GCNodeKind::Call:
+            appendBytecode(bytecodes, OpCode::CALL, record->dataIndex, {}, normOps, withOps);
             break;
 
-        case NodeType::BIND:
+        case camel::runtime::GCNodeKind::Bind:
             ASSERT(false, "BIND node not implemented.");
             break;
 
-        case NodeType::FUNC: {
-            bool isTail    = i == topoSortedNodes.size() - 1 && graph->outputNode() == node;
-            auto *funcNode = tt::as_ptr<FuncNode>(node);
-            // 将上下文参数合并到普通参数中，因为函数调用不区分参数类型
-            // 这样还可以把 fastop[1] 留空，以便放其他内容
+        case camel::runtime::GCNodeKind::Func: {
+            bool isTail = runtimeNodeIndex == tailValueNode && hasOnlyTrivialSuffixAfter(i);
+            auto *targetRuntimeGraph = graph->directCalleeGraphOf(runtimeNodeIndex);
+            ASSERT(
+                targetRuntimeGraph != nullptr,
+                std::format(
+                    "FastVM runtime compile cannot resolve direct runtime callee for node ref {} "
+                    "in graph '{}'.",
+                    runtimeNodeIndex,
+                    graph->name()));
             normOps.insert(normOps.end(), withOps.begin(), withOps.end());
+            auto dstSlots = directCallDstSlotsOf(targetRuntimeGraph);
+            ASSERT(
+                normOps.size() == dstSlots.size(),
+                std::format(
+                    "FastVM direct-call arity mismatch for node ref {} in graph '{}': "
+                    "callerArgs={}, calleePorts={}.",
+                    runtimeNodeIndex,
+                    graph->name(),
+                    normOps.size(),
+                    dstSlots.size()));
             appendBytecode(
                 bytecodes,
                 (opt.enableTailCallDetection && isTail) ? OpCode::TAIL : OpCode::FUNC,
-                node->index(),
+                record->dataIndex,
                 {},
                 normOps,
-                {},
+                dstSlots,
                 true,
-                {.graph = funcNode->bodyGraph()},
+                {.runtimeGraph = targetRuntimeGraph},
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
-                2
+                3
 #else
-                1
+                2
 #endif
             );
             break;
         }
 
-        case NodeType::OPER: {
-            auto *opNode    = tt::as_ptr<OperNode>(node);
-            const auto &uri = opNode->oper()->uri();
+        case camel::runtime::GCNodeKind::Oper: {
+            const auto *operBody = graph->nodeBodyAs<camel::runtime::GCOperBody>(runtimeNodeIndex);
+            const std::string uri(operBody->uri());
 
-            // 尝试内联算子
             if (opt.enableInlineOperators) {
                 const auto &inlineOpMap = getSupportedInlineOperatorsMap();
                 auto it                 = inlineOpMap.find(uri);
                 if (it != inlineOpMap.end()) {
+                    requireInputCount("OPER", runtimeNodeIndex, "norm", normOps.size(), 2);
                     appendBytecode(
                         bytecodes,
                         it->second,
-                        node->index(),
+                        record->dataIndex,
                         {
                             normOps.front(),
                             normOps.back(),
@@ -435,7 +459,7 @@ bytecode_vec_t compile(
                 appendBytecode(
                     bytecodes,
                     OpCode::SCHD,
-                    node->index(),
+                    record->dataIndex,
                     {},
                     normOps,
                     withOps,
@@ -455,7 +479,7 @@ bytecode_vec_t compile(
             appendBytecode(
                 bytecodes,
                 OpCode::OPER,
-                node->index(),
+                record->dataIndex,
                 {},
                 normOps,
                 withOps,
@@ -466,48 +490,64 @@ bytecode_vec_t compile(
             break;
         }
 
-        case NodeType::DATA:
+        case camel::runtime::GCNodeKind::Data:
             [[fallthrough]];
-        case NodeType::GATE: {
-            // 一般无操作
-            // 但在内联函数中，有时候会直连JOIN
-            // 这时候需要插入一个JUMP节点而不能直接跳过
-            // 否则会导致该条路径为空，进而导致跳转错误
-            break; // break 而不能是 continue
+        case camel::runtime::GCNodeKind::Gate: {
+            const auto normInputs = graph->normInputsOf(runtimeNodeIndex);
+            if (!normInputs.empty()) {
+                const auto valueInput = normInputs.back();
+                if (auto it = valueProducerMap.find(valueInput); it != valueProducerMap.end()) {
+                    valueProducerMap[runtimeNodeIndex] = it->second;
+                }
+            }
+            break;
         }
 
-        case NodeType::PORT:
+        case camel::runtime::GCNodeKind::Port:
             [[fallthrough]];
-        case NodeType::SYNC:
+        case camel::runtime::GCNodeKind::Sync:
             [[fallthrough]];
-        case NodeType::DREF:
-            // 这些节点类型不生成字节码
+        case camel::runtime::GCNodeKind::Dref:
             continue;
 
         default:
             ASSERT(
                 false,
                 std::format(
-                    "Unsupported node type encountered in bytecode generation: {}",
-                    to_string(node->type())));
+                    "Unsupported node type encountered in runtime bytecode generation: {}",
+                    static_cast<int>(record->kind)));
         }
 
         if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
             (*localPcOrigins)[currIdx] = nodeOrigin;
         }
 
-        // 如果该节点的输出连接到 JOIN 节点，则插入一个跳转到 JOIN 的 JUMP
-        if (node->hasMatchedJoinOutput()) {
-            auto *joinNode = node->matchedJoinOutput();
+        if (bytecodes.size() > bytecodeStart) {
+            valueProducerMap[runtimeNodeIndex] = currIdx;
+        }
+
+        if (record->kind == camel::runtime::GCNodeKind::Func) {
+            const auto joinNode = graph->matchedJoinOutputOf(runtimeNodeIndex);
+            if (joinNode == camel::runtime::kInvalidNodeRef) {
+                continue;
+            }
+            size_t fromIdx = currIdx;
+            if (auto it = valueProducerMap.find(runtimeNodeIndex); it != valueProducerMap.end()) {
+                fromIdx = it->second;
+            }
             joinTargetMap[joinNode].push_back({
                 bytecodes.size(),
-                currIdx,
+                fromIdx,
             });
             appendBytecode(bytecodes, OpCode::JUMP, 0, {0});
         }
     }
 
-    appendBytecode(bytecodes, OpCode::RETN, 0, {graph->exitNode()->index()});
+    appendBytecode(
+        bytecodes,
+        OpCode::RETN,
+        0,
+        {static_cast<data_idx_t>(hasValueReturn ? runtimeDataIndexOf(graph, returnNodeRef) : 0)});
 
     ASSERT(
         brchTargetMap.empty(),
@@ -516,66 +556,45 @@ bytecode_vec_t compile(
         joinTargetMap.empty(),
         "Some JOIN nodes have unmatched JUMP instructions without corresponding targets.");
 
-    // 优化字节码
     BytecodeOptimizer optimizer(opt.optimizationStrategies);
     optimizer.optimize(bytecodes, 0, localPcOrigins);
 
     return bytecodes;
 }
 
-std::tuple<bytecode_vec_t, std::vector<BytecodeIndex>, std::unordered_map<GIR::Graph *, size_t>>
-compileAndLink(context_ptr_t ctx, GIR::Graph *entry, const CompileStrategy &opt) {
+bytecode_vec_t compile(
+    const context_ptr_t &ctx, camel::runtime::GCGraph *graph, const CompileStrategy &opt,
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins) {
+    return compileRuntimeGraph(ctx, graph, opt, localPcOrigins);
+}
+
+LinkedBytecodeResult
+compileAndLink(context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileStrategy &opt) {
     bytecode_vec_t linked;
     std::vector<BytecodeIndex> graphs;
-    std::unordered_map<GIR::Graph *, size_t> offsetMap;
+    std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap;
 
-    // 收集 entry 通过 subGraphs / dependencies 任一关系可达的全部图。
-    std::unordered_set<GIR::Graph *> visited;
-    std::vector<GIR::Graph *> uniqueGraphs;
-    std::function<void(const graph_ptr_t &)> collect = [&](const graph_ptr_t &curr) {
-        if (!curr || !visited.insert(curr.get()).second) {
-            return;
-        }
-        uniqueGraphs.push_back(curr.get());
-        for (const auto &[_, gSet] : curr->subGraphs()) {
-            for (const auto &subGraph : gSet) {
-                collect(subGraph);
-            }
-        }
-        for (const auto &dep : curr->dependencies()) {
-            collect(dep);
-        }
-        for (Node *node : curr->nodes()) {
-            if (node->type() == NodeType::FUNC) {
-                auto *funcNode = tt::as_ptr<FuncNode>(node);
-                if (funcNode->bodyGraph()) {
-                    collect(funcNode->bodyGraph()->shared_from_this());
-                }
-                continue;
-            }
-            if (node->type() == NodeType::DATA) {
-                auto *dataNode = tt::as_ptr<DataNode>(node);
-                if (dataNode->dataType()->code() != TypeCode::Function) {
-                    continue;
-                }
-                auto *func = camel::core::rtdata::fromSlot<::Function *>(dataNode->dataSlot());
-                if (func && func->graph()) {
-                    collect(func->graph()->shared_from_this());
-                }
-            }
-        }
-    };
-    collect(entry->shared_from_this());
+    std::vector<camel::runtime::GCGraph *> uniqueGraphs =
+        camel::runtime::collectReachableGraphs(entry);
     reverse(uniqueGraphs.begin(), uniqueGraphs.end());
 
-    // 编译所有图
-    for (auto *graph : uniqueGraphs) {
+    for (auto *runtimeGraph : uniqueGraphs) {
+        ASSERT(runtimeGraph != nullptr, "Reachable runtime graph set contains null.");
+        camel::runtime::validateRuntimeGraphPayload(runtimeGraph);
         size_t start = linked.size();
         std::unordered_map<size_t, camel::source::origin_id_t> localPcOrigins;
-        bytecode_vec_t codes = compile(ctx, graph, opt, &localPcOrigins);
+        bytecode_vec_t codes;
+        try {
+            codes = compile(ctx, runtimeGraph, opt, &localPcOrigins);
+        } catch (const std::bad_alloc &) {
+            throw std::runtime_error(
+                std::format(
+                    "FastVM compile ran out of memory while compiling graph '{}'.",
+                    runtimeGraph->name()));
+        }
 
-        offsetMap[graph] = start;
-        graphs.push_back({start, codes.size(), graph});
+        offsetMap[runtimeGraph] = start;
+        graphs.push_back({start, codes.size(), runtimeGraph});
 
         linked.insert(linked.end(), codes.begin(), codes.end());
         if (auto sourceContext = ctx ? ctx->sourceContext() : nullptr) {
@@ -585,7 +604,6 @@ compileAndLink(context_ptr_t ctx, GIR::Graph *entry, const CompileStrategy &opt)
         }
     }
 
-    // 统一链接 — 修改字节码中的地址引用
     size_t scanIndex    = 0;
     size_t currGraphIdx = 0;
     size_t currGraphEnd = graphs.empty() ? 0 : graphs[0].length;
@@ -602,13 +620,15 @@ compileAndLink(context_ptr_t ctx, GIR::Graph *entry, const CompileStrategy &opt)
         switch (bc.opcode) {
         case OpCode::TAIL:
         case OpCode::FUNC: {
-            auto *targetGraph = bc.extra()->graph;
-            // 写入目标图字节码的起始偏移
-            bc.fastop[1] = as_index(offsetMap.at(targetGraph));
+            ASSERT(
+                getFuncExtraRuntimeGraph(&bc) != nullptr,
+                std::format(
+                    "FastVM linker cannot resolve runtime graph for bytecode at pc {}.",
+                    scanIndex));
+            setFuncExtraTargetPc(&bc, offsetMap.at(getFuncExtraRuntimeGraph(&bc)));
         } break;
         case OpCode::JUMP: {
-            // 局部偏移转全局偏移
-            bc.fastop[0] += offsetMap.at(info.graph);
+            bc.fastop[0] += offsetMap.at(info.runtimeGraph);
         } break;
         default:
             break;
@@ -617,7 +637,11 @@ compileAndLink(context_ptr_t ctx, GIR::Graph *entry, const CompileStrategy &opt)
         scanIndex += bc.opsize;
     }
 
-    return {linked, graphs, offsetMap};
+    return {
+        .codes     = std::move(linked),
+        .graphs    = std::move(graphs),
+        .offsetMap = std::move(offsetMap),
+    };
 }
 
 std::string opCodeToString(const Bytecode &bc, const context_ptr_t &context) {
@@ -625,21 +649,28 @@ std::string opCodeToString(const Bytecode &bc, const context_ptr_t &context) {
         std::string operandStr;
 
         if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
-            size_t argsCnt = bc.fastop[0];
-            operandStr     = "(";
+            const auto srcArgs  = bc.directCallSrcArgs();
+            const auto dstSlots = bc.directCallDstSlots();
+            operandStr          = "(";
 
-            for (size_t j = 0; j < argsCnt; j++) {
-                operandStr += std::to_string(bc.operands()[j]);
-                if (j + 1 < argsCnt)
+            for (size_t j = 0; j < srcArgs.size(); j++) {
+                operandStr += std::to_string(srcArgs[j]);
+                if (j + 1 < srcArgs.size())
                     operandStr += ", ";
             }
 
-            operandStr += ")";
+            operandStr += ") => (";
 
-            if (bc.fastop[1] >= 0) {
-                operandStr += " -> ";
-                operandStr += std::to_string(bc.fastop[1]);
+            for (size_t j = 0; j < dstSlots.size(); ++j) {
+                operandStr += std::to_string(dstSlots[j]);
+                if (j + 1 < dstSlots.size()) {
+                    operandStr += ", ";
+                }
             }
+
+            operandStr += ")";
+            operandStr += " -> ";
+            operandStr += std::to_string(getFuncExtraTargetPc(&bc));
         } else {
             size_t normCnt = bc.fastop[0];
             size_t withCnt = bc.fastop[1];
@@ -662,13 +693,16 @@ std::string opCodeToString(const Bytecode &bc, const context_ptr_t &context) {
             operandStr += ">";
         }
 
-        return std::format(
-            "{} | {} | {}",
-            bc.toString(),
-            operandStr,
-            bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
-                                      : bc.extra()->toString(bc.opcode));
+        const std::string extraInfo =
+            bc.hasExtraWord() ? (bc.opcode == OpCode::OPER
+                                     ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
+                                     : bc.extra()->toString(bc.opcode))
+                              : "";
+        return std::format("{} | {} | {}", bc.toString(), operandStr, extraInfo);
     } else {
-        return std::format("{} | {}", bc.toString(), bc.extra()->toString(bc.opcode));
+        return std::format(
+            "{} | {}",
+            bc.toString(),
+            bc.hasExtraWord() ? bc.extra()->toString(bc.opcode) : "");
     }
 }

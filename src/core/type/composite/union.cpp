@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,46 +69,42 @@ UnionType::UnionType(const vector<Type *> &types) : CompositeType(TypeCode::Unio
 }
 
 UnionType *UnionType::create() {
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("UnionType")
-            .debug("Allocating UnionType: (), size: {} bytes", sizeof(UnionType)));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "UnionType",
+        "Allocating UnionType: (), size: {} bytes",
+        sizeof(UnionType)));
     void *mem = mm::permSpace().alloc(sizeof(UnionType), alignof(UnionType));
     ASSERT(mem != nullptr, "Failed to allocate UnionType from permSpace");
     return new (mem) UnionType();
 }
 
 UnionType *UnionType::create(Type *lhs, Type *rhs) {
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("UnionType")
-            .debug("Allocating UnionType: (lhs, rhs), size: {} bytes", sizeof(UnionType)));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "UnionType",
+        "Allocating UnionType: (lhs, rhs), size: {} bytes",
+        sizeof(UnionType)));
     void *mem = mm::permSpace().alloc(sizeof(UnionType), alignof(UnionType));
     ASSERT(mem != nullptr, "Failed to allocate UnionType from permSpace");
     return new (mem) UnionType(lhs, rhs);
 }
 
 UnionType *UnionType::create(const std::initializer_list<Type *> &types) {
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("UnionType")
-            .debug(
-                "Allocating UnionType: (initializer_list, size={}), size: {} bytes",
-                types.size(),
-                sizeof(UnionType)));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "UnionType",
+        "Allocating UnionType: (initializer_list, size={}), size: {} bytes",
+        types.size(),
+        sizeof(UnionType)));
     void *mem = mm::permSpace().alloc(sizeof(UnionType), alignof(UnionType));
     ASSERT(mem != nullptr, "Failed to allocate UnionType from permSpace");
     return new (mem) UnionType(types);
 }
 
 UnionType *UnionType::create(const std::vector<Type *> &types) {
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("UnionType")
-            .debug(
-                "Allocating UnionType: (vector, size={}), size: {} bytes",
-                types.size(),
-                sizeof(UnionType)));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "UnionType",
+        "Allocating UnionType: (vector, size={}), size: {} bytes",
+        types.size(),
+        sizeof(UnionType)));
     void *mem = mm::permSpace().alloc(sizeof(UnionType), alignof(UnionType));
     ASSERT(mem != nullptr, "Failed to allocate UnionType from permSpace");
     return new (mem) UnionType(types);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,17 +22,32 @@
 #include "module.h"
 
 #include "camel/compile/gct.h"
-#include "camel/compile/gir.h"
 
 #include "camel/parse/parse.h"
 
+namespace camel::runtime {
+class GCGraph;
+}
+
+namespace camel::compile::gir {
+class DraftGraphBuilder;
+}
+
 namespace camel::core::module {
+
+class UserDefinedModule;
+
+namespace detail {
+class UserDefinedModuleAccess;
+}
 
 enum class CompileStage { None, AST, GCT, GIR, Done };
 
 class UserDefinedModule : public Module {
+    friend class detail::UserDefinedModuleAccess;
+
     GCT::node_ptr_t gct_;
-    GIR::graph_ptr_t gir_;
+    std::shared_ptr<camel::compile::gir::DraftGraphBuilder> compileGraph_;
     camel::core::error::diagnostics_ptr_t diagnostics_;
     camel::parse::parser_ptr_t parser_;
     CompileStage stage_ = CompileStage::None;
@@ -44,7 +59,6 @@ class UserDefinedModule : public Module {
     virtual ~UserDefinedModule() = default;
 
     GCT::node_ptr_t gct() const { return gct_; }
-    GIR::graph_ptr_t gir() const { return gir_; }
     camel::core::error::diagnostics_ptr_t diagnostics() const { return diagnostics_; }
     camel::parse::parser_ptr_t parser() const { return parser_; }
     virtual bool loaded() const override { return stage_ == CompileStage::Done; }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 27, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,9 +37,9 @@ inline void report(std::ostream &) {}
 inline void enable_logging(bool) {}
 #else
 
-// 分配尺寸桶（统计不同尺寸范围的分配次数）
-static constexpr size_t BUCKET_COUNT = 8; // 8个桶
-// 尺寸范围：<16, <64, <256, <1024, <4096, <16384, <65536, >=65536
+// Allocation size buckets (counts allocations by size range).
+static constexpr size_t BUCKET_COUNT = 8; // Eight buckets.
+// Size ranges: <16, <64, <256, <1024, <4096, <16384, <65536, >=65536
 static constexpr std::array<size_t, BUCKET_COUNT> bucket_limits =
     {16, 64, 256, 1024, 4096, 16384, 65536, SIZE_MAX};
 
@@ -76,17 +76,17 @@ class PerfMonitor {
     size_t bucket_index(size_t size);
 };
 
-// 全局实例
+// Global instance.
 PerfMonitor &instance();
 
-// 全局 API
+// Global API.
 inline void start() { instance().start(); }
 inline void stop() { instance().stop(); }
 inline void reset() { instance().reset(); }
 inline void report(std::ostream &os) { instance().report(os); }
 inline void enable_logging(bool e) { instance().enable_logging(e); }
 
-// 高精度计时
+// High-resolution timing.
 inline uint64_t rdtsc() {
     unsigned int lo, hi;
     __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));

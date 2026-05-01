@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,6 @@
 #include <sstream>
 #include <string_view>
 
-using namespace GIR;
 using namespace camel::core::type;
 namespace data = camel::core::data;
 
@@ -66,24 +65,6 @@ std::string escapeCppStringLiteral(std::string_view text) {
         }
     }
     return escaped;
-}
-
-void recordTypeUsage(CppBridgePlan &plan, Type *type) {
-    if (!type) {
-        return;
-    }
-    plan.usesRtdataNamespace = true;
-    if (type->code() == TypeCode::String) {
-        plan.usesStringHeader = true;
-    }
-}
-
-std::string operatorProtocol(const std::string &uri) {
-    const size_t pos = uri.find(':');
-    if (pos == std::string::npos) {
-        return "";
-    }
-    return uri.substr(0, pos);
 }
 
 std::string sanitizeUriForSymbol(std::string_view uri) {
@@ -391,88 +372,6 @@ std::string serializeTypeInitExpr(Type *type, const std::function<std::string(Ty
     }
 }
 
-CppBridgePlan collectCppBridgePlan(
-    const camel::core::context::context_ptr_t &ctx, const std::vector<GraphLoweringPlan> &plans) {
-    CppBridgePlan plan;
-    std::set<std::string> importedModules;
-    std::set<std::string> runtimeOperatorUris;
-    std::unordered_set<Type *> usedTypes;
-
-    for (const auto &graphPlan : plans) {
-        if (graphPlan.graph) {
-            recordTypeUsage(plan, graphPlan.graph->funcType()->exitType());
-            usedTypes.insert(graphPlan.graph->funcType()->exitType());
-            for (const auto &port : graphPlan.graph->normPorts()) {
-                recordTypeUsage(plan, port->dataType());
-                usedTypes.insert(port->dataType());
-            }
-            for (const auto &port : graphPlan.graph->withPorts()) {
-                recordTypeUsage(plan, port->dataType());
-                usedTypes.insert(port->dataType());
-            }
-        }
-
-        for (auto *node : graphPlan.topoNodes) {
-            recordTypeUsage(plan, node->dataType());
-            usedTypes.insert(node->dataType());
-
-            if (node->type() == NodeType::DATA) {
-                auto *dataNode = tt::as_ptr<DataNode>(node);
-                auto literal   = cppLiteralFor(dataNode->dataSlot(), dataNode->dataType());
-                if (literal.has_value()) {
-                    if (dataNode->dataType()->code() == TypeCode::String) {
-                        plan.usesRtdataNamespace = true;
-                        plan.usesStringHeader    = true;
-                        plan.usesMmNamespace     = true;
-                    }
-                }
-            }
-
-            if (node->type() != NodeType::OPER) {
-                continue;
-            }
-
-            auto *opNode = tt::as_ptr<OperNode>(node);
-            if (findCppOperatorSpec(opNode) == nullptr) {
-                plan.usesRuntimeBridge = true;
-                runtimeOperatorUris.insert(opNode->oper()->uri());
-
-                const std::string protocol = operatorProtocol(opNode->oper()->uri());
-                if (!protocol.empty() && ctx) {
-                    auto module = ctx->importModule(protocol);
-                    importedModules.insert(module->name());
-                }
-            }
-        }
-    }
-
-    plan.importedModules.assign(importedModules.begin(), importedModules.end());
-    for (const auto &uri : runtimeOperatorUris) {
-        plan.runtimeOperators.push_back({
-            .uri  = uri,
-            .name = cppBridgeAccessorNameForUri(uri),
-        });
-    }
-
-    std::vector<Type *> orderedTypes;
-    std::unordered_set<Type *> visitedTypes;
-    for (Type *type : usedTypes) {
-        collectTypeDepsDepthFirst(type, orderedTypes, visitedTypes);
-    }
-    std::unordered_set<Type *> emittedTypes;
-    size_t typeIndex = 0;
-    for (Type *type : orderedTypes) {
-        if (!type || !emittedTypes.insert(type).second || isAtomicTypeForCpp(type)) {
-            continue;
-        }
-        plan.cachedTypes.push_back({
-            .type = type,
-            .name = std::format("t_{}", typeIndex++),
-        });
-    }
-    return plan;
-}
-
 std::string emitCppBridgePreamble(const CppBridgePlan &plan, bool includeIostream) {
     std::ostringstream oss;
     auto emitInclude = [&](bool enabled, std::string_view includeLine) {
@@ -583,48 +482,6 @@ std::string cppBridgeTypeAccessorName(const CppBridgePlan &plan, Type *type) {
     }
     throw std::runtime_error(
         std::format("missing cached type binding for '{}'", type ? type->toString() : "null"));
-}
-
-std::string emitCppRuntimeFallbackExpr(
-    const CppBridgePlan &plan, OperNode *node, const std::function<std::string(Node *)> &emitExpr) {
-    const bool normEmpty = node->normInputs().empty();
-    const bool withEmpty = node->withInputs().empty();
-
-    std::ostringstream oss;
-    oss << cppBridgeAccessorNameForUri(node->oper()->uri()) << "().call<"
-        << cppTypeFor(node->dataType()) << ">(";
-
-    if (normEmpty && withEmpty) {
-        oss << ")";
-        return oss.str();
-    }
-
-    oss << "{";
-    bool first = true;
-    for (const auto &arg : node->normInputs()) {
-        if (!first) {
-            oss << ", ";
-        }
-        first = false;
-        oss << "val(" << cppBridgeTypeExprFor(plan, arg->dataType()) << ", " << emitExpr(arg)
-            << ")";
-    }
-    oss << "}";
-    if (!withEmpty) {
-        oss << ", {";
-        first = true;
-        for (const auto &arg : node->withInputs()) {
-            if (!first) {
-                oss << ", ";
-            }
-            first = false;
-            oss << "val(" << cppBridgeTypeExprFor(plan, arg->dataType()) << ", " << emitExpr(arg)
-                << ")";
-        }
-        oss << "}";
-    }
-    oss << ")";
-    return oss.str();
 }
 
 std::string emitCppBridgeInitializeCall(const CppBridgePlan &plan) {

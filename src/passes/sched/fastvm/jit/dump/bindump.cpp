@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 30, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,7 +33,6 @@
 #include <tuple>
 #include <vector>
 
-using namespace GIR;
 using namespace camel::core::context;
 #if ENABLE_FASTVM_JIT
 using namespace camel::jit;
@@ -80,11 +79,12 @@ static void dumpMachineCodeByInstruction(
 }
 #endif
 
-graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+camel::runtime::GCGraph *
+JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
-    const auto &[bytecodes, _, offsetMap] = compileAndLink(
+    auto linked = compileAndLink(
         context_,
-        graph.get(),
+        graph,
         {
             .enableTailCallDetection = true,
             .enableInlineOperators   = true,
@@ -94,21 +94,19 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     auto backend = createBackend();
     if (!backend) {
         os << "[JIT] Backend not available, cannot dump machine code.\n";
-        return Graph::null();
+        return nullptr;
     }
 
     os << "[JIT Machine Code] offset (hex bytes) ; entry @ entryOffset\n";
     os << "---\n";
 
-    std::span<const Bytecode> bcSpan(bytecodes.data(), bytecodes.size());
+    std::span<const Bytecode> bcSpan(linked.codes.data(), linked.codes.size());
 
-    for (const auto &[g, entryPc] : offsetMap) {
+    for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
+        ASSERT(runtimeGraph != nullptr, "JIT machine-code dump requires a runtime graph.");
         ASSERT(
-            g->finalized(),
-            std::format("Graph '{}' must be sealed before JIT machine-code dump.", g->name()));
-        ASSERT(
-            g->hasFrameLayout(),
-            std::format("Graph '{}' has no finalized frame layout.", g->name()));
+            runtimeGraph->hasFrameLayout(),
+            std::format("Graph '{}' has no finalized frame layout.", runtimeGraph->name()));
 
         std::vector<std::tuple<size_t, size_t, std::string>> instructionBoundaries;
         CompilationDebugOptions debugOptions{
@@ -116,7 +114,7 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .enableDebugTrace      = true,
         };
         CompilationUnit unit{
-            .graph              = g,
+            .runtimeGraph       = runtimeGraph,
             .bytecodes          = bcSpan,
             .entryPc            = entryPc,
             .trampolineFunc     = reinterpret_cast<void *>(&trampolineFunc),
@@ -130,19 +128,20 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         std::string failureReason;
         auto compiled = backend->compile(unit, &failureReason);
         if (!compiled) {
-            os << g->mangledName() << ":\n  [compile failed] "
+            os << runtimeGraph->mangledName() << ":\n  [compile failed] "
                << (failureReason.empty() ? "(unknown)" : failureReason) << "\n\n";
             continue;
         }
 
         size_t codeSize = compiled->code.size();
-        // 偏移为十进制，宽度按最大偏移的十进制位数计算
+        // Offset is decimal, and the width is computed from the largest offset's decimal digit
+        // count.
         size_t maxOffset = codeSize > 0 ? codeSize - 1 : 0;
         int idxWidth     = 1;
         for (size_t v = maxOffset; v; v /= 10)
             ++idxWidth;
 
-        os << g->mangledName() << ":\n";
+        os << runtimeGraph->mangledName() << ":\n";
         os << "  [code size: " << codeSize << " bytes, entryOffset: " << compiled->entryOffset
            << "]\n";
 
@@ -168,10 +167,10 @@ graph_ptr_t JitBinaryDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         os << "\n";
     }
 
-    return Graph::null();
+    return nullptr;
 #else
     (void)graph;
     os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump machine code.\n";
-    return Graph::null();
+    return nullptr;
 #endif
 }

@@ -25,6 +25,8 @@ build/
 dist/
 out/
 tmp/
+modules/python/dlls/
+modules/python/sdks/
 
 *.cmo
 ./camel
@@ -41,6 +43,7 @@ profile.json.gz
 
 pypi/camel-lang/bin/
 pypi/camel-lang/stdlib/
+pypi/camel-lang/wrapper-dist/
 pypi/camel-lang/src/camel_lang.egg-info
 
 profile_reports/

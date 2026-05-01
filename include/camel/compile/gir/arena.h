@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 12, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 11, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -280,8 +280,10 @@ class GraphArena {
             metrics_.draftFreedBytes += usedInRegion(Region::Draft);
             runTrackedDestructors(draftTrackedDtors_);
             if (!recycleMemory) {
-                // Draft 区在 seal 后逻辑上已释放，但物理内存回收到 metaSpace 会让任何
-                // 残余悬挂指针直接破坏 free-list。这里延迟到 GraphArena 析构时统一回收。
+                // The Draft region is logically released after export, but returning
+                // the physical memory to metaSpace would let any dangling pointer
+                // immediately corrupt the free list. Defer this to GraphArena
+                // destruction and reclaim it there in one place.
                 return;
             }
         }
@@ -289,11 +291,11 @@ class GraphArena {
             auto &meta             = camel::core::mm::metaSpace();
             const bool metaHealthy = meta.validate();
             if (!metaHealthy) {
-                EXEC_WHEN_DEBUG(
-                    GetDefaultLogger().in("GIR").warn(
-                        "Skip GraphArena {:p} block recycle because metaSpace is already "
-                        "corrupted.",
-                        static_cast<void *>(this)));
+                CAMEL_LOG_WARN_S(
+                    "GIR",
+                    "Skip GraphArena {:p} block recycle because metaSpace is already "
+                    "corrupted.",
+                    static_cast<void *>(this));
                 heads.clear();
                 blocks.clear();
                 return;

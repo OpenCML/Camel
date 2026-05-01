@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,14 +36,15 @@ using data_ptr_t  = camel::core::data::data_ptr_t;
 using Type        = camel::core::type::Type;
 
 // =============================================================================
-// Load：树节点载荷基类
+// Load: base payload type for tree nodes
 // =============================================================================
 
 class Load {
   protected:
     LoadType type_;
-    // GCT 不再保存 token，而是直接持有从 AST 派生来的 origin。
-    // 这样语义诊断和后续 GIR 构建都不需要反查 AST tokenRange。
+    // GCT no longer stores tokens; it holds the origin derived from the AST.
+    // This avoids looking back at AST token ranges during diagnostics and GIR
+    // construction.
     origin_id_t origin_ = camel::source::kInvalidOriginId;
 
   public:
@@ -60,7 +61,7 @@ class Load {
 };
 
 // =============================================================================
-// 各类 Load 子类
+// Load subclasses
 // =============================================================================
 
 class DataLoad : public Load {

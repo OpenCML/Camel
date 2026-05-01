@@ -6,7 +6,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  */
 
 #include "camel/core/mm.h"
@@ -21,7 +21,7 @@ namespace profiler {
 
 using json = nlohmann::json;
 
-// BumpPointer 区域快照
+// BumpPointer region snapshot.
 static json bumpRegionToJson(const char *name, const BumpPointerAllocator &alloc) {
     auto *start     = alloc.start();
     auto *top       = alloc.top();
@@ -31,7 +31,7 @@ static json bumpRegionToJson(const char *name, const BumpPointerAllocator &alloc
 
     std::vector<json> objects;
     alloc.iterateAllocated([&](ObjectHeader *hdr) {
-        // 跳过已转发对象（逻辑上已迁出，由目标代表）
+        // Skip forwarded objects (logically moved out and represented by the target).
         if (hdr->forwarded())
             return;
         objects.push_back({
@@ -56,7 +56,7 @@ static json bumpRegionToJson(const char *name, const BumpPointerAllocator &alloc
     };
 }
 
-// FreeList 区域快照（区分已分配块和空闲块）
+// FreeList region snapshot (distinguish allocated blocks and free blocks).
 static json freeListRegionToJson(const char *name, const FreeListAllocator &alloc) {
     auto *start      = alloc.start();
     auto *end        = alloc.end();
@@ -87,7 +87,7 @@ static json freeListRegionToJson(const char *name, const FreeListAllocator &allo
     };
 }
 
-// 按名称获取 Bump 区域指针（仅当前已启用的 region）
+// Look up a Bump region by name (only currently enabled regions).
 static const BumpPointerAllocator *getBumpRegionByName(const char *name) {
     auto &autoSp = autoSpace();
     if (strcmp(name, "birthSpace") == 0)
@@ -102,7 +102,7 @@ static const BumpPointerAllocator *getBumpRegionByName(const char *name) {
     return nullptr;
 }
 
-// LargeObject 区域：无连续块，仅对象列表
+// LargeObject region: no contiguous blocks, only an object list.
 static json largeObjRegionToJson(const LargeObjectAllocator &alloc) {
     std::vector<json> objects;
     alloc.iterateAllocated([&](ObjectHeader *hdr) {
@@ -129,21 +129,21 @@ std::string snapshotToJson() {
 
     json regions = json::array();
 
-    // Young Gen: birth, haven, cache
+    // Young Gen: birth, haven, cache.
     regions.push_back(bumpRegionToJson("birthSpace", autoSp.birthSpace()));
     regions.push_back(bumpRegionToJson("havenSpace", autoSp.havenSpace()));
     regions.push_back(bumpRegionToJson("cacheSpace", autoSp.cacheSpace()));
 
-    // Elder Gen
+    // Elder Gen.
     regions.push_back(freeListRegionToJson("elderGenSpace", autoSp.elderGenSpace()));
 
-    // Large Object
+    // Large Object.
     regions.push_back(largeObjRegionToJson(autoSp.largeObjSpace()));
 
-    // Meta Space
+    // Meta Space.
     regions.push_back(freeListRegionToJson("metaSpace", metaSp));
 
-    // Perm Space
+    // Perm Space.
     regions.push_back(bumpRegionToJson("permSpace", permSp));
 
     json root = {

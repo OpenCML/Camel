@@ -13,20 +13,22 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 29, 2026
- * Updated: Mar. 29, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include "graph.h"
+#include "draft_graph_builder.h"
 
 namespace camel::compile::gir::validate {
 
-// 在 GraphBuilder::sealGraph() 之前必须满足的结构不变量（ASSERT，失败即中止）。
-// 不做任何图改写；仅用于 draft → sealed 前的自检与 rewrite 会话 seal()。
-void assertGraphSealingPreconditions(const Graph &graph);
-// 对 root 及其 subGraphs()/dependencies() 做深度优先，逐图执行同上断言。
+// Structural invariants for an encodable compile-time graph.
+// This remains a standalone debug utility rather than part of the Graph type.
+void assertGraphSealingPreconditions(const DraftGraphBuilder &graph);
+// Depth-first over root and its subGraphs()/dependencies(), applying the same assertions graph
+// by graph.
 void assertGraphTreeSealingPreconditions(const graph_ptr_t &graph);
+void assertGraphTreeStaticReferences(const graph_ptr_t &graph);
 
 } // namespace camel::compile::gir::validate

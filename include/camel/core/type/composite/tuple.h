@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,10 +27,10 @@
 
 namespace camel::core::type {
 
-// 前向声明
+// Forward declaration.
 class TupleType;
 
-// 布局信息：一次计算，避免重复
+// Layout information: compute once to avoid duplication.
 struct TupleTypeLayout {
     size_t totalSize;
     size_t size;
@@ -52,7 +52,7 @@ struct TupleTypeLayout {
     }
 };
 
-// 工厂类：用于构造 TupleType（可以使用 STL）
+// Factory for constructing TupleType (may use STL).
 class TupleTypeFactory {
     friend class TupleType;
 
@@ -72,31 +72,31 @@ class TupleTypeFactory {
         types_[index] = type;
     }
 
-    // 构建不可变的 TupleType 对象
+    // Build an immutable TupleType object.
     TupleType *build();
 
   private:
     std::vector<Type *> types_;
 };
 
-// 不可变的 TupleType：类型信息直接嵌入对象
+// Immutable TupleType: type information is embedded directly in the object.
 class TupleType : public CompositeType {
     friend class TupleTypeFactory;
 
   public:
-    // 禁止直接构造，使用工厂或 create 方法
+    // Direct construction is forbidden; use the factory or create methods.
     TupleType(const TupleType &)            = delete;
     TupleType &operator=(const TupleType &) = delete;
 
-    // 创建已解析的 TupleType
+    // Create a resolved TupleType.
     static TupleType *create();
     static TupleType *create(const std::vector<Type *> &types);
     static TupleType *create(std::vector<Type *> &&types);
 
-    // 从工厂构建
+    // Build from a factory.
     static TupleType *fromFactory(TupleTypeFactory &factory);
 
-    // 辅助方法：从数据构建（内部使用）
+    // Helper: build from raw data (internal use).
     static TupleType *fromFactoryData(
         const Type *const *types, const TypeCode *typeCodes, const size_t *refs, size_t size,
         size_t refCount);
@@ -115,7 +115,7 @@ class TupleType : public CompositeType {
         return std::span<const TypeCode>(typeCodesPtr_, size_);
     }
     size_t refCount() const { return refCount_; }
-    const size_t *refs() const { return refsPtr(); } // 返回指向内部数组的指针
+    const size_t *refs() const { return refsPtr(); } // Return a pointer to the internal array.
 
     TupleType *slice(size_t start, size_t end) const;
 
@@ -129,26 +129,27 @@ class TupleType : public CompositeType {
     virtual bool assignableFrom(Type *sourceType) const override;
 
   private:
-    // 从预计算 layout + 数据指针一次拷贝
+    // Copy once from the precomputed layout + data pointers.
     TupleType(
         const TupleTypeLayout &layout, const Type *const *types, const TypeCode *typeCodes,
         const size_t *refs);
-    // 从工厂直接填充，无临时 vector
+    // Fill directly from the factory, with no temporary vector.
     TupleType(TupleTypeFactory &factory, const TupleTypeLayout &layout);
-    // 从 vector<Type*> 一次遍历填充（用于 create）
+    // Fill in one pass from vector<Type*> (used by create).
     TupleType(const TupleTypeLayout &layout, const std::vector<Type *> &types);
 
-    size_t size_;            // 元素数量
-    size_t refCount_;        // 引用索引数量
-    Type **typesPtr_;        // 指向 types 数组的指针（构造时计算）
-    TypeCode *typeCodesPtr_; // 指向 typeCodes 数组的指针（构造时计算）
-    size_t *refsPtr_;        // 指向 refs 数组的指针（构造时计算）
-    // 灵活数组：存储 types_[size_], typeCodes_[size_], refs_[refCount_]
-    // 内存布局：[TupleType
-    // base][size_][refCount_][typesPtr_][typeCodesPtr_][refsPtr_][types_[size_]][typeCodes_[size_]][refs_[refCount_]]
-    uint8_t data_[]; // 灵活数组：存储所有数据
+    size_t size_;            // Element count.
+    size_t refCount_;        // Number of reference indices.
+    Type **typesPtr_;        // Pointer to the types array (computed at construction).
+    TypeCode *typeCodesPtr_; // Pointer to the typeCodes array (computed at construction).
+    size_t *refsPtr_;        // Pointer to the refs array (computed at construction).
+    // Flexible array: stores types_[size_], typeCodes_[size_], refs_[refCount_].
+    // Layout:
+    // [TupleType base][size_][refCount_][typesPtr_][typeCodesPtr_][refsPtr_]
+    // [types_[size_]][typeCodes_[size_]][refs_[refCount_]]
+    uint8_t data_[]; // Flexible array: stores all data.
 
-    // 访问方法（现在直接返回存储的指针）
+    // Accessors (return the stored pointers directly).
     const Type **typesPtr() const { return const_cast<const Type **>(typesPtr_); }
     const TypeCode *typeCodesPtr() const { return typeCodesPtr_; }
     const size_t *refsPtr() const { return refsPtr_; }

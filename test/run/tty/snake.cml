@@ -1,6 +1,5 @@
 module snake
 
-import { now } from time
 import { set_terminal_raw_mode, has_input, get_char, clear_input_buffer } from os
 
 // Map size

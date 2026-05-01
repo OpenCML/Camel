@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 27, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,18 +59,18 @@ void PerfMonitor::reset() {
 
 static std::string format_with_commas(uint64_t value) {
     std::stringstream ss;
-    ss.imbue(std::locale("")); // 使用系统本地千位分隔
+    ss.imbue(std::locale("")); // Use the system locale for thousands separators.
     ss << std::fixed << value;
     return ss.str();
 }
 
 void PerfMonitor::report(std::ostream &os) {
-    const int label_width = 30; // 标签列宽
-    const int value_width = 20; // 数值列宽
+    const int label_width = 30; // Label column width.
+    const int value_width = 20; // Value column width.
 
     os << "=============== Memory Perf Report ===============\n";
 
-    // 主统计信息
+    // Main statistics.
     os << std::left << std::setw(label_width) << "Alloc count:" << std::right
        << std::setw(value_width) << format_with_commas(stats.alloc_count) << "\n";
 
@@ -103,7 +103,7 @@ void PerfMonitor::report(std::ostream &os) {
        << format_with_commas(stats.alloc_cycles_total.load() + stats.free_cycles_total.load())
        << "\n";
 
-    // 计算总运行时间（秒）
+    // Compute total runtime in seconds.
     double elapsed_seconds =
         std::chrono::duration<double>(stats.end_time - stats.start_time).count();
     double seconds_per_cycle = (elapsed_seconds / static_cast<double>(stats.total_cycles));
@@ -144,9 +144,9 @@ void PerfMonitor::report(std::ostream &os) {
        << " s\n";
 
     os.unsetf(std::ios::fixed);
-    os << std::setprecision(6); // 恢复到默认精度
+    os << std::setprecision(6); // Restore the default precision.
 
-    // 分配大小分布
+    // Allocation size distribution.
     os << "\nAlloc size distribution:\n";
     for (size_t i = 0; i < BUCKET_COUNT; ++i) {
         std::string label;
@@ -200,7 +200,7 @@ size_t PerfMonitor::bucket_index(size_t size) {
 
 } // namespace memperf
 
-// 拦截全局 new/delete
+// Intercept global new/delete.
 void *operator new(std::size_t size) {
     auto start = memperf::rdtsc();
     void *p    = std::malloc(size);
@@ -215,7 +215,7 @@ void operator delete(void *p) noexcept {
     auto start = memperf::rdtsc();
     std::free(p);
     auto end = memperf::rdtsc();
-    // 释放时无法直接得知原大小，传0
+    // The original size is not available on free, so pass 0.
     memperf::instance().record_free(0, end - start);
 }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,10 +25,10 @@
 
 namespace camel::core::type {
 
-// 前向声明
+// Forward declaration.
 class ArrayType;
 
-// 工厂类：用于构造 ArrayType（可以使用 STL）
+// Factory for constructing ArrayType (may use STL containers).
 class ArrayTypeFactory {
     friend class ArrayType;
 
@@ -37,39 +37,34 @@ class ArrayTypeFactory {
     explicit ArrayTypeFactory(Type *elemType) : elemType_(elemType) {}
 
     void setElemType(Type *elemType) { elemType_ = elemType; }
-    void addRef(size_t index) { refs_.push_back(index); }
-    void setRefs(const std::vector<size_t> &refs) { refs_ = refs; }
 
-    // 构建不可变的 ArrayType 对象
+    // Build an immutable ArrayType object.
     ArrayType *build();
 
   private:
     Type *elemType_ = nullptr;
-    std::vector<size_t> refs_;
 };
 
-// 不可变的 ArrayType：类型信息直接嵌入对象
+// Immutable ArrayType: type information is embedded directly in the object.
 class ArrayType : public CompositeType {
     friend class ArrayTypeFactory;
 
   public:
-    // 禁止直接构造，使用工厂或 create 方法
+    // Direct construction is forbidden; use the factory or create methods.
     ArrayType(const ArrayType &)            = delete;
     ArrayType &operator=(const ArrayType &) = delete;
 
-    // 创建已解析的 ArrayType（无 refs）
+    // Create an ArrayType whose only unresolved state is the element type itself.
     static ArrayType *create(Type *elemType = nullptr);
 
-    // 从工厂构建
+    // Build from a factory.
     static ArrayType *fromFactory(ArrayTypeFactory &factory);
 
-    // 从数据直接构建（内部使用，用于 clone 等场景）
-    static ArrayType *fromData(Type *elemType, size_t refCount, const size_t *refs);
+    // Build directly from data (internal use, e.g. clone).
+    static ArrayType *fromData(Type *elemType);
 
     Type *elemType() const { return elemType_; }
     TypeCode elemTypeCode() const { return elemTypeCode_; }
-    size_t refCount() const { return refCount_; }
-    const size_t *refs() const { return refs_; } // 返回指向内部数组的指针
 
     virtual Type *resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;
@@ -81,13 +76,11 @@ class ArrayType : public CompositeType {
     virtual bool assignableFrom(Type *sourceType) const override;
 
   private:
-    // 私有构造函数：由工厂或 create 调用
-    ArrayType(Type *elemType, size_t refCount, const size_t *refs);
+    // Private constructor: called by the factory or create.
+    explicit ArrayType(Type *elemType);
 
-    Type *elemType_;        // 元素类型指针（用于类型系统）
-    TypeCode elemTypeCode_; // 元素类型代码（用于运行时）
-    size_t refCount_;       // 引用索引数量
-    size_t refs_[];         // 灵活数组：引用索引列表
+    Type *elemType_;        // Element type pointer (used by the type system).
+    TypeCode elemTypeCode_; // Element type code (used at runtime).
 };
 
 } // namespace camel::core::type

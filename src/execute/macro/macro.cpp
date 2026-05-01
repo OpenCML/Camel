@@ -13,16 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: Mar. 29, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "macro.h"
 
-#include "camel/common/algo/topo.h"
-#include "camel/compile/gir/graph.h"
-#include "camel/compile/gir/nodes.h"
-#include "camel/compile/gir/rewrite.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
@@ -32,6 +28,9 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/graph_runtime_support.h"
+#include "camel/runtime/draft_session.h"
+#include "camel/runtime/graph.h"
 #include <format>
 #include <optional>
 #include <unordered_set>
@@ -39,7 +38,6 @@
 namespace mm = camel::core::mm;
 
 using namespace std;
-using namespace GIR;
 using namespace camel::core::context;
 using namespace camel::core::error;
 using namespace camel::core::rtdata;
@@ -55,99 +53,108 @@ class MacroExecutionError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
-inline ::Function *
-makeRuntimeFunctionFromGraph(Graph *graph, camel::core::mm::IAllocator &allocator) {
-    ASSERT(graph != nullptr, "Macro callee graph is null.");
-    return ::Function::create(graph, graph->closureType(), allocator);
+using camel::runtime::gc_data_idx_t;
+using camel::runtime::gc_node_ref_t;
+using camel::runtime::GCAccsBody;
+using camel::runtime::GCGraph;
+using camel::runtime::GCNode;
+using camel::runtime::GCNodeKind;
+using camel::runtime::GCOperBody;
+
+inline gc_data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
+    const auto *node = graph ? graph->node(nodeRef) : nullptr;
+    ASSERT(node != nullptr, "Macro runtime node lookup resolved to null.");
+    return node->dataIndex;
 }
 
-inline Graph *requireFinalizedGraphLayout(Graph *graph) {
-    ASSERT(graph != nullptr, "Graph is null.");
-    ASSERT(
-        graph->finalized(),
-        std::format("Graph '{}' must be sealed before macro execution.", graph->name()));
-    ASSERT(
-        graph->hasFrameLayout(),
-        std::format("Graph '{}' has no finalized frame layout.", graph->name()));
-    return graph;
+inline slot_t getStaticRuntimeNodeSlot(const GCGraph *graph, gc_node_ref_t nodeRef) {
+    ASSERT(graph != nullptr, "Macro static-slot lookup requires a runtime graph.");
+    const auto *node = graph->node(nodeRef);
+    ASSERT(node != nullptr, "Macro static-slot lookup requires a valid runtime node.");
+    ASSERT(node->kind == GCNodeKind::Data, "Macro static-slot lookup requires a DATA node.");
+    ASSERT(node->dataIndex < 0, "Macro static DATA node must use a negative static slot index.");
+    return graph->staticArea()->get<slot_t>(static_cast<size_t>(-node->dataIndex));
 }
 
-inline slot_t getStaticNodeSlot(Node *node) {
-    ASSERT(node != nullptr, "Node is null.");
-    ASSERT(node->type() == NodeType::DATA, "Node is not static DATA.");
-    auto *graph = requireFinalizedGraphLayout(&node->graph());
-    return graph->staticArea()->get<slot_t>(static_cast<size_t>(-node->index()));
-}
-
-inline bool areStaticDataInputs(node_span_t inputs, size_t start = 0) {
+inline bool areStaticRuntimeDataInputs(
+    const GCGraph *graph, std::span<const gc_node_ref_t> inputs, size_t start = 0) {
     for (size_t i = start; i < inputs.size(); ++i) {
-        if (inputs[i] == nullptr || inputs[i]->type() != NodeType::DATA) {
+        const auto *inputNode = graph ? graph->node(inputs[i]) : nullptr;
+        if (inputNode == nullptr || inputNode->kind != GCNodeKind::Data ||
+            inputNode->dataIndex >= 0) {
             return false;
         }
     }
     return true;
 }
 
-inline void fillFrameForDirectFunc(Frame *from, Frame *dest, Graph *graph, Node *node) {
-    const auto &normNodes = node->normInputs();
-    const auto &normPorts = graph->normPorts();
-    ASSERT(normNodes.size() == normPorts.size(), "Norm nodes and ports count mismatch.");
-    for (size_t i = 0; i < normNodes.size(); ++i) {
-        dest->set(normPorts[i]->index(), from->get<slot_t>(normNodes[i]->index()));
-    }
-
-    const auto &withNodes = node->withInputs();
-    const auto &withPorts = graph->withPorts();
-    ASSERT(withNodes.size() == withPorts.size(), "With nodes and ports count mismatch.");
-    for (size_t i = 0; i < withNodes.size(); ++i) {
-        dest->set(withPorts[i]->index(), from->get<slot_t>(withNodes[i]->index()));
-    }
+inline bool isMacroFunction(const ::Function *funcObj) {
+    return funcObj != nullptr && funcObj->graph() != nullptr && funcObj->graph()->isMacro();
 }
 
-inline void fillFrameForIndirectCall(Frame *from, Frame *dest, Graph *graph, Node *node) {
-    const auto &normNodes = node->normInputs();
-    const auto &normPorts = graph->normPorts();
-    ASSERT(normNodes.size() == normPorts.size(), "Norm nodes and ports count mismatch.");
-    for (size_t i = 0; i < normNodes.size(); ++i) {
-        dest->set(normPorts[i]->index(), from->get<slot_t>(normNodes[i]->index()));
-    }
+inline std::string macroFunctionName(const ::Function *funcObj) {
+    ASSERT(funcObj != nullptr, "Macro function is null.");
+    auto *runtimeGraph = funcObj->graph();
+    ASSERT(runtimeGraph != nullptr, "Macro function is missing runtime graph materialization.");
+    return runtimeGraph->name();
+}
 
-    const auto &withNodes = node->withInputs();
-    const auto &withPorts = graph->withPorts();
-    ASSERT(withNodes.size() == withPorts.size() + 1, "With nodes and ports count mismatch.");
-    for (size_t i = 0; i < withPorts.size(); ++i) {
-        dest->set(withPorts[i]->index(), from->get<slot_t>(withNodes[i + 1]->index()));
+inline void bindRuntimeGraphArgs(
+    Frame *frame, camel::runtime::GCGraph *calleeGraph, camel::runtime::GCGraph *callerGraph,
+    std::span<const gc_node_ref_t> withInputs, std::span<const gc_node_ref_t> normInputs) {
+    ASSERT(frame != nullptr, "Macro runtime argument binding requires a frame.");
+    ASSERT(calleeGraph != nullptr, "Macro runtime argument binding requires a callee graph.");
+    ASSERT(callerGraph != nullptr, "Macro runtime argument binding requires a caller graph.");
+    const auto runtimeWithPorts = calleeGraph->withPorts();
+    const auto runtimeNormPorts = calleeGraph->normPorts();
+    ASSERT(runtimeWithPorts.size() == withInputs.size(), "Runtime with-port count mismatch.");
+    ASSERT(runtimeNormPorts.size() == normInputs.size(), "Runtime norm-port count mismatch.");
+    for (size_t i = 0; i < runtimeWithPorts.size(); ++i) {
+        const auto *portRecord = calleeGraph->node(runtimeWithPorts[i]);
+        ASSERT(portRecord != nullptr, "Macro runtime with-port record is missing.");
+        frame->set(portRecord->dataIndex, getStaticRuntimeNodeSlot(callerGraph, withInputs[i]));
+    }
+    for (size_t i = 0; i < runtimeNormPorts.size(); ++i) {
+        const auto *portRecord = calleeGraph->node(runtimeNormPorts[i]);
+        ASSERT(portRecord != nullptr, "Macro runtime norm-port record is missing.");
+        frame->set(portRecord->dataIndex, getStaticRuntimeNodeSlot(callerGraph, normInputs[i]));
     }
 }
 
 class MacroExecutor {
   public:
     explicit MacroExecutor(const context_ptr_t &context)
-        : context_(context), framePool_(kMacroFramePoolSize) {}
+        : context_(context), framePool_(kMacroFramePoolSize) {
+        framePool_.registerGcTracer();
+    }
 
-    std::optional<slot_t> tryExecute(Node *node, std::ostream &os) {
+    std::optional<slot_t>
+    tryExecute(GCGraph *runtimeGraph, gc_node_ref_t nodeRef, std::ostream &os) {
         try {
+            const auto *node = runtimeGraph ? runtimeGraph->node(nodeRef) : nullptr;
             if (node == nullptr) {
                 return std::nullopt;
             }
-            switch (node->type()) {
-            case NodeType::FUNC:
-                return tryExecuteDirectFunc(tt::as_ptr<FuncNode>(node), os);
-            case NodeType::CALL:
-                return tryExecuteIndirectCall(tt::as_ptr<CallNode>(node), os);
+            switch (node->kind) {
+            case GCNodeKind::Func:
+                return tryExecuteDirectFunc(runtimeGraph, nodeRef, os);
+            case GCNodeKind::Call:
+                return tryExecuteIndirectCall(runtimeGraph, nodeRef, os);
             default:
                 return std::nullopt;
             }
         } catch (const MacroExecutionError &e) {
-            os << "[macro] skip " << node->debugEntityId() << ": " << e.what() << "\n";
+            os << "[macro] skip " << runtimeGraph->name() << "::ref#" << nodeRef << ": " << e.what()
+               << "\n";
             return std::nullopt;
         } catch (const Diagnostic &d) {
             (void)d;
-            os << "[macro] diagnostic while evaluating " << node->debugEntityId() << "\n";
+            os << "[macro] diagnostic while evaluating " << runtimeGraph->name() << "::ref#"
+               << nodeRef << "\n";
             return std::nullopt;
         } catch (const std::exception &e) {
-            os << "[macro] exception while evaluating " << node->debugEntityId() << ": " << e.what()
-               << "\n";
+            os << "[macro] exception while evaluating " << runtimeGraph->name() << "::ref#"
+               << nodeRef << ": " << e.what() << "\n";
             return std::nullopt;
         }
     }
@@ -157,89 +164,92 @@ class MacroExecutor {
     FramePool framePool_;
     size_t recursionDepth_ = 0;
 
-    bool macroCallsFunctionParam(Graph *graph) const {
-        std::unordered_set<Node *> paramNodes;
-        for (Node *p : graph->withPorts())
-            paramNodes.insert(p);
-        for (Node *p : graph->normPorts())
-            paramNodes.insert(p);
-        for (Node *p : graph->closure())
-            paramNodes.insert(p);
-        for (Node *n : graph->nodes()) {
-            if (n->type() != NodeType::CALL || !tt::as_ptr<CallNode>(n)->hasCallee())
+    bool macroCallsFunctionParam(GCGraph *graph) const {
+        ASSERT(graph != nullptr, "Macro function-parameter analysis requires a runtime graph.");
+        std::unordered_set<gc_node_ref_t> paramNodes;
+        for (gc_node_ref_t ref : graph->withPorts())
+            paramNodes.insert(ref);
+        for (gc_node_ref_t ref : graph->normPorts())
+            paramNodes.insert(ref);
+        for (gc_node_ref_t ref : graph->closureNodes())
+            paramNodes.insert(ref);
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            const gc_node_ref_t nodeRef = it.ref();
+            const auto *node            = *it;
+            if (!node || node->kind != GCNodeKind::Call) {
                 continue;
-            if (paramNodes.count(tt::as_ptr<CallNode>(n)->calleeInput()))
+            }
+            const auto withInputs = graph->withInputsOf(nodeRef);
+            if (!withInputs.empty() && paramNodes.contains(withInputs.front())) {
                 return true;
+            }
         }
         return false;
     }
 
-    std::optional<slot_t> tryExecuteDirectFunc(FuncNode *node, std::ostream &os) {
-        if (!node || !node->isMacro()) {
+    std::optional<slot_t>
+    tryExecuteDirectFunc(GCGraph *ownerGraph, gc_node_ref_t nodeRef, std::ostream &os) {
+        const auto *node = ownerGraph ? ownerGraph->node(nodeRef) : nullptr;
+        if (!node || node->kind != GCNodeKind::Func || !node->isMacro()) {
             return std::nullopt;
         }
-        if (!areStaticDataInputs(node->withInputs()) || !areStaticDataInputs(node->normInputs())) {
+        if (!areStaticRuntimeDataInputs(ownerGraph, ownerGraph->withInputsOf(nodeRef)) ||
+            !areStaticRuntimeDataInputs(ownerGraph, ownerGraph->normInputsOf(nodeRef))) {
             return std::nullopt;
         }
-        if (macroCallsFunctionParam(node->bodyGraph())) {
+        auto *calleeGraph = ownerGraph->directCalleeGraphOf(nodeRef);
+        if (!calleeGraph || macroCallsFunctionParam(calleeGraph)) {
             return std::nullopt;
         }
-        os << "[macro] execute direct macro " << node->bodyGraph()->name() << "\n";
+        os << "[macro] execute direct macro " << calleeGraph->name() << "\n";
         return executeFunction(
-            makeRuntimeFunctionFromGraph(node->bodyGraph(), mm::autoSpace()),
-            [&](Frame *frame, Graph *graph) {
-                const auto &withPorts = graph->withPorts();
-                const auto &normPorts = graph->normPorts();
-                ASSERT(
-                    withPorts.size() == node->withInputs().size(),
-                    "With nodes and ports count mismatch.");
-                ASSERT(
-                    normPorts.size() == node->normInputs().size(),
-                    "Norm nodes and ports count mismatch.");
-                for (size_t i = 0; i < withPorts.size(); ++i) {
-                    frame->set(withPorts[i]->index(), getStaticNodeSlot(node->withInputs()[i]));
-                }
-                for (size_t i = 0; i < normPorts.size(); ++i) {
-                    frame->set(normPorts[i]->index(), getStaticNodeSlot(node->normInputs()[i]));
-                }
+            ::Function::create(calleeGraph, calleeGraph->closureType(), mm::autoSpace()),
+            [&](Frame *frame, GCGraph *runtimeGraph) {
+                bindRuntimeGraphArgs(
+                    frame,
+                    runtimeGraph,
+                    ownerGraph,
+                    ownerGraph->withInputsOf(nodeRef),
+                    ownerGraph->normInputsOf(nodeRef));
             });
     }
 
-    std::optional<slot_t> tryExecuteIndirectCall(CallNode *node, std::ostream &os) {
-        if (!node || !node->hasCallee()) {
+    std::optional<slot_t>
+    tryExecuteIndirectCall(GCGraph *ownerGraph, gc_node_ref_t nodeRef, std::ostream &os) {
+        const auto *node = ownerGraph ? ownerGraph->node(nodeRef) : nullptr;
+        if (!node || node->kind != GCNodeKind::Call) {
             return std::nullopt;
         }
-        Node *calleeNode = node->calleeInput();
-        if (calleeNode->type() != NodeType::DATA) {
+        const auto withInputs = ownerGraph->withInputsOf(nodeRef);
+        if (withInputs.empty()) {
             return std::nullopt;
         }
-        auto *funcObj = fromSlot<::Function *>(getStaticNodeSlot(calleeNode));
-        if (!funcObj || !funcObj->graph()->isMacro()) {
+        const auto *calleeNode = ownerGraph->node(withInputs.front());
+        if (!calleeNode || calleeNode->kind != GCNodeKind::Data || calleeNode->dataIndex >= 0) {
             return std::nullopt;
         }
-        if (!areStaticDataInputs(node->withInputs(), 1) ||
-            !areStaticDataInputs(node->normInputs())) {
+        auto *funcObj =
+            fromSlot<::Function *>(getStaticRuntimeNodeSlot(ownerGraph, withInputs.front()));
+        if (!funcObj || !isMacroFunction(funcObj) || macroCallsFunctionParam(funcObj->graph())) {
             return std::nullopt;
         }
-        if (macroCallsFunctionParam(funcObj->graph())) {
+        if (!areStaticRuntimeDataInputs(ownerGraph, withInputs, 1) ||
+            !areStaticRuntimeDataInputs(ownerGraph, ownerGraph->normInputsOf(nodeRef))) {
             return std::nullopt;
         }
-        os << "[macro] execute indirect macro " << funcObj->graph()->name() << "\n";
-        return executeFunction(funcObj, [&](Frame *frame, Graph *graph) {
-            const auto &withPorts = graph->withPorts();
-            const auto &normPorts = graph->normPorts();
-            ASSERT(
-                withPorts.size() + 1 == node->withInputs().size(),
-                "With nodes and ports count mismatch.");
-            ASSERT(
-                normPorts.size() == node->normInputs().size(),
-                "Norm nodes and ports count mismatch.");
-            for (size_t i = 0; i < withPorts.size(); ++i) {
-                frame->set(withPorts[i]->index(), getStaticNodeSlot(node->withArg(i)));
+        os << "[macro] execute indirect macro " << macroFunctionName(funcObj) << "\n";
+        return executeFunction(funcObj, [&](Frame *frame, GCGraph *runtimeGraph) {
+            std::vector<gc_node_ref_t> withArgs;
+            withArgs.reserve(withInputs.size() - 1);
+            for (size_t i = 1; i < withInputs.size(); ++i) {
+                withArgs.push_back(withInputs[i]);
             }
-            for (size_t i = 0; i < normPorts.size(); ++i) {
-                frame->set(normPorts[i]->index(), getStaticNodeSlot(node->normInputs()[i]));
-            }
+            bindRuntimeGraphArgs(
+                frame,
+                runtimeGraph,
+                ownerGraph,
+                withArgs,
+                ownerGraph->normInputsOf(nodeRef));
         });
     }
 
@@ -247,30 +257,34 @@ class MacroExecutor {
         if (!funcObj) {
             throw MacroExecutionError("Macro callee is null.");
         }
-        Graph *graph = funcObj->graph();
-        if (!graph->isMacro()) {
-            throw MacroExecutionError(std::format("'{}' is not marked as macro.", graph->name()));
+        auto *runtimeGraph = funcObj->graph();
+        ASSERT(runtimeGraph != nullptr, "Macro function must carry a runtime graph.");
+        if (!runtimeGraph->isMacro()) {
+            throw MacroExecutionError(
+                std::format("'{}' is not marked as macro.", runtimeGraph->name()));
         }
         if (recursionDepth_ >= kMaxMacroRecursionDepth) {
             throw MacroExecutionError(
-                std::format("Macro recursion depth exceeded at '{}'.", graph->name()));
+                std::format("Macro recursion depth exceeded at '{}'.", runtimeGraph->name()));
         }
 
-        Frame *frame = framePool_.acquire(graph);
+        Frame *frame = framePool_.acquire(runtimeGraph);
         try {
-            fillArgs(frame, graph);
-            if (graph->hasClosure()) {
-                auto *closure            = funcObj->tuple();
-                const auto &closureNodes = graph->closure();
+            fillArgs(frame, runtimeGraph);
+            if (!runtimeGraph->closureNodes().empty()) {
+                auto *closure           = funcObj->tuple();
+                const auto closureNodes = runtimeGraph->closureNodes();
                 ASSERT(
                     closure != nullptr && closureNodes.size() == closure->size(),
-                    "Closure tuple mismatch in macro execution.");
+                    "Runtime closure tuple mismatch in macro execution.");
                 for (size_t i = 0; i < closureNodes.size(); ++i) {
-                    frame->set(closureNodes[i]->index(), closure->get<slot_t>(i));
+                    const auto *closureRecord = runtimeGraph->node(closureNodes[i]);
+                    ASSERT(closureRecord != nullptr, "Macro runtime closure record is missing.");
+                    frame->set(closureRecord->dataIndex, closure->get<slot_t>(i));
                 }
             }
             recursionDepth_++;
-            slot_t result = executeGraph(graph, frame);
+            slot_t result = executeGraph(frame, runtimeGraph);
             recursionDepth_--;
             framePool_.release(frame);
             return result;
@@ -283,204 +297,143 @@ class MacroExecutor {
         }
     }
 
-    std::vector<Node *> buildTopoNodes(Graph *graph) const {
-        (void)requireFinalizedGraphLayout(graph);
-        return findReachable(
-            graph->exitNode(),
-            [](Node *n) {
-                node_vec_t ins;
-                ins.reserve(n->dataInputs().size() + n->ctrlInputs().size());
-                for (const auto &in : n->ctrlInputs()) {
-                    if (&in->graph() == &n->graph()) {
-                        ins.emplace_back(in);
-                    }
-                }
-                for (const auto &in : n->dataInputs()) {
-                    if (&in->graph() == &n->graph()) {
-                        ins.emplace_back(in);
-                    }
-                }
-                return ins;
-            },
-            false);
-    }
-
-    slot_t executeGraph(Graph *graph, Frame *frame) {
+    slot_t executeGraph(Frame *frame, camel::runtime::GCGraph *runtimeGraph) {
+        ASSERT(runtimeGraph != nullptr, "Macro runtime graph execution requires a runtime graph.");
         if (recursionDepth_ > kMaxMacroRecursionDepth) {
             throw MacroExecutionError(
-                std::format("Macro recursion depth exceeded at '{}'.", graph->name()));
+                std::format("Macro recursion depth exceeded at '{}'.", runtimeGraph->name()));
         }
-        auto topoNodes = buildTopoNodes(graph);
-        Node *tillNode = nullptr, *skipNode = nullptr, *joinNode = nullptr;
+        auto runtimeTopoIndices = camel::execute::buildReachableExecutionTopoIndices(runtimeGraph);
+        std::optional<uint32_t> tillRuntimeIndex;
+        std::optional<uint32_t> skipRuntimeIndex;
+        std::optional<uint32_t> joinRuntimeIndex;
 
-        for (Node *node : topoNodes) {
-            if (tillNode) {
-                if (tillNode == node) {
-                    tillNode = nullptr;
-                } else {
-                    continue;
-                }
-            }
-            if (skipNode && skipNode == node) {
-                skipNode = nullptr;
-                tillNode = joinNode;
-            }
+        auto executeNode = [&](uint32_t runtimeNodeIndex) {
+            const auto *node = runtimeGraph->node(runtimeNodeIndex);
+            ASSERT(node != nullptr, "Macro execution encountered a null runtime node.");
 
-            switch (node->type()) {
-            case NodeType::CAST: {
-                const auto &inputNode = node->normInputs().front();
-                Type *srcType         = frame->typeAt<Type>(inputNode->index());
-                Type *dstType         = node->dataType();
-                slot_t value          = frame->get<slot_t>(inputNode->index());
-                frame->set(node->index(), dstType->castSlotFrom(value, srcType));
+            switch (node->kind) {
+            case GCNodeKind::Cast: {
+                const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
+                ASSERT(!normInputs.empty(), "CAST node must have one norm input.");
+                gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
+                Type *srcType        = frame->typeAt<Type>(srcIdx);
+                Type *dstType        = node->dataType;
+                slot_t value         = frame->get<slot_t>(srcIdx);
+                frame->set(node->dataIndex, dstType->castSlotFrom(value, srcType));
             } break;
 
-            case NodeType::COPY: {
-                const auto &inputNode = node->normInputs().front();
-                data_idx_t srcIdx     = inputNode->index();
-                TypeCode srcCode      = frame->codeAt(srcIdx);
+            case GCNodeKind::Copy: {
+                const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
+                ASSERT(!normInputs.empty(), "COPY node must have one norm input.");
+                gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
+                TypeCode srcCode     = frame->codeAt(srcIdx);
                 if (isGCTraced(srcCode)) {
                     Object *srcData  = frame->get<Object *>(srcIdx);
                     Type *srcTypePtr = frame->typeAt<Type>(srcIdx);
-                    frame->set(node->index(), srcData->clone(mm::autoSpace(), srcTypePtr, false));
+                    frame->set(node->dataIndex, srcData->clone(mm::autoSpace(), srcTypePtr, false));
                 } else {
-                    frame->set(node->index(), frame->get<slot_t>(srcIdx));
+                    frame->set(node->dataIndex, frame->get<slot_t>(srcIdx));
                 }
             } break;
 
-            case NodeType::FILL: {
-                const auto &srcNode    = node->normInputs().front();
-                const auto &dataInputs = node->withInputs();
-                TypeCode srcCode       = frame->codeAt(srcNode->index());
-                Type *srcType          = frame->typeAt<Type>(srcNode->index());
-                ASSERT(isGCTraced(srcCode), "FILL target type is not GC-traced.");
-                Object *srcObj =
-                    frame->get<Object *>(srcNode->index())->clone(mm::autoSpace(), srcType, false);
+            case GCNodeKind::Fill: {
+                const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
+                const auto dataInputs = runtimeGraph->withInputsOf(runtimeNodeIndex);
+                ASSERT(!normInputs.empty(), "FILL node must have one source input.");
+                gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
+                Type *srcType        = node->dataType;
+                ASSERT(isGCTraced(srcType->code()), "FILL target type is not GC-traced.");
+                Object *sourceObj = frame->get<Object *>(srcIdx);
+                ASSERT(sourceObj != nullptr, "FILL source object is null.");
+                Object *srcObj = sourceObj->clone(mm::autoSpace(), srcType, false);
                 ASSERT(srcObj != nullptr, "FILL target data is null.");
-
-                switch (srcCode) {
-                case TypeCode::Tuple: {
-                    auto *type         = tt::as_ptr<TupleType>(srcType);
-                    auto *tuple        = tt::as_ptr<::Tuple>(srcObj);
-                    const size_t *refs = type->refs();
-                    for (size_t i = 0; i < dataInputs.size(); ++i) {
-                        tuple->set<slot_t>(refs[i], frame->get<slot_t>(dataInputs[i]->index()));
-                    }
-                } break;
-                case TypeCode::Array: {
-                    auto *array = tt::as_ptr<::Array>(srcObj);
-                    for (size_t i = 0; i < dataInputs.size(); ++i) {
-                        array->set<slot_t>(i, frame->get<slot_t>(dataInputs[i]->index()));
-                    }
-                } break;
-                case TypeCode::Struct: {
-                    auto *type         = tt::as_ptr<StructType>(srcType);
-                    auto *st           = tt::as_ptr<::Struct>(srcObj);
-                    const size_t *refs = type->refs();
-                    for (size_t i = 0; i < dataInputs.size(); ++i) {
-                        st->set<slot_t>(refs[i], frame->get<slot_t>(dataInputs[i]->index()));
-                    }
-                } break;
-                case TypeCode::Function: {
-                    auto *func  = tt::as_ptr<::Function>(srcObj);
-                    auto *tuple = func->tuple();
-                    for (size_t i = 0; i < dataInputs.size(); ++i) {
-                        tuple->set<slot_t>(i, frame->get<slot_t>(dataInputs[i]->index()));
-                    }
-                } break;
-                default:
-                    throw MacroExecutionError(
-                        std::format("Unsupported FILL target type '{}'.", srcType->toString()));
+                std::vector<slot_t> fillValues;
+                fillValues.reserve(dataInputs.size());
+                for (auto input : dataInputs) {
+                    fillValues.push_back(frame->get<slot_t>(dataIndexOf(runtimeGraph, input)));
                 }
-                frame->set(node->index(), srcObj);
+                camel::execute::writeRuntimeFillSlots(
+                    srcObj,
+                    srcType,
+                    runtimeGraph->nodeBodyAs<camel::runtime::GCFillBody>(runtimeNodeIndex),
+                    fillValues);
+                frame->set(node->dataIndex, srcObj);
             } break;
 
-            case NodeType::ACCS: {
-                auto *accsNode    = tt::as_ptr<AccsNode>(node);
-                data_idx_t srcIdx = node->dataInputs().front()->index();
-                if (accsNode->isNum()) {
-                    size_t idx  = accsNode->numIndex();
+            case GCNodeKind::Accs: {
+                const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
+                ASSERT(!normInputs.empty(), "ACCS node must have one source input.");
+                gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
+                const auto *body     = runtimeGraph->nodeBodyAs<GCAccsBody>(runtimeNodeIndex);
+                if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
+                    size_t idx  = body->value;
                     auto *tuple = frame->get<::Tuple *>(srcIdx);
-                    frame->set(node->index(), tuple->get<slot_t>(idx));
+                    frame->set(node->dataIndex, tuple->get<slot_t>(idx));
                 } else {
-                    auto key         = accsNode->strIndex();
-                    auto *st         = frame->get<::Struct *>(srcIdx);
-                    Type *structType = frame->typeAt<Type>(srcIdx);
-                    frame->set(node->index(), st->get<slot_t>(key, structType));
+                    const std::string_view keyView = body->key();
+                    auto key                       = std::string(keyView.data(), keyView.size());
+                    auto *st                       = frame->get<::Struct *>(srcIdx);
+                    Type *structType               = frame->typeAt<Type>(srcIdx);
+                    frame->set(node->dataIndex, st->get<slot_t>(key, structType));
                 }
             } break;
 
-            case NodeType::BRCH: {
-                const auto &normIns = node->normInputs();
-                const auto &withIns = node->withInputs();
-                ASSERT(normIns.size() == 1, "BRCH node must have exactly one norm input.");
-
-                size_t jumpIdx = 0;
-                if (withIns.empty()) {
-                    bool cond = frame->get<bool>(normIns.front()->index());
-                    jumpIdx   = cond ? 0 : 1;
-                } else {
-                    TypeCode condType = frame->codeAt(normIns.front()->index());
-                    size_t i          = 0;
-                    if (isGCTraced(condType)) {
-                        Type *condTypePtr = frame->typeAt<Type>(normIns.front()->index());
-                        Object *condData  = frame->get<Object *>(normIns.front()->index());
-                        for (; i < withIns.size(); ++i) {
-                            Object *caseData = frame->get<Object *>(withIns[i]->index());
-                            if (condData->equals(caseData, condTypePtr, false)) {
-                                jumpIdx = i;
-                                break;
-                            }
-                        }
-                    } else {
-                        slot_t condData = frame->get<slot_t>(normIns.front()->index());
-                        for (; i < withIns.size(); ++i) {
-                            if (condData == frame->get<slot_t>(withIns[i]->index())) {
-                                jumpIdx = i;
-                                break;
-                            }
-                        }
-                    }
-                    if (i == withIns.size()) {
-                        jumpIdx = withIns.size();
-                    }
-                }
-
-                frame->set(node->index(), fromSlot<Int32>(static_cast<Int32>(jumpIdx)));
-                auto *brchNode   = tt::as_ptr<BrchNode>(node);
-                auto *targetJoin = brchNode->matchedJoin();
-                tillNode         = brchNode->armHead(jumpIdx);
-                skipNode         = targetJoin->armTail(jumpIdx);
-                joinNode         = targetJoin;
+            case GCNodeKind::Brch: {
+                const size_t jumpIdx =
+                    camel::execute::selectRuntimeBranchArm(runtimeGraph, runtimeNodeIndex, frame);
+                frame->set(node->dataIndex, fromSlot<Int32>(static_cast<Int32>(jumpIdx)));
             } break;
 
-            case NodeType::JOIN: {
-                const auto &nargs = node->normInputs();
-                const auto &wargs = node->withInputs();
-                int32_t brIndex   = frame->get<int32_t>(nargs.front()->index());
-                slot_t branchData =
-                    frame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]->index());
-                frame->set(node->index(), branchData);
+            case GCNodeKind::Join: {
+                std::vector<gc_data_idx_t> nargs;
+                std::vector<gc_data_idx_t> wargs;
+                for (uint32_t inputIndex : runtimeGraph->normInputsOf(runtimeNodeIndex)) {
+                    const auto *inputRecord = runtimeGraph->node(inputIndex);
+                    ASSERT(
+                        inputRecord != nullptr,
+                        "Macro runtime JOIN norm input record is missing.");
+                    nargs.push_back(inputRecord->dataIndex);
+                }
+                for (uint32_t inputIndex : runtimeGraph->withInputsOf(runtimeNodeIndex)) {
+                    const auto *inputRecord = runtimeGraph->node(inputIndex);
+                    ASSERT(
+                        inputRecord != nullptr,
+                        "Macro runtime JOIN with input record is missing.");
+                    wargs.push_back(inputRecord->dataIndex);
+                }
+                int32_t brIndex = frame->get<int32_t>(nargs.front());
+                if (node->dataIndex == 0) {
+                    break;
+                }
+                if (node->dataType == Type::Void()) {
+                    frame->set(node->dataIndex, NullSlot);
+                    break;
+                }
+                slot_t branchData = frame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
+                frame->set(node->dataIndex, branchData);
             } break;
 
-            case NodeType::CALL: {
-                auto *callNode = tt::as_ptr<CallNode>(node);
-                if (!callNode->hasCallee()) {
-                    throw MacroExecutionError("CALL node has no callee.");
-                }
-                Node *calleeInput   = callNode->calleeInput();
+            case GCNodeKind::Call: {
+                gc_data_idx_t calleeSlot = 0;
+                const auto withInputs    = runtimeGraph->withInputsOf(runtimeNodeIndex);
+                ASSERT(!withInputs.empty(), "Runtime CALL node must expose a callee input.");
+                const auto *calleeRecord = runtimeGraph->node(withInputs.front());
+                ASSERT(calleeRecord != nullptr, "Runtime CALL callee record is missing.");
+                calleeSlot          = calleeRecord->dataIndex;
                 ::Function *funcObj = nullptr;
                 bool calleeIsMacro  = false;
-                if (calleeInput->type() == NodeType::DATA) {
-                    funcObj = fromSlot<::Function *>(getStaticNodeSlot(calleeInput));
+                if (calleeSlot < 0) {
+                    funcObj = fromSlot<::Function *>(
+                        getStaticRuntimeNodeSlot(runtimeGraph, withInputs.front()));
                     if (!funcObj) {
                         throw MacroExecutionError("CALL static callee is null.");
                     }
-                    calleeIsMacro = funcObj->graph()->isMacro();
+                    calleeIsMacro = isMacroFunction(funcObj);
                 } else {
-                    funcObj = frame->get<::Function *>(calleeInput->index());
+                    funcObj = frame->get<::Function *>(calleeSlot);
                     if (funcObj) {
-                        calleeIsMacro = funcObj->graph()->isMacro();
+                        calleeIsMacro = isMacroFunction(funcObj);
                     }
                 }
                 if (!funcObj) {
@@ -491,25 +444,22 @@ class MacroExecutor {
                         "Macro cannot call non-macro function at compile time (use runtime "
                         "instead).");
                 }
-                Graph *funcGraph   = funcObj->graph();
-                Frame *calleeFrame = framePool_.acquire(funcGraph);
+                auto *calleeRuntimeGraph = funcObj->graph();
+                ASSERT(
+                    calleeRuntimeGraph != nullptr,
+                    "Macro CALL callee is missing runtime graph.");
+                Frame *calleeFrame = framePool_.acquire(calleeRuntimeGraph);
                 try {
-                    fillFrameForIndirectCall(frame, calleeFrame, funcGraph, node);
-                    if (funcGraph->hasClosure()) {
-                        auto *closure            = funcObj->tuple();
-                        const auto &closureNodes = funcGraph->closure();
-                        ASSERT(
-                            closure != nullptr && closureNodes.size() == closure->size(),
-                            "Closure tuple mismatch in macro CALL.");
-                        for (size_t i = 0; i < closureNodes.size(); ++i) {
-                            calleeFrame->set(closureNodes[i]->index(), closure->get<slot_t>(i));
-                        }
-                    }
+                    camel::execute::fillFrameForIndirectCall(
+                        frame,
+                        calleeFrame,
+                        runtimeGraph,
+                        runtimeNodeIndex);
                     recursionDepth_++;
-                    slot_t result = executeGraph(funcGraph, calleeFrame);
+                    slot_t result = executeGraph(calleeFrame, calleeRuntimeGraph);
                     recursionDepth_--;
                     framePool_.release(calleeFrame);
-                    frame->set(node->index(), result);
+                    frame->set(node->dataIndex, result);
                 } catch (...) {
                     if (recursionDepth_ > 0) {
                         recursionDepth_--;
@@ -519,17 +469,23 @@ class MacroExecutor {
                 }
             } break;
 
-            case NodeType::FUNC: {
-                auto *funcNode     = tt::as_ptr<FuncNode>(node);
-                Graph *funcGraph   = funcNode->bodyGraph();
-                Frame *calleeFrame = framePool_.acquire(funcGraph);
+            case GCNodeKind::Func: {
+                auto *calleeRuntimeGraph = runtimeGraph->directCalleeGraphOf(runtimeNodeIndex);
+                ASSERT(
+                    calleeRuntimeGraph != nullptr,
+                    "Runtime FUNC node must have a direct runtime callee graph.");
+                Frame *calleeFrame = framePool_.acquire(calleeRuntimeGraph);
                 try {
-                    fillFrameForDirectFunc(frame, calleeFrame, funcGraph, node);
+                    camel::execute::fillFrameForDirectInvoke(
+                        frame,
+                        calleeFrame,
+                        runtimeGraph,
+                        runtimeNodeIndex);
                     recursionDepth_++;
-                    slot_t result = executeGraph(funcGraph, calleeFrame);
+                    slot_t result = executeGraph(calleeFrame, calleeRuntimeGraph);
                     recursionDepth_--;
                     framePool_.release(calleeFrame);
-                    frame->set(node->index(), result);
+                    frame->set(node->dataIndex, result);
                 } catch (...) {
                     if (recursionDepth_ > 0) {
                         recursionDepth_--;
@@ -539,28 +495,29 @@ class MacroExecutor {
                 }
             } break;
 
-            case NodeType::OPER: {
-                auto *operNode = tt::as_ptr<OperNode>(node);
-                operator_t op  = operNode->getCachedOp();
+            case GCNodeKind::Oper: {
+                const auto *body = runtimeGraph->nodeBodyAs<GCOperBody>(runtimeNodeIndex);
+                operator_t op    = body->op;
                 if (!op) {
-                    const auto &uri = operNode->oper()->uri();
-                    auto found      = context_->execMgr().find(uri);
+                    const auto uri = std::string(body->uri());
+                    auto found     = context_->execMgr().find(uri);
                     if (!found) {
                         throw MacroExecutionError(
                             std::format("Operator '{}' is unavailable in macro execution.", uri));
                     }
                     op = *found;
-                    operNode->setCachedOp(op);
                 }
 
-                std::vector<data_idx_t> indices;
-                indices.reserve(node->normInputs().size() + node->withInputs().size());
-                for (const auto &in : node->normInputs()) {
-                    indices.push_back(in->index());
+                const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
+                const auto withInputs = runtimeGraph->withInputsOf(runtimeNodeIndex);
+                std::vector<gc_data_idx_t> indices;
+                indices.reserve(normInputs.size() + withInputs.size());
+                for (gc_node_ref_t in : normInputs) {
+                    indices.push_back(dataIndexOf(runtimeGraph, in));
                 }
                 size_t normCount = indices.size();
-                for (const auto &in : node->withInputs()) {
-                    indices.push_back(in->index());
+                for (gc_node_ref_t in : withInputs) {
+                    indices.push_back(dataIndexOf(runtimeGraph, in));
                 }
 
                 data_arr_t nargs{indices.data(), normCount};
@@ -568,107 +525,119 @@ class MacroExecutor {
                 FrameArgsView withView(*frame, wargs);
                 FrameArgsView normView(*frame, nargs);
                 slot_t result = (*op)(withView, normView, *context_);
-                frame->set(node->index(), result);
+                frame->set(node->dataIndex, result);
             } break;
 
-            case NodeType::DATA: {
-                frame->set(node->index(), getStaticNodeSlot(node));
+            case GCNodeKind::Data: {
+                frame->set(
+                    node->dataIndex,
+                    getStaticRuntimeNodeSlot(runtimeGraph, runtimeNodeIndex));
             } break;
 
-            case NodeType::PORT:
-            case NodeType::SYNC:
-            case NodeType::GATE:
+            case GCNodeKind::Port:
+            case GCNodeKind::Sync:
+            case GCNodeKind::Gate:
                 break;
 
             default:
                 throw MacroExecutionError(
-                    std::format("Unsupported node '{}' in macro execution.", node->toString()));
+                    std::format(
+                        "Unsupported runtime node kind {} in macro execution.",
+                        static_cast<int>(node->kind)));
+            }
+        };
+
+        for (uint32_t runtimeNodeIndex : runtimeTopoIndices) {
+            if (tillRuntimeIndex.has_value()) {
+                if (*tillRuntimeIndex == runtimeNodeIndex) {
+                    tillRuntimeIndex.reset();
+                } else {
+                    continue;
+                }
+            }
+            if (skipRuntimeIndex.has_value() && *skipRuntimeIndex == runtimeNodeIndex) {
+                skipRuntimeIndex.reset();
+                tillRuntimeIndex = joinRuntimeIndex;
+            }
+
+            executeNode(runtimeNodeIndex);
+
+            const auto *record = runtimeGraph->node(runtimeNodeIndex);
+            if (record != nullptr && record->kind == camel::runtime::GCNodeKind::Brch) {
+                size_t jumpIdx = static_cast<size_t>(frame->get<Int32>(record->dataIndex));
+                auto armRegion = camel::execute::collectRuntimeBranchArmRegion(
+                    runtimeGraph,
+                    runtimeNodeIndex,
+                    jumpIdx);
+                tillRuntimeIndex = armRegion.headIndex;
+                joinRuntimeIndex = armRegion.joinIndex;
+                skipRuntimeIndex = armRegion.tailIndex;
             }
         }
-
-        Node *outputNode = graph->outputNode();
-        return frame->get<slot_t>(outputNode->index());
+        return camel::execute::readRuntimeGraphReturn(runtimeGraph, frame);
     }
 };
 
-std::vector<graph_ptr_t> collectAllGraphs(const graph_ptr_t &root) {
-    std::vector<graph_ptr_t> result;
-    std::unordered_set<Graph *> visited;
-    std::function<void(const graph_ptr_t &)> dfs = [&](const graph_ptr_t &graph) {
-        if (!graph || !visited.insert(graph.get()).second) {
-            return;
-        }
-        result.push_back(graph);
-        for (auto &[_, subGraphs] : graph->subGraphs()) {
-            for (const auto &subGraph : subGraphs) {
-                dfs(subGraph);
-            }
-        }
-        for (const auto &dep : graph->dependencies()) {
-            dfs(dep);
-        }
-    };
-    dfs(root);
-    return result;
-}
-
-Node *materializeMacroResult(
-    GraphRewriteSession &session, const graph_ptr_t &owner, slot_t resultSlot, Type *resultType) {
-    ASSERT(owner != nullptr, "Owner graph is null.");
-    if (resultType->code() == TypeCode::Function) {
-        auto *funcObj = fromSlot<::Function *>(resultSlot);
-        if (funcObj && funcObj->graph() != owner.get()) {
-            session.addDependency(owner, funcObj->graph()->shared_from_this());
-        }
-    }
-    Node *node = DataNode::createStaticSlot(*owner, resultType, resultSlot);
-    if (resultType->code() == TypeCode::Function) {
-        auto *funcObj = fromSlot<::Function *>(resultSlot);
-        if (funcObj && funcObj->graph()->isMacro()) {
-            detail::NodeMutation::setMacro(node, true);
-        }
-    }
-    return node;
-}
-
 } // namespace
 
-graph_ptr_t MacroRewritePass::apply(graph_ptr_t &graph, ostream &os) {
+camel::runtime::GCGraph *MacroRewritePass::apply(camel::runtime::GCGraph *graph, ostream &os) {
     if (!graph) {
-        return graph;
+        return nullptr;
     }
+    camel::runtime::RuntimeGraphDraftSession runtimeSession(context_, graph);
 
-    GraphRewriteSession session(graph);
-    graph_ptr_t workingRoot = session.root();
     MacroExecutor executor(context_);
-    bool changed = true;
-    while (changed) {
-        changed     = false;
-        auto graphs = collectAllGraphs(workingRoot);
-        for (const auto &currGraph : graphs) {
-            auto nodes = currGraph->nodes();
-            for (Node *node : nodes) {
-                if (std::find(currGraph->nodes().begin(), currGraph->nodes().end(), node) ==
-                    currGraph->nodes().end()) {
-                    continue;
-                }
 
-                auto result = executor.tryExecute(node, os);
+    while (true) {
+        bool roundChanged = false;
+        const std::vector<camel::runtime::GCGraph *> runtimeGraphs =
+            runtimeSession.collectReachableRuntimeGraphs();
+        for (camel::runtime::GCGraph *runtimeGraph : runtimeGraphs) {
+            if (!runtimeGraph) {
+                continue;
+            }
+            camel::runtime::GraphDraft &draft = runtimeSession.edit(runtimeGraph);
+            for (auto it = runtimeGraph->nodes().begin(); it != runtimeGraph->nodes().end(); ++it) {
+                const camel::runtime::gc_node_ref_t runtimeNodeRef = it.ref();
+                const auto *runtimeNode                            = *it;
+                auto result = executor.tryExecute(runtimeGraph, runtimeNodeRef, os);
                 if (!result.has_value()) {
                     continue;
                 }
 
-                Node *newNode =
-                    materializeMacroResult(session, currGraph, *result, node->dataType());
-                session.replaceNode(node, newNode);
-                changed = true;
-                os << "[macro] rewrote " << node->debugEntityId() << " -> "
-                   << newNode->debugEntityId() << "\n";
+                const camel::runtime::gc_node_ref_t draftNodeId =
+                    draft.draftIdOfSourceRef(runtimeNodeRef);
+                ASSERT(
+                    draftNodeId != camel::runtime::kInvalidNodeRef,
+                    "Macro rewrite lost runtime-to-draft node mapping.");
+                const camel::runtime::gc_node_ref_t newNodeId = draft.materializeStaticValue(
+                    *result,
+                    runtimeNode->dataType,
+                    runtimeNode->flags);
+                draft.replaceAllValueUses(draftNodeId, newNodeId);
+                draft.replaceAllCtrlUses(draftNodeId, newNodeId);
+                if (draft.outputNode() == draftNodeId) {
+                    draft.setOutputNode(newNodeId);
+                }
+                if (draft.returnNode() == draftNodeId) {
+                    draft.setReturnNode(newNodeId, camel::runtime::GCReturnKind::Self);
+                }
+                draft.eraseNode(draftNodeId);
+                roundChanged = true;
+                os << "[macro] rewrote " << runtimeGraph->name() << "::ref#" << runtimeNodeRef
+                   << " -> draft#" << newNodeId << "\n";
             }
         }
+
+        if (!roundChanged) {
+            break;
+        }
+        graph = runtimeSession.commit();
+        if (!graph) {
+            return nullptr;
+        }
+        runtimeSession = camel::runtime::RuntimeGraphDraftSession(context_, graph);
     }
 
-    auto result = session.finish();
-    graph       = result.graph;
     return graph;
 }

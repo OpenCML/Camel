@@ -13,16 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/utils/windows_parser_guard.h"
 
 #include "camel/core/module/userdef.h"
+#include "core/module/userdef_internal.h"
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
+#include "camel/compile/gir/encode.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/parse/parse.h"
 #include "compile/gct/builder.h"
@@ -33,6 +35,7 @@
 
 #include "camel/utils/log.h"
 
+#include <cstdio>
 #include <filesystem>
 
 namespace fs = std::filesystem;
@@ -43,8 +46,6 @@ using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::error;
 using namespace camel::parse;
-
-namespace GIR = camel::compile::gir;
 
 UserDefinedModule::UserDefinedModule(
     const std::string &name, const std::string &path, context_ptr_t ctx, parser_ptr_t parser)
@@ -71,20 +72,26 @@ UserDefinedModule::fromFile(const std::string &name, const std::string &path, co
     return std::make_shared<UserDefinedModule>(name, path, ctx);
 }
 
+const void *camel::core::module::detail::UserDefinedModuleAccess::compileGraphOpaque(
+    const UserDefinedModule &module) {
+    return camel::compile::gir::compileGraphOpaque(module.compileGraph_);
+}
+
+camel::runtime::GCGraph *camel::core::module::detail::UserDefinedModuleAccess::encodeRuntimeGraph(
+    const UserDefinedModule &module) {
+    return camel::compile::gir::encodeToRuntimeGraph(module.compileGraph_);
+}
+
 bool UserDefinedModule::compile(CompileStage till) {
     if (till <= stage_) {
         return true;
     }
     if (stage_ == CompileStage::Done) {
-        EXEC_WHEN_DEBUG(GetDefaultLogger().in("Module").warn("Module '{}' already built", name_));
+        CAMEL_LOG_WARN_S("Module", "Module '{}' already built", name_);
         return true;
     }
     if (stage_ == CompileStage::None) {
-        EXEC_WHEN_DEBUG(
-            GetDefaultLogger().in("Module").info(
-                "Start compiling module '{}' from file '{}'.",
-                name_,
-                path_));
+        CAMEL_LOG_INFO_S("Module", "Start compiling module '{}' from file '{}'.", name_, path_);
     }
 
     if (stage_ == CompileStage::None && till > CompileStage::None) {
@@ -99,14 +106,12 @@ bool UserDefinedModule::compile(CompileStage till) {
             }
         }
         if (diagnostics_->hasErrors()) {
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("Module").error("Module '{}' failed to parse", name_));
+            CAMEL_LOG_FATAL_S("Module", "Module '{}' failed to parse", name_);
             return false;
         }
         if (till == CompileStage::AST) {
             stage_ = CompileStage::AST;
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("Module").info("Module '{}' built successfully.", name_));
+            CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_);
             return true;
         }
     }
@@ -118,42 +123,34 @@ bool UserDefinedModule::compile(CompileStage till) {
             gct_            = gctBuilder.build(ast, diagnostics_);
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GCT", gct_.get()); });
             if (diagnostics_->hasErrors()) {
-                EXEC_WHEN_DEBUG(
-                    GetDefaultLogger().in("Module").error(
-                        "Module '{}' failed to build GCT",
-                        name_));
+                CAMEL_LOG_FATAL_S("Module", "Module '{}' failed to build GCT", name_);
                 return false;
             }
         }
         if (till == CompileStage::GCT) {
             stage_ = CompileStage::GCT;
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("Module").info("Module '{}' built successfully.", name_));
+            CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_);
             return true;
         }
     }
 
     if (stage_ < CompileStage::GIR && till >= CompileStage::GIR) {
-        if (!gir_) {
-            auto girBuilder = GIR::Builder(context_, shared_from_this());
-            gir_            = girBuilder.build(gct_, diagnostics_);
+        if (!compileGraph_) {
+            auto girBuilder = camel::compile::gir::Builder(context_, shared_from_this());
+            compileGraph_   = girBuilder.build(gct_, diagnostics_);
             if (diagnostics_->hasErrors()) {
-                EXEC_WHEN_DEBUG(
-                    GetDefaultLogger().in("Module").error(
-                        "Module '{}' failed to build GIR",
-                        name_));
+                CAMEL_LOG_FATAL_S("Module", "Module '{}' failed to build GIR", name_);
                 return false;
             }
         }
         if (till == CompileStage::GIR) {
             stage_ = CompileStage::GIR;
-            EXEC_WHEN_DEBUG(
-                GetDefaultLogger().in("Module").info("Module '{}' built successfully.", name_));
+            CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_);
             return true;
         }
     }
 
     stage_ = CompileStage::Done;
-    EXEC_WHEN_DEBUG(GetDefaultLogger().in("Module").info("Module '{}' built successfully.", name_));
+    CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_);
     return true;
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Mar. 07, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,16 +33,9 @@ class Operator;
 class OperatorIndex;
 class OperatorGroup;
 
-namespace camel::compile::gir {
-class Node;
-class Graph;
-using data_idx_t  = int16_t;
-using arr_size_t  = uint16_t;
-using graph_ptr_t = std::shared_ptr<Graph>;
-} // namespace camel::compile::gir
-
-namespace GIR    = camel::compile::gir;
-using data_arr_t = std::span<const GIR::data_idx_t>;
+using data_idx_t = int16_t;
+using arr_size_t = uint16_t;
+using data_arr_t = std::span<const data_idx_t>;
 
 namespace type    = camel::core::type;
 namespace rtdata  = camel::core::rtdata;

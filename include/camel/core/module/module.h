@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 20, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,18 +30,40 @@
 #include "camel/core/operator.h"
 
 namespace camel::compile::gir {
-class Node;
-class Graph;
-using graph_ptr_t     = std::shared_ptr<Graph>;
-using graph_vec_t     = std::vector<graph_ptr_t>;
-using graph_vec_ptr_t = std::shared_ptr<graph_vec_t>;
-} // namespace camel::compile::gir
+class DraftGraphBuilder;
+}
 
-namespace GIR = camel::compile::gir;
 namespace camel::core::module {
 
-using Type   = camel::core::type::Type;
-using entity = std::variant<GIR::Node *, GIR::graph_vec_ptr_t, oper_group_ptr_t, GIR::graph_ptr_t>;
+namespace detail {
+class EntityAccess;
+}
+
+using Type = camel::core::type::Type;
+class Entity {
+  public:
+    Entity() = default;
+    Entity(oper_group_ptr_t ops) : storage_(std::move(ops)) {}
+    bool isOperGroup() const { return std::holds_alternative<oper_group_ptr_t>(storage_); }
+    const oper_group_ptr_t &operGroup() const { return std::get<oper_group_ptr_t>(storage_); }
+
+  private:
+    friend class detail::EntityAccess;
+
+    using node_payload_t      = void *;
+    using graph_payload_t     = std::shared_ptr<camel::compile::gir::DraftGraphBuilder>;
+    using graph_set_payload_t = std::vector<graph_payload_t>;
+    using graph_set_ptr_t     = std::shared_ptr<graph_set_payload_t>;
+    using storage_t =
+        std::variant<node_payload_t, graph_set_ptr_t, oper_group_ptr_t, graph_payload_t>;
+
+    explicit Entity(node_payload_t node) : storage_(node) {}
+    explicit Entity(graph_set_ptr_t graphs) : storage_(std::move(graphs)) {}
+    explicit Entity(graph_payload_t graph) : storage_(std::move(graph)) {}
+
+    storage_t storage_;
+};
+using entity          = Entity;
 using entity_ns_ptr_t = std::shared_ptr<Namespace<std::string, entity>>;
 using type_ns_ptr_t   = std::shared_ptr<Namespace<std::string, Type *>>;
 
@@ -56,9 +78,10 @@ class Module : public std::enable_shared_from_this<Module> {
     type_ns_ptr_t exportedTypeNS_;
     entity_ns_ptr_t exportedEntityNS_;
     std::vector<Reference> defaultImportedRefs_;
-    /// 同一 ref 可能来自多个模块（同名函数/算子重载），按 ref 聚合模块列表
+    /// A ref may come from multiple modules (same-name function/operator overloads);
+    /// group modules by ref.
     std::unordered_map<Reference, std::vector<std::shared_ptr<Module>>> importedRefModMap_;
-    /// 合并后的导入 entity 缓存，避免每次查询都做多模块合并
+    /// Cache merged imported entities to avoid re-merging on every query.
     mutable std::unordered_map<Reference, entity> importedEntityCache_;
 
   public:
@@ -80,7 +103,7 @@ class Module : public std::enable_shared_from_this<Module> {
     bool exportType(const Reference &ref, Type *type);
     bool exportEntity(const Reference &ref, const entity &ent);
 
-    /// Returns true if this module imports the given module
+    /// Return true if this module imports the given module.
     bool imports(const std::shared_ptr<Module> &mod) const;
 
     std::optional<Type *> getImportedType(const Reference &ref) const;

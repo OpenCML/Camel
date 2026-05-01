@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 27, 2025
- * Updated: Feb. 20, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -66,7 +66,7 @@ inline std::string encodeEscapes(const std::string &input) {
             if (std::isprint(c)) {
                 oss << c;
             } else {
-                // 非可打印字符，使用十六进制 \xHH 表示
+                // Non-printable characters are emitted as hexadecimal \xHH.
                 oss << "\\x" << std::hex << std::uppercase << std::setw(2) << std::setfill('0')
                     << (int)c;
             }
@@ -126,7 +126,7 @@ inline std::string decodeEscapes(const std::string &input) {
                 oss << '\'';
                 i += 2;
                 break;
-            case '0': { // \0 或 \nnn 八进制
+            case '0': { // \0 or \nnn octal
                 size_t j = i + 1;
                 std::string oct;
                 while (j < len && oct.length() < 3 && input[j] >= '0' && input[j] <= '7') {
@@ -138,12 +138,12 @@ inline std::string decodeEscapes(const std::string &input) {
                     oss << ch;
                     i = j;
                 } else {
-                    oss << '\0'; // 单独的 \0
+                    oss << '\0'; // A standalone \0
                     i += 2;
                 }
             } break;
 
-            case 'x': { // \xHH 十六进制
+            case 'x': { // \xHH hexadecimal
                 size_t j = i + 2;
                 std::string hex;
                 while (j < len && hex.length() < 2 && std::isxdigit(input[j])) {

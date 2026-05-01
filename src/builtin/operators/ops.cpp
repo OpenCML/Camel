@@ -13,12 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "ops.h"
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
 #include "camel/utils/assert.h"
@@ -27,8 +26,7 @@
 
 #include "camel/core/error/runtime.h"
 
-namespace GIR = camel::compile::gir;
-namespace mm  = camel::core::mm;
+namespace mm = camel::core::mm;
 using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::type;
@@ -213,7 +211,7 @@ slot_t __builtin__assn_mat__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __builtin__or__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Bool lhs = norm.get<Bool>(0);
     if (lhs) {
-        // 左值为真则短路
+        // Short-circuit when the left operand is true.
         return toSlot(true);
     } else {
         Bool rhs = norm.get<Bool>(1);
@@ -224,7 +222,7 @@ slot_t __builtin__or__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __builtin__and__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Bool lhs = norm.get<Bool>(0);
     if (!lhs) {
-        // 左值为假则短路
+        // Short-circuit when the left operand is false.
         return toSlot(false);
     } else {
         Bool rhs = norm.get<Bool>(1);
@@ -448,7 +446,7 @@ slot_t __builtin__mat__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return NullSlot;
 }
 
-// 幂运算
+// Exponentiation operator.
 slot_t __builtin__pow__(ArgsView &with, ArgsView &norm, Context &ctx) {
     TypeCode lhsType = norm.code(0);
     switch (lhsType) {
@@ -488,7 +486,7 @@ slot_t __builtin__pow__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
     TypeCode idxType = norm.code(1);
 
-    // 数组索引：index 为 Int
+    // Array indexing: index must be Int.
     if (idxType == TypeCode::Int64) {
         TypeCode containerType = norm.code(0);
         switch (containerType) {
@@ -521,7 +519,7 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
     }
 
-    // 结构体索引：index 为 String
+    // Struct indexing: index must be String.
     if (idxType == TypeCode::String) {
         Struct *st                  = norm.get<Struct *>(0);
         String *keyObj              = norm.get<String *>(1);
@@ -535,7 +533,7 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
         return st->get<slot_t>(key, structType);
     }
 
-    // 不支持的索引类型
+    // Unsupported index type.
     return NullSlot;
 }
 

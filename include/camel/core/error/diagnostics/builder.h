@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,7 +49,7 @@ class DiagnosticBuilder {
     template <typename... Args> Diagnostic commit(Args &&...args);
 
   private:
-    friend class Diagnostics; // 允许 Diagnostics 访问私有成员
+    friend class Diagnostics; // Allow Diagnostics to access private members.
 
     Diagnostics *diagnostics_;
     SourceRange range_{};

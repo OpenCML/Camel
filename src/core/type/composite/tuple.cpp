@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -104,10 +104,10 @@ TupleType::TupleType(const TupleTypeLayout &layout, const std::vector<Type *> &t
 
 TupleType *TupleType::create() {
     TupleTypeLayout layout = computeLayout(0, 0);
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("TupleType")
-            .debug("Allocating TupleType: (), size: {} bytes", layout.totalSize));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "TupleType",
+        "Allocating TupleType: (), size: {} bytes",
+        layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
     ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
     return new (mem) TupleType(layout, nullptr, nullptr, nullptr);
@@ -120,14 +120,12 @@ TupleType *TupleType::create(const std::vector<Type *> &types) {
             ++refCount;
     }
     TupleTypeLayout layout = computeLayout(types.size(), refCount);
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("TupleType")
-            .debug(
-                "Allocating TupleType: size={}, refCount={}, totalSize: {} bytes",
-                layout.size,
-                layout.refCount,
-                layout.totalSize));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "TupleType",
+        "Allocating TupleType: size={}, refCount={}, totalSize: {} bytes",
+        layout.size,
+        layout.refCount,
+        layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
     ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
     return new (mem) TupleType(layout, types);
@@ -143,14 +141,12 @@ TupleType *TupleType::fromFactory(TupleTypeFactory &factory) {
             ++refCount;
     }
     TupleTypeLayout layout = computeLayout(size, refCount);
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("TupleType")
-            .debug(
-                "Allocating TupleType(fromFactory): size={}, refCount={}, totalSize: {} bytes",
-                layout.size,
-                layout.refCount,
-                layout.totalSize));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "TupleType",
+        "Allocating TupleType(fromFactory): size={}, refCount={}, totalSize: {} bytes",
+        layout.size,
+        layout.refCount,
+        layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
     ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
     return new (mem) TupleType(factory, layout);
@@ -160,14 +156,12 @@ TupleType *TupleType::fromFactoryData(
     const Type *const *types, const TypeCode *typeCodes, const size_t *refs, size_t size,
     size_t refCount) {
     TupleTypeLayout layout = computeLayout(size, refCount);
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("TupleType")
-            .debug(
-                "Allocating TupleType(fromFactoryData): size={}, refCount={}, totalSize: {} bytes",
-                size,
-                refCount,
-                layout.totalSize));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "TupleType",
+        "Allocating TupleType(fromFactoryData): size={}, refCount={}, totalSize: {} bytes",
+        size,
+        refCount,
+        layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
     ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
     return new (mem) TupleType(layout, types, typeCodes, refs);

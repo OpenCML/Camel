@@ -161,7 +161,7 @@
 ### 3.14 POST /api/settings
 
 - **target**：可选（Body）。父进程先执行命令并回显，再按 target 转发到子进程。
-- **请求**：`{ "verbose"?: boolean, "logFile"?: string, "target"?: "<id>" }`；logFile 为空则关闭日志文件。
+- **请求**：`{ "verbose"?: boolean, "logFile"?: string, "target"?: "<id>" }`；logFile 为空则关闭日志文件。`verbose: true` 时库内将全局日志阈值设为 **info**，`false` 时为 **fatal**（与 `camel` CLI 的 `-vv` / 默认行为对齐）；详见仓库根目录 [`docs/cli.cn.md`](../../../docs/cli.cn.md) / [`docs/cli.md`](../../../docs/cli.md)。
 - **响应**：`{ "ok": true }` 或 `{ "ok": false, "error": "..." }`。
 - **错误**：由命令返回。
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,7 @@
 namespace camel::compile::gct {
 
 // =============================================================================
-// Node：GCT 树节点（CRTP 继承 AbstractTreeNode）
+// Node: GCT tree node (CRTP over AbstractTreeNode)
 // =============================================================================
 
 class Node : public AbstractTreeNode<load_ptr_t, Node> {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Mar. 11, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,7 @@ class CppDumpPass : public GraphTranslatePass {
         const camel::core::context::context_ptr_t &ctx, CppEmitMode mode = CppEmitMode::Plain)
         : GraphTranslatePass(ctx), mode_(mode) {}
 
-    GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 
   private:
     CppEmitMode mode_;

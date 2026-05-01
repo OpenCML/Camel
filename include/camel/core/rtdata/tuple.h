@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,7 +32,7 @@ class Tuple : public rtdata::Object {
     Tuple(const Tuple &)            = delete;
     Tuple &operator=(const Tuple &) = delete;
 
-    /// 创建 Tuple 实例
+    /// Create a Tuple instance.
     static Tuple *create(size_t slotCount, camel::core::mm::IAllocator &allocator) {
         size_t headerSize = sizeof(Tuple);
         size_t dataSize   = sizeof(slot_t) * slotCount;
@@ -81,7 +81,7 @@ class Tuple : public rtdata::Object {
         const slot_t *dataB = otherTuple->data_;
 
         if (deep) {
-            // 深比较：引用类型递归比较，普通类型直接值比较
+            // Deep compare: recurse for reference types; compare values directly for plain types.
             for (size_t i = 0; i < size_; ++i) {
                 if (type::isGCTraced(codes[i])) {
                     const rtdata::Object *refA =
@@ -99,7 +99,8 @@ class Tuple : public rtdata::Object {
             }
             return true;
         } else {
-            // 浅比较：所有 slot 原样比较（对于引用，仅比较指针地址）
+            // Shallow compare: compare slots as-is (for references, compare pointer addresses
+            // only).
             return std::memcmp(dataA, dataB, size_ * sizeof(slot_t)) == 0;
         }
     }
@@ -123,16 +124,16 @@ class Tuple : public rtdata::Object {
 
                 if (oriRef) {
                     if (deep) {
-                        // 深拷贝：递归克隆引用对象
+                        // Deep copy: recursively clone referenced objects.
                         newRef = oriRef->clone(allocator, tupleType->typeAt(i), true);
                     } else {
-                        // 浅拷贝：仅复制引用指针
+                        // Shallow copy: copy the reference pointer only.
                         newRef = const_cast<rtdata::Object *>(oriRef);
                     }
                 }
                 reinterpret_cast<rtdata::Object **>(dst)[i] = newRef;
             } else {
-                // 非引用类型，直接复制 slot 数据
+                // Non-reference types: copy the slot data directly.
                 dst[i] = src[i];
             }
         }

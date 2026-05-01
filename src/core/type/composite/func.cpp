@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -68,10 +68,10 @@ FunctionTypeLayout computeLayout(size_t withCount, size_t normCount) {
 
 FunctionMetaInfo *
 FunctionMetaInfo::create(std::vector<std::string> argNames, std::vector<std::string> closureRefs) {
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("FunctionMetaInfo")
-            .debug("Allocating FunctionMetaInfo: size: {} bytes", sizeof(FunctionMetaInfo)));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "FunctionMetaInfo",
+        "Allocating FunctionMetaInfo: size: {} bytes",
+        sizeof(FunctionMetaInfo)));
     void *mem = mm::permSpace().alloc(sizeof(FunctionMetaInfo), alignof(FunctionMetaInfo));
     ASSERT(mem != nullptr, "Failed to allocate FunctionMetaInfo");
     return new (mem) FunctionMetaInfo(std::move(argNames), std::move(closureRefs));
@@ -112,7 +112,7 @@ FunctionType *FunctionTypeFactory::build() { return FunctionType::fromFactory(*t
 
 // --- FunctionType ---
 
-// 从预计算 layout + 指针一次拷贝，不再重复计算布局
+// Copy once from the precomputed layout and pointers; do not recompute layout.
 FunctionType::FunctionType(
     const FunctionTypeLayout &layout, size_t withCount, size_t normCount,
     const Type *const *withTypes, const TypeCode *withTypeCodes, const bool *withIsVar,
@@ -140,7 +140,7 @@ FunctionType::FunctionType(
     }
 }
 
-// 从工厂直接写入 data_，一次遍历，无临时 vector
+// Write directly from the factory into data_; one pass, no temporary vector.
 FunctionType::FunctionType(
     FunctionTypeFactory &factory, const FunctionTypeLayout &layout, Type *exitType,
     ImplMark implMark, ModifierSet modifiers, const FunctionMetaInfo *metaInfo)
@@ -171,7 +171,7 @@ FunctionType::FunctionType(
     }
 }
 
-// 从 param_vec 一次遍历写入 data_，无临时 vector
+// Write from param_vec into data_ in one pass, without temporary vectors.
 FunctionType::FunctionType(
     const FunctionTypeLayout &layout, const param_vec_t &withTypes, const param_vec_t &normTypes,
     Type *exitType, ImplMark implMark, ModifierSet modifiers)
@@ -203,8 +203,8 @@ FunctionType::FunctionType(
 }
 
 Type *FunctionType::exitType() const {
-    // 如果没有返回值类型，默认为void
-    // 但此时返回值仍然是未设置状态，以便编译器进行类型推导
+    // If there is no return type, default to void.
+    // The value still counts as unset so the compiler can keep inferring types.
     return exitType_ ? exitType_ : Type::Void();
 }
 
@@ -297,7 +297,7 @@ string FunctionType::mangle() const {
 }
 
 FunctionType *FunctionType::create() {
-    // 空 FunctionType，使用工厂构建
+    // Empty FunctionType: build via the factory.
     FunctionTypeFactory factory;
     factory.setHasCompileInfo(true);
     return factory.build();
@@ -315,14 +315,12 @@ FunctionType *FunctionType::create(
     const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType,
     const ModifierSet &modifiers) {
     FunctionTypeLayout layout = computeLayout(withTypes.size(), normTypes.size());
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("FunctionType")
-            .debug(
-                "Allocating FunctionType: withCount={}, normCount={}, totalSize: {} bytes",
-                withTypes.size(),
-                normTypes.size(),
-                layout.totalSize));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "FunctionType",
+        "Allocating FunctionType: withCount={}, normCount={}, totalSize: {} bytes",
+        withTypes.size(),
+        normTypes.size(),
+        layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(FunctionType));
     ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
     return new (mem)
@@ -346,15 +344,13 @@ FunctionType *FunctionType::fromFactory(FunctionTypeFactory &factory) {
             FunctionMetaInfo::create(std::move(factory.argNames_), std::move(factory.closureRefs_));
     }
 
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("FunctionType")
-            .debug(
-                "Allocating FunctionType(fromFactory): withCount={}, normCount={}, "
-                "totalSize: {} bytes",
-                withCount,
-                normCount,
-                layout.totalSize));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "FunctionType",
+        "Allocating FunctionType(fromFactory): withCount={}, normCount={}, "
+        "totalSize: {} bytes",
+        withCount,
+        normCount,
+        layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(FunctionType));
     ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
     return new (mem) FunctionType(
@@ -372,15 +368,13 @@ FunctionType *FunctionType::fromData(
     const bool *normIsVar, Type *exitType, ImplMark implMark, ModifierSet modifiers,
     const FunctionMetaInfo *metaInfo) {
     FunctionTypeLayout layout = computeLayout(withCount, normCount);
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("FunctionType")
-            .debug(
-                "Allocating FunctionType(fromData): withCount={}, normCount={}, "
-                "totalSize: {} bytes",
-                withCount,
-                normCount,
-                layout.totalSize));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "FunctionType",
+        "Allocating FunctionType(fromData): withCount={}, normCount={}, "
+        "totalSize: {} bytes",
+        withCount,
+        normCount,
+        layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(FunctionType));
     ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
     return new (mem) FunctionType(
@@ -407,7 +401,7 @@ void FunctionType::addClosureRef(const std::string &ref) {
 }
 
 Type *FunctionType::clone(bool deep /* = false */) const {
-    // 准备数据
+    // Prepare the data.
     std::vector<Type *> withTypePtrs;
     std::vector<TypeCode> withTypeCodes;
     std::vector<uint8_t> withIsVar;

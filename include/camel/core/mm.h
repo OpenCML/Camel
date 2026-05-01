@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@ namespace camel::core::mm {
 
 GenerationalAllocatorWithGC &autoSpace();
 FreeListAllocator &metaSpace();
+FreeListAllocator &graphSpace();
 BumpPointerAllocator &permSpace();
 
 } // namespace camel::core::mm

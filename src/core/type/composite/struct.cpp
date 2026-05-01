@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -86,10 +86,10 @@ StructType::StructType(
 
 StructType *StructType::create() {
     StructTypeLayout layout = computeLayout(0, 0, 0);
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("StructType")
-            .debug("Allocating StructType: (), size: {} bytes", layout.totalSize));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "StructType",
+        "Allocating StructType: (), size: {} bytes",
+        layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
     ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
     return new (mem) StructType(layout, nullptr, nullptr, nullptr, nullptr, nullptr);
@@ -135,14 +135,12 @@ StructType *StructType::fromFactoryData(
     }
 
     StructTypeLayout layout = computeLayout(size, refCount, fieldNamesData.size());
-    EXEC_WHEN_DEBUG(
-        GetDefaultLogger()
-            .in("StructType")
-            .debug(
-                "Allocating StructType: size={}, refCount={}, totalSize: {} bytes",
-                size,
-                refCount,
-                layout.totalSize));
+    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+        "StructType",
+        "Allocating StructType: size={}, refCount={}, totalSize: {} bytes",
+        size,
+        refCount,
+        layout.totalSize));
     void *mem = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
     ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
     return new (mem) StructType(
@@ -167,11 +165,11 @@ Type *StructType::operator|(const StructType &other) const {
     ASSERT(resolved() && other.resolved(), "StructType::operator| requires resolved operands");
 
     StructTypeFactory factory;
-    // 复制 lhs 的字段
+    // Copy lhs fields.
     for (size_t i = 0; i < size_; ++i) {
         factory.add(std::string(fieldName(i)), typeAt(i));
     }
-    // 补齐 rhs 独有的字段
+    // Add fields that exist only in rhs.
     for (size_t i = 0; i < other.size_; ++i) {
         std::string name(other.fieldName(i));
         if (!factory.has(name)) {
@@ -200,21 +198,21 @@ Type *StructType::resolve(const type_vec_t &typeList) const {
     ASSERT(!resolved(), "StructType is already resolved");
 
     StructTypeFactory factory;
-    // 复制所有字段
+    // Copy all fields.
     for (size_t i = 0; i < size_; ++i) {
         factory.add(std::string(fieldName(i)), typeAt(i));
     }
-    // 解析 refs
+    // Resolve refs.
     const size_t *refIndices = refs();
     for (size_t i = 0; i < refCount_; ++i) {
         size_t refIdx = refIndices[i];
-        // 更新对应字段的类型
-        // 注意：factory 需要支持更新已存在的字段
-        // 这里我们重新构建，因为 factory 不支持更新
+        // Update the corresponding field type.
+        // Note: the factory would need to support updating existing fields.
+        // We rebuild here because the factory does not support updates.
         std::string refName(fieldName(refIdx));
-        // 实际上我们需要重新构建整个 factory
+        // In practice we need to rebuild the entire factory.
     }
-    // 简化：重新构建整个 struct
+    // Simplification: rebuild the entire struct.
     StructTypeFactory newFactory;
     size_t typeListIdx = 0;
     for (size_t i = 0; i < size_; ++i) {

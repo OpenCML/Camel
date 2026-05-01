@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 07, 2026
- * Updated: Mar. 30, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,17 +28,16 @@
 #include "camel/core/context/frame.h"
 #endif
 
-using namespace GIR;
 using namespace camel::core::context;
 #if ENABLE_FASTVM_JIT
 using namespace camel::jit;
 #endif
 
-graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
+camel::runtime::GCGraph *JitAsmDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
 #if ENABLE_FASTVM_JIT
-    const auto &[bytecodes, _, offsetMap] = compileAndLink(
+    auto linked = compileAndLink(
         context_,
-        graph.get(),
+        graph,
         {
             .enableTailCallDetection = true,
             .enableInlineOperators   = true,
@@ -48,21 +47,19 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
     auto backend = createBackend();
     if (!backend) {
         os << "[JIT] Backend not available, cannot dump assembly.\n";
-        return Graph::null();
+        return nullptr;
     }
 
     os << "[JIT Assembly] [offset]  instruction\n";
     os << "---\n";
 
-    std::span<const Bytecode> bcSpan(bytecodes.data(), bytecodes.size());
+    std::span<const Bytecode> bcSpan(linked.codes.data(), linked.codes.size());
 
-    for (const auto &[g, entryPc] : offsetMap) {
+    for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
+        ASSERT(runtimeGraph != nullptr, "JIT assembly dump requires a runtime graph.");
         ASSERT(
-            g->finalized(),
-            std::format("Graph '{}' must be sealed before JIT assembly dump.", g->name()));
-        ASSERT(
-            g->hasFrameLayout(),
-            std::format("Graph '{}' has no finalized frame layout.", g->name()));
+            runtimeGraph->hasFrameLayout(),
+            std::format("Graph '{}' has no finalized frame layout.", runtimeGraph->name()));
 
         CompilationDebugOptions debugOptions{
             .asmOut           = &os,
@@ -70,7 +67,7 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         };
         static uint64_t dummyPoolTop = 0;
         CompilationUnit unit{
-            .graph                    = g,
+            .runtimeGraph             = runtimeGraph,
             .bytecodes                = bcSpan,
             .entryPc                  = entryPc,
             .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
@@ -83,7 +80,7 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
             .debug                    = &debugOptions,
         };
 
-        os << g->mangledName() << ":\n";
+        os << runtimeGraph->mangledName() << ":\n";
         std::string failureReason;
         auto compiled = backend->compile(unit, &failureReason);
         if (!compiled) {
@@ -94,10 +91,10 @@ graph_ptr_t JitAsmDumpPass::apply(graph_ptr_t &graph, std::ostream &os) {
         os << "\n";
     }
 
-    return Graph::null();
+    return nullptr;
 #else
     (void)graph;
     os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump assembly.\n";
-    return Graph::null();
+    return nullptr;
 #endif
 }

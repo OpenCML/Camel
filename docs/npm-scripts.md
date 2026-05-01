@@ -9,9 +9,11 @@
 | `npm run build` | Release 构建，生成 `camel` 及 `camel-format`、`camel-codegen`、`camel-profiler` 可执行文件 |
 | `npm run debug` | Debug 构建 |
 | `npm run profile` | RelWithDebInfo 构建（性能分析用） |
+| `npm run config` | 交互式编辑 CMake 选项（FastVM、Python 模块等），写入 `.camel-opts.json`；详见 [编译选项说明](build-options.cn.md) |
 | `npm run check` | 代码健康检查（`camel check`） |
 | `npm run format` | 使用 clang-format 格式化 `src/` 和 `include/` 下的 C++ 源文件 |
 | `npm run clean` | 清理构建产物 |
+| `npm run pypi:rollup` | 生成 **camel-lang** 的 PyPI wheel（`dist/pypi/*.whl`）；与 `build` 在 Python SDK / bridge 策略上不同，详见 [PyPI 打包说明](pypi-packaging.md) |
 
 ## 构建产物路径
 
@@ -64,18 +66,18 @@ npm run test -- linear "run {file} --pass-until 3"
 ### 注意事项
 
 1. 运行前需先执行 `npm run build` 生成 `camel` 可执行文件（复制至项目根目录）
-2. **必须使用 `--`**：`npm run test -- linear "template"`，否则 npm 会消费 `-v`、`--log-level` 等参数
+2. **必须使用 `--`**：`npm run test -- linear "template"`，否则 npm 会消费 `-v`、`-vv`、`--log-level` 等参数
 3. 若 npm 仍消费参数，可用环境变量兜底：
 
    ```powershell
-   # PowerShell
-   $env:TEST_TEMPLATE="-v --log-level debug {file} std::nvm"
+   # PowerShell（示例：info 阈值；debug/trace 埋点需 Debug 构建才生效）
+   $env:TEST_TEMPLATE="-vv {file} std::nvm"
    npm run test -- linear
    ```
 
    ```bash
    # Bash
-   TEST_TEMPLATE="-v --log-level debug {file} std::nvm" npm run test -- linear
+   TEST_TEMPLATE="-vv {file} std::nvm" npm run test -- linear
    ```
 
 ## 批量测试脚本（test:all / test:modules / test:run）

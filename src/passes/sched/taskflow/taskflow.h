@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Mar. 29, 2026
+ * Updated: Apr. 10, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,8 +21,10 @@
 
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
-#include "camel/execute/pass/sched.h"
+#include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/pass/runtime_sched.h"
 
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -33,9 +35,9 @@
 
 namespace camel::core::context {
 
-// Taskflow 专用的并发 frame allocator。
-// 与通用 FramePool 不同，它允许并发 acquire/release 和乱序回收，
-// 以适配 Taskflow worker 的并发执行模型。
+// Taskflow-specific concurrent frame allocator.
+// Unlike the generic FramePool, this allocator tolerates concurrent
+// acquire/release operations and out-of-order recycling across workers.
 class TaskflowFramePool {
   public:
     explicit TaskflowFramePool(
@@ -45,13 +47,13 @@ class TaskflowFramePool {
     TaskflowFramePool(const TaskflowFramePool &)            = delete;
     TaskflowFramePool &operator=(const TaskflowFramePool &) = delete;
 
-    Frame *acquire(GIR::Graph *graph);
+    Frame *acquire(camel::runtime::GCGraph *graph);
     void release(Frame *frame);
-    void warmup(GIR::Graph *graph, size_t count);
+    void warmup(camel::runtime::GCGraph *graph, size_t count);
 
   private:
     struct GraphArena {
-        GIR::Graph *graph{nullptr};
+        camel::runtime::GCGraph *runtimeGraph{nullptr};
         size_t frameSize{0};
         const camel::core::type::TupleType *runtimeDataType{nullptr};
         ::Tuple *staticArea{nullptr};
@@ -61,169 +63,162 @@ class TaskflowFramePool {
         std::vector<std::byte *> chunks;
     };
 
-    GraphArena &getOrCreateArena(GIR::Graph *graph);
+    GraphArena &getOrCreateArena(camel::runtime::GCGraph *graph);
     void allocateChunk(GraphArena &arena, size_t minFrameCount);
+    static uintptr_t arenaKey(camel::runtime::GCGraph *graph);
 
     size_t chunkBytes_;
     size_t minChunkFrames_;
     std::mutex arenasMutex_;
-    std::unordered_map<GIR::Graph *, std::unique_ptr<GraphArena>> arenas_;
+    std::unordered_map<uintptr_t, std::unique_ptr<GraphArena>> arenas_;
 };
 
 } // namespace camel::core::context
 
 namespace ctx = camel::core::context;
 
-class TaskflowExecSchedPass : public GraphSchedulePass {
+class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
   public:
     TaskflowExecSchedPass(const ctx::context_ptr_t &ctx, size_t max_concurrent_tasks = 32)
-        : GraphSchedulePass(ctx), executor_(max_concurrent_tasks) {}
-    virtual ~TaskflowExecSchedPass() = default;
+        : RuntimeGraphSchedulePass(ctx), executor_(max_concurrent_tasks) {}
+    ~TaskflowExecSchedPass() override = default;
 
-    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    void buildAndDump(camel::runtime::GCGraph *graph, std::ostream &os);
 
-    /// 仅构建任务流并 dump 为 DOT 到 os，不执行。供 TfDumpPass 等使用。
-    void buildAndDump(GIR::Graph *graph, std::ostream &os);
-
-    tf::Taskflow mainFlow_; // 主任务流
+    tf::Taskflow mainFlow_;
     ctx::TaskflowFramePool framePool_{1 * camel::core::mm::MB};
 
-    // 预编译元信息：BRCH/JOIN 关系、输入索引映射、端口与闭包布局等
-    struct GraphInfos {
-        struct NodeExecMeta {
-            std::vector<GIR::data_idx_t> normIndices;
-            std::vector<GIR::data_idx_t> withIndices;
-        };
-
-        GIR::Graph *graph{nullptr};
-        std::unordered_map<GIR::Node *, GIR::Node *> joinToBrch;
-        std::unordered_map<GIR::Node *, NodeExecMeta> nodeExecMeta;
-        std::vector<GIR::data_idx_t> normPortIndices;
-        std::vector<GIR::data_idx_t> withPortIndices;
-        std::vector<GIR::data_idx_t> closureIndices;
-
-        NodeExecMeta &getOrCreateNodeExecMeta(GIR::Node *node) { return nodeExecMeta[node]; }
-
-        const NodeExecMeta &getNodeExecMeta(GIR::Node *node) const {
-            auto it = nodeExecMeta.find(node);
-            ASSERT(it != nodeExecMeta.end(), "Node exec meta not found.");
-            return it->second;
-        }
+  private:
+    struct RuntimeBuildInfo {
+        std::vector<uint8_t> skipNodes;
+        std::vector<std::vector<camel::execute::RuntimeBranchArmRegion>> branchArms;
     };
 
-    struct GlobalBuildCtx {
-        std::unordered_map<GIR::Graph *, std::unique_ptr<GraphInfos>> graphInfoMap;
-        std::unordered_set<GIR::Node *> skipNodes;
-
-        GraphInfos &getOrCreateGraphInfos(GIR::Graph *graph) {
-            auto it = graphInfoMap.find(graph);
-            if (it == graphInfoMap.end()) {
-                auto tasks          = std::make_unique<GraphInfos>();
-                tasks->graph        = graph;
-                auto &ref           = *tasks;
-                graphInfoMap[graph] = std::move(tasks);
-                return ref;
-            }
-            return *it->second;
-        }
-
-        GraphInfos &getGraphInfos(GIR::Graph *graph) {
-            auto it = graphInfoMap.find(graph);
-            ASSERT(it != graphInfoMap.end(), "Graph tasks not found.");
-            return *it->second;
-        }
-
-        const GraphInfos &getGraphInfos(GIR::Graph *graph) const {
-            auto it = graphInfoMap.find(graph);
-            ASSERT(it != graphInfoMap.end(), "Graph tasks not found.");
-            return *it->second;
-        }
-    } globalBuildCtx_;
-
-  private:
     tf::Executor executor_;
+    std::unordered_map<camel::runtime::GCGraph *, std::vector<camel::runtime::gc_node_ref_t>>
+        linearTopoCache_;
 
-    // 为一次图实例执行构建并运行任务流，返回 exit 值（slot_t）
-    slot_t evalGraphTF(GIR::Graph *graph, ctx::Frame *frame);
+    slot_t evalGraphTF(camel::runtime::GCGraph *graph, ctx::Frame *frame);
+    slot_t evalGraphLinear(camel::runtime::GCGraph *graph, ctx::Frame *frame);
+    std::span<const camel::runtime::gc_node_ref_t>
+    topoNodesForLinear(camel::runtime::GCGraph *graph);
+    slot_t runPreparedSubgraph(tf::Subflow &sf, camel::runtime::GCGraph *graph, ctx::Frame *frame);
+    slot_t executeLinearNode(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
+    slot_t executeLinearMarkedOperator(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
 
-    // 递归构建所有图的元信息
-    void buildGraphsInfo(GIR::Graph *rootGraph);
-
-    // 统一子图执行入口：接管已准备好的 frame 生命周期
-    slot_t runPreparedSubgraph(tf::Subflow &sf, GIR::Graph *graph, ctx::Frame *frame);
-
-    // 预编译的调用布局填参
-    ctx::Frame *acquirePreparedNodeCallFrame(
-        GIR::Graph *targetGraph, GIR::Node *callNode, ctx::Frame *sourceFrame);
+    ctx::Frame *acquirePreparedRuntimeCallFrame(
+        camel::runtime::GCGraph *targetGraph, camel::runtime::gc_node_ref_t callNodeRuntimeIndex,
+        ctx::Frame *sourceFrame);
     ctx::Frame *acquirePreparedClosureCallFrame(
-        GIR::Graph *targetGraph, ::Tuple *closure, std::span<const slot_t> args);
+        camel::runtime::GCGraph *targetGraph, ::Tuple *closure, std::span<const slot_t> args);
 
-    // 复用预编译后的参数索引，减少运行时 vector 构造
-    slot_t executePreparedOperator(GIR::Node *n, ctx::Frame *frame);
-
-    // 通用：在任意 flowLike(可为 Taskflow/Subflow) 中展开一次图实例
-    template <typename FlowT>
-    void instantiate_graph_instance_generic(FlowT &flowLike, GIR::Graph *graph, ctx::Frame *frame);
-
-    // 分离的节点任务构建（每种类型一个函数）
-    template <typename FlowT>
-    tf::Task buildDataTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
+    slot_t executePreparedOperator(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
+    slot_t executePreparedNode(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        tf::Subflow &sf, const RuntimeBuildInfo *buildInfo);
+    slot_t executePreparedBranchArm(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef, size_t armIndex,
+        ctx::Frame *frame, tf::Subflow &sf, const RuntimeBuildInfo *buildInfo);
 
     template <typename FlowT>
-    tf::Task buildPortTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
+    void instantiate_graph_instance_generic(
+        FlowT &flowLike, camel::runtime::GCGraph *runtimeGraph, ctx::Frame *frame);
+
+    RuntimeBuildInfo buildRuntimeBuildInfo(camel::runtime::GCGraph *graph);
 
     template <typename FlowT>
-    tf::Task buildCopyTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
+    void buildRuntimeNodeTasks(
+        FlowT &flowLike, camel::runtime::GCGraph *graph, ctx::Frame *frame,
+        const std::shared_ptr<const RuntimeBuildInfo> &buildInfo, std::vector<tf::Task> &taskMap,
+        std::vector<uint8_t> &taskBuilt);
 
     template <typename FlowT>
-    tf::Task buildCastTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
+    void connectRuntimeDependencies(
+        FlowT &flowLike, camel::runtime::GCGraph *graph, ctx::Frame *frame,
+        const std::shared_ptr<const RuntimeBuildInfo> &buildInfo, std::vector<tf::Task> &taskMap,
+        std::vector<uint8_t> &taskBuilt);
 
     template <typename FlowT>
-    tf::Task buildFillTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
+    tf::Task buildDataTask(
+        FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
+        ctx::Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildAccsTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
+    tf::Task buildPortTask(
+        FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
+        ctx::Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildFuncTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
+    tf::Task buildCopyTask(
+        FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
+        ctx::Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildCallTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
+    tf::Task buildCastTask(
+        FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
+        ctx::Frame *frame);
 
     template <typename FlowT>
-    tf::Task buildOperTask(FlowT &flowLike, GIR::Node *n, ctx::Frame *frame);
+    tf::Task buildFillTask(
+        FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
+        ctx::Frame *frame);
 
-    // BRCH-JOIN 区域处理（创建 selector/candidate/join 任务）
     template <typename FlowT>
-    void buildBranchJoinRegion(
-        FlowT &flowLike, GIR::Graph *graph, ctx::Frame *frame,
-        std::unordered_map<GIR::Node *, tf::Task> &taskMap, GIR::Node *brch);
+    tf::Task buildAccsTask(
+        FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
+        ctx::Frame *frame);
 
-    // 构建非 BRCH-JOIN 的普通节点任务（含 ports）
     template <typename FlowT>
-    void buildNormalNodeTasks(
-        FlowT &flowLike, GIR::Graph *graph, ctx::Frame *frame,
-        std::unordered_map<GIR::Node *, tf::Task> &taskMap);
+    tf::Task buildFuncTask(
+        FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
+        ctx::Frame *frame);
 
-    // 连接依赖边
     template <typename FlowT>
-    void connectDependencies(
-        FlowT &flowLike, GIR::Graph *graph, std::unordered_map<GIR::Node *, tf::Task> &taskMap);
+    tf::Task buildCallTask(
+        FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
+        ctx::Frame *frame);
 
-    // 标记算子（使用 Subflow 并行元素任务）
-    void mark_map_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
-    void mark_apply_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
-    void mark_filter_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
-    void mark_reduce_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
-    void mark_foreach_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
-    void mark_unordered_foreach_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
-    void mark_unordered_reduce_arr(GIR::Node *node, ctx::Frame *frame, tf::Subflow &sf);
+    template <typename FlowT>
+    tf::Task buildOperTask(
+        FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
+        ctx::Frame *frame);
+
+    template <typename FlowT>
+    void buildRuntimeBranchJoinRegion(
+        FlowT &flowLike, camel::runtime::GCGraph *runtimeGraph, ctx::Frame *frame,
+        const std::shared_ptr<const RuntimeBuildInfo> &buildInfo, std::vector<tf::Task> &taskMap,
+        std::vector<uint8_t> &taskBuilt, camel::runtime::gc_node_ref_t brchRuntimeIndex);
+
+    void mark_map_arr(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        tf::Subflow &sf);
+    void mark_apply_arr(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        tf::Subflow &sf);
+    void mark_filter_arr(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        tf::Subflow &sf);
+    void mark_reduce_arr(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        tf::Subflow &sf);
+    void mark_foreach_arr(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        tf::Subflow &sf);
+    void mark_unordered_foreach_arr(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        tf::Subflow &sf);
+    void mark_unordered_reduce_arr(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        tf::Subflow &sf);
 };
 
-/// 将 Taskflow 执行图 dump 为 GraphViz DOT 格式，便于用 dot 等工具可视化。不执行图。
 class TfDumpPass : public GraphIRPass {
   public:
     TfDumpPass(const ctx::context_ptr_t &ctx) : GraphIRPass(ctx) {}
-    virtual ~TfDumpPass() = default;
-    virtual GIR::graph_ptr_t apply(GIR::graph_ptr_t &graph, std::ostream &os) override;
+    ~TfDumpPass() override = default;
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 };

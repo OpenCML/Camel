@@ -7,10 +7,28 @@
 
 默认的 run 命令中，输入文件可以写为位置参数或通过 `--input <文件>` 指定，二者至少提供一个。
 
-## 通用选项（Global Options）
+## 通用选项（日志）
 
-- `-v`, `--verbose`：启用详细输出
-- `-l`, `--log-level <level>`：设置日志等级，支持：`debug`, `info`（默认）, `warn`, `error`, `off`
+通过 **全局级别阈值** 与可选的 **scope 过滤** 控制日志。开启时日志写到 **stderr**。未指定任何 `-l` / `-v*` 时，默认阈值为 **`fatal`**（仅输出 fatal 级别）。
+
+### 级别阈值
+
+- `-l`, `--log-level <level>`：`fatal` | `warn` | `info` | `debug` | `trace` | `off`  
+  达到或高于该级别的消息才可能输出（例如 `warn` 会输出 `warn` 与 `fatal`）。
+- 快捷方式（等价于设置对应 `--log-level`）：
+  - `-v`, `--verbose` → `warn`
+  - `-vv` → `info`
+  - `-vvv` → `debug`
+  - `-vvvv` → `trace`
+
+若同时出现 `--log-level` 与 `-v*`，以命令行中 **后出现者** 为准。
+
+### Scope 过滤（在阈值之后应用）
+
+- `--log-preset <none|wall|extra>`：按预设的 scope 前缀集合过滤（`none` 表示不用预设列表）。
+- `--log-include <scopes>`：逗号分隔的 scope 前缀；一旦指定，**取代** preset 的列表。某条日志的 scope 须与某前缀 **相等** 或以 `前缀.` 开头。
+
+**说明：** **`npm run build` 的 Release（NDEBUG）** 下，`debug` / `trace` 对应的 **宏**会在编译期删除，因此即使用 `-vvv` / `-vvvv` 或 `--log-level debug|trace`，也不会出现这些埋点；需 **`npm run debug` 的 Debug 构建** 才能看到。
 
 ---
 
@@ -28,6 +46,17 @@
 - `-I`, `--include <dir>`：添加模块搜索路径（可多次指定）
 - `-L`, `--stdlib <path>`：指定标准库路径（默认当前目录下的 `./stdlib`）
 - `-E`, `--error-format <text|json>`：错误输出格式，默认为 `text`
+
+### 常用 Passes
+
+- `std::inline`：仅负责 inline 的 rewrite pass；默认目标策略等价于 `std::inline::hybrid`
+- `std::inline::small` / `std::inline::arm` / `std::inline::hybrid`：显式指定 inline 目标策略
+- `std::devirtualize`：运行时原生 devirtualization pass
+- `std::specialize`：运行时原生 specialization pass
+- `std::opt`：聚合式运行时原生优化流水线（`devirtualize` + `specialize` + `inline`）
+- `std::fvm`：高性能字节码虚拟机调度器
+- `std::jit`：带 JIT 的高性能字节码虚拟机调度器
+- `std::gir`：打印当前图中间表示并停止
 
 ---
 
@@ -52,7 +81,7 @@
 - `-c`, `--config <file>`：规则定义文件路径
 - `-e`, `--ignore`：忽略定义文件
 - `-o`, `--output <file>`：输出文件（默认输出到控制台）
-- 可用的通用选项：`--verbose`, `--log-level`
+- 可用的通用选项：`-v` / `-vv` / `-vvv` / `-vvvv`、`--verbose`、`--log-level`、`--log-preset`、`--log-include`
 
 ---
 
@@ -68,7 +97,7 @@
 - `--tns`, `--topo-node-seq`：打印拓扑排序后的节点序列
 - `--gen`, `--gene-code`：从 AST 生成代码
 - `-p`, `-P`, `--pass-until <n>`：执行到指定图优化阶段
-- 可用的通用选项：`--verbose`, `--log-level`
+- 可用的通用选项：`-v` / `-vv` / `-vvv` / `-vvvv`、`--verbose`、`--log-level`、`--log-preset`、`--log-include`
 
 ---
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 14, 2026
+ * Updated: Apr. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.1.19"
+#define VERSION "0.1.20"
 
 #include <string>
 
@@ -33,8 +33,9 @@ namespace CmdLineArgs {
 extern Command selectedCommand;
 
 namespace Global {
-extern bool verbose;         // Whether to enable verbose output
-extern std::string logLevel; // Log level: debug, info, warn, error, off
+/// Filled by clipp for `--log-level` (for help/validation); effective threshold follows argv scan
+/// in config.cpp.
+extern std::string logLevelArg;
 } // namespace Global
 
 namespace Run {

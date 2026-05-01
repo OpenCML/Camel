@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Mar. 30, 2026
+ * Updated: May. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -87,11 +87,52 @@ inline void storeFloatResultFromVReg(int disp, x64::VRegId v, x64::MirBuilder &b
     build.emitVXmm32StoreToFrame(disp, v);
 }
 
-// Camel 标准槽模型：每个 slot 一字（8 字节），布尔/32位/64位/指针均占一槽；JIT
-// 生成的所有槽访问必须为 8 字节
+std::string describeFramelessSelfFuncFailure(const CompilationUnit &unit) {
+    if (unit.graphLength == 0)
+        return "graph bytecode span is empty";
+    const size_t graphEnd = unit.entryPc + unit.graphLength;
+    ASSERT(
+        graphEnd <= unit.bytecodes.size(),
+        "Current graph bytecode range exceeds linked bytecode span.");
+    for (size_t pc = unit.entryPc; pc < graphEnd;) {
+        const Bytecode &bc = unit.bytecodes[pc];
+        switch (bc.opcode) {
+        case OpCode::OPER:
+            return "pc=" + std::to_string(pc) + " contains OPER";
+        case OpCode::CAST:
+            return "pc=" + std::to_string(pc) + " contains CAST";
+        case OpCode::COPY:
+            return "pc=" + std::to_string(pc) + " contains COPY";
+        case OpCode::FILL:
+            return "pc=" + std::to_string(pc) + " contains FILL";
+        case OpCode::CALL:
+            return "pc=" + std::to_string(pc) + " contains indirect CALL";
+        case OpCode::ACCS:
+            return "pc=" + std::to_string(pc) + " contains ACCS";
+        case OpCode::FUNC:
+        case OpCode::TAIL:
+            if (getFuncExtraRuntimeGraph(&bc) != unit.runtimeGraph) {
+                const auto *target = getFuncExtraRuntimeGraph(&bc);
+                return std::format(
+                    "pc={} targets non-self graph '{}' ({:p})",
+                    pc,
+                    target ? target->name() : "<null>",
+                    static_cast<const void *>(target));
+            }
+            break;
+        default:
+            break;
+        }
+        pc += bc.opsize;
+    }
+    return {};
+}
+
+// Camel standard slot model: every slot is one word (8 bytes); bool / 32-bit / 64-bit / pointer
+// values all occupy one slot. JIT generated slot accesses must be 8 bytes.
 static_assert(sizeof(slot_t) == 8, "JIT assumes one word per slot");
 
-// JIT 接收 slot_t*（动态区基址），基址偏移为 0
+// JIT receives slot_t* (dynamic-area base), with base offset 0.
 size_t getFrameDynamicAreaOffset() { return 0; }
 
 void *allocExecutable(size_t size) {
@@ -118,7 +159,7 @@ void freeExecutable(void *p, size_t size) {
 X64Backend::X64Backend() { frameBaseOffset_ = getFrameDynamicAreaOffset(); }
 
 int X64Backend::slotDisp(int idx) const {
-    // 每槽一字（sizeof(slot_t)==8），disp 为字节偏移
+    // One word per slot (sizeof(slot_t)==8), disp is in bytes.
     return static_cast<int>(frameBaseOffset_ + static_cast<size_t>(idx) * sizeof(slot_t));
 }
 
@@ -147,18 +188,16 @@ bool X64Backend::compileBytecode(
         return false;
     };
 
-    if (!unit.graph)
-        return fail("null graph in JIT compilation unit");
-    if (!unit.graph->finalized())
-        return fail("graph '" + unit.graph->name() + "' is not sealed");
-    if (!unit.graph->hasFrameLayout())
-        return fail("incomplete frame layout for graph '" + unit.graph->name() + "'");
+    if (!unit.runtimeGraph)
+        return fail("null runtime graph in JIT compilation unit");
+    if (!unit.runtimeGraph->hasFrameLayout())
+        return fail("incomplete frame layout for graph '" + unit.runtimeGraph->name() + "'");
 
     const Bytecode *base = unit.bytecodes.data();
     size_t pcEnd         = unit.bytecodes.size();
     size_t entryPc       = unit.entryPc;
 
-    const slot_t *staticBase = unit.graph->staticArea()->data();
+    const slot_t *staticBase = unit.runtimeGraph->staticArea()->data();
     auto staticSlotAddr      = [&](data_idx_t idx) -> uint64_t {
         return reinterpret_cast<uint64_t>(staticBase + static_cast<size_t>(-idx));
     };
@@ -172,7 +211,26 @@ bool X64Backend::compileBytecode(
     // leaving enough structure for later peephole and dead-store cleanup.
     x64::MirBuffer mirBuf;
     x64::MirBuilder build(mirBuf);
-    x64::VRegId nextVReg = 0;
+    x64::VRegId nextVReg                     = 0;
+    const std::string framelessFailureReason = describeFramelessSelfFuncFailure(unit);
+    const bool canUseFramelessSelfFunc       = framelessFailureReason.empty();
+    // The current x64 JIT is only sound for graphs whose execution stays within
+    // the slot-native bytecode subset. Graphs that rely on runtime Function
+    // carriers, indirect CALL, or frame-dependent trampolines still execute
+    // correctly through the interpreter, while pure callee graphs such as
+    // recursive fib keep the hot-path JIT speedup.
+    if (!canUseFramelessSelfFunc)
+        return fail("graph requires interpreter fallback: " + framelessFailureReason);
+
+    auto fillDirectCallDstDisps = [&](const Bytecode &bc, int32_t *dstDisps) {
+        const auto dstSlots = bc.directCallDstSlots();
+        ASSERT(
+            dstSlots.size() == bc.directCallArgCnt(),
+            "JIT encoded direct-call layout is arity-mismatched.");
+        for (size_t argIndex = 0; argIndex < dstSlots.size(); ++argIndex) {
+            dstDisps[argIndex] = slotDisp(dstSlots[argIndex]);
+        }
+    };
 
     // Compare-Branch fusion state: when a comparison detects a following BRCH
     // using its result, it emits only VLoadFromFrame + VCmpRegImm (no setcc/store),
@@ -685,6 +743,15 @@ bool X64Backend::compileBytecode(
             break;
         }
         case OpCode::JOIN: {
+            if (bc.result == 0) {
+                break;
+            }
+            if (bc.extra()->pType == camel::core::type::Type::Void()) {
+                x64::VRegId vNull = nextVReg++;
+                build.emitVLoadImm64(vNull, 0);
+                build.emitVStoreToFrame(slotDisp(bc.result), vNull);
+                break;
+            }
             if (bc.withCnt() != 2)
                 return fail(
                     "pc=" + std::to_string(pc) +
@@ -736,69 +803,74 @@ bool X64Backend::compileBytecode(
         }
         case OpCode::FUNC: {
 #if defined(_WIN32) || defined(_WIN64)
-            if (unit.poolTopAddr) {
-                GIR::Graph *targetGraph = getFuncExtraGraph(&bc);
-                bool sameGraph          = (targetGraph == unit.graph);
-                // NativeJitCallParams is the bridge between MIR lowering and the
-                // encoder's call expander. Everything the encoder needs for fast
-                // path / slow path selection is packed here once.
-                auto *params            = new NativeJitCallParams{};
-                params->poolTopAddr     = reinterpret_cast<uint64_t>(unit.poolTopAddr);
-                params->targetGraphAddr = reinterpret_cast<uint64_t>(targetGraph);
-                params->resultDisp      = slotDisp(bc.result);
-                params->argsCnt         = static_cast<uint8_t>(bc.normCnt());
-                for (uint8_t ai = 0; ai < params->argsCnt; ++ai)
-                    params->argSrcDisps[ai] = slotDisp(bc.operands()[ai]);
-                std::memset(params->argVRegs, 0xFF, sizeof(params->argVRegs));
-                params->isSameGraph = sameGraph;
-                params->extra2Addr  = reinterpret_cast<uint64_t>(bc.extra2());
-                params->fastop1Addr = reinterpret_cast<uint64_t>(&bc.fastop[1]);
-                params->frameless   = sameGraph;
-                if (sameGraph) {
-                    // Frameless is only valid for self-recursion today: the
-                    // callee layout matches the current graph exactly, so we can
-                    // allocate a stack-backed frame and jump straight to the JIT
-                    // entry without touching the frame pool.
-                    size_t slotCount        = targetGraph->runtimeDataType()->size();
-                    size_t rawBytes         = slotCount * sizeof(slot_t);
-                    params->calleeSlotBytes = static_cast<uint32_t>((rawBytes + 15u) & ~15u);
-                } else {
-                    params->calleeSlotBytes = 0;
-                }
-                if (sameGraph) {
-                    params->slowPathFnAddr =
-                        reinterpret_cast<uint64_t>(unit.directSelfFuncInvokeAddr);
-                    params->slowPathBcAddr = reinterpret_cast<uint64_t>(&bc);
-                    params->slowPathPc     = 0;
-                } else {
-                    params->slowPathFnAddr = reinterpret_cast<uint64_t>(unit.trampolineFunc);
-                    params->slowPathBcAddr = 0;
-                    params->slowPathPc     = static_cast<uint32_t>(pc);
-                }
-                // Phase L: for frameless calls, emit visible VLoadFromFrame for
-                // each arg so that peephole can fuse preceding store+load pairs.
-                if (params->frameless) {
-                    uint8_t nArgs = params->argsCnt < 7 ? params->argsCnt : 7;
-                    for (uint8_t ai = 0; ai < nArgs; ++ai) {
-                        x64::VRegId vArg = nextVReg++;
-                        loadSlot(bc.operands()[ai], params->argSrcDisps[ai], vArg);
-                        params->argVRegs[ai] = static_cast<uint8_t>(vArg);
+            bool handledByNativeJitCall = false;
+            if (unit.poolTopAddr && !unit.runtimeGraph->funcType()->modifiers().sync()) {
+                auto *targetRuntimeGraph = getFuncExtraRuntimeGraph(&bc);
+                bool sameGraph           = (targetRuntimeGraph == unit.runtimeGraph);
+                if (!(sameGraph && !canUseFramelessSelfFunc)) {
+                    // NativeJitCallParams is the bridge between MIR lowering and the
+                    // encoder's call expander. Everything the encoder needs for fast
+                    // path / slow path selection is packed here once.
+                    auto *params                   = new NativeJitCallParams{};
+                    params->poolTopAddr            = reinterpret_cast<uint64_t>(unit.poolTopAddr);
+                    params->targetRuntimeGraphAddr = reinterpret_cast<uint64_t>(targetRuntimeGraph);
+                    params->resultDisp             = slotDisp(bc.result);
+                    params->argsCnt                = static_cast<uint8_t>(bc.directCallArgCnt());
+                    for (uint8_t ai = 0; ai < params->argsCnt; ++ai)
+                        params->argSrcDisps[ai] = slotDisp(bc.operands()[ai]);
+                    fillDirectCallDstDisps(bc, params->argDstDisps);
+                    std::memset(params->argVRegs, 0xFF, sizeof(params->argVRegs));
+                    params->isSameGraph = sameGraph;
+                    params->jitFnAddr   = reinterpret_cast<uint64_t>(bc.extra3());
+                    params->frameless   = sameGraph && canUseFramelessSelfFunc;
+                    if (params->frameless) {
+                        // Frameless is only valid for self-recursion today: the
+                        // callee layout matches the current graph exactly, so we can
+                        // allocate a stack-backed frame and jump straight to the JIT
+                        // entry without touching the frame pool.
+                        size_t slotCount        = unit.runtimeGraph->runtimeDataType()->size();
+                        size_t rawBytes         = slotCount * sizeof(slot_t);
+                        params->calleeSlotBytes = static_cast<uint32_t>((rawBytes + 15u) & ~15u);
+                    } else {
+                        params->calleeSlotBytes = 0;
                     }
-                    // Phase Q: externalize result store so peephole can fuse
-                    // the subsequent VLoadFromFrame into a VCopy.
-                    x64::VRegId vResult = nextVReg++;
-                    params->resultVReg  = static_cast<uint8_t>(vResult);
+                    if (sameGraph) {
+                        params->slowPathFnAddr =
+                            reinterpret_cast<uint64_t>(unit.directSelfFuncInvokeAddr);
+                        params->slowPathBcAddr = reinterpret_cast<uint64_t>(&bc);
+                        params->slowPathPc     = 0;
+                    } else {
+                        params->slowPathFnAddr = reinterpret_cast<uint64_t>(unit.trampolineFunc);
+                        params->slowPathBcAddr = 0;
+                        params->slowPathPc     = static_cast<uint32_t>(pc);
+                    }
+                    // Phase L: for frameless calls, emit visible VLoadFromFrame for
+                    // each arg so that peephole can fuse preceding store+load pairs.
+                    if (params->frameless) {
+                        uint8_t nArgs = params->argsCnt < 7 ? params->argsCnt : 7;
+                        for (uint8_t ai = 0; ai < nArgs; ++ai) {
+                            x64::VRegId vArg = nextVReg++;
+                            loadSlot(bc.operands()[ai], params->argSrcDisps[ai], vArg);
+                            params->argVRegs[ai] = static_cast<uint8_t>(vArg);
+                        }
+                        // Phase Q: externalize result store so peephole can fuse
+                        // the subsequent VLoadFromFrame into a VCopy.
+                        x64::VRegId vResult = nextVReg++;
+                        params->resultVReg  = static_cast<uint8_t>(vResult);
+                    }
+                    build.emitNativeJitFuncCall(params);
+                    if (params->frameless)
+                        build.emitVStoreToFrame(
+                            params->resultDisp,
+                            static_cast<x64::VRegId>(params->resultVReg));
+                    // Native calls are the main cache barrier: physical registers
+                    // may no longer hold the previously cached slot values.
+                    slotCache.clear();
+                    handledByNativeJitCall = true;
                 }
-                build.emitNativeJitFuncCall(params);
-                if (params->frameless)
-                    build.emitVStoreToFrame(
-                        params->resultDisp,
-                        static_cast<x64::VRegId>(params->resultVReg));
-                // Native calls are the main cache barrier: physical registers
-                // may no longer hold the previously cached slot values.
-                slotCache.clear();
-                break;
             }
+            if (handledByNativeJitCall)
+                break;
 #endif
             if (!unit.trampolineFunc)
                 return fail("pc=" + std::to_string(pc) + " no FUNC trampoline");
@@ -817,11 +889,11 @@ bool X64Backend::compileBytecode(
         }
         case OpCode::TAIL: {
 #if defined(_WIN32) || defined(_WIN64)
-            if (getFuncExtraGraph(&bc) == unit.graph) {
+            if (getFuncExtraRuntimeGraph(&bc) == unit.runtimeGraph && canUseFramelessSelfFunc) {
                 // Self-tail-call is reduced to "rewrite argument slots + jump to
                 // entry". No call instruction is emitted, so no new frame is
                 // created and recursion stays in the current activation.
-                size_t argsCnt         = bc.normCnt();
+                size_t argsCnt         = bc.directCallArgCnt();
                 const data_idx_t *args = bc.operands();
                 std::vector<x64::VRegId> argRegs;
                 argRegs.reserve(argsCnt);
@@ -830,8 +902,10 @@ bool X64Backend::compileBytecode(
                     argRegs.push_back(v);
                     loadSlot(args[i], slotDisp(args[i]), v);
                 }
+                int32_t argDstDisps[8]{};
+                fillDirectCallDstDisps(bc, argDstDisps);
                 for (size_t i = 0; i < argsCnt; ++i)
-                    build.emitVStoreToFrame(slotDisp(static_cast<int>(i + 1)), argRegs[i]);
+                    build.emitVStoreToFrame(argDstDisps[i], argRegs[i]);
                 build.emitJmpRel32(static_cast<uint32_t>(entryPc));
                 break;
             }
@@ -856,8 +930,9 @@ bool X64Backend::compileBytecode(
         }
         case OpCode::JUMP: {
             size_t target = static_cast<size_t>(bc.fastop[0]);
-            // 若目标是 JOIN 且当前块是 BRCH 的“第一分支”（仅含此 JUMP），直接写回 w0 并跳到 JOIN
-            // 之后，避免经 JOIN 读未初始化的 w1
+            // If the target is JOIN and the current block is the BRCH "first branch" (only this
+            // JUMP), write back w0 directly and jump to JOIN afterward, to avoid reading an
+            // uninitialized w1 through JOIN.
             bool isFirstBranchToJoin = false;
             if (target < pcEnd && base[target].opcode == OpCode::JOIN) {
                 for (size_t p = entryPc; p < pc; p += base[p].opsize) {
@@ -906,9 +981,13 @@ bool X64Backend::compileBytecode(
             break;
         }
         case OpCode::RETN: {
-            int d0         = slotDisp(bc.fastop[0]);
             x64::VRegId v0 = nextVReg++;
-            loadSlot(bc.fastop[0], d0, v0);
+            if (bc.fastop[0] == 0) {
+                build.emitVLoadImm64(v0, 0);
+            } else {
+                int d0 = slotDisp(bc.fastop[0]);
+                loadSlot(bc.fastop[0], d0, v0);
+            }
             build.emitVRet(v0);
             break;
         }
@@ -968,7 +1047,7 @@ bool X64Backend::compileBytecode(
         pc += bc.opsize;
     }
 
-    // rmir：字节码直接得到的 vreg MIR，未做优化，直接打印并返回
+    // rmir: MIR obtained directly from bytecode, unoptimized; print and return.
     if (debug && debug->mirOut && debug->mirSlotOnly) {
         std::unordered_map<size_t, size_t> pcToOffset;
         size_t offset = 0;
@@ -991,7 +1070,7 @@ bool X64Backend::compileBytecode(
     // physical register side effects.
     x64::runMirOptimizationPasses(mirBuf);
 
-    // mir：优化后的 vreg MIR，打印并返回（不分配、不编码）
+    // mir: optimized vreg MIR; print and return (do not allocate or encode).
     if (debug && debug->mirOut) {
         std::unordered_map<size_t, size_t> pcToOffset;
         size_t offset = 0;
@@ -1019,14 +1098,17 @@ bool X64Backend::compileBytecode(
         nullptr;
 #endif
 
-    // Generate C++ ABI wrapper: converts Win64 ABI to JIT internal convention, then calls body.
-    // Layout: [C++ wrapper | JIT body ...]. C++ callers enter at offset 0 (wrapper).
-    // JIT-to-JIT calls enter at jitEntryOffset_ (body start), bypassing wrapper overhead.
+    // Generate C++ ABI wrapper, then call MIR body. C++ enters at offset 0; JIT-to-JIT uses
+    // jitEntryOffset_ (body start) so rbx/r12 pool+graph cache is already live.
+    //
+    // Windows: rcx/rdx → rdi/rsi + load rbx/r12 (MIR/regalloc assume these on body entry).
+    // Linux SysV: rdi/rsi already hold slots/ctx; historically only Windows emitted this prologue,
+    // so Linux ran the body with garbage rbx/r12 and mis-compared / mis-loaded frame slots.
     size_t wrapperSize = 0;
 #if defined(_WIN32) || defined(_WIN64)
     {
         uint64_t poolAddr  = unit.poolTopAddr ? reinterpret_cast<uint64_t>(unit.poolTopAddr) : 0;
-        uint64_t graphAddr = reinterpret_cast<uint64_t>(unit.graph);
+        uint64_t graphAddr = reinterpret_cast<uint64_t>(unit.runtimeGraph);
         // push rdi; push rsi; push rbx; push r12  (4 pushes → RSP 8→0→8→0→8 mod 16)
         // 4 pushes gives correct Win64 alignment: body RSP ≡ 0 (mod 16) after wrapper's call.
         code.push_back(0x57);                  // push rdi
@@ -1058,6 +1140,40 @@ bool X64Backend::compileBytecode(
         code.push_back(0x5F);                  // pop rdi
         code.push_back(0xC3);                  // ret
         wrapperSize            = code.size();  // = 42 bytes
+        int32_t callRel        = static_cast<int32_t>(wrapperSize - (callPatchPos + 4));
+        code[callPatchPos]     = static_cast<uint8_t>(callRel & 0xFF);
+        code[callPatchPos + 1] = static_cast<uint8_t>((callRel >> 8) & 0xFF);
+        code[callPatchPos + 2] = static_cast<uint8_t>((callRel >> 16) & 0xFF);
+        code[callPatchPos + 3] = static_cast<uint8_t>((callRel >> 24) & 0xFF);
+    }
+#else
+    // System V AMD64: slot_t * in rdi, void *ctx in rsi (same as JIT body convention).
+    // r13 keeps a stable copy of jitCtx because helper calls are free to clobber rsi under SysV.
+    {
+        uint64_t poolAddr  = unit.poolTopAddr ? reinterpret_cast<uint64_t>(unit.poolTopAddr) : 0;
+        uint64_t graphAddr = reinterpret_cast<uint64_t>(unit.runtimeGraph);
+        code.push_back(0x53);                        // push rbx (callee-saved)
+        code.insert(code.end(), {0x41, 0x54});       // push r12
+        code.insert(code.end(), {0x41, 0x55});       // push r13
+        code.insert(code.end(), {0x49, 0x89, 0xF5}); // mov r13, rsi
+        // mov rbx, imm64(poolTopAddr)
+        code.push_back(0x48);
+        code.push_back(0xBB);
+        for (int b = 0; b < 8; ++b)
+            code.push_back(static_cast<uint8_t>((poolAddr >> (b * 8)) & 0xFF));
+        // mov r12, imm64(graphAddr)
+        code.push_back(0x49);
+        code.push_back(0xBC);
+        for (int b = 0; b < 8; ++b)
+            code.push_back(static_cast<uint8_t>((graphAddr >> (b * 8)) & 0xFF));
+        code.push_back(0xE8);
+        size_t callPatchPos = code.size();
+        code.insert(code.end(), {0, 0, 0, 0});
+        code.insert(code.end(), {0x41, 0x5D}); // pop r13
+        code.insert(code.end(), {0x41, 0x5C}); // pop r12
+        code.push_back(0x5B);                  // pop rbx
+        code.push_back(0xC3);                  // ret
+        wrapperSize            = code.size();
         int32_t callRel        = static_cast<int32_t>(wrapperSize - (callPatchPos + 4));
         code[callPatchPos]     = static_cast<uint8_t>(callRel & 0xFF);
         code[callPatchPos + 1] = static_cast<uint8_t>((callRel >> 8) & 0xFF);
