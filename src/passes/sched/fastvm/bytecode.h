@@ -137,6 +137,10 @@ inline bool hasDynamicOperands(OpCode opcode) {
     }
 }
 
+inline bool isDirectCallOpcode(OpCode opcode) {
+    return opcode == OpCode::FUNC || opcode == OpCode::TAIL;
+}
+
 enum class MarkOpCode {
     MapArr,
     ApplyArr,
@@ -235,11 +239,27 @@ struct BytecodeHeader {                  // 8 bytes
     size_t withCnt() const { return static_cast<size_t>(fastop[1]); }
     size_t argsCnt() const { return normCnt() + withCnt(); }
 
+    size_t directCallArgCnt() const {
+        ASSERT(isDirectCallOpcode(opcode), "Direct-call arg count requires FUNC/TAIL bytecode.");
+        return normCnt();
+    }
+
     const data_arr_t nargs() const {
         return data_arr_t{reinterpret_cast<const data_idx_t *>(this + 1), normCnt()};
     }
     const data_arr_t wargs() const {
         return data_arr_t{reinterpret_cast<const data_idx_t *>(this + 1) + normCnt(), withCnt()};
+    }
+
+    const data_arr_t directCallSrcArgs() const {
+        ASSERT(isDirectCallOpcode(opcode), "Direct-call source args require FUNC/TAIL bytecode.");
+        return nargs();
+    }
+    const data_arr_t directCallDstSlots() const {
+        ASSERT(
+            isDirectCallOpcode(opcode),
+            "Direct-call destination slots require FUNC/TAIL bytecode.");
+        return wargs();
     }
 
     inline data_idx_t *operands() { return reinterpret_cast<data_idx_t *>(this + 1); }
@@ -248,34 +268,70 @@ struct BytecodeHeader {                  // 8 bytes
         return reinterpret_cast<const data_idx_t *>(this + 1);
     }
 
+    size_t extraWordCount() const {
+        switch (opcode) {
+        case OpCode::CAST:
+            [[fallthrough]];
+        case OpCode::JOIN:
+            [[fallthrough]];
+        case OpCode::OPER:
+            [[fallthrough]];
+        case OpCode::SCHD:
+            return 1;
+        case OpCode::FILL:
+            return 2;
+        case OpCode::FUNC:
+            [[fallthrough]];
+        case OpCode::TAIL:
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+            return 3;
+#else
+            return 2;
+#endif
+        default:
+            return 0;
+        }
+    }
+
+    bool hasExtraWord() const { return extraWordCount() != 0; }
+
     inline BytecodeExtra *extra() {
-        if (hasLeadingExtraWord())
-            return reinterpret_cast<BytecodeExtra *>(this + opsize - 2);
-        return reinterpret_cast<BytecodeExtra *>(this + opsize - 1);
+        const size_t extraWords = extraWordCount();
+        ASSERT(extraWords != 0, "Bytecode has no extra payload.");
+        return reinterpret_cast<BytecodeExtra *>(this + opsize - extraWords);
     }
 
     inline const BytecodeExtra *extra() const {
-        if (hasLeadingExtraWord())
-            return reinterpret_cast<const BytecodeExtra *>(this + opsize - 2);
-        return reinterpret_cast<const BytecodeExtra *>(this + opsize - 1);
+        const size_t extraWords = extraWordCount();
+        ASSERT(extraWords != 0, "Bytecode has no extra payload.");
+        return reinterpret_cast<const BytecodeExtra *>(this + opsize - extraWords);
     }
 
-    bool hasLeadingExtraWord() const {
-        if (opcode == OpCode::FILL) {
-            return true;
-        }
-#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
-        return opcode == OpCode::FUNC || opcode == OpCode::TAIL;
-#else
-        return false;
-#endif
+    // FILL uses two extra words. FUNC/TAIL use two extra words in non-JIT builds and three extra
+    // words in JIT builds. extra() returns the first word.
+    inline uint64_t *extra2() {
+        const size_t extraWords = extraWordCount();
+        ASSERT(extraWords >= 2, "Bytecode has no second extra payload word.");
+        return reinterpret_cast<uint64_t *>(this + opsize - extraWords + 1);
     }
-
-    // FUNC/TAIL/FILL use two extra words. extra() returns the first word.
-    inline uint64_t *extra2() { return reinterpret_cast<uint64_t *>(this + opsize - 1); }
     inline const uint64_t *extra2() const {
-        return reinterpret_cast<const uint64_t *>(this + opsize - 1);
+        const size_t extraWords = extraWordCount();
+        ASSERT(extraWords >= 2, "Bytecode has no second extra payload word.");
+        return reinterpret_cast<const uint64_t *>(this + opsize - extraWords + 1);
     }
+
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+    inline uint64_t *extra3() {
+        const size_t extraWords = extraWordCount();
+        ASSERT(extraWords >= 3, "Bytecode has no third extra payload word.");
+        return reinterpret_cast<uint64_t *>(this + opsize - extraWords + 2);
+    }
+    inline const uint64_t *extra3() const {
+        const size_t extraWords = extraWordCount();
+        ASSERT(extraWords >= 3, "Bytecode has no third extra payload word.");
+        return reinterpret_cast<const uint64_t *>(this + opsize - extraWords + 2);
+    }
+#endif
 };
 
 using Bytecode = BytecodeHeader;
@@ -291,8 +347,10 @@ union BytecodeExtra {                           // 8 bytes
     std::string toString(OpCode opcode) const;
 };
 
-// FUNC/TAIL: the first extra word is the runtime callee graph pointer; when JIT is enabled, the
-// second extra word is count (before JIT) or [targetPc:16 | jitFn:48] (after JIT).
+// FUNC/TAIL:
+// - extra()  : runtime callee graph pointer
+// - extra2() : [targetPc:16 | directCallCount:48]
+// - extra3() : JIT entry pointer (JIT builds only; 0 means interpreter entry)
 inline camel::runtime::GCGraph *getFuncExtraRuntimeGraph(const BytecodeHeader *bc) {
     return bc->extra()->runtimeGraph;
 }
@@ -300,38 +358,41 @@ inline void setFuncExtraRuntimeGraph(BytecodeHeader *bc, camel::runtime::GCGraph
     bc->extra()->runtimeGraph = graph;
 }
 
-#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
-constexpr uint64_t kFuncExtraJitFnMask     = (1ull << 48) - 1;
+constexpr uint64_t kFuncExtraCountMask     = (1ull << 48) - 1;
 constexpr uint64_t kFuncExtraTargetPcShift = 48;
 constexpr uint64_t kFuncExtraTargetPcMask  = 0xFFFFull;
-constexpr data_idx_t kFuncJitFastopSentinel =
-    std::numeric_limits<data_idx_t>::lowest(); // negative sentinel; target pc may be 0
 
-inline uint32_t getFuncExtraCount(BytecodeHeader *bc) {
-    return static_cast<uint32_t>(*bc->extra2());
+inline uint32_t getFuncExtraCount(const BytecodeHeader *bc) {
+    const uint64_t count = *bc->extra2() & kFuncExtraCountMask;
+    return count >= static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())
+               ? std::numeric_limits<uint32_t>::max()
+               : static_cast<uint32_t>(count);
 }
 inline size_t getFuncExtraTargetPc(const BytecodeHeader *bc) {
     return static_cast<size_t>((*bc->extra2() >> kFuncExtraTargetPcShift) & kFuncExtraTargetPcMask);
 }
-inline void *getFuncExtraFn(BytecodeHeader *bc) {
-    return reinterpret_cast<void *>(*bc->extra2() & kFuncExtraJitFnMask);
-}
-inline void *getFuncExtraFn(const BytecodeHeader *bc) {
-    return reinterpret_cast<void *>(*bc->extra2() & kFuncExtraJitFnMask);
-}
-inline void setFuncExtraFn(BytecodeHeader *bc, void *fn) {
-    const uint64_t targetPc = static_cast<uint16_t>(bc->fastop[1]);
-    const uint64_t fnBits   = reinterpret_cast<uint64_t>(fn);
-    ASSERT(
-        (fnBits & ~kFuncExtraJitFnMask) == 0,
-        "JIT entry pointer exceeds packed FuncExtra range.");
-    *bc->extra2() = (targetPc << kFuncExtraTargetPcShift) | (fnBits & kFuncExtraJitFnMask);
-    bc->fastop[1] = kFuncJitFastopSentinel;
+inline void setFuncExtraTargetPc(BytecodeHeader *bc, size_t targetPc) {
+    ASSERT(targetPc <= kFuncExtraTargetPcMask, "JIT target pc exceeds packed FuncExtra range.");
+    const uint64_t count = *bc->extra2() & kFuncExtraCountMask;
+    *bc->extra2()        = (static_cast<uint64_t>(targetPc) << kFuncExtraTargetPcShift) | count;
 }
 inline uint32_t incFuncExtraCount(BytecodeHeader *bc) {
-    uint64_t *p = bc->extra2();
-    *p          = *p + 1;
-    return static_cast<uint32_t>(*p);
+    const uint64_t targetPc = *bc->extra2() & ~kFuncExtraCountMask;
+    uint64_t count          = *bc->extra2() & kFuncExtraCountMask;
+    if (count < static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
+        ++count;
+    }
+    *bc->extra2() = targetPc | count;
+    return static_cast<uint32_t>(count);
+}
+
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+inline void *getFuncExtraFn(BytecodeHeader *bc) { return reinterpret_cast<void *>(*bc->extra3()); }
+inline void *getFuncExtraFn(const BytecodeHeader *bc) {
+    return reinterpret_cast<void *>(*bc->extra3());
+}
+inline void setFuncExtraFn(BytecodeHeader *bc, void *fn) {
+    *bc->extra3() = reinterpret_cast<uint64_t>(fn);
 }
 #endif
 

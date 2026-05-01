@@ -59,6 +59,21 @@ static camel::runtime::gc_node_ref_t resolveTailValueNode(camel::runtime::GCGrap
     return tailRef;
 }
 
+static std::vector<data_idx_t> directCallDstSlotsOf(camel::runtime::GCGraph *targetRuntimeGraph) {
+    ASSERT(targetRuntimeGraph != nullptr, "FastVM direct-call target graph is null.");
+    std::vector<data_idx_t> dstSlots;
+    const auto normPorts = targetRuntimeGraph->normPorts();
+    const auto withPorts = targetRuntimeGraph->withPorts();
+    dstSlots.reserve(normPorts.size() + withPorts.size());
+    for (auto portRef : normPorts) {
+        dstSlots.push_back(runtimeDataIndexOf(targetRuntimeGraph, portRef));
+    }
+    for (auto portRef : withPorts) {
+        dstSlots.push_back(runtimeDataIndexOf(targetRuntimeGraph, portRef));
+    }
+    return dstSlots;
+}
+
 const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() {
     static const std::unordered_map<std::string, OpCode> supportedInlineOperators = {
         {":op/add_i", OpCode::IADD}, {":op/add_l", OpCode::LADD},
@@ -375,19 +390,29 @@ static bytecode_vec_t compileRuntimeGraph(
                     runtimeNodeIndex,
                     graph->name()));
             normOps.insert(normOps.end(), withOps.begin(), withOps.end());
+            auto dstSlots = directCallDstSlotsOf(targetRuntimeGraph);
+            ASSERT(
+                normOps.size() == dstSlots.size(),
+                std::format(
+                    "FastVM direct-call arity mismatch for node ref {} in graph '{}': "
+                    "callerArgs={}, calleePorts={}.",
+                    runtimeNodeIndex,
+                    graph->name(),
+                    normOps.size(),
+                    dstSlots.size()));
             appendBytecode(
                 bytecodes,
                 (opt.enableTailCallDetection && isTail) ? OpCode::TAIL : OpCode::FUNC,
                 record->dataIndex,
                 {},
                 normOps,
-                {},
+                dstSlots,
                 true,
                 {.runtimeGraph = targetRuntimeGraph},
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
-                2
+                3
 #else
-                1
+                2
 #endif
             );
             break;
@@ -600,7 +625,7 @@ compileAndLink(context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileS
                 std::format(
                     "FastVM linker cannot resolve runtime graph for bytecode at pc {}.",
                     scanIndex));
-            bc.fastop[1] = as_index(offsetMap.at(getFuncExtraRuntimeGraph(&bc)));
+            setFuncExtraTargetPc(&bc, offsetMap.at(getFuncExtraRuntimeGraph(&bc)));
         } break;
         case OpCode::JUMP: {
             bc.fastop[0] += offsetMap.at(info.runtimeGraph);
@@ -624,21 +649,28 @@ std::string opCodeToString(const Bytecode &bc, const context_ptr_t &context) {
         std::string operandStr;
 
         if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
-            size_t argsCnt = bc.fastop[0];
-            operandStr     = "(";
+            const auto srcArgs  = bc.directCallSrcArgs();
+            const auto dstSlots = bc.directCallDstSlots();
+            operandStr          = "(";
 
-            for (size_t j = 0; j < argsCnt; j++) {
-                operandStr += std::to_string(bc.operands()[j]);
-                if (j + 1 < argsCnt)
+            for (size_t j = 0; j < srcArgs.size(); j++) {
+                operandStr += std::to_string(srcArgs[j]);
+                if (j + 1 < srcArgs.size())
                     operandStr += ", ";
             }
 
-            operandStr += ")";
+            operandStr += ") => (";
 
-            if (bc.fastop[1] >= 0) {
-                operandStr += " -> ";
-                operandStr += std::to_string(bc.fastop[1]);
+            for (size_t j = 0; j < dstSlots.size(); ++j) {
+                operandStr += std::to_string(dstSlots[j]);
+                if (j + 1 < dstSlots.size()) {
+                    operandStr += ", ";
+                }
             }
+
+            operandStr += ")";
+            operandStr += " -> ";
+            operandStr += std::to_string(getFuncExtraTargetPc(&bc));
         } else {
             size_t normCnt = bc.fastop[0];
             size_t withCnt = bc.fastop[1];
@@ -661,13 +693,16 @@ std::string opCodeToString(const Bytecode &bc, const context_ptr_t &context) {
             operandStr += ">";
         }
 
-        return std::format(
-            "{} | {} | {}",
-            bc.toString(),
-            operandStr,
-            bc.opcode == OpCode::OPER ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
-                                      : bc.extra()->toString(bc.opcode));
+        const std::string extraInfo =
+            bc.hasExtraWord() ? (bc.opcode == OpCode::OPER
+                                     ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
+                                     : bc.extra()->toString(bc.opcode))
+                              : "";
+        return std::format("{} | {} | {}", bc.toString(), operandStr, extraInfo);
     } else {
-        return std::format("{} | {}", bc.toString(), bc.extra()->toString(bc.opcode));
+        return std::format(
+            "{} | {}",
+            bc.toString(),
+            bc.hasExtraWord() ? bc.extra()->toString(bc.opcode) : "");
     }
 }

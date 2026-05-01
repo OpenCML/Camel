@@ -48,10 +48,8 @@ namespace {
 constexpr size_t kFastVmEntryPcSlot            = 1;
 constexpr size_t kFastVmJitEntrySlot           = 2;
 constexpr size_t kFastVmFlagsSlot              = 3;
-constexpr size_t kFastVmRootCacheSlot          = 4;
 constexpr size_t kFastVmIndirectCallCountSlot  = 5;
 constexpr size_t kFastVmGraphLengthSlot        = 6;
-constexpr size_t kFastVmCallLayoutSlot         = 7;
 constexpr uintptr_t kFastVmFlagCompileFailed   = 1u << 0;
 constexpr uintptr_t kFastVmFlagFailureReported = 1u << 1;
 
@@ -121,12 +119,6 @@ inline void setFastVmJitFailureReportedOf(camel::runtime::GCGraph *graph, bool r
     graph->setExtraSlot(kFastVmFlagsSlot, flags);
 }
 
-inline FastVMRuntimeRootCache *fastVmRootCacheOf(camel::runtime::GCGraph *graph) {
-    return graph
-               ? reinterpret_cast<FastVMRuntimeRootCache *>(graph->extraSlot(kFastVmRootCacheSlot))
-               : nullptr;
-}
-
 inline uint32_t incFastVmIndirectCallCountOf(camel::runtime::GCGraph *graph) {
     if (!graph) {
         return 0;
@@ -137,23 +129,6 @@ inline uint32_t incFastVmIndirectCallCountOf(camel::runtime::GCGraph *graph) {
                               : static_cast<uint32_t>(raw) + 1;
     graph->setExtraSlot(kFastVmIndirectCallCountSlot, static_cast<uintptr_t>(next));
     return next;
-}
-
-inline void setFastVmRootCacheOf(camel::runtime::GCGraph *graph, FastVMRuntimeRootCache *cache) {
-    if (graph)
-        graph->setExtraSlot(kFastVmRootCacheSlot, reinterpret_cast<uintptr_t>(cache));
-}
-
-inline FastVMCallLayoutCache *fastVmCallLayoutOf(camel::runtime::GCGraph *graph) {
-    return graph
-               ? reinterpret_cast<FastVMCallLayoutCache *>(graph->extraSlot(kFastVmCallLayoutSlot))
-               : nullptr;
-}
-
-inline void setFastVmCallLayoutOf(camel::runtime::GCGraph *graph, FastVMCallLayoutCache *cache) {
-    if (graph) {
-        graph->setExtraSlot(kFastVmCallLayoutSlot, reinterpret_cast<uintptr_t>(cache));
-    }
 }
 
 struct HigherOrderCallSite {
@@ -181,38 +156,158 @@ inline HigherOrderCallSite makeHigherOrderCallSite(Function *func) {
 
 FastVMSchedPass::~FastVMSchedPass() = default;
 
-std::span<const camel::runtime::gc_data_idx_t>
-FastVMSchedPass::directCallPortSlots(camel::runtime::GCGraph *targetGraph) {
-    ASSERT(targetGraph != nullptr, "FastVM direct-call target graph is null.");
-    if (auto *cache = fastVmCallLayoutOf(targetGraph)) {
-        return std::span<const camel::runtime::gc_data_idx_t>(cache->portSlots);
+void FastVMSchedPass::populateDirectCallFrame(
+    Frame *callerFrame, Frame *calleeFrame, data_arr_t srcArgs, data_arr_t dstSlots) {
+    ASSERT(callerFrame != nullptr && calleeFrame != nullptr, "FastVM call frame is null.");
+    ASSERT(
+        srcArgs.size() == dstSlots.size(),
+        "FastVM encoded direct-call layout is arity-mismatched.");
+    if (srcArgs.size() == 1) {
+        calleeFrame->set(dstSlots[0], callerFrame->get<slot_t>(srcArgs[0]));
+        return;
+    }
+    for (size_t argIndex = 0; argIndex < srcArgs.size(); ++argIndex) {
+        calleeFrame->set(dstSlots[argIndex], callerFrame->get<slot_t>(srcArgs[argIndex]));
+    }
+}
+
+void FastVMSchedPass::captureCallArgValues(
+    Frame *callerFrame, data_arr_t srcArgs, std::vector<slot_t> &out) {
+    ASSERT(callerFrame != nullptr, "FastVM direct call source frame is null.");
+    out.resize(srcArgs.size());
+    if (srcArgs.size() == 1) {
+        out[0] = callerFrame->get<slot_t>(srcArgs[0]);
+        return;
+    }
+    for (size_t argIndex = 0; argIndex < srcArgs.size(); ++argIndex) {
+        out[argIndex] = callerFrame->get<slot_t>(srcArgs[argIndex]);
+    }
+}
+
+void FastVMSchedPass::populateDirectCallFrameFromValues(
+    Frame *calleeFrame, data_arr_t dstSlots, std::span<const slot_t> argValues) {
+    ASSERT(calleeFrame != nullptr, "FastVM direct call target frame is null.");
+    ASSERT(
+        argValues.size() == dstSlots.size(),
+        "FastVM encoded direct-call layout is arity-mismatched.");
+    if (argValues.size() == 1) {
+        calleeFrame->set(dstSlots[0], argValues[0]);
+        return;
+    }
+    for (size_t argIndex = 0; argIndex < argValues.size(); ++argIndex) {
+        calleeFrame->set(dstSlots[argIndex], argValues[argIndex]);
+    }
+}
+
+void FastVMSchedPass::populateFunctionClosureFrame(Frame *calleeFrame, Function *func) {
+    ASSERT(calleeFrame != nullptr, "FastVM closure target frame is null.");
+    ASSERT(func != nullptr, "FastVM closure Function is null.");
+    auto *targetGraph = func->graph();
+    ASSERT(targetGraph != nullptr, "FastVM closure target graph is null.");
+
+    const auto closureNodes = targetGraph->closureNodes();
+    if (closureNodes.empty()) {
+        return;
     }
 
-    auto layout          = std::make_unique<FastVMCallLayoutCache>();
+    Tuple *closure = func->tuple();
+    ASSERT(closure != nullptr, "FastVM closure tuple is null.");
+    ASSERT(
+        closure->size() == closureNodes.size(),
+        std::format(
+            "FastVM closure-arity mismatch for graph '{}': expected {}, got {}.",
+            targetGraph->name(),
+            closureNodes.size(),
+            closure->size()));
+    for (size_t i = 0; i < closureNodes.size(); ++i) {
+        const auto *port = targetGraph->node(closureNodes[i]);
+        ASSERT(port != nullptr, "FastVM closure port is null.");
+        calleeFrame->set(port->dataIndex, closure->get<slot_t>(i));
+    }
+}
+
+void FastVMSchedPass::populateIndirectCallFrame(
+    Frame *callerFrame, Frame *calleeFrame, Function *func, data_arr_t nargs, data_arr_t wargs) {
+    ASSERT(callerFrame != nullptr, "FastVM indirect call source frame is null.");
+    ASSERT(calleeFrame != nullptr, "FastVM indirect call target frame is null.");
+    ASSERT(func != nullptr, "FastVM indirect call callee Function is null.");
+    auto *targetGraph = func->graph();
+    ASSERT(targetGraph != nullptr, "FastVM indirect call target graph is null.");
+    ASSERT(!wargs.empty(), "FastVM indirect CALL requires with-arg[0] as Function.");
+
+    const auto normPorts = targetGraph->normPorts();
+    ASSERT(
+        nargs.size() == normPorts.size(),
+        std::format(
+            "FastVM indirect call norm-arity mismatch for graph '{}': expected {}, got {}.",
+            targetGraph->name(),
+            normPorts.size(),
+            nargs.size()));
+    for (size_t i = 0; i < normPorts.size(); ++i) {
+        const auto *port = targetGraph->node(normPorts[i]);
+        ASSERT(port != nullptr, "FastVM indirect call norm port is null.");
+        calleeFrame->set(port->dataIndex, callerFrame->get<slot_t>(nargs[i]));
+    }
+
+    const auto withPorts = targetGraph->withPorts();
+    ASSERT(
+        wargs.size() - 1 == withPorts.size(),
+        std::format(
+            "FastVM indirect call with-arity mismatch for graph '{}': expected {}, got {}.",
+            targetGraph->name(),
+            withPorts.size(),
+            wargs.size() - 1));
+    for (size_t i = 0; i < withPorts.size(); ++i) {
+        const auto *port = targetGraph->node(withPorts[i]);
+        ASSERT(port != nullptr, "FastVM indirect call with port is null.");
+        calleeFrame->set(port->dataIndex, callerFrame->get<slot_t>(wargs[i + 1]));
+    }
+
+    populateFunctionClosureFrame(calleeFrame, func);
+}
+
+void FastVMSchedPass::populateMarkedCallFrame(
+    Frame *calleeFrame, Function *func, std::span<const slot_t> normArgs,
+    std::span<const slot_t> withArgs) {
+    ASSERT(calleeFrame != nullptr, "FastVM marked call target frame is null.");
+    ASSERT(func != nullptr, "FastVM marked call Function is null.");
+    auto *targetGraph = func->graph();
+    ASSERT(targetGraph != nullptr, "FastVM marked call target graph is null.");
+
     const auto normPorts = targetGraph->normPorts();
     const auto withPorts = targetGraph->withPorts();
-    layout->portSlots.reserve(normPorts.size() + withPorts.size());
-    for (auto portRef : normPorts) {
-        const auto *port = targetGraph->node(portRef);
-        ASSERT(port != nullptr, "FastVM direct call norm port is null.");
-        layout->portSlots.push_back(port->dataIndex);
+    ASSERT(
+        normArgs.size() == normPorts.size(),
+        std::format(
+            "FastVM marked call norm-arity mismatch for graph '{}': expected {}, got {}.",
+            targetGraph->name(),
+            normPorts.size(),
+            normArgs.size()));
+    ASSERT(
+        withArgs.size() == withPorts.size(),
+        std::format(
+            "FastVM marked call with-arity mismatch for graph '{}': expected {}, got {}.",
+            targetGraph->name(),
+            withPorts.size(),
+            withArgs.size()));
+
+    for (size_t i = 0; i < normPorts.size(); ++i) {
+        const auto *port = targetGraph->node(normPorts[i]);
+        ASSERT(port != nullptr, "FastVM marked call norm port is null.");
+        calleeFrame->set(port->dataIndex, normArgs[i]);
     }
-    for (auto portRef : withPorts) {
-        const auto *port = targetGraph->node(portRef);
-        ASSERT(port != nullptr, "FastVM direct call with port is null.");
-        layout->portSlots.push_back(port->dataIndex);
+    for (size_t i = 0; i < withPorts.size(); ++i) {
+        const auto *port = targetGraph->node(withPorts[i]);
+        ASSERT(port != nullptr, "FastVM marked call with port is null.");
+        calleeFrame->set(port->dataIndex, withArgs[i]);
     }
 
-    FastVMCallLayoutCache *raw = layout.get();
-    callLayoutCaches_.push_back(std::move(layout));
-    setFastVmCallLayoutOf(targetGraph, raw);
-    return std::span<const camel::runtime::gc_data_idx_t>(raw->portSlots);
+    populateFunctionClosureFrame(calleeFrame, func);
 }
 
 void FastVMSchedPass::precompile(camel::runtime::GCGraph *runtimeRoot) {
     ASSERT(runtimeRoot != nullptr, "Runtime root graph is null.");
-    runtimeRoot_ = runtimeRoot;
-    auto linked  = compileAndLink(
+    auto linked = compileAndLink(
         context_,
         runtimeRoot,
         {
@@ -229,27 +324,6 @@ void FastVMSchedPass::precompile(camel::runtime::GCGraph *runtimeRoot) {
         setFastVmEntryPcOf(runtimeGraph, offset);
         setFastVmGraphLengthOf(runtimeGraph, length);
     }
-    auto rootCache = std::make_unique<FastVMRuntimeRootCache>();
-    rootCache->callTargetsByPc.resize(bytecodes_.size(), nullptr);
-    rootCache->callLayoutsByPc.resize(bytecodes_.size(), nullptr);
-    rootCache->singleArgPortByPc.resize(bytecodes_.size(), 0);
-    for (size_t pc = 0; pc < bytecodes_.size();) {
-        const Bytecode &bc = bytecodes_[pc];
-        if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
-            auto *target                   = getFuncExtraRuntimeGraph(&bc);
-            rootCache->callTargetsByPc[pc] = target;
-            const auto portSlots           = directCallPortSlots(target);
-            rootCache->callLayoutsByPc[pc] = fastVmCallLayoutOf(target);
-            if (portSlots.size() == 1) {
-                rootCache->singleArgPortByPc[pc] = portSlots[0];
-            }
-        }
-        pc += bc.opsize;
-    }
-    FastVMRuntimeRootCache *rootCacheRaw = rootCache.get();
-    runtimeRootCaches_.push_back(std::move(rootCache));
-    runtimeRootCache_ = rootCacheRaw;
-    setFastVmRootCacheOf(runtimeRoot_, rootCacheRaw);
 }
 
 void FastVMSchedPass::push(size_t pc, Frame *frame) {
@@ -277,7 +351,6 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
     ASSERT(graph != nullptr, "FastVM requires a non-null runtime root graph.");
 
     camel::runtime::GCGraph *runtimeRoot = graph;
-    runtimeRootCaches_.clear();
     precompile(runtimeRoot);
 
     stackDepth_ = 0;
@@ -376,7 +449,7 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
-        seedMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
+        populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
 #if ENABLE_FASTVM_JIT
         currFrame.get<Array *>(self)->data()[i] =
@@ -398,7 +471,7 @@ void FastVMSchedPass::evalMarkedOperator_apply_arr(
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
-        seedMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
+        populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
 #if ENABLE_FASTVM_JIT
         arr->data()[i] = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
@@ -424,7 +497,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
-        seedMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
+        populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
 #if ENABLE_FASTVM_JIT
         slot_t result = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
@@ -460,7 +533,7 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         const slot_t args[]            = {currFrame.get<slot_t>(self), arr->data()[i]};
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
-        seedMarkedFunctionFrame(frame, func, std::span<const slot_t>(args, 2));
+        populateMarkedCallFrame(frame, func, std::span<const slot_t>(args, 2));
 
 #if ENABLE_FASTVM_JIT
         currFrame.set(
@@ -483,7 +556,7 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
-        seedMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
+        populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
 #if ENABLE_FASTVM_JIT
         invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
@@ -633,7 +706,7 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
         for (size_t pc = 0; pc < bytecodes_.size();) {
             Bytecode &bc = bytecodes_[pc];
             if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
-                if (bc.fastop[1] >= 0 && runtimeCallTarget(pc) == graph)
+                if (getFuncExtraFn(&bc) == nullptr && getFuncExtraRuntimeGraph(&bc) == graph)
                     setFuncExtraFn(&bc, reinterpret_cast<void *>(fn));
             }
             pc += bc.opsize;
@@ -649,18 +722,18 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
 }
 
 Bytecode *FastVMSchedPass::materializeCallTarget(size_t pc, Bytecode *bc) {
-    if (!bc || bc->fastop[1] < 0) {
+    if (!bc || getFuncExtraFn(bc) != nullptr) {
         return bc;
     }
     if (!jitEnabled()) {
         return bc;
     }
-    auto *runtimeTarget = runtimeCallTarget(pc);
+    auto *runtimeTarget = getFuncExtraRuntimeGraph(bc);
     ASSERT(runtimeTarget != nullptr, "FastVM direct call target is not materialized.");
     if (jitCompileFailedOf(runtimeTarget)) {
         return bc;
     }
-    size_t targetPc = static_cast<size_t>(bc->fastop[1]);
+    size_t targetPc = getFuncExtraTargetPc(bc);
     uint32_t count  = incFuncExtraCount(bc);
     if (tierPolicy_.shouldJit(count)) {
         compileAndCacheGraph(runtimeTarget, targetPc);
@@ -683,13 +756,6 @@ size_t FastVMSchedPass::graphEntryPc(camel::runtime::GCGraph *graph) const {
         pc.has_value(),
         std::format("Runtime graph '{}' has no FastVM entry pc.", graph->name()));
     return *pc;
-}
-
-camel::runtime::GCGraph *FastVMSchedPass::runtimeCallTarget(size_t pc) const {
-    if (auto *cache = fastVmRootCacheOf(runtimeRoot_)) {
-        return pc < cache->callTargetsByPc.size() ? cache->callTargetsByPc[pc] : nullptr;
-    }
-    return nullptr;
 }
 
 uint32_t FastVMSchedPass::noteIndirectCall(camel::runtime::GCGraph *graph) const {

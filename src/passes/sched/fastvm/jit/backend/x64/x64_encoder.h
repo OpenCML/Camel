@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: Apr. 10, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1305,8 +1305,9 @@ class Encoder {
              static_cast<uint8_t>((rel >> 24) & 0xff)});
         asmLineAt(at, "jge .+" + std::to_string(rel) + "  ; rel32");
     }
-    void jeRel32(int32_t rel) {
-        size_t at = here();
+    size_t jeRel32(int32_t rel) {
+        size_t at     = here();
+        size_t relPos = at + 2;
         emitBytes({0x0f, 0x84});
         emitBytes(
             {static_cast<uint8_t>(rel & 0xff),
@@ -1314,6 +1315,7 @@ class Encoder {
              static_cast<uint8_t>((rel >> 16) & 0xff),
              static_cast<uint8_t>((rel >> 24) & 0xff)});
         asmLineAt(at, "je .+" + std::to_string(rel) + "  ; rel32");
+        return relPos;
     }
     // jmp rel8 (short jump, -128..127).
     void jmpRel8(int8_t rel) {

@@ -90,34 +90,16 @@ class TailArgStorage {
 
 inline void copyOperandsToBuffer(slot_t *dst, Frame *frame, const Bytecode &bc, size_t argsCnt) {
     for (size_t i = 0; i < argsCnt; ++i) {
-        dst[i] = frame->get<slot_t>(bc.operands()[i]);
+        dst[i] = frame->get<slot_t>(bc.directCallSrcArgs()[i]);
     }
 }
 
-inline void writeDirectCallArgsToFrame(
-    Frame *frame, camel::runtime::GCGraph *targetGraph, const slot_t *args, size_t argsCnt) {
+inline void
+writeDirectCallArgsToFrame(Frame *frame, data_arr_t dstSlots, const slot_t *args, size_t argsCnt) {
     ASSERT(frame != nullptr, "JIT trampoline target frame is null.");
-    ASSERT(targetGraph != nullptr, "JIT trampoline target graph is null.");
-    const auto normPorts                       = targetGraph->normPorts();
-    const auto withPorts                       = targetGraph->withPorts();
-    [[maybe_unused]] const size_t expectedArgs = normPorts.size() + withPorts.size();
-    ASSERT(
-        argsCnt == expectedArgs,
-        std::format(
-            "JIT direct-call arity mismatch for graph '{}': expected {}, got {}.",
-            targetGraph->name(),
-            expectedArgs,
-            argsCnt));
-    size_t argIndex = 0;
-    for (auto portRef : normPorts) {
-        const auto *port = targetGraph->node(portRef);
-        ASSERT(port != nullptr, "JIT direct-call norm port is null.");
-        frame->set(port->dataIndex, args[argIndex++]);
-    }
-    for (auto portRef : withPorts) {
-        const auto *port = targetGraph->node(portRef);
-        ASSERT(port != nullptr, "JIT direct-call with port is null.");
-        frame->set(port->dataIndex, args[argIndex++]);
+    ASSERT(argsCnt == dstSlots.size(), "JIT encoded direct-call layout is arity-mismatched.");
+    for (size_t argIndex = 0; argIndex < argsCnt; ++argIndex) {
+        frame->set(dstSlots[argIndex], args[argIndex]);
     }
 }
 
@@ -228,21 +210,21 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
     Bytecode &bc = base[pc];
 
-    const data_idx_t targetSlot = bc.fastop[1];
-    size_t targetPc             = targetSlot < 0 ? 0 : static_cast<size_t>(targetSlot);
-    size_t argsCnt              = bc.normCnt();
+    size_t targetPc     = getFuncExtraTargetPc(&bc);
+    size_t argsCnt      = bc.directCallArgCnt();
+    const auto dstSlots = bc.directCallDstSlots();
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "JIT.Trampoline",
         "trampolineFunc bc: targetPc={} argsCnt={}",
         targetPc,
         argsCnt));
     uint32_t count = 0;
-    if (targetSlot >= 0)
+    if (getFuncExtraFn(&bc) == nullptr)
         count = incFuncExtraCount(&bc);
 
-    if (targetSlot < 0) {
+    if (getFuncExtraFn(&bc) != nullptr) {
         EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("JIT.Trampoline", "trampolineFunc path: JIT->JIT"));
-        auto *runtimeTarget = vm->runtimeCallTarget(pc);
+        auto *runtimeTarget = getFuncExtraRuntimeGraph(&bc);
         ASSERT(
             runtimeTarget != nullptr,
             std::format(
@@ -258,7 +240,7 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
         Frame *newFrame    = vm->acquireFrameForCall(runtimeTarget);
         TailArgStorage args(argsCnt);
         copyOperandsToBuffer(args.data(), callerFrame, bc, argsCnt);
-        writeDirectCallArgsToFrame(newFrame, runtimeTarget, args.data(), argsCnt);
+        writeDirectCallArgsToFrame(newFrame, dstSlots, args.data(), argsCnt);
 
         EXEC_WHEN_DEBUG({
             std::ostringstream os;
@@ -276,7 +258,7 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
         return result;
     }
 
-    auto *runtimeTarget = vm->runtimeCallTarget(pc);
+    auto *runtimeTarget = getFuncExtraRuntimeGraph(&bc);
     ASSERT(
         runtimeTarget != nullptr,
         std::format(
@@ -286,7 +268,7 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
     Frame *newFrame    = vm->acquireFrameForCall(runtimeTarget);
     TailArgStorage args(argsCnt);
     copyOperandsToBuffer(args.data(), callerFrame, bc, argsCnt);
-    writeDirectCallArgsToFrame(newFrame, runtimeTarget, args.data(), argsCnt);
+    writeDirectCallArgsToFrame(newFrame, dstSlots, args.data(), argsCnt);
     (void)count;
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "JIT.Trampoline",
@@ -302,16 +284,16 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     auto *base   = static_cast<Bytecode *>(const_cast<void *>(jc->base));
     Bytecode &bc = base[pc];
 
-    const data_idx_t targetSlot = bc.fastop[1];
-    size_t targetPc             = targetSlot < 0 ? 0 : static_cast<size_t>(targetSlot);
-    size_t argsCnt              = bc.normCnt();
-    uint32_t count              = 0;
-    if (targetSlot >= 0)
+    size_t targetPc     = getFuncExtraTargetPc(&bc);
+    size_t argsCnt      = bc.directCallArgCnt();
+    const auto dstSlots = bc.directCallDstSlots();
+    uint32_t count      = 0;
+    if (getFuncExtraFn(&bc) == nullptr)
         count = incFuncExtraCount(&bc);
 
-    if (targetSlot < 0) {
+    if (getFuncExtraFn(&bc) != nullptr) {
         Frame *callerFrame  = reinterpret_cast<Frame *>(callerSlots[0]);
-        auto *runtimeTarget = vm->runtimeCallTarget(pc);
+        auto *runtimeTarget = getFuncExtraRuntimeGraph(&bc);
         ASSERT(
             runtimeTarget != nullptr,
             std::format(
@@ -321,23 +303,16 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
         copyOperandsToBuffer(args.data(), callerFrame, bc, argsCnt);
         vm->releaseFrameForTail(callerFrame);
         Frame *newFrame = vm->acquireFrameForTail(runtimeTarget);
-        writeDirectCallArgsToFrame(newFrame, runtimeTarget, args.data(), argsCnt);
+        writeDirectCallArgsToFrame(newFrame, dstSlots, args.data(), argsCnt);
         JitEntryFn fn = reinterpret_cast<JitEntryFn>(getFuncExtraFn(&bc));
-        if (fn) {
-            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                "JIT.Trampoline",
-                "trampolineTail: JIT->JIT target='{}'",
-                runtimeTarget->name()));
-            return vm->invokeOwnedJitFrame(fn, newFrame, ctx);
-        }
         EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
             "JIT.Trampoline",
-            "trampolineTail: JIT->interpreter(target compiled sentinel without fn) target='{}'",
+            "trampolineTail: JIT->JIT target='{}'",
             runtimeTarget->name()));
-        return vm->call(vm->graphEntryPc(runtimeTarget), newFrame);
+        return vm->invokeOwnedJitFrame(fn, newFrame, ctx);
     }
 
-    auto *runtimeTarget = vm->runtimeCallTarget(pc);
+    auto *runtimeTarget = getFuncExtraRuntimeGraph(&bc);
     ASSERT(
         runtimeTarget != nullptr,
         std::format(
@@ -353,7 +328,7 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     copyOperandsToBuffer(args.data(), callerFrame, bc, argsCnt);
     vm->releaseFrameForTail(callerFrame);
     Frame *newFrame = vm->acquireFrameForTail(runtimeTarget);
-    writeDirectCallArgsToFrame(newFrame, runtimeTarget, args.data(), argsCnt);
+    writeDirectCallArgsToFrame(newFrame, dstSlots, args.data(), argsCnt);
     (void)count;
     return vm->call(targetPc, newFrame);
 }
@@ -369,12 +344,12 @@ slot_t *prepareDirectJitCall(slot_t *callerSlots, void *ctx, const Bytecode *bc)
         std::format(
             "FastVM prepareDirectJitCall target '{}' must have a materialized runtime graph.",
             runtimeTarget->name()));
-    size_t argsCnt     = bc->normCnt();
+    size_t argsCnt     = bc->directCallArgCnt();
     Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
     Frame *newFrame    = vm->acquireFrameForCall(runtimeTarget);
     TailArgStorage args(argsCnt);
     copyOperandsToBuffer(args.data(), callerFrame, *bc, argsCnt);
-    writeDirectCallArgsToFrame(newFrame, runtimeTarget, args.data(), argsCnt);
+    writeDirectCallArgsToFrame(newFrame, bc->directCallDstSlots(), args.data(), argsCnt);
     newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
     return newFrame->slotBase();
 }
@@ -390,14 +365,14 @@ slot_t *prepareDirectJitTailCall(slot_t *callerSlots, void *ctx, const Bytecode 
         std::format(
             "FastVM prepareDirectJitTailCall target '{}' must have a materialized runtime graph.",
             runtimeTarget->name()));
-    size_t argsCnt     = bc->normCnt();
+    size_t argsCnt     = bc->directCallArgCnt();
     Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
     TailArgStorage args(argsCnt);
     copyOperandsToBuffer(args.data(), callerFrame, *bc, argsCnt);
 
     vm->releaseFrameForTail(callerFrame);
     Frame *newFrame = vm->acquireFrameForTail(runtimeTarget);
-    writeDirectCallArgsToFrame(newFrame, runtimeTarget, args.data(), argsCnt);
+    writeDirectCallArgsToFrame(newFrame, bc->directCallDstSlots(), args.data(), argsCnt);
     newFrame->slotBase()[0] = reinterpret_cast<slot_t>(newFrame);
     return newFrame->slotBase();
 }
@@ -428,12 +403,12 @@ slot_t directSelfFuncInvoke(slot_t *callerSlots, void *ctx, const Bytecode *bc) 
             "FastVM directSelfFuncInvoke target '{}' must have a materialized runtime graph.",
             runtimeGraph->name()));
     JitEntryFn fn      = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
-    size_t argsCnt     = bc->normCnt();
+    size_t argsCnt     = bc->directCallArgCnt();
     Frame *callerFrame = reinterpret_cast<Frame *>(callerSlots[0]);
     Frame *newFrame    = vm->acquireFrameForCall(runtimeGraph);
     TailArgStorage args(argsCnt);
     copyOperandsToBuffer(args.data(), callerFrame, *bc, argsCnt);
-    writeDirectCallArgsToFrame(newFrame, runtimeGraph, args.data(), argsCnt);
+    writeDirectCallArgsToFrame(newFrame, bc->directCallDstSlots(), args.data(), argsCnt);
     slot_t *slots = newFrame->slotBase();
     slots[0]      = reinterpret_cast<slot_t>(newFrame);
     slot_t result;
@@ -588,7 +563,7 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
             runtimeTarget != nullptr,
             "FastVM JIT indirect CALL requires a materialized runtime graph target.");
         Frame *funcFrame = vm->acquireFrameForCall(runtimeTarget);
-        vm->seedIndirectCallFrame(frame, funcFrame, function, nargs, wargs);
+        vm->populateIndirectCallFrame(frame, funcFrame, function, nargs, wargs);
 
         // Indirect CALL still crosses a runtime Function carrier and closure
         // object. Keep this path on the interpreter entry for now until the

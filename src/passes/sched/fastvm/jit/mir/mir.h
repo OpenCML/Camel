@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -192,9 +192,8 @@ struct NativeJitCallParams {
     int32_t argDstDisps[8];
     uint8_t argVRegs[8]; // VReg IDs for pre-loaded args (frameless path); 0xFF = not pre-loaded
     uint8_t resultVReg = 0xFF; // VReg for call result (frameless); 0xFF = store inside call
-    bool isSameGraph;          // true = call rel32, false = load fn from extra2 and call rax
-    uint64_t extra2Addr;       // &bc->extra2() (load fn pointer at runtime for cross graph)
-    uint64_t fastop1Addr;      // &bc->fastop[1] (cross-graph runtime check: 0 = already compiled)
+    bool isSameGraph;          // true = call rel32, false = load fn from jitFnAddr and call rax
+    uint64_t jitFnAddr;        // &bc->extra3() (load JIT entry pointer at runtime for cross graph)
     bool frameless; // true = stack allocation (no Frame pool), suitable for pure self-recursive
                     // same-graph calls
     uint32_t calleeSlotBytes; // Callee stack-frame size when frameless (16-byte aligned)

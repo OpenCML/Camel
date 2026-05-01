@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 09, 2026
- * Updated: Apr. 12, 2026
+ * Updated: May. 01, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -617,19 +617,14 @@ void encodeMirBuffer(
             // ═══ FRAME-BASED PATH (cross-graph or non-frameless) ═══
             enc.pushRdi();
 
-            size_t jnzNotCompiledRelPos = 0, jnzNotCompiledEnd = 0;
+            size_t jzNotCompiledRelPos = 0, jzNotCompiledEnd = 0;
             if (!p->isSameGraph) {
-                enc.movRaxImm64(p->fastop1Addr);
-                enc.emitBytes({0x0F, 0xB6, 0x00});
-                enc.asmLine("movzx eax, byte [rax]  ; fastop[1]");
-                enc.testRaxRax();
-                jnzNotCompiledRelPos = enc.jneRel32(0);
-                jnzNotCompiledEnd    = enc.here();
-                enc.movRaxImm64(p->extra2Addr);
+                enc.movRaxImm64(p->jitFnAddr);
                 enc.emitBytes({0x48, 0x8B, 0x00});
-                enc.asmLine("mov rax, [rax]  ; load extra2");
-                enc.shlRax16();
-                enc.shrRax16();
+                enc.asmLine("mov rax, [rax]  ; load cross-graph jit entry");
+                enc.testRaxRax();
+                jzNotCompiledRelPos = enc.jeRel32(0);
+                jzNotCompiledEnd    = enc.here();
                 enc.pushRax();
             }
 
@@ -703,8 +698,8 @@ void encodeMirBuffer(
                 enc.popRax();
                 size_t slowCommon = enc.here();
                 enc.patchRel32At(
-                    jnzNotCompiledRelPos,
-                    static_cast<int32_t>(slowCommon - jnzNotCompiledEnd));
+                    jzNotCompiledRelPos,
+                    static_cast<int32_t>(slowCommon - jzNotCompiledEnd));
                 enc.patchRel32At(jneRelPos, static_cast<int32_t>(slowStart - jneEnd));
             } else {
                 enc.patchRel32At(jneRelPos, static_cast<int32_t>(slowStart - jneEnd));
