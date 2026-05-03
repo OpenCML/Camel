@@ -1,4 +1,5 @@
 id = "perf.fib"
+order = 400
 tier = "benchmark"
 tags = ["perf", "fib"]
 

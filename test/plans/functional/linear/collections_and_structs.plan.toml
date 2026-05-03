@@ -1,0 +1,104 @@
+id = "linear.collections_and_structs"
+order = 341
+tier = "functional"
+tags = ["functional", "linear", "collections", "structs"]
+
+[[tests]]
+name = "duplicate_inputs.nvm"
+desc = "Checks repeated use of one input value survives tuples, arrays, and calls without aliasing mistakes."
+kind = "behavior"
+case = "../../../cases/linear/nvm/duplicate_inputs.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "fill_mixed.nvm"
+desc = "Checks array literals can mix constants and computed values without reordering elements."
+kind = "behavior"
+case = "../../../cases/linear/nvm/fill_mixed.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "render_grid.nvm"
+desc = "Checks nested iteration and membership tests can render a small grid correctly."
+kind = "behavior"
+case = "../../../cases/linear/nvm/render.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "tuple_index_pipeline.nvm"
+desc = "Checks tuple-field access and array indexing inside a small processing pipeline."
+kind = "behavior"
+case = "../../../cases/linear/nvm/index.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "mapping_pipeline.nvm"
+desc = "Checks match expressions, struct transforms, and method-style pipelines on one NVM path."
+kind = "behavior"
+case = "../../../cases/linear/nvm/mapping.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "unique_subgraph.nvm"
+desc = "Checks branch-local helper bodies remain distinct instead of collapsing onto one subgraph."
+kind = "behavior"
+case = "../../../cases/linear/nvm/inline_unique_subgraph.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "builtin_operator_chain.jit"
+desc = "Checks JIT execution of chained builtin helpers over arrays and strings."
+kind = "behavior"
+case = "../../../cases/linear/jit/builtin_operator_chain.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "list_transform.jit"
+desc = "Checks JIT preserves chained map, slice, and concat list transforms end to end."
+kind = "behavior"
+case = "../../../cases/linear/jit/list_transform.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "tuple_pipeline.jit"
+desc = "Checks JIT keeps tuple values coherent through indexing, calls, and reconstruction."
+kind = "behavior"
+case = "../../../cases/linear/jit/tuple_pipeline.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "struct_match.jit"
+desc = "Checks JIT match lowering reconstructs structs with the correct field values."
+kind = "behavior"
+case = "../../../cases/linear/jit/struct_match.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

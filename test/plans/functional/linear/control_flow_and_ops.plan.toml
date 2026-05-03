@@ -1,0 +1,54 @@
+id = "linear.control_flow_and_ops"
+order = 343
+tier = "functional"
+tags = ["functional", "linear", "control_flow", "ops"]
+
+[[tests]]
+name = "branch_join.jit"
+desc = "Checks JIT branch lowering on nested joins so each control-flow arm returns the expected value."
+kind = "behavior"
+case = "../../../cases/linear/jit/branch_join.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "comparison_matrix.jit"
+desc = "Checks JIT code generation for the full integer comparison matrix and its packed result encoding."
+kind = "behavior"
+case = "../../../cases/linear/jit/comparison_matrix.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "operator_branch_mix.jit"
+desc = "Checks JIT ordering when builtin operators feed branch conditions and arithmetic."
+kind = "behavior"
+case = "../../../cases/linear/jit/operator_branch_mix.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "float_arith.jit"
+desc = "Checks JIT floating-point arithmetic stays within the expected numeric range."
+kind = "behavior"
+case = "../../../cases/linear/jit/float_arith.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "neural_forward.nvm"
+desc = "Checks numeric zip/map/reduce and floating-point math for a neural-style forward pass."
+kind = "behavior"
+case = "../../../cases/linear/nvm/neuro.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

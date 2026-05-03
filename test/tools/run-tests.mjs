@@ -160,8 +160,8 @@ function printSuiteBanner(name) {
     console.log(`====> ${name}`)
 }
 
-function printCase(caseId) {
-    console.log(`[CASE] ${caseId}`)
+function printPlanHeader(plan) {
+    console.log(`[SUITE] ${plan.id}`)
 }
 
 function printStatusLine(status, name, metric = '') {
@@ -398,13 +398,18 @@ function writeLogFiles(plan, test, result, status, logDir) {
 function loadPlans(targets, tier) {
     const planPaths = targets.length > 0 ? targets.flatMap((target) => walkPlans(target)) : walkPlans(PLANS_ROOT)
     const plans = planPaths
-        .sort()
         .map((planPath) => {
             const doc = parseTomlFile(planPath)
             const tests = (doc.tests || []).map((test) => ({ ...test, __planPath: planPath }))
             return { ...doc, __planPath: planPath, tests }
         })
         .filter((plan) => !tier || plan.tier === tier)
+        .sort((lhs, rhs) => {
+            const lhsOrder = Number.isFinite(lhs.order) ? lhs.order : Number.MAX_SAFE_INTEGER
+            const rhsOrder = Number.isFinite(rhs.order) ? rhs.order : Number.MAX_SAFE_INTEGER
+            if (lhsOrder !== rhsOrder) return lhsOrder - rhsOrder
+            return lhs.__planPath.localeCompare(rhs.__planPath)
+        })
     return plans
 }
 
@@ -433,7 +438,7 @@ function main() {
             currentSuite = suiteName
             printSuiteBanner(suiteName)
         }
-        printCase(plan.id)
+        printPlanHeader(plan)
         for (const test of plan.tests) {
             const result = runOneTest(test, sharedVars, { options, completed })
             completed.set(test.name, result)

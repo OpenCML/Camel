@@ -1,4 +1,5 @@
 id = "parse.core"
+order = 300
 tier = "functional"
 tags = ["functional", "parse", "inspect"]
 

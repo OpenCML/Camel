@@ -1,4 +1,5 @@
 id = "opt.inline"
+order = 320
 tier = "functional"
 tags = ["functional", "opt", "inline"]
 

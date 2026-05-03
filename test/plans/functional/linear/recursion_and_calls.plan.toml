@@ -1,0 +1,114 @@
+id = "linear.recursion_and_calls"
+order = 344
+tier = "functional"
+tags = ["functional", "linear", "recursion", "calls"]
+
+[[tests]]
+name = "tail_accumulator.nvm"
+desc = "Checks deep tail-recursive accumulation on NVM so self recursion does not collapse under a long linear run."
+kind = "behavior"
+case = "../../../cases/linear/nvm/acc.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "fib_baseline.nvm"
+desc = "Checks baseline recursive call and return behavior on NVM with observable formatted output."
+kind = "behavior"
+case = "../../../cases/linear/nvm/fib.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "fib_shared_counter.nvm"
+desc = "Checks recursive execution with shared mutable state and wait-based updates on NVM."
+kind = "behavior"
+case = "../../../cases/linear/nvm/fib1.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "fib_nested_sync.nvm"
+desc = "Checks nested sync recursion preserves local mutable state across recursive closures."
+kind = "behavior"
+case = "../../../cases/linear/nvm/fib2.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "mutual_tail.nvm"
+desc = "Checks deep mutual tail recursion executes without overflow on the linear runtime."
+kind = "behavior"
+case = "../../../cases/linear/nvm/mutual_tail.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "fib_recursive.jit"
+desc = "Checks classic recursive execution on JIT across several Fibonacci depths and return joins."
+kind = "behavior"
+case = "../../../cases/linear/jit/fib_recursive.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "mutual_tail_check.jit"
+desc = "Checks JIT control transfer across simple mutual calls and their base-case returns."
+kind = "behavior"
+case = "../../../cases/linear/jit/mutual_tail_check.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "nested_call_state.jit"
+desc = "Checks JIT preserves captured outer state across nested local recursion."
+kind = "behavior"
+case = "../../../cases/linear/jit/nested_call_state.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "tail_accumulate.jit"
+desc = "Checks deep tail-recursive accumulation remains stable under JIT execution."
+kind = "behavior"
+case = "../../../cases/linear/jit/tail_accumulate.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "hot_call_chain.jit"
+desc = "Stresses JIT dispatch on repeatedly invoked tiny helper functions in a hot call chain."
+kind = "behavior"
+case = "../../../cases/linear/jit/call_chain_hot.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "perf_helper_smoke.jit"
+desc = "Checks the perf helper returns sane average and margin values under a small JIT workload."
+kind = "behavior"
+case = "../../../cases/linear/jit/perf_fib_smoke.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

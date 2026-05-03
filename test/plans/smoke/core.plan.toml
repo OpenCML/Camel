@@ -1,4 +1,5 @@
 id = "smoke.core"
+order = 100
 tier = "smoke"
 tags = ["smoke", "fib", "inspect", "gir", "prl"]
 
