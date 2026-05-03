@@ -1,6 +1,5 @@
 /**
- * 意图：验证 operator 返回值在 JIT 下继续参与后续分支、算术与返回时保持正确。
- * 预期：打印 `operator_branch_mix ok`；exit 0。
+ * Verifies builtin operators feeding branch conditions and arithmetic remain correctly ordered after JIT lowering.
  */
 module jit_operator_branch_mix
 
@@ -23,3 +22,4 @@ func main(): int sync {
         return 0
     }
 }
+

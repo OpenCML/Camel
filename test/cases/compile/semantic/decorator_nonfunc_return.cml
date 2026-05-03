@@ -1,3 +1,6 @@
+/**
+ * Ensures decorator validation rejects wrappers that do not return a callable with the original function signature.
+ */
 module semantic_decorator_nonfunc_return
 
 with <k: int>
@@ -13,3 +16,4 @@ func base(x: int): int {
 func main(): int sync {
     return base(1)
 }
+

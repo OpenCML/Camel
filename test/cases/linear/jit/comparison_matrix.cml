@@ -1,6 +1,5 @@
 /**
- * 意图：验证 `< <= > >= == !=` 这些比较在 JIT 下的物化与控制流结果是否一致。
- * 预期：打印 `comparison_matrix ok`；exit 0。
+ * Verifies JIT codegen for the full set of integer comparison operators and their branch-dependent packing logic.
  */
 module jit_comparison_matrix
 
@@ -30,3 +29,4 @@ func main(): int sync {
         return 0
     }
 }
+

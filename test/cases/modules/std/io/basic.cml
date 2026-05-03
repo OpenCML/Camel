@@ -1,3 +1,6 @@
+/**
+ * Exercises the minimal console IO surface so print and println remain usable as the lowest-level output primitives.
+ */
 module main
 
 // io 模块基础测试
@@ -13,3 +16,4 @@ func main(): int sync {
     println("\n=== IO tests completed ===")
     return 0
 }
+

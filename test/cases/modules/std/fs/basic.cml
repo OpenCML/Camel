@@ -1,3 +1,6 @@
+/**
+ * Exercises filesystem primitives for directory creation, text IO, metadata queries, and partial reads.
+ */
 module main
 
 import { exists, is_file, is_dir, mkdir, mkdirs, read_text, write_text, file_size, read_chunk } from fs
@@ -34,3 +37,4 @@ func main(): int sync {
     println("\n=== FS tests completed ===")
     return 0
 }
+

@@ -1,3 +1,6 @@
+/**
+ * Exercises regex matching with positive, anchored, and negative cases to keep the wrapper semantics stable.
+ */
 module main
 
 import { test } from re
@@ -20,3 +23,4 @@ func main(): int sync {
     println("\n=== RE tests completed ===")
     return 0
 }
+

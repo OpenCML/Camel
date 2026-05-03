@@ -1,6 +1,5 @@
 /**
- * 意图：验证尾递归累加在 JIT 下的数值正确性，并覆盖大步数递归。
- * 预期：打印 `tail_accumulate ok`；exit 0。
+ * Tail-recursive accumulator used to check JIT stability on deep recursion and large integer propagation.
  */
 module jit_tail_accumulate
 
@@ -22,3 +21,4 @@ func main(): int sync {
         return 0
     }
 }
+

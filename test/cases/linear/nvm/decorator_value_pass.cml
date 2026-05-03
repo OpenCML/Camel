@@ -1,3 +1,6 @@
+/**
+ * Verifies decorated functions remain first-class values when passed through another call boundary.
+ */
 module decorator_value_pass
 
 with <delta: int>
@@ -20,3 +23,4 @@ func main(): int sync {
     let v = apply_once(inc, 10)
     return if v == 16 then 0 else 1
 }
+

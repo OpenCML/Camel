@@ -1,6 +1,5 @@
 /**
- * 意图：验证 tuple 元组、数组索引与普通函数流水线在 JIT 下的正确性。
- * 预期：打印 `tuple_pipeline ok`；exit 0。
+ * Verifies tuple values survive a small pipeline of calls, indexing, and reconstruction under JIT execution.
  */
 module jit_tuple_pipeline
 
@@ -39,3 +38,4 @@ func main(): int sync {
         return 0
     }
 }
+

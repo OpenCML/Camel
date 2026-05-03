@@ -1,3 +1,6 @@
+/**
+ * Ensures semantic name resolution reports unresolved identifiers before code generation begins.
+ */
 module semantic_unresolved_reference
 
 func main(): int sync {
@@ -5,3 +8,4 @@ func main(): int sync {
     println(value)
     return 0
 }
+

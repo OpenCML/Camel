@@ -1,3 +1,6 @@
+/**
+ * Exercises core algorithm helpers, focusing on in-place sorting and deterministic merge behavior for sorted inputs.
+ */
 module main
 
 // algo 模块基础测试
@@ -20,3 +23,4 @@ func main(): int sync {
     println("\n=== Algo tests completed ===")
     return 0
 }
+

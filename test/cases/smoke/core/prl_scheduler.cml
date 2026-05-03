@@ -1,3 +1,6 @@
+/**
+ * Minimal parallel workload used to prove the PRL scheduler can issue waits and join independent tasks correctly.
+ */
 module prl_scheduler
 
 func work(n: int): int {
@@ -16,3 +19,4 @@ func main(): int sync {
         return 1
     }
 }
+

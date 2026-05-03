@@ -1,11 +1,5 @@
 /**
- * 覆盖点：
- * 1) BRCH arm 内联后，一次性子图应可被 use-site sweep 清理；
- * 2) 运行结果保持正确。
- *
- * 建议：
- * camel "test/cases/opt/inline/registry_sweep_unique_arm.cml" std::inline std::gir
- * camel "test/cases/opt/inline/registry_sweep_unique_arm.cml" std::inline std::fvm
+ * Verifies inline registry cleanup keeps distinct branch-arm helper bodies from collapsing onto the same rewritten subgraph.
  */
 module inline_registry_sweep_unique_arm
 
@@ -34,5 +28,6 @@ func main(): int sync {
         return 0
     }
 }
+
 
 

@@ -1,3 +1,6 @@
+/**
+ * Exercises descriptive statistics helpers on a simple dataset to validate mean and standard-deviation plumbing.
+ */
 module main
 
 import { mean, stdev } from statistics
@@ -15,3 +18,4 @@ func main(): int sync {
     println("\n=== Statistics tests completed ===")
     return 0
 }
+

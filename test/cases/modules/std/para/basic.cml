@@ -1,3 +1,6 @@
+/**
+ * Minimal import-only probe for the para standard module so loader and symbol registration failures show up immediately.
+ */
 module main
 
 import para
@@ -11,3 +14,4 @@ func main(): int sync {
     println("\n=== Para tests completed ===")
     return 0
 }
+

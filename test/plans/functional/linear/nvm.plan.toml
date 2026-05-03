@@ -4,6 +4,7 @@ tags = ["functional", "linear", "nvm"]
 
 [[tests]]
 name = "acc"
+desc = "Checks deep tail-recursive accumulation on NVM so self recursion does not collapse under a long linear run."
 kind = "behavior"
 case = "../../../cases/linear/nvm/acc.cml"
 args = ["${case}"]
@@ -13,6 +14,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "decorator_multi"
+desc = "Checks stacked decorators compose in source order and preserve captured wrapper parameters."
 kind = "behavior"
 case = "../../../cases/linear/nvm/decorator_multi.cml"
 args = ["${case}"]
@@ -22,6 +24,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "decorator_single"
+desc = "Checks a single decorator can wrap a function and adjust its result through a captured value."
 kind = "behavior"
 case = "../../../cases/linear/nvm/decorator_single.cml"
 args = ["${case}"]
@@ -31,6 +34,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "decorator_value_pass"
+desc = "Checks decorated functions remain first-class values when passed as call arguments."
 kind = "behavior"
 case = "../../../cases/linear/nvm/decorator_value_pass.cml"
 args = ["${case}"]
@@ -40,6 +44,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "duplicate_inputs"
+desc = "Checks repeated use of one input value survives tuples, arrays, and calls without aliasing mistakes."
 kind = "behavior"
 case = "../../../cases/linear/nvm/duplicate_inputs.cml"
 args = ["${case}"]
@@ -49,6 +54,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "fib"
+desc = "Checks baseline recursive call and return behavior on NVM with observable formatted output."
 kind = "behavior"
 case = "../../../cases/linear/nvm/fib.cml"
 args = ["${case}"]
@@ -58,6 +64,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "fib1"
+desc = "Checks recursive execution with shared mutable state and wait-based updates on NVM."
 kind = "behavior"
 case = "../../../cases/linear/nvm/fib1.cml"
 args = ["${case}"]
@@ -67,6 +74,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "fib2"
+desc = "Checks nested sync recursion preserves local mutable state across recursive closures."
 kind = "behavior"
 case = "../../../cases/linear/nvm/fib2.cml"
 args = ["${case}"]
@@ -76,6 +84,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "fill_mixed"
+desc = "Checks array literals can mix constants and computed values without reordering elements."
 kind = "behavior"
 case = "../../../cases/linear/nvm/fill_mixed.cml"
 args = ["${case}"]
@@ -85,6 +94,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "hello"
+desc = "Checks the smallest executable path: module load, main dispatch, and stdout emission."
 kind = "behavior"
 case = "../../../cases/linear/nvm/hello.cml"
 args = ["${case}"]
@@ -94,6 +104,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "index"
+desc = "Checks tuple-field access and array indexing inside a small processing pipeline."
 kind = "behavior"
 case = "../../../cases/linear/nvm/index.cml"
 args = ["${case}"]
@@ -103,6 +114,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "inline_unique_subgraph"
+desc = "Checks branch-local helper bodies remain distinct instead of collapsing onto one subgraph."
 kind = "behavior"
 case = "../../../cases/linear/nvm/inline_unique_subgraph.cml"
 args = ["${case}"]
@@ -112,6 +124,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "lambda"
+desc = "Checks lambda capture and collection filtering inside a grid-render pipeline."
 kind = "behavior"
 case = "../../../cases/linear/nvm/lambda.cml"
 args = ["${case}"]
@@ -121,6 +134,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "mapping"
+desc = "Checks match expressions, struct transforms, and method-style pipelines on one NVM path."
 kind = "behavior"
 case = "../../../cases/linear/nvm/mapping.cml"
 args = ["${case}"]
@@ -130,6 +144,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "mutual_tail"
+desc = "Checks deep mutual tail recursion executes without overflow on the linear runtime."
 kind = "behavior"
 case = "../../../cases/linear/nvm/mutual_tail.cml"
 args = ["${case}"]
@@ -139,6 +154,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "neuro"
+desc = "Checks numeric zip/map/reduce and floating-point math for a neural-style forward pass."
 kind = "behavior"
 case = "../../../cases/linear/nvm/neuro.cml"
 args = ["${case}"]
@@ -148,6 +164,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "render"
+desc = "Checks nested iteration and membership tests can render a small grid correctly."
 kind = "behavior"
 case = "../../../cases/linear/nvm/render.cml"
 args = ["${case}"]
@@ -157,6 +174,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "var"
+desc = "Checks by-reference mutable updates propagate back through sync calls."
 kind = "behavior"
 case = "../../../cases/linear/nvm/var.cml"
 args = ["${case}"]
@@ -166,6 +184,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "zen"
+desc = "Checks importing and calling the builtin this module on the default runtime."
 kind = "behavior"
 case = "../../../cases/linear/nvm/zen.cml"
 args = ["${case}"]
@@ -175,6 +194,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "runtime.divide_by_zero"
+desc = "Checks runtime diagnostics report division by zero with source location information."
 kind = "negative"
 case = "../../../cases/linear/runtime/divide_by_zero.cml"
 args = ["${case}"]

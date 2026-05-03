@@ -1,3 +1,6 @@
+/**
+ * Smallest executable sanity case for module loading, main dispatch, and plain stdout emission.
+ */
 module main
 
 func main(): int sync {

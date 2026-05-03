@@ -1,3 +1,6 @@
+/**
+ * Parallel bootstrap workload used to stress repeated sampling plus concurrent sort-heavy reductions.
+ */
 module bootstrap_medians
 
 import { now } from time
@@ -43,3 +46,4 @@ func main(): int sync {
     'parallel sorting stage took {:.2f} seconds'->format<sort_duration>->println
     return 0
 }
+

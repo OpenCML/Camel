@@ -1,3 +1,6 @@
+/**
+ * Ensures runtime diagnostics surface division-by-zero faults with source mapping instead of silently producing garbage.
+ */
 module runtime_divide_by_zero
 
 func main(): int sync {
@@ -5,3 +8,4 @@ func main(): int sync {
     println(10 / z)
     return 0
 }
+

@@ -1,6 +1,9 @@
+/**
+ * Smallest pyplot smoke case for a single plot call and output artifact generation.
+ */
 module main
 
-// 最简 pyplot 测试：单次 plot
+// 最简 pyplot 测试：单�?plot
 import { plot } from pyplot
 
 func main(): int sync {
@@ -9,3 +12,4 @@ func main(): int sync {
     println("pyplot.plot OK")
     return 0
 }
+

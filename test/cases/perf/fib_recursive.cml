@@ -1,3 +1,6 @@
+/**
+ * Recursive Fibonacci benchmark used to compare NVM, FVM, JIT, and inline-assisted pipelines on the same workload.
+ */
 module fib
 
 import { now } from time

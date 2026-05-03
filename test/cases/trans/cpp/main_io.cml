@@ -1,3 +1,6 @@
+/**
+ * Verifies the C++ translation path preserves imports, timing calls, formatting, and stdout side effects from main.
+ */
 module main_io
 
 import { now } from time
@@ -7,3 +10,4 @@ func main(): int sync {
     'elapsed = {:.4f}'->format<now() - start>->println
     return 0
 }
+

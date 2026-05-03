@@ -1,3 +1,6 @@
+/**
+ * Verifies a simple macro function expands to a concrete arithmetic expression before runtime execution.
+ */
 module macro_basic
 
 macro func add_one(x: int): int {
@@ -9,3 +12,4 @@ func main(): int sync {
     println(value)
     return 0
 }
+

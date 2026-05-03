@@ -1,3 +1,6 @@
+/**
+ * Parallel Monte Carlo pricing workload used to stress independent worker scheduling over a compute-heavy finance kernel.
+ */
 module asian_option_mc
 
 import { now } from time
@@ -24,3 +27,4 @@ func main(): int sync {
     'Asian option Monte Carlo completed in {:.2f} seconds'->format<duration>->println
     return 0
 }
+

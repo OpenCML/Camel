@@ -1,12 +1,5 @@
 /**
- * 覆盖点：
- * 1) `std::inline::small` 可命中非分支 arm 的小子图调用；
- * 2) `std::inline::arm` 不应因为该调用是小子图就误内联（需配合 std::gir 结构检查）。
- *
- * 结构检查建议：
- * - `camel inline_strategy_small_non_arm.cml std::inline::small std::gir`
- * - `camel inline_strategy_small_non_arm.cml std::inline::arm std::gir`
- * 对比 `main` 中 `FUNC(..., tiny...)` 是否被消除。
+ * Verifies the small-function heuristic still inlines non-branch callees through the fast path.
  */
 module inline_strategy_small_non_arm
 
@@ -23,3 +16,4 @@ func main(): int sync {
         return 0
     }
 }
+

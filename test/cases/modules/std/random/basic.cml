@@ -1,3 +1,6 @@
+/**
+ * Exercises the random module surface with seeded generation so deterministic behavior can be observed directly.
+ */
 module main
 
 // random 模块基础测试
@@ -31,3 +34,4 @@ func main(): int sync {
     println("\n=== Random tests completed ===")
     return 0
 }
+

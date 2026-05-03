@@ -1,3 +1,6 @@
+/**
+ * Exercises process-environment queries so runtime access to env vars and cwd remains available.
+ */
 module main
 
 import { get_env, get_cwd } from sys
@@ -16,3 +19,4 @@ func main(): int sync {
     println("\n=== Sys tests completed ===")
     return 0
 }
+

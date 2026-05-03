@@ -1,6 +1,5 @@
 /**
- * 意图：验证多层函数调用链在 JIT 热路径下的正确性，覆盖频繁 call/ret 场景。
- * 预期：打印 `call_chain_hot ok`；exit 0。
+ * Hot-call-chain case used to stress repeated small-function dispatch and accumulation under JIT execution.
  */
 module jit_call_chain_hot
 
@@ -33,3 +32,4 @@ func main(): int sync {
         return 0
     }
 }
+

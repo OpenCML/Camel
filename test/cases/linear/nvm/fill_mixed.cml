@@ -1,3 +1,6 @@
+/**
+ * Verifies array literals can mix constants and computed values without losing element order or materialization.
+ */
 module fill_mixed
 
 func main(): int sync {
@@ -8,3 +11,4 @@ func main(): int sync {
     println(arr[2])
     return 0
 }
+

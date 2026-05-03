@@ -1,3 +1,6 @@
+/**
+ * Recursive linear-regression trainer used to stress tensor math together with state threading through sync recursion.
+ */
 module linear_regression
 
 import {

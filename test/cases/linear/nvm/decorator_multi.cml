@@ -1,3 +1,6 @@
+/**
+ * Verifies stacked decorators compose in declaration order and preserve captured configuration values across nested wrappers.
+ */
 module decorator_multi
 
 with <k: int>
@@ -24,3 +27,4 @@ func main(): int sync {
     let v = core(1)
     return if v == 9 then 0 else 1
 }
+

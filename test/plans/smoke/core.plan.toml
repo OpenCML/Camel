@@ -4,6 +4,7 @@ tags = ["smoke", "fib", "inspect", "gir", "prl"]
 
 [[tests]]
 name = "inspect.tok_snapshot"
+desc = "Pins the token stream for the canonical fib10 smoke program."
 kind = "snapshot"
 case = "../../cases/smoke/core/fib10_pipeline.cml"
 args = ["${inspect_tok}", "${case}"]
@@ -16,6 +17,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "inspect.cst_snapshot"
+desc = "Pins the concrete syntax tree for the canonical fib10 smoke program."
 kind = "snapshot"
 case = "../../cases/smoke/core/fib10_pipeline.cml"
 args = ["${inspect_cst}", "${case}"]
@@ -28,6 +30,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "inspect.ast_snapshot"
+desc = "Pins the normalized AST shape for the canonical fib10 smoke program."
 kind = "snapshot"
 case = "../../cases/smoke/core/fib10_pipeline.cml"
 args = ["${inspect_ast}", "${case}"]
@@ -40,6 +43,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "runtime.nvm_runtime"
+desc = "Checks the canonical fib10 program executes correctly on the baseline NVM path."
 kind = "behavior"
 case = "../../cases/smoke/core/fib10_pipeline.cml"
 args = ["${case}", "${run_nvm}"]
@@ -50,6 +54,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "runtime.fvm_runtime"
+desc = "Checks the canonical fib10 program matches NVM output on the FVM backend."
 kind = "differential"
 case = "../../cases/smoke/core/fib10_pipeline.cml"
 args = ["${case}", "${run_fvm}"]
@@ -61,6 +66,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "runtime.inline_fvm_runtime"
+desc = "Checks fib10 still matches the NVM baseline after inline plus FVM execution."
 kind = "differential"
 case = "../../cases/smoke/core/fib10_pipeline.cml"
 args = ["${case}", "${run_inline_fvm}"]
@@ -72,6 +78,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "gir.gir_snapshot"
+desc = "Pins the GIR shape produced by the canonical fib10 program before optimization."
 kind = "snapshot"
 case = "../../cases/smoke/core/fib10_pipeline.cml"
 args = ["${case}", "${run_gir}"]
@@ -84,6 +91,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "gir.inline_gir_snapshot"
+desc = "Pins the GIR shape after inline rewriting on the canonical fib10 program."
 kind = "snapshot"
 case = "../../cases/smoke/core/fib10_pipeline.cml"
 args = ["${case}", "${run_inline_gir}"]
@@ -96,6 +104,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "prl.runtime"
+desc = "Checks a minimal PRL scheduling example can launch, wait, and join independent work."
 kind = "behavior"
 case = "../../cases/smoke/core/prl_scheduler.cml"
 args = ["${case}", "${run_prl}"]

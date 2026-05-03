@@ -4,6 +4,7 @@ tags = ["functional", "para"]
 
 [[tests]]
 name = "asian_option_mc"
+desc = "Stresses the parallel scheduler with many independent Monte Carlo option-pricing workers."
 kind = "behavior"
 case = "../../../cases/para/core/asian_option_mc.cml"
 args = ["${case}"]
@@ -14,6 +15,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "block_sort_merge"
+desc = "Stresses parallel scheduling of independent large-array sort blocks."
 kind = "behavior"
 case = "../../../cases/para/core/block_sort_merge.cml"
 args = ["${case}"]
@@ -23,6 +25,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "bootstrap_medians"
+desc = "Stresses repeated sampling plus concurrent sort-heavy reductions."
 kind = "behavior"
 case = "../../../cases/para/core/bootstrap_medians.cml"
 args = ["${case}"]
@@ -32,6 +35,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "file_chunk_hash"
+desc = "Stresses chunked file IO combined with parallel hashing and deterministic reduction."
 kind = "behavior"
 case = "../../../cases/para/core/file_chunk_hash.cml"
 args = ["${case}"]
@@ -41,6 +45,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "merge_sort"
+desc = "Stresses divide-and-conquer parallelism on a large recursive mergesort workload."
 kind = "behavior"
 case = "../../../cases/para/core/merge_sort.cml"
 args = ["${case}"]
@@ -50,6 +55,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "monte_carlo_pi"
+desc = "Stresses embarrassingly parallel map-reduce execution on a Monte Carlo estimator."
 kind = "behavior"
 case = "../../../cases/para/core/monte_carlo_pi.cml"
 args = ["${case}"]

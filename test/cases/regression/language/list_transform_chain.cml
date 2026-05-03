@@ -1,6 +1,5 @@
 /**
- * 意图：验证 range/map/slice/concat 等列表变换在 JIT 下的正确性。
- * 预期：打印 `list_transform ok`；exit 0。
+ * Regression for chained map/slice/concat pipelines so JIT execution preserves list values through the full transform chain.
  */
 module jit_list_transform
 
@@ -28,3 +27,4 @@ func main(): int sync {
         return 0
     }
 }
+

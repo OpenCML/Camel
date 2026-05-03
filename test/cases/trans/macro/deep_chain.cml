@@ -1,3 +1,6 @@
+/**
+ * Verifies deeper macro expansion stacks do not lose intermediate rewrites across multiple nested calls.
+ */
 module macro_deep_chain
 
 macro func add_one(x: int): int {
@@ -16,3 +19,4 @@ func main(): int sync {
     println(add_five(37))
     return 0
 }
+

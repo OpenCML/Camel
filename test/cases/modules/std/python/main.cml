@@ -1,3 +1,6 @@
+/**
+ * Broader Python integration case covering calls, imports, attributes, code execution, scripts, and keyword arguments.
+ */
 module main
 
 import {
@@ -23,18 +26,18 @@ func main(): int sync {
     println("\n[2] py_call('builtins.print', py_wrap('hello'))")
     py_call("builtins.print", py_wrap("hello"))
 
-    // 3. py_call: 直接传 PyObject (通过 py_attr 获取 callable)
+    // 3. py_call: 直接�?PyObject (通过 py_attr 获取 callable)
     println("\n[3] py_call via py_attr(builtins, 'print')")
     let builtins = py_import("builtins")
     let print_fn = py_attr(builtins, "print")
     py_call(print_fn, py_wrap("from py_attr"))
 
-    // 4. py_call: len - 用 Python print 输出结果
+    // 4. py_call: len - �?Python print 输出结果
     println("\n[4] py_call('len', py_wrap([1, 2, 3]))")
     let len_result = py_call("len", py_wrap([1, 2, 3]))
     py_call("print", py_call("str", len_result))
 
-    // 5. py_eval: 表达式求值
+    // 5. py_eval: 表达式求�?
     println("\n[5] py_eval('1 + 2 * 3')")
     let sum_result = py_eval("1 + 2 * 3")
     py_call("print", sum_result)
@@ -43,7 +46,7 @@ func main(): int sync {
     let str_result = py_eval("'hello' + ' world'")
     py_call("print", str_result)
 
-    // 6. py_exec: 执行代码字符串
+    // 6. py_exec: 执行代码字符�?
     println("\n[6] py_exec")
     py_exec("print('Exec: Hello from exec!')")
 
@@ -58,7 +61,7 @@ func main(): int sync {
     let sqrt_result = py_call(sqrt_fn, py_wrap(16))
     py_call("print", sqrt_result)
 
-    // 9. py_call 命名参数重载: (fn, args_tuple|array, kwargs_struct)，全部 PyObject
+    // 9. py_call 命名参数重载: (fn, args_tuple|array, kwargs_struct)，全�?PyObject
     println("\n[9] py_call with *args and **kwargs")
     py_exec("def _greet(name, greeting='Hello'): print(f'{greeting}, {name}!')")
     let args_tuple = (py_wrap("World"),)
@@ -68,3 +71,4 @@ func main(): int sync {
     println("\n=== All tests completed ===")
     return 0
 }
+

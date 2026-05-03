@@ -1,3 +1,6 @@
+/**
+ * Exercises the this module zen helper as a lightweight builtin-module import and execution check.
+ */
 module main
 
 import { zen } from this
@@ -12,3 +15,4 @@ func main(): int sync {
     println("\n=== This tests completed ===")
     return 0
 }
+

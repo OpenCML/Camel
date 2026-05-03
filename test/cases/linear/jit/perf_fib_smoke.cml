@@ -1,6 +1,5 @@
 /**
- * 意图：提供一个轻量性能 smoke，用于确认 JIT 跑 fib benchmark 时结果与计时接口正常。
- * 预期：打印 `jit perf fib(20): ...`；exit 0。
+ * Lightweight performance smoke case that proves the perf helper returns sane average and margin values under JIT.
  */
 module jit_perf_fib_smoke
 
@@ -31,3 +30,4 @@ func main(): int sync {
         }
     }
 }
+

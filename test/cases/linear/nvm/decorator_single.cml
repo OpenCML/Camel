@@ -1,3 +1,6 @@
+/**
+ * Verifies a single decorator can wrap a function, capture a constant, and adjust the returned value at runtime.
+ */
 module decorator_single
 
 with <delta: int>
@@ -16,3 +19,4 @@ func main(): int sync {
     let v = base(40)
     return if v == 42 then 0 else 1
 }
+

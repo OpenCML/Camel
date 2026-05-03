@@ -4,6 +4,7 @@ tags = ["regression", "language"]
 
 [[tests]]
 name = "list_transform_chain"
+desc = "Regression guard for the JIT list-transform pipeline bug across map, slice, and concat."
 kind = "behavior"
 case = "../../cases/regression/language/list_transform_chain.cml"
 args = ["${case}", "${run_jit}"]

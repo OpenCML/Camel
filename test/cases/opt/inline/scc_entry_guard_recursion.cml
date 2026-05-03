@@ -1,12 +1,5 @@
 /**
- * 覆盖点：
- * 1) SCC 内存在互递归（ping <-> pong）；
- * 2) `ping` 被 SCC 外（main）调用，属于 SCC 入口 callee；
- * 3) SCC 入口保护开启时，SCC 内对入口 `ping` 的调用不应被继续内联展开。
- *
- * 结构检查建议：
- * - `camel inline_scc_entry_guard_recursion.cml std::inline std::gir`
- * - 重点观察 SCC 内部是否仍保留对入口 `ping` 的 FUNC 调用（而不是被无限向内展开）。
+ * Verifies the inliner detects recursive SCC entry points and avoids infinitely expanding mutually recursive calls.
  */
 module inline_scc_entry_guard_recursion
 
@@ -27,3 +20,4 @@ func main(): int sync {
         return 0
     }
 }
+

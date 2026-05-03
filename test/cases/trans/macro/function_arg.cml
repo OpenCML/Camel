@@ -1,3 +1,6 @@
+/**
+ * Verifies macro expansion stops cleanly when a function-valued argument must be left for runtime evaluation.
+ */
 module macro_function_arg
 
 macro func id_func(): (x: int) => int {
@@ -9,7 +12,8 @@ macro func apply_once(f: (x: int) => int, x: int): int {
 }
 
 func main(): int sync {
-    // id_func() 展开为 DATA；apply_once 会因“调用函数参数”被跳过，由运行时执行
+    // id_func() 展开�?DATA；apply_once 会因“调用函数参数”被跳过，由运行时执�?
     println(apply_once(id_func(), 20))
     return 0
 }
+

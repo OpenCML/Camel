@@ -1,3 +1,6 @@
+/**
+ * Verifies repeated use of the same SSA value across tuples, arrays, and calls does not alias or drop inputs during scheduling.
+ */
 module duplicate_inputs
 
 func pair(x: int): (int, int) {
@@ -37,3 +40,4 @@ func main(): int sync {
         }
     }
 }
+

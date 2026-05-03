@@ -1,7 +1,5 @@
 /**
- * 覆盖点：
- * 1) BRCH arm 上 FUNC 内联后，控制/值路径替换正确；
- * 2) 多分支 JOIN 行为保持正确。
+ * Verifies inlining does not corrupt control-flow arm selection when a call result feeds a branch join.
  */
 module inline_branch_arm_behavior
 
@@ -22,4 +20,5 @@ func main(): int sync {
         return 0
     }
 }
+
 

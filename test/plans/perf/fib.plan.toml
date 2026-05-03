@@ -4,6 +4,7 @@ tags = ["perf", "fib"]
 
 [[tests]]
 name = "nvm_timeit"
+desc = "Benchmarks recursive Fibonacci on the baseline NVM scheduler using repeated pass-level timing."
 kind = "benchmark"
 case = "../../cases/perf/fib_recursive.cml"
 args = ["${timeit_nvm_10}", "${case}", "${run_nvm}"]
@@ -17,6 +18,7 @@ perf_budget_tolerance_pct = 200
 
 [[tests]]
 name = "inline_nvm_timeit"
+desc = "Benchmarks recursive Fibonacci on NVM after running the inline optimization pass first."
 kind = "benchmark"
 case = "../../cases/perf/fib_recursive.cml"
 args = ["${timeit_inline_nvm_10}", "${case}", "${run_inline_nvm}"]
@@ -30,6 +32,7 @@ perf_budget_tolerance_pct = 200
 
 [[tests]]
 name = "fvm_timeit"
+desc = "Benchmarks recursive Fibonacci on the FVM backend using repeated pass-level timing."
 kind = "benchmark"
 case = "../../cases/perf/fib_recursive.cml"
 args = ["${timeit_fvm_10}", "${case}", "${run_fvm}"]
@@ -43,6 +46,7 @@ perf_budget_tolerance_pct = 200
 
 [[tests]]
 name = "inline_fvm_timeit"
+desc = "Benchmarks recursive Fibonacci on FVM after running the inline optimization pass first."
 kind = "benchmark"
 case = "../../cases/perf/fib_recursive.cml"
 args = ["${timeit_inline_fvm_10}", "${case}", "${run_inline_fvm}"]
@@ -56,6 +60,7 @@ perf_budget_tolerance_pct = 200
 
 [[tests]]
 name = "jit_timeit"
+desc = "Benchmarks recursive Fibonacci on the JIT backend using repeated pass-level timing."
 kind = "benchmark"
 case = "../../cases/perf/fib_recursive.cml"
 args = ["${timeit_jit_10}", "${case}", "${run_jit}"]
@@ -69,6 +74,7 @@ perf_budget_tolerance_pct = 200
 
 [[tests]]
 name = "inline_jit_timeit"
+desc = "Benchmarks recursive Fibonacci on JIT after running the inline optimization pass first."
 kind = "benchmark"
 case = "../../cases/perf/fib_recursive.cml"
 args = ["${timeit_inline_jit_10}", "${case}", "${run_inline_jit}"]

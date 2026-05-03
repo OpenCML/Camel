@@ -1,6 +1,5 @@
 /**
- * 意图：验证 Lambda、闭包参数与自定义 filter 在 JIT 下的正确性。
- * 预期：打印 `lambda_points ok`；exit 0。
+ * Verifies JIT execution of lambda predicates over structs and arrays, including captured bounds checks.
  */
 module jit_lambda_points
 
@@ -53,3 +52,4 @@ func main(): int sync {
         return 0
     }
 }
+

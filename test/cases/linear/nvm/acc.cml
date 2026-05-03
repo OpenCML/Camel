@@ -1,8 +1,6 @@
 /**
-tail-recursive accumulate function
-This test checks that tail-call optimization is working correctly.
-*/
-
+ * Tail-recursive arithmetic-series accumulator used to check that the linear runtime can execute deep self recursion without stack blowup.
+ */
 module arithmetic_sum
 
 import { now } from time

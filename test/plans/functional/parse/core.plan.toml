@@ -4,6 +4,7 @@ tags = ["functional", "parse", "inspect"]
 
 [[tests]]
 name = "inspect.tok_snapshot"
+desc = "Pins the token stream for the canonical fib10 smoke program."
 kind = "snapshot"
 case = "../../../cases/smoke/core/fib10_pipeline.cml"
 args = ["${inspect_tok}", "${case}"]
@@ -16,6 +17,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "inspect.cst_snapshot"
+desc = "Pins the concrete syntax tree for the canonical fib10 smoke program."
 kind = "snapshot"
 case = "../../../cases/smoke/core/fib10_pipeline.cml"
 args = ["${inspect_cst}", "${case}"]
@@ -28,6 +30,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "inspect.ast_snapshot"
+desc = "Pins the normalized AST shape for the canonical fib10 smoke program."
 kind = "snapshot"
 case = "../../../cases/smoke/core/fib10_pipeline.cml"
 args = ["${inspect_ast}", "${case}"]
@@ -40,6 +43,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "syntax.missing_then"
+desc = "Checks parser diagnostics for a missing then keyword in an if-expression."
 kind = "negative"
 case = "../../../cases/parse/syntax/missing_then.cml"
 args = ["${case}"]

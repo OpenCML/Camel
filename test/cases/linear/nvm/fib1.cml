@@ -1,3 +1,6 @@
+/**
+ * Verifies recursion can mutate shared state with wait semantics so each activation contributes to the global call counter.
+ */
 module fib
 
 import { now } from time

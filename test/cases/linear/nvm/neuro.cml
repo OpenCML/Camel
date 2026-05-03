@@ -1,3 +1,6 @@
+/**
+ * Verifies a small numeric pipeline combining arrays, zip/map/reduce, and floating-point math for neural-style computation.
+ */
 module neural
 
 import { exp } from math
@@ -41,3 +44,4 @@ func main(): int sync {
 
     return 0
 }
+

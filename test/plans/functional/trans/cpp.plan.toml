@@ -4,6 +4,7 @@ tags = ["functional", "trans", "cpp"]
 
 [[tests]]
 name = "exec_mod_scalar"
+desc = "Checks the C++ translation path lowers scalar modulo logic and executes the generated program."
 kind = "behavior"
 case = "../../../cases/trans/cpp/exec_mod_scalar.cml"
 args = ["${case}", "std::cpp"]
@@ -13,6 +14,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "main_io"
+desc = "Checks the C++ translation path preserves imports, formatting, timing calls, and stdout side effects."
 kind = "behavior"
 case = "../../../cases/trans/cpp/main_io.cml"
 args = ["${case}", "std::cpp"]

@@ -1,7 +1,5 @@
 /**
- * 意图：验证 len/contains/join/format 等内置 operator 链在 JIT 下的正确性，
- *       并覆盖 operator 结果继续参与分支与字符串比较的场景。
- * 预期：打印 `count=4 text=jit-ops-ok`；exit 0。
+ * Verifies JIT execution can chain builtin collection and string helpers without breaking intermediate values.
  */
 module jit_builtin_operator_chain
 
@@ -28,3 +26,4 @@ func main(): int sync {
         return 4
     }
 }
+

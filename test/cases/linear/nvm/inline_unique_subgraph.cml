@@ -1,8 +1,5 @@
 /**
- * 意图：验证 std::inline 裁剪掉分支中唯一引用的子图后，
- * 父图的 subGraphs_/dependencies_ 仍保持一致。
- * 手动回归：camel inline_unique_subgraph.cml std::inline std::fvm
- * 预期：打印 `inline_unique_subgraph ok`；exit 0。
+ * Verifies branch-local helper functions stay distinct so each call site keeps its own inlined subgraph semantics.
  */
 module inline_unique_subgraph
 
@@ -31,3 +28,4 @@ func main(): int sync {
         return 0
     }
 }
+

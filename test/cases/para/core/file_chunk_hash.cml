@@ -1,3 +1,6 @@
+/**
+ * Parallel file hashing workload used to verify chunked IO plus compute stages can fan out and reduce deterministically.
+ */
 module file_chunk_hash
 
 import { now } from time
@@ -37,3 +40,4 @@ func main(): int sync {
     'Chunk hashing completed in {:.2f} seconds'->format<duration>->println
     return 0
 }
+

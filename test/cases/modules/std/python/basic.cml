@@ -1,3 +1,6 @@
+/**
+ * Exercises the minimal embedded-Python bridge: call a builtin, evaluate an expression, and unwrap the result.
+ */
 module main
 
 // 最简 python 模块测试
@@ -16,3 +19,4 @@ func main(): int sync {
     println("\n=== Basic tests completed ===")
     return 0
 }
+

@@ -1,6 +1,5 @@
 /**
- * 意图：验证 range/map/slice/concat 等列表变换在 JIT 下的正确性。
- * 预期：打印 `list_transform ok`；exit 0。
+ * Verifies JIT execution of chained list map/slice/concat transforms that previously regressed in the language pipeline.
  */
 module jit_list_transform
 
@@ -28,3 +27,4 @@ func main(): int sync {
         return 0
     }
 }
+

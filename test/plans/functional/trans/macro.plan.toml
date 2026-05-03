@@ -4,6 +4,7 @@ tags = ["functional", "trans", "macro"]
 
 [[tests]]
 name = "basic"
+desc = "Exercises a single-step macro expansion into a concrete arithmetic expression."
 kind = "behavior"
 case = "../../../cases/trans/macro/basic.cml"
 args = ["${case}", "std::macro"]
@@ -14,6 +15,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "branch_chain"
+desc = "Exercises nested macro expansion that differs across branch arms."
 kind = "behavior"
 case = "../../../cases/trans/macro/branch_chain.cml"
 args = ["${case}", "std::macro"]
@@ -24,6 +26,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "chain"
+desc = "Exercises multi-step macro expansion where one macro expands through another."
 kind = "behavior"
 case = "../../../cases/trans/macro/chain.cml"
 args = ["${case}", "std::macro"]
@@ -34,6 +37,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "deep_chain"
+desc = "Exercises deeper nested macro expansion so intermediate rewrites are not lost."
 kind = "behavior"
 case = "../../../cases/trans/macro/deep_chain.cml"
 args = ["${case}", "std::macro"]
@@ -44,6 +48,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "function_arg"
+desc = "Exercises the boundary where macro expansion must stop and leave a function-valued argument for runtime."
 kind = "behavior"
 case = "../../../cases/trans/macro/function_arg.cml"
 args = ["${case}", "std::macro"]
@@ -54,6 +59,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "functor"
+desc = "Exercises macro-generated closures passed onward as first-class function values."
 kind = "behavior"
 case = "../../../cases/trans/macro/functor.cml"
 args = ["${case}", "std::macro"]
@@ -64,6 +70,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "pipeline"
+desc = "Exercises macro expansion of a staged arithmetic pipeline with local temporaries."
 kind = "behavior"
 case = "../../../cases/trans/macro/pipeline.cml"
 args = ["${case}", "std::macro"]

@@ -1,3 +1,6 @@
+/**
+ * Exercises JSON decoding across primitives, arrays, and structs, including an encode-decode round trip.
+ */
 module main
 
 import { encode, decode } from json
@@ -32,3 +35,4 @@ func main(): int sync {
     println("\n=== JSON decode tests completed ===")
     return 0
 }
+

@@ -1,6 +1,5 @@
 /**
- * 意图：验证局部递归函数对外层局部状态的捕获在 JIT 下保持正确。
- * 预期：打印 `nested_call_state ok`；exit 0。
+ * Verifies nested local-function recursion keeps captured outer state intact across repeated JIT frames.
  */
 module jit_nested_call_state
 
@@ -25,3 +24,4 @@ func main(): int sync {
         return 0
     }
 }
+

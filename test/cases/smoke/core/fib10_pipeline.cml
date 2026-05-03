@@ -1,3 +1,6 @@
+/**
+ * Minimal end-to-end Fibonacci program used to pin token, CST, AST, GIR, and multi-VM runtime behavior.
+ */
 module fib
 
 import { now } from time
@@ -15,3 +18,4 @@ func main(): int sync {
     'Fibonacci({}) = {} (computed in {:.4f} seconds)'->format<idx, res, duration>->println
     return 0
 }
+

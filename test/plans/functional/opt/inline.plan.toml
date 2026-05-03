@@ -4,16 +4,17 @@ tags = ["functional", "opt", "inline"]
 
 [[tests]]
 name = "branch_arm_behavior"
+desc = "Checks inline rewriting preserves branch-arm behavior when a call result rejoins control flow."
 kind = "behavior"
 case = "../../../cases/opt/inline/branch_arm_behavior.cml"
 args = ["${case}", "std::inline"]
 expect_exit = 0
-failure_note = "Inline runtime still times out on this graph; keep it tracked until the scheduler stabilizes."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
 name = "empty_entry_targets_fallback"
+desc = "Checks the inliner handles entry nodes that simplify to no meaningful outgoing targets."
 kind = "behavior"
 case = "../../../cases/opt/inline/empty_entry_targets_fallback.cml"
 args = ["${case}", "std::inline"]
@@ -23,6 +24,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "entry_multi_target_with_sync"
+desc = "Checks the inliner preserves multi-target entry fan-out before return."
 kind = "behavior"
 case = "../../../cases/opt/inline/entry_multi_target_with_sync.cml"
 args = ["${case}", "std::inline"]
@@ -32,6 +34,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "entry_single_target_no_sync"
+desc = "Checks the fast inline path for a tiny single-target leaf call."
 kind = "behavior"
 case = "../../../cases/opt/inline/entry_single_target_no_sync.cml"
 args = ["${case}", "std::inline"]
@@ -41,6 +44,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "no_param_reverse_root"
+desc = "Checks zero-argument callees can be reattached correctly from the return root during inlining."
 kind = "behavior"
 case = "../../../cases/opt/inline/no_param_reverse_root.cml"
 args = ["${case}", "std::inline"]
@@ -50,16 +54,17 @@ timeout_ms = 4000
 
 [[tests]]
 name = "registry_sweep_unique_arm"
+desc = "Checks inline registry cleanup keeps distinct branch-arm helper bodies separate."
 kind = "behavior"
 case = "../../../cases/opt/inline/registry_sweep_unique_arm.cml"
 args = ["${case}", "std::inline"]
 expect_exit = 0
-failure_note = "Inline runtime still times out on this graph; keep it tracked until the scheduler stabilizes."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
 name = "scc_entry_guard_recursion"
+desc = "Checks the inliner avoids infinite expansion on recursive SCC entry points."
 kind = "behavior"
 case = "../../../cases/opt/inline/scc_entry_guard_recursion.cml"
 args = ["${case}", "std::inline"]
@@ -69,16 +74,17 @@ timeout_ms = 4000
 
 [[tests]]
 name = "inline_strategy_hybrid_mix"
+desc = "Checks mixed inline strategies can coexist without stale rescanning state."
 kind = "behavior"
 case = "../../../cases/opt/inline/strategy_hybrid_mix.cml"
 args = ["${case}", "std::inline"]
 expect_exit = 0
-failure_note = "Inline runtime still times out on this mixed-strategy graph; keep GIR coverage and track the runtime regression."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
 name = "strategy_small_non_arm"
+desc = "Checks the small-function heuristic still inlines non-branch callees."
 kind = "behavior"
 case = "../../../cases/opt/inline/strategy_small_non_arm.cml"
 args = ["${case}", "std::inline"]
@@ -88,6 +94,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "value_ctrl_gate_anchor"
+desc = "Checks inlining preserves the control anchor around side effects and returned values."
 kind = "behavior"
 case = "../../../cases/opt/inline/value_ctrl_gate_anchor.cml"
 args = ["${case}", "std::inline"]

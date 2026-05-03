@@ -1,8 +1,5 @@
 /**
- * 覆盖点：
- * 1) 同图同时存在「非 arm 小子图调用」与「arm 小子图调用」；
- * 2) `std::inline::hybrid`/`std::inline` 应同时覆盖两类目标；
- * 3) `std::inline::arm` 仅保证 arm 小子图路径（非 arm 目标需在 std::gir 下仍可见）。
+ * Verifies mixed inline strategies can coexist in one graph without leaving stale work items after rescanning.
  */
 module inline_strategy_hybrid_mix
 
@@ -27,3 +24,4 @@ func main(): int sync {
         return 0
     }
 }
+

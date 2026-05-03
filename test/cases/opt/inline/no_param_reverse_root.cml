@@ -1,7 +1,5 @@
 /**
- * 覆盖点：
- * 1) 无参数函数：入口目标来自 exitNode（值出口锚点）反向推导（而非参数门控）；
- * 2) 内联后仍返回正确结果。
+ * Verifies zero-argument callees can be inlined even when the rewritten graph has to reconnect from the return root backward.
  */
 module inline_no_param_reverse_root
 
@@ -20,4 +18,5 @@ func main(): int sync {
         return 0
     }
 }
+
 

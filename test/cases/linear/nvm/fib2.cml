@@ -1,3 +1,6 @@
+/**
+ * Verifies nested sync recursion keeps local mutable state coherent while the recursive tree executes through inner closures.
+ */
 module fib
 
 import { now } from time

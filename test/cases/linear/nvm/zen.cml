@@ -1,3 +1,6 @@
+/**
+ * Verifies the builtin this module can be imported and executed through a trivial standard-library call.
+ */
 module main
 
 import { zen } from this

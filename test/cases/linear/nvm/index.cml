@@ -1,3 +1,6 @@
+/**
+ * Verifies tuple-field access and array indexing remain stable when values flow through a small processing pipeline.
+ */
 type Signal = (int, int)
 
 func process(signals: Signal[]) sync {

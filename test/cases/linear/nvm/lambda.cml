@@ -1,3 +1,6 @@
+/**
+ * Verifies lambdas can capture outer constants and drive collection filtering inside a larger render pipeline.
+ */
 module lambda
 
 type Point = { x: int, y: int }
@@ -5,7 +8,7 @@ type Point = { x: int, y: int }
 let WIDTH = 10
 let HEIGHT = 10
 
-// 自定义 my_filter 函数，用于测试 Lambda 表达式
+// 自定�?my_filter 函数，用于测�?Lambda 表达�?
 with <predicate: (p: Point) => bool>
 func my_filter(points: Point[]): Point[] sync {
     var result: Point[] = []
@@ -25,7 +28,7 @@ func valid_points(points: Point[]): Point[] {
     }>
 }
 
-// 渲染函数：只渲染合法点
+// 渲染函数：只渲染合法�?
 func render(snake: Point[]): void sync {
     let cleaned = valid_points(snake)
     let rows = range(0, HEIGHT)
@@ -47,10 +50,11 @@ func main(): int sync {
         { x: 5, y: 5 },
         { x: 5, y: 6 },
         { x: 5, y: 7 },
-        { x: -1, y: 0 },   // 非法点
-        { x: 10, y: 10 }   // 非法点
+        { x: -1, y: 0 },   // 非法�?
+        { x: 10, y: 10 }   // 非法�?
     ]
 
     render(snake)
     return 0
 }
+

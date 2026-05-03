@@ -1,7 +1,5 @@
 /**
- * 覆盖点：
- * 1) callee 内部“值出口”和“控制完成点”分离（先算值，再副作用 println，再 return）；
- * 2) 内联后应通过 GATE 维持 value/ctrl 会合语义。
+ * Verifies inlining preserves side-effect anchors so value results do not bypass the control gate that prints before return.
  */
 module inline_value_ctrl_gate_anchor
 
@@ -20,4 +18,5 @@ func main(): int sync {
         return 0
     }
 }
+
 

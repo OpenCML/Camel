@@ -1,3 +1,6 @@
+/**
+ * Parallel Monte Carlo estimator used to stress embarrassingly parallel map-reduce execution over many workers.
+ */
 module monte_carlo_pi
 
 import { now } from time
@@ -25,3 +28,4 @@ func main(): int sync {
 
     return 0
 }
+

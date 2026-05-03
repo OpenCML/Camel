@@ -4,6 +4,7 @@ tags = ["functional", "compile", "semantic"]
 
 [[tests]]
 name = "semantic.branch_return_mismatch"
+desc = "Rejects branch expressions whose then/else arms infer incompatible return types."
 kind = "negative"
 case = "../../../cases/compile/semantic/branch_return_mismatch.cml"
 args = ["${case}"]
@@ -17,6 +18,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "semantic.decorator_nonfunc_return"
+desc = "Rejects decorators that return data instead of a callable compatible with the decorated function."
 kind = "negative"
 case = "../../../cases/compile/semantic/decorator_nonfunc_return.cml"
 args = ["${case}"]
@@ -30,6 +32,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "semantic.unresolved_reference"
+desc = "Rejects unresolved identifiers during semantic binding before execution can start."
 kind = "negative"
 case = "../../../cases/compile/semantic/unresolved_reference.cml"
 args = ["${case}"]

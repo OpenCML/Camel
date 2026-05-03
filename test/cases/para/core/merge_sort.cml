@@ -1,3 +1,6 @@
+/**
+ * Large recursive mergesort workload used to stress divide-and-conquer parallelism and deep task trees.
+ */
 module merge_sort
 
 import { now } from time

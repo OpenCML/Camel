@@ -1,3 +1,6 @@
+/**
+ * Verifies macros can expand a small staged pipeline with local temporaries and dependent intermediate values.
+ */
 module macro_pipeline
 
 macro func add_one(x: int): int {
@@ -18,3 +21,4 @@ func main(): int sync {
     println(pipeline(20))
     return 0
 }
+

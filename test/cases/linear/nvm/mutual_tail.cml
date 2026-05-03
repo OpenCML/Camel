@@ -1,3 +1,6 @@
+/**
+ * Deep mutual recursion case used to check that tail-position jumps across functions do not overflow under linear execution.
+ */
 module mutual_tail
 
 func even(n: int): int {
@@ -15,3 +18,4 @@ func main(): int sync {
     'mutual_tail({}, {}, {})'->format<n, a, b>->println
     return 0
 }
+

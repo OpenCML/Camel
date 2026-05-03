@@ -1,7 +1,5 @@
 /**
- * 覆盖点：
- * 1) 入口目标集合大小为 1 时，不应创建 entry SYNC；
- * 2) 内联后行为正确。
+ * Verifies the simple single-target inline path rewrites a tiny leaf call without requiring sync-specific handling.
  */
 module inline_entry_single_target_no_sync
 
@@ -21,4 +19,5 @@ func main(): int sync {
         return 0
     }
 }
+
 

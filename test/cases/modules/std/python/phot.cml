@@ -1,3 +1,6 @@
+/**
+ * End-to-end phot wrapper probe that drives a Python-backed optical-communication pipeline through Camel bindings.
+ */
 module main
 
 import { config, gen_bits, modulation, up_sample, pulse_shaper, constellation_diagram } from pyphot
@@ -27,3 +30,4 @@ func main(): int sync {
     "Done." -> println
     return 0
 }
+

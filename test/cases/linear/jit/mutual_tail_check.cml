@@ -1,6 +1,5 @@
 /**
- * 意图：验证多个 graph 之间的普通调用链在 JIT 下保持正确，覆盖跨函数返回值传递。
- * 预期：打印 `mutual_tail_check ok`；exit 0。
+ * Verifies simple mutual-call control transfer on JIT, especially around base-case selection and returned tail values.
  */
 module jit_mutual_tail_check
 
@@ -43,3 +42,4 @@ func main(): int sync {
         return 0
     }
 }
+

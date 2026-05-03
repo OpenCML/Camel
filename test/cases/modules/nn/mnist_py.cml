@@ -1,3 +1,6 @@
+/**
+ * Python-backed MNIST training pipeline used to validate cross-language tensor ingestion, training, and visualization hooks.
+ */
 // mnist_py.cml - Softmax classifier with MNIST loaded via Python (no JSON file)
 
 module mnist_py
@@ -134,3 +137,4 @@ func main(): int sync {
             py_wrap(labels_arr), py_wrap(pred_list), py_wrap(true))
     return 0
 }
+

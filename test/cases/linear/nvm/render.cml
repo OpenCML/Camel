@@ -1,3 +1,6 @@
+/**
+ * Verifies nested collection iteration and membership checks can render a simple grid without corrupting loop state.
+ */
 type Point = { x: int, y: int }
 
 let WIDTH = 10

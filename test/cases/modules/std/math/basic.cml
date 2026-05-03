@@ -1,3 +1,6 @@
+/**
+ * Exercises representative scalar math intrinsics so the standard numeric helpers stay wired into the runtime.
+ */
 module main
 
 // math 模块基础测试
@@ -16,3 +19,4 @@ func main(): int sync {
     println("\n=== Math tests completed ===")
     return 0
 }
+

@@ -1,6 +1,5 @@
 /**
- * 意图：验证结构体字段访问与 match 分派在 JIT 下的正确性。
- * 预期：打印 `struct_match ok`；exit 0。
+ * Verifies match-driven struct reconstruction on JIT, including field reads and rebuilt record values.
  */
 module jit_struct_match
 
@@ -35,3 +34,4 @@ func main(): int sync {
         return 0
     }
 }
+

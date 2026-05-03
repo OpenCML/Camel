@@ -1,6 +1,5 @@
 /**
- * 意图：验证浮点算术在 JIT 下的基本正确性，覆盖 mul/add/div 链路。
- * 预期：打印 `float_arith ok`；exit 0。
+ * Verifies JIT floating-point arithmetic keeps ordering and precision within a tight expected range.
  */
 module jit_float_arith
 
@@ -22,3 +21,4 @@ func main(): int sync {
         return 0
     }
 }
+

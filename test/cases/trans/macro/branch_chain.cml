@@ -1,3 +1,6 @@
+/**
+ * Verifies nested macro expansion across branch arms keeps the right expansion order in each control-flow path.
+ */
 module macro_branch_chain
 
 macro func add_one(x: int): int {
@@ -16,3 +19,4 @@ func main(): int sync {
     println(choose(true, 40) + choose(false, 40))
     return 0
 }
+

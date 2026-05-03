@@ -1,3 +1,6 @@
+/**
+ * Parallel block-sorting workload used to verify independent large-array jobs can be scheduled without cross-block corruption.
+ */
 module block_sort_merge
 
 import { now } from time
@@ -36,3 +39,4 @@ func main(): int sync {
     'Block sorting completed in {:.2f} seconds'->format<duration>->println
     return 0
 }
+

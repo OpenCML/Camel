@@ -1,3 +1,6 @@
+/**
+ * Verifies match expressions, struct updates, and method-style pipelines compose correctly in one semantic path.
+ */
 module semantic_mapping
 
 type Point = {
@@ -25,3 +28,4 @@ func main(): int sync {
     '{} {}'->format<label, moved.y>->println
     return 0
 }
+

@@ -1,6 +1,5 @@
 /**
- * 意图：验证 JIT 下 if/else、嵌套分支与 JOIN/select 结果合流是否正确。
- * 预期：打印 `branch_join ok`；exit 0。
+ * Verifies JIT lowering preserves multi-level branch joins and returns the correct value from each control-flow arm.
  */
 module jit_branch_join
 
@@ -37,3 +36,4 @@ func main(): int sync {
         return 0
     }
 }
+

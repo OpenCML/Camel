@@ -1,3 +1,6 @@
+/**
+ * Synthetic softmax-classifier pipeline used to validate larger tensor training loops without external data dependencies.
+ */
 // mnist.cml - Softmax classifier for handwritten digit recognition (MNIST-style)
 // Uses synthetic data for pipeline validation.
 
@@ -99,3 +102,4 @@ func main(): int sync {
     'Accuracy: {} / {} = {}'->format<correct, n, acc>->println
     return 0
 }
+

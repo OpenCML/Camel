@@ -1,3 +1,6 @@
+/**
+ * Verifies mutable variables passed by reference through sync calls are updated in place and observed by the caller.
+ */
 // variables and sync for explicit
 sync func update(var target: int) {
     wait target += 1
@@ -10,3 +13,4 @@ func main(): int sync {
     println(c)
     return 0
 }
+

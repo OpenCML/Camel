@@ -1,3 +1,6 @@
+/**
+ * Baseline recursive Fibonacci program used to validate ordinary call/return behavior and observable output formatting on NVM.
+ */
 module fib
 
 import { now } from time

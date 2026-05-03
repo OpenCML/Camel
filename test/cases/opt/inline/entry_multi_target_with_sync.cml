@@ -1,7 +1,5 @@
 /**
- * 覆盖点：
- * 1) 多个参数门控目标时，应创建 entry SYNC 收敛为单一 ctrlEntry；
- * 2) 内联后多参数值流保持正确。
+ * Verifies the inliner preserves dataflow when the callee entry fans out to multiple local values before returning.
  */
 module inline_entry_multi_target_with_sync
 
@@ -23,4 +21,5 @@ func main(): int sync {
         return 0
     }
 }
+
 

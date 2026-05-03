@@ -1,3 +1,6 @@
+/**
+ * Verifies the C++ translation path can lower scalar modulo logic and run the generated program end to end.
+ */
 module exec_mod_scalar
 
 func fib(n: int): int {
@@ -7,3 +10,4 @@ func fib(n: int): int {
 func main(): int sync {
     return fib(4)
 }
+
