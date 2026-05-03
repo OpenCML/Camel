@@ -45,7 +45,7 @@ let n = 100000  // number of terms
 let a = 1       // first term
 ```
 
-（来自 `test/run/linear/var.cml`、`test/run/linear/acc.cml`）
+（来自 `test/cases/linear/nvm/var.cml`、`test/cases/linear/nvm/acc.cml`）
 
 ### 2.2.2 块注释
 
@@ -61,7 +61,7 @@ let a = 1       // first term
 module arithmetic_sum
 ```
 
-（来自 `test/run/linear/acc.cml`）
+（来自 `test/cases/linear/nvm/acc.cml`）
 
 ### 2.2.3 命令/预处理行
 
@@ -282,3 +282,4 @@ range(0, HEIGHT)->foreach<(y: int) => sync { ... }>
 - **`[ ]`**：数组、下标、切片。
 - **`{ }`**：结构体、块、模式。
 - **`< >`**：泛型/显式参数，如 `format<idx>`、`slice<0, len(arr)>`。
+

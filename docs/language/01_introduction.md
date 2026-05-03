@@ -23,7 +23,7 @@ func main(): int sync {
 }
 ```
 
-（来自 `test/run/linear/hello.cml`）
+（来自 `test/cases/linear/nvm/hello.cml`）
 
 ## 1.3 其它实现
 
@@ -48,3 +48,4 @@ func main(): int sync {
 - **第 6 章 表达式**：原子、访问、管道、运算、控制表达式、Lambda。
 - **第 7 章 语句**：简单语句与复合语句（块、if、match、try、函数、类型定义）。
 - **第 8 章 顶层与文法**：程序组成、文法概要。
+

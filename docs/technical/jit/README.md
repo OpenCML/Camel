@@ -10,8 +10,9 @@
 生成汇编、MIR 与字节码的参考命令：
 
 ```bash
-camel test/run/linear/fib.cml std::inline std::lbc   # 链接后字节码
-camel test/run/linear/fib.cml std::inline std::rmir  # 字节码直接编译得到的 vreg MIR（未优化）
-camel test/run/linear/fib.cml std::inline std::mir   # 多遍优化后的 vreg MIR（优化遍入口：runMirOptimizationPasses）
-camel test/run/linear/fib.cml std::inline std::asm   # 优化后 MIR 经寄存器分配 + 指令派发得到的汇编
+camel test/cases/linear/nvm/fib.cml std::inline std::lbc   # 链接后字节码
+camel test/cases/linear/nvm/fib.cml std::inline std::rmir  # 字节码直接编译得到的 vreg MIR（未优化）
+camel test/cases/linear/nvm/fib.cml std::inline std::mir   # 多遍优化后的 vreg MIR（优化遍入口：runMirOptimizationPasses）
+camel test/cases/linear/nvm/fib.cml std::inline std::asm   # 优化后 MIR 经寄存器分配 + 指令派发得到的汇编
 ```
+

@@ -1,0 +1,42 @@
+id = "compile.core"
+tier = "functional"
+tags = ["functional", "compile", "semantic"]
+
+[[tests]]
+name = "semantic.branch_return_mismatch"
+kind = "negative"
+case = "../../../cases/compile/semantic/branch_return_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::BranchReturnTypeMismatch"
+expect_diagnostic_code = "0x0300000C"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 12
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "semantic.decorator_nonfunc_return"
+kind = "negative"
+case = "../../../cases/compile/semantic/decorator_nonfunc_return.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsMismatch"
+expect_diagnostic_code = "0x03000010"
+expect_diagnostic_line = 1
+expect_diagnostic_column = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "semantic.unresolved_reference"
+kind = "negative"
+case = "../../../cases/compile/semantic/unresolved_reference.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_code = "0x0300000B"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 17
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

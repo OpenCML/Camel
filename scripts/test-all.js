@@ -1,4 +1,4 @@
-import { FULL_TARGETS, RUN_TARGETS, TARGETS, runHarness, resolveTargetName } from './test-harness.js'
+import { FULL_TARGETS, TARGETS, runHarness, resolveTargetName } from './test-harness.js'
 
 function parseArgs(argv) {
     const options = {
@@ -6,7 +6,7 @@ function parseArgs(argv) {
         customTargets: [],
         selectedTargets: new Set(),
         suites: [],
-        run: false,
+        functional: false,
         all: false
     }
 
@@ -14,26 +14,38 @@ function parseArgs(argv) {
         const arg = argv[i]
         if (arg === '--all') {
             options.all = true
+        } else if (arg === '--functional') {
+            options.functional = true
         } else if (arg === '--modules') {
             options.selectedTargets.add(TARGETS.modules)
-        } else if (arg === '--run') {
-            options.run = true
+        } else if (arg === '--modules:std') {
+            options.selectedTargets.add(TARGETS.modulesStd)
+        } else if (arg === '--modules:nn') {
+            options.selectedTargets.add(TARGETS.modulesNn)
+        } else if (arg === '--parse') {
+            options.selectedTargets.add(TARGETS.parse)
+        } else if (arg === '--compile') {
+            options.selectedTargets.add(TARGETS.compile)
+        } else if (arg === '--opt') {
+            options.selectedTargets.add(TARGETS.opt)
+        } else if (arg === '--trans') {
+            options.selectedTargets.add(TARGETS.trans)
+        } else if (arg === '--linear') {
+            options.selectedTargets.add(TARGETS.linear)
+        } else if (arg === '--linear:nvm') {
+            options.selectedTargets.add(TARGETS.linearNvm)
+        } else if (arg === '--linear:jit') {
+            options.selectedTargets.add(TARGETS.linearJit)
+        } else if (arg === '--para') {
+            options.selectedTargets.add(TARGETS.para)
         } else if (arg === '--suite' && i + 1 < argv.length) {
             options.suites.push(argv[++i])
         } else if (arg === '--smoke') {
             options.selectedTargets.add(TARGETS.smoke)
-        } else if (arg === '--errors') {
-            options.selectedTargets.add(TARGETS.errors)
-        } else if (arg === '--macro') {
-            options.selectedTargets.add(TARGETS.macro)
-        } else if (arg === '--passes') {
-            options.selectedTargets.add(TARGETS.passes)
         } else if (arg === '--perf') {
             options.selectedTargets.add(TARGETS.perf)
         } else if (arg === '--regression') {
             options.selectedTargets.add(TARGETS.regression)
-        } else if (arg === '--trans') {
-            options.selectedTargets.add(TARGETS.trans)
         } else if (arg.startsWith('-')) {
             options.runnerArgs.push(arg)
         } else {
@@ -56,12 +68,11 @@ if (options.customTargets.length > 0) {
     const selected = new Set(options.selectedTargets)
     if (options.suites.length > 0) {
         for (const suite of options.suites) {
-            selected.add(resolveTargetName(`run/${suite}`))
+            selected.add(resolveTargetName(suite))
         }
-    } else if (options.run) {
-        for (const target of RUN_TARGETS) {
-            selected.add(target)
-        }
+    }
+    if (options.functional) {
+        selected.add(TARGETS.functional)
     }
     targets = selected.size > 0 ? [...selected] : FULL_TARGETS
 }

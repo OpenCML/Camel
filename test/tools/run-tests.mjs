@@ -19,7 +19,6 @@ const CAMEL_EXE = path.join(REPO_ROOT, 'out', 'latest', 'bin', IS_WINDOWS ? 'cam
 const COLORS = {
     green: '\x1b[32m',
     red: '\x1b[31m',
-    yellow: '\x1b[33m',
     cyan: '\x1b[36m',
     reset: '\x1b[0m',
 }
@@ -32,10 +31,6 @@ function timestamp() {
 
 function ensureDir(dir) {
     fs.mkdirSync(dir, { recursive: true })
-}
-
-function readFileIfExists(filePath) {
-    return fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : ''
 }
 
 function walkPlans(entryPath, files = []) {
@@ -100,6 +95,23 @@ function applyNormalizers(text, names) {
         }
     }
     return output
+}
+
+function parseDiagnostics(text) {
+    const diagnostics = []
+    const clean = applyNormalizers(text || '', ['strip_ansi', 'normalize_newlines', 'trim_trailing_space'])
+    const pattern = /^(?:\([^)]+\))?(.*?):(\d+):(\d+): \[[^\]]+\]: .* \(name=([^,]+), code=(0x[0-9A-Fa-f]+)\)$/gm
+    let match
+    while ((match = pattern.exec(clean)) !== null) {
+        diagnostics.push({
+            path: match[1],
+            line: Number.parseInt(match[2], 10),
+            column: Number.parseInt(match[3], 10),
+            name: match[4],
+            code: match[5],
+        })
+    }
+    return diagnostics
 }
 
 function expandArgToken(token, scope) {
@@ -219,6 +231,30 @@ function validateTest(test, result, context) {
             failures.push(`stderr does not contain '${needle}'`)
         }
     }
+    if (
+        test.expect_diagnostic_name
+        || test.expect_diagnostic_code
+        || typeof test.expect_diagnostic_line === 'number'
+        || typeof test.expect_diagnostic_column === 'number'
+    ) {
+        const matched = result.diagnostics.find((diagnostic) => {
+            if (test.expect_diagnostic_name && diagnostic.name !== test.expect_diagnostic_name) return false
+            if (test.expect_diagnostic_code && diagnostic.code !== test.expect_diagnostic_code) return false
+            if (typeof test.expect_diagnostic_line === 'number' && diagnostic.line !== test.expect_diagnostic_line) return false
+            if (typeof test.expect_diagnostic_column === 'number' && diagnostic.column !== test.expect_diagnostic_column) return false
+            return true
+        })
+        if (!matched) {
+            failures.push(
+                `expected diagnostic ${[
+                    test.expect_diagnostic_name || null,
+                    test.expect_diagnostic_code || null,
+                    typeof test.expect_diagnostic_line === 'number' ? `line ${test.expect_diagnostic_line}` : null,
+                    typeof test.expect_diagnostic_column === 'number' ? `column ${test.expect_diagnostic_column}` : null,
+                ].filter(Boolean).join(', ')}`
+            )
+        }
+    }
     if (test.kind === 'snapshot') {
         const stream = test.snapshot_stream || 'stdout'
         const actualText = stream === 'stderr' ? result.normalized.stderr : result.normalized.stdout
@@ -305,6 +341,7 @@ function runOneTest(test, sharedVars, logContext) {
         normalized,
         wallMs: raw.wallMs,
         benchmark: null,
+        diagnostics: parseDiagnostics(raw.output),
     }
 
     if (test.kind === 'benchmark' && raw.stdout) {
@@ -335,9 +372,9 @@ function writeLogFiles(plan, test, result, status, logDir) {
                 test: test.name,
                 case_path: result.casePath,
                 status,
-                result_policy: 'normal',
-                policy_reason: test.xfail_reason || null,
+                failure_note: test.failure_note || null,
                 failures: result.failures,
+                diagnostics: result.diagnostics,
                 metrics: result.benchmark
                     ? {
                         mean_ms: result.benchmark.mean_ms,
@@ -386,7 +423,7 @@ function main() {
     console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable: ${CAMEL_EXE}`)
     console.log(`${COLORS.cyan}[INFO]${COLORS.reset} discovered plans: ${plans.length}`)
 
-    const summary = { pass: 0, fail: 0, skip: 0 }
+    const summary = { pass: 0, fail: 0 }
     const completed = new Map()
     let currentSuite = ''
 
@@ -404,8 +441,8 @@ function main() {
             const metric = formatMetric(result)
             printStatusLine(result.status, test.name, metric)
             if (result.failures.length > 0) {
-                if (test.xfail_reason) {
-                    printDetailLines([`known issue: ${test.xfail_reason}`])
+                if (test.failure_note) {
+                    printDetailLines([`note: ${test.failure_note}`])
                 }
                 printDetailLines(result.failures)
             }

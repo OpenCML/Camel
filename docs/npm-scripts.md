@@ -28,35 +28,32 @@ The repository now uses the plan-based harness under `test/`.
 
 | Script | Description |
 |------|------|
-| `npm run test` | Main regression set: `smoke`, `regression`, `errors`, `modules`, `run/ln`, `run/jit`, `run/nn`, `macro`, `trans` |
-| `npm run test:all` | Full suite including `passes/inline`, `perf`, and `run/para` |
+| `npm run test` | Main set: `smoke`, `regression`, `functional/**` |
+| `npm run test:all` | Full suite including `perf/**` |
 | `npm run test:smoke` | Smoke-only suite |
 | `npm run test:regression` | Alias of the main regression entry |
-| `npm run test:errors` | Diagnostic error cases |
+| `npm run test:functional` | All functional suites |
+| `npm run test:parse` | Parse suite only |
+| `npm run test:compile` | Compile/semantic suite only |
+| `npm run test:opt` | Optimization-pass suite only |
+| `npm run test:linear` | Linear scheduler / VM suites |
+| `npm run test:linear:nvm` | NVM/default linear suite only |
+| `npm run test:linear:jit` | JIT linear suite only |
+| `npm run test:para` | Parallel runtime suite only |
 | `npm run test:modules` | Module suite only |
-| `npm run test:macro` | Macro suite only |
-| `npm run test:passes` | Inline-pass suite only |
+| `npm run test:modules:std` | Stdlib module suite only |
+| `npm run test:modules:nn` | NN module suite only |
 | `npm run test:perf` | Benchmark/performance suite only |
 | `npm run test:trans` | Translation/export suite only |
-
-## Run Suite Scripts
-
-| Script | Description |
-|------|------|
-| `npm run test:run` | All `run/*` suites (`ln`, `jit`, `nn`, `para`) |
-| `npm run test:run:ln` | `run/ln` only |
-| `npm run test:run:jit` | `run/jit` only |
-| `npm run test:run:nn` | `run/nn` only |
-| `npm run test:run:para` | `run/para` only |
 
 ## Direct Runner Examples
 
 ```powershell
 node test/tools/run-tests.mjs
-node test/tools/run-tests.mjs test/plans/modules.plan.toml
-node test/tools/run-tests.mjs test/plans/run/ln.plan.toml
+node test/tools/run-tests.mjs test/plans/functional/modules
+node test/tools/run-tests.mjs test/plans/functional/linear/nvm.plan.toml
 node test/tools/run-tests.mjs --tier benchmark test/plans/perf/fib.plan.toml
-node test/tools/run-tests.mjs --update-golden test/plans/passes/inline.plan.toml
+node test/tools/run-tests.mjs --update-golden test/plans/functional/parse/core.plan.toml
 ```
 
 ## Performance Helper Scripts
@@ -72,5 +69,5 @@ node test/tools/run-tests.mjs --update-golden test/plans/passes/inline.plan.toml
 
 - Build first: `npm run build`.
 - `test:perf` plans drive pass-level measurements through test `args`, for example `["${timeit_nvm_10}", "${case}", "${run_nvm}"]`, instead of relying only on outer process wall time.
-- Environment-sensitive suites may report `skip` or `xfail` instead of `pass`.
-- `xpass` is treated as actionable because it usually means a known regression is fixed and the manifest should be promoted back to a normal passing test.
+- Negative cases live in their owning functional plans and assert diagnostic name/code/line/column directly.
+- Environment-sensitive or known-bad cases still fail the suite; optional `failure_note` text is only explanatory output.

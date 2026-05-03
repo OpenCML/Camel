@@ -4,8 +4,8 @@
  * 2) 运行结果保持正确。
  *
  * 建议：
- * camel "test/passes/inline/inline_registry_sweep_unique_arm.cml" std::inline std::gir
- * camel "test/passes/inline/inline_registry_sweep_unique_arm.cml" std::inline std::fvm
+ * camel "test/cases/opt/inline/registry_sweep_unique_arm.cml" std::inline std::gir
+ * camel "test/cases/opt/inline/registry_sweep_unique_arm.cml" std::inline std::fvm
  */
 module inline_registry_sweep_unique_arm
 
@@ -34,4 +34,5 @@ func main(): int sync {
         return 0
     }
 }
+
 

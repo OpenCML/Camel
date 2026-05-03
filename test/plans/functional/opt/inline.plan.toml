@@ -1,21 +1,21 @@
-id = "passes.inline"
-tier = "regression"
-tags = ["passes", "inline"]
+id = "opt.inline"
+tier = "functional"
+tags = ["functional", "opt", "inline"]
 
 [[tests]]
 name = "branch_arm_behavior"
 kind = "behavior"
-case = "../../cases/passes/inline/branch_arm_behavior.cml"
+case = "../../../cases/opt/inline/branch_arm_behavior.cml"
 args = ["${case}", "std::inline"]
 expect_exit = 0
-xfail_reason = "Inline runtime still times out on this graph; keep it as a tracked regression until the scheduler stabilizes."
+failure_note = "Inline runtime still times out on this graph; keep it tracked until the scheduler stabilizes."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
 name = "empty_entry_targets_fallback"
 kind = "behavior"
-case = "../../cases/passes/inline/empty_entry_targets_fallback.cml"
+case = "../../../cases/opt/inline/empty_entry_targets_fallback.cml"
 args = ["${case}", "std::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -24,7 +24,7 @@ timeout_ms = 4000
 [[tests]]
 name = "entry_multi_target_with_sync"
 kind = "behavior"
-case = "../../cases/passes/inline/entry_multi_target_with_sync.cml"
+case = "../../../cases/opt/inline/entry_multi_target_with_sync.cml"
 args = ["${case}", "std::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -33,7 +33,7 @@ timeout_ms = 4000
 [[tests]]
 name = "entry_single_target_no_sync"
 kind = "behavior"
-case = "../../cases/passes/inline/entry_single_target_no_sync.cml"
+case = "../../../cases/opt/inline/entry_single_target_no_sync.cml"
 args = ["${case}", "std::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -42,7 +42,7 @@ timeout_ms = 4000
 [[tests]]
 name = "no_param_reverse_root"
 kind = "behavior"
-case = "../../cases/passes/inline/no_param_reverse_root.cml"
+case = "../../../cases/opt/inline/no_param_reverse_root.cml"
 args = ["${case}", "std::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -51,17 +51,17 @@ timeout_ms = 4000
 [[tests]]
 name = "registry_sweep_unique_arm"
 kind = "behavior"
-case = "../../cases/passes/inline/registry_sweep_unique_arm.cml"
+case = "../../../cases/opt/inline/registry_sweep_unique_arm.cml"
 args = ["${case}", "std::inline"]
 expect_exit = 0
-xfail_reason = "Inline runtime still times out on this graph; keep it as a tracked regression until the scheduler stabilizes."
+failure_note = "Inline runtime still times out on this graph; keep it tracked until the scheduler stabilizes."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
 name = "scc_entry_guard_recursion"
 kind = "behavior"
-case = "../../cases/passes/inline/scc_entry_guard_recursion.cml"
+case = "../../../cases/opt/inline/scc_entry_guard_recursion.cml"
 args = ["${case}", "std::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -70,17 +70,17 @@ timeout_ms = 4000
 [[tests]]
 name = "inline_strategy_hybrid_mix"
 kind = "behavior"
-case = "../../cases/passes/inline/strategy_hybrid_mix.cml"
+case = "../../../cases/opt/inline/strategy_hybrid_mix.cml"
 args = ["${case}", "std::inline"]
 expect_exit = 0
-xfail_reason = "Inline runtime still times out on this mixed-strategy graph; keep GIR coverage and track the runtime regression."
+failure_note = "Inline runtime still times out on this mixed-strategy graph; keep GIR coverage and track the runtime regression."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
 name = "strategy_small_non_arm"
 kind = "behavior"
-case = "../../cases/passes/inline/strategy_small_non_arm.cml"
+case = "../../../cases/opt/inline/strategy_small_non_arm.cml"
 args = ["${case}", "std::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -89,7 +89,7 @@ timeout_ms = 4000
 [[tests]]
 name = "value_ctrl_gate_anchor"
 kind = "behavior"
-case = "../../cases/passes/inline/value_ctrl_gate_anchor.cml"
+case = "../../../cases/opt/inline/value_ctrl_gate_anchor.cml"
 args = ["${case}", "std::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

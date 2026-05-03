@@ -8,59 +8,50 @@ const PLANS_ROOT = path.join(TESTS_ROOT, 'plans')
 
 export const TARGETS = {
     smoke: path.join(PLANS_ROOT, 'smoke', 'core.plan.toml'),
-    regression: path.join(PLANS_ROOT, 'regression', 'language.plan.toml'),
-    errors: path.join(PLANS_ROOT, 'errors.plan.toml'),
-    modules: path.join(PLANS_ROOT, 'modules.plan.toml'),
-    runLn: path.join(PLANS_ROOT, 'run', 'ln.plan.toml'),
-    runJit: path.join(PLANS_ROOT, 'run', 'jit.plan.toml'),
-    runNn: path.join(PLANS_ROOT, 'run', 'nn.plan.toml'),
-    runPara: path.join(PLANS_ROOT, 'run', 'para.plan.toml'),
-    macro: path.join(PLANS_ROOT, 'macro.plan.toml'),
-    passes: path.join(PLANS_ROOT, 'passes', 'inline.plan.toml'),
-    perf: path.join(PLANS_ROOT, 'perf', 'fib.plan.toml'),
-    trans: path.join(PLANS_ROOT, 'trans', 'cpp.plan.toml')
+    regression: path.join(PLANS_ROOT, 'regression'),
+    functional: path.join(PLANS_ROOT, 'functional'),
+    parse: path.join(PLANS_ROOT, 'functional', 'parse'),
+    compile: path.join(PLANS_ROOT, 'functional', 'compile'),
+    opt: path.join(PLANS_ROOT, 'functional', 'opt'),
+    trans: path.join(PLANS_ROOT, 'functional', 'trans'),
+    linear: path.join(PLANS_ROOT, 'functional', 'linear'),
+    linearNvm: path.join(PLANS_ROOT, 'functional', 'linear', 'nvm.plan.toml'),
+    linearJit: path.join(PLANS_ROOT, 'functional', 'linear', 'jit.plan.toml'),
+    para: path.join(PLANS_ROOT, 'functional', 'para'),
+    modules: path.join(PLANS_ROOT, 'functional', 'modules'),
+    modulesStd: path.join(PLANS_ROOT, 'functional', 'modules', 'std.plan.toml'),
+    modulesNn: path.join(PLANS_ROOT, 'functional', 'modules', 'nn.plan.toml'),
+    perf: path.join(PLANS_ROOT, 'perf')
 }
 
 export const MAIN_TARGETS = [
     TARGETS.smoke,
     TARGETS.regression,
-    TARGETS.errors,
-    TARGETS.modules,
-    TARGETS.runLn,
-    TARGETS.runJit,
-    TARGETS.runNn,
-    TARGETS.macro,
-    TARGETS.trans
+    TARGETS.functional
 ]
 
 export const FULL_TARGETS = [
     ...MAIN_TARGETS,
-    TARGETS.passes,
-    TARGETS.perf,
-    TARGETS.runPara
-]
-
-export const RUN_TARGETS = [
-    TARGETS.runLn,
-    TARGETS.runJit,
-    TARGETS.runNn,
-    TARGETS.runPara
+    TARGETS.perf
 ]
 
 export function resolveTargetName(name) {
     const compact = String(name).replace(/^[./\\]+/, '')
     if (compact === 'smoke') return TARGETS.smoke
     if (compact === 'regression') return TARGETS.regression
-    if (compact === 'errors') return TARGETS.errors
+    if (compact === 'functional') return TARGETS.functional
+    if (compact === 'parse' || compact === 'functional/parse' || compact === 'functional\\parse') return TARGETS.parse
+    if (compact === 'compile' || compact === 'functional/compile' || compact === 'functional\\compile') return TARGETS.compile
+    if (compact === 'opt' || compact === 'functional/opt' || compact === 'functional\\opt') return TARGETS.opt
+    if (compact === 'trans' || compact === 'functional/trans' || compact === 'functional\\trans') return TARGETS.trans
+    if (compact === 'linear' || compact === 'functional/linear' || compact === 'functional\\linear') return TARGETS.linear
+    if (compact === 'linear/nvm' || compact === 'linear\\nvm' || compact === 'functional/linear/nvm' || compact === 'functional\\linear\\nvm') return TARGETS.linearNvm
+    if (compact === 'linear/jit' || compact === 'linear\\jit' || compact === 'functional/linear/jit' || compact === 'functional\\linear\\jit') return TARGETS.linearJit
+    if (compact === 'para' || compact === 'functional/para' || compact === 'functional\\para') return TARGETS.para
     if (compact === 'modules') return TARGETS.modules
-    if (compact === 'run/ln' || compact === 'run\\ln') return TARGETS.runLn
-    if (compact === 'run/jit' || compact === 'run\\jit') return TARGETS.runJit
-    if (compact === 'run/nn' || compact === 'run\\nn') return TARGETS.runNn
-    if (compact === 'run/para' || compact === 'run\\para') return TARGETS.runPara
-    if (compact === 'macro') return TARGETS.macro
-    if (compact === 'passes' || compact === 'passes/inline' || compact === 'passes\\inline') return TARGETS.passes
+    if (compact === 'modules/std' || compact === 'modules\\std' || compact === 'functional/modules/std' || compact === 'functional\\modules\\std') return TARGETS.modulesStd
+    if (compact === 'modules/nn' || compact === 'modules\\nn' || compact === 'functional/modules/nn' || compact === 'functional\\modules\\nn') return TARGETS.modulesNn
     if (compact === 'perf') return TARGETS.perf
-    if (compact === 'trans' || compact === 'trans/cpp' || compact === 'trans\\cpp') return TARGETS.trans
     return path.resolve(BASEDIR, name)
 }
 

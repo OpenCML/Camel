@@ -325,4 +325,5 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 - **详细语言参考**：[docs/language/](../language/README.md) — 按主题分章、含大量示例的详细文档目录。
 - **技术文档**：01_overview.md（总览）、02_language_spec.md（规范摘要）、03_trees_and_structures.md（CST/AST/GCT/GIR）、04_compilation_pipeline.md（流水线）、05_graph_ir.md（GIR）、06_runtime_and_execution.md（运行时与调度）。
 - **文法与 AST**：antlr/OpenCML.g4、OpenCMLLex.g4；docs/Camel.asdl。
-- **用例**：test/run/linear/、test/run/para/、test/run/nn/ 等目录下的 `.cml` 文件。
+- **用例**：test/cases/linear/nvm/、test/cases/para/core/、test/cases/modules/nn/ 等目录下的 `.cml` 文件。
+

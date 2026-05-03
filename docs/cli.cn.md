@@ -133,7 +133,7 @@ camel --input main.cml --passes std::gir,other
 camel -P main.cml
 
 # 转译到 C++ 并编译（一步到位，产物到 tmp/）
-camel-cpp test/run/linear/fib.cml
+camel-cpp test/cases/linear/nvm/fib.cml
 
 # 格式化代码（使用 camel-format，不是 camel format）
 camel-format -i src/xxx.cml
@@ -147,3 +147,4 @@ camel inspect --gir main.cml
 # 查看 Zen
 camel --zen
 ```
+

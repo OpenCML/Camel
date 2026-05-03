@@ -1,21 +1,21 @@
-id = "run.para"
-tier = "regression"
-tags = ["run", "para"]
+id = "para.core"
+tier = "functional"
+tags = ["functional", "para"]
 
 [[tests]]
 name = "asian_option_mc"
 kind = "behavior"
-case = "../../cases/run/para/asian_option_mc.cml"
+case = "../../../cases/para/core/asian_option_mc.cml"
 args = ["${case}"]
 expect_exit = 0
-xfail_reason = "This workload is intentionally heavy and exceeds the default local full-suite time budget on typical developer machines."
+failure_note = "This workload is intentionally heavy and exceeds the default local full-suite time budget on typical developer machines."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
 name = "block_sort_merge"
 kind = "behavior"
-case = "../../cases/run/para/block_sort_merge.cml"
+case = "../../../cases/para/core/block_sort_merge.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -24,7 +24,7 @@ timeout_ms = 4000
 [[tests]]
 name = "bootstrap_medians"
 kind = "behavior"
-case = "../../cases/run/para/bootstrap_medians.cml"
+case = "../../../cases/para/core/bootstrap_medians.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -33,7 +33,7 @@ timeout_ms = 4000
 [[tests]]
 name = "file_chunk_hash"
 kind = "behavior"
-case = "../../cases/run/para/file_chunk_hash.cml"
+case = "../../../cases/para/core/file_chunk_hash.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -42,7 +42,7 @@ timeout_ms = 4000
 [[tests]]
 name = "merge_sort"
 kind = "behavior"
-case = "../../cases/run/para/merge_sort.cml"
+case = "../../../cases/para/core/merge_sort.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -51,7 +51,7 @@ timeout_ms = 20000
 [[tests]]
 name = "monte_carlo_pi"
 kind = "behavior"
-case = "../../cases/run/para/monte_carlo_pi.cml"
+case = "../../../cases/para/core/monte_carlo_pi.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

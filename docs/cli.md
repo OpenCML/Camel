@@ -140,7 +140,7 @@ camel --input test/cases/perf/fib_recursive.cml --timeit std::jit/10
 camel --input test/cases/perf/fib_recursive.cml --timeit std::jit/10 --output-format json
 
 # Transpile to C++ and compile (one step, output to tmp/)
-camel-cpp test/run/linear/fib.cml
+camel-cpp test/cases/linear/nvm/fib.cml
 
 # Format code (use camel-format, not camel format)
 camel-format -i src/xxx.cml
@@ -154,3 +154,4 @@ camel inspect --gir main.cml
 # View Zen of Camel
 camel --zen
 ```
+

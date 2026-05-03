@@ -1,173 +1,195 @@
-id = "run.ln"
-tier = "regression"
-tags = ["run", "ln"]
+id = "modules.std"
+tier = "functional"
+tags = ["functional", "modules", "std"]
 
 [[tests]]
-name = "acc"
+name = "algo.basic"
 kind = "behavior"
-case = "../../cases/run/ln/acc.cml"
+case = "../../../cases/modules/std/algo/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "decorator_multi"
+name = "crypto.basic"
 kind = "behavior"
-case = "../../cases/run/ln/decorator_multi.cml"
+case = "../../../cases/modules/std/crypto/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "decorator_single"
+name = "fs.basic"
 kind = "behavior"
-case = "../../cases/run/ln/decorator_single.cml"
+case = "../../../cases/modules/std/fs/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "decorator_value_pass"
+name = "io.basic"
 kind = "behavior"
-case = "../../cases/run/ln/decorator_value_pass.cml"
+case = "../../../cases/modules/std/io/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "duplicate_inputs"
+name = "json.decode"
 kind = "behavior"
-case = "../../cases/run/ln/duplicate_inputs.cml"
+case = "../../../cases/modules/std/json/decode.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "fib"
+name = "json.encode"
 kind = "behavior"
-case = "../../cases/run/ln/fib.cml"
+case = "../../../cases/modules/std/json/encode.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "fib1"
+name = "math.basic"
 kind = "behavior"
-case = "../../cases/run/ln/fib1.cml"
+case = "../../../cases/modules/std/math/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "fib2"
+name = "os.basic"
 kind = "behavior"
-case = "../../cases/run/ln/fib2.cml"
+case = "../../../cases/modules/std/os/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "fill_mixed"
+name = "para.basic"
 kind = "behavior"
-case = "../../cases/run/ln/fill_mixed.cml"
+case = "../../../cases/modules/std/para/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+failure_note = "Importing para still fails with internal reference-loading errors on the current runtime."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "pyplot.main"
+kind = "behavior"
+case = "../../../cases/modules/std/pyplot/main.cml"
+args = ["${case}"]
+expect_exit = 0
+failure_note = "Pyplot depends on matplotlib inside Camel's embedded Python runtime, which is not stable across local environments yet."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "pyplot.simple"
+kind = "behavior"
+case = "../../../cases/modules/std/pyplot/simple.cml"
+args = ["${case}"]
+expect_exit = 0
+failure_note = "Pyplot depends on matplotlib inside Camel's embedded Python runtime, which is not stable across local environments yet."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "python.basic"
+kind = "behavior"
+case = "../../../cases/modules/std/python/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "hello"
+name = "python.integration"
 kind = "behavior"
-case = "../../cases/run/ln/hello.cml"
+case = "../../../cases/modules/std/python/main.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "index"
+name = "python.phot"
 kind = "behavior"
-case = "../../cases/run/ln/index.cml"
+case = "../../../cases/modules/std/python/phot.cml"
+args = ["${case}"]
+expect_exit = 0
+failure_note = "The phot wrapper path is not stable in the current runtime/environment matrix."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "random.basic"
+kind = "behavior"
+case = "../../../cases/modules/std/random/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "inline_unique_subgraph"
+name = "re.basic"
 kind = "behavior"
-case = "../../cases/run/ln/inline_unique_subgraph.cml"
+case = "../../../cases/modules/std/re/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "lambda"
+name = "sim.basic"
 kind = "behavior"
-case = "../../cases/run/ln/lambda.cml"
+case = "../../../cases/modules/std/sim/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "mapping"
+name = "statistics.basic"
 kind = "behavior"
-case = "../../cases/run/ln/mapping.cml"
+case = "../../../cases/modules/std/statistics/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "mutual_tail"
+name = "sys.basic"
 kind = "behavior"
-case = "../../cases/run/ln/mutual_tail.cml"
+case = "../../../cases/modules/std/sys/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "neuro"
+name = "this.basic"
 kind = "behavior"
-case = "../../cases/run/ln/neuro.cml"
+case = "../../../cases/modules/std/this/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "render"
+name = "time.basic"
 kind = "behavior"
-case = "../../cases/run/ln/render.cml"
-args = ["${case}"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
-
-[[tests]]
-name = "var"
-kind = "behavior"
-case = "../../cases/run/ln/var.cml"
-args = ["${case}"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
-
-[[tests]]
-name = "zen"
-kind = "behavior"
-case = "../../cases/run/ln/zen.cml"
+case = "../../../cases/modules/std/time/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

@@ -17,7 +17,7 @@
 cmake --build build --target camel-cpp --config Release
 
 # 一键：转译 + 编译，产物输出到 tmp/
-build\tools\camel-cpp\Release\camel-cpp.exe test\run\linear\fib.cml
+build\tools\camel-cpp\Release\camel-cpp.exe test\cases\linear\nvm\fib.cml
 
 # 产物：tmp/fib.cpp、tmp/fib.exe、tmp/libcamel.dll
 .\tmp\fib.exe
@@ -31,7 +31,7 @@ camel-cpp 会自动：解析并编译 `.cml` → 应用 `std::cpp` pass → 写�
 
 ```powershell
 # 示例：生成 fib.cml 的 C++
-camel -L "D:/Projects/camel-1/build/modules/time/Release" test/run/linear/fib.cml std::cpp > gen.cpp
+camel -L "D:/Projects/camel-1/build/modules/time/Release" test/cases/linear/nvm/fib.cml std::cpp > gen.cpp
 ```
 
 - 用 `-L` 指定 `.cmo` 模块所在路径
@@ -114,7 +114,7 @@ cd D:\Projects\camel-1\build\Release
 **推荐：使用 camel-cpp**（见上文「0. 一键流程」）
 
 ```powershell
-build\tools\camel-cpp\Release\camel-cpp.exe test\run\linear\fib.cml
+build\tools\camel-cpp\Release\camel-cpp.exe test\cases\linear\nvm\fib.cml
 .\tmp\fib.exe
 ```
 
@@ -124,7 +124,7 @@ build\tools\camel-cpp\Release\camel-cpp.exe test\run\linear\fib.cml
 cd D:\Projects\camel-1
 
 # 1. 生成 C++
-build\Release\camel.exe -L "build/modules/time/Release" test\run\linear\fib.cml std::cpp > gen.cpp
+build\Release\camel.exe -L "build/modules/time/Release" test\cases\linear\nvm\fib.cml std::cpp > gen.cpp
 
 # 2. 配置并编译（需在 CMakeLists 中添加 cpp_gen 目标）
 cmake -S . -B build -DCPP_GEN_SOURCE=$PWD/gen.cpp
@@ -176,3 +176,5 @@ build\cpp_gen\Release\cpp_gen.exe
 - **模块未找到**：`-L` 指向的目录需包含对应 `.cmo` 文件（如 `time.cmo`）
 - **UTF-16 BOM 错误**：PowerShell 重定向默认 UTF-16，Clang 会报错，请用文档中的 UTF-8 写入方式
 - **undeclared identifier**：若子函数在调用者之后定义，需在生成器中增加前向声明或调整函数发射顺序
+
+

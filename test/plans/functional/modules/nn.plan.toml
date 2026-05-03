@@ -1,11 +1,11 @@
-id = "run.nn"
-tier = "regression"
-tags = ["run", "nn"]
+id = "modules.nn"
+tier = "functional"
+tags = ["functional", "modules", "nn"]
 
 [[tests]]
 name = "lr"
 kind = "behavior"
-case = "../../cases/run/nn/lr.cml"
+case = "../../../cases/modules/nn/lr.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -14,7 +14,7 @@ timeout_ms = 4000
 [[tests]]
 name = "lrit"
 kind = "behavior"
-case = "../../cases/run/nn/lrit.cml"
+case = "../../../cases/modules/nn/lrit.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -23,7 +23,7 @@ timeout_ms = 4000
 [[tests]]
 name = "mnist"
 kind = "behavior"
-case = "../../cases/run/nn/mnist.cml"
+case = "../../../cases/modules/nn/mnist.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -32,7 +32,7 @@ timeout_ms = 4000
 [[tests]]
 name = "tensor_smoke"
 kind = "behavior"
-case = "../../cases/run/nn/tensor_smoke.cml"
+case = "../../../cases/modules/nn/tensor_smoke.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -41,19 +41,19 @@ timeout_ms = 4000
 [[tests]]
 name = "mnist_py"
 kind = "behavior"
-case = "../../cases/run/nn/mnist_py.cml"
+case = "../../../cases/modules/nn/mnist_py.cml"
 args = ["${case}"]
 expect_exit = 0
-xfail_reason = "Known Python-integration regression in the MNIST helper path."
+failure_note = "The MNIST helper path still has a Python integration regression."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
 name = "svm"
 kind = "behavior"
-case = "../../cases/run/nn/svm.cml"
+case = "../../../cases/modules/nn/svm.cml"
 args = ["${case}"]
 expect_exit = 0
-xfail_reason = "Known neural-network runtime regression in the SVM helper path."
+failure_note = "The SVM helper path still has a neural-network runtime regression."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000

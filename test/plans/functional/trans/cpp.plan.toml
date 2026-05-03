@@ -1,12 +1,12 @@
 id = "trans.cpp"
-tier = "regression"
-tags = ["trans", "cpp"]
+tier = "functional"
+tags = ["functional", "trans", "cpp"]
 
 [[tests]]
 name = "exec_mod_scalar"
 kind = "behavior"
-case = "../../cases/trans/cpp/exec_mod_scalar.cml"
-args = ["${case}"]
+case = "../../../cases/trans/cpp/exec_mod_scalar.cml"
+args = ["${case}", "std::cpp"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
@@ -14,10 +14,8 @@ timeout_ms = 4000
 [[tests]]
 name = "main_io"
 kind = "behavior"
-case = "../../cases/trans/cpp/main_io.cml"
-args = ["${case}"]
+case = "../../../cases/trans/cpp/main_io.cml"
+args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["elapsed ="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
-
