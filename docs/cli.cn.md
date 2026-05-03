@@ -42,7 +42,6 @@
 - `-S`, `--scheduler <type>`：指定图调度器类型
 - `-t`, `--threads <num>`：最大线程数
 - `-n`, `--no-cache`：不使用缓存模块
-- `-r`, `--repeat <times>`：重复执行若干次
 - `-I`, `--include <dir>`：添加模块搜索路径（可多次指定）
 - `-L`, `--stdlib <path>`：指定标准库路径（默认当前目录下的 `./stdlib`）
 - `-E`, `--error-format <text|json>`：错误输出格式，默认为 `text`

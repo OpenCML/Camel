@@ -1,0 +1,14 @@
+id = "regression.language"
+tier = "regression"
+tags = ["regression", "language"]
+
+[[tests]]
+name = "list_transform_chain"
+kind = "behavior"
+case = "../../cases/regression/language/list_transform_chain.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+expect_stdout_contains = ["list_transform ok"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+xfail_reason = "Known JIT regression: list-transform chains return without producing the expected final state."

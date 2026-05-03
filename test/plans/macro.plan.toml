@@ -1,0 +1,73 @@
+id = "macro.all"
+tier = "regression"
+tags = ["macro"]
+
+[[tests]]
+name = "basic"
+kind = "behavior"
+case = "../cases/macro/basic.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+xfail_reason = "Macro runtime execution is currently unstable under std::macro on this build."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "branch_chain"
+kind = "behavior"
+case = "../cases/macro/branch_chain.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+xfail_reason = "Macro runtime execution is currently unstable under std::macro on this build."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "chain"
+kind = "behavior"
+case = "../cases/macro/chain.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+xfail_reason = "Macro runtime execution is currently unstable under std::macro on this build."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "deep_chain"
+kind = "behavior"
+case = "../cases/macro/deep_chain.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+xfail_reason = "Macro runtime execution is currently unstable under std::macro on this build."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "function_arg"
+kind = "behavior"
+case = "../cases/macro/function_arg.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+xfail_reason = "Macro runtime execution is currently unstable under std::macro on this build."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "functor"
+kind = "behavior"
+case = "../cases/macro/functor.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+xfail_reason = "Macro runtime execution is currently unstable under std::macro on this build."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "pipeline"
+kind = "behavior"
+case = "../cases/macro/pipeline.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+xfail_reason = "Macro runtime execution is currently unstable under std::macro on this build."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

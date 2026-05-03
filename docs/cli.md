@@ -38,14 +38,14 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 
 - `--input <file>`: Input file path (alternative to positional; use with `--passes` to avoid ambiguity)  
 - `--passes <list>`: Comma-separated pass list (e.g. `--passes std::gir,other`). If omitted, first positional is file, rest are passes.  
+- `--timeit <pass>/<N>`: Measure one pass `N` times from a fresh graph; text mode prints samples plus a compact summary table, while `--output-format json` emits structured benchmark data  
 - `-P`, `--profile`: Record time spent in each stage and output a performance report  
 - `-S`, `--scheduler <type>`: Specify the scheduler type  
 - `-t`, `--threads <num>`: Maximum number of threads  
 - `-n`, `--no-cache`: Disable cache modules  
-- `-r`, `--repeat <times>`: Repeat execution a number of times  
 - `-I`, `--include <dir>`: Add module search path (can be used multiple times)  
 - `-L`, `--stdlib <path>`: Specify standard library path (default: `./stdlib` under current directory)  
-- `-E`, `--error-format <text|json>`: Error output format (default: `text`)
+- `-E`, `--error-format`, `--output-format <text|json>`: Output format (default: `text`); `--timeit` reuses this, and the test harness expects `json`
 
 ### Common Passes
 
@@ -132,6 +132,12 @@ camel --input main.cml --passes std::gir,other
 
 # Run and record performance
 camel -P main.cml
+
+# Measure only std::jit across 10 fresh executions
+camel --input test/cases/perf/fib_recursive.cml --timeit std::jit/10
+
+# Emit the timeit summary as JSON
+camel --input test/cases/perf/fib_recursive.cml --timeit std::jit/10 --output-format json
 
 # Transpile to C++ and compile (one step, output to tmp/)
 camel-cpp test/run/linear/fib.cml

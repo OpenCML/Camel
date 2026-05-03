@@ -1,0 +1,18 @@
+module prl_scheduler
+
+func work(n: int): int {
+    return n * n
+}
+
+func main(): int sync {
+    let a = wait work(5)
+    let b = wait work(6)
+    let c = a + b
+    if c == 61 then {
+        println('prl_scheduler ok')
+        return 0
+    } else {
+        println('prl_scheduler failed')
+        return 1
+    }
+}

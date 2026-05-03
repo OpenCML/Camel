@@ -1,0 +1,53 @@
+id = "errors.all"
+tier = "regression"
+tags = ["errors"]
+
+[[tests]]
+name = "runtime.divide_by_zero"
+kind = "negative"
+case = "../cases/errors/runtime/divide_by_zero.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_contains = ["division by zero"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "semantic.branch_return_mismatch"
+kind = "negative"
+case = "../cases/errors/semantic/branch_return_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_contains = ["Return type mismatch"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "semantic.decorator_nonfunc_return"
+kind = "negative"
+case = "../cases/errors/semantic/decorator_nonfunc_return.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_contains = ["cannot be called with argument types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "semantic.unresolved_reference"
+kind = "negative"
+case = "../cases/errors/semantic/unresolved_reference.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_contains = ["Unresolved reference"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "syntax.missing_then"
+kind = "negative"
+case = "../cases/errors/syntax/missing_then.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_contains = ["missing 'then'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

@@ -1,0 +1,138 @@
+id = "run.jit"
+tier = "regression"
+tags = ["run", "jit"]
+
+[[tests]]
+name = "branch_join"
+kind = "behavior"
+case = "../../cases/run/jit/branch_join.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "builtin_operator_chain"
+kind = "behavior"
+case = "../../cases/run/jit/builtin_operator_chain.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "call_chain_hot"
+kind = "behavior"
+case = "../../cases/run/jit/call_chain_hot.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "comparison_matrix"
+kind = "behavior"
+case = "../../cases/run/jit/comparison_matrix.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "fib_recursive"
+kind = "behavior"
+case = "../../cases/run/jit/fib_recursive.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "float_arith"
+kind = "behavior"
+case = "../../cases/run/jit/float_arith.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "lambda_points"
+kind = "behavior"
+case = "../../cases/run/jit/lambda_points.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "list_transform"
+kind = "behavior"
+case = "../../cases/run/jit/list_transform.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "mutual_tail_check"
+kind = "behavior"
+case = "../../cases/run/jit/mutual_tail_check.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "nested_call_state"
+kind = "behavior"
+case = "../../cases/run/jit/nested_call_state.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "operator_branch_mix"
+kind = "behavior"
+case = "../../cases/run/jit/operator_branch_mix.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "perf_fib_smoke"
+kind = "behavior"
+case = "../../cases/run/jit/perf_fib_smoke.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "struct_match"
+kind = "behavior"
+case = "../../cases/run/jit/struct_match.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "tail_accumulate"
+kind = "behavior"
+case = "../../cases/run/jit/tail_accumulate.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "tuple_pipeline"
+kind = "behavior"
+case = "../../cases/run/jit/tuple_pipeline.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
