@@ -13,6 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -102,6 +103,10 @@ inline bool areStaticRuntimeDataInputs(
 
 inline bool isMacroFunction(const ::Function *funcObj) {
     return funcObj != nullptr && funcObj->graph() != nullptr && funcObj->graph()->isMacro();
+}
+
+inline bool isNativeMacroOperUri(std::string_view uri) {
+    return uri == "nn:apply_gradients" || uri == "nn:compile_step";
 }
 
 inline std::string macroFunctionName(const ::Function *funcObj) {
@@ -243,6 +248,8 @@ MacroEvaluator::tryEvaluate(const MacroCandidate &candidate, std::ostream &os) {
             return tryExecuteDirectFunc(runtimeGraph, candidate.nodeRef, os);
         case GCNodeKind::Call:
             return tryExecuteIndirectCall(runtimeGraph, candidate.nodeRef, os);
+        case GCNodeKind::Oper:
+            return tryExecuteStaticOper(runtimeGraph, candidate.nodeRef, os);
         default:
             return std::nullopt;
         }
@@ -358,6 +365,64 @@ std::optional<MacroEvalResult> MacroEvaluator::tryExecuteIndirectCall(
         },
         true);
     return anchorResult(value, node->dataType, node->flags);
+}
+
+std::optional<MacroEvalResult>
+MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef, std::ostream &os) {
+    const auto *node = ownerGraph ? ownerGraph->node(nodeRef) : nullptr;
+    if (!node || node->kind != GCNodeKind::Oper) {
+        return std::nullopt;
+    }
+    const auto *body = ownerGraph->nodeBodyAs<GCOperBody>(nodeRef);
+    if (!body || (!node->isMacro() && !isNativeMacroOperUri(body->uri()))) {
+        return std::nullopt;
+    }
+    const bool nativeMacroOper = isNativeMacroOperUri(body->uri());
+    if ((!nativeMacroOper &&
+         !areStaticRuntimeDataInputs(ownerGraph, ownerGraph->withInputsOf(nodeRef))) ||
+        !areStaticRuntimeDataInputs(ownerGraph, ownerGraph->normInputsOf(nodeRef))) {
+        return std::nullopt;
+    }
+
+    operator_t op = body->op;
+    if (!op) {
+        const auto uri = std::string(body->uri());
+        auto found     = context_->execMgr().find(uri);
+        if (!found) {
+            throw MacroExecutionError(
+                std::format("Operator '{}' is unavailable in macro execution.", uri));
+        }
+        op = *found;
+    }
+
+    ::Tuple *staticAreaSnapshot = staticAreas_->cloneStaticArea(ownerGraph);
+    Frame *frame                = framePool_.acquire(ownerGraph, staticAreaSnapshot);
+    try {
+        const auto normInputs = ownerGraph->normInputsOf(nodeRef);
+        const auto withInputs =
+            nativeMacroOper ? std::span<const gc_node_ref_t>{} : ownerGraph->withInputsOf(nodeRef);
+        std::vector<gc_data_idx_t> indices;
+        indices.reserve(normInputs.size() + withInputs.size());
+        for (gc_node_ref_t in : normInputs) {
+            indices.push_back(dataIndexOf(ownerGraph, in));
+        }
+        size_t normCount = indices.size();
+        for (gc_node_ref_t in : withInputs) {
+            indices.push_back(dataIndexOf(ownerGraph, in));
+        }
+
+        data_arr_t nargs{indices.data(), normCount};
+        data_arr_t wargs{indices.data() + normCount, indices.size() - normCount};
+        FrameArgsView withView(*frame, wargs);
+        FrameArgsView normView(*frame, nargs);
+        os << "[macro] execute static operator " << std::string(body->uri()) << "\n";
+        slot_t value = (*op)(withView, normView, *context_);
+        framePool_.release(frame);
+        return anchorResult(value, node->dataType, node->flags);
+    } catch (...) {
+        framePool_.release(frame);
+        throw;
+    }
 }
 
 slot_t MacroEvaluator::executeFunction(

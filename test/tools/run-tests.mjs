@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 import { performance } from 'perf_hooks'
 import { spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
@@ -213,6 +214,161 @@ function benchmarkFromJson(rawStdout) {
     return payload
 }
 
+function inlineVerifyModuleSource(source) {
+    const encodedSource = JSON.stringify(source)
+    return `
+import fs from 'fs'
+
+const input = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))
+const assert = (condition, message = 'assertion failed') => {
+    if (!condition) throw new Error(message)
+}
+const fail = (message = 'verification failed') => {
+    throw new Error(message)
+}
+const approx = (actual, expected, tolerance = 1e-9) =>
+    Math.abs(Number(actual) - Number(expected)) <= tolerance
+const match = (pattern, text = input.normalized.output) => {
+    const regex = pattern instanceof RegExp ? pattern : new RegExp(pattern)
+    const found = regex.exec(text)
+    if (!found) throw new Error(\`pattern not found: \${regex}\`)
+    return found
+}
+const helpers = { input, assert, fail, approx, match }
+const inlineSource = ${encodedSource}
+
+try {
+    const trimmed = inlineSource.trim()
+    if (
+        trimmed.startsWith('(')
+        || trimmed.startsWith('function')
+        || trimmed.startsWith('async ')
+    ) {
+        const verify = (0, eval)(\`(\${inlineSource})\`)
+        if (typeof verify !== 'function') {
+            throw new Error('verify_js expression did not evaluate to a function')
+        }
+        await verify(helpers)
+    } else {
+        await (async () => {
+${source}
+        })()
+    }
+} catch (error) {
+    console.error(error && error.stack ? error.stack : String(error))
+    process.exit(1)
+}
+`
+}
+
+function runVerification(test, result) {
+    if (!test.verify_script && !test.verify_js) return null
+    if (test.verify_script && test.verify_js) {
+        return {
+            ok: false,
+            sourceKind: 'config',
+            scriptPath: '',
+            command: '',
+            exitCode: null,
+            signal: null,
+            timedOut: false,
+            errorMessage: 'verify_script and verify_js cannot both be set',
+            stdout: '',
+            stderr: '',
+        }
+    }
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-test-verify-'))
+    let scriptPath = ''
+    let sourceKind = ''
+    if (test.verify_script) {
+        scriptPath = path.resolve(path.dirname(test.__planPath), test.verify_script)
+        sourceKind = 'script'
+        if (!fs.existsSync(scriptPath)) {
+            fs.rmSync(tempDir, { recursive: true, force: true })
+            return {
+                ok: false,
+                sourceKind,
+                scriptPath,
+                command: '',
+                exitCode: null,
+                signal: null,
+                timedOut: false,
+                errorMessage: `verify script does not exist: ${scriptPath}`,
+                stdout: '',
+                stderr: '',
+            }
+        }
+    } else {
+        scriptPath = path.join(tempDir, 'verify-inline.mjs')
+        sourceKind = 'inline'
+        fs.writeFileSync(scriptPath, inlineVerifyModuleSource(test.verify_js))
+    }
+
+    const payloadPath = path.join(tempDir, 'input.json')
+    const payload = {
+        repo_root: REPO_ROOT,
+        test_root: TEST_ROOT,
+        plan_path: test.__planPath,
+        test_name: test.name,
+        case_path: result.casePath,
+        command: result.command,
+        exit_code: result.exitCode,
+        signal: result.signal,
+        timed_out: result.timedOut,
+        error_message: result.errorMessage,
+        wall_ms: result.wallMs,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        output: result.output,
+        normalized: result.normalized,
+        diagnostics: result.diagnostics,
+        benchmark: result.benchmark,
+    }
+    fs.writeFileSync(payloadPath, JSON.stringify(payload, null, 2))
+
+    const proc = spawnSync(process.execPath, [scriptPath, payloadPath], {
+        cwd: REPO_ROOT,
+        env: process.env,
+        encoding: 'utf8',
+        timeout: test.verify_timeout_ms || 5000,
+    })
+    fs.rmSync(tempDir, { recursive: true, force: true })
+
+    const timedOut = Boolean(proc.error && proc.error.code === 'ETIMEDOUT')
+    return {
+        ok: !timedOut && proc.status === 0,
+        sourceKind,
+        scriptPath,
+        command: `${process.execPath} ${scriptPath} ${payloadPath}`,
+        exitCode: typeof proc.status === 'number' ? proc.status : null,
+        signal: proc.signal ?? null,
+        timedOut,
+        errorMessage: proc.error ? proc.error.message : null,
+        stdout: proc.stdout || '',
+        stderr: proc.stderr || '',
+    }
+}
+
+function verifyFailureLines(verification) {
+    const lines = []
+    if (!verification) return lines
+    if (verification.errorMessage) lines.push(`verification error: ${verification.errorMessage}`)
+    if (verification.timedOut) lines.push('verification timed out')
+    if (verification.exitCode !== 0) {
+        lines.push(`verification exited ${verification.exitCode}`)
+    }
+    const detail = `${verification.stdout}${verification.stderr}`.trim()
+    if (detail) {
+        const clipped = detail.length > 2000 ? `${detail.slice(0, 2000)}...` : detail
+        lines.push(`verification output: ${clipped}`)
+    }
+    if (lines.length === 0) {
+        lines.push('verification failed')
+    }
+    return lines
+}
+
 function compareField(field, actual, baseline) {
     if (field === 'exit_code') return actual.exitCode === baseline.exitCode
     if (field === 'stdout_normalized') return actual.normalized.stdout === baseline.normalized.stdout
@@ -302,6 +458,10 @@ function validateTest(test, result, context) {
             }
         }
     }
+    result.verification = runVerification(test, result)
+    if (result.verification && !result.verification.ok) {
+        failures.push(...verifyFailureLines(result.verification))
+    }
     return failures
 }
 
@@ -370,6 +530,10 @@ function writeLogFiles(plan, test, result, status, logDir) {
     fs.writeFileSync(path.join(statusDir, 'stdout.txt'), result.stdout)
     fs.writeFileSync(path.join(statusDir, 'stderr.txt'), result.stderr)
     fs.writeFileSync(path.join(statusDir, 'output.txt'), result.output)
+    if (result.verification) {
+        fs.writeFileSync(path.join(statusDir, 'verify_stdout.txt'), result.verification.stdout)
+        fs.writeFileSync(path.join(statusDir, 'verify_stderr.txt'), result.verification.stderr)
+    }
     fs.writeFileSync(
         path.join(statusDir, 'meta.json'),
         JSON.stringify(
@@ -392,6 +556,18 @@ function writeLogFiles(plan, test, result, status, logDir) {
                 signal: result.signal,
                 timed_out: result.timedOut,
                 error_message: result.errorMessage,
+                verification: result.verification
+                    ? {
+                        source_kind: result.verification.sourceKind,
+                        script_path: result.verification.scriptPath,
+                        command: result.verification.command,
+                        ok: result.verification.ok,
+                        exit_code: result.verification.exitCode,
+                        signal: result.verification.signal,
+                        timed_out: result.verification.timedOut,
+                        error_message: result.verification.errorMessage,
+                    }
+                    : null,
                 wall_ms: result.wallMs,
                 plan_path: test.__planPath,
             },

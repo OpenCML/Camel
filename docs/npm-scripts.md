@@ -25,6 +25,15 @@ The repository uses the plan-based runner under `test/`.
 - cases: `test/cases/**`
 - shared args templates: `test/vars.toml`
 
+Plans may use `verify_js = """..."""` for short, external assertions over the
+Camel process result. The inline code can be either a function body using
+`input`, `assert`, `fail`, `approx`, and `match` directly, or a function
+expression such as `({ input, assert }) => { ... }`. `input.normalized.stdout`,
+`input.normalized.stderr`, and `input.normalized.output` contain the streams
+after the plan normalizers have been applied. Larger reusable checks can use
+`verify_script = "relative/script.mjs"`; the script receives a JSON payload path
+as `process.argv[2]`.
+
 ## Main Test Scripts
 
 | Script | Description |

@@ -4,6 +4,103 @@ tier = "feat"
 tags = ["feat", "modules", "nn"]
 
 [[tests]]
+name = "vjp_decorator_demo"
+desc = "Exercises nn.vjp macro decorator registration for a user function VJP rule."
+kind = "behavior"
+case = "../../../cases/modules/nn/vjp_decorator_demo.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_js = """
+({ input, assert, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/vjp_decorator_demo value=([0-9]+)/, input.normalized.stdout)
+assert(Number(found[1]) === 42, `expected decorated value 42, got ${found[1]}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "with_context_step_demo"
+desc = "Exercises macro-generated in-place SGD over a with-context Linear model parameter."
+kind = "behavior"
+case = "../../../cases/modules/nn/with_context_step_demo.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_js = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(
+    /with_context_step_demo metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/,
+    input.normalized.stdout
+)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(before > 0, `expected positive initial loss, got ${before}`)
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/with_context_step_demo weight=tensor/, input.normalized.stdout)
+match(/with_context_step_demo grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "with_context_step_gir"
+desc = "Inspects std::gir output to ensure compile_step emits a VJP-derived backward graph."
+kind = "behavior"
+case = "../../../cases/modules/nn/with_context_step_demo.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_js = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+for (const needle of [
+    '[macro] execute static operator nn:compile_step',
+    'nn::linear_context_mse_sgd_step',
+    'tensor:full',
+    'tensor:add',
+    'nn:add_grad',
+    'nn:sgd',
+]) {
+    assert(text.includes(needle), `GIR output missing ${needle}`)
+}
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "autograd_linear_demo"
+desc = "Exercises nn.apply_gradients macro synthesis for a linear MSE SGD step."
+kind = "behavior"
+case = "../../../cases/modules/nn/autograd_linear_demo.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_js = """
+({ input, assert, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(
+    /autograd_linear_demo metrics before=([0-9.eE+-]+) after=([0-9.eE+-]+)/,
+    input.normalized.stdout
+)
+const before = Number(found[1])
+const after = Number(found[2])
+assert(Number.isFinite(before) && Number.isFinite(after), 'metrics are not finite')
+assert(before > 0, `expected positive initial loss, got ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/autograd_linear_demo w0=tensor/, input.normalized.stdout)
+match(/autograd_linear_demo w1=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
 name = "lr"
 desc = "Exercises tensor algebra, gradient updates, and mutable weights through a linear-regression training loop."
 kind = "behavior"

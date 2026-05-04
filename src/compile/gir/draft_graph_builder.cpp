@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -218,6 +218,9 @@ DraftGraphBuilder::addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t 
     const runtime::gc_node_ref_t id =
         draft_->addOperNode(op->funcType()->exitType(), nullptr, op->uri(), dataIndex);
     auto *node = draft_->node(id);
+    if (op->funcType()->modifiers().macro()) {
+        draft_->setNodeRuntimeFlags(id, runtime::kGCNodeFlagMacro);
+    }
     registerOperTarget(node, op);
     return node;
 }

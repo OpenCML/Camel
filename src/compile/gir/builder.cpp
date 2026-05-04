@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1489,15 +1489,28 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         "Unexpected result type from Enter the child of WITH node.");
     node_handle_t targetNode = any_cast<node_handle_t>(targetNodeRes);
     vector<node_handle_t> inputs;
+    auto lowerGraphValue = [&](const graph_ptr_t &graph) -> node_handle_t {
+        currGraph_->addDependencyGraph(graph);
+        return createFuncDataNode(graph, true, false);
+    };
     for (size_t i = 1; i < gct->size(); i++) {
         any dataRes = visit(gct->at(i));
         if (dataRes.type() == typeid(graph_ptr_t)) {
-            graph_ptr_t subGraph = any_cast<graph_ptr_t>(dataRes);
-            currGraph_->addDependencyGraph(subGraph);
-            auto inputNode = createFuncDataNode(subGraph, true, false);
-            inputs.push_back(inputNode);
+            inputs.push_back(lowerGraphValue(any_cast<graph_ptr_t>(dataRes)));
         } else if (dataRes.type() == typeid(node_handle_t)) {
-            inputs.push_back(any_cast<node_handle_t>(dataRes));
+            node_handle_t inputNode = any_cast<node_handle_t>(dataRes);
+            if (nodeIsKind(inputNode, runtime::GCNodeKind::Dref)) {
+                const auto &target = nodeGraphOf(inputNode)->drefTarget(inputNode);
+                if (std::holds_alternative<graph_ptr_t>(target)) {
+                    inputNode = lowerGraphValue(std::get<graph_ptr_t>(target));
+                } else if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+                    auto graphs = asCompileGraphVec(target);
+                    if (graphs && graphs->size() == 1) {
+                        inputNode = lowerGraphValue(graphs->front());
+                    }
+                }
+            }
+            inputs.push_back(inputNode);
         } else {
             ASSERT(false, std::format("Unexpected result type from the {} child of WITH node", i));
         }
