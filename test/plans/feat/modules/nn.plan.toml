@@ -391,6 +391,98 @@ assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic c
 timeout_ms = 4000
 
 [[tests]]
+name = "softmax_grad_sanity"
+desc = "Checks row-wise softmax VJP against a tiny finite-difference estimate."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_grad_sanity.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/softmax_grad_sanity prob_sum=([0-9.eE+-]+) grad0=([0-9.eE+-]+) finite=([0-9.eE+-]+)/, input.normalized.stdout)
+const probSum = Number(found[1])
+const grad0 = Number(found[2])
+const finite = Number(found[3])
+assert(Number.isFinite(probSum) && Number.isFinite(grad0) && Number.isFinite(finite), 'metrics are not finite')
+assert(approx(probSum, 1.0, 1e-6), `softmax row should sum to 1, got ${probSum}`)
+assert(approx(grad0, finite, 1e-3), `gradient ${grad0} should match finite difference ${finite}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tiny_attention"
+desc = "Exercises helper-call autograd through a tiny attention block with row-wise softmax."
+kind = "behavior"
+case = "../../../cases/modules/nn/tiny_attention.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/tiny_attention metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/tiny_attention wq=tensor/, input.normalized.stdout)
+match(/tiny_attention wk=tensor/, input.normalized.stdout)
+match(/tiny_attention wv=tensor/, input.normalized.stdout)
+match(/tiny_attention wo=tensor/, input.normalized.stdout)
+match(/tiny_attention wq_grad=tensor/, input.normalized.stdout)
+match(/tiny_attention wk_grad=tensor/, input.normalized.stdout)
+match(/tiny_attention wv_grad=tensor/, input.normalized.stdout)
+match(/tiny_attention wo_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tiny_attention_gir"
+desc = "Checks softmax and softmax VJP primitives appear in the attention autograd step graph."
+kind = "behavior"
+case = "../../../cases/modules/nn/tiny_attention.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+const stepNeedle = (op) => `tooltip="${op}\\nnn::autograd_sgd_step`
+const inStep = (op) => text.includes(stepNeedle(op))
+const countStep = (op) => text.split(stepNeedle(op)).length - 1
+assert(inStep('tensor:softmax'), 'autograd step missing attention softmax')
+assert(inStep('tensor:softmax_grad'), 'autograd step missing softmax VJP primitive')
+assert(countStep('nn:sgd') === 4, 'expected one update for Q/K/V/output projection parameters')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "softmax_rank_error"
+desc = "Rejects non-rank-2 softmax input with a readable diagnostic."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_rank_error.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(input.exit_code !== 0, 'softmax rank error case unexpectedly succeeded')
+assert(text.includes('softmax currently requires a rank-2 tensor'), 'missing softmax rank diagnostic')
+assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic category')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
 name = "residual_mlp"
 desc = "Exercises helper-call lowering over a residual MLP with branch merge and skip parameters."
 kind = "behavior"

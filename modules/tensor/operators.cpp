@@ -188,6 +188,8 @@ std::unordered_map<std::string, operator_t> getTensorOpsMap() {
         {"log", __tensor_log__},
         {"sigmoid", __tensor_sigmoid__},
         {"tanh", __tensor_tanh__},
+        {"softmax", __tensor_softmax__},
+        {"softmax_grad", __tensor_softmax_grad__},
         {"transpose", __tensor_transpose__},
         {"concat", __tensor_concat__},
         {"reshape", __tensor_reshape__},
@@ -504,6 +506,24 @@ const std::vector<oper_group_ptr_t> &getTensorOperatorGroups() {
                       return isTensorType(norm[0]) ? std::optional<Type *>{tensorType()}
                                                    : std::nullopt;
                   })}}),
+        OperatorGroup::create(
+            "softmax",
+            {{"tensor:softmax",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {1, {false}}},
+                  "(t: Tensor) => Tensor",
+                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      return isTensorType(norm[0]) ? std::optional<Type *>{tensorType()}
+                                                   : std::nullopt;
+                  })}}),
+        OperatorGroup::create(
+            "softmax_grad",
+            {{"tensor:softmax_grad",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{tensorType(), false}, {tensorType(), false}},
+                  tensorType())}}),
         OperatorGroup::create(
             "transpose",
             {{"tensor:transpose",
@@ -1156,6 +1176,27 @@ slot_t __tensor_tanh__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
     (void)ctx;
     return withTensorErrors([&]() -> slot_t {
         return wrapTensor(camel::tensor::tensorTanh(requireTensor(norm, 0), mm::autoSpace()));
+    });
+}
+
+slot_t __tensor_softmax__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return withTensorErrors([&]() -> slot_t {
+        return wrapTensor(
+            camel::tensor::tensorSoftmaxRows2D(requireTensor(norm, 0), mm::autoSpace()));
+    });
+}
+
+slot_t __tensor_softmax_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return withTensorErrors([&]() -> slot_t {
+        return wrapTensor(
+            camel::tensor::tensorSoftmaxRows2DGrad(
+                requireTensor(norm, 0),
+                requireTensor(norm, 1),
+                mm::autoSpace()));
     });
 }
 

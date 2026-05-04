@@ -266,6 +266,18 @@ void tanhVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
         ctx.addOper(tensorType(), "tensor:multiply", gradInputs));
 }
 
+void softmaxVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 1);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    std::array<rt::gc_node_ref_t, 2> inputs{call.output, *dy};
+    ctx.accumulateGradient(
+        call.inputs[0],
+        ctx.addOper(tensorType(), "tensor:softmax_grad", inputs));
+}
+
 void divScalarVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
     requireInputCount(call, 2);
     auto dy = ctx.gradientOf(call.output);
@@ -557,6 +569,7 @@ void ensureBuiltinVjpRulesRegistered() {
         registry.registerBuiltin("tensor:log", logVjp, "log_vjp");
         registry.registerBuiltin("tensor:sigmoid", sigmoidVjp, "sigmoid_vjp");
         registry.registerBuiltin("tensor:tanh", tanhVjp, "tanh_vjp");
+        registry.registerBuiltin("tensor:softmax", softmaxVjp, "softmax_vjp");
         registry.registerBuiltin(":op/add_d", addScalarVjp, "add_d_vjp");
         registry.registerBuiltin(":op/sub_d", subScalarVjp, "sub_d_vjp");
         registry.registerBuiltin(":op/mul_d", mulScalarVjp, "mul_d_vjp");

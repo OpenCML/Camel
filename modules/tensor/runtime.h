@@ -160,6 +160,9 @@ TensorObject *tensorExp(const TensorObject *tensor, mm::IAllocator &allocator);
 TensorObject *tensorLog(const TensorObject *tensor, mm::IAllocator &allocator);
 TensorObject *tensorSigmoid(const TensorObject *tensor, mm::IAllocator &allocator);
 TensorObject *tensorTanh(const TensorObject *tensor, mm::IAllocator &allocator);
+TensorObject *tensorSoftmaxRows2D(const TensorObject *tensor, mm::IAllocator &allocator);
+TensorObject *tensorSoftmaxRows2DGrad(
+    const TensorObject *output, const TensorObject *dy, mm::IAllocator &allocator);
 double tensorIndex1D(const TensorObject *tensor, int64_t index);
 double tensorIndex2D(const TensorObject *tensor, int64_t row, int64_t col);
 

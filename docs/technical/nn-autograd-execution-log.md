@@ -201,3 +201,62 @@ Phase 2 status after this slice:
 - Remaining Phase 2 work includes CNN/`conv2d`, tiny attention/softmax path,
   broader shape/rank diagnostics, full Phase 2 docs, and the Phase 2 adversarial
   review.
+
+## 2026-05-05 Phase 2 Partial: Tiny Attention Softmax
+
+Target references: sections 3.2, 3.3, 3.7, 3.8, 3.9, and 3.10 of
+`docs/technical/nn-autograd-targets.md`.
+
+Implemented:
+
+- Added row-wise rank-2 `tensor.softmax(t)` and fused `tensor.softmax_grad(output, dy)`.
+- Registered the builtin VJP for `tensor:softmax`.
+- Added `test/cases/modules/nn/softmax_grad_sanity.cml`, which compares one
+  softmax VJP component against a finite-difference estimate.
+- Added `test/cases/modules/nn/tiny_attention.cml`, a helper-based single-head
+  attention block with Q/K/V projections, row-wise softmax weights, weighted sum,
+  and output projection.
+- Added `test/cases/modules/nn/softmax_rank_error.cml` for non-rank-2 softmax
+  diagnostics.
+- Updated `test/plans/feat/modules/nn.plan.toml` with behavior, GIR, finite
+  difference, and negative diagnostic checks.
+- Updated `docs/technical/nn-autograd.md` with the new tensor API, VJP coverage,
+  tests, and current limits.
+
+Manual raw-run evidence before verifier use:
+
+```powershell
+camel test\cases\modules\nn\softmax_grad_sanity.cml
+```
+
+Observed metrics: probability sum `0.9999999701976776`, gradient element
+`0.36668744683265686`, finite difference `0.3666579723358153`.
+
+```powershell
+camel test\cases\modules\nn\tiny_attention.cml std::macro std::nvm
+```
+
+Observed metrics: before `0.4615999920642935`, step
+`0.4615999920642935`, after `0.429342576302588`.
+
+```powershell
+camel test\cases\modules\nn\softmax_rank_error.cml
+```
+
+Observed exit: nonzero, with diagnostic substring
+`softmax currently requires a rank-2 tensor`.
+
+Focused verification:
+
+```powershell
+node scripts/test.js test\plans\feat\modules\nn.plan.toml
+```
+
+Result: 33 total, 33 pass.
+
+Phase 2 status after this slice:
+
+- Softmax Classifier, Embedding Model, and Tiny Attention Block now pass
+  automated model tests, each through helper/layer functions and `apply_gradients`.
+- Remaining explicit target items include CNN/`conv2d`, Tiny CNN, final Phase 2
+  documentation pass, and the Phase 2 adversarial review.

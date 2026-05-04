@@ -56,6 +56,8 @@ slot_t __tensor_exp__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_log__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_sigmoid__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_tanh__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_softmax__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_softmax_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_transpose__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_concat__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_reshape__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);

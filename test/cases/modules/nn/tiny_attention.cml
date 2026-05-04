@@ -1,0 +1,92 @@
+/**
+ * Tiny single-head attention block trained through row-wise softmax VJP.
+ */
+module tiny_attention
+
+import {
+    Tensor,
+    reshape, shape, softmax, sum, transpose
+} from tensor
+
+import {
+    Parameter,
+    apply_gradients, grad, parameter, value
+} from nn
+
+type AttentionModel = {
+    wq: Parameter,
+    wk: Parameter,
+    wv: Parameter,
+    wo: Parameter
+}
+
+with <weight: Parameter>
+func linear(x: Tensor): Tensor {
+    return x @ value(weight)
+}
+
+with <model: AttentionModel>
+func attend(x: Tensor): Tensor {
+    let q = x->linear<model.wq>
+    let k = x->linear<model.wk>
+    let v = x->linear<model.wv>
+    let scores = (q @ transpose(k)) * 0.5
+    let weights = softmax(scores)
+    return weights @ v
+}
+
+with <model: AttentionModel>
+func predict(x: Tensor): Tensor {
+    return x->attend<model> @ value(model.wo)
+}
+
+with <target: Tensor>
+func mse_loss(pred: Tensor): float {
+    let diff = pred - target
+    return sum(diff * diff) / float(shape(pred)[0])
+}
+
+with <model: AttentionModel, target: Tensor>
+func model_loss(x: Tensor): float {
+    let pred = x->predict<model>
+    return pred->mse_loss<target>
+}
+
+func main(): int sync {
+    var model = {
+        wq: parameter(reshape([0.2, 0.0, 0.0, 0.1], [2, 2])),
+        wk: parameter(reshape([0.1, 0.0, 0.0, 0.3], [2, 2])),
+        wv: parameter(reshape([0.2, 0.1, 0.0, 0.2], [2, 2])),
+        wo: parameter(reshape([0.1, 0.2], [2, 1]))
+    }
+    let x = reshape([1.0, 0.0, 0.0, 1.0], [2, 2])
+    let target = reshape([1.0, 0.0], [2, 1])
+
+    let step = apply_gradients(<model: AttentionModel, target: Tensor> (x: Tensor): float => {
+        let pred = x->predict<model>
+        return pred->mse_loss<target>
+    })
+
+    let before = x->model_loss<model, target>
+    let step_loss = wait step<model, target>(x, 0.5)
+    let after = x->model_loss<model, target>
+    let wq = value(model.wq)
+    let wk = value(model.wk)
+    let wv = value(model.wv)
+    let wo = value(model.wo)
+    let wq_grad = grad(model.wq)
+    let wk_grad = grad(model.wk)
+    let wv_grad = grad(model.wv)
+    let wo_grad = grad(model.wo)
+
+    'tiny_attention metrics before={} step={} after={}'->format<before, step_loss, after>->println
+    'tiny_attention wq={}'->format<wq>->println
+    'tiny_attention wk={}'->format<wk>->println
+    'tiny_attention wv={}'->format<wv>->println
+    'tiny_attention wo={}'->format<wo>->println
+    'tiny_attention wq_grad={}'->format<wq_grad>->println
+    'tiny_attention wk_grad={}'->format<wk_grad>->println
+    'tiny_attention wv_grad={}'->format<wv_grad>->println
+    'tiny_attention wo_grad={}'->format<wo_grad>->println
+    return 0
+}

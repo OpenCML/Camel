@@ -102,7 +102,9 @@ constructs them from the same `Parameter` object.
 `compile_step` is intentionally absent.
 
 `tensor` also exposes `sigmoid(t: Tensor) -> Tensor` and `tanh(t: Tensor) -> Tensor`
-for toy NN models.
+for toy NN models. It also exposes row-wise rank-2 `softmax(t: Tensor) -> Tensor`
+and `softmax_grad(output, dy) -> Tensor` for tiny attention and operator sanity
+checks.
 
 ## 5. Builtin VJP Coverage
 
@@ -114,6 +116,7 @@ Registered builtin rules currently cover:
 | Linear algebra | `tensor:matmul`, `tensor:transpose` |
 | Reduction/shape | `tensor:sum`, `tensor:reshape` |
 | Numeric functions | `tensor:exp`, `tensor:log`, `tensor:sigmoid`, `tensor:tanh` |
+| Attention support | `tensor:softmax` row-wise rank-2 path |
 | Fused NN losses | `nn:softmax_cross_entropy` logits path |
 | Fused NN layers | `nn:embedding` table path |
 | Scalar arithmetic | `:op/add_d`, `:op/sub_d`, `:op/mul_d`, `:op/div_d` numerator path |
@@ -142,6 +145,9 @@ Broadcast support is deliberately narrow:
 - embedding repeated-index gradient sanity check;
 - helper-based Embedding Matrix Factorization using true gather;
 - negative out-of-range embedding index diagnostic;
+- row-wise `softmax` finite-difference sanity check;
+- helper-based Tiny Attention block with Q/K/V projections and softmax weights;
+- negative non-rank-2 softmax diagnostic;
 - Residual MLP helper calls with branch merge and skip parameters;
 - Siamese Shared Encoder with two call sites sharing encoder parameters;
 - GRU-lite fixed unroll with repeated gate parameter use;
@@ -167,6 +173,8 @@ camel test\cases\modules\nn\softmax_cross_entropy_sanity.cml
 camel test\cases\modules\nn\softmax_classifier.cml std::macro std::nvm
 camel test\cases\modules\nn\embedding_grad_sanity.cml
 camel test\cases\modules\nn\embedding_mf.cml std::macro std::nvm
+camel test\cases\modules\nn\softmax_grad_sanity.cml
+camel test\cases\modules\nn\tiny_attention.cml std::macro std::nvm
 camel test\cases\modules\nn\residual_mlp.cml std::macro std::nvm
 camel test\cases\modules\nn\siamese_shared_encoder.cml std::macro std::nvm
 camel test\cases\modules\nn\gru_lite.cml std::macro std::nvm
@@ -188,6 +196,9 @@ The implementation is still a small static-graph autograd skeleton:
 - `embedding` currently supports rank-2 floating tables and rank-1 int64 index
   tensors. Its backward path emits dense table gradients with zero rows for
   unvisited indices; sparse optimizer state is not implemented.
+- `tensor:softmax` is currently row-wise for rank-2 tensors only. There is no
+  arbitrary axis argument, mask support, rank-3 batched attention, or decomposed
+  `sum_axis` VJP yet.
 - Static alias keys merge repeated reads through the same model path, but not
   arbitrary runtime `Parameter` object aliases stored under different fields.
 - No arrays/lists of `Parameter` are discovered.
