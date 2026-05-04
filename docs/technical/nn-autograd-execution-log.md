@@ -138,3 +138,66 @@ Phase 2 status after this slice:
 - Remaining Phase 2 work includes CNN/`conv2d`, true embedding/gather, tiny
   attention/softmax path, additional operator-level tests, full Phase 2 docs, and
   the Phase 2 adversarial review.
+
+## 2026-05-05 Phase 2 Partial: Embedding Gather
+
+Target references: sections 3.2, 3.3, 3.6, 3.8, 3.9, and 3.10 of
+`docs/technical/nn-autograd-targets.md`.
+
+Implemented:
+
+- Added `nn.embedding(table, indices)` for rank-2 floating tables and rank-1
+  int64 index tensors.
+- Added `nn.embedding_table_grad(table, indices, dy)` as a dense table-gradient
+  primitive. Repeated indices accumulate into the same row; unvisited rows remain
+  zero.
+- Registered the builtin VJP for `nn:embedding`, propagating only to the table.
+  Indices are treated as non-differentiable lookup data.
+- Added `test/cases/modules/nn/embedding_grad_sanity.cml` to check repeated-index
+  accumulation and unvisited-row zero gradients.
+- Added `test/cases/modules/nn/embedding_mf.cml`, a helper-based embedding matrix
+  factorization model trained through `apply_gradients`.
+- Added `test/cases/modules/nn/embedding_index_error.cml` for out-of-range index
+  diagnostics.
+- Updated `test/plans/feat/modules/nn.plan.toml` with behavior, GIR, and negative
+  diagnostic checks.
+- Updated `docs/technical/nn-autograd.md` with the new API, VJP coverage, tests,
+  and current limits.
+
+Manual raw-run evidence before verifier use:
+
+```powershell
+camel test\cases\modules\nn\embedding_grad_sanity.cml
+```
+
+Observed metrics: gathered sum `2.5000000596046448`, row0 gradient sum `0`,
+row1 gradient sum `7`, row2 gradient sum `9`.
+
+```powershell
+camel test\cases\modules\nn\embedding_mf.cml std::macro std::nvm
+```
+
+Observed metrics: before `0.8463999895811081`, step
+`0.8463999895811081`, after `0.5865295435403175`.
+
+```powershell
+camel test\cases\modules\nn\embedding_index_error.cml
+```
+
+Observed exit: nonzero, with diagnostic substring `embedding index out of range`.
+
+Focused verification:
+
+```powershell
+node scripts/test.js test\plans\feat\modules\nn.plan.toml
+```
+
+Result: 29 total, 29 pass.
+
+Phase 2 status after this slice:
+
+- Classification and embedding models are covered with operator-level sanity
+  tests and GIR checks.
+- Remaining Phase 2 work includes CNN/`conv2d`, tiny attention/softmax path,
+  broader shape/rank diagnostics, full Phase 2 docs, and the Phase 2 adversarial
+  review.

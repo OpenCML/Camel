@@ -608,6 +608,8 @@ std::unordered_map<std::string, operator_t> getNnOpsMap() {
         {"sgd", __nn_sgd__},
         {"softmax_cross_entropy", __nn_softmax_cross_entropy__},
         {"softmax_cross_entropy_grad", __nn_softmax_cross_entropy_grad__},
+        {"embedding", __nn_embedding__},
+        {"embedding_table_grad", __nn_embedding_table_grad__},
     };
 }
 
@@ -666,6 +668,20 @@ const std::vector<oper_group_ptr_t> &getNnOperatorGroups() {
               StaticFuncTypeResolver::create(
                   {},
                   {{tensorType(), false}, {tensorType(), false}, {Type::Float64(), false}},
+                  tensorType())}}),
+        OperatorGroup::create(
+            "embedding",
+            {{"nn:embedding",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{tensorType(), false}, {tensorType(), false}},
+                  tensorType())}}),
+        OperatorGroup::create(
+            "embedding_table_grad",
+            {{"nn:embedding_table_grad",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{tensorType(), false}, {tensorType(), false}, {tensorType(), false}},
                   tensorType())}}),
     };
     return groups;

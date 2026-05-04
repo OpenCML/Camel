@@ -3,6 +3,7 @@ add_camel_module(
   NAME nn
   SOURCES
     executor.cpp
+    layers.cpp
     losses.cpp
     module.cpp
     operators.cpp
