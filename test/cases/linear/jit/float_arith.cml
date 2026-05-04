@@ -1,0 +1,24 @@
+/**
+ * Verifies JIT floating-point arithmetic keeps ordering and precision within a tight expected range.
+ */
+module jit_float_arith
+
+func mix(x: float): float {
+    let a = x * 2.0
+    let b = a + 0.5
+    return b / 2.0
+}
+
+func main(): int sync {
+    let y = mix(1.5)
+
+    if y < 1.74 then {
+        return 1
+    } else if y > 1.76 then {
+        return 2
+    } else {
+        'float_arith ok'->println
+        return 0
+    }
+}
+

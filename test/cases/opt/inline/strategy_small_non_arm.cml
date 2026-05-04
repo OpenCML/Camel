@@ -1,0 +1,19 @@
+/**
+ * Verifies the small-function heuristic still inlines non-branch callees through the fast path.
+ */
+module inline_strategy_small_non_arm
+
+func tiny(v: int): int {
+    return v + 1
+}
+
+func main(): int sync {
+    let out = tiny(41)
+    if out != 42 then {
+        return 1
+    } else sync {
+        'inline_strategy_small_non_arm ok'->println
+        return 0
+    }
+}
+

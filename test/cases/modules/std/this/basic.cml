@@ -1,0 +1,18 @@
+/**
+ * Exercises the this module zen helper as a lightweight builtin-module import and execution check.
+ */
+module main
+
+import { zen } from this
+
+func main(): int sync {
+    println("=== This Module Basic Tests ===")
+
+    println("\n[1] zen()")
+    let z = zen()
+    println(z)
+
+    println("\n=== This tests completed ===")
+    return 0
+}
+

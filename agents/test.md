@@ -1,0 +1,13 @@
+# Test Rules
+
+## General Policy
+- Prefer TDD: write tests before implementation whenever feasible.
+- Place test cases under `test/`.
+- For substantial refactors, update `docs/` in the same change set.
+
+## Verification Style
+- Always define explicit acceptance criteria for an implementation plan and validate against them.
+- Start with small inputs when debugging high-volume workloads such as `fib 30`.
+- Use `std::gir` for graph inspection, `std::nvm` for baseline runtime behavior, and `std::fvm` or `std::jit` for scheduler/runtime verification when relevant.
+- Prefer routine verification in `npm run build`; use `npm run debug` only when diagnosing logging or debug-only code paths.
+

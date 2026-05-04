@@ -1,0 +1,28 @@
+/**
+ * Exercises the richer pyplot wrapper with multiple input shapes and output files to validate Python-backed plotting.
+ */
+module main
+
+import { plot } from pyplot
+
+func main(): int sync {
+    println("=== Pyplot Module Tests ===")
+
+    println("\n[1] plot([1.0, 2.0, 3.0, 4.0, 5.0], 'test/tmp/pyplot/plot.png')")
+    let data_f = [1.0, 2.0, 3.0, 4.0, 5.0]
+    plot(data_f, "test/tmp/pyplot/plot.png")
+    println("  -> generated plot.png")
+
+    println("\n[2] plot([1, 2, 3, 4, 5], 'test/tmp/pyplot/out_int.png')")
+    let data_i = [1, 2, 3, 4, 5]
+    plot(data_i, "test/tmp/pyplot/out_int.png")
+    println("  -> generated out_int.png")
+
+    println("\n[3] plot sequence [0..19]")
+    let seq = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0]
+    plot(seq, "test/tmp/pyplot/out_seq.png")
+    println("  -> generated out_seq.png")
+
+    println("\n=== Pyplot tests completed ===")
+    return 0
+}

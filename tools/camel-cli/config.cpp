@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Apr. 01, 2026
+ * Updated: May. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <charconv>
 #include <string_view>
 #include <vector>
 
@@ -97,6 +98,38 @@ std::vector<std::string> splitCommaScopes(std::string_view s) {
     if (!p.empty())
         out.push_back(std::move(p));
     return out;
+}
+
+bool parseTimeitSpecValue(
+    std::string_view spec, std::string &outPassName, unsigned int &outIterations) {
+    const std::string trimmed(strutil::trim(spec));
+    const size_t slashPos = trimmed.rfind('/');
+    if (slashPos == std::string::npos || slashPos == 0 || slashPos + 1 >= trimmed.size()) {
+        std::cerr << "Invalid --timeit value: '" << spec
+                  << "'. Expected format '<pass>/<iterations>'." << std::endl;
+        return false;
+    }
+
+    outPassName = strutil::trim(trimmed.substr(0, slashPos));
+    const std::string countToken(strutil::trim(trimmed.substr(slashPos + 1)));
+    if (outPassName.empty() || countToken.empty()) {
+        std::cerr << "Invalid --timeit value: '" << spec
+                  << "'. Expected format '<pass>/<iterations>'." << std::endl;
+        return false;
+    }
+
+    unsigned int parsedIterations = 0;
+    const char *begin             = countToken.data();
+    const char *end               = countToken.data() + countToken.size();
+    auto [ptr, ec]                = std::from_chars(begin, end, parsedIterations);
+    if (ec != std::errc() || ptr != end || parsedIterations == 0) {
+        std::cerr << "Invalid --timeit iteration count in '" << spec
+                  << "'. Iterations must be a positive integer." << std::endl;
+        return false;
+    }
+
+    outIterations = parsedIterations;
+    return true;
 }
 
 /// Left-to-right over argv: last `--log-level` / `-v*` wins; then applies preset/include and stderr
@@ -177,16 +210,19 @@ vector<string> includeDirs      = {}; // Include directories
 vector<string> targetFiles      = {};
 vector<string> passes           = {}; // from --passes comma-separated or positional
 string passesOpt                = ""; // raw --passes "a,b,c"
+string timeitSpec               = ""; // raw --timeit "std::jit/10"
 string inputFile                = ""; // from --input (alternative to first positional as file)
 string resolvedInputPath        = ""; // computed: inputFile or targetFiles[0]
 vector<string> resolvedPassList = {}; // computed: passes or derived from targetFiles
 vector<string> fallbackPasses   = {"std::default"};
+string timeitPass               = "";
+unsigned int timeitIterations   = 0;
+bool timeitEnabled              = false;
 
-bool profile        = false;
-bool noCache        = false;
-bool semanticOnly   = false;
-unsigned int repeat = 1;
-int maxThreads      = -1; // -1 means use the maximum number of threads
+bool profile      = false;
+bool noCache      = false;
+bool semanticOnly = false;
+int maxThreads    = -1; // -1 means use the maximum number of threads
 } // namespace Run
 
 namespace Check {
@@ -286,13 +322,14 @@ bool parseArgs(int argc, char *argv[]) {
          (option("-S", "--scheduler") & value("schedular type", schedular)) % "scheduler type",
          (option("-t", "--threads") & integer("max threads", maxThreads)) % "max threads",
          option("-n", "--no-cache").set(noCache) % "do not use cache",
-         (option("-r", "--repeat") & integer("repeat times", repeat)) % "repeat times",
          (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
-         (option("-E", "--error-format") & value("error format", errorFormat)) %
+         (option("-E", "--error-format", "--output-format") & value("error format", errorFormat)) %
              "error format: text or json",
          (option("--passes") & value("pass1,pass2,...", passesOpt)) %
              "pass list as comma-separated (e.g. --passes std::gir,other)",
+         (option("--timeit") & value("pass/iterations", timeitSpec)) %
+             "measure one pass N times from a fresh graph (e.g. --timeit std::jit/10)",
          (option("--input") & value("input file", inputFile)) %
              "input file (optional if positional given)",
          globalOps,
@@ -408,12 +445,21 @@ bool parseArgs(int argc, char *argv[]) {
                     Run::passes.push_back(std::move(s));
             }
         }
+        if (!Run::timeitSpec.empty()) {
+            if (!parseTimeitSpecValue(Run::timeitSpec, Run::timeitPass, Run::timeitIterations)) {
+                return false;
+            }
+            Run::timeitEnabled = true;
+        }
         if (!Run::passes.empty()) {
             Run::resolvedPassList = Run::passes;
         } else if (!Run::inputFile.empty()) {
             Run::resolvedPassList = Run::targetFiles;
         } else {
             Run::resolvedPassList.assign(Run::targetFiles.begin() + 1, Run::targetFiles.end());
+        }
+        if (Run::timeitEnabled && Run::resolvedPassList.empty()) {
+            Run::resolvedPassList.push_back(Run::timeitPass);
         }
 
         // Apply .opencmlrc: list = prefix + CLI passes + suffix; fallback used only when graph !=
@@ -428,6 +474,11 @@ bool parseArgs(int argc, char *argv[]) {
             scriptDir,
             Run::resolvedPassList,
             &Run::fallbackPasses);
+
+        if (Run::timeitEnabled && Run::profile) {
+            std::cerr << "Error: --timeit cannot be combined with --profile." << std::endl;
+            return false;
+        }
     }
 
     // Run requires at least one input source: --input or positional file

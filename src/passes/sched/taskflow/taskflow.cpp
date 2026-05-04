@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: May. 02, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,6 +32,7 @@
 #include <array>
 #include <format>
 #include <string>
+#include <thread>
 
 using namespace camel::core::context;
 using namespace camel::core::error;
@@ -1170,7 +1171,67 @@ void TaskflowExecSchedPass::mark_reduce_arr(
 
 void TaskflowExecSchedPass::mark_unordered_reduce_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
-    mark_reduce_arr(graph, nodeRef, frame, sf);
+    (void)sf;
+    Array *arr = frame->get<Array *>(dataIndexOf(graph, graph->normInputsOf(nodeRef).front()));
+    const auto withInputs = graph->withInputsOf(nodeRef);
+    Function *func        = frame->get<Function *>(dataIndexOf(graph, withInputs[0]));
+    slot_t init           = frame->get<slot_t>(dataIndexOf(graph, withInputs[1]));
+    const auto site       = makeHigherOrderCallSite(func);
+    if (arr->size() == 0) {
+        frame->set(dataIndexOf(graph, nodeRef), init);
+        return;
+    }
+
+    const size_t workerHint = std::max<size_t>(2, std::thread::hardware_concurrency());
+    const size_t chunkGoal =
+        arr->size() <= 1 ? size_t(1) : std::max<size_t>(2, std::min(workerHint, arr->size() / 2));
+    const size_t chunkCount = std::min(arr->size(), chunkGoal);
+    const size_t chunkSize  = (arr->size() + chunkCount - 1) / chunkCount;
+    std::vector<slot_t> partials(chunkCount, NullSlot);
+
+    tf::Taskflow level;
+    for (size_t chunk = 0; chunk < chunkCount; ++chunk) {
+        const size_t begin = chunk * chunkSize;
+        const size_t end   = std::min(arr->size(), begin + chunkSize);
+        if (begin >= end) {
+            continue;
+        }
+        level
+            .emplace([this, arr, begin, end, chunk, site, &partials]() {
+                slot_t acc = arr->get<slot_t>(begin);
+                for (size_t i = begin + 1; i < end; ++i) {
+                    std::array<slot_t, 2> args{acc, arr->get<slot_t>(i)};
+                    Frame *callee =
+                        acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
+                    try {
+                        acc = evalGraphLinear(site.runtimeGraph, callee);
+                        framePool_.release(callee);
+                    } catch (...) {
+                        framePool_.release(callee);
+                        throw;
+                    }
+                }
+                partials[chunk] = acc;
+            })
+            .name("UNORDERED_REDUCE_CHUNK");
+    }
+
+    tf::Executor nestedExecutor;
+    nestedExecutor.run(level).wait();
+
+    slot_t acc = init;
+    for (size_t chunk = 0; chunk < chunkCount; ++chunk) {
+        std::array<slot_t, 2> args{acc, partials[chunk]};
+        Frame *callee = acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
+        try {
+            acc = evalGraphLinear(site.runtimeGraph, callee);
+            framePool_.release(callee);
+        } catch (...) {
+            framePool_.release(callee);
+            throw;
+        }
+    }
+    frame->set(dataIndexOf(graph, nodeRef), acc);
 }
 
 void TaskflowExecSchedPass::mark_foreach_arr(

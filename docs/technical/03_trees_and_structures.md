@@ -6,7 +6,7 @@
 
 ## 1. 如何查看各阶段产出
 
-在项目根目录执行（将 `<file>` 换为实际 `.cml` 路径，如 `test/run/linear/hello.cml`）：
+在项目根目录执行（将 `<file>` 换为实际 `.cml` 路径，如 `test/cases/linear/nvm/hello.cml`）：
 
 | 选项 | 说明 |
 |------|------|
@@ -17,7 +17,7 @@
 | `camel inspect --gir` / `--graph-ir` | 图中间表示（GIR，Dot 格式） |
 | `camel inspect --topo-node-seq` | 拓扑排序后的节点序列（线性调度视图） |
 
-示例：`camel inspect --ast test/run/linear/hello.cml`
+示例：`camel inspect --ast test/cases/linear/nvm/hello.cml`
 
 ---
 
@@ -193,3 +193,4 @@ GIR Builder 在 `visitCastNode` 中递归访问子节点 0、创建 `CastNode`�
   - **FUNC: main** 下列出 `[N00] DATA(-1, "Hello, Camel!")`、`[N01] CALL: <println>, N00`、`[N02] DATA(-2, 0L)`、**RETN: N03**，以及 **CALL: __root__**（入口）。
 
 这些视图用于实现与调试，不改变语言规范；语言规范仅描述源码与可见行为。
+

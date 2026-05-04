@@ -1,0 +1,27 @@
+/**
+ * Verifies nested local-function recursion keeps captured outer state intact across repeated JIT frames.
+ */
+module jit_nested_call_state
+
+func run(depth: int): int {
+    let base = 11
+
+    func visit(n: int): int {
+        return if n == 0 then base else visit(n - 1) + 1
+    }
+
+    return visit(depth)
+}
+
+func main(): int sync {
+    let actual = run(24)
+    let expected = 35
+
+    if actual != expected then {
+        return 1
+    } else {
+        'nested_call_state ok'->println
+        return 0
+    }
+}
+

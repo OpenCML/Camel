@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -445,11 +445,11 @@ static bytecode_vec_t compileRuntimeGraph(
                     markOp = MarkOpCode::MapArr;
                 } else if (uri == ":mark/apply_arr") {
                     markOp = MarkOpCode::ApplyArr;
-                } else if (uri == ":mark/reduce_arr") {
+                } else if (uri == ":mark/reduce_arr" || uri == ":mark/unordered_reduce_arr") {
                     markOp = MarkOpCode::ReduceArr;
                 } else if (uri == ":mark/filter_arr") {
                     markOp = MarkOpCode::FilterArr;
-                } else if (uri == ":mark/foreach_arr") {
+                } else if (uri == ":mark/foreach_arr" || uri == ":mark/unordered_foreach_arr") {
                     markOp = MarkOpCode::ForeachArr;
                 } else {
                     ctx->rtmDiags()->of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);

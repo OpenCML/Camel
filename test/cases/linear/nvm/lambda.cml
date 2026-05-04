@@ -1,0 +1,59 @@
+/**
+ * Verifies lambdas can capture outer constants and drive collection filtering inside a larger render pipeline.
+ */
+module lambda
+
+type Point = { x: int, y: int }
+
+let WIDTH = 10
+let HEIGHT = 10
+
+// Custom filter helper used to exercise lambda predicates over points.
+with <predicate: (p: Point) => bool>
+func my_filter(points: Point[]): Point[] sync {
+    var result: Point[] = []
+    points->foreach<(p: Point) => sync {
+        if predicate(p) then sync {
+            result->append<p>
+            return null
+        }
+    }>
+    return result
+}
+
+// Filter out points that fall outside the visible board.
+func valid_points(points: Point[]): Point[] {
+    return points->my_filter<(p: Point): bool => {
+        return p.x >= 0 && p.x < WIDTH && p.y >= 0 && p.y < HEIGHT
+    }>
+}
+
+// Render only the points that remain after validation.
+func render(snake: Point[]): void sync {
+    let cleaned = valid_points(snake)
+    let rows = range(0, HEIGHT)
+
+    rows->foreach<(y: int) => sync {
+        let cols = range(0, WIDTH)
+        cols->map<(x: int): string => {
+            let p = { x: x, y: y }
+            return if cleaned->contains<p> then 'O' else '.'
+        }>->join<''>->println
+    }>
+
+    println('')
+}
+
+// Provide a snake with both valid and invalid points.
+func main(): int sync {
+    let snake = [
+        { x: 5, y: 5 },
+        { x: 5, y: 6 },
+        { x: 5, y: 7 },
+        { x: -1, y: 0 },   // invalid
+        { x: 10, y: 10 }   // invalid
+    ]
+
+    render(snake)
+    return 0
+}

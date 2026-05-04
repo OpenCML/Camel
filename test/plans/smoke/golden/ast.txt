@@ -1,0 +1,116 @@
+Module: fib
+|-Import*
+|  \-ImportDecl: { now } from time
+|-Export?
+\-Stmts*
+   |-FuncDecl: fib
+   |  \-FuncData: fib
+   |     |-FuncType:
+   |     |  |-NamedPair*
+   |     |  |-NamedPair*
+   |     |  |  \-NamedPair: n
+   |     |  |     |-RefType: int
+   |     |  |     \-DataExpr?
+   |     |  \-Type?
+   |     |     \-RefType: int
+   |     \-StmtBlock:
+   |        \-Stmt*
+   |           \-ExitStmt: return
+   |              \-Data*
+   |                 \-IfExpr
+   |                    |-BinaryExpr: <=
+   |                    |  |-RefData: n
+   |                    |  \-1
+   |                    |-StmtBlock:
+   |                    |  \-Stmt*
+   |                    |     \-ExprStmt
+   |                    |        \-RefData: n
+   |                    \-StmtBlock?
+   |                       \-StmtBlock:
+   |                          \-Stmt*
+   |                             \-ExprStmt
+   |                                \-BinaryExpr: +
+   |                                   |-ReservedExpr: ()
+   |                                   |  |-RefData: fib
+   |                                   |  |-Data*
+   |                                   |  |  \-BinaryExpr: -
+   |                                   |  |     |-RefData: n
+   |                                   |  |     \-1
+   |                                   |  \-NamedData*
+   |                                   \-ReservedExpr: ()
+   |                                      |-RefData: fib
+   |                                      |-Data*
+   |                                      |  \-BinaryExpr: -
+   |                                      |     |-RefData: n
+   |                                      |     \-2
+   |                                      \-NamedData*
+   \-FuncDecl: main
+      \-FuncData: main
+         |-FuncType:
+         |  |-NamedPair*
+         |  |-NamedPair*
+         |  \-Type?
+         |     \-RefType: int
+         \-StmtBlock: sync
+            \-Stmt*
+               |-DataDecl: idx
+               |  |-Type*
+               |  \-Data*
+               |     \-10
+               |-ExprStmt
+               |  \-ReservedExpr: ()
+               |     |-RefData: println
+               |     |-Data*
+               |     |  \-ReservedExpr: ()
+               |     |     |-ReservedExpr: <>
+               |     |     |  |-RefData: format
+               |     |     |  |-Data*
+               |     |     |  |  \-RefData: idx
+               |     |     |  \-NamedData*
+               |     |     |-Data*
+               |     |     |  \-Start computing fibonacci({})...
+               |     |     \-NamedData*
+               |     \-NamedData*
+               |-DataDecl: start
+               |  |-Type*
+               |  \-Data*
+               |     \-ReservedExpr: ()
+               |        |-RefData: now
+               |        |-Data*
+               |        \-NamedData*
+               |-DataDecl: res
+               |  |-Type*
+               |  \-Data*
+               |     \-ReservedExpr: ()
+               |        |-RefData: fib
+               |        |-Data*
+               |        |  \-RefData: idx
+               |        \-NamedData*
+               |-DataDecl: duration
+               |  |-Type*
+               |  \-Data*
+               |     \-BinaryExpr: -
+               |        |-ReservedExpr: ()
+               |        |  |-RefData: now
+               |        |  |-Data*
+               |        |  \-NamedData*
+               |        \-RefData: start
+               |-ExprStmt
+               |  \-ReservedExpr: ()
+               |     |-RefData: println
+               |     |-Data*
+               |     |  \-ReservedExpr: ()
+               |     |     |-ReservedExpr: <>
+               |     |     |  |-RefData: format
+               |     |     |  |-Data*
+               |     |     |  |  |-RefData: idx
+               |     |     |  |  |-RefData: res
+               |     |     |  |  \-RefData: duration
+               |     |     |  \-NamedData*
+               |     |     |-Data*
+               |     |     |  \-Fibonacci({}) = {} (computed in {:.4f} seconds)
+               |     |     \-NamedData*
+               |     \-NamedData*
+               \-ExitStmt: return
+                  \-Data*
+                     \-0

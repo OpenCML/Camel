@@ -1,0 +1,114 @@
+id = "smoke.core"
+order = 100
+tier = "smoke"
+tags = ["smoke", "fib", "inspect", "gir", "prl"]
+
+[[tests]]
+name = "inspect.tok_snapshot"
+desc = "Pins the token stream for the canonical fib10 smoke program."
+kind = "snapshot"
+case = "../../cases/smoke/core/fib10_pipeline.cml"
+args = ["${inspect_tok}", "${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/tok.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "inspect.cst_snapshot"
+desc = "Pins the concrete syntax tree for the canonical fib10 smoke program."
+kind = "snapshot"
+case = "../../cases/smoke/core/fib10_pipeline.cml"
+args = ["${inspect_cst}", "${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/cst.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "inspect.ast_snapshot"
+desc = "Pins the normalized AST shape for the canonical fib10 smoke program."
+kind = "snapshot"
+case = "../../cases/smoke/core/fib10_pipeline.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/ast.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_addresses"]
+timeout_ms = 4000
+
+[[tests]]
+name = "runtime.nvm_runtime"
+desc = "Checks the canonical fib10 program executes correctly on the baseline NVM path."
+kind = "behavior"
+case = "../../cases/smoke/core/fib10_pipeline.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["Fibonacci(10) = 55"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
+timeout_ms = 4000
+
+[[tests]]
+name = "runtime.fvm_runtime"
+desc = "Checks the canonical fib10 program matches NVM output on the FVM backend."
+kind = "differential"
+case = "../../cases/smoke/core/fib10_pipeline.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+compare_to = "runtime.nvm_runtime"
+compare_fields = ["exit_code", "stdout_normalized"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
+timeout_ms = 4000
+
+[[tests]]
+name = "runtime.inline_fvm_runtime"
+desc = "Checks fib10 still matches the NVM baseline after inline plus FVM execution."
+kind = "differential"
+case = "../../cases/smoke/core/fib10_pipeline.cml"
+args = ["${case}", "${run_inline_fvm}"]
+expect_exit = 0
+compare_to = "runtime.nvm_runtime"
+compare_fields = ["exit_code", "stdout_normalized"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
+timeout_ms = 4000
+
+[[tests]]
+name = "gir.gir_snapshot"
+desc = "Pins the GIR shape produced by the canonical fib10 program before optimization."
+kind = "snapshot"
+case = "../../cases/smoke/core/fib10_pipeline.cml"
+args = ["${case}", "${run_gir}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "gir_dot_isomorphic"
+golden = "./golden/gir.dot"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "gir.inline_gir_snapshot"
+desc = "Pins the GIR shape after inline rewriting on the canonical fib10 program."
+kind = "snapshot"
+case = "../../cases/smoke/core/fib10_pipeline.cml"
+args = ["${case}", "${run_inline_gir}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "gir_dot_isomorphic"
+golden = "./golden/inline_gir.dot"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "prl.runtime"
+desc = "Checks a minimal PRL scheduling example can launch, wait, and join independent work."
+kind = "behavior"
+case = "../../cases/smoke/core/prl_scheduler.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

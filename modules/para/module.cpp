@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,25 +40,27 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 {
                     ":mark/unordered_reduce_arr",
                     DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {2, {false, false}}},
-                        "<func: (acc: U, item: T) => U, initial: U> (collect: T[]) => U",
+                        {{2, {false, false}}, {1, {false}}},
+                        "<func: (acc: T, item: T) => T, initial: T> (collect: T[]) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> std::optional<Type *> {
-                            if (with[0]->code() != TypeCode::Array)
+                            if (norm[0]->code() != TypeCode::Array)
                                 return std::nullopt;
-                            const auto &vecType = tt::as_ptr<ArrayType>(with[0]);
-                            if (norm[0]->code() != TypeCode::Function)
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
+                            if (with[0]->code() != TypeCode::Function)
                                 return std::nullopt;
-                            const auto &funcType = tt::as_ptr<FunctionType>(norm[0]);
+                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
                             if (funcType->normTypesCount() < 2)
                                 return std::nullopt;
                             if (!funcType->normTypeAt(1)->equals(vecType->elemType()))
                                 return std::nullopt;
-                            if (!funcType->normTypeAt(0)->equals(norm[1]))
+                            if (!funcType->normTypeAt(0)->equals(vecType->elemType()))
                                 return std::nullopt;
-                            if (!funcType->exitType()->equals(norm[1]))
+                            if (!with[1]->equals(vecType->elemType()))
                                 return std::nullopt;
-                            return norm[1];
+                            if (!funcType->exitType()->equals(vecType->elemType()))
+                                return std::nullopt;
+                            return vecType->elemType();
                         }),
                 },
             }),
@@ -72,17 +74,15 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         "<func: (item: T) => void> (collect: T[]) => void",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> std::optional<Type *> {
-                            if (with[0]->code() != TypeCode::Array)
+                            if (norm[0]->code() != TypeCode::Array)
                                 return std::nullopt;
-                            const auto &vecType = tt::as_ptr<ArrayType>(with[0]);
-                            if (norm[0]->code() != TypeCode::Function)
+                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
+                            if (with[0]->code() != TypeCode::Function)
                                 return std::nullopt;
-                            const auto &funcType = tt::as_ptr<FunctionType>(norm[0]);
+                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
                             if (funcType->normTypesCount() != 1)
                                 return std::nullopt;
                             if (!funcType->normTypeAt(0)->equals(vecType->elemType()))
-                                return std::nullopt;
-                            if (!funcType->exitType()->equals(Type::Void()))
                                 return std::nullopt;
                             return Type::Void();
                         }),

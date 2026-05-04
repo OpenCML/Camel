@@ -274,7 +274,7 @@ FastVM 在 **编译期**（`compile.cpp`）将 GIR 转为字节码，尾调用�
 
 1. **平凡后缀仅允许 `GATE`**：若 lowering 在尾值结点与出口之间插入在 NodeVM 中亦为无操作的结点类型（如某些 **SYNC**），当前仍判为**非平凡**，从而禁用 TCO。扩展白名单需与 FastVM **同步**修改并增加测试。
 2. **静态拓扑与动态分支**：判据基于全图拓扑序；依赖 GIR 对 BRCH/JOIN 布局的常规约定。
-3. **回归用例**：`test/run/para/merge_sort_tco_smoke.cml` 用于快速验证递归 `sync` 路径上 **JOIN 之后** 的 `println` 仍执行；全量性能场景见 `test/run/para/merge_sort.cml`。
+3. **回归用例**：`test/cases/para/core/merge_sort_tco_smoke.cml` 用于快速验证递归 `sync` 路径上 **JOIN 之后** 的 `println` 仍执行；全量性能场景见 `test/cases/para/core/merge_sort.cml`。
 
 ---
 
@@ -283,3 +283,4 @@ FastVM 在 **编译期**（`compile.cpp`）将 GIR 转为字节码，尾调用�
 - [05_graph_ir.md](05_graph_ir.md) — GIR 结点与边
 - [06_runtime_and_execution.md](06_runtime_and_execution.md) — 运行时与调度总览
 - [18_sync_control_semantics.md](18_sync_control_semantics.md) — GATE、EXIT 与 sync 语义
+

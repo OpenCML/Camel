@@ -1,0 +1,66 @@
+id = "modules.nn"
+order = 361
+tier = "feat"
+tags = ["feat", "modules", "nn"]
+
+[[tests]]
+name = "lr"
+desc = "Exercises tensor algebra, gradient updates, and mutable weights through a linear-regression training loop."
+kind = "behavior"
+case = "../../../cases/modules/nn/lr.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "lrit"
+desc = "Exercises tensor math together with recursive state threading in a sync linear-regression trainer."
+kind = "behavior"
+case = "../../../cases/modules/nn/lrit.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "mnist"
+desc = "Exercises a larger softmax-classifier training loop on synthetic data without external dependencies."
+kind = "behavior"
+case = "../../../cases/modules/nn/mnist.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "tensor_smoke"
+desc = "Exercises core tensor shape propagation and matrix operators in a compact sanity case."
+kind = "behavior"
+case = "../../../cases/modules/nn/tensor_smoke.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "mnist_py"
+desc = "Exercises Python-backed MNIST loading, training, and visualization through the Camel tensor stack."
+kind = "behavior"
+case = "../../../cases/modules/nn/mnist_py.cml"
+args = ["${case}"]
+expect_exit = 0
+failure_note = "The MNIST helper path still has a Python integration regression."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "svm"
+desc = "Exercises a heavier tensor optimization example with SVM-style training and prediction."
+kind = "behavior"
+case = "../../../cases/modules/nn/svm.cml"
+args = ["${case}"]
+expect_exit = 0
+failure_note = "The SVM helper path still has a neural-network runtime regression."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

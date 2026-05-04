@@ -1,0 +1,22 @@
+/**
+ * Uses wall-clock time as a correctness proxy: PRL should not serialize an unordered_foreach of independent sleeps.
+ */
+module unordered_foreach_timing
+
+import { now } from time
+import { sleep } from os
+import { unordered_foreach } from para
+
+func main(): int sync {
+    let jobs = range(0, 8)
+    let delay_ms = 120
+
+    let start = now()
+    unordered_foreach<(i: int) => sync {
+        sleep(delay_ms)
+    }>(jobs)
+    let duration = now() - start
+
+    'unordered_foreach duration = {:.3f}s'->format<duration>->println
+    return if duration < 0.50 then 0 else 1
+}

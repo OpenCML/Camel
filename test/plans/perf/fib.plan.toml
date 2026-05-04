@@ -1,0 +1,88 @@
+id = "perf.fib"
+order = 400
+tier = "benchmark"
+tags = ["perf", "fib"]
+
+[[tests]]
+name = "nvm_timeit"
+desc = "Benchmarks recursive Fibonacci on the baseline NVM scheduler using repeated pass-level timing."
+kind = "benchmark"
+case = "../../cases/perf/fib_recursive.cml"
+args = ["${timeit_nvm_10}", "${case}", "${run_nvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 15000
+perf_budget_platform = "local.sample"
+perf_budget_mean_ms = 200
+perf_budget_tolerance_pct = 10
+
+[[tests]]
+name = "inline_nvm_timeit"
+desc = "Benchmarks recursive Fibonacci on NVM after running the inline optimization pass first."
+kind = "benchmark"
+case = "../../cases/perf/fib_recursive.cml"
+args = ["${timeit_inline_nvm_10}", "${case}", "${run_inline_nvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 15000
+perf_budget_platform = "local.sample"
+perf_budget_mean_ms = 200
+perf_budget_tolerance_pct = 10
+
+[[tests]]
+name = "fvm_timeit"
+desc = "Benchmarks recursive Fibonacci on the FVM backend using repeated pass-level timing."
+kind = "benchmark"
+case = "../../cases/perf/fib_recursive.cml"
+args = ["${timeit_fvm_10}", "${case}", "${run_fvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 15000
+perf_budget_platform = "local.sample"
+perf_budget_mean_ms = 65
+perf_budget_tolerance_pct = 10
+
+[[tests]]
+name = "inline_fvm_timeit"
+desc = "Benchmarks recursive Fibonacci on FVM after running the inline optimization pass first."
+kind = "benchmark"
+case = "../../cases/perf/fib_recursive.cml"
+args = ["${timeit_inline_fvm_10}", "${case}", "${run_inline_fvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 15000
+perf_budget_platform = "local.sample"
+perf_budget_mean_ms = 50
+perf_budget_tolerance_pct = 10
+
+[[tests]]
+name = "jit_timeit"
+desc = "Benchmarks recursive Fibonacci on the JIT backend using repeated pass-level timing."
+kind = "benchmark"
+case = "../../cases/perf/fib_recursive.cml"
+args = ["${timeit_jit_10}", "${case}", "${run_jit}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 15000
+perf_budget_platform = "local.sample"
+perf_budget_mean_ms = 80
+perf_budget_tolerance_pct = 10
+
+[[tests]]
+name = "inline_jit_timeit"
+desc = "Benchmarks recursive Fibonacci on JIT after running the inline optimization pass first."
+kind = "benchmark"
+case = "../../cases/perf/fib_recursive.cml"
+args = ["${timeit_inline_jit_10}", "${case}", "${run_inline_jit}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 1500
+perf_budget_platform = "local.sample"
+perf_budget_mean_ms = 3
+perf_budget_tolerance_pct = 10

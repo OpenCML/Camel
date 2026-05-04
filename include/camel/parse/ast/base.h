@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -166,6 +166,8 @@ class ImportLoad : public Load {
     }
 
     void setRefs(const std::vector<Reference> &refs) { refs_ = refs; }
+    const std::vector<Reference> &refs() const { return refs_; }
+    bool hasRefs() const { return !refs_.empty(); }
     std::vector<Reference> &getRefs() {
         if (refs_.empty()) {
             throw std::runtime_error("ImportLoad: References are not set");

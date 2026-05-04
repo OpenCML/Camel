@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -389,6 +389,15 @@ class FramePool {
     inline void _resetTop() { reinterpret_cast<Frame *>(top_)->runtimeGraph_ = nullptr; }
 
     inline Frame *_acquire(camel::runtime::GCGraph *graph) {
+        return acquireImpl<false>(graph, nullptr);
+    }
+
+    inline Frame *_acquire(camel::runtime::GCGraph *graph, ::Tuple *staticArea) {
+        return acquireImpl<true>(graph, staticArea);
+    }
+
+    template <bool MatchStaticArea>
+    inline Frame *acquireImpl(camel::runtime::GCGraph *graph, ::Tuple *staticArea) {
         EXEC_WHEN_DEBUG({
             CAMEL_LOG_INFO_S(
                 "FramePool",
@@ -400,7 +409,9 @@ class FramePool {
         });
 
         Frame *lastFrame = reinterpret_cast<Frame *>(top_);
-        if (LIKELY(lastFrame->runtimeGraph_ == graph)) {
+        if (LIKELY(
+                lastFrame->runtimeGraph_ == graph &&
+                (!MatchStaticArea || lastFrame->staticArea_ == staticArea))) {
             clearGcSlots(lastFrame);
             EXEC_WHEN_DEBUG({
                 CAMEL_LOG_INFO_S(
@@ -433,7 +444,10 @@ class FramePool {
                 graph && graph->runtimeDataType() ? graph->runtimeDataType()->size() : 0);
             throw std::bad_alloc{};
         }
-        Frame *frame = new (top_) Frame(graph, graph->staticArea(), graph->runtimeDataType());
+        Frame *frame = new (top_) Frame(
+            graph,
+            MatchStaticArea ? staticArea : graph->staticArea(),
+            graph->runtimeDataType());
         clearGcSlots(frame);
 
         EXEC_WHEN_DEBUG({
@@ -455,6 +469,12 @@ class FramePool {
 
     inline Frame *acquire(camel::runtime::GCGraph *graph) {
         Frame *frame = _acquire(graph);
+        _resetTop();
+        return frame;
+    }
+
+    inline Frame *acquire(camel::runtime::GCGraph *graph, ::Tuple *staticArea) {
+        Frame *frame = _acquire(graph, staticArea);
         _resetTop();
         return frame;
     }
@@ -534,6 +554,9 @@ class FramePool {
     void traceActiveFrames(
         const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) const {
         forEachActiveFrame([&](Frame *frame) {
+            if (frame->staticArea_ && frame->staticDataLayout()) {
+                frame->staticArea_->updateRefs(relocate, frame->staticDataLayout());
+            }
             if (frame->dynamicAreaType_ && frame->dynamicAreaType_->refCount() != 0) {
                 frame->updateRefs(relocate, nullptr);
             }
