@@ -260,3 +260,134 @@ Phase 2 status after this slice:
   automated model tests, each through helper/layer functions and `apply_gradients`.
 - Remaining explicit target items include CNN/`conv2d`, Tiny CNN, final Phase 2
   documentation pass, and the Phase 2 adversarial review.
+
+## 2026-05-05 Phase 2 Partial: Conv2d And Tiny CNN
+
+Target references: sections 3.2, 3.3, 3.4, 3.8, 3.9, and 3.10 of
+`docs/technical/nn-autograd-targets.md`.
+
+Implemented:
+
+- Added `nn.conv2d(input, kernel, bias)` for floating NCHW input
+  `[N,C,H,W]`, floating kernels `[O,C,KH,KW]`, rank-1 bias `[O]`, stride 1,
+  and valid padding.
+- Added dense backward helpers `nn.conv2d_input_grad`,
+  `nn.conv2d_kernel_grad`, and `nn.conv2d_bias_grad`.
+- Registered the builtin VJP for `nn:conv2d`, propagating to input, kernel,
+  and bias. The Tiny CNN case trains kernel and bias parameters through the
+  ordinary `apply_gradients` path.
+- Added `test/cases/modules/nn/conv2d_grad_sanity.cml`, which compares one
+  kernel-gradient component against a tiny finite-difference estimate and checks
+  the bias-gradient sum.
+- Added `test/cases/modules/nn/tiny_cnn.cml`, a helper-based valid-convolution
+  CNN with `conv2d`, `tanh`, `reshape`, a linear head, and MSE loss.
+- Added `test/cases/modules/nn/conv2d_shape_error.cml` for channel-mismatch
+  diagnostics.
+- Updated `test/plans/feat/modules/nn.plan.toml` with behavior, GIR, finite
+  difference, update-count, and negative diagnostic checks.
+- Updated `docs/technical/nn-autograd.md` with the conv2d API, VJP coverage,
+  tests, and current limits.
+
+Manual raw-run evidence before verifier use:
+
+```powershell
+camel test\cases\modules\nn\conv2d_grad_sanity.cml
+```
+
+Observed metrics: kernel gradient element `12`, finite difference
+`12.00008392333984`, bias-gradient sum `4`.
+
+```powershell
+camel test\cases\modules\nn\tiny_cnn.cml std::macro std::nvm
+```
+
+Observed metrics: before `0.960530161857605`, step `0.960530161857605`,
+after `0.6478729248046875`; kernel, bias, head parameters and their gradients
+were printed.
+
+```powershell
+camel test\cases\modules\nn\tiny_cnn.cml std::macro std::gir
+```
+
+Observed GIR contained `nn:conv2d`, `nn:conv2d_input_grad`,
+`nn:conv2d_kernel_grad`, `nn:conv2d_bias_grad`, and three `nn:sgd` update
+nodes inside `nn::autograd_sgd_step`.
+
+```powershell
+camel test\cases\modules\nn\conv2d_shape_error.cml
+```
+
+Observed exit: nonzero, with diagnostic substring
+`conv2d input channels must match kernel channels`.
+
+Focused verification:
+
+```powershell
+node scripts/test.js test\plans\feat\modules\nn.plan.toml
+```
+
+Result: 37 total, 37 pass.
+
+Phase 2 status after this slice:
+
+- Tiny CNN, Softmax Classifier, Embedding Model, and Tiny Attention Block all
+  pass automated model tests through helper/layer functions and
+  `apply_gradients`.
+- Operator-level sanity and negative diagnostic coverage now exists for
+  softmax cross entropy, embedding, tensor softmax, and conv2d.
+- Remaining explicit target items are the full default verification run, the
+  final Phase 2 adversarial review, and the completion audit.
+
+## 2026-05-05 Phase 2 Completion Verification
+
+Target references: sections 3.8, 3.10, 3.11, and 6 of
+`docs/technical/nn-autograd-targets.md`.
+
+Final additions before completion:
+
+- Added `test/cases/modules/nn/autograd_missing_vjp_concat_error.cml` to lock
+  the missing-VJP diagnostic for trainable paths through unsupported operators.
+- Updated `test/plans/feat/modules/nn.plan.toml` to assert that diagnostic:
+  `No builtin VJP rule registered for 'tensor:concat'`.
+- Tightened the Tiny CNN GIR verifier to assert `nn:conv2d_input_grad` in
+  addition to the kernel and bias gradient helpers.
+- Updated `docs/technical/nn-autograd.md` to document `tensor:concat` as an
+  explicit no-VJP boundary.
+
+Manual raw-run evidence before verifier use:
+
+```powershell
+camel test\cases\modules\nn\autograd_missing_vjp_concat_error.cml std::macro std::nvm
+```
+
+Observed exit: nonzero, with diagnostic substring
+`No builtin VJP rule registered for 'tensor:concat'`.
+
+Final verification:
+
+```powershell
+npm run build
+node scripts/test.js test\plans\feat\modules\nn.plan.toml
+npm run test
+```
+
+Results:
+
+- Build passed.
+- Focused NN plan passed: 38 total, 38 pass.
+- Default developer test set passed: 144 total, 144 pass.
+
+Completion audit:
+
+- Phase 1 call-aware helper/layer models and diagnostics still pass in the same
+  NN plan.
+- Phase 2 models now cover Tiny CNN, Softmax Classifier, Embedding Matrix
+  Factorization, and Tiny Attention. All use helper/layer functions and
+  `apply_gradients`.
+- Operator-level sanity coverage exists for softmax cross entropy, embedding,
+  tensor softmax, and conv2d.
+- Negative diagnostics now cover recursive helper calls, embedding index
+  bounds, softmax rank limits, conv2d channel mismatch, and missing builtin VJP
+  on a trainable `tensor:concat` path.
+- The Phase 2 adversarial review is recorded in
+  `docs/technical/nn-autograd-review-log.md`.

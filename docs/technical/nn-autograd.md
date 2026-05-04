@@ -97,6 +97,10 @@ constructs them from the same `Parameter` object.
 | `softmax_cross_entropy_grad(logits, target, dy) -> Tensor` | Fused logits-gradient primitive used by the VJP rule; callable for operator sanity checks. |
 | `embedding(table: Tensor, indices: Tensor) -> Tensor` | Rank-2 table gather with rank-1 int64 indices. |
 | `embedding_table_grad(table, indices, dy) -> Tensor` | Dense table-gradient primitive used by the embedding VJP; repeated indices accumulate into one row. |
+| `conv2d(input, kernel, bias) -> Tensor` | Valid CPU NCHW convolution for input `[N,C,H,W]`, kernel `[O,C,KH,KW]`, rank-1 bias `[O]`, stride 1, no padding. |
+| `conv2d_input_grad(input, kernel, dy) -> Tensor` | Dense input-gradient helper used by the conv2d VJP. |
+| `conv2d_kernel_grad(input, kernel, dy) -> Tensor` | Dense kernel-gradient helper used by the conv2d VJP and operator sanity checks. |
+| `conv2d_bias_grad(bias, dy) -> Tensor` | Dense bias-gradient helper used by the conv2d VJP and operator sanity checks. |
 | `vjp<rule>(f)` | Records user VJP metadata; helper calls currently train by pre-VJP inlining, not by invoking custom function VJP graphs. |
 
 `compile_step` is intentionally absent.
@@ -119,6 +123,7 @@ Registered builtin rules currently cover:
 | Attention support | `tensor:softmax` row-wise rank-2 path |
 | Fused NN losses | `nn:softmax_cross_entropy` logits path |
 | Fused NN layers | `nn:embedding` table path |
+| Convolution | `nn:conv2d` input, kernel, and bias paths |
 | Scalar arithmetic | `:op/add_d`, `:op/sub_d`, `:op/mul_d`, `:op/div_d` numerator path |
 | Parameter leaf | `nn:value` |
 
@@ -152,6 +157,11 @@ Broadcast support is deliberately narrow:
 - Siamese Shared Encoder with two call sites sharing encoder parameters;
 - GRU-lite fixed unroll with repeated gate parameter use;
 - negative recursive-helper diagnostic for call-aware lowering;
+- negative missing-VJP diagnostic for trainable `tensor:concat` paths;
+- conv2d kernel finite-difference and bias-gradient sanity check;
+- helper-based Tiny CNN using valid NCHW conv2d, tanh, reshape, and linear head;
+- GIR checks that Tiny CNN autograd includes conv2d and conv2d backward helpers;
+- negative conv2d channel-mismatch diagnostic;
 - GIR checks that helper primitives appear inside `nn::autograd_sgd_step` and that
   helper `FUNC` nodes do not remain in the step graph;
 - legacy direct tensor examples that do not use autograd.
@@ -175,6 +185,9 @@ camel test\cases\modules\nn\embedding_grad_sanity.cml
 camel test\cases\modules\nn\embedding_mf.cml std::macro std::nvm
 camel test\cases\modules\nn\softmax_grad_sanity.cml
 camel test\cases\modules\nn\tiny_attention.cml std::macro std::nvm
+camel test\cases\modules\nn\conv2d_grad_sanity.cml
+camel test\cases\modules\nn\tiny_cnn.cml std::macro std::nvm
+camel test\cases\modules\nn\tiny_cnn.cml std::macro std::gir
 camel test\cases\modules\nn\residual_mlp.cml std::macro std::nvm
 camel test\cases\modules\nn\siamese_shared_encoder.cml std::macro std::nvm
 camel test\cases\modules\nn\gru_lite.cml std::macro std::nvm
@@ -199,11 +212,18 @@ The implementation is still a small static-graph autograd skeleton:
 - `tensor:softmax` is currently row-wise for rank-2 tensors only. There is no
   arbitrary axis argument, mask support, rank-3 batched attention, or decomposed
   `sum_axis` VJP yet.
+- `nn:conv2d` currently supports floating rank-4 NCHW input, floating rank-4
+  `[O,C,KH,KW]` kernels, rank-1 bias, stride 1, and valid padding only. The VJP
+  emits dense input/kernel/bias gradients. There is no stride argument, padding
+  mode, dilation, groups, NHWC layout, pooling, or optimized kernel backend.
+- `tensor:concat` still has no builtin VJP. Trainable paths through concat fail
+  explicitly instead of silently dropping gradients.
 - Static alias keys merge repeated reads through the same model path, but not
   arbitrary runtime `Parameter` object aliases stored under different fields.
 - No arrays/lists of `Parameter` are discovered.
 - Broadcast semantics are not NumPy-complete.
 - No optimizer state beyond SGD.
-- No GPU, BLAS, checkpointing, dataloaders, CNN, Transformer, or Diffusion support.
+- No GPU, BLAS, checkpointing, dataloaders, full CNN stack, Transformer, or
+  Diffusion support.
 - `:op/div_d` only propagates through the numerator because current supported losses use
   non-trainable denominators.

@@ -2,6 +2,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../camel_module.cmake)
 add_camel_module(
   NAME nn
   SOURCES
+    conv.cpp
     executor.cpp
     layers.cpp
     losses.cpp

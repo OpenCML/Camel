@@ -366,6 +366,29 @@ void embeddingVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
         ctx.addOper(tensorType(), "nn:embedding_table_grad", inputs));
 }
 
+void conv2dVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 3);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+
+    std::array<rt::gc_node_ref_t, 3> inputGradInputs{call.inputs[0], call.inputs[1], *dy};
+    ctx.accumulateGradient(
+        call.inputs[0],
+        ctx.addOper(tensorType(), "nn:conv2d_input_grad", inputGradInputs));
+
+    std::array<rt::gc_node_ref_t, 3> kernelGradInputs{call.inputs[0], call.inputs[1], *dy};
+    ctx.accumulateGradient(
+        call.inputs[1],
+        ctx.addOper(tensorType(), "nn:conv2d_kernel_grad", kernelGradInputs));
+
+    std::array<rt::gc_node_ref_t, 2> biasGradInputs{call.inputs[2], *dy};
+    ctx.accumulateGradient(
+        call.inputs[2],
+        ctx.addOper(tensorType(), "nn:conv2d_bias_grad", biasGradInputs));
+}
+
 void registerGraphAliases(VjpRegistry &registry, rt::GCGraph *target, rt::GCGraph *vjpGraph) {
     if (!target || !vjpGraph) {
         return;
@@ -580,6 +603,7 @@ void ensureBuiltinVjpRulesRegistered() {
             softmaxCrossEntropyVjp,
             "softmax_cross_entropy_vjp");
         registry.registerBuiltin("nn:embedding", embeddingVjp, "embedding_vjp");
+        registry.registerBuiltin("nn:conv2d", conv2dVjp, "conv2d_vjp");
     });
 }
 

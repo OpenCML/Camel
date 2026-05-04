@@ -1,0 +1,39 @@
+/**
+ * Negative case: trainable paths through operators without builtin VJP must fail.
+ */
+module autograd_missing_vjp_concat_error
+
+import {
+    Tensor,
+    concat, reshape, sum
+} from tensor
+
+import {
+    Parameter,
+    apply_gradients, parameter, value
+} from nn
+
+type ConcatModel = {
+    tail: Parameter
+}
+
+with <model: ConcatModel>
+func concat_loss(x: Tensor): float {
+    let combined = concat(x, value(model.tail), 0)
+    return sum(combined)
+}
+
+func main(): int sync {
+    var model = {
+        tail: parameter(reshape([3.0, 4.0], [1, 2]))
+    }
+    let x = reshape([1.0, 2.0], [1, 2])
+
+    let step = apply_gradients(<model: ConcatModel> (x: Tensor): float => {
+        return x->concat_loss<model>
+    })
+    let loss = wait step<model>(x, 0.1)
+
+    'autograd_missing_vjp_concat_error loss={}'->format<loss>->println
+    return 0
+}

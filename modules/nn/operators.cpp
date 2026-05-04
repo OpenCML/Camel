@@ -610,6 +610,10 @@ std::unordered_map<std::string, operator_t> getNnOpsMap() {
         {"softmax_cross_entropy_grad", __nn_softmax_cross_entropy_grad__},
         {"embedding", __nn_embedding__},
         {"embedding_table_grad", __nn_embedding_table_grad__},
+        {"conv2d", __nn_conv2d__},
+        {"conv2d_input_grad", __nn_conv2d_input_grad__},
+        {"conv2d_kernel_grad", __nn_conv2d_kernel_grad__},
+        {"conv2d_bias_grad", __nn_conv2d_bias_grad__},
     };
 }
 
@@ -682,6 +686,34 @@ const std::vector<oper_group_ptr_t> &getNnOperatorGroups() {
               StaticFuncTypeResolver::create(
                   {},
                   {{tensorType(), false}, {tensorType(), false}, {tensorType(), false}},
+                  tensorType())}}),
+        OperatorGroup::create(
+            "conv2d",
+            {{"nn:conv2d",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{tensorType(), false}, {tensorType(), false}, {tensorType(), false}},
+                  tensorType())}}),
+        OperatorGroup::create(
+            "conv2d_input_grad",
+            {{"nn:conv2d_input_grad",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{tensorType(), false}, {tensorType(), false}, {tensorType(), false}},
+                  tensorType())}}),
+        OperatorGroup::create(
+            "conv2d_kernel_grad",
+            {{"nn:conv2d_kernel_grad",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{tensorType(), false}, {tensorType(), false}, {tensorType(), false}},
+                  tensorType())}}),
+        OperatorGroup::create(
+            "conv2d_bias_grad",
+            {{"nn:conv2d_bias_grad",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{tensorType(), false}, {tensorType(), false}},
                   tensorType())}}),
     };
     return groups;

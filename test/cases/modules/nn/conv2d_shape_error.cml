@@ -1,0 +1,21 @@
+/**
+ * Negative case: conv2d must reject channel mismatch.
+ */
+module conv2d_shape_error
+
+import {
+    reshape, sum
+} from tensor
+
+import {
+    conv2d
+} from nn
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0], [1, 1, 2, 2])
+    let kernel = reshape([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8], [1, 2, 2, 2])
+    let bias = reshape([0.0], [1])
+    let y = conv2d(x, kernel, bias)
+    'conv2d_shape_error sum={}'->format<sum(y)>->println
+    return 0
+}

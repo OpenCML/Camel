@@ -483,6 +483,116 @@ assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic c
 timeout_ms = 4000
 
 [[tests]]
+name = "conv2d_grad_sanity"
+desc = "Checks conv2d kernel gradient against finite difference and bias gradient shape."
+kind = "behavior"
+case = "../../../cases/modules/nn/conv2d_grad_sanity.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/conv2d_grad_sanity grad0=([0-9.eE+-]+) finite=([0-9.eE+-]+) bias_sum=([0-9.eE+-]+)/, input.normalized.stdout)
+const grad0 = Number(found[1])
+const finite = Number(found[2])
+const biasSum = Number(found[3])
+assert(Number.isFinite(grad0) && Number.isFinite(finite) && Number.isFinite(biasSum), 'metrics are not finite')
+assert(approx(grad0, finite, 1e-3), `kernel gradient ${grad0} should match finite difference ${finite}`)
+assert(approx(biasSum, 4.0, 1e-6), `bias gradient sum should be 4, got ${biasSum}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tiny_cnn"
+desc = "Exercises helper-call autograd through a tiny valid-convolution CNN."
+kind = "behavior"
+case = "../../../cases/modules/nn/tiny_cnn.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/tiny_cnn metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/tiny_cnn kernel=tensor/, input.normalized.stdout)
+match(/tiny_cnn bias=tensor/, input.normalized.stdout)
+match(/tiny_cnn head=tensor/, input.normalized.stdout)
+match(/tiny_cnn kernel_grad=tensor/, input.normalized.stdout)
+match(/tiny_cnn bias_grad=tensor/, input.normalized.stdout)
+match(/tiny_cnn head_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tiny_cnn_gir"
+desc = "Checks conv2d and conv2d VJP primitives appear in the Tiny CNN autograd step graph."
+kind = "behavior"
+case = "../../../cases/modules/nn/tiny_cnn.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+const stepNeedle = (op) => `tooltip="${op}\\nnn::autograd_sgd_step`
+const inStep = (op) => text.includes(stepNeedle(op))
+const countStep = (op) => text.split(stepNeedle(op)).length - 1
+assert(inStep('nn:conv2d'), 'autograd step missing conv2d')
+assert(inStep('nn:conv2d_input_grad'), 'autograd step missing conv2d input gradient')
+assert(inStep('nn:conv2d_kernel_grad'), 'autograd step missing conv2d kernel gradient')
+assert(inStep('nn:conv2d_bias_grad'), 'autograd step missing conv2d bias gradient')
+assert(countStep('nn:sgd') === 3, 'expected one update for conv kernel, conv bias, and head')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "conv2d_shape_error"
+desc = "Rejects conv2d channel mismatch with a readable diagnostic."
+kind = "behavior"
+case = "../../../cases/modules/nn/conv2d_shape_error.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(input.exit_code !== 0, 'conv2d shape error case unexpectedly succeeded')
+assert(text.includes('conv2d input channels must match kernel channels'), 'missing conv2d channel diagnostic')
+assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic category')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "autograd_missing_vjp_concat_error"
+desc = "Rejects trainable concat paths that lack a builtin VJP rule."
+kind = "behavior"
+case = "../../../cases/modules/nn/autograd_missing_vjp_concat_error.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(input.exit_code !== 0, 'missing-VJP case unexpectedly succeeded')
+assert(text.includes("No builtin VJP rule registered for 'tensor:concat'"), 'missing concat VJP diagnostic')
+assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic category')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
 name = "residual_mlp"
 desc = "Exercises helper-call lowering over a residual MLP with branch merge and skip parameters."
 kind = "behavior"
