@@ -60,6 +60,16 @@ kind = "behavior"
 case = "../../../cases/linear/jit/fib_recursive.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/fib_recursive f0=([0-9]+) f1=([0-9]+) f10=([0-9]+) f15=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 0, `expected f0=0, got ${found[1]}`)
+    assert(Number(found[2]) === 1, `expected f1=1, got ${found[2]}`)
+    assert(Number(found[3]) === 55, `expected f10=55, got ${found[3]}`)
+    assert(Number(found[4]) === 610, `expected f15=610, got ${found[4]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -70,6 +80,16 @@ kind = "behavior"
 case = "../../../cases/linear/jit/mutual_tail_check.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/mutual_tail_check a=([0-9]+) b=([0-9]+) c=([0-9]+) d=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 0, `expected a=0, got ${found[1]}`)
+    assert(Number(found[2]) === 1, `expected b=1, got ${found[2]}`)
+    assert(Number(found[3]) === 1, `expected c=1, got ${found[3]}`)
+    assert(Number(found[4]) === 0, `expected d=0, got ${found[4]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -80,6 +100,14 @@ kind = "behavior"
 case = "../../../cases/linear/jit/nested_call_state.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/nested_call_state actual=([0-9]+) expected=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 35, `expected actual=35, got ${found[1]}`)
+    assert(Number(found[2]) === 35, `expected expected=35, got ${found[2]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -90,6 +118,14 @@ kind = "behavior"
 case = "../../../cases/linear/jit/tail_accumulate.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/tail_accumulate actual=([0-9]+) expected=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 14999950000, `expected actual=14999950000, got ${found[1]}`)
+    assert(Number(found[2]) === 14999950000, `expected expected=14999950000, got ${found[2]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -100,6 +136,14 @@ kind = "behavior"
 case = "../../../cases/linear/jit/call_chain_hot.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/call_chain_hot a=([0-9]+) b=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 7, `expected a=7, got ${found[1]}`)
+    assert(Number(found[2]) === 6001, `expected b=6001, got ${found[2]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -112,3 +156,4 @@ args = ["${case}", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+

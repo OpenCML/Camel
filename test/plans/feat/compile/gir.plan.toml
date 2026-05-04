@@ -15,3 +15,4 @@ snapshot_compare = "gir_dot_isomorphic"
 golden = "./golden/sync_ctrl_dedup.dot"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+

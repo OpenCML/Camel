@@ -11,12 +11,8 @@ func calc(): int {
 
 func main(): int sync {
     let out = calc()
-    if out != 42 then {
-        return 1
-    } else sync {
-        'inline_no_param_reverse_root ok'->println
-        return 0
-    }
+    'inline_no_param_reverse_root out={}'->format<out>->println
+    return 0
 }
 
 

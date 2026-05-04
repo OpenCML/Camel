@@ -16,28 +16,7 @@ func main(): int sync {
     let (a, b) = pair(x)
     let arr = [x, x]
     let y = double(x)
-
-    if a != 7 then {
-        return 1
-    } else {
-        if b != 7 then {
-            return 2
-        } else {
-            if arr[0] != 7 then {
-                return 3
-            } else {
-                if arr[1] != 7 then {
-                    return 4
-                } else {
-                    if y != 14 then {
-                        return 5
-                    } else {
-                        'duplicate inputs ok'->println
-                        return 0
-                    }
-                }
-            }
-        }
-    }
+    'duplicate_inputs a={} b={} arr0={} arr1={} y={}'->format<a, b, arr[0], arr[1], y>->println
+    return 0
 }
 

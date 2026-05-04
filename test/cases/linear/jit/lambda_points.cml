@@ -38,18 +38,7 @@ func main(): int sync {
     let p0 = cleaned[0]
     let p1 = cleaned[1]
     let p2 = cleaned[2]
-
-    if len(cleaned) != 3 then {
-        return 1
-    } else if p0.x != 1 then {
-        return 2
-    } else if p1.y != 9 then {
-        return 3
-    } else if p2.x != 5 then {
-        return 4
-    } else {
-        'lambda_points ok'->println
-        return 0
-    }
+    'lambda_points len={} p0x={} p1y={} p2x={}'->format<len(cleaned), p0.x, p1.y, p2.x>->println
+    return 0
 }
 

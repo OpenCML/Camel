@@ -9,12 +9,8 @@ func literal(): int {
 
 func main(): int sync {
     let v = literal()
-    if v != 42 then {
-        return 1
-    } else sync {
-        'inline_empty_entry_targets_fallback ok'->println
-        return 0
-    }
+    'inline_empty_entry_targets_fallback v={}'->format<v>->println
+    return 0
 }
 
 

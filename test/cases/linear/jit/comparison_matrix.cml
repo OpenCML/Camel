@@ -17,16 +17,7 @@ func main(): int sync {
     let s0 = score(2, 5)
     let s1 = score(5, 5)
     let s2 = score(7, 3)
-
-    if s0 != 100011 then {
-        return 1
-    } else if s1 != 11010 then {
-        return 2
-    } else if s2 != 101100 then {
-        return 3
-    } else {
-        'comparison_matrix ok'->println
-        return 0
-    }
+    'comparison_matrix s0={} s1={} s2={}'->format<s0, s1, s2>->println
+    return 0
 }
 

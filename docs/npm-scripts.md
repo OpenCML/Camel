@@ -24,15 +24,12 @@ The repository uses the plan-based runner under `test/`.
 - plans: `test/plans/**/*.plan.toml`
 - cases: `test/cases/**`
 - shared args templates: `test/vars.toml`
+- plan field reference: `docs/test-plans.md`
 
-Plans may use `verify_js = """..."""` for short, external assertions over the
-Camel process result. The inline code can be either a function body using
-`input`, `assert`, `fail`, `approx`, and `match` directly, or a function
-expression such as `({ input, assert }) => { ... }`. `input.normalized.stdout`,
-`input.normalized.stderr`, and `input.normalized.output` contain the streams
-after the plan normalizers have been applied. Larger reusable checks can use
-`verify_script = "relative/script.mjs"`; the script receives a JSON payload path
-as `process.argv[2]`.
+Plans may use `verify_script = """..."""` for inline JavaScript assertions over
+the Camel process result, or `verify_script_path = "relative/script.mjs"` for a
+reusable external verifier. Full field constraints and examples live in
+`docs/test-plans.md`.
 
 ## Main Test Scripts
 

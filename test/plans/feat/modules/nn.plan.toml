@@ -11,7 +11,7 @@ case = "../../../cases/modules/nn/vjp_decorator_demo.cml"
 args = ["${case}", "std::macro", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_js = """
+verify_script = """
 ({ input, assert, match }) => {
 assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
 const found = match(/vjp_decorator_demo value=([0-9]+)/, input.normalized.stdout)
@@ -28,7 +28,7 @@ case = "../../../cases/modules/nn/with_context_step_demo.cml"
 args = ["${case}", "std::macro", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_js = """
+verify_script = """
 ({ input, assert, approx, match }) => {
 assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
 const found = match(
@@ -56,7 +56,7 @@ case = "../../../cases/modules/nn/with_context_step_demo.cml"
 args = ["${case}", "std::macro", "std::gir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_js = """
+verify_script = """
 ({ input, assert }) => {
 assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
 const text = input.normalized.output
@@ -82,7 +82,7 @@ case = "../../../cases/modules/nn/autograd_linear_demo.cml"
 args = ["${case}", "std::macro", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_js = """
+verify_script = """
 ({ input, assert, match }) => {
 assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
 const found = match(
@@ -161,3 +161,4 @@ expect_exit = 0
 failure_note = "The SVM helper path still has a neural-network runtime regression."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+

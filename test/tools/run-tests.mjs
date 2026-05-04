@@ -246,7 +246,7 @@ try {
     ) {
         const verify = (0, eval)(\`(\${inlineSource})\`)
         if (typeof verify !== 'function') {
-            throw new Error('verify_js expression did not evaluate to a function')
+            throw new Error('verify_script expression did not evaluate to a function')
         }
         await verify(helpers)
     } else {
@@ -261,9 +261,46 @@ ${source}
 `
 }
 
+function verificationConfigOf(test) {
+    const hasInline = typeof test.verify_script === 'string' && test.verify_script.trim().length > 0
+    const hasPath = typeof test.verify_script_path === 'string' && test.verify_script_path.trim().length > 0
+    const hasLegacyInline = typeof test.verify_js === 'string' && test.verify_js.trim().length > 0
+
+    if (hasLegacyInline && hasInline) {
+        return {
+            error: 'verify_js and verify_script cannot both be set',
+        }
+    }
+    if (hasPath && (hasInline || hasLegacyInline)) {
+        return {
+            error: 'verify_script_path cannot be combined with verify_script or verify_js',
+        }
+    }
+    if (hasInline) {
+        return {
+            mode: 'inline',
+            source: test.verify_script,
+        }
+    }
+    if (hasPath) {
+        return {
+            mode: 'path',
+            source: test.verify_script_path,
+        }
+    }
+    if (hasLegacyInline) {
+        return {
+            mode: 'inline',
+            source: test.verify_js,
+        }
+    }
+    return null
+}
+
 function runVerification(test, result) {
-    if (!test.verify_script && !test.verify_js) return null
-    if (test.verify_script && test.verify_js) {
+    const config = verificationConfigOf(test)
+    if (!config) return null
+    if (config.error) {
         return {
             ok: false,
             sourceKind: 'config',
@@ -272,7 +309,7 @@ function runVerification(test, result) {
             exitCode: null,
             signal: null,
             timedOut: false,
-            errorMessage: 'verify_script and verify_js cannot both be set',
+            errorMessage: config.error,
             stdout: '',
             stderr: '',
         }
@@ -281,8 +318,8 @@ function runVerification(test, result) {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-test-verify-'))
     let scriptPath = ''
     let sourceKind = ''
-    if (test.verify_script) {
-        scriptPath = path.resolve(path.dirname(test.__planPath), test.verify_script)
+    if (config.mode === 'path') {
+        scriptPath = path.resolve(path.dirname(test.__planPath), config.source)
         sourceKind = 'script'
         if (!fs.existsSync(scriptPath)) {
             fs.rmSync(tempDir, { recursive: true, force: true })
@@ -302,7 +339,7 @@ function runVerification(test, result) {
     } else {
         scriptPath = path.join(tempDir, 'verify-inline.mjs')
         sourceKind = 'inline'
-        fs.writeFileSync(scriptPath, inlineVerifyModuleSource(test.verify_js))
+        fs.writeFileSync(scriptPath, inlineVerifyModuleSource(config.source))
     }
 
     const payloadPath = path.join(tempDir, 'input.json')

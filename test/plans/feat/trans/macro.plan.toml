@@ -65,7 +65,13 @@ kind = "behavior"
 case = "../../../cases/trans/macro/closure_runtime_call.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
-expect_stdout_contains = ["macro_closure_runtime_call ok"]
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/macro_closure_runtime_call value=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 42, `expected value=42, got ${found[1]}`)
+}
+"""
 failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
@@ -77,7 +83,14 @@ kind = "behavior"
 case = "../../../cases/trans/macro/closure_isolation.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
-expect_stdout_contains = ["macro_closure_isolation ok"]
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/macro_closure_isolation lhs=([0-9]+) rhs=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 15, `expected lhs=15, got ${found[1]}`)
+    assert(Number(found[2]) === 25, `expected rhs=25, got ${found[2]}`)
+}
+"""
 failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
@@ -111,7 +124,13 @@ kind = "behavior"
 case = "../../../cases/trans/macro/runtime_boundary.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
-expect_stdout_contains = ["macro_runtime_boundary ok"]
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/macro_runtime_boundary value=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 42, `expected value=42, got ${found[1]}`)
+}
+"""
 failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
@@ -123,7 +142,14 @@ kind = "behavior"
 case = "../../../cases/trans/macro/static_object_access.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
-expect_stdout_contains = ["macro_static_object_access ok"]
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/macro_static_object_access value=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 42, `expected value=42, got ${found[1]}`)
+}
+"""
 failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
