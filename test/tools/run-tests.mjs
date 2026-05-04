@@ -188,6 +188,12 @@ function printDetailLines(lines) {
     }
 }
 
+function printRunSummary(summary) {
+    const total = summary.pass + summary.fail
+    console.log('')
+    console.log(`${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}`)
+}
+
 function sanitizeSegment(value) {
     return String(value).replace(/[<>:"/\\|?*]+/g, '_')
 }
@@ -457,6 +463,8 @@ function main() {
             2
         )
     )
+
+    printRunSummary(summary)
 
     const exitCode = summary.fail > 0 ? 1 : 0
     process.exit(exitCode)

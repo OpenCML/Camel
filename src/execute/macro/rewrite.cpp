@@ -13,6 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,10 +41,7 @@ gc_node_ref_t bridgeMacroRewriteControl(
     const std::vector<gc_node_ref_t> ctrlPreds(
         draft.ctrlInputsOf(replacedNodeId).begin(),
         draft.ctrlInputsOf(replacedNodeId).end());
-    const bool needControlBridge = !ctrlPreds.empty() || draft.isBranchArmAnchor(replacedNodeId) ||
-                                   draft.entryNode() == replacedNodeId ||
-                                   draft.exitNode() == replacedNodeId;
-    if (!needControlBridge) {
+    if (ctrlPreds.empty()) {
         return valueNodeId;
     }
 
@@ -58,15 +56,6 @@ gc_node_ref_t bridgeMacroRewriteControl(
         .ctrlInputs   = ctrlPreds,
     };
     return draft.addNode(gateInit);
-}
-
-void dropMacroRewriteControlUses(camel::runtime::GraphDraft &draft, gc_node_ref_t replacedNodeId) {
-    std::vector<gc_node_ref_t> ctrlUsers(
-        draft.ctrlUsersOf(replacedNodeId).begin(),
-        draft.ctrlUsersOf(replacedNodeId).end());
-    for (gc_node_ref_t userId : ctrlUsers) {
-        draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, userId, replacedNodeId);
-    }
 }
 
 } // namespace
@@ -96,11 +85,7 @@ bool applyMacroRewrite(
         bridgeMacroRewriteControl(draft, draftNodeId, valueNodeId);
 
     draft.replaceAllValueUses(draftNodeId, replacementNodeId);
-    if (replacementNodeId != valueNodeId) {
-        draft.replaceAllCtrlUses(draftNodeId, replacementNodeId);
-    } else {
-        dropMacroRewriteControlUses(draft, draftNodeId);
-    }
+    draft.replaceAllCtrlUses(draftNodeId, replacementNodeId);
     draft.retargetBranchArmAnchors(draftNodeId, replacementNodeId, replacementNodeId);
     if (draft.outputNode() == draftNodeId) {
         draft.setOutputNode(replacementNodeId);
