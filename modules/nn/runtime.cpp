@@ -13,6 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +25,9 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 
+#include <span>
 #include <stdexcept>
+#include <vector>
 
 namespace camel::nn {
 
@@ -46,6 +49,44 @@ void requireSameShape(
     const tensor::TensorObject *lhs, const tensor::TensorObject *rhs, const char *what) {
     if (!lhs || !rhs || !lhs->sameShape(rhs)) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "{} requires matching Tensor shapes", what);
+    }
+}
+
+bool canReduceLeadingBroadcast(
+    const tensor::TensorObject *target, const tensor::TensorObject *source) {
+    if (!target || !source || target->numel() == 0 || source->numel() == 0) {
+        return false;
+    }
+    if (target->rank() == 0) {
+        return true;
+    }
+    if (source->rank() == target->rank() + 1) {
+        for (size_t i = 0; i < target->rank(); ++i) {
+            if (source->dim(i + 1) != target->dim(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (source->rank() == target->rank() && target->rank() > 0 && target->dim(0) == 1 &&
+        source->dim(0) >= 1) {
+        for (size_t i = 1; i < target->rank(); ++i) {
+            if (source->dim(i) != target->dim(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+void addReducedLeadingBroadcast(tensor::TensorObject *target, const tensor::TensorObject *source) {
+    std::vector<double> reduced(static_cast<size_t>(target->numel()), 0.0);
+    for (uint64_t i = 0; i < source->numel(); ++i) {
+        reduced[static_cast<size_t>(i % target->numel())] += source->getAsDouble(i);
+    }
+    for (uint64_t i = 0; i < target->numel(); ++i) {
+        target->setFromDouble(i, target->getAsDouble(i) + reduced[static_cast<size_t>(i)]);
     }
 }
 
@@ -81,7 +122,13 @@ void ParameterObject::zeroGrad() { fillTensor(grad_, 0.0); }
 void ParameterObject::addGrad(const tensor::TensorObject *grad) {
     requireFloatingTensor(grad_, "add_grad");
     requireFloatingTensor(grad, "add_grad");
-    requireSameShape(grad_, grad, "add_grad");
+    if (!grad_->sameShape(grad)) {
+        if (canReduceLeadingBroadcast(grad_, grad)) {
+            addReducedLeadingBroadcast(grad_, grad);
+            return;
+        }
+        requireSameShape(grad_, grad, "add_grad");
+    }
     for (uint64_t i = 0; i < grad_->numel(); ++i) {
         grad_->setFromDouble(i, grad_->getAsDouble(i) + grad->getAsDouble(i));
     }

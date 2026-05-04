@@ -13,14 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
  * Neural-network graph-generation operators.
  *
- * `apply_gradients` is intentionally narrow in this demo: it accepts a static
- * scalar loss function and emits a linear-MSE SGD step graph.
+ * `apply_gradients` accepts a static scalar loss graph and emits a sync SGD
+ * training step with forward evaluation, reverse-mode VJP synthesis, gradient
+ * accumulation, and deterministic parameter updates.
  */
 
 #pragma once
@@ -34,7 +36,6 @@
 namespace ctx = camel::core::context;
 
 slot_t __nn_apply_gradients__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __nn_compile_step__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __nn_vjp__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __nn_parameter__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __nn_value__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);

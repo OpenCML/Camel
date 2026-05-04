@@ -13,29 +13,23 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * Demo reverse-mode graph synthesis.
+ * Reverse-mode graph synthesis for small static NN loss graphs.
  *
- * This is not the final autograd engine. The legacy `apply_gradients` path
- * still emits one training graph for the common linear regression MSE pattern:
- *
- *   pred = X @ w
- *   grad = 2 / m * transpose(X) @ (pred - y)
- *   new_w = w - lr * grad
- *
- * The with-context `compile_step` path now builds the same pattern through the
- * VJP registry, which is the first architectural slice of generic autograd.
+ * `apply_gradients` is the public training-step macro. It clones the supplied
+ * scalar loss graph into a sync step graph, seeds the loss cotangent with 1.0,
+ * walks reachable differentiable nodes backward through the VJP registry, and
+ * appends deterministic SGD updates for every `nn:value(Parameter)` leaf that
+ * receives a gradient.
  */
 
 #include "operators.h"
 
 #include "../tensor/type.h"
-#include "runtime.h"
-#include "type.h"
-#include "vjp_registry.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/rtdata/func.h"
@@ -45,11 +39,16 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/draft.h"
 #include "camel/utils/type.h"
+#include "runtime.h"
+#include "type.h"
+#include "vjp_registry.h"
 
+#include <algorithm>
 #include <atomic>
 #include <format>
 #include <memory>
 #include <optional>
+#include <unordered_set>
 
 namespace mm = camel::core::mm;
 using namespace camel::core::context;
@@ -64,52 +63,45 @@ Type *tensorType() { return camel::tensor::TensorType::Default(); }
 
 Type *parameterType() { return camel::nn::ParameterType::Default(); }
 
-FunctionType *linearSgdStepType() {
-    Type *tensor = tensorType();
-    return FunctionType::create(
-        {},
-        {
-            {tensor, false},
-            {tensor, false},
-            {tensor, false},
-            {Type::Float64(), false},
-        },
-        tensor,
-        Modifier::None);
-}
-
-bool looksLikeScalarLoss(FunctionType *funcType) {
-    if (!funcType || funcType->normTypesCount() != 3 || funcType->withTypesCount() != 0) {
+bool isScalarLossType(FunctionType *funcType) {
+    if (!funcType || funcType->modifiers().sync() || funcType->modifiers().macro()) {
         return false;
     }
     return funcType->exitType() == Type::Float64() || funcType->exitType() == Type::Float32();
 }
 
-bool looksLikeLinearContextLoss(FunctionType *funcType) {
-    if (!funcType || funcType->withTypesCount() != 2 || funcType->normTypesCount() != 1) {
+bool typeContainsParameter(Type *type) {
+    if (!type) {
         return false;
     }
-    if (funcType->exitType() != Type::Float64() && funcType->exitType() != Type::Float32()) {
-        return false;
+    if (type->code() == camel::nn::ParameterType::typeCode()) {
+        return true;
     }
-    if (funcType->withTypeAt(1)->code() != camel::tensor::TensorType::typeCode() ||
-        funcType->normTypeAt(0)->code() != camel::tensor::TensorType::typeCode()) {
-        return false;
+    if (type->code() == TypeCode::Struct) {
+        auto *structType = tt::as_ptr<StructType>(type);
+        for (Type *fieldType : structType->types()) {
+            if (typeContainsParameter(fieldType)) {
+                return true;
+            }
+        }
     }
-    if (funcType->withTypeAt(0)->code() != TypeCode::Struct) {
-        return false;
+    if (type->code() == TypeCode::Tuple) {
+        auto *tupleType = tt::as_ptr<TupleType>(type);
+        for (Type *elemType : tupleType->types()) {
+            if (typeContainsParameter(elemType)) {
+                return true;
+            }
+        }
     }
-    auto *modelType = tt::as_ptr<StructType>(funcType->withTypeAt(0));
-    auto weight     = modelType->findField("weight");
-    return weight.has_value() &&
-           modelType->typeAt(*weight)->code() == camel::nn::ParameterType::typeCode();
+    return false;
 }
 
-FunctionType *linearContextSgdStepType(FunctionType *lossType) {
+FunctionType *gradientStepType(FunctionType *lossType) {
     param_vec_t withParams;
     withParams.reserve(lossType->withTypesCount());
     for (size_t i = 0; i < lossType->withTypesCount(); ++i) {
-        withParams.emplace_back(lossType->withTypeAt(i), i == 0);
+        Type *type = lossType->withTypeAt(i);
+        withParams.emplace_back(type, lossType->withIsVarAt(i) || typeContainsParameter(type));
     }
 
     param_vec_t normParams;
@@ -118,7 +110,7 @@ FunctionType *linearContextSgdStepType(FunctionType *lossType) {
         normParams.emplace_back(lossType->normTypeAt(i), false);
     }
     normParams.emplace_back(Type::Float64(), false);
-    return FunctionType::create(withParams, normParams, Type::Float64(), Modifier::Sync);
+    return FunctionType::create(withParams, normParams, lossType->exitType(), Modifier::Sync);
 }
 
 class ApplyGradientsResolver final : public FuncTypeResolver {
@@ -131,42 +123,19 @@ class ApplyGradientsResolver final : public FuncTypeResolver {
             return std::nullopt;
         }
         auto *lossType = tt::as_ptr<FunctionType>(norm[0]);
-        if (!looksLikeScalarLoss(lossType)) {
-            return std::nullopt;
-        }
-        return FunctionType::create({}, {{norm[0], false}}, linearSgdStepType(), Modifier::Macro);
-    }
-
-    std::string signature() const override {
-        return "(loss: (w: Tensor, X: Tensor, y: Tensor) => float) => "
-               "(w: Tensor, X: Tensor, y: Tensor, lr: float) => Tensor";
-    }
-};
-
-class CompileStepResolver final : public FuncTypeResolver {
-  public:
-    std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override {
-        (void)modifiers;
-        if (!with.empty() || norm.size() != 1 || norm[0]->code() != TypeCode::Function) {
-            return std::nullopt;
-        }
-        auto *lossType = tt::as_ptr<FunctionType>(norm[0]);
-        if (!looksLikeLinearContextLoss(lossType)) {
+        if (!isScalarLossType(lossType)) {
             return std::nullopt;
         }
         return FunctionType::create(
             {},
             {{norm[0], false}},
-            linearContextSgdStepType(lossType),
+            gradientStepType(lossType),
             Modifier::Macro);
     }
 
     std::string signature() const override {
-        return "(loss: <layer: { weight: Parameter }, y: Tensor> (x: Tensor) => float) => "
-               "sync <var layer: { weight: Parameter }, y: Tensor> "
-               "(x: Tensor, lr: float) => float";
+        return "(loss: <ctx...> (args...) => float) => "
+               "sync <var trainable_ctx...> (args..., lr: float) => float";
     }
 };
 
@@ -187,17 +156,8 @@ class VjpDecoratorResolver final : public FuncTypeResolver {
             Modifier::Macro);
     }
 
-    std::string signature() const override {
-        return "<rule: Function> (f: Function) => Function";
-    }
+    std::string signature() const override { return "<rule: Function> (f: Function) => Function"; }
 };
-
-gc_node_ref_t addWithPort(GraphDraft &draft, Type *type) {
-    const gc_slot_idx_t slot = draft.allocateRuntimeSlot(type);
-    const gc_node_ref_t node = draft.addPortNode(type, slot);
-    draft.appendWithPort(node);
-    return node;
-}
 
 gc_node_ref_t addNormPort(GraphDraft &draft, Type *type) {
     const gc_slot_idx_t slot = draft.allocateRuntimeSlot(type);
@@ -210,10 +170,6 @@ gc_node_ref_t addStaticFloat(GraphDraft &draft, double value) {
     return draft.materializeStaticValue(toSlot<Float64>(value), Type::Float64());
 }
 
-gc_node_ref_t addStaticInt(GraphDraft &draft, int64_t value) {
-    return draft.materializeStaticValue(toSlot<Int64>(value), Type::Int64());
-}
-
 gc_node_ref_t addOper(
     GraphDraft &draft, Type *type, std::string_view uri,
     std::initializer_list<gc_node_ref_t> normInputs) {
@@ -223,92 +179,133 @@ gc_node_ref_t addOper(
     return node;
 }
 
-GCGraph *buildLinearMseSgdStepGraph() {
-    static std::atomic<size_t> nextId{0};
-    const size_t id = nextId.fetch_add(1, std::memory_order_relaxed);
-
-    Type *tensor = tensorType();
-    GraphDraft draft;
-    draft.setFuncType(linearSgdStepType());
-    draft.setClosureType(TupleType::create());
-
-    const gc_node_ref_t w  = addNormPort(draft, tensor);
-    const gc_node_ref_t x  = addNormPort(draft, tensor);
-    const gc_node_ref_t y  = addNormPort(draft, tensor);
-    const gc_node_ref_t lr = addNormPort(draft, Type::Float64());
-
-    const gc_node_ref_t pred = addOper(draft, tensor, "tensor:matmul", {x, w});
-    const gc_node_ref_t errors = addOper(draft, tensor, "tensor:subtract", {pred, y});
-    const gc_node_ref_t xT     = addOper(draft, tensor, "tensor:transpose", {x});
-    const gc_node_ref_t dw     = addOper(draft, tensor, "tensor:matmul", {xT, errors});
-
-    const gc_node_ref_t shape =
-        addOper(draft, ArrayType::create(Type::Int64()), "tensor:shape", {x});
-    const gc_node_ref_t zero   = addStaticInt(draft, 0);
-    const gc_node_ref_t m      = addOper(draft, Type::Int64(), ":op/idx_arr", {shape, zero});
-    const gc_node_ref_t mFloat = draft.addCastNode(Type::Float64());
-    draft.setNormInputs(mFloat, std::span<const gc_node_ref_t>(&m, 1));
-
-    const gc_node_ref_t two   = addStaticFloat(draft, 2.0);
-    const gc_node_ref_t scale = addOper(draft, Type::Float64(), ":op/div_d", {two, mFloat});
-    const gc_node_ref_t grad  = addOper(draft, tensor, "tensor:multiply", {scale, dw});
-    const gc_node_ref_t step  = addOper(draft, tensor, "tensor:multiply", {lr, grad});
-    const gc_node_ref_t newW  = addOper(draft, tensor, "tensor:subtract", {w, step});
-
-    draft.setEntryNode(pred);
-    draft.setOutputNode(newW);
-    draft.setExitNode(newW);
-    draft.setReturnNode(newW, GCReturnKind::Self);
-
-    const std::string suffix = std::format("${}", id);
-    return draft.encode(
-        "nn.apply_gradients.linear_mse_sgd" + suffix,
-        "nn.apply_gradients.linear_mse_sgd" + suffix,
-        "nn::linear_mse_sgd_step" + suffix);
+std::string_view operUri(GraphDraft &draft, gc_node_ref_t node) {
+    auto payload = draft.payloadOf(node);
+    if (payload.size_bytes() < sizeof(GCOperBody)) {
+        return {};
+    }
+    const auto *body = reinterpret_cast<const GCOperBody *>(payload.data());
+    return body->uri();
 }
 
-GCGraph *buildLinearContextMseSgdStepGraph(FunctionType *lossType) {
-    static std::atomic<size_t> nextId{0};
-    const size_t id = nextId.fetch_add(1, std::memory_order_relaxed);
+bool isNonDifferentiableOperUri(std::string_view uri) {
+    // Constructors and shape/index helpers can receive cotangents through
+    // larger differentiable expressions, but they do not represent trainable
+    // paths and should stop gradients rather than report missing VJPs.
+    return uri == "tensor:zeros" || uri == "tensor:ones" || uri == "tensor:full" ||
+           uri == "tensor:shape" || uri == ":op/idx_arr" || uri == ":op/ltod";
+}
 
-    Type *tensor = tensorType();
-    GraphDraft draft;
-    draft.setFuncType(linearContextSgdStepType(lossType));
-    draft.setClosureType(TupleType::create());
+std::string nodeKindName(GCNodeKind kind) {
+    switch (kind) {
+    case GCNodeKind::Data:
+        return "DATA";
+    case GCNodeKind::Port:
+        return "PORT";
+    case GCNodeKind::Cast:
+        return "CAST";
+    case GCNodeKind::Copy:
+        return "COPY";
+    case GCNodeKind::Fill:
+        return "FILL";
+    case GCNodeKind::Accs:
+        return "ACCS";
+    case GCNodeKind::Brch:
+        return "BRCH";
+    case GCNodeKind::Join:
+        return "JOIN";
+    case GCNodeKind::Call:
+        return "CALL";
+    case GCNodeKind::Bind:
+        return "BIND";
+    case GCNodeKind::Func:
+        return "FUNC";
+    case GCNodeKind::Oper:
+        return "OPER";
+    case GCNodeKind::Sync:
+        return "SYNC";
+    case GCNodeKind::Gate:
+        return "GATE";
+    case GCNodeKind::Dref:
+        return "DREF";
+    }
+    return "UNKNOWN";
+}
 
-    const gc_node_ref_t layer = addWithPort(draft, lossType->withTypeAt(0));
-    const gc_node_ref_t y     = addWithPort(draft, tensor);
-    const gc_node_ref_t x     = addNormPort(draft, tensor);
-    const gc_node_ref_t lr    = addNormPort(draft, Type::Float64());
+void collectReachableForwardTape(
+    GraphDraft &draft, gc_node_ref_t node, std::unordered_set<gc_node_ref_t> &seen,
+    std::vector<gc_node_ref_t> &tape) {
+    if (node == kInvalidNodeRef || !draft.alive(node) || !seen.insert(node).second) {
+        return;
+    }
+    for (gc_node_ref_t input : draft.normInputsOf(node)) {
+        collectReachableForwardTape(draft, input, seen, tape);
+    }
+    for (gc_node_ref_t input : draft.withInputsOf(node)) {
+        collectReachableForwardTape(draft, input, seen, tape);
+    }
+    tape.push_back(node);
+}
 
-    const gc_node_ref_t weight = draft.addAccsNode(parameterType(), "weight");
-    draft.setNormInputs(weight, std::span<const gc_node_ref_t>(&layer, 1));
+std::vector<gc_node_ref_t> collectReachableForwardTape(GraphDraft &draft, gc_node_ref_t output) {
+    std::unordered_set<gc_node_ref_t> seen;
+    std::vector<gc_node_ref_t> tape;
+    collectReachableForwardTape(draft, output, seen, tape);
+    return tape;
+}
 
-    const gc_node_ref_t wData = addOper(draft, tensor, "nn:value", {weight});
-    const gc_node_ref_t pred  = addOper(draft, tensor, "tensor:matmul", {x, wData});
-    const gc_node_ref_t errors = addOper(draft, tensor, "tensor:subtract", {pred, y});
-    const gc_node_ref_t squared = addOper(draft, tensor, "tensor:multiply", {errors, errors});
-    const gc_node_ref_t lossSum = addOper(draft, Type::Float64(), "tensor:sum", {squared});
+void propagateSingleInputGradient(
+    camel::nn::VjpBuildContext &vjp, GraphDraft &draft, gc_node_ref_t node) {
+    auto gradient = vjp.gradientOf(node);
+    if (!gradient) {
+        return;
+    }
+    const auto inputs = draft.normInputsOf(node);
+    if (!inputs.empty()) {
+        vjp.accumulateGradient(inputs.front(), *gradient);
+    }
+}
 
-    const gc_node_ref_t shape =
-        addOper(draft, ArrayType::create(Type::Int64()), "tensor:shape", {x});
-    const gc_node_ref_t zero   = addStaticInt(draft, 0);
-    const gc_node_ref_t m      = addOper(draft, Type::Int64(), ":op/idx_arr", {shape, zero});
-    const gc_node_ref_t mFloat = draft.addCastNode(Type::Float64());
-    draft.setNormInputs(mFloat, std::span<const gc_node_ref_t>(&m, 1));
-    const gc_node_ref_t loss = addOper(draft, Type::Float64(), ":op/div_d", {lossSum, mFloat});
+void applyNodeVjp(camel::nn::VjpBuildContext &vjp, GraphDraft &draft, gc_node_ref_t node) {
+    if (!vjp.gradientOf(node)) {
+        return;
+    }
+    const DraftNodeHeader *header = draft.header(node);
+    if (!header) {
+        return;
+    }
 
-    camel::nn::VjpBuildContext vjp(draft);
-    vjp.seedGradient(loss, addStaticFloat(draft, 1.0));
-    camel::nn::applyVjpRule(vjp, ":op/div_d", {lossSum, mFloat}, loss);
-    camel::nn::applyVjpRule(vjp, "tensor:sum", {squared}, lossSum);
-    camel::nn::applyVjpRule(vjp, "tensor:multiply", {errors, errors}, squared);
-    camel::nn::applyVjpRule(vjp, "tensor:subtract", {pred, y}, errors);
-    camel::nn::applyVjpRule(vjp, "tensor:matmul", {x, wData}, pred);
-    camel::nn::applyVjpRule(vjp, "nn:value", {weight}, wData);
+    switch (header->kind) {
+    case GCNodeKind::Oper: {
+        const std::string key(operUri(draft, node));
+        if (isNonDifferentiableOperUri(key)) {
+            return;
+        }
+        camel::nn::applyVjpRule(vjp, key, draft.normInputsOf(node), node);
+        return;
+    }
+    case GCNodeKind::Cast:
+    case GCNodeKind::Copy:
+    case GCNodeKind::Gate:
+        propagateSingleInputGradient(vjp, draft, node);
+        return;
+    case GCNodeKind::Data:
+    case GCNodeKind::Port:
+    case GCNodeKind::Accs:
+        return;
+    default:
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::format(
+                "apply_gradients cannot differentiate through {} nodes yet",
+                nodeKindName(header->kind)));
+    }
+}
 
+gc_node_ref_t appendOptimizerUpdates(
+    GraphDraft &draft, std::span<const camel::nn::ParameterGradient> gradients, gc_node_ref_t lr) {
     gc_node_ref_t updateTail = kInvalidNodeRef;
-    for (const auto &paramGrad : vjp.parameterGradients()) {
+    for (const auto &paramGrad : gradients) {
         const gc_node_ref_t zeroGrad =
             addOper(draft, Type::Void(), "nn:zero_grad", {paramGrad.parameter});
         if (updateTail != kInvalidNodeRef) {
@@ -323,27 +320,58 @@ GCGraph *buildLinearContextMseSgdStepGraph(FunctionType *lossType) {
         draft.setCtrlInputs(sgd, std::span<const gc_node_ref_t>(&addGrad, 1));
         updateTail = sgd;
     }
+    return updateTail;
+}
+
+GCGraph *buildAutogradSgdStepGraph(GCGraph *lossGraph) {
+    static std::atomic<size_t> nextId{0};
+    const size_t id = nextId.fetch_add(1, std::memory_order_relaxed);
+
+    auto draftPtr     = GraphDraft::decode(lossGraph);
+    GraphDraft &draft = *draftPtr;
+    auto *lossType    = lossGraph->funcType();
+    draft.setFuncType(gradientStepType(lossType));
+    const gc_node_ref_t lr = addNormPort(draft, Type::Float64());
+
+    gc_node_ref_t loss = draft.outputNode();
+    if (loss == kInvalidNodeRef) {
+        loss = draft.returnNode();
+    }
+    if (loss == kInvalidNodeRef) {
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "apply_gradients loss graph has no output");
+    }
+
+    const std::vector<gc_node_ref_t> tape = collectReachableForwardTape(draft, loss);
+
+    camel::nn::VjpBuildContext vjp(draft);
+    vjp.seedGradient(loss, addStaticFloat(draft, 1.0));
+    for (auto it = tape.rbegin(); it != tape.rend(); ++it) {
+        applyNodeVjp(vjp, draft, *it);
+    }
+
+    const std::vector<camel::nn::ParameterGradient> parameterGradients = vjp.parameterGradients();
+    const gc_node_ref_t updateTail = appendOptimizerUpdates(draft, parameterGradients, lr);
     if (updateTail == kInvalidNodeRef) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "compile_step found no trainable Parameter");
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "apply_gradients found no trainable Parameter");
     }
 
     const auto *lossHeader = draft.header(loss);
     ASSERT(lossHeader != nullptr, "Loss node header is missing.");
-    const gc_node_ref_t gatedLoss =
-        draft.addGateNode(Type::Float64(), lossHeader->dataIndex);
+    const gc_node_ref_t gatedLoss = draft.addGateNode(lossHeader->dataType, lossHeader->dataIndex);
     draft.setNormInputs(gatedLoss, std::span<const gc_node_ref_t>(&loss, 1));
     draft.setCtrlInputs(gatedLoss, std::span<const gc_node_ref_t>(&updateTail, 1));
 
-    draft.setEntryNode(pred);
     draft.setOutputNode(gatedLoss);
     draft.setExitNode(gatedLoss);
     draft.setReturnNode(gatedLoss, GCReturnKind::Self);
 
     const std::string suffix = std::format("${}", id);
     return draft.encode(
-        "nn.compile_step.linear_context_mse_sgd" + suffix,
-        "nn.compile_step.linear_context_mse_sgd" + suffix,
-        "nn::linear_context_mse_sgd_step" + suffix);
+        "nn.apply_gradients.autograd_sgd" + suffix,
+        "nn.apply_gradients.autograd_sgd" + suffix,
+        "nn::autograd_sgd_step" + suffix);
 }
 
 } // namespace
@@ -351,7 +379,6 @@ GCGraph *buildLinearContextMseSgdStepGraph(FunctionType *lossType) {
 std::unordered_map<std::string, operator_t> getNnOpsMap() {
     return {
         {"apply_gradients", __nn_apply_gradients__},
-        {"compile_step", __nn_compile_step__},
         {"vjp", __nn_vjp__},
         {"parameter", __nn_parameter__},
         {"value", __nn_value__},
@@ -366,37 +393,20 @@ const std::vector<oper_group_ptr_t> &getNnOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
             "apply_gradients",
-            {{"nn:apply_gradients",
-              std::make_shared<ApplyGradientsResolver>()}}),
-        OperatorGroup::create(
-            "compile_step",
-            {{"nn:compile_step",
-              std::make_shared<CompileStepResolver>()}}),
-        OperatorGroup::create(
-            "vjp",
-            {{"nn:vjp",
-              std::make_shared<VjpDecoratorResolver>()}}),
+            {{"nn:apply_gradients", std::make_shared<ApplyGradientsResolver>()}}),
+        OperatorGroup::create("vjp", {{"nn:vjp", std::make_shared<VjpDecoratorResolver>()}}),
         OperatorGroup::create(
             "parameter",
             {{"nn:parameter",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{tensorType(), false}},
-                  parameterType())}}),
+              StaticFuncTypeResolver::create({}, {{tensorType(), false}}, parameterType())}}),
         OperatorGroup::create(
             "value",
             {{"nn:value",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{parameterType(), false}},
-                  tensorType())}}),
+              StaticFuncTypeResolver::create({}, {{parameterType(), false}}, tensorType())}}),
         OperatorGroup::create(
             "grad",
             {{"nn:grad",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{parameterType(), false}},
-                  tensorType())}}),
+              StaticFuncTypeResolver::create({}, {{parameterType(), false}}, tensorType())}}),
         OperatorGroup::create(
             "zero_grad",
             {{"nn:zero_grad",
@@ -430,37 +440,19 @@ slot_t __nn_apply_gradients__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)ctx;
     auto *loss = norm.get<Function *>(0);
     if (!loss || !loss->graph()) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "apply_gradients requires a static loss graph");
-    }
-    auto *lossType = loss->graph()->funcType();
-    if (!looksLikeScalarLoss(lossType)) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
-            "apply_gradients demo expects (w: Tensor, X: Tensor, y: Tensor) => float");
+            "apply_gradients requires a static loss graph");
+    }
+    auto *lossType = loss->graph()->funcType();
+    if (!isScalarLossType(lossType)) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "apply_gradients expects a static non-sync scalar loss function");
     }
 
-    GCGraph *stepGraph = buildLinearMseSgdStepGraph();
-    Function *step     = Function::create(stepGraph, TupleType::create(), mm::autoSpace());
-    return toSlot<Function *>(step);
-}
-
-slot_t __nn_compile_step__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    (void)with;
-    (void)ctx;
     camel::nn::ensureBuiltinVjpRulesRegistered();
-    auto *loss = norm.get<Function *>(0);
-    if (!loss || !loss->graph()) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "compile_step requires a static loss graph");
-    }
-    auto *lossType = loss->graph()->funcType();
-    if (!looksLikeLinearContextLoss(lossType)) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "compile_step demo expects <layer: { weight: Parameter }, y: Tensor> "
-            "(x: Tensor) => float");
-    }
-
-    GCGraph *stepGraph = buildLinearContextMseSgdStepGraph(lossType);
+    GCGraph *stepGraph = buildAutogradSgdStepGraph(loss->graph());
     Function *step     = Function::create(stepGraph, TupleType::create(), mm::autoSpace());
     return toSlot<Function *>(step);
 }

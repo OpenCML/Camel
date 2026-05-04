@@ -13,6 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +27,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/runtime/draft.h"
 
+#include <algorithm>
 #include <array>
 #include <format>
 #include <mutex>
@@ -81,6 +83,23 @@ void matmulVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
     ctx.accumulateGradient(rhs, ctx.addOper(tensorType(), "tensor:matmul", rhsGradInputs));
 }
 
+void addVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 2);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+
+    const rt::gc_node_ref_t lhs = call.inputs[0];
+    const rt::gc_node_ref_t rhs = call.inputs[1];
+    if (isTensorType(ctx.nodeType(lhs)) || isFloat64(ctx.nodeType(lhs))) {
+        ctx.accumulateGradient(lhs, *dy);
+    }
+    if (isTensorType(ctx.nodeType(rhs)) || isFloat64(ctx.nodeType(rhs))) {
+        ctx.accumulateGradient(rhs, *dy);
+    }
+}
+
 void subtractVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
     requireInputCount(call, 2);
     auto dy = ctx.gradientOf(call.output);
@@ -123,6 +142,34 @@ void multiplyVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
     }
 }
 
+void divideVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 2);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+
+    const rt::gc_node_ref_t lhs = call.inputs[0];
+    const rt::gc_node_ref_t rhs = call.inputs[1];
+    if (isTensorType(ctx.nodeType(lhs))) {
+        std::array<rt::gc_node_ref_t, 2> lhsGradInputs{*dy, rhs};
+        ctx.accumulateGradient(lhs, ctx.addOper(tensorType(), "tensor:divide", lhsGradInputs));
+    }
+    if (isTensorType(ctx.nodeType(rhs))) {
+        const rt::gc_node_ref_t zero = ctx.addStaticFloat(0.0);
+        std::array<rt::gc_node_ref_t, 2> negDyInputs{zero, *dy};
+        const rt::gc_node_ref_t negDy = ctx.addOper(tensorType(), "tensor:subtract", negDyInputs);
+        std::array<rt::gc_node_ref_t, 2> rhsSquaredInputs{rhs, rhs};
+        const rt::gc_node_ref_t rhsSquared =
+            ctx.addOper(tensorType(), "tensor:multiply", rhsSquaredInputs);
+        std::array<rt::gc_node_ref_t, 2> numeratorInputs{negDy, lhs};
+        const rt::gc_node_ref_t numerator =
+            ctx.addOper(tensorType(), "tensor:multiply", numeratorInputs);
+        std::array<rt::gc_node_ref_t, 2> rhsGradInputs{numerator, rhsSquared};
+        ctx.accumulateGradient(rhs, ctx.addOper(tensorType(), "tensor:divide", rhsGradInputs));
+    }
+}
+
 void sumVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
     requireInputCount(call, 1);
     auto dy = ctx.gradientOf(call.output);
@@ -138,6 +185,87 @@ void sumVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
     ctx.accumulateGradient(input, ctx.addOper(tensorType(), "tensor:full", fullInputs));
 }
 
+void transposeVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 1);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    std::array<rt::gc_node_ref_t, 1> inputs{*dy};
+    ctx.accumulateGradient(call.inputs[0], ctx.addOper(tensorType(), "tensor:transpose", inputs));
+}
+
+void reshapeVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 2);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    std::array<rt::gc_node_ref_t, 1> shapeInputs{call.inputs[0]};
+    const rt::gc_node_ref_t originalShape =
+        ctx.addOper(ArrayType::create(Type::Int64()), "tensor:shape", shapeInputs);
+    std::array<rt::gc_node_ref_t, 2> reshapeInputs{*dy, originalShape};
+    ctx.accumulateGradient(
+        call.inputs[0],
+        ctx.addOper(tensorType(), "tensor:reshape", reshapeInputs));
+}
+
+void expVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 1);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    std::array<rt::gc_node_ref_t, 2> inputs{*dy, call.output};
+    ctx.accumulateGradient(call.inputs[0], ctx.addOper(tensorType(), "tensor:multiply", inputs));
+}
+
+void logVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 1);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    std::array<rt::gc_node_ref_t, 2> inputs{*dy, call.inputs[0]};
+    ctx.accumulateGradient(call.inputs[0], ctx.addOper(tensorType(), "tensor:divide", inputs));
+}
+
+void sigmoidVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 1);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    const rt::gc_node_ref_t one = ctx.addStaticFloat(1.0);
+    std::array<rt::gc_node_ref_t, 2> oneMinusYInputs{one, call.output};
+    const rt::gc_node_ref_t oneMinusY =
+        ctx.addOper(tensorType(), "tensor:subtract", oneMinusYInputs);
+    std::array<rt::gc_node_ref_t, 2> yTimesInputs{call.output, oneMinusY};
+    const rt::gc_node_ref_t yTimesOneMinusY =
+        ctx.addOper(tensorType(), "tensor:multiply", yTimesInputs);
+    std::array<rt::gc_node_ref_t, 2> gradInputs{*dy, yTimesOneMinusY};
+    ctx.accumulateGradient(
+        call.inputs[0],
+        ctx.addOper(tensorType(), "tensor:multiply", gradInputs));
+}
+
+void tanhVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 1);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    const rt::gc_node_ref_t one = ctx.addStaticFloat(1.0);
+    std::array<rt::gc_node_ref_t, 2> ySquaredInputs{call.output, call.output};
+    const rt::gc_node_ref_t ySquared = ctx.addOper(tensorType(), "tensor:multiply", ySquaredInputs);
+    std::array<rt::gc_node_ref_t, 2> factorInputs{one, ySquared};
+    const rt::gc_node_ref_t factor = ctx.addOper(tensorType(), "tensor:subtract", factorInputs);
+    std::array<rt::gc_node_ref_t, 2> gradInputs{*dy, factor};
+    ctx.accumulateGradient(
+        call.inputs[0],
+        ctx.addOper(tensorType(), "tensor:multiply", gradInputs));
+}
+
 void divScalarVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
     requireInputCount(call, 2);
     auto dy = ctx.gradientOf(call.output);
@@ -149,7 +277,46 @@ void divScalarVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
     const rt::gc_node_ref_t denominator = call.inputs[1];
     std::array<rt::gc_node_ref_t, 2> numeratorGradInputs{*dy, denominator};
     ctx.accumulateGradient(
-        numerator, ctx.addOper(Type::Float64(), ":op/div_d", numeratorGradInputs));
+        numerator,
+        ctx.addOper(Type::Float64(), ":op/div_d", numeratorGradInputs));
+}
+
+void addScalarVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 2);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    ctx.accumulateGradient(call.inputs[0], *dy);
+    ctx.accumulateGradient(call.inputs[1], *dy);
+}
+
+void subScalarVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 2);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    ctx.accumulateGradient(call.inputs[0], *dy);
+    const rt::gc_node_ref_t zero = ctx.addStaticFloat(0.0);
+    std::array<rt::gc_node_ref_t, 2> negInputs{zero, *dy};
+    ctx.accumulateGradient(call.inputs[1], ctx.addOper(Type::Float64(), ":op/sub_d", negInputs));
+}
+
+void mulScalarVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 2);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    std::array<rt::gc_node_ref_t, 2> lhsGradInputs{*dy, call.inputs[1]};
+    ctx.accumulateGradient(
+        call.inputs[0],
+        ctx.addOper(Type::Float64(), ":op/mul_d", lhsGradInputs));
+    std::array<rt::gc_node_ref_t, 2> rhsGradInputs{*dy, call.inputs[0]};
+    ctx.accumulateGradient(
+        call.inputs[1],
+        ctx.addOper(Type::Float64(), ":op/mul_d", rhsGradInputs));
 }
 
 void valueVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
@@ -244,6 +411,7 @@ std::vector<ParameterGradient> VjpBuildContext::parameterGradients() const {
     for (const auto &[parameter, gradient] : parameterGradients_) {
         result.push_back(ParameterGradient{.parameter = parameter, .gradient = gradient});
     }
+    std::ranges::sort(result, {}, &ParameterGradient::parameter);
     return result;
 }
 
@@ -285,17 +453,28 @@ void ensureBuiltinVjpRulesRegistered() {
     static std::once_flag once;
     std::call_once(once, [] {
         auto &registry = VjpRegistry::instance();
+        registry.registerBuiltin("tensor:add", addVjp, "add_vjp");
         registry.registerBuiltin("tensor:matmul", matmulVjp, "matmul_vjp");
         registry.registerBuiltin("tensor:subtract", subtractVjp, "subtract_vjp");
         registry.registerBuiltin("tensor:multiply", multiplyVjp, "multiply_vjp");
+        registry.registerBuiltin("tensor:divide", divideVjp, "divide_vjp");
         registry.registerBuiltin("tensor:sum", sumVjp, "sum_vjp");
+        registry.registerBuiltin("tensor:transpose", transposeVjp, "transpose_vjp");
+        registry.registerBuiltin("tensor:reshape", reshapeVjp, "reshape_vjp");
+        registry.registerBuiltin("tensor:exp", expVjp, "exp_vjp");
+        registry.registerBuiltin("tensor:log", logVjp, "log_vjp");
+        registry.registerBuiltin("tensor:sigmoid", sigmoidVjp, "sigmoid_vjp");
+        registry.registerBuiltin("tensor:tanh", tanhVjp, "tanh_vjp");
+        registry.registerBuiltin(":op/add_d", addScalarVjp, "add_d_vjp");
+        registry.registerBuiltin(":op/sub_d", subScalarVjp, "sub_d_vjp");
+        registry.registerBuiltin(":op/mul_d", mulScalarVjp, "mul_d_vjp");
         registry.registerBuiltin(":op/div_d", divScalarVjp, "div_d_vjp");
         registry.registerBuiltin("nn:value", valueVjp, "parameter_value_vjp");
     });
 }
 
 void applyVjpRule(
-    VjpBuildContext &ctx, std::string_view key, std::initializer_list<rt::gc_node_ref_t> inputs,
+    VjpBuildContext &ctx, std::string_view key, std::span<const rt::gc_node_ref_t> inputs,
     rt::gc_node_ref_t output) {
     ensureBuiltinVjpRulesRegistered();
     const VjpRule *rule = VjpRegistry::instance().lookup(key);
@@ -304,13 +483,19 @@ void applyVjpRule(
             RuntimeDiag::RuntimeError,
             std::format("No builtin VJP rule registered for '{}'", std::string(key)));
     }
-    std::vector<rt::gc_node_ref_t> inputVec(inputs);
     VjpPrimitiveCall call{
         .key    = key,
-        .inputs = std::span<const rt::gc_node_ref_t>(inputVec),
+        .inputs = inputs,
         .output = output,
     };
     rule->builtin(ctx, call);
+}
+
+void applyVjpRule(
+    VjpBuildContext &ctx, std::string_view key, std::initializer_list<rt::gc_node_ref_t> inputs,
+    rt::gc_node_ref_t output) {
+    std::vector<rt::gc_node_ref_t> inputVec(inputs);
+    applyVjpRule(ctx, key, std::span<const rt::gc_node_ref_t>(inputVec), output);
 }
 
 void registerFunctionVjp(::Function *target, ::Function *vjp) {

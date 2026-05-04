@@ -13,6 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -72,8 +73,7 @@ class VjpBuildContext {
         camel::core::type::Type *type, std::string_view uri,
         std::span<const camel::runtime::gc_node_ref_t> normInputs);
 
-    void seedGradient(
-        camel::runtime::gc_node_ref_t primal, camel::runtime::gc_node_ref_t gradient);
+    void seedGradient(camel::runtime::gc_node_ref_t primal, camel::runtime::gc_node_ref_t gradient);
     void accumulateGradient(
         camel::runtime::gc_node_ref_t primal, camel::runtime::gc_node_ref_t gradient);
     std::optional<camel::runtime::gc_node_ref_t>
@@ -98,8 +98,8 @@ enum class VjpRuleKind {
 };
 
 struct VjpRule {
-    VjpRuleKind kind          = VjpRuleKind::Builtin;
-    BuiltinVjpRule builtin   = nullptr;
+    VjpRuleKind kind                       = VjpRuleKind::Builtin;
+    BuiltinVjpRule builtin                 = nullptr;
     camel::runtime::GCGraph *functionGraph = nullptr;
     std::string label;
 };
@@ -118,6 +118,9 @@ class VjpRegistry {
 };
 
 void ensureBuiltinVjpRulesRegistered();
+void applyVjpRule(
+    VjpBuildContext &ctx, std::string_view key,
+    std::span<const camel::runtime::gc_node_ref_t> inputs, camel::runtime::gc_node_ref_t output);
 void applyVjpRule(
     VjpBuildContext &ctx, std::string_view key,
     std::initializer_list<camel::runtime::gc_node_ref_t> inputs,

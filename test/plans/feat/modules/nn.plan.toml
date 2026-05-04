@@ -50,7 +50,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "with_context_step_gir"
-desc = "Inspects std::gir output to ensure compile_step emits a VJP-derived backward graph."
+desc = "Inspects std::gir output to ensure apply_gradients emits a VJP-derived backward graph."
 kind = "behavior"
 case = "../../../cases/modules/nn/with_context_step_demo.cml"
 args = ["${case}", "std::macro", "std::gir"]
@@ -61,8 +61,8 @@ verify_script = """
 assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
 const text = input.normalized.output
 for (const needle of [
-    '[macro] execute static operator nn:compile_step',
-    'nn::linear_context_mse_sgd_step',
+    '[macro] execute static operator nn:apply_gradients',
+    'nn::autograd_sgd_step',
     'tensor:full',
     'tensor:add',
     'nn:add_grad',
@@ -86,16 +86,145 @@ verify_script = """
 ({ input, assert, match }) => {
 assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
 const found = match(
-    /autograd_linear_demo metrics before=([0-9.eE+-]+) after=([0-9.eE+-]+)/,
+    /autograd_linear_demo metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/,
     input.normalized.stdout
 )
 const before = Number(found[1])
-const after = Number(found[2])
-assert(Number.isFinite(before) && Number.isFinite(after), 'metrics are not finite')
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
 assert(before > 0, `expected positive initial loss, got ${before}`)
+assert(Math.abs(step - before) < 1e-9, `step loss ${step} should equal pre-update loss ${before}`)
 assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
 match(/autograd_linear_demo w0=tensor/, input.normalized.stdout)
 match(/autograd_linear_demo w1=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "graph_autograd_multi_param_demo"
+desc = "Exercises graph-based apply_gradients over multiple Parameter leaves and a broadcast bias."
+kind = "behavior"
+case = "../../../cases/modules/nn/graph_autograd_multi_param_demo.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(
+    /graph_autograd_multi_param_demo metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/,
+    input.normalized.stdout
+)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/graph_autograd_multi_param_demo weight=tensor/, input.normalized.stdout)
+match(/graph_autograd_multi_param_demo bias=tensor/, input.normalized.stdout)
+match(/graph_autograd_multi_param_demo weight_grad=tensor/, input.normalized.stdout)
+match(/graph_autograd_multi_param_demo bias_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "graph_autograd_multi_param_gir"
+desc = "Inspects std::gir output for two parameter updates from one loss graph."
+kind = "behavior"
+case = "../../../cases/modules/nn/graph_autograd_multi_param_demo.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+assert(text.includes('nn::autograd_sgd_step'), 'GIR output missing autograd step graph')
+assert((text.match(/nn:add_grad/g) || []).length >= 2, 'expected at least two nn:add_grad nodes')
+assert((text.match(/nn:sgd/g) || []).length >= 2, 'expected at least two nn:sgd nodes')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "autoencoder"
+desc = "Exercises graph-based apply_gradients on a tiny sigmoid autoencoder."
+kind = "behavior"
+case = "../../../cases/modules/nn/autoencoder.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/autoencoder metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/autoencoder enc_w=tensor/, input.normalized.stdout)
+match(/autoencoder dec_w=tensor/, input.normalized.stdout)
+match(/autoencoder enc_grad=tensor/, input.normalized.stdout)
+match(/autoencoder dec_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tiny_rnn"
+desc = "Exercises graph-based apply_gradients on a fixed two-step tanh RNN."
+kind = "behavior"
+case = "../../../cases/modules/nn/tiny_rnn.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/tiny_rnn metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/tiny_rnn wxh=tensor/, input.normalized.stdout)
+match(/tiny_rnn whh=tensor/, input.normalized.stdout)
+match(/tiny_rnn why=tensor/, input.normalized.stdout)
+match(/tiny_rnn wxh_grad=tensor/, input.normalized.stdout)
+match(/tiny_rnn whh_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "matrix_factorization"
+desc = "Exercises graph-based apply_gradients on one-hot matrix factorization."
+kind = "behavior"
+case = "../../../cases/modules/nn/matrix_factorization.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/matrix_factorization metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/matrix_factorization user_table=tensor/, input.normalized.stdout)
+match(/matrix_factorization item_table=tensor/, input.normalized.stdout)
+match(/matrix_factorization user_grad=tensor/, input.normalized.stdout)
+match(/matrix_factorization item_grad=tensor/, input.normalized.stdout)
 }
 """
 timeout_ms = 4000

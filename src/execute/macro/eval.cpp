@@ -105,9 +105,7 @@ inline bool isMacroFunction(const ::Function *funcObj) {
     return funcObj != nullptr && funcObj->graph() != nullptr && funcObj->graph()->isMacro();
 }
 
-inline bool isNativeMacroOperUri(std::string_view uri) {
-    return uri == "nn:apply_gradients" || uri == "nn:compile_step";
-}
+inline bool isNativeMacroOperUri(std::string_view uri) { return uri == "nn:apply_gradients"; }
 
 inline std::string macroFunctionName(const ::Function *funcObj) {
     ASSERT(funcObj != nullptr, "Macro function is null.");

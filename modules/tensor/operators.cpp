@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -186,6 +186,8 @@ std::unordered_map<std::string, operator_t> getTensorOpsMap() {
         {"argmax_axis", __tensor_argmax_axis__},
         {"exp", __tensor_exp__},
         {"log", __tensor_log__},
+        {"sigmoid", __tensor_sigmoid__},
+        {"tanh", __tensor_tanh__},
         {"transpose", __tensor_transpose__},
         {"concat", __tensor_concat__},
         {"reshape", __tensor_reshape__},
@@ -472,6 +474,28 @@ const std::vector<oper_group_ptr_t> &getTensorOperatorGroups() {
         OperatorGroup::create(
             "log",
             {{"tensor:log",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {1, {false}}},
+                  "(t: Tensor) => Tensor",
+                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      return isTensorType(norm[0]) ? std::optional<Type *>{tensorType()}
+                                                   : std::nullopt;
+                  })}}),
+        OperatorGroup::create(
+            "sigmoid",
+            {{"tensor:sigmoid",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {1, {false}}},
+                  "(t: Tensor) => Tensor",
+                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      return isTensorType(norm[0]) ? std::optional<Type *>{tensorType()}
+                                                   : std::nullopt;
+                  })}}),
+        OperatorGroup::create(
+            "tanh",
+            {{"tensor:tanh",
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {1, {false}}},
                   "(t: Tensor) => Tensor",
@@ -1116,6 +1140,22 @@ slot_t __tensor_log__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
     (void)ctx;
     return withTensorErrors([&]() -> slot_t {
         return wrapTensor(camel::tensor::tensorLog(requireTensor(norm, 0), mm::autoSpace()));
+    });
+}
+
+slot_t __tensor_sigmoid__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return withTensorErrors([&]() -> slot_t {
+        return wrapTensor(camel::tensor::tensorSigmoid(requireTensor(norm, 0), mm::autoSpace()));
+    });
+}
+
+slot_t __tensor_tanh__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return withTensorErrors([&]() -> slot_t {
+        return wrapTensor(camel::tensor::tensorTanh(requireTensor(norm, 0), mm::autoSpace()));
     });
 }
 

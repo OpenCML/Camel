@@ -1,0 +1,61 @@
+/**
+ * One-hot matrix factorization trained by graph-based apply_gradients.
+ */
+module matrix_factorization
+
+import {
+    Tensor,
+    full, reshape, sum
+} from tensor
+
+import {
+    Parameter,
+    apply_gradients, grad, parameter, value
+} from nn
+
+type MatrixFactorization = {
+    user_table: Parameter,
+    item_table: Parameter
+}
+
+with <model: MatrixFactorization, item_one_hot: Tensor, rating: float>
+func rating_loss(user_one_hot: Tensor): float {
+    let user_vec = user_one_hot @ value(model.user_table)
+    let item_vec = item_one_hot @ value(model.item_table)
+    let pred = sum(user_vec * item_vec)
+    let error = pred - rating
+    return error * error
+}
+
+func main(): int sync {
+    var model = {
+        user_table: parameter(full([3, 2], 0.1)),
+        item_table: parameter(full([4, 2], 0.2))
+    }
+    let user_one_hot = reshape([[1.0, 0.0, 0.0]], [1, 3])
+    let item_one_hot = reshape([[0.0, 1.0, 0.0, 0.0]], [1, 4])
+    let rating = 1.0
+
+    let step = apply_gradients(<model: MatrixFactorization, item_one_hot: Tensor, rating: float> (user_one_hot: Tensor): float => {
+        let user_vec = user_one_hot @ value(model.user_table)
+        let item_vec = item_one_hot @ value(model.item_table)
+        let pred = sum(user_vec * item_vec)
+        let error = pred - rating
+        return error * error
+    })
+
+    let before = user_one_hot->rating_loss<model, item_one_hot, rating>
+    let step_loss = wait step<model, item_one_hot, rating>(user_one_hot, 0.1)
+    let after = user_one_hot->rating_loss<model, item_one_hot, rating>
+    let user_table = value(model.user_table)
+    let item_table = value(model.item_table)
+    let user_grad = grad(model.user_table)
+    let item_grad = grad(model.item_table)
+
+    'matrix_factorization metrics before={} step={} after={}'->format<before, step_loss, after>->println
+    'matrix_factorization user_table={}'->format<user_table>->println
+    'matrix_factorization item_table={}'->format<item_table>->println
+    'matrix_factorization user_grad={}'->format<user_grad>->println
+    'matrix_factorization item_grad={}'->format<item_grad>->println
+    return 0
+}

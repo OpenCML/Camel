@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -54,6 +54,8 @@ slot_t __tensor_max_axis__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_argmax_axis__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_exp__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_log__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_sigmoid__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_tanh__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_transpose__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_concat__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_reshape__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);

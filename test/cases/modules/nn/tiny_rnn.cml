@@ -1,0 +1,73 @@
+/**
+ * Fixed two-step tanh RNN trained by graph-based apply_gradients.
+ */
+module tiny_rnn
+
+import {
+    Tensor,
+    full, shape, sum, tanh, zeros
+} from tensor
+
+import {
+    Parameter,
+    apply_gradients, grad, parameter, value
+} from nn
+
+type TinyRnn = {
+    wxh: Parameter,
+    whh: Parameter,
+    why: Parameter,
+    b: Parameter,
+    by: Parameter
+}
+
+with <model: TinyRnn, x1: Tensor, target: Tensor>
+func rnn_loss(x0: Tensor): float {
+    let h0 = zeros([1, 2])
+    let h1 = tanh((x0 @ value(model.wxh)) + (h0 @ value(model.whh)) + value(model.b))
+    let h2 = tanh((x1 @ value(model.wxh)) + (h1 @ value(model.whh)) + value(model.b))
+    let pred = (h2 @ value(model.why)) + value(model.by)
+    let errors = pred - target
+    let squared = errors * errors
+    return sum(squared) / float(shape(pred)[0])
+}
+
+func main(): int sync {
+    var model = {
+        wxh: parameter(full([2, 2], 0.1)),
+        whh: parameter(full([2, 2], 0.1)),
+        why: parameter(full([2, 1], 0.1)),
+        b: parameter(zeros([1, 2])),
+        by: parameter(zeros([1, 1]))
+    }
+    let x0 = full([1, 2], 1.0)
+    let x1 = full([1, 2], 0.5)
+    let target = full([1, 1], 1.0)
+
+    let step = apply_gradients(<model: TinyRnn, x1: Tensor, target: Tensor> (x0: Tensor): float => {
+        let h0 = zeros([1, 2])
+        let h1 = tanh((x0 @ value(model.wxh)) + (h0 @ value(model.whh)) + value(model.b))
+        let h2 = tanh((x1 @ value(model.wxh)) + (h1 @ value(model.whh)) + value(model.b))
+        let pred = (h2 @ value(model.why)) + value(model.by)
+        let errors = pred - target
+        let squared = errors * errors
+        return sum(squared) / float(shape(pred)[0])
+    })
+
+    let before = x0->rnn_loss<model, x1, target>
+    let step_loss = wait step<model, x1, target>(x0, 0.05)
+    let after = x0->rnn_loss<model, x1, target>
+    let wxh = value(model.wxh)
+    let whh = value(model.whh)
+    let why = value(model.why)
+    let wxh_grad = grad(model.wxh)
+    let whh_grad = grad(model.whh)
+
+    'tiny_rnn metrics before={} step={} after={}'->format<before, step_loss, after>->println
+    'tiny_rnn wxh={}'->format<wxh>->println
+    'tiny_rnn whh={}'->format<whh>->println
+    'tiny_rnn why={}'->format<why>->println
+    'tiny_rnn wxh_grad={}'->format<wxh_grad>->println
+    'tiny_rnn whh_grad={}'->format<whh_grad>->println
+    return 0
+}

@@ -10,7 +10,7 @@ import {
 
 import {
     Parameter,
-    compile_step, grad, parameter, value
+    apply_gradients, grad, parameter, value
 } from nn
 
 type Linear = {
@@ -37,8 +37,8 @@ func main(): int sync {
     let X = ones([4, 2])
     let y = ones([4, 1])
 
-    let step = compile_step(<layer: Linear, y: Tensor> (x: Tensor): float => {
-        let pred = x->linear<layer>
+    let step = apply_gradients(<layer: Linear, y: Tensor> (x: Tensor): float => {
+        let pred = x @ value(layer.weight)
         let errors = pred - y
         let squared = errors * errors
         return sum(squared) / float(shape(x)[0])
