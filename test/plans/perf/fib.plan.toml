@@ -14,8 +14,8 @@ snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 15000
 perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 250
-perf_budget_tolerance_pct = 200
+perf_budget_mean_ms = 200
+perf_budget_tolerance_pct = 10
 
 [[tests]]
 name = "inline_nvm_timeit"
@@ -28,8 +28,8 @@ snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 15000
 perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 250
-perf_budget_tolerance_pct = 200
+perf_budget_mean_ms = 200
+perf_budget_tolerance_pct = 10
 
 [[tests]]
 name = "fvm_timeit"
@@ -42,8 +42,8 @@ snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 15000
 perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 150
-perf_budget_tolerance_pct = 200
+perf_budget_mean_ms = 65
+perf_budget_tolerance_pct = 10
 
 [[tests]]
 name = "inline_fvm_timeit"
@@ -56,8 +56,8 @@ snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 15000
 perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 150
-perf_budget_tolerance_pct = 200
+perf_budget_mean_ms = 50
+perf_budget_tolerance_pct = 10
 
 [[tests]]
 name = "jit_timeit"
@@ -70,8 +70,8 @@ snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 15000
 perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 150
-perf_budget_tolerance_pct = 200
+perf_budget_mean_ms = 80
+perf_budget_tolerance_pct = 10
 
 [[tests]]
 name = "inline_jit_timeit"
@@ -82,7 +82,7 @@ args = ["${timeit_inline_jit_10}", "${case}", "${run_inline_jit}"]
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 15000
+timeout_ms = 1500
 perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 150
-perf_budget_tolerance_pct = 200
+perf_budget_mean_ms = 3
+perf_budget_tolerance_pct = 10

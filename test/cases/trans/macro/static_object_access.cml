@@ -1,0 +1,21 @@
+/**
+ * Verifies macro evaluation can build static tuple and struct values, read their fields, and materialize the scalar result.
+ */
+module macro_static_object_access
+
+macro func score(): int {
+    let pair = (19, 23)
+    let point = { x: pair.0, y: pair.1 }
+    return point.x + point.y
+}
+
+func main(): int sync {
+    let value = score()
+
+    if value != 42 then {
+        return 1
+    } else sync {
+        'macro_static_object_access ok'->println
+        return 0
+    }
+}

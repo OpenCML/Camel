@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 03, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -392,11 +392,12 @@ bool applyRuntimeOptimizeRewrite(
                 const bool isSmall =
                     isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig);
                 const bool isArm = isDraftBranchArmHead(draft, id);
-                const bool suppressArmInliningInThisGraph =
+                const bool suppressNonRecursiveArmInlining =
                     config.inlineConfig.inlineStrategy == InlineTargetStrategy::Hybrid &&
                     isSmallRuntimeSubgraphForInline(nextGraph, config.inlineConfig) &&
-                    sccInfo.externallyCalledGraphs.contains(nextGraph);
-                if (suppressArmInliningInThisGraph && isArm) {
+                    sccInfo.externallyCalledGraphs.contains(nextGraph) &&
+                    !sccInfo.recursiveGraphs.contains(nextGraph);
+                if (suppressNonRecursiveArmInlining && isArm) {
                     continue;
                 }
                 if (shouldInlineTarget(isSmall, isArm, config.inlineConfig)) {

@@ -1,7 +1,7 @@
 id = "trans.macro"
 order = 331
-tier = "functional"
-tags = ["functional", "trans", "macro"]
+tier = "feat"
+tags = ["feat", "trans", "macro"]
 
 [[tests]]
 name = "basic"
@@ -59,6 +59,30 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
+name = "closure_runtime_call"
+desc = "Exercises a macro-generated closure whose captured static value is later invoked by the normal runtime."
+kind = "behavior"
+case = "../../../cases/trans/macro/closure_runtime_call.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_contains = ["macro_closure_runtime_call ok"]
+failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "closure_isolation"
+desc = "Exercises two macro-generated closures so static captures cannot bleed between materialized function values."
+kind = "behavior"
+case = "../../../cases/trans/macro/closure_isolation.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_contains = ["macro_closure_isolation ok"]
+failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
 name = "functor"
 desc = "Exercises macro-generated closures passed onward as first-class function values."
 kind = "behavior"
@@ -76,6 +100,30 @@ kind = "behavior"
 case = "../../../cases/trans/macro/pipeline.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
+failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "runtime_boundary"
+desc = "Exercises the non-static input boundary where macro evaluation must defer the call to runtime execution."
+kind = "behavior"
+case = "../../../cases/trans/macro/runtime_boundary.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_contains = ["macro_runtime_boundary ok"]
+failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "static_object_access"
+desc = "Exercises macro evaluation over static tuple and struct objects, including field access before materialization."
+kind = "behavior"
+case = "../../../cases/trans/macro/static_object_access.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_contains = ["macro_static_object_access ok"]
 failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000

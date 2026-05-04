@@ -12,8 +12,7 @@ macro func apply_once(f: (x: int) => int, x: int): int {
 }
 
 func main(): int sync {
-    // id_func() 展开�?DATA；apply_once 会因“调用函数参数”被跳过，由运行时执�?
+    // id_func() folds to a function value, while apply_once stays deferred to runtime.
     println(apply_once(id_func(), 20))
     return 0
 }
-
