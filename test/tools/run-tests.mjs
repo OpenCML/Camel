@@ -272,7 +272,8 @@ function validateTest(test, result, context) {
             failures.push(`golden file does not exist: ${goldenPath}`)
         } else {
             const expected = fs.readFileSync(goldenPath, 'utf8')
-            const cmp = snapshotCompare(actualText, expected, test.snapshot_compare || 'text_exact')
+            const expectedText = applyNormalizers(expected, test.normalizers)
+            const cmp = snapshotCompare(actualText, expectedText, test.snapshot_compare || 'text_exact')
             if (!cmp.ok) failures.push(cmp.message)
         }
     }
