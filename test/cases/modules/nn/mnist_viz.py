@@ -3,8 +3,6 @@ MNIST visualization for Camel - loss curve and sample predictions.
 Call from Camel via py_call with wrapped arrays.
 """
 
-import numpy as np
-
 
 def visualize(loss_history: list, images_flat: list, n: int, d: int,
               labels: list, pred: list, show_window: bool = True) -> None:
@@ -19,10 +17,7 @@ def visualize(loss_history: list, images_flat: list, n: int, d: int,
     """
     try:
         import matplotlib
-        if show_window:
-            # 使用默认交互式后端以支持窗口展示
-            pass
-        else:
+        if not show_window:
             matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
@@ -51,22 +46,23 @@ def visualize(loss_history: list, images_flat: list, n: int, d: int,
 
     # 2. Sample predictions (2x5 grid)
     if images_flat and pred and labels:
-        images = np.array(images_flat, dtype=np.float32).reshape(n, d)
-
         def safe_int(x):
             if x is None:
                 return 0
             return int(float(x)) if isinstance(x, (int, float)) else int(x)
 
-        pred_arr = np.array([safe_int(x) for x in pred[:n]], dtype=np.int32)
-        labels_arr = np.array([safe_int(x) for x in labels[:n]], dtype=np.int32)
+        pred_arr = [safe_int(x) for x in pred]
+        labels_arr = [safe_int(x) for x in labels[:n]]
+        sample_count = min(10, n, len(pred_arr), len(labels_arr))
 
-        for idx in range(min(10, n)):
+        for idx in range(sample_count):
             r, c = row + idx // 5, idx % 5
             ax = fig.add_subplot(gs[r, c])
-            ax.imshow(images[idx].reshape(28, 28), cmap="gray")
-            true_lbl = int(labels_arr[idx])
-            pred_lbl = int(pred_arr[idx])
+            image = images_flat[idx * d : (idx + 1) * d]
+            image_2d = [image[start : start + 28] for start in range(0, min(len(image), 28 * 28), 28)]
+            ax.imshow(image_2d, cmap="gray")
+            true_lbl = labels_arr[idx]
+            pred_lbl = pred_arr[idx]
             color = "green" if true_lbl == pred_lbl else "red"
             ax.set_title(f"True:{true_lbl} Pred:{pred_lbl}", color=color, fontsize=10)
             ax.axis("off")
@@ -75,6 +71,6 @@ def visualize(loss_history: list, images_flat: list, n: int, d: int,
     if show_window:
         plt.show()
     else:
-        fig.savefig("mnist_result.png")
+        fig.savefig("test/tmp/mnist/mnist_result.png")
         plt.close(fig)
-        print("Saved to mnist_result.png")
+        print("Saved to test/tmp/mnist/mnist_result.png")

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -356,7 +356,7 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     // Extract the import load details
     const auto &load = ast->loadAs<AST::ImportLoad>();
     const auto &path = load->getPath();
-    const auto &refs = load->getRefs();
+    const auto &refs = load->refs();
 
     // Attempt to import the module (importModule throws ModuleNotFound with detail on failure)
     const module_ptr_t &mod = context_->importModule(path, module_->name());

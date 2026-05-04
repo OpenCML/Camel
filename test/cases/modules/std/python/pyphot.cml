@@ -17,16 +17,15 @@ type Signals = (Channel, Channel)
 func _init_helpers() sync {
     py_exec("
 import sys, os
-import numpy as np
 
 def _phot_to_bits_pair(py_result):
     r = py_result
     def to_int_list(arr):
-        return np.asarray(arr).ravel().astype(int).tolist()
+        return [int(x) for x in arr]
     return (to_int_list(r[0]), to_int_list(r[1]))
 
 def _bits_from_camel(bits_list):
-    return [np.array(bits_list[0]), np.array(bits_list[1])]
+    return [list(bits_list[0]), list(bits_list[1])]
 
 def _phot_to_signals_pair(py_result):
     r = py_result

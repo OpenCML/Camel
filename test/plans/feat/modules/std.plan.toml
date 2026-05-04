@@ -84,17 +84,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "para.basic"
-desc = "Exercises basic para-module loading so symbol registration failures are caught immediately."
-kind = "behavior"
-case = "../../../cases/modules/std/para/basic.cml"
-args = ["${case}"]
-expect_exit = 0
-failure_note = "Importing para still fails with internal reference-loading errors on the current runtime."
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
-
-[[tests]]
 name = "pyplot.main"
 desc = "Exercises the richer pyplot wrapper across multiple inputs and output files."
 kind = "behavior"

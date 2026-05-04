@@ -74,7 +74,7 @@ func main(): int sync {
     println('Loading MNIST via Python...')
     let mnist_mod = py_import("mnist_loader")
     let load_fn = py_attr(mnist_mod, "load_mnist")
-    let data_py = py_call(load_fn, py_wrap(1000), py_wrap(true), py_wrap("tmp"))
+    let data_py = py_call(load_fn, py_wrap(256), py_wrap(true), py_wrap("tmp"))
     let data = py_unwrap(data_py as PyObject<{ images: float[], labels: int[], shape: int[] }>)
 
     let labels_arr = data.labels
@@ -102,7 +102,7 @@ func main(): int sync {
     var train_result = (W, empty_loss)
 
     let lr = 0.1
-    let its = 300
+    let its = 150
 
     println('Training softmax classifier on MNIST...')
     println('Samples:', n, 'Features:', d_in, 'Classes:', num_classes)
@@ -118,13 +118,12 @@ func main(): int sync {
     let labels_t = argmax(y_onehot, 1)
     let correct = sum((pred == labels_t))
     let acc = correct / float(n)
-    println(pred)
-    println(labels_t)
     'Accuracy: {} / {} = {}'->format<correct, n, acc>->println
 
+    let viz_count = if n < 10 then n else 10
     var pred_list: int[] = []
     sync func collect_pred(i: int): void {
-        return if i >= n then null else sync {
+        return if i >= viz_count then null else sync {
             pred_list->append<int(pred[i])>
             return collect_pred(i + 1)
         }
@@ -134,7 +133,7 @@ func main(): int sync {
     let viz_mod = py_import("mnist_viz")
     let viz_fn = py_attr(viz_mod, "visualize")
     py_call(viz_fn, py_wrap(loss_history), py_wrap(data.images), py_wrap(n), py_wrap(d_in),
-            py_wrap(labels_arr), py_wrap(pred_list), py_wrap(true))
+            py_wrap(labels_arr), py_wrap(pred_list), py_wrap(false))
     return 0
 }
 

@@ -3,7 +3,6 @@
  */
 module main
 
-// os 模块基础测试（不�?exit、set_terminal_raw_mode 等会终止或需交互的）
 import { whoami, sleep, cpu_count } from os
 
 func main(): int sync {
@@ -23,4 +22,3 @@ func main(): int sync {
     println("\n=== OS tests completed ===")
     return 0
 }
-

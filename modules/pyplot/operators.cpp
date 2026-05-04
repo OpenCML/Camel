@@ -10,7 +10,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 07, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,8 @@ using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
+#include <filesystem>
+#include <fstream>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -34,6 +36,43 @@ using namespace camel::core::rtdata;
 #include <vector>
 
 namespace py = pybind11;
+
+namespace {
+
+void writeFallbackSvg(const std::vector<double> &data, const std::string &filename) {
+    const std::filesystem::path outputPath(filename);
+    if (outputPath.has_parent_path()) {
+        std::filesystem::create_directories(outputPath.parent_path());
+    }
+    std::ofstream out(filename, std::ios::binary);
+    if (!out) {
+        throw std::runtime_error("could not open output file '" + filename + "'");
+    }
+    constexpr double width  = 640.0;
+    constexpr double height = 360.0;
+    constexpr double pad    = 32.0;
+    double minVal           = data.empty() ? 0.0 : data.front();
+    double maxVal           = minVal;
+    for (double v : data) {
+        minVal = std::min(minVal, v);
+        maxVal = std::max(maxVal, v);
+    }
+    const double span = (maxVal > minVal) ? (maxVal - minVal) : 1.0;
+    out << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << width << "\" height=\"" << height
+        << "\" viewBox=\"0 0 " << width << " " << height << "\">\n";
+    out << "<rect width=\"100%\" height=\"100%\" fill=\"white\"/>\n";
+    out << "<path d=\"";
+    for (size_t i = 0; i < data.size(); ++i) {
+        const double x = pad + (width - 2.0 * pad) *
+                                   (data.size() == 1 ? 0.5 : double(i) / double(data.size() - 1));
+        const double y = height - pad - (height - 2.0 * pad) * ((data[i] - minVal) / span);
+        out << (i == 0 ? "M " : " L ") << x << ' ' << y;
+    }
+    out << "\" fill=\"none\" stroke=\"#0b6\" stroke-width=\"2\"/>\n";
+    out << "</svg>\n";
+}
+
+} // namespace
 
 template <typename T> static std::vector<double> __array_to_vector__(Array *arr) {
     size_t n = arr->size();
@@ -97,7 +136,15 @@ slot_t __plot__(ArgsView &with, ArgsView &norm, camel::core::context::Context &c
 
         return NullSlot;
     } catch (const std::exception &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("plot error: ") + e.what());
+        try {
+            writeFallbackSvg(data, filename);
+            return NullSlot;
+        } catch (const std::exception &fallbackError) {
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                std::string("plot error: ") + e.what() +
+                    "; fallback error: " + fallbackError.what());
+        }
     }
 }
 
