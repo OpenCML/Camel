@@ -1,7 +1,7 @@
 id = "para.core"
 order = 350
-tier = "functional"
-tags = ["functional", "para"]
+tier = "feat"
+tags = ["feat", "para"]
 
 [[tests]]
 name = "asian_option_mc"

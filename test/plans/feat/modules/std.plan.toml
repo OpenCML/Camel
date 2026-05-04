@@ -1,7 +1,7 @@
 id = "modules.std"
 order = 360
-tier = "functional"
-tags = ["functional", "modules", "std"]
+tier = "feat"
+tags = ["feat", "modules", "std"]
 
 [[tests]]
 name = "algo.basic"

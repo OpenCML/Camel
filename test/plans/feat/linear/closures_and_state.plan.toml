@@ -1,7 +1,7 @@
 id = "linear.closures_and_state"
 order = 342
-tier = "functional"
-tags = ["functional", "linear", "closures", "state"]
+tier = "feat"
+tags = ["feat", "linear", "closures", "state"]
 
 [[tests]]
 name = "decorator_single.nvm"

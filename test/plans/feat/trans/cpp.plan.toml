@@ -1,7 +1,7 @@
 id = "trans.cpp"
 order = 330
-tier = "functional"
-tags = ["functional", "trans", "cpp"]
+tier = "feat"
+tags = ["feat", "trans", "cpp"]
 
 [[tests]]
 name = "exec_mod_scalar"

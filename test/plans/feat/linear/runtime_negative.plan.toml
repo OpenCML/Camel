@@ -1,7 +1,7 @@
 id = "linear.runtime_negative"
 order = 345
-tier = "functional"
-tags = ["functional", "linear", "runtime", "negative"]
+tier = "feat"
+tags = ["feat", "linear", "runtime", "negative"]
 
 [[tests]]
 name = "divide_by_zero.nvm"

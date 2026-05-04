@@ -1,7 +1,7 @@
 id = "linear.control_flow_and_ops"
 order = 343
-tier = "functional"
-tags = ["functional", "linear", "control_flow", "ops"]
+tier = "feat"
+tags = ["feat", "linear", "control_flow", "ops"]
 
 [[tests]]
 name = "branch_join.jit"

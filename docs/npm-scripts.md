@@ -28,17 +28,16 @@ The repository now uses the plan-based harness under `test/`.
 
 | Script | Description |
 |------|------|
-| `npm run test` | Main set: `smoke`, `regression`, `functional/**` |
+| `npm run test` | Main set: `smoke`, `feat/**` |
 | `npm run test:all` | Full suite including `perf/**` |
 | `npm run test:smoke` | Smoke-only suite |
-| `npm run test:regression` | Alias of the main regression entry |
-| `npm run test:functional` | All functional suites |
+| `npm run test:feat` | All feature suites |
 | `npm run test:parse` | Parse suite only |
 | `npm run test:compile` | Compile/semantic suite only |
 | `npm run test:opt` | Optimization-pass suite only |
 | `npm run test:linear` | Linear scheduler / VM suites |
-| `npm run test:linear:nvm` | NVM/default linear suite only |
-| `npm run test:linear:jit` | JIT linear suite only |
+| `npm run test:linear:nvm` | Linear suite alias |
+| `npm run test:linear:jit` | Linear suite alias |
 | `npm run test:para` | Parallel runtime suite only |
 | `npm run test:modules` | Module suite only |
 | `npm run test:modules:std` | Stdlib module suite only |
@@ -50,11 +49,26 @@ The repository now uses the plan-based harness under `test/`.
 
 ```powershell
 node test/tools/run-tests.mjs
-node test/tools/run-tests.mjs test/plans/functional/modules
-node test/tools/run-tests.mjs test/plans/functional/linear/nvm.plan.toml
+node test/tools/run-tests.mjs test/plans/feat/modules
+node test/tools/run-tests.mjs test/plans/feat/linear/recursion_and_calls.plan.toml
 node test/tools/run-tests.mjs --tier benchmark test/plans/perf/fib.plan.toml
-node test/tools/run-tests.mjs --update-golden test/plans/functional/parse/core.plan.toml
+node test/tools/run-tests.mjs --update-golden test/plans/feat/parse/core.plan.toml
 ```
+
+## Target Shorthand Examples
+
+```powershell
+npm run test feat.trans.macro
+npm run test feat.trans
+npm run test trans.macro
+npm run test perf.fib
+npm run test linear.collections_and_structs
+```
+
+Dot targets resolve against `test/plans/`: `feat.trans.macro` maps to
+`test/plans/feat/trans/macro.plan.toml`, while `feat.trans` maps to the whole
+`test/plans/feat/trans/` directory. Feature-suite names may omit the `feat.`
+prefix when unambiguous, so `trans.macro` resolves to the same macro plan.
 
 ## Performance Helper Scripts
 
@@ -69,5 +83,5 @@ node test/tools/run-tests.mjs --update-golden test/plans/functional/parse/core.p
 
 - Build first: `npm run build`.
 - `test:perf` plans drive pass-level measurements through test `args`, for example `["${timeit_nvm_10}", "${case}", "${run_nvm}"]`, instead of relying only on outer process wall time.
-- Negative cases live in their owning functional plans and assert diagnostic name/code/line/column directly.
+- Negative cases and regression guards both live in their owning feature plans and assert diagnostics or outputs directly.
 - Environment-sensitive or known-bad cases still fail the suite; optional `failure_note` text is only explanatory output.

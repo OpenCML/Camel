@@ -1,7 +1,7 @@
 id = "linear.recursion_and_calls"
 order = 344
-tier = "functional"
-tags = ["functional", "linear", "recursion", "calls"]
+tier = "feat"
+tags = ["feat", "linear", "recursion", "calls"]
 
 [[tests]]
 name = "tail_accumulator.nvm"

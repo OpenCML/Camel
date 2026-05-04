@@ -1,7 +1,7 @@
 id = "linear.basic_runtime"
 order = 340
-tier = "functional"
-tags = ["functional", "linear", "basic"]
+tier = "feat"
+tags = ["feat", "linear", "basic"]
 
 [[tests]]
 name = "hello.nvm"

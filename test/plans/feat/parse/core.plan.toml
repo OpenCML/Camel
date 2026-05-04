@@ -1,7 +1,7 @@
 id = "parse.core"
 order = 300
-tier = "functional"
-tags = ["functional", "parse", "inspect"]
+tier = "feat"
+tags = ["feat", "parse", "inspect"]
 
 [[tests]]
 name = "inspect.tok_snapshot"

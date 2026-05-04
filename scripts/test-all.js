@@ -6,7 +6,7 @@ function parseArgs(argv) {
         customTargets: [],
         selectedTargets: new Set(),
         suites: [],
-        functional: false,
+        feat: false,
         all: false
     }
 
@@ -14,8 +14,8 @@ function parseArgs(argv) {
         const arg = argv[i]
         if (arg === '--all') {
             options.all = true
-        } else if (arg === '--functional') {
-            options.functional = true
+        } else if (arg === '--feat') {
+            options.feat = true
         } else if (arg === '--modules') {
             options.selectedTargets.add(TARGETS.modules)
         } else if (arg === '--modules:std') {
@@ -44,8 +44,6 @@ function parseArgs(argv) {
             options.selectedTargets.add(TARGETS.smoke)
         } else if (arg === '--perf') {
             options.selectedTargets.add(TARGETS.perf)
-        } else if (arg === '--regression') {
-            options.selectedTargets.add(TARGETS.regression)
         } else if (arg.startsWith('-')) {
             options.runnerArgs.push(arg)
         } else {
@@ -71,8 +69,8 @@ if (options.customTargets.length > 0) {
             selected.add(resolveTargetName(suite))
         }
     }
-    if (options.functional) {
-        selected.add(TARGETS.functional)
+    if (options.feat) {
+        selected.add(TARGETS.feat)
     }
     targets = selected.size > 0 ? [...selected] : FULL_TARGETS
 }

@@ -6,7 +6,7 @@ const targets = []
 
 for (const arg of args) {
     if (arg === '--smoke') targets.push(TARGETS.smoke)
-    else if (arg === '--functional') targets.push(TARGETS.functional)
+    else if (arg === '--feat') targets.push(TARGETS.feat)
     else if (arg === '--parse') targets.push(TARGETS.parse)
     else if (arg === '--compile') targets.push(TARGETS.compile)
     else if (arg === '--opt') targets.push(TARGETS.opt)
@@ -19,7 +19,6 @@ for (const arg of args) {
     else if (arg === '--modules:std') targets.push(TARGETS.modulesStd)
     else if (arg === '--modules:nn') targets.push(TARGETS.modulesNn)
     else if (arg === '--perf') targets.push(TARGETS.perf)
-    else if (arg === '--regression') targets.push(TARGETS.regression)
     else if (arg.startsWith('-')) runnerArgs.push(arg)
     else targets.push(arg)
 }

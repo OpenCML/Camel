@@ -1,7 +1,7 @@
 id = "opt.inline"
 order = 320
-tier = "functional"
-tags = ["functional", "opt", "inline"]
+tier = "feat"
+tags = ["feat", "opt", "inline"]
 
 [[tests]]
 name = "branch_arm_behavior"

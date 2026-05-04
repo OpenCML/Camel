@@ -1,7 +1,7 @@
 id = "compile.semantic_negative"
 order = 310
-tier = "functional"
-tags = ["functional", "compile", "semantic"]
+tier = "feat"
+tags = ["feat", "compile", "semantic"]
 
 [[tests]]
 name = "semantic.branch_return_mismatch"
