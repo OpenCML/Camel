@@ -85,3 +85,56 @@ Results:
 - Build passed.
 - Focused NN plan passed: 22 total, 22 pass.
 - Default developer test set passed: 128 total, 128 pass.
+
+## 2026-05-05 Phase 2 Partial: Fused Classifier Loss
+
+Target references: sections 3.2, 3.3, 3.5, 3.8, 3.9, and 3.10 of
+`docs/technical/nn-autograd-targets.md`.
+
+Implemented:
+
+- Added fused `nn.softmax_cross_entropy(logits, target)` for stable rank-2
+  `[batch, classes]` classification loss with one-hot or distribution targets.
+- Added `nn.softmax_cross_entropy_grad(logits, target, dy)` as the logits-gradient
+  primitive used by the VJP rule and by the operator sanity case.
+- Registered the builtin VJP for `nn:softmax_cross_entropy`, propagating only to
+  logits. Targets are treated as labels, not trainable tensors.
+- Added `test/cases/modules/nn/softmax_cross_entropy_sanity.cml`, which compares
+  the fused logits gradient against a tiny finite-difference estimate.
+- Added `test/cases/modules/nn/softmax_classifier.cml`, a helper-based classifier
+  trained through `apply_gradients` and the fused classification loss.
+- Updated `test/plans/feat/modules/nn.plan.toml` with behavior and GIR checks for
+  the fused loss, fused logits gradient, and classifier parameter updates.
+- Updated `docs/technical/nn-autograd.md` with the new API, VJP coverage, tests,
+  and current limits.
+
+Manual raw-run evidence before verifier use:
+
+```powershell
+camel test\cases\modules\nn\softmax_cross_entropy_sanity.cml
+```
+
+Observed metrics: loss `0.554355242566137`, gradient element
+`-0.4255574941635132`, finite difference `-0.4255583505785031`.
+
+```powershell
+camel test\cases\modules\nn\softmax_classifier.cml std::macro std::nvm
+```
+
+Observed metrics: before `0.6931471805599453`, step
+`0.6931471805599453`, after `0.5759394231408829`.
+
+Focused verification:
+
+```powershell
+node scripts/test.js test\plans\feat\modules\nn.plan.toml
+```
+
+Result: 25 total, 25 pass.
+
+Phase 2 status after this slice:
+
+- Classification fused loss and one helper-based classifier model are covered.
+- Remaining Phase 2 work includes CNN/`conv2d`, true embedding/gather, tiny
+  attention/softmax path, additional operator-level tests, full Phase 2 docs, and
+  the Phase 2 adversarial review.

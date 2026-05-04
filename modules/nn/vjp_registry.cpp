@@ -328,6 +328,19 @@ void valueVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
     ctx.accumulateParameterGradient(call.inputs[0], *dy);
 }
 
+void softmaxCrossEntropyVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 2);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+
+    std::array<rt::gc_node_ref_t, 3> inputs{call.inputs[0], call.inputs[1], *dy};
+    ctx.accumulateGradient(
+        call.inputs[0],
+        ctx.addOper(tensorType(), "nn:softmax_cross_entropy_grad", inputs));
+}
+
 void registerGraphAliases(VjpRegistry &registry, rt::GCGraph *target, rt::GCGraph *vjpGraph) {
     if (!target || !vjpGraph) {
         return;
@@ -536,6 +549,10 @@ void ensureBuiltinVjpRulesRegistered() {
         registry.registerBuiltin(":op/mul_d", mulScalarVjp, "mul_d_vjp");
         registry.registerBuiltin(":op/div_d", divScalarVjp, "div_d_vjp");
         registry.registerBuiltin("nn:value", valueVjp, "parameter_value_vjp");
+        registry.registerBuiltin(
+            "nn:softmax_cross_entropy",
+            softmaxCrossEntropyVjp,
+            "softmax_cross_entropy_vjp");
     });
 }
 

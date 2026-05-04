@@ -44,6 +44,8 @@ slot_t __nn_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __nn_zero_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __nn_add_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __nn_sgd__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __nn_softmax_cross_entropy__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __nn_softmax_cross_entropy_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getNnOpsMap();
 const std::vector<oper_group_ptr_t> &getNnOperatorGroups();

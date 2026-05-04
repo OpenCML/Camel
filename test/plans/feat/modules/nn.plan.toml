@@ -230,6 +230,76 @@ match(/matrix_factorization item_grad=tensor/, input.normalized.stdout)
 timeout_ms = 4000
 
 [[tests]]
+name = "softmax_cross_entropy_sanity"
+desc = "Checks fused softmax cross entropy gradient against a tiny finite-difference estimate."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_cross_entropy_sanity.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/softmax_cross_entropy_sanity loss=([0-9.eE+-]+) grad0=([0-9.eE+-]+) finite=([0-9.eE+-]+)/, input.normalized.stdout)
+const loss = Number(found[1])
+const grad0 = Number(found[2])
+const finite = Number(found[3])
+assert(Number.isFinite(loss) && Number.isFinite(grad0) && Number.isFinite(finite), 'metrics are not finite')
+assert(loss > 0, `expected positive loss, got ${loss}`)
+assert(approx(grad0, finite, 1e-3), `gradient ${grad0} should match finite difference ${finite}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "softmax_classifier"
+desc = "Exercises helper-call autograd with fused softmax cross entropy classification loss."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_classifier.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/softmax_classifier metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/softmax_classifier weight=tensor/, input.normalized.stdout)
+match(/softmax_classifier bias=tensor/, input.normalized.stdout)
+match(/softmax_classifier weight_grad=tensor/, input.normalized.stdout)
+match(/softmax_classifier bias_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "softmax_classifier_gir"
+desc = "Checks fused classification loss and logits gradient appear in the autograd step graph."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_classifier.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+const stepNeedle = (op) => `tooltip="${op}\\nnn::autograd_sgd_step`
+const inStep = (op) => text.includes(stepNeedle(op))
+const countStep = (op) => text.split(stepNeedle(op)).length - 1
+assert(inStep('nn:softmax_cross_entropy'), 'autograd step missing fused classification loss')
+assert(inStep('nn:softmax_cross_entropy_grad'), 'autograd step missing fused logits gradient')
+assert(countStep('nn:sgd') === 2, 'expected one update for classifier weight and bias')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
 name = "residual_mlp"
 desc = "Exercises helper-call lowering over a residual MLP with branch merge and skip parameters."
 kind = "behavior"

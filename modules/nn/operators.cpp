@@ -606,6 +606,8 @@ std::unordered_map<std::string, operator_t> getNnOpsMap() {
         {"zero_grad", __nn_zero_grad__},
         {"add_grad", __nn_add_grad__},
         {"sgd", __nn_sgd__},
+        {"softmax_cross_entropy", __nn_softmax_cross_entropy__},
+        {"softmax_cross_entropy_grad", __nn_softmax_cross_entropy_grad__},
     };
 }
 
@@ -651,6 +653,20 @@ const std::vector<oper_group_ptr_t> &getNnOperatorGroups() {
                   {{parameterType(), true}, {Type::Float64(), false}},
                   Type::Void(),
                   Modifier::Sync)}}),
+        OperatorGroup::create(
+            "softmax_cross_entropy",
+            {{"nn:softmax_cross_entropy",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{tensorType(), false}, {tensorType(), false}},
+                  Type::Float64())}}),
+        OperatorGroup::create(
+            "softmax_cross_entropy_grad",
+            {{"nn:softmax_cross_entropy_grad",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{tensorType(), false}, {tensorType(), false}, {Type::Float64(), false}},
+                  tensorType())}}),
     };
     return groups;
 }

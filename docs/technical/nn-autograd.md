@@ -93,6 +93,8 @@ constructs them from the same `Parameter` object.
 | `grad(p: Parameter) -> Tensor` | Read accumulated gradient buffer. |
 | `apply_gradients(loss) -> step` | Build forward/backward/update training graph. |
 | `zero_grad(var p)` / `add_grad(var p, g)` / `sgd(var p, lr)` | Internal update primitives, still callable directly. |
+| `softmax_cross_entropy(logits: Tensor, target: Tensor) -> float` | Stable fused rank-2 classification loss over `[batch, classes]` logits and one-hot/distribution targets. |
+| `softmax_cross_entropy_grad(logits, target, dy) -> Tensor` | Fused logits-gradient primitive used by the VJP rule; callable for operator sanity checks. |
 | `vjp<rule>(f)` | Records user VJP metadata; helper calls currently train by pre-VJP inlining, not by invoking custom function VJP graphs. |
 
 `compile_step` is intentionally absent.
@@ -110,6 +112,7 @@ Registered builtin rules currently cover:
 | Linear algebra | `tensor:matmul`, `tensor:transpose` |
 | Reduction/shape | `tensor:sum`, `tensor:reshape` |
 | Numeric functions | `tensor:exp`, `tensor:log`, `tensor:sigmoid`, `tensor:tanh` |
+| Fused NN losses | `nn:softmax_cross_entropy` logits path |
 | Scalar arithmetic | `:op/add_d`, `:op/sub_d`, `:op/mul_d`, `:op/div_d` numerator path |
 | Parameter leaf | `nn:value` |
 
@@ -131,6 +134,8 @@ Broadcast support is deliberately narrow:
 - AutoEncoder with sigmoid encoder/decoder;
 - fixed two-step Tiny RNN with tanh recurrence;
 - Matrix Factorization using one-hot rows and parameter tables;
+- fused `softmax_cross_entropy` finite-difference sanity check;
+- helper-based Softmax Classifier using fused cross entropy;
 - Residual MLP helper calls with branch merge and skip parameters;
 - Siamese Shared Encoder with two call sites sharing encoder parameters;
 - GRU-lite fixed unroll with repeated gate parameter use;
@@ -152,6 +157,8 @@ Useful manual checks:
 camel test\cases\modules\nn\autoencoder.cml std::macro std::nvm
 camel test\cases\modules\nn\tiny_rnn.cml std::macro std::nvm
 camel test\cases\modules\nn\matrix_factorization.cml std::macro std::nvm
+camel test\cases\modules\nn\softmax_cross_entropy_sanity.cml
+camel test\cases\modules\nn\softmax_classifier.cml std::macro std::nvm
 camel test\cases\modules\nn\residual_mlp.cml std::macro std::nvm
 camel test\cases\modules\nn\siamese_shared_encoder.cml std::macro std::nvm
 camel test\cases\modules\nn\gru_lite.cml std::macro std::nvm
@@ -167,6 +174,9 @@ The implementation is still a small static-graph autograd skeleton:
   external callees are rejected.
 - Custom function VJP execution is not part of the helper-call path yet; helpers
   are inlined before primitive VJP traversal.
+- `softmax_cross_entropy` currently supports rank-2 logits and rank-2 one-hot or
+  distribution targets. Class-index labels, arbitrary softmax axes, gather, and a
+  decomposed softmax/log VJP stack are still Phase 2 follow-up work.
 - Static alias keys merge repeated reads through the same model path, but not
   arbitrary runtime `Parameter` object aliases stored under different fields.
 - No arrays/lists of `Parameter` are discovered.

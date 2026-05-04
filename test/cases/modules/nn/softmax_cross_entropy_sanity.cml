@@ -1,0 +1,29 @@
+/**
+ * Operator-level sanity check for fused softmax cross entropy and its logits gradient.
+ */
+module softmax_cross_entropy_sanity
+
+import {
+    reshape, sum
+} from tensor
+
+import {
+    softmax_cross_entropy, softmax_cross_entropy_grad
+} from nn
+
+func main(): int sync {
+    let logits = reshape([0.2, -0.1], [1, 2])
+    let target = reshape([1.0, 0.0], [1, 2])
+    let plus = reshape([0.201, -0.1], [1, 2])
+    let minus = reshape([0.199, -0.1], [1, 2])
+
+    let loss = softmax_cross_entropy(logits, target)
+    let loss_plus = softmax_cross_entropy(plus, target)
+    let loss_minus = softmax_cross_entropy(minus, target)
+    let grad = softmax_cross_entropy_grad(logits, target, 1.0)
+    let grad0 = sum(grad * reshape([1.0, 0.0], [1, 2]))
+    let finite = (loss_plus - loss_minus) / 0.002
+
+    'softmax_cross_entropy_sanity loss={} grad0={} finite={}'->format<loss, grad0, finite>->println
+    return 0
+}
