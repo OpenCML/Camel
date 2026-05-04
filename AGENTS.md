@@ -46,6 +46,23 @@ $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 - Canonical syntax: `camel xxx.cml pass1 pass2 ...`
 - `std::nvm` is the fallback pass when no pass is specified or when specified passes complete without yielding an empty graph.
 
+## Test Execution
+- Main entry: `node scripts/test.js`
+- Test plans live under `test/plans/`; you may pass either a single `*.plan.toml` file or a plan directory.
+- `npm run test` runs the default developer set: `smoke` plus all `feat/**` plans.
+- `npm run test:all` runs all plans under `test/plans/`, including `perf/**`.
+- Prefer passing the target explicitly instead of adding new `npm run test:*` aliases.
+- Shorthand targets such as `smoke`, `feat`, `parse`, `compile`, `opt`, `trans`, `linear`, `para`, `modules`, and `perf` resolve to the matching plan directories.
+- Direct examples:
+```powershell
+node scripts/test.js test\plans\smoke
+node scripts/test.js test\plans\feat\para
+node scripts/test.js test\plans\feat\linear\recursion_and_calls.plan.toml
+npm run test -- perf.para
+npm run test -- feat.trans.macro
+node test\tools\run-tests.mjs --update-golden test\plans\smoke\core.plan.toml
+```
+
 ### Common Passes
 
 | Pass | Description |

@@ -155,20 +155,19 @@ function formatMetric(result) {
     return ''
 }
 
-function printSuiteBanner(name) {
-    console.log('')
-    console.log(`====> ${name}`)
-}
-
 function printPlanHeader(plan) {
-    console.log(`[SUITE] ${plan.id}`)
+    const relativePath = path.relative(PLANS_ROOT, plan.__planPath).replace(/\\/g, '/')
+    const showPath = relativePath.split('.')[0].replace(/\//g, '.')
+    const planLabel = plan.desc || plan.id || '.'
+    console.log('')
+    console.log(`${COLORS.cyan}[PLAN]${COLORS.reset} ${showPath}: ${planLabel}`)
 }
 
 function printStatusLine(status, name, metric = '') {
     const label = status === 'pass'
         ? `${COLORS.green}[PASS]${COLORS.reset}`
         : `${COLORS.red}[FAIL]${COLORS.reset}`
-    const left = `    ${label} ${name}`
+    const left = `${label} ${name}`
     if (!metric) {
         console.log(left)
         return
@@ -413,10 +412,6 @@ function loadPlans(targets, tier) {
     return plans
 }
 
-function suiteNameFromPlanPath(planPath) {
-    return path.relative(PLANS_ROOT, planPath).replace(/\\/g, '/').replace(/\.plan\.toml$/, '')
-}
-
 function main() {
     const options = parseArgs(process.argv.slice(2))
     const sharedVars = loadVars()
@@ -430,14 +425,8 @@ function main() {
 
     const summary = { pass: 0, fail: 0 }
     const completed = new Map()
-    let currentSuite = ''
 
     for (const plan of plans) {
-        const suiteName = suiteNameFromPlanPath(plan.__planPath) || '.'
-        if (suiteName !== currentSuite) {
-            currentSuite = suiteName
-            printSuiteBanner(suiteName)
-        }
         printPlanHeader(plan)
         for (const test of plan.tests) {
             const result = runOneTest(test, sharedVars, { options, completed })

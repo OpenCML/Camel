@@ -1,14 +1,16 @@
 import path from 'path'
 import fs from 'fs'
+import { fileURLToPath } from 'url'
 import { spawnSync } from 'child_process'
-import { BASEDIR, logStep, logFail } from './common.js'
 
-const TESTS_ROOT = path.join(BASEDIR, 'test')
-const RUNNER = path.join(TESTS_ROOT, 'tools', 'run-tests.mjs')
-const PLANS_ROOT = path.join(TESTS_ROOT, 'plans')
+const __filename = fileURLToPath(import.meta.url)
+const TEST_ROOT = path.dirname(__filename)
+const REPO_ROOT = path.dirname(TEST_ROOT)
+const PLANS_ROOT = path.join(TEST_ROOT, 'plans')
+const RUNNER = path.join(TEST_ROOT, 'tools', 'run-tests.mjs')
 
-export const TARGETS = {
-    smoke: path.join(PLANS_ROOT, 'smoke', 'core.plan.toml'),
+const TARGETS = {
+    smoke: path.join(PLANS_ROOT, 'smoke'),
     feat: path.join(PLANS_ROOT, 'feat'),
     parse: path.join(PLANS_ROOT, 'feat', 'parse'),
     compile: path.join(PLANS_ROOT, 'feat', 'compile'),
@@ -21,17 +23,13 @@ export const TARGETS = {
     modules: path.join(PLANS_ROOT, 'feat', 'modules'),
     modulesStd: path.join(PLANS_ROOT, 'feat', 'modules', 'std.plan.toml'),
     modulesNn: path.join(PLANS_ROOT, 'feat', 'modules', 'nn.plan.toml'),
-    perf: path.join(PLANS_ROOT, 'perf')
+    perf: path.join(PLANS_ROOT, 'perf'),
+    all: PLANS_ROOT
 }
 
-export const MAIN_TARGETS = [
-    TARGETS.smoke,
-    TARGETS.feat
-]
-
-export const FULL_TARGETS = [
-    ...MAIN_TARGETS,
-    TARGETS.perf
+const DEFAULT_TARGETS = [
+    path.join(PLANS_ROOT, 'smoke'),
+    path.join(PLANS_ROOT, 'feat')
 ]
 
 function resolvePlanPathFromSegments(segments) {
@@ -43,8 +41,9 @@ function resolvePlanPathFromSegments(segments) {
     return null
 }
 
-export function resolveTargetName(name) {
+function resolveNamedTarget(name) {
     const compact = String(name).replace(/^[./\\]+/, '')
+    if (compact === 'all') return TARGETS.all
     if (compact === 'smoke') return TARGETS.smoke
     if (compact === 'feat') return TARGETS.feat
     if (compact === 'parse' || compact === 'feat/parse' || compact === 'feat\\parse') return TARGETS.parse
@@ -59,6 +58,7 @@ export function resolveTargetName(name) {
     if (compact === 'modules/std' || compact === 'modules\\std' || compact === 'feat/modules/std' || compact === 'feat\\modules\\std') return TARGETS.modulesStd
     if (compact === 'modules/nn' || compact === 'modules\\nn' || compact === 'feat/modules/nn' || compact === 'feat\\modules\\nn') return TARGETS.modulesNn
     if (compact === 'perf') return TARGETS.perf
+
     const dotted = resolvePlanPathFromSegments(compact.split('.').filter(Boolean))
     if (dotted) return dotted
     const dottedFeat = resolvePlanPathFromSegments(['feat', ...compact.split('.').filter(Boolean)])
@@ -67,20 +67,71 @@ export function resolveTargetName(name) {
     if (slashed) return slashed
     const slashedFeat = resolvePlanPathFromSegments(['feat', ...compact.split(/[\\/]+/).filter(Boolean)])
     if (slashedFeat) return slashedFeat
-    return path.resolve(BASEDIR, name)
+    return null
 }
 
-export function runHarness({ label, targets, runnerArgs = [] }) {
-    const resolvedTargets = targets.map(resolveTargetName)
-    logStep(`${label}: ${resolvedTargets.length} target(s)`)
-    const proc = spawnSync(process.execPath, [RUNNER, ...runnerArgs, ...resolvedTargets], {
-        cwd: BASEDIR,
+function resolveTarget(input) {
+    const named = resolveNamedTarget(input)
+    if (named) return named
+    return path.resolve(process.cwd(), input)
+}
+
+function parseArgs(argv) {
+    const runnerArgs = []
+    const targets = []
+
+    for (let i = 0; i < argv.length; ++i) {
+        const arg = argv[i]
+        if (
+            arg === '--all' ||
+            arg === '--smoke' ||
+            arg === '--feat' ||
+            arg === '--parse' ||
+            arg === '--compile' ||
+            arg === '--opt' ||
+            arg === '--trans' ||
+            arg === '--linear' ||
+            arg === '--linear:nvm' ||
+            arg === '--linear:jit' ||
+            arg === '--para' ||
+            arg === '--modules' ||
+            arg === '--modules:std' ||
+            arg === '--modules:nn' ||
+            arg === '--perf'
+        ) {
+            targets.push(resolveTarget(arg.slice(2)))
+        } else if (arg === '--suite' && i + 1 < argv.length) {
+            targets.push(resolveTarget(argv[++i]))
+        } else if (arg.startsWith('-')) {
+            runnerArgs.push(arg)
+            if (arg === '--tier' && i + 1 < argv.length) {
+                runnerArgs.push(argv[++i])
+            }
+        } else {
+            targets.push(resolveTarget(arg))
+        }
+    }
+
+    return {
+        runnerArgs,
+        targets: targets.length > 0 ? targets : DEFAULT_TARGETS
+    }
+}
+
+export function main(argv = process.argv.slice(2)) {
+    const options = parseArgs(argv)
+    const proc = spawnSync(process.execPath, [RUNNER, ...options.runnerArgs, ...options.targets], {
+        cwd: REPO_ROOT,
         stdio: 'inherit',
         env: process.env
     })
     if (proc.error) {
-        logFail(proc.error.message)
+        console.error(proc.error.message)
         process.exit(1)
     }
     process.exit(typeof proc.status === 'number' ? proc.status : 1)
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+    main()
 }
