@@ -1,0 +1,11 @@
+/**
+ * Verifies sync lowering does not add a redundant ctrl edge when the next
+ * statement already consumes the previous result through a data dependency.
+ */
+module compile_sync_ctrl_dedup
+
+func main(): int sync {
+    let total = 40 + 2
+    total->println
+    return total
+}

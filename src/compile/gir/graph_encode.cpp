@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: May. 01, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -225,13 +225,82 @@ struct PreparedGraph {
     GCGraph *runtime = nullptr;
 };
 
+std::vector<draft_node_ref_t> collectLiveDraftNodes(const GraphDraft &draft) {
+    std::unordered_set<draft_node_ref_t> visited;
+    std::vector<draft_node_ref_t> worklist;
+    auto pushRoot = [&](draft_node_ref_t ref) {
+        if (ref != runtime::kInvalidNodeRef && visited.insert(ref).second) {
+            worklist.push_back(ref);
+        }
+    };
+
+    pushRoot(draft.entryNode());
+    pushRoot(draft.exitNode());
+    pushRoot(draft.outputNode());
+    pushRoot(draft.returnNode());
+    for (draft_node_ref_t ref : draft.normPorts()) {
+        pushRoot(ref);
+    }
+    for (draft_node_ref_t ref : draft.withPorts()) {
+        pushRoot(ref);
+    }
+    for (draft_node_ref_t ref : draft.closureNodes()) {
+        pushRoot(ref);
+    }
+
+    while (!worklist.empty()) {
+        const draft_node_ref_t current = worklist.back();
+        worklist.pop_back();
+        for (draft_node_ref_t input : draft.normInputsOf(current)) {
+            pushRoot(input);
+        }
+        for (draft_node_ref_t input : draft.withInputsOf(current)) {
+            pushRoot(input);
+        }
+        for (draft_node_ref_t input : draft.ctrlInputsOf(current)) {
+            pushRoot(input);
+        }
+        const runtime::DraftNodeHeader *header = draft.header(current);
+        if (header == nullptr) {
+            continue;
+        }
+        if (header->kind == GCNodeKind::Brch) {
+            const auto *payload =
+                reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(current).data());
+            if (payload != nullptr) {
+                pushRoot(payload->join);
+                pushRoot(payload->defaultArm);
+            }
+            for (const GCBranchArm &arm : draft.branchArmsOf(current)) {
+                pushRoot(arm.head);
+                pushRoot(arm.tail);
+            }
+        } else if (header->kind == GCNodeKind::Join) {
+            const auto *payload =
+                reinterpret_cast<const GCJoinBody *>(draft.payloadOf(current).data());
+            if (payload != nullptr) {
+                pushRoot(payload->brch);
+            }
+        }
+    }
+
+    std::vector<draft_node_ref_t> live(visited.begin(), visited.end());
+    std::sort(live.begin(), live.end());
+    return live;
+}
+
 draft_node_ref_t
 remapNodeRef(draft_node_ref_t sourceRef, const std::vector<draft_node_ref_t> &mapping) {
     if (sourceRef == runtime::kInvalidNodeRef) {
         return runtime::kInvalidNodeRef;
     }
     ASSERT(sourceRef < mapping.size(), "Compile encode encountered an out-of-range node ref.");
-    return mapping[sourceRef];
+    const draft_node_ref_t mapped = mapping[sourceRef];
+    if (mapped == runtime::kInvalidNodeRef) {
+        throw std::runtime_error(
+            std::format("Compile encode encountered an unmapped live node ref {}.", sourceRef));
+    }
+    return mapped;
 }
 
 class EncodeSession {
@@ -300,6 +369,7 @@ class EncodeSession {
         PreparedGraph prepared;
         prepared.source = graph;
         prepared.draft  = std::make_unique<GraphDraft>();
+        CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
         prepared.draft->setFuncType(graph->funcType());
         prepared.draft->setRuntimeDataType(
             ensureRuntimeTupleType(graph->draft().runtimeDataType()));
@@ -312,6 +382,13 @@ class EncodeSession {
             prepared.draft->appendStaticSlot(sourceStaticSlots[i], sourceStaticTypes[i]);
         }
 
+        const std::vector<draft_node_ref_t> liveNodes = collectLiveDraftNodes(graph->draft());
+        CAMEL_LOG_INFO_S(
+            "GIREncode",
+            "Prepare compile graph '{}' reachable nodes={}.",
+            graph->name(),
+            liveNodes.size());
+        std::unordered_set<draft_node_ref_t> liveSet(liveNodes.begin(), liveNodes.end());
         std::vector<draft_node_ref_t> sourceToPrepared(
             graph->draft().nodeSlotCount(),
             runtime::kInvalidNodeRef);
@@ -320,7 +397,7 @@ class EncodeSession {
         std::vector<std::vector<draft_node_ref_t>> pendingCtrlInputs;
         draft_node_ref_t nextPreparedId = 0;
         for (draft_node_ref_t sourceId = 0; sourceId < graph->draft().nodeSlotCount(); ++sourceId) {
-            if (graph->draft().alive(sourceId)) {
+            if (graph->draft().alive(sourceId) && liveSet.contains(sourceId)) {
                 sourceToPrepared[sourceId] = nextPreparedId++;
             }
         }
@@ -328,11 +405,18 @@ class EncodeSession {
         pendingWithInputs.reserve(nextPreparedId);
         pendingCtrlInputs.reserve(nextPreparedId);
         for (draft_node_ref_t sourceId = 0; sourceId < graph->draft().nodeSlotCount(); ++sourceId) {
-            if (!graph->draft().alive(sourceId)) {
+            if (!graph->draft().alive(sourceId) || !liveSet.contains(sourceId)) {
                 continue;
             }
             const auto *header = graph->draft().header(sourceId);
             ASSERT(header != nullptr, "Live compile draft node cannot have a null header.");
+            if (header->kind == GCNodeKind::Dref) {
+                throw std::runtime_error(
+                    std::format(
+                        "Compile graph '{}' still contains a live DREF node at draft ref {}.",
+                        graph->name(),
+                        sourceId));
+            }
             DraftNodeInit init{
                 .dataIndex    = header->dataIndex,
                 .dataType     = header->dataType,
@@ -452,7 +536,7 @@ class EncodeSession {
 
         size_t preparedOrdinal = 0;
         for (draft_node_ref_t sourceId = 0; sourceId < graph->draft().nodeSlotCount(); ++sourceId) {
-            if (!graph->draft().alive(sourceId)) {
+            if (!graph->draft().alive(sourceId) || !liveSet.contains(sourceId)) {
                 continue;
             }
             const auto preparedId = sourceToPrepared[sourceId];
@@ -530,10 +614,13 @@ class EncodeSession {
     }
 
     void patchPreparedFuncPayloads(PreparedGraph &prepared) {
+        const std::vector<draft_node_ref_t> liveNodes =
+            collectLiveDraftNodes(prepared.source->draft());
+        std::unordered_set<draft_node_ref_t> liveSet(liveNodes.begin(), liveNodes.end());
         draft_node_ref_t preparedId = 0;
         for (draft_node_ref_t sourceId = 0; sourceId < prepared.source->draft().nodeSlotCount();
              ++sourceId) {
-            if (!prepared.source->draft().alive(sourceId)) {
+            if (!prepared.source->draft().alive(sourceId) || !liveSet.contains(sourceId)) {
                 continue;
             }
             const auto *header = prepared.source->draft().header(sourceId);

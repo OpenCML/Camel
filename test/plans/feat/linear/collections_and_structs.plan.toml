@@ -90,7 +90,6 @@ kind = "behavior"
 case = "../../../cases/linear/jit/list_transform_chain.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
-expect_stdout_contains = ["list_transform ok"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 

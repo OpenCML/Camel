@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: May. 01, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -331,6 +331,22 @@ inline bool linkCheek(node_handle_t from, node_handle_t to) {
         return false;
     }
     return true;
+}
+
+inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
+    if (!lhs || !rhs || nodeGraphOf(lhs) != nodeGraphOf(rhs)) {
+        return false;
+    }
+    const draft_node_ref_t lhsId = nodeIdOf(lhs);
+    const draft_node_ref_t rhsId = nodeIdOf(rhs);
+    return std::ranges::find(normInputsOf(rhs), lhsId) != normInputsOf(rhs).end() ||
+           std::ranges::find(withInputsOf(rhs), lhsId) != withInputsOf(rhs).end() ||
+           std::ranges::find(normInputsOf(lhs), rhsId) != normInputsOf(lhs).end() ||
+           std::ranges::find(withInputsOf(lhs), rhsId) != withInputsOf(lhs).end();
+}
+
+inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
+    return linkCheek(from, to) && !hasDirectDataDependency(from, to);
 }
 
 inline camel::source::SemanticPart semanticPart(
@@ -1419,7 +1435,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         tryRemoveCtrlLink(inputNode, targetNode);
         linkNodes(LinkType::With, inputNode, targetNode);
         if (auto modifierNode = modifierOf(inputNode); modifierNode.has_value()) {
-            if (sameGraph(*modifierNode, currGraph_) && linkCheek(*modifierNode, targetNode)) {
+            if (sameGraph(*modifierNode, currGraph_) &&
+                shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
                 linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
             }
         }
@@ -1439,7 +1456,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         tryRemoveCtrlLink(inputNode, targetNode);
         linkNodes(LinkType::Norm, inputNode, targetNode);
         if (auto modifierNode = modifierOf(inputNode); modifierNode.has_value()) {
-            if (sameGraph(*modifierNode, currGraph_) && linkCheek(*modifierNode, targetNode)) {
+            if (sameGraph(*modifierNode, currGraph_) &&
+                shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
                 linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
             }
         }
@@ -1454,7 +1472,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
 
     if (synced_) {
-        if (lastSyncedNode_ != nullptr && linkCheek(lastSyncedNode_, targetNode)) {
+        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, targetNode)) {
             linkNodes(LinkType::Ctrl, lastSyncedNode_, targetNode);
         }
         lastSyncedNode_ = targetNode;
@@ -1765,7 +1783,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     linkNodes(LinkType::Norm, brchNode, joinNode);
 
     if (synced_) {
-        if (lastSyncedNode_ != nullptr && linkCheek(lastSyncedNode_, brchNode)) {
+        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, brchNode)) {
             linkNodes(LinkType::Ctrl, lastSyncedNode_, brchNode);
         }
         lastSyncedNode_ = joinNode;

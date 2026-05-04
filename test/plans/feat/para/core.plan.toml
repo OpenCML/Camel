@@ -10,9 +10,8 @@ kind = "behavior"
 case = "../../../cases/para/core/asian_option_mc.cml"
 args = ["${case}"]
 expect_exit = 0
-failure_note = "This workload is intentionally heavy and exceeds the default local full-suite time budget on typical developer machines."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 30000
+timeout_ms = 40000
 
 [[tests]]
 name = "block_sort_merge"
