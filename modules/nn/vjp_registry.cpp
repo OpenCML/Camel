@@ -349,6 +349,66 @@ Type *VjpBuildContext::nodeType(rt::gc_node_ref_t node) const {
     return header->dataType;
 }
 
+std::string VjpBuildContext::parameterAliasKey(rt::gc_node_ref_t parameter) const {
+    // Helper lowering clones structural access nodes at every call site. The
+    // trainable leaf is the root object plus its field/index path, not the
+    // particular ACCS node that happened to feed one nn:value read.
+    auto unwrapGate = [this](rt::gc_node_ref_t node) {
+        while (node != rt::kInvalidNodeRef) {
+            const auto *header = draft_.header(node);
+            if (!header || header->kind != rt::GCNodeKind::Gate) {
+                return node;
+            }
+            const auto normInputs = draft_.normInputsOf(node);
+            if (!normInputs.empty()) {
+                node = normInputs.front();
+                continue;
+            }
+            const auto withInputs = draft_.withInputsOf(node);
+            if (!withInputs.empty()) {
+                node = withInputs.front();
+                continue;
+            }
+            return node;
+        }
+        return node;
+    };
+
+    std::vector<std::string> accessPath;
+    rt::gc_node_ref_t current = unwrapGate(parameter);
+    while (current != rt::kInvalidNodeRef) {
+        current            = unwrapGate(current);
+        const auto *header = draft_.header(current);
+        if (!header || header->kind != rt::GCNodeKind::Accs) {
+            break;
+        }
+
+        const auto payload = draft_.payloadOf(current);
+        if (payload.size_bytes() < sizeof(rt::GCAccsBody)) {
+            break;
+        }
+        const auto *body = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+        if (body->accsKind == rt::GCAccsKind::StructKey) {
+            accessPath.push_back(std::format(".{}", std::string(body->key())));
+        } else {
+            accessPath.push_back(std::format("[{}]", body->value));
+        }
+
+        const auto inputs = draft_.normInputsOf(current);
+        if (inputs.empty()) {
+            break;
+        }
+        current = inputs.front();
+    }
+
+    current         = unwrapGate(current);
+    std::string key = std::format("root#{}", current);
+    for (auto it = accessPath.rbegin(); it != accessPath.rend(); ++it) {
+        key += *it;
+    }
+    return key;
+}
+
 rt::gc_node_ref_t VjpBuildContext::addStaticFloat(double value) {
     return draft_.materializeStaticValue(toSlot<Float64>(value), Type::Float64());
 }
@@ -396,20 +456,26 @@ std::optional<rt::gc_node_ref_t> VjpBuildContext::gradientOf(rt::gc_node_ref_t p
 
 void VjpBuildContext::accumulateParameterGradient(
     rt::gc_node_ref_t parameter, rt::gc_node_ref_t gradient) {
-    auto existing = parameterGradients_.find(parameter);
+    const std::string key = parameterAliasKey(parameter);
+    auto existing         = parameterGradients_.find(key);
     if (existing == parameterGradients_.end()) {
-        parameterGradients_.emplace(parameter, gradient);
+        parameterGradients_.emplace(
+            key,
+            ParameterGradient{
+                .parameter = parameter,
+                .gradient  = gradient,
+            });
         return;
     }
-    std::array<rt::gc_node_ref_t, 2> addInputs{existing->second, gradient};
-    existing->second = addOper(tensorType(), "tensor:add", addInputs);
+    std::array<rt::gc_node_ref_t, 2> addInputs{existing->second.gradient, gradient};
+    existing->second.gradient = addOper(tensorType(), "tensor:add", addInputs);
 }
 
 std::vector<ParameterGradient> VjpBuildContext::parameterGradients() const {
     std::vector<ParameterGradient> result;
     result.reserve(parameterGradients_.size());
-    for (const auto &[parameter, gradient] : parameterGradients_) {
-        result.push_back(ParameterGradient{.parameter = parameter, .gradient = gradient});
+    for (const auto &entry : parameterGradients_) {
+        result.push_back(entry.second);
     }
     std::ranges::sort(result, {}, &ParameterGradient::parameter);
     return result;

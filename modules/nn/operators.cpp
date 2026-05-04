@@ -22,9 +22,12 @@
  *
  * `apply_gradients` is the public training-step macro. It clones the supplied
  * scalar loss graph into a sync step graph, seeds the loss cotangent with 1.0,
- * walks reachable differentiable nodes backward through the VJP registry, and
- * appends deterministic SGD updates for every `nn:value(Parameter)` leaf that
- * receives a gradient.
+ * lowers static helper/layer calls on the output-reachable tape, walks the
+ * resulting primitive
+ * graph backward through the VJP registry, and appends
+ * deterministic SGD updates for every
+ * `nn:value(Parameter)` leaf that receives
+ * a gradient.
  */
 
 #include "operators.h"
@@ -38,6 +41,8 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/draft_inline.h"
+#include "camel/runtime/draft_session.h"
 #include "camel/utils/type.h"
 #include "runtime.h"
 #include "type.h"
@@ -179,6 +184,25 @@ gc_node_ref_t addOper(
     return node;
 }
 
+gc_node_ref_t resolveGraphExitNode(const GCGraph *graph) {
+    if (!graph) {
+        return kInvalidNodeRef;
+    }
+    gc_node_ref_t output = graph->outputNodeRef();
+    if (output == kInvalidNodeRef) {
+        output = graph->returnNodeRef();
+    }
+    return output;
+}
+
+gc_node_ref_t resolveDraftExitNode(const GraphDraft &draft) {
+    gc_node_ref_t output = draft.outputNode();
+    if (output == kInvalidNodeRef) {
+        output = draft.returnNode();
+    }
+    return output;
+}
+
 std::string_view operUri(GraphDraft &draft, gc_node_ref_t node) {
     auto payload = draft.payloadOf(node);
     if (payload.size_bytes() < sizeof(GCOperBody)) {
@@ -254,6 +278,189 @@ std::vector<gc_node_ref_t> collectReachableForwardTape(GraphDraft &draft, gc_nod
     return tape;
 }
 
+void collectReachableForwardTape(
+    const GCGraph &graph, gc_node_ref_t node, std::unordered_set<gc_node_ref_t> &seen,
+    std::vector<gc_node_ref_t> &tape) {
+    if (node == kInvalidNodeRef || graph.node(node) == nullptr || !seen.insert(node).second) {
+        return;
+    }
+    for (gc_node_ref_t input : graph.normInputsOf(node)) {
+        collectReachableForwardTape(graph, input, seen, tape);
+    }
+    for (gc_node_ref_t input : graph.withInputsOf(node)) {
+        collectReachableForwardTape(graph, input, seen, tape);
+    }
+    tape.push_back(node);
+}
+
+std::vector<gc_node_ref_t> collectReachableForwardTape(const GCGraph &graph, gc_node_ref_t output) {
+    std::unordered_set<gc_node_ref_t> seen;
+    std::vector<gc_node_ref_t> tape;
+    collectReachableForwardTape(graph, output, seen, tape);
+    return tape;
+}
+
+// Validate the static helper-call closure before mutating the draft. This walks
+// each graph's value-reachable tape, so dead calls do not block autograd, while
+// recursive helper paths fail before the inline loop can grow the graph.
+void validateStaticHelperCallGraph(
+    const GCGraph *graph, std::unordered_set<const GCGraph *> &active,
+    std::unordered_set<const GCGraph *> &validated) {
+    if (!graph || validated.contains(graph)) {
+        return;
+    }
+    if (!active.insert(graph).second) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::format(
+                "apply_gradients does not support recursive helper call graph '{}'.",
+                graph->name()));
+    }
+
+    const auto *funcType = graph->funcType();
+    if (funcType) {
+        if (funcType->modifiers().sync()) {
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                std::format(
+                    "apply_gradients does not support sync helper function '{}'.",
+                    graph->name()));
+        }
+        if (funcType->modifiers().macro()) {
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                std::format(
+                    "apply_gradients does not support macro helper function '{}'.",
+                    graph->name()));
+        }
+    }
+
+    const gc_node_ref_t exitNode = resolveGraphExitNode(graph);
+    if (exitNode == kInvalidNodeRef) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::format(
+                "apply_gradients cannot lower helper graph '{}' because it has no output.",
+                graph->name()));
+    }
+
+    for (gc_node_ref_t node : collectReachableForwardTape(*graph, exitNode)) {
+        const GCNode *runtimeNode = graph->node(node);
+        if (!runtimeNode) {
+            continue;
+        }
+        if (runtimeNode->kind == GCNodeKind::Call) {
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                std::format(
+                    "apply_gradients does not support indirect call node {} in helper graph '{}'.",
+                    node,
+                    graph->name()));
+        }
+        if (runtimeNode->kind != GCNodeKind::Func) {
+            continue;
+        }
+
+        const auto *body = graph->nodeBodyAs<GCFuncBody>(node);
+        if (!body || !body->calleeGraph) {
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                std::format(
+                    "apply_gradients found an opaque helper call at node {} in graph '{}'.",
+                    node,
+                    graph->name()));
+        }
+        validateStaticHelperCallGraph(body->calleeGraph, active, validated);
+    }
+
+    active.erase(graph);
+    validated.insert(graph);
+}
+
+void validateStaticHelperCallGraph(const GCGraph *graph) {
+    std::unordered_set<const GCGraph *> active;
+    std::unordered_set<const GCGraph *> validated;
+    validateStaticHelperCallGraph(graph, active, validated);
+}
+
+// Lower only the trainable, output-reachable portion of the loss graph.
+// Any helper call that survives this pass is either genuinely unsupported
+// (indirect dispatch, sync/macro helper, opaque callee) or a cycle that would
+// otherwise expand forever during clone-and-inline.
+void lowerStaticHelperCalls(RuntimeGraphDraftSession &session, GraphDraft &draft) {
+    constexpr size_t kLoweringPassBudget = 1024;
+    size_t passCount                     = 0;
+    while (true) {
+        const gc_node_ref_t output = resolveDraftExitNode(draft);
+        if (output == kInvalidNodeRef) {
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                "apply_gradients loss graph has no output to lower helper calls from");
+        }
+        bool loweredThisPass                  = false;
+        const std::vector<gc_node_ref_t> tape = collectReachableForwardTape(draft, output);
+        for (gc_node_ref_t node : tape) {
+            const DraftNodeHeader *header = draft.header(node);
+            if (!header) {
+                continue;
+            }
+            if (header->kind == GCNodeKind::Call) {
+                throwRuntimeFault(
+                    RuntimeDiag::RuntimeError,
+                    std::format(
+                        "apply_gradients cannot lower indirect call node {} in the trainable path.",
+                        node));
+            }
+            if (header->kind != GCNodeKind::Func) {
+                continue;
+            }
+
+            const auto payload = draft.payloadOf(node);
+            if (payload.size_bytes() < sizeof(GCFuncBody)) {
+                throwRuntimeFault(
+                    RuntimeDiag::RuntimeError,
+                    std::format(
+                        "apply_gradients found an opaque helper call at node {} in the trainable "
+                        "path.",
+                        node));
+            }
+            const auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
+            if (!body || !body->calleeGraph) {
+                throwRuntimeFault(
+                    RuntimeDiag::RuntimeError,
+                    std::format(
+                        "apply_gradients found an opaque helper call at node {} in the trainable "
+                        "path.",
+                        node));
+            }
+            const std::string calleeName = body->calleeGraph->name();
+
+            const DraftInlineResult inlineResult =
+                camel::runtime::inlineCallableInDraft(session, draft, node);
+            if (!inlineResult) {
+                throwRuntimeFault(
+                    RuntimeDiag::RuntimeError,
+                    std::format(
+                        "apply_gradients failed to lower helper call '{}' at node {}.",
+                        calleeName,
+                        node));
+            }
+            loweredThisPass = true;
+            break;
+        }
+
+        if (!loweredThisPass) {
+            return;
+        }
+        if (++passCount > kLoweringPassBudget) {
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                "apply_gradients helper-call lowering did not converge; recursive helper call is "
+                "likely.");
+        }
+    }
+}
+
 void propagateSingleInputGradient(
     camel::nn::VjpBuildContext &vjp, GraphDraft &draft, gc_node_ref_t node) {
     auto gradient = vjp.gradientOf(node);
@@ -289,6 +496,18 @@ void applyNodeVjp(camel::nn::VjpBuildContext &vjp, GraphDraft &draft, gc_node_re
     case GCNodeKind::Gate:
         propagateSingleInputGradient(vjp, draft, node);
         return;
+    case GCNodeKind::Func:
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::format(
+                "apply_gradients encountered an unsupported helper call at node {} after lowering.",
+                node));
+    case GCNodeKind::Call:
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::format(
+                "apply_gradients cannot differentiate through indirect call node {}.",
+                node));
     case GCNodeKind::Data:
     case GCNodeKind::Port:
     case GCNodeKind::Accs:
@@ -323,20 +542,21 @@ gc_node_ref_t appendOptimizerUpdates(
     return updateTail;
 }
 
-GCGraph *buildAutogradSgdStepGraph(GCGraph *lossGraph) {
+GCGraph *buildAutogradSgdStepGraph(Context &context, GCGraph *lossGraph) {
     static std::atomic<size_t> nextId{0};
     const size_t id = nextId.fetch_add(1, std::memory_order_relaxed);
 
-    auto draftPtr     = GraphDraft::decode(lossGraph);
-    GraphDraft &draft = *draftPtr;
+    validateStaticHelperCallGraph(lossGraph);
+
+    RuntimeGraphDraftSession session(context.shared_from_this(), lossGraph);
+    GraphDraft &draft = session.rootDraft();
     auto *lossType    = lossGraph->funcType();
     draft.setFuncType(gradientStepType(lossType));
     const gc_node_ref_t lr = addNormPort(draft, Type::Float64());
 
-    gc_node_ref_t loss = draft.outputNode();
-    if (loss == kInvalidNodeRef) {
-        loss = draft.returnNode();
-    }
+    lowerStaticHelperCalls(session, draft);
+
+    gc_node_ref_t loss = resolveDraftExitNode(draft);
     if (loss == kInvalidNodeRef) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "apply_gradients loss graph has no output");
     }
@@ -437,7 +657,6 @@ const std::vector<oper_group_ptr_t> &getNnOperatorGroups() {
 
 slot_t __nn_apply_gradients__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
-    (void)ctx;
     auto *loss = norm.get<Function *>(0);
     if (!loss || !loss->graph()) {
         throwRuntimeFault(
@@ -452,7 +671,7 @@ slot_t __nn_apply_gradients__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 
     camel::nn::ensureBuiltinVjpRulesRegistered();
-    GCGraph *stepGraph = buildAutogradSgdStepGraph(loss->graph());
+    GCGraph *stepGraph = buildAutogradSgdStepGraph(ctx, loss->graph());
     Function *step     = Function::create(stepGraph, TupleType::create(), mm::autoSpace());
     return toSlot<Function *>(step);
 }

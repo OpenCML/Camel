@@ -1,0 +1,77 @@
+/**
+ * Siamese shared encoder trained through two calls to the same helper graph.
+ */
+module siamese_shared_encoder
+
+import {
+    Tensor,
+    full, sum, tanh, zeros
+} from tensor
+
+import {
+    Parameter,
+    apply_gradients, grad, parameter, value
+} from nn
+
+type Encoder = {
+    weight: Parameter,
+    bias: Parameter
+}
+
+type Siamese = {
+    encoder: Encoder
+}
+
+with <encoder: Encoder>
+func linear(x: Tensor): Tensor {
+    return (x @ value(encoder.weight)) + value(encoder.bias)
+}
+
+with <encoder: Encoder>
+func encode(x: Tensor): Tensor {
+    return tanh(x->linear<encoder>)
+}
+
+func pair_loss(za: Tensor, zb: Tensor): float {
+    let diff = za - zb
+    return sum(diff * diff)
+}
+
+with <model: Siamese, xb: Tensor>
+func siamese_loss(xa: Tensor): float {
+    let za = xa->encode<model.encoder>
+    let zb = xb->encode<model.encoder>
+    return pair_loss(za, zb)
+}
+
+func main(): int sync {
+    var model = {
+        encoder: {
+            weight: parameter(full([2, 2], 0.1)),
+            bias: parameter(zeros([1, 2]))
+        }
+    }
+    let xa = full([1, 2], 1.0)
+    let xb = full([1, 2], 0.5)
+
+    let step = apply_gradients(<model: Siamese, xb: Tensor> (xa: Tensor): float => {
+        let za = xa->encode<model.encoder>
+        let zb = xb->encode<model.encoder>
+        return pair_loss(za, zb)
+    })
+
+    let before = xa->siamese_loss<model, xb>
+    let step_loss = wait step<model, xb>(xa, 0.2)
+    let after = xa->siamese_loss<model, xb>
+    let weight = value(model.encoder.weight)
+    let bias = value(model.encoder.bias)
+    let weight_grad = grad(model.encoder.weight)
+    let bias_grad = grad(model.encoder.bias)
+
+    'siamese_shared_encoder metrics before={} step={} after={}'->format<before, step_loss, after>->println
+    'siamese_shared_encoder weight={}'->format<weight>->println
+    'siamese_shared_encoder bias={}'->format<bias>->println
+    'siamese_shared_encoder weight_grad={}'->format<weight_grad>->println
+    'siamese_shared_encoder bias_grad={}'->format<bias_grad>->println
+    return 0
+}

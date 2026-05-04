@@ -21,8 +21,9 @@
  * Neural-network graph-generation operators.
  *
  * `apply_gradients` accepts a static scalar loss graph and emits a sync SGD
- * training step with forward evaluation, reverse-mode VJP synthesis, gradient
- * accumulation, and deterministic parameter updates.
+ * training step with helper-call lowering, forward evaluation, reverse-mode
+ * VJP synthesis,
+ * gradient accumulation, and deterministic parameter updates.
  */
 
 #pragma once

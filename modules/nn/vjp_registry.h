@@ -22,9 +22,9 @@
  *
  * The registry maps primitive operator URIs or function graph names to their
  * vector-Jacobian-product rule. Builtin rules emit backward graph fragments
- * directly. Decorator-registered user rules are recorded as graph metadata and
- * will be consumed by the generic function-call autograd path as that path
- * expands beyond this demo.
+ * directly. Decorator-registered user rules are recorded as graph metadata so
+ * helper graphs can
+ * still carry explicit custom backward rules when needed.
  */
 
 #pragma once
@@ -84,10 +84,11 @@ class VjpBuildContext {
     std::vector<ParameterGradient> parameterGradients() const;
 
   private:
+    std::string parameterAliasKey(camel::runtime::gc_node_ref_t parameter) const;
+
     camel::runtime::GraphDraft &draft_;
     std::unordered_map<camel::runtime::gc_node_ref_t, camel::runtime::gc_node_ref_t> gradients_;
-    std::unordered_map<camel::runtime::gc_node_ref_t, camel::runtime::gc_node_ref_t>
-        parameterGradients_;
+    std::unordered_map<std::string, ParameterGradient> parameterGradients_;
 };
 
 using BuiltinVjpRule = void (*)(VjpBuildContext &, const VjpPrimitiveCall &);
