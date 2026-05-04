@@ -40,6 +40,12 @@ as `process.argv[2]`.
 |------|------|
 | `npm run test` | Main set: `smoke`, `feat/**` |
 | `npm run test:all` | Full suite (`test/plans/`) |
+| `npm run precommit:staged` | Format/update only files already staged for the current commit |
+
+The staged pre-commit script delegates file selection to `scripts/format.js` and
+`scripts/update.js`; it only constrains auto-staging to the original staged path
+set. It rejects partially staged files before re-adding paths, so unstaged hunks
+are not pulled into the commit by the hook.
 
 Use `npm run test -- <target>` for everything else instead of adding more fixed aliases.
 
