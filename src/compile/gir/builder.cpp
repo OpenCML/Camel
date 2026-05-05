@@ -280,14 +280,14 @@ void linkNodes(LinkType type, node_handle_t from, node_handle_t to) {
 
 std::string makeCompileGraphStableId(const std::string &name) {
     static std::atomic<uint64_t> seq = 1;
-    return std::format("cgraph:{}:{}", name.empty() ? "anonymous" : name, seq++);
+    return std::format("{}_{}", name.empty() ? "g" : name, seq++);
 }
 
 compile_graph_ptr_t createCompileGraph(
     FunctionType *funcType, const compile_graph_ptr_t &outer, std::string name = "") {
     auto graph = std::make_shared<DraftGraphBuilder>(funcType ? funcType : FunctionType::create());
     if (name.empty()) {
-        name = std::format("__graph_{}", makeCompileGraphStableId("anon"));
+        name = std::format("__{}__", makeCompileGraphStableId(""));
     }
     graph->setName(std::move(name));
     graph->setStableId(makeCompileGraphStableId(graph->name()));
@@ -299,14 +299,14 @@ compile_graph_ptr_t createCompileGraph(
         for (size_t i = 0; i < funcType->withTypesCount(); ++i) {
             const std::string portName = i < funcType->argNamesCount()
                                              ? std::string(funcType->argNameAt(i))
-                                             : std::format("__with{}", i);
+                                             : std::format("__w{}", i);
             graph->addPortNode(funcType->withTypeAt(i), portName, true, funcType->withIsVarAt(i));
         }
         for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
             const size_t argIndex      = funcType->withTypesCount() + i;
             const std::string portName = argIndex < funcType->argNamesCount()
                                              ? std::string(funcType->argNameAt(argIndex))
-                                             : std::format("__arg{}", i);
+                                             : std::format("__n{}", i);
             graph->addPortNode(funcType->normTypeAt(i), portName, false, funcType->normIsVarAt(i));
         }
     }
