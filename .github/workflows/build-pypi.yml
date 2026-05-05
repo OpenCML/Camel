@@ -100,7 +100,21 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build
+          sudo apt-get install -y build-essential clang cmake ninja-build
+
+      - name: Select Clang (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "CC=clang" >> "$GITHUB_ENV"
+          echo "CXX=clang++" >> "$GITHUB_ENV"
+
+      - name: Verify Clang (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          clang --version
+          clang++ --version
+          ninja --version
+          cmake --version
 
       - name: Install LLVM, Ninja, CMake (Windows)
         if: runner.os == 'Windows'
