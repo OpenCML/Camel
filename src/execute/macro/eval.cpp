@@ -38,6 +38,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/utils/log.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -252,20 +253,32 @@ MacroEvaluator::tryEvaluate(const MacroCandidate &candidate, std::ostream &os) {
             return std::nullopt;
         }
     } catch (const MacroExecutionError &e) {
-        os << "[macro] skip "
-           << (candidate.runtimeGraph ? candidate.runtimeGraph->name() : "(null)") << "::ref#"
-           << candidate.nodeRef << ": " << e.what() << "\n";
+        (void)os;
+        CAMEL_LOG_DEBUG_S(
+            "Macro",
+            "Skip {}::ref#{}: {}",
+            candidate.runtimeGraph ? candidate.runtimeGraph->name() : "(null)",
+            candidate.nodeRef,
+            e.what());
         return std::nullopt;
     } catch (const Diagnostic &d) {
-        (void)d;
-        os << "[macro] diagnostic while evaluating "
-           << (candidate.runtimeGraph ? candidate.runtimeGraph->name() : "(null)") << "::ref#"
-           << candidate.nodeRef << "\n";
+        (void)os;
+        CAMEL_LOG_WARN_S(
+            "Macro",
+            "Diagnostic while evaluating {}::ref#{}: {} | {}",
+            candidate.runtimeGraph ? candidate.runtimeGraph->name() : "(null)",
+            candidate.nodeRef,
+            d.name,
+            d.message);
         return std::nullopt;
     } catch (const std::exception &e) {
-        os << "[macro] exception while evaluating "
-           << (candidate.runtimeGraph ? candidate.runtimeGraph->name() : "(null)") << "::ref#"
-           << candidate.nodeRef << ": " << e.what() << "\n";
+        (void)os;
+        CAMEL_LOG_WARN_S(
+            "Macro",
+            "Exception while evaluating {}::ref#{}: {}",
+            candidate.runtimeGraph ? candidate.runtimeGraph->name() : "(null)",
+            candidate.nodeRef,
+            e.what());
         return std::nullopt;
     }
 }
@@ -307,7 +320,8 @@ MacroEvaluator::tryExecuteDirectFunc(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
     if (!calleeGraph || macroCallsFunctionParam(calleeGraph)) {
         return std::nullopt;
     }
-    os << "[macro] execute direct macro " << calleeGraph->name() << "\n";
+    (void)os;
+    CAMEL_LOG_INFO_S("Macro", "Execute direct macro '{}'.", calleeGraph->name());
     const slot_t value = executeFunction(
         ::Function::create(calleeGraph, ensureMacroClosureType(calleeGraph), mm::autoSpace()),
         [&](Frame *frame, GCGraph *runtimeGraph) {
@@ -345,7 +359,8 @@ std::optional<MacroEvalResult> MacroEvaluator::tryExecuteIndirectCall(
         !areStaticRuntimeDataInputs(ownerGraph, ownerGraph->normInputsOf(nodeRef))) {
         return std::nullopt;
     }
-    os << "[macro] execute indirect macro " << macroFunctionName(funcObj) << "\n";
+    (void)os;
+    CAMEL_LOG_INFO_S("Macro", "Execute indirect macro '{}'.", macroFunctionName(funcObj));
     const slot_t value = executeFunction(
         funcObj,
         [&](Frame *frame, GCGraph *runtimeGraph) {
@@ -413,7 +428,8 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
         data_arr_t wargs{indices.data() + normCount, indices.size() - normCount};
         FrameArgsView withView(*frame, wargs);
         FrameArgsView normView(*frame, nargs);
-        os << "[macro] execute static operator " << std::string(body->uri()) << "\n";
+        (void)os;
+        CAMEL_LOG_INFO_S("Macro", "Execute static operator '{}'.", std::string(body->uri()));
         slot_t value = (*op)(withView, normView, *context_);
         framePool_.release(frame);
         return anchorResult(value, node->dataType, node->flags);

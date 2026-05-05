@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,8 @@
  */
 
 #include "runtime.h"
+
+#include "camel/utils/log.h"
 
 #include <vector>
 
@@ -95,8 +97,13 @@ bool applyMacroRewrite(
     }
     draft.eraseNode(draftNodeId);
 
-    os << "[macro] rewrote " << candidate.runtimeGraph->name() << "::ref#" << candidate.nodeRef
-       << " -> draft#" << replacementNodeId << "\n";
+    (void)os;
+    CAMEL_LOG_INFO_S(
+        "Macro",
+        "Rewrote {}::ref#{} -> draft#{}.",
+        candidate.runtimeGraph->name(),
+        candidate.nodeRef,
+        replacementNodeId);
     return true;
 }
 

@@ -61,7 +61,6 @@ verify_script = """
 assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
 const text = input.normalized.output
 for (const needle of [
-    '[macro] execute static operator nn:apply_gradients',
     'nn::autograd_sgd_step',
     'tensor:full',
     'tensor:add',
@@ -836,4 +835,3 @@ expect_exit = 0
 failure_note = "The SVM helper path still has a neural-network runtime regression."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
-
