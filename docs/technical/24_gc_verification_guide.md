@@ -75,8 +75,18 @@ Use these controls for deterministic GC validation:
 | `CAMEL_GC_LOG_MOVES=1` | Log object movement in the young-copying path. |
 | `CAMEL_GC_ENABLE_YOUNG_COPYING=1` | Enable the experimental young-generation copying path. |
 
+GC stress is a diagnostic mode: it asks the allocator to request collections at deterministic
+allocation or safepoint intervals so missed roots, missing barriers, and relocation bugs fail
+quickly. It is not a production scheduling policy. With stress disabled and no pending deferred
+collection, scheduler safepoint checks stay on the fast path and do not enter the allocator mutex.
+
 Production defaults keep young copying disabled. Tests that assert movement, remembered-set
 behavior, or foreign wrapper relocation must opt in with `CAMEL_GC_ENABLE_YOUNG_COPYING=1`.
+
+FVM is intentionally different from NVM/PRL here: default FVM does not poll a GC safepoint at every
+bytecode transition. The GC plan still verifies FVM execution with GC diagnostics enabled, but the
+collection opportunities are pass-boundary or other explicit safepoints around that execution, not
+per-opcode bytecode-loop safepoints.
 
 ## Standard Verification Commands
 
@@ -161,8 +171,9 @@ out\latest\bin\camel.exe test\cases\feat\mm\gc\gc_fib10.cml std::gc::verify std:
 
 Expected evidence:
 
-- The same source program runs correctly under NVM and FVM with safepoint stress.
-- The PRL scheduler case runs correctly under safepoint stress.
+- The same source program runs correctly under NVM and PRL with active runtime safepoint stress.
+- The FVM case runs correctly with GC verification and stress diagnostics enabled while preserving
+  the no-per-bytecode-safepoint performance policy.
 - Heap verification reports named root paths if a root is missed.
 
 ### Phase 3: Write Barriers And Remembered Set

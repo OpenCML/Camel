@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 10, 2025
- * Updated: May. 05, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,10 @@
 #include <string>
 
 namespace camel::core::mm {
+
+namespace detail {
+std::atomic_bool autoSpaceSafepointSlowPath{false};
+}
 
 namespace {
 

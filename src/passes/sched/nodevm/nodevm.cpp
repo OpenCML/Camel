@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: May. 05, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -331,6 +331,14 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
     Frame *currFrame       = rootFrame;
     Frame *twinFrame       = nullptr;
     auto *currRuntimeGraph = rootRuntimeGraph;
+    auto gcSafepoint       = [&](std::string_view reason) {
+        // NVM keeps safepoints at graph boundaries only. Cache the slow-path state so normal
+        // execution does not acquire the GC mutex or reload the global atomic at every node.
+        if (gcSafepointsEnabled_) {
+            mm::autoSpace().safepoint(reason);
+            gcSafepointsEnabled_ = mm::autoSpaceSafepointSlowPathEnabled();
+        }
+    };
     try {
         if (currRecursionDepth_ > maxRecursionDepth_) {
             throwRuntimeFault(
@@ -351,7 +359,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
 
         // Tail-call loop. Rebind currRuntimeGraph/currFrame instead of growing the C++ stack.
     loop_start: {
-        mm::autoSpace().safepoint("nodevm graph boundary");
+        gcSafepoint("nodevm graph boundary");
         const size_t nodesSize = currNodes.size();
 
         size_t i = 0;
@@ -393,7 +401,6 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 tillNode = joinNode;
             }
 
-            mm::autoSpace().safepoint("nodevm node boundary");
             EXEC_WHEN_DEBUG({
                 CAMEL_LOG_DEBUG_S(
                     "NodeVM",
@@ -775,8 +782,9 @@ camel::runtime::GCGraph *NodeVMSchedPass::apply(camel::runtime::GCGraph *graph, 
     (void)os;
     ASSERT(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
     graphCaches_.clear();
-    Frame *rootFrame = framePool_.acquire(graph);
-    slot_t result    = call(graph, rootFrame);
+    gcSafepointsEnabled_ = mm::autoSpaceSafepointSlowPathEnabled();
+    Frame *rootFrame     = framePool_.acquire(graph);
+    slot_t result        = call(graph, rootFrame);
     context_->captureProcessExitCode(graph, result);
     return nullptr;
 }

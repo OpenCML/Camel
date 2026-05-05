@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: May. 05, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -182,6 +182,10 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
     pendingSafepointCollection_     = CollectionKind::None;
     const std::string_view gcReason = reason.empty() ? std::string_view{"safepoint"} : reason;
     collectAtSafepointUnlocked(requested, gcReason);
+    detail::autoSpaceSafepointSlowPath.store(
+        debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0 ||
+            pendingSafepointCollection_ != CollectionKind::None,
+        std::memory_order_release);
 }
 
 void GenerationalAllocatorWithGC::minorGC() {
@@ -191,6 +195,10 @@ void GenerationalAllocatorWithGC::minorGC() {
     CollectionKind requested    = pendingSafepointCollection_;
     pendingSafepointCollection_ = CollectionKind::None;
     collectAtSafepointUnlocked(requested, "manual minor GC");
+    detail::autoSpaceSafepointSlowPath.store(
+        debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0 ||
+            pendingSafepointCollection_ != CollectionKind::None,
+        std::memory_order_release);
 }
 
 void GenerationalAllocatorWithGC::majorGC() {
@@ -200,6 +208,10 @@ void GenerationalAllocatorWithGC::majorGC() {
     CollectionKind requested    = pendingSafepointCollection_;
     pendingSafepointCollection_ = CollectionKind::None;
     collectAtSafepointUnlocked(requested, "manual major GC");
+    detail::autoSpaceSafepointSlowPath.store(
+        debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0 ||
+            pendingSafepointCollection_ != CollectionKind::None,
+        std::memory_order_release);
 }
 
 bool GenerationalAllocatorWithGC::debugRunRememberedSetSelfTest() {
@@ -390,6 +402,10 @@ void GenerationalAllocatorWithGC::requestCollectionAtSafepointUnlocked(
     }
     ++stats_.deferredCollections;
     pendingSafepointCollection_ = combineCollectionKinds(pendingSafepointCollection_, kind);
+    // Allocation and stress sites only request moving-capable GC. The actual collection must wait
+    // for an explicit safepoint where roots can be relocated, so publish that pending work to
+    // scheduler-level safepoint polls.
+    detail::autoSpaceSafepointSlowPath.store(true, std::memory_order_release);
 }
 
 void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(

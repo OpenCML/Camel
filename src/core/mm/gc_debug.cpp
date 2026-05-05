@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: May. 05, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,6 +38,11 @@ void GenerationalAllocatorWithGC::configureDebug(DebugConfig config) {
     std::lock_guard<std::mutex> lock(mutex_);
     debugConfig_                = config;
     pendingSafepointCollection_ = CollectionKind::None;
+    // GC stress deliberately turns normal safepoints into collection opportunities. Keep the
+    // runtime-visible slow-path flag in sync so schedulers can stay cheap when diagnostics are off.
+    detail::autoSpaceSafepointSlowPath.store(
+        debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0,
+        std::memory_order_release);
 }
 
 GenerationalAllocatorWithGC::DebugConfig GenerationalAllocatorWithGC::debugConfig() const {

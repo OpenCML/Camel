@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: May. 05, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,7 @@
 #include "alloc/large_obj.h"
 #include "camel/core/rtdata/base.h"
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <mutex>
@@ -187,6 +188,12 @@ namespace camel::core::mm {
 
 namespace rtdata = camel::core::rtdata;
 namespace type   = camel::core::type;
+
+namespace detail {
+// Set only when diagnostic GC stress or a deferred safepoint collection can require real work.
+// Hot schedulers use this as the single cheap predicate before taking the allocator mutex.
+extern std::atomic_bool autoSpaceSafepointSlowPath;
+} // namespace detail
 
 FreeListAllocator &graphSpace();
 BumpPointerAllocator &permSpace();
@@ -503,5 +510,15 @@ class GenerationalAllocatorWithGC : public IAllocator {
 };
 
 GenerationalAllocatorWithGC &autoSpace();
+
+inline bool autoSpaceSafepointSlowPathEnabled() noexcept {
+    return detail::autoSpaceSafepointSlowPath.load(std::memory_order_acquire);
+}
+
+inline void safepoint(std::string_view reason = {}) {
+    if (autoSpaceSafepointSlowPathEnabled()) {
+        autoSpace().safepoint(reason);
+    }
+}
 
 } // namespace camel::core::mm

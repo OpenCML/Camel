@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: May. 05, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -152,6 +152,22 @@ inline HigherOrderCallSite makeHigherOrderCallSite(Function *func) {
     };
 }
 
+// Direct-call layouts encode callee port slots during bytecode linking. Most calls move scalar
+// values between positive dynamic slots, so copying through slotBase() avoids the generic
+// Frame::get/set routing while preserving static-slot fallback for closures and constants.
+inline slot_t readCallSlot(Frame *frame, data_idx_t index) {
+    return LIKELY(index > 0) ? frame->slotBase()[static_cast<size_t>(index)]
+                             : frame->get<slot_t>(index);
+}
+
+inline void writeCallSlot(Frame *frame, data_idx_t index, slot_t value) {
+    if (LIKELY(index > 0)) {
+        frame->slotBase()[static_cast<size_t>(index)] = value;
+        return;
+    }
+    frame->set(index, value);
+}
+
 } // namespace
 
 FastVMSchedPass::~FastVMSchedPass() = default;
@@ -163,11 +179,14 @@ void FastVMSchedPass::populateDirectCallFrame(
         srcArgs.size() == dstSlots.size(),
         "FastVM encoded direct-call layout is arity-mismatched.");
     if (srcArgs.size() == 1) {
-        calleeFrame->set(dstSlots[0], callerFrame->get<slot_t>(srcArgs[0]));
+        writeCallSlot(calleeFrame, dstSlots[0], readCallSlot(callerFrame, srcArgs[0]));
         return;
     }
     for (size_t argIndex = 0; argIndex < srcArgs.size(); ++argIndex) {
-        calleeFrame->set(dstSlots[argIndex], callerFrame->get<slot_t>(srcArgs[argIndex]));
+        writeCallSlot(
+            calleeFrame,
+            dstSlots[argIndex],
+            readCallSlot(callerFrame, srcArgs[argIndex]));
     }
 }
 
@@ -176,11 +195,11 @@ void FastVMSchedPass::captureCallArgValues(
     ASSERT(callerFrame != nullptr, "FastVM direct call source frame is null.");
     out.resize(srcArgs.size());
     if (srcArgs.size() == 1) {
-        out[0] = callerFrame->get<slot_t>(srcArgs[0]);
+        out[0] = readCallSlot(callerFrame, srcArgs[0]);
         return;
     }
     for (size_t argIndex = 0; argIndex < srcArgs.size(); ++argIndex) {
-        out[argIndex] = callerFrame->get<slot_t>(srcArgs[argIndex]);
+        out[argIndex] = readCallSlot(callerFrame, srcArgs[argIndex]);
     }
 }
 
@@ -191,11 +210,11 @@ void FastVMSchedPass::populateDirectCallFrameFromValues(
         argValues.size() == dstSlots.size(),
         "FastVM encoded direct-call layout is arity-mismatched.");
     if (argValues.size() == 1) {
-        calleeFrame->set(dstSlots[0], argValues[0]);
+        writeCallSlot(calleeFrame, dstSlots[0], argValues[0]);
         return;
     }
     for (size_t argIndex = 0; argIndex < argValues.size(); ++argIndex) {
-        calleeFrame->set(dstSlots[argIndex], argValues[argIndex]);
+        writeCallSlot(calleeFrame, dstSlots[argIndex], argValues[argIndex]);
     }
 }
 

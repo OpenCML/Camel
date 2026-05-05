@@ -17,7 +17,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "gc.verify_stress_fvm"
-desc = "Checks GC verification and deterministic stress requests can run across FVM bytecode safepoints."
+desc = "Checks GC verification and deterministic stress requests can run around FVM execution without bytecode-loop safepoints."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
 args = ["${case}", "std::gc::verify", "${run_fvm}"]

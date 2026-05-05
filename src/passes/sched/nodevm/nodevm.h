@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,6 +58,7 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     std::vector<std::unique_ptr<NodeVMCallLayoutCache>> callLayoutCaches_;
     std::vector<runtime_data_idx_t> operIndices_;
     std::vector<slot_t> callArgScratch_;
+    bool gcSafepointsEnabled_ = false;
 
     slot_t call(camel::runtime::GCGraph *runtimeGraph, ctx::Frame *rootFrame);
     std::span<const camel::runtime::gc_node_ref_t> buildTopoNodes(camel::runtime::GCGraph *graph);

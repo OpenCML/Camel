@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: May. 05, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -64,7 +64,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
     try {
         while (true) {
-            mm::autoSpace().safepoint("fastvm bytecode boundary");
+            // The switch interpreter follows the same policy as computed-goto FVM: no GC safepoint
+            // inside the bytecode loop. Pass-boundary safepoints keep diagnostics available without
+            // taxing every opcode dispatch.
             if (InternalGlobalConfig::IsInspectionMode() && context_) {
                 if (auto sourceContext = context_->sourceContext()) {
                     sourceContext->setCurrentRuntimeOrigin(sourceContext->debugMap().pcOrigin(pc));

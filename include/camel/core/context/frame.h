@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: May. 05, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -424,7 +424,9 @@ class FramePool {
         if (LIKELY(
                 lastFrame->runtimeGraph_ == graph &&
                 (!MatchStaticArea || lastFrame->staticArea_ == staticArea))) {
-            clearGcSlots(lastFrame);
+            if (UNLIKELY(hasGcSlots(lastFrame))) {
+                clearGcSlots(lastFrame);
+            }
             EXEC_WHEN_DEBUG({
                 CAMEL_LOG_INFO_S(
                     "FramePool",
@@ -460,7 +462,9 @@ class FramePool {
             graph,
             MatchStaticArea ? staticArea : graph->staticArea(),
             graph->runtimeDataType());
-        clearGcSlots(frame);
+        if (UNLIKELY(graph->runtimeDataType()->refCount() != 0)) {
+            clearGcSlots(frame);
+        }
 
         EXEC_WHEN_DEBUG({
             CAMEL_LOG_INFO_S(
@@ -549,6 +553,14 @@ class FramePool {
             visitor(frame);
             cursor += frame->runtimeGraph_->frameSize();
         }
+    }
+
+    // Frame reuse must clear stale managed references, but scalar-only frames dominate FVM hot
+    // paths such as recursive fib. Test the precomputed ref count before entering the clearing
+    // loop so GC safety stays tied to the layout while pure-scalar frames stay cheap.
+    static bool hasGcSlots(const Frame *frame) {
+        const type::TupleType *layout = frame->dynamicAreaType_;
+        return layout && layout->refCount() != 0;
     }
 
     void clearGcSlots(Frame *frame) {

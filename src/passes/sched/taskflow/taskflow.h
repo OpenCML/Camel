@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: May. 05, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -103,6 +103,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     tf::Executor executor_;
     std::unordered_map<camel::runtime::GCGraph *, std::vector<camel::runtime::gc_node_ref_t>>
         linearTopoCache_;
+    bool gcSafepointsEnabled_ = false;
 
     slot_t evalGraphTF(camel::runtime::GCGraph *graph, ctx::Frame *frame);
     slot_t evalGraphLinear(camel::runtime::GCGraph *graph, ctx::Frame *frame);
