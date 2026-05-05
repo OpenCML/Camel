@@ -1,0 +1,17 @@
+/**
+ * Small parallel workload used by GC stress tests to cover PRL safepoints.
+ */
+module gc_prl_scheduler
+
+func work(n: int): int {
+    return n * n
+}
+
+func main(): int sync {
+    let a = wait work(5)
+    let b = wait work(6)
+    let c = a + b
+    'prl_scheduler a={} b={} sum={}'->format<a, b, c>->println
+    return 0
+}
+
