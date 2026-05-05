@@ -63,6 +63,20 @@ void GenerationalAllocatorWithGC::free(void *ptr) {
     ASSERT(false, "GenerationalAllocatorWithGC does not support manual free");
 }
 
+bool GenerationalAllocatorWithGC::isObjectAddressStable(rtdata::Object *object) const {
+    if (!object) {
+        return true;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    ObjectHeader *header = autoHeaderForPayload(object);
+    if (header) {
+        return inElderGenSpace(header) || inLargeObjSpace(header);
+    }
+
+    return graphSpace().contains(object) || permSpace().contains(object);
+}
+
 void GenerationalAllocatorWithGC::setObjectRootSet(std::vector<rtdata::Object *> *rootSet) {
     std::lock_guard<std::mutex> lock(mutex_);
     rootObjectSet_ = rootSet;
@@ -496,7 +510,11 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
             rememberOldObjectIfYoungRefsUnlocked(entry.object, entry.type);
         }
 
-        // 5. Reset Birth and Cache
+        // 5. Finalize dead young wrappers, then reset Birth and Cache. Forwarded source objects
+        // still have a live copy in Haven/Elder, so finalizing only unforwarded payloads preserves
+        // the "moving the wrapper does not retain/release the native resource" contract.
+        finalizeUnforwardedObjectsIn(birthSpace_);
+        finalizeUnforwardedObjectsIn(cacheSpace_);
         birthSpace_.reset();
         cacheSpace_.reset();
 
@@ -615,6 +633,26 @@ void GenerationalAllocatorWithGC::rememberOldObjectIfYoungRefsUnlocked(
             .object = object,
             .type   = objectType,
         };
+    }
+}
+
+void GenerationalAllocatorWithGC::finalizeUnforwardedObjectsIn(BumpPointerAllocator &allocator) {
+    std::vector<ObjectHeader *> deadObjects;
+    allocator.iterateAllocated([&](ObjectHeader *header) {
+        objectTypes_.erase(header);
+        if (!header->forwarded()) {
+            deadObjects.push_back(header);
+        }
+    });
+    finalizeObjects(deadObjects);
+}
+
+void GenerationalAllocatorWithGC::finalizeObjects(const std::vector<ObjectHeader *> &objects) {
+    for (ObjectHeader *header : objects) {
+        if (!header) {
+            continue;
+        }
+        payloadOf<rtdata::Object>(header)->finalize();
     }
 }
 
@@ -840,6 +878,7 @@ void GenerationalAllocatorWithGC::sweepOldGen() {
     });
 
     stats_.freedElderObjects += unreachable.size();
+    finalizeObjects(unreachable);
     for (ObjectHeader *header : unreachable) {
         rememberedSet_.erase(header);
         objectTypes_.erase(header);
@@ -857,6 +896,7 @@ void GenerationalAllocatorWithGC::sweepLargeObjects() {
     });
 
     stats_.freedLargeObjects += unreachable.size();
+    finalizeObjects(unreachable);
     for (ObjectHeader *header : unreachable) {
         rememberedSet_.erase(header);
         objectTypes_.erase(header);

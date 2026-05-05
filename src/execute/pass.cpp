@@ -22,6 +22,7 @@
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
+#include "camel/core/mm/foreign_handle.h"
 #include "camel/core/mm/profiler.h"
 #include "macro/macro.h"
 #include "passes/opt/devirtualize/devirtualize.h"
@@ -108,6 +109,17 @@ class GcRememberedSetPass final : public GraphIRPass {
     GCGraph *apply(GCGraph *graph, std::ostream &os) override {
         camel::core::mm::autoSpace().debugRunRememberedSetSelfTest();
         os << "{\"ok\":true,\"kind\":\"gc.remembered_set\"}\n";
+        return graph;
+    }
+};
+
+class GcForeignResourcePass final : public GraphIRPass {
+  public:
+    explicit GcForeignResourcePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        camel::core::mm::debugRunForeignResourceSelfTest(camel::core::mm::autoSpace());
+        os << "{\"ok\":true,\"kind\":\"gc.foreign_resource\"}\n";
         return graph;
     }
 };
@@ -216,6 +228,7 @@ PassScopePtr initPassScope() {
                          {"snapshot", def(PASS(GcSnapshotPass))},
                          {"verify", def(PASS(GcVerifyPass))},
                          {"remembered_set", def(PASS(GcRememberedSetPass))},
+                         {"foreign_resource", def(PASS(GcForeignResourcePass))},
                      })},
                     {"nodevm", def(PASS(NodeVMSchedPass))},
                     {"fastvm",
@@ -304,6 +317,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::gcsnap", "std::gc::snapshot"},
     {"std::gcverify", "std::gc::verify"},
     {"std::gcremembered", "std::gc::remembered_set"},
+    {"std::gcforeign", "std::gc::foreign_resource"},
     {"std::bc", "std::fastvm::bytecode"},
     {"std::lbc", "std::fastvm::linked_bytecode"},
     {"std::bin", "std::fastvm::jit::dump::bin"},

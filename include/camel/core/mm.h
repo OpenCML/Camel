@@ -21,6 +21,7 @@
 
 #include "mm/alloc/bump_ptr.h"
 #include "mm/alloc/free_list.h"
+#include "mm/foreign_handle.h"
 #include "mm/gen.h"
 #include "mm/root_handle.h"
 

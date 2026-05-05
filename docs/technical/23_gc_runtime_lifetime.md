@@ -100,6 +100,57 @@ dynamic frame slots are traced roots, graph-space static tuples are graph roots 
 auto-space owners, macro/static bridge buffers use their own lifetime contracts, and compile-time
 data objects do not participate in runtime auto-space collection.
 
+## Phase 4 Foreign Resource Contract
+
+Camel slots remain plain 8-byte values. A slot that names an external/native resource stores an
+ordinary `rtdata::Object *`, specifically a `ForeignResourceObject`. The wrapper is GC-managed and
+may move under the experimental young-copying collector; the native resource itself lives behind a
+`ForeignResourceControlBlock` with explicit retain/release, idempotent disposal, kind metadata, and
+debug counters.
+
+Wrapper relocation copies only the wrapper bytes. It does not retain, release, or clone the native
+resource. The control block is released only when a wrapper is finalized, when an explicitly cloned
+resource reference is released after an allocation failure, or when a descriptor-specific shared
+resource clone/retain operation is requested. `dispose` immediately runs the descriptor deleter,
+marks the resource disposed, and leaves the wrapper object alive; later access fails with a
+deterministic runtime error and a later GC finalizer only releases the control-block reference.
+
+GC finalization now runs before mark-sweep frees unreachable elder or large objects. In the
+young-copying path, dead nursery/from-space wrappers are finalized before the semispace reset, while
+forwarded source wrappers are not finalized because their live copy still owns the same control
+block. This preserves exactly-once native cleanup across promotion and movement.
+
+The native handle ABI has three levels:
+
+- `ForeignBorrowedHandle` documents a raw object pointer that is valid only for the current native
+  call and across no safepoint.
+- `ForeignRootedHandle` wraps `mm::RootHandle`, keeps the object live, and updates when copying GC
+  moves it.
+- `ForeignPinnedHandle` also roots the object, but it is deliberately conservative: it only accepts
+  objects already in non-moving auto-space regions (`elder` or `large`) or non-moving runtime
+  regions. Native code that exposes a raw address must use this handle or allocate the exposed data
+  in a non-moving domain.
+
+`ForeignResourceDescriptor` is the native type contract. It names the resource kind, owns the deleter
+and optional clone operation, can trace embedded Camel references, can observe wrapper movement, and
+declares flags such as `containsCamelReferences`, `finalizable`, `movable`, and `pinned`. A
+descriptor without a trace callback is treated as unable to hold Camel object references.
+
+The Python module now stores `PyObject` values as `ForeignResourceObject` wrappers instead of a
+process-global holder vector. `python:py_dispose` exposes deterministic cleanup, and normal Python
+access checks for the disposed state before borrowing the `py::object`.
+
+Loaded `.cmo` DLL handles are still retained for the process lifetime. This is intentional: native
+resource control blocks may hold descriptor callbacks compiled into the module DLL, and unloading the
+DLL before every unreachable wrapper has been finalized would leave stale finalizer code pointers.
+Context teardown drops graph roots so a later major GC can reclaim wrappers, but the code image stays
+mapped to keep late finalization safe.
+
+Diagnostics expose `foreignResources` in `std::gc::snapshot`, including created/disposed/finalized
+control-block counters plus active rooted and pinned handle counts. `std::gc::foreign_resource`
+runs a deterministic self-test covering movement, rooted survival, pinned address stability,
+idempotent disposal, finalization after disposal, and handle accounting.
+
 ## Phase 1 Observability Controls
 
 GC diagnostics are configured explicitly through environment variables so language-level test cases
@@ -127,6 +178,8 @@ Two runtime passes expose the same infrastructure:
 - `std::gc::verify` validates the heap and leaves the graph available for later passes.
 - `std::gc::snapshot` / `std::gcsnap` prints JSON with region object counts/bytes, collection
   counters, deferred/emergency collection counters, moved/promoted/freed counters, root-source data,
-  and remembered-set size.
+  remembered-set size, and foreign-resource diagnostics.
 - `std::gc::remembered_set` runs a targeted old-to-young remembered-set self-test and leaves the
   graph available for later passes.
+- `std::gc::foreign_resource` runs a targeted FFI resource and handle lifetime self-test and leaves
+  the graph available for later passes.

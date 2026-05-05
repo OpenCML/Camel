@@ -117,6 +117,10 @@ verify_script = """
     assert(Array.isArray(payload.gc.rootSources), "expected root source list")
     assert(payload.gc.rootSources.some((name) => name.startsWith("runtimeGraphRoots")), "expected runtime graph roots")
     assert(Number.isInteger(payload.gc.rememberedSetSize), "expected remembered-set size")
+    assert(payload.foreignResources, "expected foreign resource diagnostics")
+    assert(Number.isInteger(payload.foreignResources.liveControlBlocks), "expected live foreign resource count")
+    assert(Number.isInteger(payload.foreignResources.activeRootedHandles), "expected active rooted foreign handles")
+    assert(Number.isInteger(payload.foreignResources.activePinnedHandles), "expected active pinned foreign handles")
     assert(payload.regions.some((region) => region.name === "elderGenSpace"), "expected elder region")
 }
 """
@@ -133,6 +137,18 @@ env = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both"]
 expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "\"kind\":\"gc.remembered_set\"", "Fibonacci(10) = 55"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
+timeout_ms = 4000
+
+[[tests]]
+name = "gc.foreign_resource_lifetime"
+desc = "Checks foreign-resource dispose/finalize and rooted/pinned handle accounting under young copying."
+kind = "behavior"
+case = "../../cases/smoke/core/fib10_pipeline.cml"
+args = ["${case}", "std::gc::foreign_resource"]
+env = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both"]
+expect_exit = 0
+expect_stdout_contains = ["\"ok\":true", "\"kind\":\"gc.foreign_resource\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]

@@ -86,9 +86,10 @@ class Object {
     equals(const Object *other, const camel::core::type::Type *type, bool deep = false) const = 0;
     virtual Object *clone(
         camel::core::mm::IAllocator &allocator, const camel::core::type::Type *type,
-        bool deep = false) const                                                               = 0;
-    virtual void print(std::ostream &os, const camel::core::type::Type *type) const            = 0;
-    virtual void onMoved()                                                                     = 0;
+        bool deep = false) const                                                    = 0;
+    virtual void print(std::ostream &os, const camel::core::type::Type *type) const = 0;
+    virtual void onMoved()                                                          = 0;
+    virtual void finalize() noexcept {}
     virtual void updateRefs(const RefRelocator &relocate, const camel::core::type::Type *type) = 0;
 
     template <typename T>

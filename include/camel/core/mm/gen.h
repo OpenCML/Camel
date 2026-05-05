@@ -257,6 +257,8 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     void free(void *ptr) override;
 
+    bool isObjectAddressStable(rtdata::Object *object) const;
+
     void setObjectRootSet(std::vector<rtdata::Object *> *rootSet);
 
     void registerExternalRootTracer(const void *owner, std::string name, ExternalRootTracer tracer);
@@ -430,6 +432,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
     collectYoungReferenceEdges(rtdata::Object *object, const type::Type *objectType) const;
 
     void rememberOldObjectIfYoungRefsUnlocked(rtdata::Object *object, const type::Type *objectType);
+
+    void finalizeUnforwardedObjectsIn(BumpPointerAllocator &allocator);
+
+    void finalizeObjects(const std::vector<ObjectHeader *> &objects);
 
     rtdata::Object *forward(rtdata::Object *obj, const type::Type *objType);
 

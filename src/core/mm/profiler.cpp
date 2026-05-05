@@ -11,6 +11,7 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/mm/alloc/header.h"
+#include "camel/core/rtdata/foreign.h"
 #include "nlohmann/json.hpp"
 
 #include <cstdint>
@@ -162,7 +163,8 @@ std::string snapshotToJson() {
         totalObjectBytes += region.value("objectBytes", 0);
     }
 
-    const auto stats = autoSp.stats();
+    const auto stats        = autoSp.stats();
+    const auto foreignStats = camel::core::rtdata::foreignResourceStats();
 
     json root = {
         {"regions", regions},
@@ -184,6 +186,18 @@ std::string snapshotToJson() {
              {"lastTracedRootReferenceCount", stats.lastTracedRootReferenceCount},
              {"rememberedSetSize", stats.rememberedSetSize},
              {"rootSources", autoSp.rootSourceDescriptions()},
+         }},
+        {"foreignResources",
+         {
+             {"createdControlBlocks", foreignStats.createdControlBlocks},
+             {"disposedResources", foreignStats.disposedResources},
+             {"finalizedWrappers", foreignStats.finalizedWrappers},
+             {"releasedControlBlocks", foreignStats.releasedControlBlocks},
+             {"liveControlBlocks", foreignStats.liveControlBlocks},
+             {"createdRootedHandles", foreignStats.createdRootedHandles},
+             {"createdPinnedHandles", foreignStats.createdPinnedHandles},
+             {"activeRootedHandles", foreignStats.activeRootedHandles},
+             {"activePinnedHandles", foreignStats.activePinnedHandles},
          }},
         {"summary",
          {
