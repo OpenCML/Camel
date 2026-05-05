@@ -209,7 +209,18 @@ class Struct : public rtdata::Object {
         for (size_t i = 0; i < size_; ++i) {
             if (type::isGCTraced(codes[i])) {
                 if (rtdata::Object *&ref = refArr[i]) {
-                    ref = relocate(ref, structType->typeAt(i));
+                    const type::Type *slotType = structType->typeAt(i);
+                    ref                        = relocate(
+                        ref,
+                        slotType,
+                        rtdata::RefTraceInfo{
+                            .owner     = this,
+                            .ownerType = type,
+                            .slotType  = slotType,
+                            .ownerKind = "Struct",
+                            .slotName  = structType->fieldName(i),
+                            .slotIndex = i,
+                        });
                 }
             }
         }

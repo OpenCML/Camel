@@ -28,13 +28,58 @@
 #include <cstring> // for std::memcpy
 #include <format>
 #include <functional>
+#include <limits>
 #include <ostream>
+#include <string>
+#include <string_view>
 
 namespace camel::core::rtdata {
 
+class Object;
+
+struct RefTraceInfo {
+    static constexpr size_t npos = std::numeric_limits<size_t>::max();
+
+    const Object *owner                      = nullptr;
+    const camel::core::type::Type *ownerType = nullptr;
+    const camel::core::type::Type *slotType  = nullptr;
+    std::string_view ownerKind               = {};
+    std::string_view slotName                = {};
+    size_t slotIndex                         = npos;
+
+    bool hasSlotIndex() const { return slotIndex != npos; }
+
+    std::string describe() const {
+        std::string out;
+        if (!ownerKind.empty()) {
+            out += ownerKind;
+        } else {
+            out += "Object";
+        }
+
+        if (owner) {
+            out += std::format("@{}", static_cast<const void *>(owner));
+        }
+
+        if (hasSlotIndex()) {
+            out += std::format("[{}]", slotIndex);
+        }
+        if (!slotName.empty()) {
+            out += ".";
+            out += slotName;
+        }
+        if (slotType) {
+            out += ":";
+            out += slotType->toString();
+        }
+        return out;
+    }
+};
+
 class Object {
   public:
-    using RefRelocator = std::function<Object *(Object *, const camel::core::type::Type *)>;
+    using RefRelocator =
+        std::function<Object *(Object *, const camel::core::type::Type *, const RefTraceInfo &)>;
 
     virtual ~Object() = default;
     virtual bool

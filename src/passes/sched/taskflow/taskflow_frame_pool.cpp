@@ -28,6 +28,7 @@ TaskflowFramePool::TaskflowFramePool(size_t chunkBytes, size_t minChunkFrames)
     : chunkBytes_(chunkBytes), minChunkFrames_(std::max<size_t>(1, minChunkFrames)) {
     camel::core::mm::autoSpace().registerExternalRootTracer(
         this,
+        "TaskflowFramePool.activeFrames",
         [this](const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) {
             traceActiveFrames(relocate);
         });

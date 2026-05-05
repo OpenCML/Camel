@@ -101,7 +101,17 @@ class Function : public rtdata::Object {
         (void)type;
         if (closure_) {
             const type::TupleType *tupleTypePtr = tupleType();
-            closure_ = static_cast<Tuple *>(relocate(closure_, tupleTypePtr));
+            closure_                            = static_cast<Tuple *>(relocate(
+                closure_,
+                tupleTypePtr,
+                rtdata::RefTraceInfo{
+                    .owner     = this,
+                    .ownerType = type,
+                    .slotType  = tupleTypePtr,
+                    .ownerKind = "Function",
+                    .slotName  = "closure",
+                    .slotIndex = rtdata::RefTraceInfo::npos,
+                }));
         }
     }
 

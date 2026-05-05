@@ -24,11 +24,13 @@
 #include "alloc/large_obj.h"
 #include "camel/core/rtdata/base.h"
 
-#include "camel/utils/assert.h"
-#include "camel/utils/brpred.h"
-
+#include <cstdint>
 #include <functional>
 #include <mutex>
+#include <string>
+#include <string_view>
+#include <unordered_set>
+#include <vector>
 
 // ============================================================================
 // Generational GC memory layout overview
@@ -186,10 +188,20 @@ namespace camel::core::mm {
 namespace rtdata = camel::core::rtdata;
 namespace type   = camel::core::type;
 
+FreeListAllocator &graphSpace();
+BumpPointerAllocator &permSpace();
+
 class GenerationalAllocatorWithGC : public IAllocator {
   public:
     using RefRelocator       = rtdata::Object::RefRelocator;
     using ExternalRootTracer = std::function<void(const RefRelocator &)>;
+
+    enum class CollectionKind {
+        None,
+        Minor,
+        Major,
+        MinorAndMajor,
+    };
 
     struct Config {
         size_t birthSize;
@@ -202,68 +214,70 @@ class GenerationalAllocatorWithGC : public IAllocator {
         bool enableYoungGenCopying;
     };
 
-    GenerationalAllocatorWithGC(const Config &config)
-        : birthSpace_(config.birthSize, "auto.birth"), havenSpace_(config.havenSize, "auto.haven"),
-          cacheSpace_(config.havenSize, "auto.cache"),
-          elderGenSpace_(config.elderGenSize, "auto.elder"), largeObjSpace_("auto.large"),
-          promotionAgeThreshold_(config.promotionAgeThreshold),
-          largeObjThreshold_(config.largeObjThreshold),
-          minorGCTriggerRatio_(config.minorGCTriggerRatio),
-          majorGCTriggerRatio_(config.majorGCTriggerRatio),
-          enableYoungGenCopying_(config.enableYoungGenCopying) {}
+    struct DebugConfig {
+        size_t stressEveryNAllocations  = 0;
+        size_t stressEveryNSafepoints   = 0;
+        CollectionKind stressCollection = CollectionKind::Major;
+        bool verifyBeforeGC             = false;
+        bool verifyAfterGC              = false;
+        bool logMovements               = false;
+    };
 
-    void *alloc(size_t payloadSize, size_t align = alignof(slot_t)) override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return allocUnlocked(payloadSize, align);
-    }
+    struct RuntimeStats {
+        uint64_t allocations                  = 0;
+        uint64_t safepoints                   = 0;
+        uint64_t requestedCollections         = 0;
+        uint64_t minorCollections             = 0;
+        uint64_t majorCollections             = 0;
+        uint64_t movedObjects                 = 0;
+        uint64_t promotedObjects              = 0;
+        uint64_t freedElderObjects            = 0;
+        uint64_t freedLargeObjects            = 0;
+        uint64_t lastTracedRootReferenceCount = 0;
+        size_t rememberedSetSize              = 0;
+        size_t rootSourceCount                = 0;
+    };
 
-    void free(void *ptr) override {
-        (void)ptr;
-        ASSERT(false, "GenerationalAllocatorWithGC does not support manual free");
-    }
+    struct HeapVerificationIssue {
+        std::string message;
+        std::string path;
+        std::string owner;
+        std::string slotType;
+        std::string region;
+        uintptr_t object = 0;
+        uintptr_t target = 0;
+    };
 
-    void setObjectRootSet(std::vector<rtdata::Object *> *rootSet) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        rootObjectSet_ = rootSet;
-    }
+    explicit GenerationalAllocatorWithGC(const Config &config);
 
-    void registerExternalRootTracer(const void *owner, ExternalRootTracer tracer) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        ASSERT(owner != nullptr, "External GC root tracer owner cannot be null.");
-        ASSERT(static_cast<bool>(tracer), "External GC root tracer cannot be empty.");
-        auto it = std::find_if(
-            externalRootTracers_.begin(),
-            externalRootTracers_.end(),
-            [owner](const auto &entry) { return entry.first == owner; });
-        if (it != externalRootTracers_.end()) {
-            it->second = std::move(tracer);
-            return;
-        }
-        externalRootTracers_.emplace_back(owner, std::move(tracer));
-    }
+    void *alloc(size_t payloadSize, size_t align = alignof(slot_t)) override;
 
-    void unregisterExternalRootTracer(const void *owner) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        std::erase_if(externalRootTracers_, [owner](const auto &entry) {
-            return entry.first == owner;
-        });
-    }
+    void free(void *ptr) override;
 
-    void recordOldToYoungRef(void *oldObj, void *youngObj) {
-        (void)youngObj;
-        if (!enableYoungGenCopying_) {
-            return;
-        }
-        std::lock_guard<std::mutex> lock(mutex_);
-        ObjectHeader *header = headerOf(oldObj);
-        rememberedSet_.insert(header);
-    }
+    void setObjectRootSet(std::vector<rtdata::Object *> *rootSet);
+
+    void registerExternalRootTracer(const void *owner, std::string name, ExternalRootTracer tracer);
+
+    void unregisterExternalRootTracer(const void *owner);
+
+    void configureDebug(DebugConfig config);
+
+    DebugConfig debugConfig() const;
+
+    RuntimeStats stats() const;
+
+    std::vector<std::string> rootSourceDescriptions() const;
+
+    std::vector<HeapVerificationIssue> verifyHeap();
+
+    void verifyHeapOrThrow(std::string_view where);
+
+    void safepoint(std::string_view reason = {});
+
+    void recordOldToYoungRef(void *oldObj, void *youngObj);
 
     // Minor GC: collect the young generation (Birth + From).
-    void minorGC() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        minorGCUnlocked();
-    }
+    void minorGC();
 
     // Debugger / profiler: expose sub-regions (e.g. memory visualization).
     const BumpPointerAllocator &birthSpace() const { return birthSpace_; }
@@ -273,145 +287,20 @@ class GenerationalAllocatorWithGC : public IAllocator {
     const LargeObjectAllocator &largeObjSpace() const { return largeObjSpace_; }
 
     // Major GC: collect the entire heap.
-    void majorGC() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        majorGCUnlocked();
-    }
+    void majorGC();
 
   private:
-    void *allocUnlocked(size_t payloadSize, size_t align = alignof(slot_t)) {
-        ASSERT(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
+    void *allocUnlocked(size_t payloadSize, size_t align = alignof(slot_t));
 
-        // Large objects use the large-object allocator directly.
-        if (UNLIKELY(payloadSize > largeObjThreshold_)) {
-            void *ptr = largeObjSpace_.alloc(payloadSize, align);
-            if (UNLIKELY(!ptr)) {
-                majorGCUnlocked();
-                ptr = largeObjSpace_.alloc(payloadSize, align);
-                if (!ptr)
-                    throw std::bad_alloc();
-            }
-            auto *header = headerOf(ptr);
-            header->setRegion(AllocRegion::LargeObj);
-            return ptr;
-        }
+    static CollectionKind combineCollectionKinds(CollectionKind lhs, CollectionKind rhs);
 
-        if (!enableYoungGenCopying_) {
-            void *ptr = elderGenSpace_.alloc(payloadSize, align);
-            if (UNLIKELY(!ptr)) {
-                majorGCUnlocked();
-                ptr = elderGenSpace_.alloc(payloadSize, align);
-                if (!ptr)
-                    throw std::bad_alloc();
-            }
+    void requestStressCollectionUnlocked(std::string_view reason);
 
-            auto *header = headerOf(ptr);
-            header->setRegion(AllocRegion::ElderGen);
-            return ptr;
-        }
+    void collectUnlocked(CollectionKind kind, std::string_view reason);
 
-        // Try allocating in the birth space first.
-        void *ptr = birthSpace_.alloc(payloadSize, align);
-        if (UNLIKELY(!ptr)) {
-            minorGCUnlocked();
-            ptr = birthSpace_.alloc(payloadSize, align);
-            if (UNLIKELY(!ptr)) {
-                majorGCUnlocked();
-                ptr = birthSpace_.alloc(payloadSize, align);
-                if (!ptr)
-                    throw std::bad_alloc();
-            }
-        }
+    void minorGCUnlocked();
 
-        auto *header = headerOf(ptr);
-        header->setRegion(AllocRegion::YoungGen);
-        return ptr;
-    }
-
-    void minorGCUnlocked() {
-        if (!enableYoungGenCopying_) {
-            return;
-        }
-        if (inGC_)
-            return; // Reentrancy guard
-        inGC_ = true;
-
-        try {
-            relocationScan_.clear();
-            relocationScanIndex_ = 0;
-
-            // 1. Swap Cache and Haven
-            cacheSpace_.swap(havenSpace_);
-            havenSpace_.reset(); // Clear the new Haven (To) space
-
-            auto relocateYoung =
-                [this](rtdata::Object *ref, const type::Type *refType) -> rtdata::Object * {
-                return forwardYoungRef(ref, refType);
-            };
-
-            // 2. Forward young-gen objects referenced from roots. The root set currently stores
-            // runtime GCGraph carriers, which live in graphSpace rather than autoSpace; tracing the
-            // root object's fields is therefore required to update static data roots.
-            if (rootObjectSet_) {
-                for (rtdata::Object *&rootObj : *rootObjectSet_) {
-                    if (!rootObj) {
-                        continue;
-                    }
-
-                    rootObj = forwardYoungRef(rootObj, nullptr);
-                    rootObj->updateRefs(relocateYoung, nullptr);
-                }
-            }
-            for (const auto &[_, tracer] : externalRootTracers_) {
-                tracer(relocateYoung);
-            }
-
-            // 3. Process old-to-young references (remembered set)
-            for (ObjectHeader *oldHeader : rememberedSet_) {
-                if (!oldHeader->isValid())
-                    continue;
-
-                rtdata::Object *oldObj = payloadOf<rtdata::Object>(oldHeader);
-
-                // Walk and update refs in old-gen objects (layout is per Object / allocator
-                // contract)
-                oldObj->updateRefs(relocateYoung, nullptr);
-            }
-
-            // Remembered set is stale after the young-gen collection
-            rememberedSet_.clear();
-
-            // 4. Scan copied/promoted objects with their static layouts.
-            scanRelocatedObjects();
-
-            // 5. Reset Birth and Cache
-            birthSpace_.reset();
-            cacheSpace_.reset();
-
-            relocationScan_.clear();
-            relocationScanIndex_ = 0;
-            inGC_                = false;
-        } catch (...) {
-            relocationScan_.clear();
-            relocationScanIndex_ = 0;
-            inGC_                = false;
-            throw;
-        }
-    }
-
-    void majorGCUnlocked() {
-        // 1. Mark phase: mark all reachable objects
-        markPhase();
-
-        // 2. Collect the young generation
-        minorGCUnlocked();
-
-        // 3. Sweep old generation (mark-sweep; no compaction here)
-        sweepOldGen();
-
-        // 4. Sweep large-object space
-        sweepLargeObjects();
-    }
+    void majorGCUnlocked();
 
     // ============================================================================
     // Allocation region tag
@@ -472,8 +361,16 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // Untyped roots are reserved for graph carriers whose updateRefs implementation owns its
     // layout. Runtime frames and temporary values must register typed external tracers instead.
     std::vector<rtdata::Object *> *rootObjectSet_{};
-    std::vector<std::pair<const void *, ExternalRootTracer>> externalRootTracers_;
+    struct ExternalRootTracerEntry {
+        const void *owner = nullptr;
+        std::string name;
+        ExternalRootTracer tracer;
+    };
+    std::vector<ExternalRootTracerEntry> externalRootTracers_;
     std::unordered_set<ObjectHeader *> rememberedSet_; // Remembered set: old→young edges
+    DebugConfig debugConfig_{};
+    RuntimeStats stats_{};
+    CollectionKind pendingStressCollection_ = CollectionKind::None;
     mutable std::mutex mutex_;
 
     struct TraceEntry {
@@ -484,244 +381,71 @@ class GenerationalAllocatorWithGC : public IAllocator {
     std::vector<TraceEntry> relocationScan_;
     size_t relocationScanIndex_ = 0;
 
-    bool inYoungGenSpace(ObjectHeader *header) const {
-        return header && header->region_ == AllocRegion::YoungGen &&
-               (birthSpace_.contains(header) || havenSpace_.contains(header) ||
-                cacheSpace_.contains(header));
-    }
-    bool inElderGenSpace(ObjectHeader *header) const {
-        return header && header->region_ == AllocRegion::ElderGen &&
-               elderGenSpace_.contains(header);
-    }
-    bool inLargeObjSpace(ObjectHeader *header) const {
-        return header && header->region_ == AllocRegion::LargeObj &&
-               largeObjSpace_.contains(payloadOf<rtdata::Object>(header));
-    }
+    bool inYoungGenSpace(ObjectHeader *header) const;
+    bool inElderGenSpace(ObjectHeader *header) const;
+    bool inLargeObjSpace(ObjectHeader *header) const;
 
-    rtdata::Object *forward(rtdata::Object *obj, const type::Type *objType) {
-        ObjectHeader *header = headerOf(obj);
-        ASSERT(header->isValid(), "Invalid ObjectHeader encountered during forwarding");
+    rtdata::Object *forward(rtdata::Object *obj, const type::Type *objType);
 
-        // Already forwarded: return the forwardee
-        if (header->forwarded()) {
-            return static_cast<rtdata::Object *>(header->forwardedAddr());
-        }
+    rtdata::Object *forwardYoungRef(rtdata::Object *ref, const type::Type *refType);
 
-        size_t objSize = header->objSize();
+    void scanRelocatedObjects();
 
-        // Bump survival age
-        header->incAge();
-        uint64_t age = header->age();
+    size_t rootSourceCountUnlocked() const;
 
-        void *newObj            = nullptr;
-        ObjectHeader *newHeader = nullptr;
+    static std::string formatVerificationIssue(const HeapVerificationIssue &issue);
 
-        // Promotion vs. copy to survivor To
-        if (UNLIKELY(age >= promotionAgeThreshold_)) {
-            // Promote to old generation
-            newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
-            if (!newObj) {
-                // Old gen full: run full collection
-                majorGCUnlocked();
-                newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
-                if (!newObj)
-                    throw std::bad_alloc();
-            }
+    static HeapVerificationIssue makeIssue(
+        std::string message, std::string path = {}, std::string owner = {},
+        std::string slotType = {}, std::string region = {}, uintptr_t object = 0,
+        uintptr_t target = 0);
 
-            newHeader = headerOf(newObj);
-            newHeader->setAge(age);
-            newHeader->setRegion(AllocRegion::ElderGen);
-        } else {
-            // Copy into survivor To
-            newObj = havenSpace_.alloc(objSize, alignof(slot_t));
-            if (UNLIKELY(!newObj)) {
-                // To space full: promote instead
-                newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
-                if (UNLIKELY(!newObj)) {
-                    if (inGC_) {
-                        // Already in GC; cannot recurse into another major pass here
-                        throw std::bad_alloc();
-                    }
+    void throwIfVerificationFailed(
+        const std::vector<HeapVerificationIssue> &issues, std::string_view where) const;
 
-                    // Run major GC from nested forward path
-                    inGC_ = true;
-                    try {
-                        majorGCUnlocked();
-                        newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
-                        inGC_  = false;
-                    } catch (...) {
-                        inGC_ = false;
-                        throw;
-                    }
+    bool autoRegionContainsPayload(
+        const BumpPointerAllocator &allocator, rtdata::Object *object, std::string_view regionName,
+        AllocRegion expectedRegion, std::vector<HeapVerificationIssue> &issues,
+        std::string_view path) const;
 
-                    if (!newObj)
-                        throw std::bad_alloc();
-                }
+    bool autoRegionContainsPayload(
+        const FreeListAllocator &allocator, rtdata::Object *object, std::string_view regionName,
+        AllocRegion expectedRegion, std::vector<HeapVerificationIssue> &issues,
+        std::string_view path) const;
 
-                newHeader = headerOf(newObj);
-                newHeader->setAge(age);
-                newHeader->setRegion(AllocRegion::ElderGen);
-            } else {
-                newHeader = headerOf(newObj);
-                newHeader->setAge(age);
-                newHeader->setRegion(AllocRegion::YoungGen);
-            }
-        }
+    bool autoRegionContainsPayload(
+        const LargeObjectAllocator &allocator, rtdata::Object *object,
+        std::vector<HeapVerificationIssue> &issues, std::string_view path) const;
 
-        // Copy payload bytes
-        std::memcpy(newObj, (void *)obj, objSize);
+    bool knownObjectPointer(
+        rtdata::Object *object, std::vector<HeapVerificationIssue> &issues,
+        std::string_view path) const;
 
-        // Notify the moved object (fix interior pointers, etc.)
-        rtdata::Object *gcObj = reinterpret_cast<rtdata::Object *>(newObj);
-        gcObj->onMoved();
-        relocationScan_.push_back(TraceEntry{gcObj, objType});
+    void validateAllocatedHeaders(
+        std::vector<HeapVerificationIssue> &issues, const BumpPointerAllocator &allocator,
+        std::string_view regionName, AllocRegion expectedRegion) const;
 
-        // Install forwarding pointer in the old header
-        header->forward(newObj);
+    void validateAllocatedHeaders(
+        std::vector<HeapVerificationIssue> &issues, const FreeListAllocator &allocator,
+        std::string_view regionName, AllocRegion expectedRegion) const;
 
-        return static_cast<rtdata::Object *>(newObj);
-    }
+    void validateAllocatedHeaders(
+        std::vector<HeapVerificationIssue> &issues, const LargeObjectAllocator &allocator) const;
 
-    rtdata::Object *forwardYoungRef(rtdata::Object *ref, const type::Type *refType) {
-        if (!ref) {
-            return nullptr;
-        }
-        ObjectHeader *refHeader = headerOf(ref);
-        if (inYoungGenSpace(refHeader)) {
-            return forward(ref, refType);
-        }
-        return ref;
-    }
-
-    void scanRelocatedObjects() {
-        while (relocationScanIndex_ < relocationScan_.size()) {
-            TraceEntry entry = relocationScan_[relocationScanIndex_++];
-            if (!entry.object || !entry.type) {
-                continue;
-            }
-            entry.object->updateRefs(
-                [this](rtdata::Object *ref, const type::Type *refType) -> rtdata::Object * {
-                    return forwardYoungRef(ref, refType);
-                },
-                entry.type);
-        }
-    }
+    std::vector<HeapVerificationIssue> verifyHeapUnlocked();
 
     // Mark phase: depth-first mark all reachable objects.
-    void markPhase() {
-        // Clear all marks.
-        clearMarks();
+    void markPhase();
 
-        if (rootObjectSet_) {
-            // Start marking from the root set.
-            for (rtdata::Object *root : *rootObjectSet_) {
-                if (root) {
-                    markObject(root, nullptr);
-                }
-            }
-        }
-        for (const auto &[_, tracer] : externalRootTracers_) {
-            tracer([this](rtdata::Object *ref, const type::Type *refType) -> rtdata::Object * {
-                if (ref) {
-                    markObject(ref, refType);
-                }
-                return ref;
-            });
-        }
-    }
+    void clearMarks();
 
-    void clearMarks() {
-        // Young generation marks matter when the copying collector is enabled. Clearing them keeps
-        // a later major collection from skipping an already-marked survivor and missing its edges.
-        birthSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
-        havenSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
-        cacheSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
-
-        // Clear old-generation marks.
-        elderGenSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
-
-        // Clear large-object-space marks.
-        largeObjSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
-
-        if (rootObjectSet_) {
-            for (rtdata::Object *root : *rootObjectSet_) {
-                if (!root) {
-                    continue;
-                }
-                ObjectHeader *header = headerOf(root);
-                if (!inYoungGenSpace(header) && !inElderGenSpace(header) &&
-                    !inLargeObjSpace(header)) {
-                    header->unmark();
-                }
-            }
-        }
-    }
-
-    void markObject(rtdata::Object *obj, const type::Type *objType) {
-        if (!obj)
-            return;
-
-        std::vector<TraceEntry> markStack;
-        markStack.push_back(TraceEntry{obj, objType});
-
-        while (!markStack.empty()) {
-            TraceEntry entry        = markStack.back();
-            rtdata::Object *current = entry.object;
-            markStack.pop_back();
-
-            if (!current)
-                continue;
-
-            void *payload        = reinterpret_cast<void *>(current);
-            ObjectHeader *header = headerOf(payload);
-
-            // Skip if already marked.
-            if (header->marked_)
-                continue;
-
-            // Mark the current object.
-            header->mark();
-
-            // Collect all referenced objects onto the stack (the type is
-            // supplied by the parent layout wherever the runtime has one.
-            current->updateRefs(
-                [&markStack](rtdata::Object *ref, const type::Type *refType) -> rtdata::Object * {
-                    if (ref) {
-                        markStack.push_back(TraceEntry{ref, refType});
-                    }
-                    return ref;
-                },
-                entry.type);
-        }
-    }
+    void markObject(rtdata::Object *obj, const type::Type *objType);
 
     // Sweep unmarked objects from the old generation.
-    void sweepOldGen() {
-        std::vector<ObjectHeader *> unreachable;
-
-        elderGenSpace_.iterateAllocated([&unreachable](ObjectHeader *header) {
-            if (!header->marked_) {
-                unreachable.push_back(header);
-            }
-        });
-
-        // Bulk free.
-        elderGenSpace_.freeBulk(unreachable);
-    }
+    void sweepOldGen();
 
     // Sweep unmarked objects from the large-object space.
-    void sweepLargeObjects() {
-        std::vector<ObjectHeader *> unreachable;
-
-        largeObjSpace_.iterateAllocated([&unreachable](ObjectHeader *header) {
-            if (!header->marked_) {
-                unreachable.push_back(header);
-            }
-        });
-
-        // Bulk free.
-        largeObjSpace_.freeBulk(unreachable);
-    }
+    void sweepLargeObjects();
 };
 
 } // namespace camel::core::mm

@@ -207,6 +207,7 @@ MacroEvaluator::MacroEvaluator(const context_ptr_t &context)
     framePool_.registerGcTracer();
     mm::autoSpace().registerExternalRootTracer(
         this,
+        "MacroEvaluator.valueRoots",
         [this](const mm::GenerationalAllocatorWithGC::RefRelocator &relocate) {
             traceValueRoots(relocate);
         });
@@ -229,8 +230,18 @@ void MacroEvaluator::traceValueRoots(
         if (!root || !root->type || !root->type->isGCTraced() || root->value == NullSlot) {
             continue;
         }
-        auto *relocated = relocate(fromSlot<Object *>(root->value), root->type);
-        root->value     = toSlot(relocated);
+        auto *relocated = relocate(
+            fromSlot<Object *>(root->value),
+            root->type,
+            RefTraceInfo{
+                .owner     = nullptr,
+                .ownerType = nullptr,
+                .slotType  = root->type,
+                .ownerKind = "MacroEvaluator",
+                .slotName  = "valueRoot",
+                .slotIndex = RefTraceInfo::npos,
+            });
+        root->value = toSlot(relocated);
     }
 }
 

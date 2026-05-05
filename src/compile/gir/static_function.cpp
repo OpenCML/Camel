@@ -111,7 +111,17 @@ void StaticFunction::updateRefs(
         return;
     }
     const type::TupleType *tupleTypePtr = tupleType();
-    closure_                            = static_cast<::Tuple *>(relocate(closure_, tupleTypePtr));
+    closure_                            = static_cast<::Tuple *>(relocate(
+        closure_,
+        tupleTypePtr,
+        camel::core::rtdata::RefTraceInfo{
+            .owner     = this,
+            .ownerType = type,
+            .slotType  = tupleTypePtr,
+            .ownerKind = "StaticFunction",
+            .slotName  = "closure",
+            .slotIndex = camel::core::rtdata::RefTraceInfo::npos,
+        }));
 }
 
 } // namespace camel::compile::gir

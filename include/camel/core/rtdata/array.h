@@ -182,7 +182,18 @@ class FixedArray : public rtdata::Object {
 
         for (size_t i = 0; i < size_; ++i) {
             if (rtdata::Object *&ref = refArr[i]) {
-                ref = relocate(ref, arrayType->elemType());
+                type::Type *elemType = arrayType->elemType();
+                ref                  = relocate(
+                    ref,
+                    elemType,
+                    rtdata::RefTraceInfo{
+                        .owner     = this,
+                        .ownerType = type,
+                        .slotType  = elemType,
+                        .ownerKind = "FixedArray",
+                        .slotName  = {},
+                        .slotIndex = i,
+                    });
             }
         }
     }
@@ -388,9 +399,19 @@ class Array : public rtdata::Object {
         type::Type *elemType             = arrayType->elemType();
 
         if (fixedArray_) {
-            rtdata::Object *newPtr = relocate(fixedArray_, type);
-            fixedArray_            = static_cast<FixedArray *>(newPtr);
-            dataPtr_               = fixedArray_->data();
+            rtdata::Object *newPtr = relocate(
+                fixedArray_,
+                type,
+                rtdata::RefTraceInfo{
+                    .owner     = this,
+                    .ownerType = type,
+                    .slotType  = type,
+                    .ownerKind = "Array",
+                    .slotName  = "fixedArray",
+                    .slotIndex = rtdata::RefTraceInfo::npos,
+                });
+            fixedArray_ = static_cast<FixedArray *>(newPtr);
+            dataPtr_    = fixedArray_->data();
             return;
         }
 
@@ -401,7 +422,17 @@ class Array : public rtdata::Object {
         rtdata::Object **refArr = reinterpret_cast<rtdata::Object **>(inlineData_);
         for (size_t i = 0; i < size_; ++i) {
             if (rtdata::Object *&ref = refArr[i]) {
-                ref = relocate(ref, elemType);
+                ref = relocate(
+                    ref,
+                    elemType,
+                    rtdata::RefTraceInfo{
+                        .owner     = this,
+                        .ownerType = type,
+                        .slotType  = elemType,
+                        .ownerKind = "Array",
+                        .slotName  = {},
+                        .slotIndex = i,
+                    });
             }
         }
     }

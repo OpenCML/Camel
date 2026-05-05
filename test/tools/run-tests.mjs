@@ -540,6 +540,14 @@ function runOneTest(test, sharedVars, logContext) {
     }
     const args = expandArgs(test.args || [], scope)
     const env = { ...process.env }
+    for (const entry of test.env || []) {
+        const text = String(entry)
+        const eq = text.indexOf('=')
+        if (eq <= 0) {
+            throw new Error(`invalid env entry for ${test.name}: ${text}`)
+        }
+        env[text.slice(0, eq)] = text.slice(eq + 1)
+    }
     env.CAMEL_HOME = path.join(REPO_ROOT, 'out', 'latest')
     env.PATH = `${path.join(env.CAMEL_HOME, 'bin')}${path.delimiter}${env.PATH || ''}`
 

@@ -251,7 +251,18 @@ class Frame : public rtdata::Object {
         for (size_t i = 0; i < dynamicAreaType_->size(); ++i) {
             if (type::isGCTraced(codes[i])) {
                 if (rtdata::Object *&ref = refArr[i]) {
-                    ref = relocate(ref, dynamicAreaType_->typeAt(i));
+                    type::Type *slotType = dynamicAreaType_->typeAt(i);
+                    ref                  = relocate(
+                        ref,
+                        slotType,
+                        rtdata::RefTraceInfo{
+                            .owner     = this,
+                            .ownerType = dynamicAreaType_,
+                            .slotType  = slotType,
+                            .ownerKind = "Frame",
+                            .slotName  = {},
+                            .slotIndex = i,
+                        });
                 }
             }
         }
@@ -371,6 +382,7 @@ class FramePool {
         }
         camel::core::mm::autoSpace().registerExternalRootTracer(
             this,
+            "FramePool.activeFrames",
             [this](const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) {
                 traceActiveFrames(relocate);
             });
