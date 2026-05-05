@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Apr. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -469,6 +469,25 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             if (o->paramCount() == 0)
                                 return std::nullopt;
                             return o->params()[0];
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "py_dispose",
+            {
+                {
+                    "python:py_dispose",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(obj: PyObject) => void",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> std::optional<Type *> {
+                            if (norm.size() < 1)
+                                return std::nullopt;
+                            Type *t = norm[0];
+                            if (!t->isOtherType() || t->code() != PyObjectType::typeCode())
+                                return std::nullopt;
+                            return Type::Void();
                         }),
                 },
             }),

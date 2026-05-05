@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -670,7 +670,8 @@ class EncodeSession {
                             closure->get<slot_t>(i),
                             runtimeClosureType->typeAt(i),
                             funcObj->graph(),
-                            objectCache));
+                            objectCache),
+                        runtimeClosureType);
                 }
             }
             return toSlot<Object *>(runtimeFunc);
@@ -687,7 +688,8 @@ class EncodeSession {
                         tuple->get<slot_t>(i),
                         tupleType->typeAt(i),
                         sourceGraph,
-                        objectCache));
+                        objectCache),
+                    tupleType);
             }
             return toSlot<Object *>(cloned);
         }
@@ -703,7 +705,8 @@ class EncodeSession {
                         array->get<slot_t>(i),
                         arrayType->elemType(),
                         sourceGraph,
-                        objectCache));
+                        objectCache),
+                    arrayType);
             }
             return toSlot<Object *>(cloned);
         }
@@ -719,7 +722,8 @@ class EncodeSession {
                         st->get<slot_t>(i),
                         structType->typeAt(i),
                         sourceGraph,
-                        objectCache));
+                        objectCache),
+                    structType);
             }
             return toSlot<Object *>(cloned);
         }

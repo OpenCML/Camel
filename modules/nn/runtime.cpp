@@ -184,14 +184,35 @@ void ParameterObject::print(std::ostream &os, const Type *type) const {
     os << ")";
 }
 
-void ParameterObject::updateRefs(
-    const std::function<Object *(Object *)> &relocate, const Type *type) {
+void ParameterObject::updateRefs(const Object::RefRelocator &relocate, const Type *type) {
     (void)type;
     if (data_) {
-        data_ = static_cast<tensor::TensorObject *>(relocate(data_));
+        auto *tensorType = camel::tensor::TensorType::Default();
+        data_            = static_cast<tensor::TensorObject *>(relocate(
+            data_,
+            tensorType,
+            rtdata::RefTraceInfo{
+                .owner     = this,
+                .ownerType = type,
+                .slotType  = tensorType,
+                .ownerKind = "ParameterObject",
+                .slotName  = "data",
+                .slotIndex = rtdata::RefTraceInfo::npos,
+            }));
     }
     if (grad_) {
-        grad_ = static_cast<tensor::TensorObject *>(relocate(grad_));
+        auto *tensorType = camel::tensor::TensorType::Default();
+        grad_            = static_cast<tensor::TensorObject *>(relocate(
+            grad_,
+            tensorType,
+            rtdata::RefTraceInfo{
+                .owner     = this,
+                .ownerType = type,
+                .slotType  = tensorType,
+                .ownerKind = "ParameterObject",
+                .slotName  = "grad",
+                .slotIndex = rtdata::RefTraceInfo::npos,
+            }));
     }
 }
 

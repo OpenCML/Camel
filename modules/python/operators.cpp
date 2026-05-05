@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Mar. 07, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
@@ -52,20 +53,65 @@ namespace {
 struct PythonObjectHolder {
     py::object obj;
 };
-static std::vector<std::unique_ptr<PythonObjectHolder>> s_holders;
 
-slot_t wrapPyObject(py::object o) {
-    auto h = std::make_unique<PythonObjectHolder>(PythonObjectHolder{std::move(o)});
-    PythonObjectHolder *raw = h.get();
-    s_holders.push_back(std::move(h));
-    return toSlot(raw);
+constexpr std::string_view kPythonObjectKind = "python.PyObject";
+
+void deletePythonObjectHolder(void *resource) {
+    auto *holder = static_cast<PythonObjectHolder *>(resource);
+    if (!holder) {
+        return;
+    }
+    if (Py_IsInitialized()) {
+        py::gil_scoped_acquire gil;
+        delete holder;
+        return;
+    }
+    delete holder;
 }
 
-PythonObjectHolder *unwrapPyObject(slot_t s, camel::core::context::Context &ctx) {
+ForeignResourceDescriptor pythonObjectDescriptor() {
+    return ForeignResourceDescriptor{
+        .kind                    = std::string(kPythonObjectKind),
+        .deleter                 = deletePythonObjectHolder,
+        .clone                   = {},
+        .trace                   = {},
+        .onMoved                 = {},
+        .containsCamelReferences = false,
+        .finalizable             = true,
+        .movable                 = true,
+        .pinned                  = false,
+    };
+}
+
+slot_t wrapPyObject(py::object o) {
+    auto *holder = new PythonObjectHolder{std::move(o)};
+    try {
+        return toSlot(
+            ForeignResourceObject::create(mm::autoSpace(), pythonObjectDescriptor(), holder));
+    } catch (...) {
+        deletePythonObjectHolder(holder);
+        throw;
+    }
+}
+
+ForeignResourceObject *
+unwrapPyObjectWrapper(slot_t s, camel::core::context::Context &ctx, bool allowDisposed = false) {
     if (s == NullSlot) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "python: expected non-null PyObject");
     }
-    return reinterpret_cast<PythonObjectHolder *>(static_cast<uintptr_t>(s));
+    auto *object  = fromSlot<Object *>(s);
+    auto *wrapper = dynamic_cast<ForeignResourceObject *>(object);
+    if (!wrapper || wrapper->kind() != kPythonObjectKind) {
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python: expected PyObject foreign resource");
+    }
+    if (!allowDisposed && wrapper->disposed()) {
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python: PyObject has been disposed");
+    }
+    return wrapper;
+}
+
+PythonObjectHolder *unwrapPyObject(slot_t s, camel::core::context::Context &ctx) {
+    return unwrapPyObjectWrapper(s, ctx)->resourceAs<PythonObjectHolder>();
 }
 
 // 递归：按类型与 slot 将 Camel 值转为 Python 对象（支持复合类型与嵌套）
@@ -200,6 +246,7 @@ std::unordered_map<std::string, operator_t> getPythonOpsMap() {
         {"py_println", __python_py_println__},
         {"py_wrap", __python_wrap__},
         {"py_unwrap", __python_upwrap__},
+        {"py_dispose", __python_py_dispose__},
     };
 }
 
@@ -530,7 +577,7 @@ pyToCamel(py::object obj, Type *targetType, camel::core::context::Context &ctx) 
                 auto s = pyToCamel(lst[i], elemType, ctx);
                 if (!s)
                     return std::nullopt;
-                arr->set(i, *s);
+                arr->set(i, *s, arrayType);
             }
             return toSlot(arr);
         }
@@ -552,7 +599,7 @@ pyToCamel(py::object obj, Type *targetType, camel::core::context::Context &ctx) 
                 auto s = pyToCamel(obj[py::int_(i)], tupleType->typeAt(i), ctx);
                 if (!s)
                     return std::nullopt;
-                tuple->set(i, *s);
+                tuple->set(i, *s, tupleType);
             }
             return toSlot(tuple);
         }
@@ -577,7 +624,7 @@ pyToCamel(py::object obj, Type *targetType, camel::core::context::Context &ctx) 
                 auto s = pyToCamel(d[keyObj], structType->typeAt(i), ctx);
                 if (!s)
                     return std::nullopt;
-                st->set(i, *s);
+                st->set(i, *s, structType);
             }
             return toSlot(st);
         }
@@ -612,4 +659,13 @@ slot_t __python_upwrap__(ArgsView &with, ArgsView &norm, camel::core::context::C
     Type *targetType = o->params()[0];
     auto result      = pyToCamel(h->obj, targetType, ctx);
     return result ? *result : NullSlot;
+}
+
+slot_t __python_py_dispose__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+    if (norm.size() < 1) {
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.dispose: one PyObject required");
+    }
+    ForeignResourceObject *wrapper = unwrapPyObjectWrapper(norm.slot(0), ctx, true);
+    wrapper->dispose();
+    return NullSlot;
 }

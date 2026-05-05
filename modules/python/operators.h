@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Mar. 07, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,6 +39,7 @@ slot_t __python_py_print__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __python_py_println__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __python_wrap__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __python_upwrap__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __python_py_dispose__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 /** 供 python 协议 executor 使用的 URI -> operator_t 映射（key 为 suffix，如 "eval", "wrap"）。 */
 std::unordered_map<std::string, operator_t> getPythonOpsMap();

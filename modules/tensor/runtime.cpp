@@ -484,7 +484,7 @@ void TensorObject::print(std::ostream &os, const type::Type *typeInfo) const {
 void TensorObject::onMoved() { refreshPointers(); }
 
 void TensorObject::updateRefs(
-    const std::function<rtdata::Object *(rtdata::Object *)> &relocate, const type::Type *typeInfo) {
+    const rtdata::Object::RefRelocator &relocate, const type::Type *typeInfo) {
     (void)relocate;
     (void)typeInfo;
 }

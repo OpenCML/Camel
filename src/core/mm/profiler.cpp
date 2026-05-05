@@ -6,11 +6,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Apr. 10, 2026
+ * Updated: May. 05, 2026
  */
 
 #include "camel/core/mm.h"
 #include "camel/core/mm/alloc/header.h"
+#include "camel/core/rtdata/foreign.h"
 #include "nlohmann/json.hpp"
 
 #include <cstdint>
@@ -30,10 +31,12 @@ static json bumpRegionToJson(const char *name, const BumpPointerAllocator &alloc
     size_t used     = (top && start) ? static_cast<size_t>(top - start) : 0;
 
     std::vector<json> objects;
+    size_t objectBytes = 0;
     alloc.iterateAllocated([&](ObjectHeader *hdr) {
         // Skip forwarded objects (logically moved out and represented by the target).
         if (hdr->forwarded())
             return;
+        objectBytes += hdr->size();
         objects.push_back({
             {"addr", reinterpret_cast<uintptr_t>(hdr)},
             {"size", hdr->size()},
@@ -52,6 +55,7 @@ static json bumpRegionToJson(const char *name, const BumpPointerAllocator &alloc
         {"used", used},
         {"available", alloc.available()},
         {"objectCount", objects.size()},
+        {"objectBytes", objectBytes},
         {"objects", objects},
     };
 }
@@ -65,7 +69,9 @@ static json freeListRegionToJson(const char *name, const FreeListAllocator &allo
     size_t used      = capacity - available;
 
     std::vector<json> objects;
+    size_t objectBytes = 0;
     alloc.iterateAllocated([&](ObjectHeader *hdr) {
+        objectBytes += hdr->size();
         objects.push_back({
             {"addr", reinterpret_cast<uintptr_t>(hdr)},
             {"size", hdr->size()},
@@ -83,6 +89,7 @@ static json freeListRegionToJson(const char *name, const FreeListAllocator &allo
         {"used", used},
         {"available", available},
         {"objectCount", objects.size()},
+        {"objectBytes", objectBytes},
         {"objects", objects},
     };
 }
@@ -105,7 +112,9 @@ static const BumpPointerAllocator *getBumpRegionByName(const char *name) {
 // LargeObject region: no contiguous blocks, only an object list.
 static json largeObjRegionToJson(const LargeObjectAllocator &alloc) {
     std::vector<json> objects;
+    size_t objectBytes = 0;
     alloc.iterateAllocated([&](ObjectHeader *hdr) {
+        objectBytes += hdr->size();
         objects.push_back({
             {"addr", reinterpret_cast<uintptr_t>(hdr)},
             {"size", hdr->size()},
@@ -118,6 +127,7 @@ static json largeObjRegionToJson(const LargeObjectAllocator &alloc) {
         {"name", "largeObj"},
         {"type", "largeobj"},
         {"objectCount", objects.size()},
+        {"objectBytes", objectBytes},
         {"objects", objects},
     };
 }
@@ -146,11 +156,54 @@ std::string snapshotToJson() {
     // Perm Space.
     regions.push_back(bumpRegionToJson("permSpace", permSp));
 
+    size_t totalObjectCount = 0;
+    size_t totalObjectBytes = 0;
+    for (const auto &region : regions) {
+        totalObjectCount += region.value("objectCount", 0);
+        totalObjectBytes += region.value("objectBytes", 0);
+    }
+
+    const auto stats        = autoSp.stats();
+    const auto foreignStats = camel::core::rtdata::foreignResourceStats();
+
     json root = {
         {"regions", regions},
+        {"gc",
+         {
+             {"allocations", stats.allocations},
+             {"safepoints", stats.safepoints},
+             {"deferredCollections", stats.deferredCollections},
+             {"requestedCollections", stats.requestedCollections},
+             {"allocationFailureCollections", stats.allocationFailureCollections},
+             {"writeBarriers", stats.writeBarriers},
+             {"minorCollections", stats.minorCollections},
+             {"majorCollections", stats.majorCollections},
+             {"movedObjects", stats.movedObjects},
+             {"promotedObjects", stats.promotedObjects},
+             {"freedElderObjects", stats.freedElderObjects},
+             {"freedLargeObjects", stats.freedLargeObjects},
+             {"rootSourceCount", stats.rootSourceCount},
+             {"lastTracedRootReferenceCount", stats.lastTracedRootReferenceCount},
+             {"rememberedSetSize", stats.rememberedSetSize},
+             {"rootSources", autoSp.rootSourceDescriptions()},
+         }},
+        {"foreignResources",
+         {
+             {"createdControlBlocks", foreignStats.createdControlBlocks},
+             {"disposedResources", foreignStats.disposedResources},
+             {"finalizedWrappers", foreignStats.finalizedWrappers},
+             {"releasedControlBlocks", foreignStats.releasedControlBlocks},
+             {"liveControlBlocks", foreignStats.liveControlBlocks},
+             {"createdRootedHandles", foreignStats.createdRootedHandles},
+             {"createdPinnedHandles", foreignStats.createdPinnedHandles},
+             {"activeRootedHandles", foreignStats.activeRootedHandles},
+             {"activePinnedHandles", foreignStats.activePinnedHandles},
+         }},
         {"summary",
          {
              {"regionCount", regions.size()},
+             {"objectCount", totalObjectCount},
+             {"objectBytes", totalObjectBytes},
          }},
     };
 

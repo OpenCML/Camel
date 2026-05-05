@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/utils/type.h"
 
 namespace mm = camel::core::mm;
@@ -41,8 +42,13 @@ slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *lhs = norm.get<Array *>(0);
-    Array *rhs = norm.get<Array *>(1);
+    Array *lhs    = norm.get<Array *>(0);
+    Array *rhs    = norm.get<Array *>(1);
+    auto *lhsType = tt::as_ptr<ArrayType>(norm.type(0));
+    auto *rhsType = tt::as_ptr<ArrayType>(norm.type(1));
+    auto *tupleType =
+        TupleType::create(std::vector<Type *>{lhsType->elemType(), rhsType->elemType()});
+    auto *resultType = ArrayType::create(tupleType);
 
     size_t n = lhs->size();
     if (rhs->size() != n) {
@@ -54,9 +60,9 @@ slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *result = Array::create(mm::autoSpace(), n);
     for (size_t i = 0; i < n; ++i) {
         Tuple *t = Tuple::create(2, mm::autoSpace());
-        t->set(0, lhs->get<Int64>(i));
-        t->set(1, rhs->get<Int64>(i));
-        result->set(i, t);
+        t->set<slot_t>(0, lhs->get<slot_t>(i), tupleType);
+        t->set<slot_t>(1, rhs->get<slot_t>(i), tupleType);
+        result->set<rtdata::Object *>(i, t, resultType);
     }
     return rtdata::toSlot(result);
 }
@@ -70,7 +76,8 @@ slot_t __head_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __tail_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
+    Array *arr    = norm.get<Array *>(0);
+    auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
 
     size_t n = arr->size();
     if (n <= 1) {
@@ -80,7 +87,7 @@ slot_t __tail_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     Array *res = Array::create(mm::autoSpace(), n - 1);
     for (size_t i = 1; i < n; ++i) {
-        res->set(i - 1, arr->get<slot_t>(i));
+        res->set<slot_t>(i - 1, arr->get<slot_t>(i), arrType);
     }
     return toSlot(res);
 }
@@ -111,9 +118,10 @@ slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr  = norm.get<Array *>(0);
-    Int64 start = with.get<Int64>(0);
-    Int64 end   = with.get<Int64>(1);
+    Array *arr    = norm.get<Array *>(0);
+    auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    Int64 start   = with.get<Int64>(0);
+    Int64 end     = with.get<Int64>(1);
 
     Int64 size = static_cast<Int64>(arr->size());
     if (start < 0)
@@ -129,22 +137,23 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *res     = Array::create(mm::autoSpace(), newSize);
 
     for (size_t i = 0; i < newSize; ++i)
-        res->set(i, arr->get<slot_t>(start + i));
+        res->set<slot_t>(i, arr->get<slot_t>(start + i), arrType);
 
     return rtdata::toSlot(res);
 }
 
 slot_t __concat_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *lhs = norm.get<Array *>(0);
-    Array *rhs = norm.get<Array *>(1);
+    Array *lhs    = norm.get<Array *>(0);
+    Array *rhs    = norm.get<Array *>(1);
+    auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
 
     size_t n1 = lhs->size(), n2 = rhs->size();
     Array *res = Array::create(mm::autoSpace(), n1 + n2);
 
     for (size_t i = 0; i < n1; ++i)
-        res->set(i, lhs->get<slot_t>(i));
+        res->set<slot_t>(i, lhs->get<slot_t>(i), arrType);
     for (size_t i = 0; i < n2; ++i)
-        res->set(n1 + i, rhs->get<slot_t>(i));
+        res->set<slot_t>(n1 + i, rhs->get<slot_t>(i), arrType);
 
     return rtdata::toSlot(res);
 }
@@ -152,19 +161,20 @@ slot_t __concat_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __append_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr  = norm.get<Array *>(0);
     slot_t elem = with.get<slot_t>(0);
-    arr->append(elem);
+    arr->append(elem, tt::as_ptr<ArrayType>(norm.type(0)));
     return rtdata::toSlot(arr);
 }
 
 slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr  = norm.get<Array *>(0);
-    Array *more = with.get<Array *>(0);
+    Array *arr    = norm.get<Array *>(0);
+    Array *more   = with.get<Array *>(0);
+    auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
 
     size_t n1 = arr->size(), n2 = more->size();
-    arr->reserve(n1 + n2);
+    arr->reserve(n1 + n2, arrType);
 
     for (size_t i = 0; i < n2; ++i)
-        arr->append(more->get<slot_t>(i));
+        arr->append(more->get<slot_t>(i), arrType);
 
     return rtdata::toSlot(arr);
 }

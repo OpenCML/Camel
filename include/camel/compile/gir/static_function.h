@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 11, 2026
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,7 +59,7 @@ class StaticFunction : public camel::core::rtdata::Object {
     void print(std::ostream &os, const camel::core::type::Type *type) const override;
     void onMoved() override {}
     void updateRefs(
-        const std::function<camel::core::rtdata::Object *(camel::core::rtdata::Object *)> &relocate,
+        const camel::core::rtdata::Object::RefRelocator &relocate,
         const camel::core::type::Type *type) override;
 
   private:

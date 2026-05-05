@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -56,10 +56,15 @@ class Tuple : public rtdata::Object {
 
     template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, "Index out of range");
-        if constexpr (std::is_same_v<T, rtdata::Object *>) {
-            // writeBarrier(arr[index], value);
-        }
         data_[index] = rtdata::toSlot(value);
+    }
+
+    template <typename T> void set(size_t index, T value, const type::TupleType *tupleType) {
+        ASSERT(index < size_, "Index out of range");
+        ASSERT(tupleType != nullptr && index < tupleType->size(), "TupleType is invalid.");
+        const slot_t slot = rtdata::toSlot(value);
+        camel::core::mm::writeBarrier(this, tupleType, slot, tupleType->typeAt(index));
+        data_[index] = slot;
     }
 
     slot_t *data() { return data_; }
@@ -132,6 +137,7 @@ class Tuple : public rtdata::Object {
                     }
                 }
                 reinterpret_cast<rtdata::Object **>(dst)[i] = newRef;
+                camel::core::mm::writeBarrier(newTuple, tupleType, newRef, tupleType->typeAt(i));
             } else {
                 // Non-reference types: copy the slot data directly.
                 dst[i] = src[i];
@@ -160,9 +166,8 @@ class Tuple : public rtdata::Object {
 
     virtual void onMoved() override {}
 
-    virtual void updateRefs(
-        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
-        const type::Type *type) override {
+    virtual void
+    updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override {
         if (!type || type->code() != type::TypeCode::Tuple)
             return;
         const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
@@ -172,7 +177,18 @@ class Tuple : public rtdata::Object {
         for (size_t i = 0; i < size_; ++i) {
             if (type::isGCTraced(codes[i])) {
                 if (rtdata::Object *&ref = refArr[i]) {
-                    ref = relocate(ref);
+                    const type::Type *slotType = tupleType->typeAt(i);
+                    ref                        = relocate(
+                        ref,
+                        slotType,
+                        rtdata::RefTraceInfo{
+                            .owner     = this,
+                            .ownerType = type,
+                            .slotType  = slotType,
+                            .ownerKind = "Tuple",
+                            .slotName  = {},
+                            .slotIndex = i,
+                        });
                 }
             }
         }

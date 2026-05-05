@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -77,6 +77,9 @@ Context::~Context() {
     modules_.clear();
     builtinModules_.clear();
     exeMgr_.reset();
+    if (runtimeGraphMgr_) {
+        camel::core::mm::autoSpace().setObjectRootSet(nullptr);
+    }
     runtimeGraphMgr_.reset();
 }
 

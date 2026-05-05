@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,7 @@
 #include <taskflow/algorithm/for_each.hpp>
 #include <taskflow/taskflow.hpp>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::core::context {
@@ -60,11 +61,15 @@ class TaskflowFramePool {
         size_t chunkFrames{0};
         std::mutex mutex;
         std::vector<Frame *> freeFrames;
+        std::unordered_set<Frame *> activeFrames;
         std::vector<std::byte *> chunks;
     };
 
     GraphArena &getOrCreateArena(camel::runtime::GCGraph *graph);
     void allocateChunk(GraphArena &arena, size_t minFrameCount);
+    void clearGcSlots(Frame *frame) const;
+    void
+    traceActiveFrames(const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate);
     static uintptr_t arenaKey(camel::runtime::GCGraph *graph);
 
     size_t chunkBytes_;
@@ -98,6 +103,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     tf::Executor executor_;
     std::unordered_map<camel::runtime::GCGraph *, std::vector<camel::runtime::gc_node_ref_t>>
         linearTopoCache_;
+    bool gcSafepointsEnabled_ = false;
 
     slot_t evalGraphTF(camel::runtime::GCGraph *graph, ctx::Frame *frame);
     slot_t evalGraphLinear(camel::runtime::GCGraph *graph, ctx::Frame *frame);

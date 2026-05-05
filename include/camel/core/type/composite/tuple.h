@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -114,6 +114,9 @@ class TupleType : public CompositeType {
     std::span<const TypeCode> codes() const {
         return std::span<const TypeCode>(typeCodesPtr_, size_);
     }
+    // Indices of slots that may hold managed object pointers. Resolved GC-traced
+    // types are included so runtime frames can be cleared and traced without
+    // walking non-reference slots.
     size_t refCount() const { return refCount_; }
     const size_t *refs() const { return refsPtr(); } // Return a pointer to the internal array.
 

@@ -4,7 +4,7 @@
 module main
 
 // 最简 python 模块测试
-import { py_eval, py_call, py_wrap, py_unwrap, PyObject } from python
+import { py_eval, py_call, py_wrap, py_unwrap, py_dispose, PyObject } from python
 
 func main(): int sync {
     println("=== Python Module Basic Tests ===")
@@ -15,6 +15,12 @@ func main(): int sync {
     println("\n[2] py_eval('1 + 2') -> py_unwrap as int")
     let r = py_unwrap(py_eval("1 + 2") as PyObject<int>)
     '  1 + 2 = {}'->format<r>->println
+
+    println("\n[3] py_dispose releases a PyObject explicitly and is idempotent")
+    let obj = py_eval("'dispose-me'")
+    py_dispose(obj)
+    py_dispose(obj)
+    println("  disposed PyObject twice")
 
     println("\n=== Basic tests completed ===")
     return 0

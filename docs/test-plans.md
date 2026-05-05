@@ -51,6 +51,9 @@ Every `[[tests]]` entry may use these common fields:
   Optional process timeout in milliseconds. Default is `10000`.
 - `normalizers`
   Optional string array applied to captured output before assertions.
+- `env`
+  Optional string array of `NAME=value` entries merged into the child process environment for this
+  test only.
 - `failure_note`
   Optional explanatory note printed only when the test fails.
 

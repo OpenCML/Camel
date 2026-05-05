@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -152,6 +152,22 @@ inline HigherOrderCallSite makeHigherOrderCallSite(Function *func) {
     };
 }
 
+// Direct-call layouts encode callee port slots during bytecode linking. Most calls move scalar
+// values between positive dynamic slots, so copying through slotBase() avoids the generic
+// Frame::get/set routing while preserving static-slot fallback for closures and constants.
+inline slot_t readCallSlot(Frame *frame, data_idx_t index) {
+    return LIKELY(index > 0) ? frame->slotBase()[static_cast<size_t>(index)]
+                             : frame->get<slot_t>(index);
+}
+
+inline void writeCallSlot(Frame *frame, data_idx_t index, slot_t value) {
+    if (LIKELY(index > 0)) {
+        frame->slotBase()[static_cast<size_t>(index)] = value;
+        return;
+    }
+    frame->set(index, value);
+}
+
 } // namespace
 
 FastVMSchedPass::~FastVMSchedPass() = default;
@@ -163,11 +179,14 @@ void FastVMSchedPass::populateDirectCallFrame(
         srcArgs.size() == dstSlots.size(),
         "FastVM encoded direct-call layout is arity-mismatched.");
     if (srcArgs.size() == 1) {
-        calleeFrame->set(dstSlots[0], callerFrame->get<slot_t>(srcArgs[0]));
+        writeCallSlot(calleeFrame, dstSlots[0], readCallSlot(callerFrame, srcArgs[0]));
         return;
     }
     for (size_t argIndex = 0; argIndex < srcArgs.size(); ++argIndex) {
-        calleeFrame->set(dstSlots[argIndex], callerFrame->get<slot_t>(srcArgs[argIndex]));
+        writeCallSlot(
+            calleeFrame,
+            dstSlots[argIndex],
+            readCallSlot(callerFrame, srcArgs[argIndex]));
     }
 }
 
@@ -176,11 +195,11 @@ void FastVMSchedPass::captureCallArgValues(
     ASSERT(callerFrame != nullptr, "FastVM direct call source frame is null.");
     out.resize(srcArgs.size());
     if (srcArgs.size() == 1) {
-        out[0] = callerFrame->get<slot_t>(srcArgs[0]);
+        out[0] = readCallSlot(callerFrame, srcArgs[0]);
         return;
     }
     for (size_t argIndex = 0; argIndex < srcArgs.size(); ++argIndex) {
-        out[argIndex] = callerFrame->get<slot_t>(srcArgs[argIndex]);
+        out[argIndex] = readCallSlot(callerFrame, srcArgs[argIndex]);
     }
 }
 
@@ -191,11 +210,11 @@ void FastVMSchedPass::populateDirectCallFrameFromValues(
         argValues.size() == dstSlots.size(),
         "FastVM encoded direct-call layout is arity-mismatched.");
     if (argValues.size() == 1) {
-        calleeFrame->set(dstSlots[0], argValues[0]);
+        writeCallSlot(calleeFrame, dstSlots[0], argValues[0]);
         return;
     }
     for (size_t argIndex = 0; argIndex < argValues.size(); ++argIndex) {
-        calleeFrame->set(dstSlots[argIndex], argValues[argIndex]);
+        writeCallSlot(calleeFrame, dstSlots[argIndex], argValues[argIndex]);
     }
 }
 
@@ -437,47 +456,48 @@ void FastVMSchedPass::evalMarkedOperator(
 
 void FastVMSchedPass::evalMarkedOperator_map_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
+    const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
+    auto *resultType     = currFrame.typeAt<ArrayType>(self);
 
-    Array *res = Array::create(mm::autoSpace(), arr->size());
+    Array *res = Array::create(mm::autoSpace(), arrSize);
     currFrame.set(self, res);
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr                            = currFrame.get<Array *>(nargs[0]);
-        func                           = currFrame.get<Function *>(wargs[0]);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr                     = currFrame.get<Array *>(nargs[0]);
+        Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
 #if ENABLE_FASTVM_JIT
-        currFrame.get<Array *>(self)->data()[i] =
-            invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
+        slot_t result = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
 #else
-        currFrame.get<Array *>(self)->data()[i] = call(site.entryPc, frame);
+        slot_t result = call(site.entryPc, frame);
 #endif
+        currFrame.get<Array *>(self)->set<slot_t>(i, result, resultType);
     }
 }
 
 void FastVMSchedPass::evalMarkedOperator_apply_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
+    const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
+    auto *arrType        = currFrame.typeAt<ArrayType>(nargs[0]);
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr                            = currFrame.get<Array *>(nargs[0]);
-        func                           = currFrame.get<Function *>(wargs[0]);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr                     = currFrame.get<Array *>(nargs[0]);
+        Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
 #if ENABLE_FASTVM_JIT
-        arr->data()[i] = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
+        slot_t result = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
 #else
-        arr->data()[i] = call(site.entryPc, frame);
+        slot_t result = call(site.entryPc, frame);
 #endif
+        currFrame.get<Array *>(nargs[0])->set<slot_t>(i, result, arrType);
     }
 
     currFrame.set(self, currFrame.get<Array *>(nargs[0]));
@@ -485,15 +505,15 @@ void FastVMSchedPass::evalMarkedOperator_apply_arr(
 
 void FastVMSchedPass::evalMarkedOperator_filter_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
+    const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
+    auto *resultType     = currFrame.typeAt<ArrayType>(self);
 
-    Array *filtered = Array::create(mm::autoSpace(), arr->size());
+    Array *filtered = Array::create(mm::autoSpace(), arrSize);
     currFrame.set(self, filtered);
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr                            = currFrame.get<Array *>(nargs[0]);
-        func                           = currFrame.get<Function *>(wargs[0]);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr                     = currFrame.get<Array *>(nargs[0]);
+        Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
@@ -506,30 +526,31 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
 #endif
 
         if (fromSlot<bool>(result)) {
-            currFrame.get<Array *>(self)->append(arr->data()[i]);
+            currFrame.get<Array *>(self)->append(
+                currFrame.get<Array *>(nargs[0])->data()[i],
+                resultType);
         }
     }
 
-    currFrame.get<Array *>(self)->shrinkToFit();
+    currFrame.get<Array *>(self)->shrinkToFit(resultType);
 }
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
-    slot_t init    = currFrame.get<slot_t>(wargs[1]);
+    const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
+    slot_t init          = currFrame.get<slot_t>(wargs[1]);
 
     // Preserve left-fold semantics: an empty array returns the initial value immediately.
-    if (arr->size() == 0) {
+    if (arrSize == 0) {
         currFrame.set(self, init);
         return;
     }
 
     currFrame.set(self, init);
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr                            = currFrame.get<Array *>(nargs[0]);
-        func                           = currFrame.get<Function *>(wargs[0]);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr                     = currFrame.get<Array *>(nargs[0]);
+        Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         const slot_t args[]            = {currFrame.get<slot_t>(self), arr->data()[i]};
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
@@ -547,12 +568,11 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
 
 void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
+    const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr                            = currFrame.get<Array *>(nargs[0]);
-        func                           = currFrame.get<Function *>(wargs[0]);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr                     = currFrame.get<Array *>(nargs[0]);
+        Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);

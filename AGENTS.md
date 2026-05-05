@@ -7,6 +7,7 @@ This file is the entry point. Read the detailed rules under `agents/` before mak
 - Use `;` to chain commands. Do not use `&&`.
 - Prefer the repo build commands documented below.
 - Follow the refactor, test, and commit rules in `agents/refactor.md`, `agents/test.md`, and `agents/commit.md`.
+- Do not create additional git worktrees unless the user explicitly asks for one.
 - When preparing a commit, describe the common purpose of the entire staged set, not just the most recent edit.
 
 ## Build And Runtime

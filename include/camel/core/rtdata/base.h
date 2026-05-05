@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,12 +28,59 @@
 #include <cstring> // for std::memcpy
 #include <format>
 #include <functional>
+#include <limits>
 #include <ostream>
+#include <string>
+#include <string_view>
 
 namespace camel::core::rtdata {
 
+class Object;
+
+struct RefTraceInfo {
+    static constexpr size_t npos = std::numeric_limits<size_t>::max();
+
+    const Object *owner                      = nullptr;
+    const camel::core::type::Type *ownerType = nullptr;
+    const camel::core::type::Type *slotType  = nullptr;
+    std::string_view ownerKind               = {};
+    std::string_view slotName                = {};
+    size_t slotIndex                         = npos;
+
+    bool hasSlotIndex() const { return slotIndex != npos; }
+
+    std::string describe() const {
+        std::string out;
+        if (!ownerKind.empty()) {
+            out += ownerKind;
+        } else {
+            out += "Object";
+        }
+
+        if (owner) {
+            out += std::format("@{}", static_cast<const void *>(owner));
+        }
+
+        if (hasSlotIndex()) {
+            out += std::format("[{}]", slotIndex);
+        }
+        if (!slotName.empty()) {
+            out += ".";
+            out += slotName;
+        }
+        if (slotType) {
+            out += ":";
+            out += slotType->toString();
+        }
+        return out;
+    }
+};
+
 class Object {
   public:
+    using RefRelocator =
+        std::function<Object *(Object *, const camel::core::type::Type *, const RefTraceInfo &)>;
+
     virtual ~Object() = default;
     virtual bool
     equals(const Object *other, const camel::core::type::Type *type, bool deep = false) const = 0;
@@ -42,8 +89,8 @@ class Object {
         bool deep = false) const                                                    = 0;
     virtual void print(std::ostream &os, const camel::core::type::Type *type) const = 0;
     virtual void onMoved()                                                          = 0;
-    virtual void updateRefs(
-        const std::function<Object *(Object *)> &relocate, const camel::core::type::Type *type) = 0;
+    virtual void finalize() noexcept {}
+    virtual void updateRefs(const RefRelocator &relocate, const camel::core::type::Type *type) = 0;
 
     template <typename T>
     static T *clone(
@@ -54,22 +101,6 @@ class Object {
         }
         return static_cast<T *>(obj->clone(allocator, type, deep));
     }
-
-    // template <typename T> void setField(T *&field, T *newValue, GenerationalAllocatorWithGC *gc)
-    // {
-    //     ObjectHeader *thisHeader = headerOf(this);
-
-    //     if (newValue) {
-    //         ObjectHeader *newHeader = headerOf(newValue);
-
-    //         // Write barrier: if an old-generation object references a young-generation object.
-    //         if (gc->inElderGenSpace(thisHeader) && gc->inYoungGenSpace(newHeader)) {
-    //             gc->recordOldToYoungRef(this, newValue);
-    //         }
-    //     }
-
-    //     field = newValue;
-    // }
 };
 
 template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b) noexcept {
@@ -84,6 +115,18 @@ template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b
 constexpr Object *NullRef = nullptr;
 
 } // namespace camel::core::rtdata
+
+namespace camel::core::mm {
+
+void writeBarrier(
+    camel::core::rtdata::Object *ownerObject, const camel::core::type::Type *ownerType,
+    slot_t storedSlot, const camel::core::type::Type *storedType);
+
+void writeBarrier(
+    camel::core::rtdata::Object *ownerObject, const camel::core::type::Type *ownerType,
+    camel::core::rtdata::Object *storedObject, const camel::core::type::Type *storedType);
+
+} // namespace camel::core::mm
 
 namespace camel::core::rtdata {
 
