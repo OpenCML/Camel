@@ -156,9 +156,24 @@ function formatDurationMs(valueMs, digits = 2) {
     return `${valueMs.toFixed(digits)} ms`
 }
 
+function benchmarkSampleCount(benchmark) {
+    if (Array.isArray(benchmark.samples_ms)) {
+        return benchmark.samples_ms.length
+    }
+    if (Number.isInteger(benchmark.iterations) && benchmark.iterations >= 0) {
+        return benchmark.iterations
+    }
+    return null
+}
+
 function formatMetric(result) {
     if (result.benchmark) {
-        return `${formatDurationMs(result.benchmark.mean_ms)} +/- ${formatDurationMs(result.benchmark.ci95_ms)}`
+        const samples = benchmarkSampleCount(result.benchmark)
+        const sampleSuffix = samples === null ? '' : ` (n=${samples})`
+        if (samples !== null && samples < 2) {
+            return `${formatDurationMs(result.benchmark.mean_ms)}${sampleSuffix}`
+        }
+        return `${formatDurationMs(result.benchmark.mean_ms)} +/- ${formatDurationMs(result.benchmark.ci95_ms)}${sampleSuffix}`
     }
     if (typeof result.wallMs === 'number') {
         return formatDurationMs(result.wallMs)
