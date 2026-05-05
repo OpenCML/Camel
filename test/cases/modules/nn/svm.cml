@@ -1,0 +1,73 @@
+/**
+ * Support-vector-machine example used to exercise heavier tensor control flow, optimization updates, and prediction passes.
+ */
+module svm
+
+import {
+    add, subtract, multiply, matmul, ones, zeros,
+    sum, eye, transpose, show, pow, Tensor, shape, concat, range, reshape
+} from tensor
+
+func svm_train(X: Tensor, y: Tensor, learning_rate: float, epochs: int, lambda: float): Tensor sync {
+    let m = shape(X)[0]
+    let n = shape(X)[1]
+    let X_bias = concat(X, ones([m, 1]), 1)
+    let y_col = reshape(subtract(multiply(y, 2.0), 1.0), [m, 1])
+    let w0 = zeros([n + 1, 1])
+
+    func svm_epoch(epoch: int, weights: Tensor): Tensor sync {
+        if (epoch >= epochs) then {
+            return weights
+        } else sync {
+            let predictions = matmul(X_bias, weights)
+            let margins = multiply(y_col, predictions)
+            let active = (subtract(1.0, margins) > 0)
+            let grad = transpose(X_bias) @ multiply(multiply(y_col, -1.0), active)
+            let reg = multiply(weights, lambda)
+            let step = multiply(add(grad, reg), 1.0 / float(m))
+            let new_weights = subtract(weights, multiply(step, learning_rate))
+            return svm_epoch(epoch + 1, new_weights)
+        }
+    }
+
+    return svm_epoch(0, w0)
+}
+
+func svm_predict(X: Tensor, model: Tensor): Tensor sync {
+    let n = shape(X)[0]
+    let X_bias = concat(X, ones([n, 1]), 1)
+    let predictions = matmul(X_bias, model)
+    return subtract(multiply((predictions > 0), 2.0), 1.0)
+}
+
+func main(): int sync {
+    println("=== Support Vector Machine ===")
+
+    let X1 = [[1.0, 2.0], [2.0, 3.0], [3.0, 1.0]]
+    let y1 = [0.0, 0.0, 0.0]
+
+    let X2 = [[6.0, 5.0], [7.0, 8.0], [8.0, 6.0]]
+    let y2 = [1.0, 1.0, 1.0]
+
+    let X = concat(X1, X2, 0)
+    let y = concat(y1, y2, 0)
+
+    println("Training data:")
+    show(X)
+    println("Labels:")
+    show(y)
+
+    let learning_rate = 0.01
+    let epochs = 1000
+    let lambda = 0.01
+
+    let model = svm_train(X, y, learning_rate, epochs, lambda)
+    println("Trained SVM model:")
+    show(model)
+
+    let predictions = svm_predict(X, model)
+    println("Predictions:")
+    show(predictions)
+
+    return 0
+}

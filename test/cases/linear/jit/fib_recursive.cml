@@ -1,0 +1,23 @@
+/**
+ * Verifies classic recursive call expansion and return-value joining on JIT across several Fibonacci depths.
+ */
+module jit_fib_recursive
+
+func fib(n: int): int {
+    return if n <= 1 then n else fib(n - 1) + fib(n - 2)
+}
+
+func check(n: int, expected: int, code: int): int {
+    let actual = fib(n)
+    return if actual == expected then 0 else code
+}
+
+func main(): int sync {
+    let f0 = fib(0)
+    let f1 = fib(1)
+    let f10 = fib(10)
+    let f15 = fib(15)
+    'fib_recursive f0={} f1={} f10={} f15={}'->format<f0, f1, f10, f15>->println
+    return 0
+}
+

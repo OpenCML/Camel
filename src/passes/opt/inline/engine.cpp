@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 02, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -112,6 +112,7 @@ struct RuntimeCallGraphSccInfo {
     std::vector<std::vector<const GCGraph *>> components;
     std::unordered_set<const GCGraph *> recursiveGraphs;
     std::unordered_set<const GCGraph *> componentEntryGraphs;
+    std::unordered_set<const GCGraph *> externallyCalledGraphs;
 };
 
 RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(const std::vector<GCGraph *> &closure) {
@@ -204,6 +205,9 @@ RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(const std::vector<GCGraph *> 
         // inside the SCC, but must not inline the SCC entry back into the
         // component or the graph size will grow without bound.
         for (size_t idx : component) {
+            if (!reverseEdges[idx].empty()) {
+                info.externallyCalledGraphs.insert(closure[idx]);
+            }
             for (size_t pred : reverseEdges[idx]) {
                 if (std::find(component.begin(), component.end(), pred) == component.end()) {
                     info.componentEntryGraphs.insert(closure[idx]);
@@ -302,6 +306,7 @@ bool applyRuntimeOptimizeRewrite(
         }
 
         bool roundChanged = false;
+        bool restartRound = false;
         for (auto it = closure.rbegin(); it != closure.rend(); ++it) {
             GCGraph *nextGraph = *it;
             if (!nextGraph) {
@@ -387,6 +392,14 @@ bool applyRuntimeOptimizeRewrite(
                 const bool isSmall =
                     isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig);
                 const bool isArm = isDraftBranchArmHead(draft, id);
+                const bool suppressNonRecursiveArmInlining =
+                    config.inlineConfig.inlineStrategy == InlineTargetStrategy::Hybrid &&
+                    isSmallRuntimeSubgraphForInline(nextGraph, config.inlineConfig) &&
+                    sccInfo.externallyCalledGraphs.contains(nextGraph) &&
+                    !sccInfo.recursiveGraphs.contains(nextGraph);
+                if (suppressNonRecursiveArmInlining && isArm) {
+                    continue;
+                }
                 if (shouldInlineTarget(isSmall, isArm, config.inlineConfig)) {
                     candidates.push_back(id);
                 }
@@ -410,15 +423,21 @@ bool applyRuntimeOptimizeRewrite(
                 changed      = true;
                 roundChanged = true;
                 appliedInlineCount++;
-                if (appliedInlineCount >= kRuntimeRewriteApplyBudget) {
-                    CAMEL_LOG_WARN_S(
-                        "OptimizePass",
-                        "Runtime rewrite stops at inline apply budget {}.",
-                        kRuntimeRewriteApplyBudget);
-                    break;
-                }
+                restartRound = true;
+                // Re-scan the reachable closure after every successful inline.
+                // Hybrid inline changes control/value context for the remaining
+                // FUNC nodes in the same owner graph, so a precomputed
+                // candidate list can become stale within the same round.
+                break;
+            }
+            if (restartRound) {
+                break;
             }
             if (appliedInlineCount >= kRuntimeRewriteApplyBudget) {
+                CAMEL_LOG_WARN_S(
+                    "OptimizePass",
+                    "Runtime rewrite stops at inline apply budget {}.",
+                    kRuntimeRewriteApplyBudget);
                 break;
             }
         }

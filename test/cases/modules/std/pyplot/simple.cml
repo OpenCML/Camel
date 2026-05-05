@@ -1,0 +1,13 @@
+/**
+ * Smallest pyplot smoke case for a single plot call and output artifact generation.
+ */
+module main
+
+import { plot } from pyplot
+
+func main(): int sync {
+    let data = [1.0, 2.0, 3.0]
+    plot(data, "test/tmp/pyplot/simple_out.png")
+    println("pyplot.plot OK")
+    return 0
+}

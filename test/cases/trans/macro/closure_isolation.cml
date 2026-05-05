@@ -1,0 +1,21 @@
+/**
+ * Verifies independent macro-generated closures keep distinct captured static values after materialization.
+ */
+module macro_closure_isolation
+
+type Adder = (y: int) => int
+
+macro func make_adder(x: int): Adder {
+    return (y: int): int => {
+        return x + y
+    }
+}
+
+func main(): int sync {
+    let add10 = make_adder(10)
+    let add20 = make_adder(20)
+    let lhs = add10(5)
+    let rhs = add20(5)
+    'macro_closure_isolation lhs={} rhs={}'->format<lhs, rhs>->println
+    return 0
+}

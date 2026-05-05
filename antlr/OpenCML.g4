@@ -39,6 +39,8 @@ decl
     : moduleDecl
     | importDecl
     | exportDecl
+    | namespaceDecl
+    | usingNamespaceDecl
     | dataDecl
     | funcDecl
     | typeDecl
@@ -51,6 +53,7 @@ stmt
     | funcDecl
     | typeDecl
     | dataExpr
+    | usingNamespaceDecl
     | useDecl
     | retStmt
     | blockStmt
@@ -62,6 +65,7 @@ moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ;
 moduleDecl : MODULE identDef ;
 importDecl : IMPORT (moduleName | (identDef | bracedIdents) FROM moduleName) ;
 exportDecl : EXPORT (dataDecl | typeDecl | bracedIdents) ;
+usingNamespaceDecl : USING NAMESPACE identRef ;
 
 blockStmt  : WAIT? stmtBlock ;
 stmtBlock  : SYNC? '{' stmtList? '}' ;
@@ -72,7 +76,17 @@ funcDecl   :
         funcAnno*
         (WITH angledParams)?
         EXPORT? implMark? modifiers?
-        FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
+        FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
+namespaceDecl : NAMESPACE identRef '{' SEP? (namespaceItem SEP?)* '}' ;
+namespaceItem
+    : namespaceDecl
+    | importDecl
+    | exportDecl
+    | usingNamespaceDecl
+    | funcDecl
+    | typeDecl
+    | useDecl
+    ;
 
 parentIdents  : '(' identList? ','? ')' ;    // for tuple unpacking
 bracedIdents  : '{' identList? ','? '}' ;    // for struct unpacking
@@ -80,7 +94,7 @@ bracketIdents : '[' identList? ','? ']' ;    // for array unpacking
 carrier       : identList | parentIdents | bracedIdents | bracketIdents ;
 
 dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
-typeDecl   : implMark? TYPE identDef '=' (typeExpr | STRING) ;
+typeDecl   : implMark? TYPE identRef '=' (typeExpr | STRING) ;
 useDecl    : USE (identDef '=')? identRef ;
 retStmt    : (RETURN | RAISE | THROW) dataList ;
 

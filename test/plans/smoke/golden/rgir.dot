@@ -1,0 +1,97 @@
+digraph GraphIR {
+    subgraph cluster_F01 {
+        label="main";
+        subgraph cluster_F02 {
+            label="fib";
+            subgraph cluster_F03 {
+                label="__g_4__";
+                F03 [label="ARGS", type="ARGS"];
+                O03 [label="EXIT", type="EXIT"];
+                N00 [label="PORT", type="PORT"];
+                F03 -> N00 [label="0", type="WITH_PORT"];
+                N00 -> O03 [label="0", type="EXIT"];
+            }
+            subgraph cluster_F04 {
+                label="__g_6__";
+                F04 [label="ARGS", type="ARGS"];
+                O04 [label="EXIT", type="EXIT"];
+                N01 [label="PORT", type="PORT"];
+                N02 [label="1", type="DATA"];
+                N03 [label=":op/sub_l", type="OPER"];
+                N04 [label="fib", type="FUNC"];
+                N05 [label="2", type="DATA"];
+                N06 [label=":op/sub_l", type="OPER"];
+                N07 [label="fib", type="FUNC"];
+                N08 [label=":op/add_l", type="OPER"];
+                F04 -> N01 [label="0", type="WITH_PORT"];
+                N08 -> O04 [label="0", type="EXIT"];
+                N01 -> N03 [label="0|0", type="NORM"];
+                N02 -> N03 [label="0|1", type="NORM"];
+                N03 -> N04 [label="0|0", type="NORM"];
+                N01 -> N06 [label="1|0", type="NORM"];
+                N05 -> N06 [label="0|1", type="NORM"];
+                N06 -> N07 [label="0|0", type="NORM"];
+                N04 -> N08 [label="0|0", type="NORM"];
+                N07 -> N08 [label="0|1", type="NORM"];
+            }
+            F02 [label="ARGS", type="ARGS"];
+            O02 [label="EXIT", type="EXIT"];
+            N09 [label="n", type="PORT"];
+            N0A [label="1", type="DATA"];
+            N0B [label=":op/le_l", type="OPER"];
+            N0C [label="JOIN", type="JOIN"];
+            N0D [label="BRCH", type="BRCH"];
+            N0E [label="__g_4__", type="FUNC"];
+            N0F [label="__g_6__", type="FUNC"];
+            F02 -> N09 [label="0", type="NORM_PORT"];
+            N0C -> O02 [label="0", type="EXIT"];
+            N09 -> N0B [label="0|0", type="NORM"];
+            N0A -> N0B [label="0|1", type="NORM"];
+            N0E -> N0C [label="0|0", type="WITH"];
+            N0F -> N0C [label="0|1", type="WITH"];
+            N0D -> N0C [label="0|0", type="NORM"];
+            N0B -> N0D [label="0|0", type="NORM"];
+            N09 -> N0D [label="0|0", type="CTRL"];
+            N09 -> N0E [label="0|0", type="WITH"];
+            N0D -> N0E [label="0|0", type="CTRL"];
+            N09 -> N0F [label="1|0", type="WITH"];
+            N0D -> N0F [label="1|0", type="CTRL"];
+        }
+        O01 [label="EXIT", type="EXIT"];
+        N10 [label="10", type="DATA"];
+        N11 [label="Start computing fibonacci({})...", type="DATA"];
+        N12 [label=":str/format", type="OPER"];
+        N13 [label=":io/println", type="OPER"];
+        N14 [label="time:now", type="OPER"];
+        N15 [label="fib", type="FUNC"];
+        N16 [label="time:now", type="OPER"];
+        N17 [label=":op/sub_d", type="OPER"];
+        N18 [label="Fibonacci({}) = {} (computed in {:.4f} seconds)", type="DATA"];
+        N19 [label=":str/format", type="OPER"];
+        N1A [label=":io/println", type="OPER"];
+        N1B [label="0", type="DATA"];
+        N1C [label="GATE", type="GATE"];
+        N1C -> O01 [label="0", type="EXIT"];
+        N10 -> N12 [label="0|0", type="WITH"];
+        N11 -> N12 [label="0|0", type="NORM"];
+        N12 -> N13 [label="0|0", type="NORM"];
+        N13 -> N14 [label="0|0", type="CTRL"];
+        N10 -> N15 [label="0|0", type="NORM"];
+        N14 -> N15 [label="0|0", type="CTRL"];
+        N15 -> N16 [label="0|0", type="CTRL"];
+        N16 -> N17 [label="0|0", type="NORM"];
+        N14 -> N17 [label="0|1", type="NORM"];
+        N10 -> N19 [label="1|0", type="WITH"];
+        N15 -> N19 [label="0|1", type="WITH"];
+        N17 -> N19 [label="0|2", type="WITH"];
+        N18 -> N19 [label="0|0", type="NORM"];
+        N19 -> N1A [label="0|0", type="NORM"];
+        N1B -> N1C [label="0|0", type="NORM"];
+        N1A -> N1C [label="0|0", type="CTRL"];
+    }
+    O00 [label="EXIT", type="EXIT"];
+    N1D [label="Function(graph=main, tupleSlots=0)", type="DATA"];
+    N1E [label="CALL", type="CALL"];
+    N1E -> O00 [label="0", type="EXIT"];
+    N1D -> N1E [label="0|0", type="WITH"];
+}

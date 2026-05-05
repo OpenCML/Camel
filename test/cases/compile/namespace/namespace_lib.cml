@@ -1,0 +1,24 @@
+/**
+ * Helper module for namespace import/export tests.
+ */
+module namespace_lib
+
+export func root(): int sync {
+    return 4
+}
+
+namespace Tools {
+    export func inc(x: int): int sync {
+        return x + 1
+    }
+}
+
+namespace Models {
+    export type Box = {
+        x: int
+    }
+
+    export func new(x: int): Models::Box sync {
+        return { x: x }
+    }
+}

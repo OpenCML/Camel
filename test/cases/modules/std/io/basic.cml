@@ -1,0 +1,19 @@
+/**
+ * Exercises the minimal console IO surface so print and println remain usable as the lowest-level output primitives.
+ */
+module main
+
+// io 模块基础测试
+func main(): int sync {
+    println("=== IO Module Basic Tests ===")
+
+    println("\n[1] print(1 + 2)")
+    print(1 + 2)
+
+    println("\n[2] println('hello')")
+    println("hello")
+
+    println("\n=== IO tests completed ===")
+    return 0
+}
+

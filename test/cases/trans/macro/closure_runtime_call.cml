@@ -1,0 +1,19 @@
+/**
+ * Verifies a macro can materialize a closure value whose captured static data is later called by the normal runtime.
+ */
+module macro_closure_runtime_call
+
+type Adder = (y: int) => int
+
+macro func make_adder(x: int): Adder {
+    return (y: int): int => {
+        return x + y
+    }
+}
+
+func main(): int sync {
+    let add10 = make_adder(10)
+    let value = add10(32)
+    'macro_closure_runtime_call value={}'->format<value>->println
+    return 0
+}

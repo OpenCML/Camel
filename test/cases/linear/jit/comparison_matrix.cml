@@ -1,0 +1,23 @@
+/**
+ * Verifies JIT codegen for the full set of integer comparison operators and their branch-dependent packing logic.
+ */
+module jit_comparison_matrix
+
+func score(a: int, b: int): int {
+    let lt = if a < b then 1 else 0
+    let le = if a <= b then 1 else 0
+    let gt = if a > b then 1 else 0
+    let ge = if a >= b then 1 else 0
+    let eq = if a == b then 1 else 0
+    let ne = if a != b then 1 else 0
+    return lt + le * 10 + gt * 100 + ge * 1000 + eq * 10000 + ne * 100000
+}
+
+func main(): int sync {
+    let s0 = score(2, 5)
+    let s1 = score(5, 5)
+    let s2 = score(7, 3)
+    'comparison_matrix s0={} s1={} s2={}'->format<s0, s1, s2>->println
+    return 0
+}
+

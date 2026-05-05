@@ -1,0 +1,78 @@
+/**
+ * Tiny valid-convolution CNN trained through apply_gradients.
+ */
+module tiny_cnn
+
+import {
+    Tensor,
+    reshape, shape, sum, tanh
+} from tensor
+
+import {
+    Parameter,
+    apply_gradients, conv2d, grad, parameter, value
+} from nn
+
+type TinyCnn = {
+    kernel: Parameter,
+    bias: Parameter,
+    head: Parameter
+}
+
+with <model: TinyCnn>
+func features(x: Tensor): Tensor {
+    return tanh(conv2d(x, value(model.kernel), value(model.bias)))
+}
+
+with <model: TinyCnn>
+func predict(x: Tensor): Tensor {
+    let feat = x->features<model>
+    let flat = reshape(feat, [1, 4])
+    return flat @ value(model.head)
+}
+
+with <target: Tensor>
+func mse_loss(pred: Tensor): float {
+    let diff = pred - target
+    return sum(diff * diff) / float(shape(pred)[0])
+}
+
+with <model: TinyCnn, target: Tensor>
+func model_loss(x: Tensor): float {
+    let pred = x->predict<model>
+    return pred->mse_loss<target>
+}
+
+func main(): int sync {
+    var model = {
+        kernel: parameter(reshape([0.05, 0.0, 0.0, 0.05], [1, 1, 2, 2])),
+        bias: parameter(reshape([0.0], [1])),
+        head: parameter(reshape([0.1, 0.1, 0.1, 0.1], [4, 1]))
+    }
+    let x = reshape([1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0], [1, 1, 3, 3])
+    let target = reshape([1.0], [1, 1])
+
+    let step = apply_gradients(<model: TinyCnn, target: Tensor> (x: Tensor): float => {
+        let pred = x->predict<model>
+        return pred->mse_loss<target>
+    })
+
+    let before = x->model_loss<model, target>
+    let step_loss = wait step<model, target>(x, 0.2)
+    let after = x->model_loss<model, target>
+    let kernel = value(model.kernel)
+    let bias = value(model.bias)
+    let head = value(model.head)
+    let kernel_grad = grad(model.kernel)
+    let bias_grad = grad(model.bias)
+    let head_grad = grad(model.head)
+
+    'tiny_cnn metrics before={} step={} after={}'->format<before, step_loss, after>->println
+    'tiny_cnn kernel={}'->format<kernel>->println
+    'tiny_cnn bias={}'->format<bias>->println
+    'tiny_cnn head={}'->format<head>->println
+    'tiny_cnn kernel_grad={}'->format<kernel_grad>->println
+    'tiny_cnn bias_grad={}'->format<bias_grad>->println
+    'tiny_cnn head_grad={}'->format<head_grad>->println
+    return 0
+}

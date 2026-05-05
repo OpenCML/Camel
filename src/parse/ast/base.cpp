@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Mar. 07, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,6 +58,13 @@ const string Load::geneCode() const { return ""; }
 const string ModuleLoad::geneCode() const { return "module " + ref_.toString(); }
 
 const string ImportLoad::geneCode() const {
+    if (path_.empty()) {
+        return "import";
+    }
+    if (refs_.empty() && as_.empty()) {
+        return "import " + path_;
+    }
+
     string code = "import ";
     if (!refs_.empty()) {
         if (refs_.size() == 1) {
@@ -72,6 +79,8 @@ const string ImportLoad::geneCode() const {
             }
             code += " }";
         }
+    } else if (!as_.empty()) {
+        code += as_.toString();
     }
     code += " from " + path_;
     return code;

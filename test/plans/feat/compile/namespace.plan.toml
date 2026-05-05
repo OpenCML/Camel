@@ -1,0 +1,175 @@
+id = "compile.namespace"
+order = 318
+tier = "feat"
+tags = ["feat", "compile", "namespace"]
+
+[[tests]]
+name = "type_namespace_constructor"
+desc = "Checks namespace-declared user constructors resolve through Type::function references."
+kind = "behavior"
+case = "../../../cases/compile/namespace/type_namespace_constructor.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/type_namespace_constructor x=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 7, `expected x=7, got ${found[1]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "type_namespace_builtins"
+desc = "Checks Tensor:: and Parameter:: constructor aliases resolve through imported built-in type namespaces."
+kind = "behavior"
+case = "../../../cases/compile/namespace/type_namespace_builtins.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/type_namespace_builtins shape=([0-9]+) ([0-9]+) ([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 2, `expected first tensor rank entry 2, got ${found[1]}`)
+    assert(Number(found[2]) === 2, `expected second tensor rank entry 2, got ${found[2]}`)
+    assert(Number(found[3]) === 2, `expected parameter value rank entry 2, got ${found[3]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "module_import_qualified"
+desc = "Checks bare module imports require module-qualified access."
+kind = "behavior"
+case = "../../../cases/compile/namespace/module_import_qualified.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/module_import_qualified a=([0-9]+) b=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 4, `expected a=4, got ${found[1]}`)
+    assert(Number(found[2]) === 5, `expected b=5, got ${found[2]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "module_import_using"
+desc = "Checks using namespace over a module import injects exported symbols."
+kind = "behavior"
+case = "../../../cases/compile/namespace/module_import_using.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/module_import_using a=([0-9]+) b=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 4, `expected a=4, got ${found[1]}`)
+    assert(Number(found[2]) === 5, `expected b=5, got ${found[2]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "namespace_inner_import"
+desc = "Checks namespace blocks can contain import declarations and export qualified functions."
+kind = "behavior"
+case = "../../../cases/compile/namespace/namespace_inner_import.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/namespace_inner_import value=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 5, `expected value=5, got ${found[1]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "module_import_type_export"
+desc = "Checks namespace-qualified exported types resolve through module-qualified imports."
+kind = "behavior"
+case = "../../../cases/compile/namespace/module_import_type_export.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/module_import_type_export value=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 11, `expected value=11, got ${found[1]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "nested_namespace_using"
+desc = "Checks using namespace can inject one nested namespace from an imported module."
+kind = "behavior"
+case = "../../../cases/compile/namespace/nested_namespace_using.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/nested_namespace_using a=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 9, `expected a=9, got ${found[1]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "module_import_no_direct_inject"
+desc = "Checks bare module imports do not inject exported symbols directly."
+kind = "negative"
+case = "../../../cases/compile/namespace/module_import_no_direct_inject.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "module_import_builtins"
+desc = "Checks built-in module imports expose Tensor and Parameter APIs through module-qualified refs."
+kind = "behavior"
+case = "../../../cases/compile/namespace/module_import_builtins.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/module_import_builtins shape=([0-9]+) ([0-9]+) ([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 2, `expected first tensor rank entry 2, got ${found[1]}`)
+    assert(Number(found[2]) === 2, `expected second tensor rank entry 2, got ${found[2]}`)
+    assert(Number(found[3]) === 2, `expected parameter value rank entry 2, got ${found[3]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "module_import_using_builtins"
+desc = "Checks using namespace over a built-in module import restores direct symbols and type namespaces."
+kind = "behavior"
+case = "../../../cases/compile/namespace/module_import_using_builtins.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/module_import_using_builtins shape=([0-9]+) ([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 2, `expected first tensor rank entry 2, got ${found[1]}`)
+    assert(Number(found[2]) === 2, `expected second tensor rank entry 2, got ${found[2]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

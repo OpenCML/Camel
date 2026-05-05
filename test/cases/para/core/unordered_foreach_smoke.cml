@@ -1,0 +1,25 @@
+/**
+ * Smoke-checks unordered_foreach can be parsed and executed by the available schedulers.
+ */
+module unordered_foreach_smoke
+
+import { unordered_foreach } from para
+import { pi_hits } from sim
+
+func main(): int sync {
+    let workers = 8
+    let samples_per_worker = 1e6
+    let base_seed = 20260504
+    let jobs = range(0, workers)
+
+    unordered_foreach<(i: int) => sync {
+        let hits = pi_hits(samples_per_worker, base_seed + i * 7919)
+        if hits < 0 then {
+            println('unexpected negative hits')
+        } else {
+            ''
+        }
+    }>(jobs)
+
+    return 0
+}

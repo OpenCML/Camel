@@ -1,8 +1,0 @@
-module main
-
-import { zen } from this
-
-func main() sync {
-    println(zen())
-    return 0
-}

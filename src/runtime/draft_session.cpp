@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 02, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -586,7 +586,11 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
                 }
             });
         } else {
-            graph->traceGraphs([&](GCGraph *next) { worklist.push(next); });
+            graph->traceGraphs([&](GCGraph *next) {
+                if (next) {
+                    worklist.push(next);
+                }
+            });
         }
     }
 

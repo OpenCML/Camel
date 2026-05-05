@@ -1,0 +1,208 @@
+id = "modules.std"
+order = 360
+tier = "feat"
+tags = ["feat", "modules", "std"]
+
+[[tests]]
+name = "algo.basic"
+desc = "Exercises sorting and merge helpers from the algo standard module."
+kind = "behavior"
+case = "../../../cases/modules/std/algo/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "crypto.basic"
+desc = "Exercises deterministic hashing and multi-round hashing from the crypto module."
+kind = "behavior"
+case = "../../../cases/modules/std/crypto/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "fs.basic"
+desc = "Exercises directory creation, file IO, metadata queries, and chunk reads from the fs module."
+kind = "behavior"
+case = "../../../cases/modules/std/fs/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "io.basic"
+desc = "Exercises the minimal console IO surface provided by the io module."
+kind = "behavior"
+case = "../../../cases/modules/std/io/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "json.decode"
+desc = "Exercises JSON decoding across primitives, arrays, structs, and a round trip."
+kind = "behavior"
+case = "../../../cases/modules/std/json/decode.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "json.encode"
+desc = "Exercises JSON encoding for primitives, tuples, arrays, and pretty-printed structs."
+kind = "behavior"
+case = "../../../cases/modules/std/json/encode.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "math.basic"
+desc = "Exercises representative scalar math intrinsics exposed by the math module."
+kind = "behavior"
+case = "../../../cases/modules/std/math/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "os.basic"
+desc = "Exercises non-interactive OS helpers such as identity lookup, sleeping, and CPU discovery."
+kind = "behavior"
+case = "../../../cases/modules/std/os/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "pyplot.main"
+desc = "Exercises the richer pyplot wrapper across multiple inputs and output files."
+kind = "behavior"
+case = "../../../cases/modules/std/pyplot/main.cml"
+args = ["${case}"]
+expect_exit = 0
+failure_note = "Pyplot depends on matplotlib inside Camel's embedded Python runtime, which is not stable across local environments yet."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "pyplot.simple"
+desc = "Exercises the smallest pyplot smoke path for a single plot call."
+kind = "behavior"
+case = "../../../cases/modules/std/pyplot/simple.cml"
+args = ["${case}"]
+expect_exit = 0
+failure_note = "Pyplot depends on matplotlib inside Camel's embedded Python runtime, which is not stable across local environments yet."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "python.basic"
+desc = "Exercises the minimal embedded-Python bridge: builtin call, eval, and unwrap."
+kind = "behavior"
+case = "../../../cases/modules/std/python/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "python.integration"
+desc = "Exercises broader Python interop including imports, attrs, scripts, exec, and kwargs."
+kind = "behavior"
+case = "../../../cases/modules/std/python/main.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "python.phot"
+desc = "Exercises the phot Python wrapper through an end-to-end signal-processing pipeline."
+kind = "behavior"
+case = "../../../cases/modules/std/python/phot.cml"
+args = ["${case}"]
+expect_exit = 0
+failure_note = "The phot wrapper path is not stable in the current runtime/environment matrix."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "random.basic"
+desc = "Exercises seeded random generation APIs so deterministic behavior can be observed."
+kind = "behavior"
+case = "../../../cases/modules/std/random/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "re.basic"
+desc = "Exercises regex matching with positive, anchored, and negative patterns."
+kind = "behavior"
+case = "../../../cases/modules/std/re/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "sim.basic"
+desc = "Exercises simulation helpers with fixed seeds to preserve deterministic Monte Carlo results."
+kind = "behavior"
+case = "../../../cases/modules/std/sim/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "statistics.basic"
+desc = "Exercises basic descriptive statistics on a simple numeric dataset."
+kind = "behavior"
+case = "../../../cases/modules/std/statistics/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "sys.basic"
+desc = "Exercises environment and working-directory queries from the sys module."
+kind = "behavior"
+case = "../../../cases/modules/std/sys/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "this.basic"
+desc = "Exercises the this module as a lightweight builtin import and execution check."
+kind = "behavior"
+case = "../../../cases/modules/std/this/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "time.basic"
+desc = "Exercises wall-clock capture and timestamp formatting from the time module."
+kind = "behavior"
+case = "../../../cases/modules/std/time/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+

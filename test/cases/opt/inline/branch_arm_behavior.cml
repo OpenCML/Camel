@@ -1,0 +1,17 @@
+/**
+ * Verifies inlining does not corrupt control-flow arm selection when a call result feeds a branch join.
+ */
+module inline_branch_arm_behavior
+
+func pick(flag: int, lhs: int, rhs: int): int {
+    return if flag != 0 then lhs + 3 else rhs + 4
+}
+
+func main(): int sync {
+    let a = pick(1, 7, 100)
+    let b = pick(0, 7, 100)
+    'inline_branch_arm_behavior a={} b={}'->format<a, b>->println
+    return 0
+}
+
+

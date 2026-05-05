@@ -216,6 +216,16 @@ function pyCmd(exe) {
 }
 
 /**
+ * Ensure the helper Python has packaging installed before querying wheel tags.
+ * The CI Python image used by setup-python does not guarantee packaging is present.
+ * @param {string} pyExe
+ */
+function ensurePackagingInstalled(pyExe) {
+    const py = pyCmd(pyExe)
+    runCommand(`${py} -m pip install -q packaging`)
+}
+
+/**
  * Copy out/<tag>/ into the package, run setuptools + wheel tags, append wheels to dist/pypi/.
  */
 function packageWheelBundle({
@@ -345,6 +355,7 @@ function main() {
                 logFail(e instanceof Error ? e.message : String(e))
                 process.exit(1)
             }
+            ensurePackagingInstalled(pyExe)
             const tags = getWheelTagsFromPythonExe(pyExe)
             build({
                 rollupMm: sdk.mm,
@@ -390,6 +401,7 @@ function main() {
                 logFail(e instanceof Error ? e.message : String(e))
                 process.exit(1)
             }
+            ensurePackagingInstalled(pyExe)
             tags = getWheelTagsFromPythonExe(pyExe)
             build({
                 rollupMm: sdk.mm,
@@ -418,6 +430,7 @@ function main() {
                 logFail(e instanceof Error ? e.message : String(e))
                 process.exit(1)
             }
+            ensurePackagingInstalled(pyExe)
             tags = getWheelTagsFromPythonExe(pyExe)
             build({
                 rollupMm,
@@ -450,6 +463,7 @@ function main() {
     }
     const layout = findInterpreterDevelopmentLayout(compile.executable)
     let pyExe = compile.executable
+    ensurePackagingInstalled(pyExe)
     let tags = getWheelTagsFromPythonExe(pyExe)
     if (layout) {
         const rollupMm = rollupMmFromVersion(compile.major, compile.minor)
@@ -459,6 +473,7 @@ function main() {
             logFail(e instanceof Error ? e.message : String(e))
             process.exit(1)
         }
+        ensurePackagingInstalled(pyExe)
         tags = getWheelTagsFromPythonExe(pyExe)
         build({
             rollupMm,

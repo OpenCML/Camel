@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -280,14 +280,14 @@ void linkNodes(LinkType type, node_handle_t from, node_handle_t to) {
 
 std::string makeCompileGraphStableId(const std::string &name) {
     static std::atomic<uint64_t> seq = 1;
-    return std::format("cgraph:{}:{}", name.empty() ? "anonymous" : name, seq++);
+    return std::format("{}_{}", name.empty() ? "g" : name, seq++);
 }
 
 compile_graph_ptr_t createCompileGraph(
     FunctionType *funcType, const compile_graph_ptr_t &outer, std::string name = "") {
     auto graph = std::make_shared<DraftGraphBuilder>(funcType ? funcType : FunctionType::create());
     if (name.empty()) {
-        name = std::format("__graph_{}", makeCompileGraphStableId("anon"));
+        name = std::format("__{}__", makeCompileGraphStableId(""));
     }
     graph->setName(std::move(name));
     graph->setStableId(makeCompileGraphStableId(graph->name()));
@@ -299,14 +299,14 @@ compile_graph_ptr_t createCompileGraph(
         for (size_t i = 0; i < funcType->withTypesCount(); ++i) {
             const std::string portName = i < funcType->argNamesCount()
                                              ? std::string(funcType->argNameAt(i))
-                                             : std::format("__with{}", i);
+                                             : std::format("__w{}", i);
             graph->addPortNode(funcType->withTypeAt(i), portName, true, funcType->withIsVarAt(i));
         }
         for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
             const size_t argIndex      = funcType->withTypesCount() + i;
             const std::string portName = argIndex < funcType->argNamesCount()
                                              ? std::string(funcType->argNameAt(argIndex))
-                                             : std::format("__arg{}", i);
+                                             : std::format("__n{}", i);
             graph->addPortNode(funcType->normTypeAt(i), portName, false, funcType->normIsVarAt(i));
         }
     }
@@ -331,6 +331,22 @@ inline bool linkCheek(node_handle_t from, node_handle_t to) {
         return false;
     }
     return true;
+}
+
+inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
+    if (!lhs || !rhs || nodeGraphOf(lhs) != nodeGraphOf(rhs)) {
+        return false;
+    }
+    const draft_node_ref_t lhsId = nodeIdOf(lhs);
+    const draft_node_ref_t rhsId = nodeIdOf(rhs);
+    return std::ranges::find(normInputsOf(rhs), lhsId) != normInputsOf(rhs).end() ||
+           std::ranges::find(withInputsOf(rhs), lhsId) != withInputsOf(rhs).end() ||
+           std::ranges::find(normInputsOf(lhs), rhsId) != normInputsOf(lhs).end() ||
+           std::ranges::find(withInputsOf(lhs), rhsId) != withInputsOf(lhs).end();
+}
+
+inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
+    return linkCheek(from, to) && !hasDirectDataDependency(from, to);
 }
 
 inline camel::source::SemanticPart semanticPart(
@@ -481,6 +497,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     varied_ = false;
     diags_  = diags;
     usedGraphs_.clear();
+    typeDecls_.clear();
     syntheticRefIndex_ = 0;
 
     nodeScope_      = node_scope_t::create();
@@ -693,17 +710,17 @@ any Builder::visit(const GCT::node_ptr_t &node) {
 
 void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     ENTER("DECL");
-    const auto &declLoad = gct->loadAs<GCT::DeclLoad>();
+    const auto &declLoad     = gct->loadAs<GCT::DeclLoad>();
+    GCT::node_ptr_t typeNode = gct->atAs<GCT::TypeLoad>(0);
+    Type *type               = typeNode->loadAs<GCT::TypeLoad>()->dataType();
     if (!declLoad->isFunc()) {
+        typeDecls_[declLoad->ref()] = type;
         LEAVE("DECL");
         return nullptr;
     }
 
-    GCT::node_ptr_t typeNode = gct->atAs<GCT::TypeLoad>(0);
-    Type *type               = typeNode->loadAs<GCT::TypeLoad>()->dataType();
-    FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
-
-    compile_graph_ptr_t graph = enterScope(funcType, declLoad->ref().ident());
+    FunctionType *funcType    = tt::as_ptr<FunctionType>(type);
+    compile_graph_ptr_t graph = enterScope(funcType, declLoad->ref().toString());
     leaveScope();
 
     LEAVE("DECL");
@@ -881,8 +898,8 @@ void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
 
 node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     ENTER("DREF");
-    const string &name = gct->loadAs<GCT::DRefLoad>()->ref();
-    auto optNode       = nodeAt(name);
+    const string name = gct->loadAs<GCT::DRefLoad>()->ref().toString();
+    auto optNode      = nodeAt(name);
     if (optNode.has_value()) {
         node_handle_t node = optNode.value();
         if (!sameGraph(node, currGraph_)) {
@@ -921,6 +938,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             diags_->of(SemanticDiag::ImportNameNotExported)
                 .atOrigin(gct->load()->origin())
                 .commit(name);
+            throw BuildAbortException();
         }
         const auto &e = opt.value();
         if (camel::core::module::detail::EntityAccess::isNode(e)) {
@@ -1419,7 +1437,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         tryRemoveCtrlLink(inputNode, targetNode);
         linkNodes(LinkType::With, inputNode, targetNode);
         if (auto modifierNode = modifierOf(inputNode); modifierNode.has_value()) {
-            if (sameGraph(*modifierNode, currGraph_) && linkCheek(*modifierNode, targetNode)) {
+            if (sameGraph(*modifierNode, currGraph_) &&
+                shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
                 linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
             }
         }
@@ -1439,7 +1458,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         tryRemoveCtrlLink(inputNode, targetNode);
         linkNodes(LinkType::Norm, inputNode, targetNode);
         if (auto modifierNode = modifierOf(inputNode); modifierNode.has_value()) {
-            if (sameGraph(*modifierNode, currGraph_) && linkCheek(*modifierNode, targetNode)) {
+            if (sameGraph(*modifierNode, currGraph_) &&
+                shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
                 linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
             }
         }
@@ -1454,7 +1474,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
 
     if (synced_) {
-        if (lastSyncedNode_ != nullptr && linkCheek(lastSyncedNode_, targetNode)) {
+        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, targetNode)) {
             linkNodes(LinkType::Ctrl, lastSyncedNode_, targetNode);
         }
         lastSyncedNode_ = targetNode;
@@ -1471,15 +1491,28 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         "Unexpected result type from Enter the child of WITH node.");
     node_handle_t targetNode = any_cast<node_handle_t>(targetNodeRes);
     vector<node_handle_t> inputs;
+    auto lowerGraphValue = [&](const graph_ptr_t &graph) -> node_handle_t {
+        currGraph_->addDependencyGraph(graph);
+        return createFuncDataNode(graph, true, false);
+    };
     for (size_t i = 1; i < gct->size(); i++) {
         any dataRes = visit(gct->at(i));
         if (dataRes.type() == typeid(graph_ptr_t)) {
-            graph_ptr_t subGraph = any_cast<graph_ptr_t>(dataRes);
-            currGraph_->addDependencyGraph(subGraph);
-            auto inputNode = createFuncDataNode(subGraph, true, false);
-            inputs.push_back(inputNode);
+            inputs.push_back(lowerGraphValue(any_cast<graph_ptr_t>(dataRes)));
         } else if (dataRes.type() == typeid(node_handle_t)) {
-            inputs.push_back(any_cast<node_handle_t>(dataRes));
+            node_handle_t inputNode = any_cast<node_handle_t>(dataRes);
+            if (nodeIsKind(inputNode, runtime::GCNodeKind::Dref)) {
+                const auto &target = nodeGraphOf(inputNode)->drefTarget(inputNode);
+                if (std::holds_alternative<graph_ptr_t>(target)) {
+                    inputNode = lowerGraphValue(std::get<graph_ptr_t>(target));
+                } else if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+                    auto graphs = asCompileGraphVec(target);
+                    if (graphs && graphs->size() == 1) {
+                        inputNode = lowerGraphValue(graphs->front());
+                    }
+                }
+            }
+            inputs.push_back(inputNode);
         } else {
             ASSERT(false, std::format("Unexpected result type from the {} child of WITH node", i));
         }
@@ -1765,7 +1798,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     linkNodes(LinkType::Norm, brchNode, joinNode);
 
     if (synced_) {
-        if (lastSyncedNode_ != nullptr && linkCheek(lastSyncedNode_, brchNode)) {
+        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, brchNode)) {
             linkNodes(LinkType::Ctrl, lastSyncedNode_, brchNode);
         }
         lastSyncedNode_ = joinNode;
@@ -1865,6 +1898,11 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
     const auto &exptLoad = gct->loadAs<GCT::ExptLoad>();
     const auto &exports  = exptLoad->exports();
     for (const Reference &ref : exports) {
+        auto optType = typeDecls_.find(ref);
+        if (optType != typeDecls_.end()) {
+            module_->exportType(ref, optType->second);
+            continue;
+        }
         auto optDecorated = decoratedGraphAt(ref.toString());
         if (optDecorated.has_value()) {
             module_->exportEntity(

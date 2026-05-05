@@ -1,0 +1,75 @@
+id = "linear.closures_and_state"
+order = 342
+tier = "feat"
+tags = ["feat", "linear", "closures", "state"]
+
+[[tests]]
+name = "decorator_single.nvm"
+desc = "Checks a single decorator can wrap a function and adjust its result through a captured value."
+kind = "behavior"
+case = "../../../cases/linear/nvm/decorator_single.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "decorator_multi.nvm"
+desc = "Checks stacked decorators compose in source order and preserve captured wrapper parameters."
+kind = "behavior"
+case = "../../../cases/linear/nvm/decorator_multi.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "decorator_value_pass.nvm"
+desc = "Checks decorated functions remain first-class values when passed as call arguments."
+kind = "behavior"
+case = "../../../cases/linear/nvm/decorator_value_pass.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "lambda_filter.nvm"
+desc = "Checks lambda capture and collection filtering inside a grid-render pipeline on NVM."
+kind = "behavior"
+case = "../../../cases/linear/nvm/lambda.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "lambda_points.jit"
+desc = "Checks JIT execution of lambda-based filtering over struct arrays with captured bounds."
+kind = "behavior"
+case = "../../../cases/linear/jit/lambda_points.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/lambda_points len=([0-9]+) p0x=(-?[0-9]+) p1y=(-?[0-9]+) p2x=(-?[0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 3, `expected len=3, got ${found[1]}`)
+    assert(Number(found[2]) === 1, `expected p0x=1, got ${found[2]}`)
+    assert(Number(found[3]) === 9, `expected p1y=9, got ${found[3]}`)
+    assert(Number(found[4]) === 5, `expected p2x=5, got ${found[4]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "mutable_reference.nvm"
+desc = "Checks by-reference mutable updates propagate back through sync calls."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+

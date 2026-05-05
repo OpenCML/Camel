@@ -1,0 +1,18 @@
+id = "compile.gir"
+order = 311
+tier = "feat"
+tags = ["feat", "compile", "gir", "sync"]
+
+[[tests]]
+name = "sync.ctrl_dedup_snapshot"
+desc = "Checks sync lowering does not duplicate control edges when a later statement already depends on the earlier result via norm/with data flow."
+kind = "snapshot"
+case = "../../../cases/compile/gir/sync_ctrl_dedup.cml"
+args = ["${case}", "${run_gir}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "gir_dot_isomorphic"
+golden = "./golden/sync_ctrl_dedup.dot"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: May. 02, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -291,6 +291,13 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
                     ref,
                     -node->dataIndex,
                     staticSlotCount));
+        }
+        if (node->kind == GCNodeKind::Dref) {
+            throw std::runtime_error(
+                std::format(
+                    "Runtime graph '{}' contains unresolved DREF node at ref {}.",
+                    graph->name(),
+                    ref));
         }
         auto validateSlice = [&](Slice slice, std::string_view edgeKind) {
             const auto refs = graph->edgeSlice(slice);

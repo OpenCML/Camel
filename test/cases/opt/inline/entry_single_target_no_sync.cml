@@ -1,0 +1,18 @@
+/**
+ * Verifies the simple single-target inline path rewrites a tiny leaf call without requiring sync-specific handling.
+ */
+module inline_entry_single_target_no_sync
+
+func inc(v: int): int {
+    let t = v + 1
+    return t
+}
+
+func main(): int sync {
+    let x = 7
+    let y = inc(x)
+    'inline_entry_single_target_no_sync x={} y={}'->format<x, y>->println
+    return 0
+}
+
+

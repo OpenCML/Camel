@@ -1,0 +1,25 @@
+id = "linear.basic_runtime"
+order = 340
+tier = "feat"
+tags = ["feat", "linear", "basic"]
+
+[[tests]]
+name = "hello.nvm"
+desc = "Checks the smallest executable path on NVM: module load, main dispatch, and stdout emission."
+kind = "behavior"
+case = "../../../cases/linear/nvm/hello.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "zen.nvm"
+desc = "Checks importing and calling the builtin this module on the default linear runtime."
+kind = "behavior"
+case = "../../../cases/linear/nvm/zen.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+

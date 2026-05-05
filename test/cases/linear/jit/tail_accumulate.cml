@@ -1,0 +1,19 @@
+/**
+ * Tail-recursive accumulator used to check JIT stability on deep recursion and large integer propagation.
+ */
+module jit_tail_accumulate
+
+func sum(n: int, a: int, d: int, acc: int): int {
+    return if n == 0 then acc else sum(n - 1, a + d, d, acc + a)
+}
+
+func main(): int sync {
+    let n = 100000
+    let a = 1
+    let d = 3
+    let expected = 14999950000
+    let actual = sum(n, a, d, 0)
+    'tail_accumulate actual={} expected={}'->format<actual, expected>->println
+    return 0
+}
+

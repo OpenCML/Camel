@@ -1,0 +1,15 @@
+/**
+ * Verifies JIT execution of chained list map/slice/concat transforms that previously regressed in the language pipeline.
+ */
+module jit_list_transform
+
+func main(): int sync {
+    let xs = range(0, 8)
+    let ys = xs->map<(x: int): int => {
+        return x * x
+    }>
+    let zs = concat([100], ys->slice<2, 6>)
+    'list_transform ys_len={} ys3={} ys7={} zs_len={} zs0={} zs4={}'->format<len(ys), ys[3], ys[7], len(zs), zs[0], zs[4]>->println
+    return 0
+}
+

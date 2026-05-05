@@ -1,0 +1,32 @@
+/**
+ * Operator-level sanity check for conv2d kernel and bias gradients.
+ */
+module conv2d_grad_sanity
+
+import {
+    reshape, sum
+} from tensor
+
+import {
+    conv2d, conv2d_bias_grad, conv2d_kernel_grad
+} from nn
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], [1, 1, 3, 3])
+    let kernel = reshape([0.1, 0.2, 0.3, 0.4], [1, 1, 2, 2])
+    let bias = reshape([0.0], [1])
+    let dy = reshape([1.0, 1.0, 1.0, 1.0], [1, 1, 2, 2])
+    let plus = reshape([0.101, 0.2, 0.3, 0.4], [1, 1, 2, 2])
+    let minus = reshape([0.099, 0.2, 0.3, 0.4], [1, 1, 2, 2])
+
+    let grad_kernel = conv2d_kernel_grad(x, kernel, dy)
+    let grad_bias = conv2d_bias_grad(bias, dy)
+    let grad0 = sum(grad_kernel * reshape([1.0, 0.0, 0.0, 0.0], [1, 1, 2, 2]))
+    let bias_sum = sum(grad_bias)
+    let score_plus = sum(conv2d(x, plus, bias) * dy)
+    let score_minus = sum(conv2d(x, minus, bias) * dy)
+    let finite = (score_plus - score_minus) / 0.002
+
+    'conv2d_grad_sanity grad0={} finite={} bias_sum={}'->format<grad0, finite, bias_sum>->println
+    return 0
+}

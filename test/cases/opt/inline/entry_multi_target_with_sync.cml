@@ -1,0 +1,20 @@
+/**
+ * Verifies the inliner preserves dataflow when the callee entry fans out to multiple local values before returning.
+ */
+module inline_entry_multi_target_with_sync
+
+func combine(a: int, b: int): int {
+    let x = a + 1
+    let y = b + 2
+    return x + y
+}
+
+func main(): int sync {
+    let p = 5
+    let q = 10
+    let r = combine(p, q)
+    'inline_entry_multi_target_with_sync p={} q={} r={}'->format<p, q, r>->println
+    return 0
+}
+
+

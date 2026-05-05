@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 10, 2026
- * Updated: Mar. 11, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -143,6 +143,16 @@ bool applyCompare(CompareOp op, double lhs, double rhs) {
         return lhs == rhs;
     }
     return false;
+}
+
+bool isRowBiasFor(const TensorObject *bias, const TensorObject *matrix) {
+    if (!bias || !matrix || matrix->rank() != 2) {
+        return false;
+    }
+    if (bias->rank() == 1) {
+        return bias->dim(0) == matrix->dim(1);
+    }
+    return bias->rank() == 2 && bias->dim(0) == 1 && bias->dim(1) == matrix->dim(1);
 }
 
 struct ArrayInference {
@@ -774,20 +784,30 @@ TensorObject *tensorConcat(
 
 TensorObject *tensorBinary(
     const TensorObject *lhs, const TensorObject *rhs, BinaryOp op, mm::IAllocator &allocator) {
-    if (!lhs->sameShape(rhs)) {
+    const bool sameShape = lhs->sameShape(rhs);
+    const bool rhsBias   = !sameShape && isRowBiasFor(rhs, lhs);
+    const bool lhsBias   = !sameShape && isRowBiasFor(lhs, rhs);
+    if (!sameShape && !rhsBias && !lhsBias) {
         throw std::invalid_argument("Tensor binary operation requires matching shapes");
     }
     type::TypeCode outType = promoteTensorTypes(lhs->dtype(), rhs->dtype());
     if (op == BinaryOp::Divide || op == BinaryOp::Power) {
         outType = type::TypeCode::Float32;
     }
-    TensorObject *out = TensorObject::create(
+    const TensorObject *shapeSource = lhsBias ? rhs : lhs;
+    TensorObject *out               = TensorObject::create(
         outType,
-        std::span<const int64_t>(lhs->shape(), lhs->rank()),
+        std::span<const int64_t>(shapeSource->shape(), shapeSource->rank()),
         allocator,
         false);
-    for (uint64_t i = 0; i < lhs->numel(); ++i) {
-        out->setFromDouble(i, applyBinary(op, lhs->getAsDouble(i), rhs->getAsDouble(i)));
+    const uint64_t rhsBiasWidth = rhsBias ? static_cast<uint64_t>(rhs->dim(rhs->rank() - 1)) : 0;
+    const uint64_t lhsBiasWidth = lhsBias ? static_cast<uint64_t>(lhs->dim(lhs->rank() - 1)) : 0;
+    for (uint64_t i = 0; i < out->numel(); ++i) {
+        const uint64_t lhsIndex = lhsBias ? i % lhsBiasWidth : i;
+        const uint64_t rhsIndex = rhsBias ? i % rhsBiasWidth : i;
+        out->setFromDouble(
+            i,
+            applyBinary(op, lhs->getAsDouble(lhsIndex), rhs->getAsDouble(rhsIndex)));
     }
     return out;
 }
@@ -1040,6 +1060,37 @@ TensorObject *tensorLog(const TensorObject *tensor, mm::IAllocator &allocator) {
             throw std::invalid_argument("log: input must be positive");
         }
         out->setFromDouble(i, std::log(v));
+    }
+    return out;
+}
+
+TensorObject *tensorSigmoid(const TensorObject *tensor, mm::IAllocator &allocator) {
+    if (!isFloatingTensorType(tensor->dtype())) {
+        throw std::invalid_argument("sigmoid requires floating-point tensor");
+    }
+    TensorObject *out = TensorObject::create(
+        type::TypeCode::Float32,
+        std::span<const int64_t>(tensor->shape(), tensor->rank()),
+        allocator,
+        false);
+    for (uint64_t i = 0; i < tensor->numel(); ++i) {
+        const double value = tensor->getAsDouble(i);
+        out->setFromDouble(i, 1.0 / (1.0 + std::exp(-value)));
+    }
+    return out;
+}
+
+TensorObject *tensorTanh(const TensorObject *tensor, mm::IAllocator &allocator) {
+    if (!isFloatingTensorType(tensor->dtype())) {
+        throw std::invalid_argument("tanh requires floating-point tensor");
+    }
+    TensorObject *out = TensorObject::create(
+        type::TypeCode::Float32,
+        std::span<const int64_t>(tensor->shape(), tensor->rank()),
+        allocator,
+        false);
+    for (uint64_t i = 0; i < tensor->numel(); ++i) {
+        out->setFromDouble(i, std::tanh(tensor->getAsDouble(i)));
     }
     return out;
 }

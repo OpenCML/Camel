@@ -1,0 +1,15 @@
+/**
+ * Negative case: row-wise softmax must reject non-rank-2 tensors.
+ */
+module softmax_rank_error
+
+import {
+    reshape, softmax, sum
+} from tensor
+
+func main(): int sync {
+    let values = reshape([1.0, 2.0], [2])
+    let probs = softmax(values)
+    'softmax_rank_error sum={}'->format<sum(probs)>->println
+    return 0
+}

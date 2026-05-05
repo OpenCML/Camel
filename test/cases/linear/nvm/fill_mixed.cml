@@ -1,0 +1,14 @@
+/**
+ * Verifies array literals can mix constants and computed values without losing element order or materialization.
+ */
+module fill_mixed
+
+func main(): int sync {
+    let x = 2
+    let arr = [1, x, 3]
+    println(arr[0])
+    println(arr[1])
+    println(arr[2])
+    return 0
+}
+

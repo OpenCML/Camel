@@ -1,0 +1,19 @@
+/**
+ * Verifies the inliner detects recursive SCC entry points and avoids infinitely expanding mutually recursive calls.
+ */
+module inline_scc_entry_guard_recursion
+
+func ping(n: int): int {
+    return if n <= 0 then 0 else pong(n - 1)
+}
+
+func pong(n: int): int {
+    return if n <= 0 then 0 else ping(n - 1)
+}
+
+func main(): int sync {
+    let out = ping(6)
+    'inline_scc_entry_guard_recursion out={}'->format<out>->println
+    return 0
+}
+

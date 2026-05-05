@@ -1,0 +1,18 @@
+/**
+ * Verifies builtin operators feeding branch conditions and arithmetic remain correctly ordered after JIT lowering.
+ */
+module jit_operator_branch_mix
+
+func pick(xs: int[]): int {
+    let n = len(xs)
+    let first = head(xs)
+    return if n > 3 then first + n else first - n
+}
+
+func main(): int sync {
+    let a = pick([4, 5, 6, 7])
+    let b = pick([4, 5])
+    'operator_branch_mix a={} b={}'->format<a, b>->println
+    return 0
+}
+

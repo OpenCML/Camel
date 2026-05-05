@@ -1,0 +1,837 @@
+id = "modules.nn"
+order = 361
+tier = "feat"
+tags = ["feat", "modules", "nn"]
+
+[[tests]]
+name = "vjp_decorator_demo"
+desc = "Exercises nn.vjp macro decorator registration for a user function VJP rule."
+kind = "behavior"
+case = "../../../cases/modules/nn/vjp_decorator_demo.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/vjp_decorator_demo value=([0-9]+)/, input.normalized.stdout)
+assert(Number(found[1]) === 42, `expected decorated value 42, got ${found[1]}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "with_context_step_demo"
+desc = "Exercises macro-generated in-place SGD over a with-context Linear model parameter."
+kind = "behavior"
+case = "../../../cases/modules/nn/with_context_step_demo.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(
+    /with_context_step_demo metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/,
+    input.normalized.stdout
+)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(before > 0, `expected positive initial loss, got ${before}`)
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/with_context_step_demo weight=tensor/, input.normalized.stdout)
+match(/with_context_step_demo grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "with_context_step_gir"
+desc = "Inspects std::gir output to ensure apply_gradients emits a VJP-derived backward graph."
+kind = "behavior"
+case = "../../../cases/modules/nn/with_context_step_demo.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+for (const needle of [
+    'nn::autograd_sgd_step',
+    'tensor:full',
+    'tensor:add',
+    'nn:add_grad',
+    'nn:sgd',
+]) {
+    assert(text.includes(needle), `GIR output missing ${needle}`)
+}
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "autograd_linear_demo"
+desc = "Exercises nn.apply_gradients macro synthesis for a linear MSE SGD step."
+kind = "behavior"
+case = "../../../cases/modules/nn/autograd_linear_demo.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(
+    /autograd_linear_demo metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/,
+    input.normalized.stdout
+)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(before > 0, `expected positive initial loss, got ${before}`)
+assert(Math.abs(step - before) < 1e-9, `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/autograd_linear_demo w0=tensor/, input.normalized.stdout)
+match(/autograd_linear_demo w1=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "graph_autograd_multi_param_demo"
+desc = "Exercises graph-based apply_gradients over multiple Parameter leaves and a broadcast bias."
+kind = "behavior"
+case = "../../../cases/modules/nn/graph_autograd_multi_param_demo.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(
+    /graph_autograd_multi_param_demo metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/,
+    input.normalized.stdout
+)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/graph_autograd_multi_param_demo weight=tensor/, input.normalized.stdout)
+match(/graph_autograd_multi_param_demo bias=tensor/, input.normalized.stdout)
+match(/graph_autograd_multi_param_demo weight_grad=tensor/, input.normalized.stdout)
+match(/graph_autograd_multi_param_demo bias_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "graph_autograd_multi_param_gir"
+desc = "Inspects std::gir output for two parameter updates from one loss graph."
+kind = "behavior"
+case = "../../../cases/modules/nn/graph_autograd_multi_param_demo.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+assert(text.includes('nn::autograd_sgd_step'), 'GIR output missing autograd step graph')
+assert((text.match(/nn:add_grad/g) || []).length >= 2, 'expected at least two nn:add_grad nodes')
+assert((text.match(/nn:sgd/g) || []).length >= 2, 'expected at least two nn:sgd nodes')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "autoencoder"
+desc = "Exercises graph-based apply_gradients on a tiny sigmoid autoencoder."
+kind = "behavior"
+case = "../../../cases/modules/nn/autoencoder.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/autoencoder metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/autoencoder enc_w=tensor/, input.normalized.stdout)
+match(/autoencoder dec_w=tensor/, input.normalized.stdout)
+match(/autoencoder enc_grad=tensor/, input.normalized.stdout)
+match(/autoencoder dec_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tiny_rnn"
+desc = "Exercises graph-based apply_gradients on a fixed two-step tanh RNN."
+kind = "behavior"
+case = "../../../cases/modules/nn/tiny_rnn.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/tiny_rnn metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/tiny_rnn wxh=tensor/, input.normalized.stdout)
+match(/tiny_rnn whh=tensor/, input.normalized.stdout)
+match(/tiny_rnn why=tensor/, input.normalized.stdout)
+match(/tiny_rnn wxh_grad=tensor/, input.normalized.stdout)
+match(/tiny_rnn whh_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "matrix_factorization"
+desc = "Exercises graph-based apply_gradients on one-hot matrix factorization."
+kind = "behavior"
+case = "../../../cases/modules/nn/matrix_factorization.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/matrix_factorization metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/matrix_factorization user_table=tensor/, input.normalized.stdout)
+match(/matrix_factorization item_table=tensor/, input.normalized.stdout)
+match(/matrix_factorization user_grad=tensor/, input.normalized.stdout)
+match(/matrix_factorization item_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "softmax_cross_entropy_sanity"
+desc = "Checks fused softmax cross entropy gradient against a tiny finite-difference estimate."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_cross_entropy_sanity.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/softmax_cross_entropy_sanity loss=([0-9.eE+-]+) grad0=([0-9.eE+-]+) finite=([0-9.eE+-]+)/, input.normalized.stdout)
+const loss = Number(found[1])
+const grad0 = Number(found[2])
+const finite = Number(found[3])
+assert(Number.isFinite(loss) && Number.isFinite(grad0) && Number.isFinite(finite), 'metrics are not finite')
+assert(loss > 0, `expected positive loss, got ${loss}`)
+assert(approx(grad0, finite, 1e-3), `gradient ${grad0} should match finite difference ${finite}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "softmax_classifier"
+desc = "Exercises helper-call autograd with fused softmax cross entropy classification loss."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_classifier.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/softmax_classifier metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/softmax_classifier weight=tensor/, input.normalized.stdout)
+match(/softmax_classifier bias=tensor/, input.normalized.stdout)
+match(/softmax_classifier weight_grad=tensor/, input.normalized.stdout)
+match(/softmax_classifier bias_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "softmax_classifier_gir"
+desc = "Checks fused classification loss and logits gradient appear in the autograd step graph."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_classifier.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+const stepNeedle = (op) => `tooltip="${op}\\nnn::autograd_sgd_step`
+const inStep = (op) => text.includes(stepNeedle(op))
+const countStep = (op) => text.split(stepNeedle(op)).length - 1
+assert(inStep('nn:softmax_cross_entropy'), 'autograd step missing fused classification loss')
+assert(inStep('nn:softmax_cross_entropy_grad'), 'autograd step missing fused logits gradient')
+assert(countStep('nn:sgd') === 2, 'expected one update for classifier weight and bias')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "embedding_grad_sanity"
+desc = "Checks embedding table gradients accumulate repeated indices and leave unvisited rows zero."
+kind = "behavior"
+case = "../../../cases/modules/nn/embedding_grad_sanity.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/embedding_grad_sanity gathered_sum=([0-9.eE+-]+) row0=([0-9.eE+-]+) row1=([0-9.eE+-]+) row2=([0-9.eE+-]+)/, input.normalized.stdout)
+const gathered = Number(found[1])
+const row0 = Number(found[2])
+const row1 = Number(found[3])
+const row2 = Number(found[4])
+assert(Number.isFinite(gathered) && Number.isFinite(row0) && Number.isFinite(row1) && Number.isFinite(row2), 'metrics are not finite')
+assert(approx(gathered, 2.5, 1e-6), `unexpected gathered sum ${gathered}`)
+assert(approx(row0, 0.0, 1e-6), `unvisited row should have zero grad, got ${row0}`)
+assert(approx(row1, 7.0, 1e-6), `repeated row grad should accumulate to 7, got ${row1}`)
+assert(approx(row2, 9.0, 1e-6), `single visited row grad should be 9, got ${row2}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "embedding_mf"
+desc = "Exercises helper-call autograd with true embedding/gather table parameters."
+kind = "behavior"
+case = "../../../cases/modules/nn/embedding_mf.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/embedding_mf metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/embedding_mf user_table=tensor/, input.normalized.stdout)
+match(/embedding_mf item_table=tensor/, input.normalized.stdout)
+match(/embedding_mf user_grad=tensor/, input.normalized.stdout)
+match(/embedding_mf item_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "embedding_mf_gir"
+desc = "Checks embedding and dense table-gradient primitives appear in the autograd step graph."
+kind = "behavior"
+case = "../../../cases/modules/nn/embedding_mf.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+const stepNeedle = (op) => `tooltip="${op}\\nnn::autograd_sgd_step`
+const inStep = (op) => text.includes(stepNeedle(op))
+const countStep = (op) => text.split(stepNeedle(op)).length - 1
+assert(inStep('nn:embedding'), 'autograd step missing embedding gather')
+assert(inStep('nn:embedding_table_grad'), 'autograd step missing embedding table gradient')
+assert(countStep('nn:sgd') === 2, 'expected one update for user and item embedding tables')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "embedding_index_error"
+desc = "Rejects out-of-range embedding indices with a readable diagnostic."
+kind = "behavior"
+case = "../../../cases/modules/nn/embedding_index_error.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(input.exit_code !== 0, 'embedding index error case unexpectedly succeeded')
+assert(text.includes('embedding index out of range'), 'missing embedding index diagnostic')
+assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic category')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "softmax_grad_sanity"
+desc = "Checks row-wise softmax VJP against a tiny finite-difference estimate."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_grad_sanity.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/softmax_grad_sanity prob_sum=([0-9.eE+-]+) grad0=([0-9.eE+-]+) finite=([0-9.eE+-]+)/, input.normalized.stdout)
+const probSum = Number(found[1])
+const grad0 = Number(found[2])
+const finite = Number(found[3])
+assert(Number.isFinite(probSum) && Number.isFinite(grad0) && Number.isFinite(finite), 'metrics are not finite')
+assert(approx(probSum, 1.0, 1e-6), `softmax row should sum to 1, got ${probSum}`)
+assert(approx(grad0, finite, 1e-3), `gradient ${grad0} should match finite difference ${finite}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tiny_attention"
+desc = "Exercises helper-call autograd through a tiny attention block with row-wise softmax."
+kind = "behavior"
+case = "../../../cases/modules/nn/tiny_attention.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/tiny_attention metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/tiny_attention wq=tensor/, input.normalized.stdout)
+match(/tiny_attention wk=tensor/, input.normalized.stdout)
+match(/tiny_attention wv=tensor/, input.normalized.stdout)
+match(/tiny_attention wo=tensor/, input.normalized.stdout)
+match(/tiny_attention wq_grad=tensor/, input.normalized.stdout)
+match(/tiny_attention wk_grad=tensor/, input.normalized.stdout)
+match(/tiny_attention wv_grad=tensor/, input.normalized.stdout)
+match(/tiny_attention wo_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tiny_attention_gir"
+desc = "Checks softmax and softmax VJP primitives appear in the attention autograd step graph."
+kind = "behavior"
+case = "../../../cases/modules/nn/tiny_attention.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+const stepNeedle = (op) => `tooltip="${op}\\nnn::autograd_sgd_step`
+const inStep = (op) => text.includes(stepNeedle(op))
+const countStep = (op) => text.split(stepNeedle(op)).length - 1
+assert(inStep('tensor:softmax'), 'autograd step missing attention softmax')
+assert(inStep('tensor:softmax_grad'), 'autograd step missing softmax VJP primitive')
+assert(countStep('nn:sgd') === 4, 'expected one update for Q/K/V/output projection parameters')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "softmax_rank_error"
+desc = "Rejects non-rank-2 softmax input with a readable diagnostic."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_rank_error.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(input.exit_code !== 0, 'softmax rank error case unexpectedly succeeded')
+assert(text.includes('softmax currently requires a rank-2 tensor'), 'missing softmax rank diagnostic')
+assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic category')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "conv2d_grad_sanity"
+desc = "Checks conv2d kernel gradient against finite difference and bias gradient shape."
+kind = "behavior"
+case = "../../../cases/modules/nn/conv2d_grad_sanity.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/conv2d_grad_sanity grad0=([0-9.eE+-]+) finite=([0-9.eE+-]+) bias_sum=([0-9.eE+-]+)/, input.normalized.stdout)
+const grad0 = Number(found[1])
+const finite = Number(found[2])
+const biasSum = Number(found[3])
+assert(Number.isFinite(grad0) && Number.isFinite(finite) && Number.isFinite(biasSum), 'metrics are not finite')
+assert(approx(grad0, finite, 1e-3), `kernel gradient ${grad0} should match finite difference ${finite}`)
+assert(approx(biasSum, 4.0, 1e-6), `bias gradient sum should be 4, got ${biasSum}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tiny_cnn"
+desc = "Exercises helper-call autograd through a tiny valid-convolution CNN."
+kind = "behavior"
+case = "../../../cases/modules/nn/tiny_cnn.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/tiny_cnn metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/tiny_cnn kernel=tensor/, input.normalized.stdout)
+match(/tiny_cnn bias=tensor/, input.normalized.stdout)
+match(/tiny_cnn head=tensor/, input.normalized.stdout)
+match(/tiny_cnn kernel_grad=tensor/, input.normalized.stdout)
+match(/tiny_cnn bias_grad=tensor/, input.normalized.stdout)
+match(/tiny_cnn head_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tiny_cnn_gir"
+desc = "Checks conv2d and conv2d VJP primitives appear in the Tiny CNN autograd step graph."
+kind = "behavior"
+case = "../../../cases/modules/nn/tiny_cnn.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+const stepNeedle = (op) => `tooltip="${op}\\nnn::autograd_sgd_step`
+const inStep = (op) => text.includes(stepNeedle(op))
+const countStep = (op) => text.split(stepNeedle(op)).length - 1
+assert(inStep('nn:conv2d'), 'autograd step missing conv2d')
+assert(inStep('nn:conv2d_input_grad'), 'autograd step missing conv2d input gradient')
+assert(inStep('nn:conv2d_kernel_grad'), 'autograd step missing conv2d kernel gradient')
+assert(inStep('nn:conv2d_bias_grad'), 'autograd step missing conv2d bias gradient')
+assert(countStep('nn:sgd') === 3, 'expected one update for conv kernel, conv bias, and head')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "conv2d_shape_error"
+desc = "Rejects conv2d channel mismatch with a readable diagnostic."
+kind = "behavior"
+case = "../../../cases/modules/nn/conv2d_shape_error.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(input.exit_code !== 0, 'conv2d shape error case unexpectedly succeeded')
+assert(text.includes('conv2d input channels must match kernel channels'), 'missing conv2d channel diagnostic')
+assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic category')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "autograd_missing_vjp_concat_error"
+desc = "Rejects trainable concat paths that lack a builtin VJP rule."
+kind = "behavior"
+case = "../../../cases/modules/nn/autograd_missing_vjp_concat_error.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(input.exit_code !== 0, 'missing-VJP case unexpectedly succeeded')
+assert(text.includes("No builtin VJP rule registered for 'tensor:concat'"), 'missing concat VJP diagnostic')
+assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic category')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "residual_mlp"
+desc = "Exercises helper-call lowering over a residual MLP with branch merge and skip parameters."
+kind = "behavior"
+case = "../../../cases/modules/nn/residual_mlp.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/residual_mlp metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/residual_mlp l0_weight=tensor/, input.normalized.stdout)
+match(/residual_mlp l1_weight=tensor/, input.normalized.stdout)
+match(/residual_mlp skip_weight=tensor/, input.normalized.stdout)
+match(/residual_mlp l0_grad=tensor/, input.normalized.stdout)
+match(/residual_mlp skip_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "residual_mlp_gir"
+desc = "Checks residual MLP helper primitives are lowered into the autograd step graph."
+kind = "behavior"
+case = "../../../cases/modules/nn/residual_mlp.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+const stepNeedle = (op) => `tooltip="${op}\\nnn::autograd_sgd_step`
+const inStep = (op) => text.includes(stepNeedle(op))
+const countStep = (op) => text.split(stepNeedle(op)).length - 1
+const stepFuncLines = text.split(/\r?\n/).filter((line) =>
+    line.includes('shape=Mdiamond') && line.includes('nn::autograd_sgd_step')
+)
+assert(inStep('tensor:matmul'), 'autograd step missing lowered matmul')
+assert(inStep('tensor:add'), 'autograd step missing lowered residual add')
+assert(inStep('tensor:tanh'), 'autograd step missing lowered tanh')
+assert(stepFuncLines.length === 0, `autograd step still contains helper FUNC nodes: ${stepFuncLines[0] || ''}`)
+assert(countStep('nn:sgd') === 6, 'expected one update for each residual MLP parameter')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "siamese_shared_encoder"
+desc = "Exercises helper-call lowering with two branches sharing one encoder parameter set."
+kind = "behavior"
+case = "../../../cases/modules/nn/siamese_shared_encoder.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/siamese_shared_encoder metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/siamese_shared_encoder weight=tensor/, input.normalized.stdout)
+match(/siamese_shared_encoder bias=tensor/, input.normalized.stdout)
+match(/siamese_shared_encoder weight_grad=tensor/, input.normalized.stdout)
+match(/siamese_shared_encoder bias_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "siamese_shared_encoder_gir"
+desc = "Checks shared encoder calls merge to one update per shared parameter."
+kind = "behavior"
+case = "../../../cases/modules/nn/siamese_shared_encoder.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+const stepNeedle = (op) => `tooltip="${op}\\nnn::autograd_sgd_step`
+const inStep = (op) => text.includes(stepNeedle(op))
+const countStep = (op) => text.split(stepNeedle(op)).length - 1
+const stepFuncLines = text.split(/\r?\n/).filter((line) =>
+    line.includes('shape=Mdiamond') && line.includes('nn::autograd_sgd_step')
+)
+assert(inStep('tensor:matmul'), 'autograd step missing encoder matmul')
+assert(inStep('tensor:tanh'), 'autograd step missing encoder tanh')
+assert(inStep('tensor:subtract'), 'autograd step missing pairwise diff')
+assert(stepFuncLines.length === 0, `autograd step still contains helper FUNC nodes: ${stepFuncLines[0] || ''}`)
+assert(countStep('nn:add_grad') === 2, 'expected two add_grad nodes for shared weight/bias')
+assert(countStep('nn:sgd') === 2, 'expected two sgd nodes for shared weight/bias')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "gru_lite"
+desc = "Exercises helper-call lowering through a fixed two-step GRU-lite unroll."
+kind = "behavior"
+case = "../../../cases/modules/nn/gru_lite.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/gru_lite metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/gru_lite wxz=tensor/, input.normalized.stdout)
+match(/gru_lite whz=tensor/, input.normalized.stdout)
+match(/gru_lite wxn=tensor/, input.normalized.stdout)
+match(/gru_lite whn=tensor/, input.normalized.stdout)
+match(/gru_lite wxz_grad=tensor/, input.normalized.stdout)
+match(/gru_lite whz_grad=tensor/, input.normalized.stdout)
+match(/gru_lite wxn_grad=tensor/, input.normalized.stdout)
+match(/gru_lite whn_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "gru_lite_gir"
+desc = "Checks GRU-lite repeated helper calls lower to primitive gated tensor ops."
+kind = "behavior"
+case = "../../../cases/modules/nn/gru_lite.cml"
+args = ["${case}", "std::macro", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const text = input.normalized.output
+const stepNeedle = (op) => `tooltip="${op}\\nnn::autograd_sgd_step`
+const inStep = (op) => text.includes(stepNeedle(op))
+const countStep = (op) => text.split(stepNeedle(op)).length - 1
+const stepFuncLines = text.split(/\r?\n/).filter((line) =>
+    line.includes('shape=Mdiamond') && line.includes('nn::autograd_sgd_step')
+)
+assert(inStep('tensor:sigmoid'), 'autograd step missing sigmoid gate')
+assert(inStep('tensor:tanh'), 'autograd step missing tanh candidate')
+assert(inStep('tensor:multiply'), 'autograd step missing elementwise gate multiply')
+assert(stepFuncLines.length === 0, `autograd step still contains helper FUNC nodes: ${stepFuncLines[0] || ''}`)
+assert(countStep('nn:sgd') === 8, 'expected one update for each GRU-lite parameter')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "autograd_recursive_helper_error"
+desc = "Rejects recursive helper call graphs during apply_gradients lowering."
+kind = "behavior"
+case = "../../../cases/modules/nn/autograd_recursive_helper_error.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(input.exit_code !== 0, 'recursive helper case unexpectedly succeeded')
+assert(text.includes("apply_gradients does not support recursive helper call graph 'recursive_pred'"), 'missing recursive helper diagnostic')
+assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic category')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "lr"
+desc = "Exercises tensor algebra, gradient updates, and mutable weights through a linear-regression training loop."
+kind = "behavior"
+case = "../../../cases/modules/nn/lr.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "lrit"
+desc = "Exercises tensor math together with recursive state threading in a sync linear-regression trainer."
+kind = "behavior"
+case = "../../../cases/modules/nn/lrit.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "mnist"
+desc = "Exercises a larger softmax-classifier training loop on synthetic data without external dependencies."
+kind = "behavior"
+case = "../../../cases/modules/nn/mnist.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "tensor_smoke"
+desc = "Exercises core tensor shape propagation and matrix operators in a compact sanity case."
+kind = "behavior"
+case = "../../../cases/modules/nn/tensor_smoke.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "mnist_py"
+desc = "Exercises Python-backed MNIST loading, training, and visualization through the Camel tensor stack."
+kind = "behavior"
+case = "../../../cases/modules/nn/mnist_py.cml"
+args = ["${case}"]
+expect_exit = 0
+failure_note = "The MNIST helper path still has a Python integration regression."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "svm"
+desc = "Exercises a heavier tensor optimization example with SVM-style training and prediction."
+kind = "behavior"
+case = "../../../cases/modules/nn/svm.cml"
+args = ["${case}"]
+expect_exit = 0
+failure_note = "The SVM helper path still has a neural-network runtime regression."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

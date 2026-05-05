@@ -1,0 +1,24 @@
+/**
+ * Verifies JIT lowering preserves multi-level branch joins and returns the correct value from each control-flow arm.
+ */
+module jit_branch_join
+
+func select_value(flag: int, lhs: int, rhs: int): int {
+    return if flag != 0 then lhs + 1 else rhs + 2
+}
+
+func layered(n: int): int {
+    return if n < 0 then 10 else if n == 0 then 20 else if n < 5 then 30 else 40
+}
+
+func main(): int sync {
+    let a = select_value(1, 7, 100)
+    let b = select_value(0, 7, 100)
+    let c = layered(-3)
+    let d = layered(0)
+    let e = layered(3)
+    let f = layered(9)
+    'branch_join a={} b={} c={} d={} e={} f={}'->format<a, b, c, d, e, f>->println
+    return 0
+}
+

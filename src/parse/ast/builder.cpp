@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Mar. 18, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -202,6 +202,26 @@ inline void setNodeTokenRangeByContexts(node_ptr_t node, const vector<Context *>
 
 inline node_ptr_t any2node(const std::any &a) { return std::any_cast<node_ptr_t>(a); }
 
+Reference Builder::qualifyRef(const Reference &ref) const {
+    if (namespaceStack_.empty()) {
+        return ref;
+    }
+
+    std::vector<std::string> paths = namespaceStack_;
+    paths.insert(paths.end(), ref.paths().begin(), ref.paths().end());
+    return Reference(paths, ref.ident());
+}
+
+void Builder::pushNamespace(const Reference &ref) {
+    namespaceStack_.insert(namespaceStack_.end(), ref.paths().begin(), ref.paths().end());
+    namespaceStack_.push_back(ref.ident());
+}
+
+void Builder::popNamespace(size_t previousSize) {
+    ASSERT(previousSize <= namespaceStack_.size(), "Invalid namespace stack restore point");
+    namespaceStack_.resize(previousSize);
+}
+
 /*
 program : SEP? (decl SEP?)* EOF;
 */
@@ -217,9 +237,17 @@ any Builder::visitProgram(OpenCMLParser::ProgramContext *context) {
     for (const auto &decl : context->decl()) {
         any res = visitDecl(decl);
         if (res.has_value()) {
-            node_ptr_t node = any2node(res);
-            if (node) {
-                *stmts << node;
+            if (res.type() == typeid(node_ptr_t)) {
+                node_ptr_t node = any2node(res);
+                if (node) {
+                    *stmts << node;
+                }
+            } else if (res.type() == typeid(std::vector<node_ptr_t>)) {
+                for (const auto &node : std::any_cast<std::vector<node_ptr_t>>(res)) {
+                    if (node) {
+                        *stmts << node;
+                    }
+                }
             }
         }
     }
@@ -247,6 +275,9 @@ decl
     : moduleDecl
     | importDecl
     | exportDecl
+    | namespaceDecl
+    |
+usingNamespaceDecl
     | dataDecl
     | funcDecl
     | typeDecl
@@ -266,7 +297,9 @@ stmt
     | funcDecl
     | typeDecl
     | dataExpr
-    | useDecl
+    | usingNamespaceDecl
+    |
+useDecl
     | retStmt
     | blockStmt
     ;
@@ -356,12 +389,17 @@ any Builder::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
     ENTER("ExportDecl");
     node_ptr_t res = nullptr;
     if (context->dataDecl()) {
-        res = any2node(visitDataDecl(context->dataDecl()));
+        res                  = any2node(visitDataDecl(context->dataDecl()));
+        const auto &dataDecl = res->loadAs<DataDeclLoad>();
+        for (const auto &ref : dataDecl->refs()) {
+            export_->addRef(ref);
+        }
     } else if (context->typeDecl()) {
         res = any2node(visitTypeDecl(context->typeDecl()));
+        export_->addRef(res->loadAs<TypeDeclLoad>()->ref());
     } else if (context->bracedIdents()) {
         for (auto &ident : context->bracedIdents()->identList()->identDef()) {
-            export_->addRef(Reference(ident->getText()));
+            export_->addRef(qualifyRef(Reference(ident->getText())));
         }
     }
     LEAVE("ExportDecl");
@@ -370,6 +408,18 @@ any Builder::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
     } else {
         return std::any();
     }
+}
+
+/*
+usingNamespaceDecl : USING NAMESPACE identRef ;
+*/
+any Builder::visitUsingNamespaceDecl(OpenCMLParser::UsingNamespaceDeclContext *context) {
+    ENTER("UsingNamespaceDecl");
+    Reference ref        = qualifyRef(any_cast<Reference>(visitIdentRef(context->identRef())));
+    node_ptr_t usingNode = createNodeAs<UsingNamespaceLoad>(ref);
+    setNodeTokenRangeByContext(usingNode, context);
+    LEAVE("UsingNamespaceDecl");
+    return usingNode;
 }
 
 /*
@@ -555,7 +605,7 @@ funcDecl   :
         funcAnno*
         (WITH angledParams)?
         EXPORT? implMark? modifiers?
-        FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
+        FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
 */
 any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     ENTER("FuncDecl");
@@ -632,7 +682,7 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     }
     *funcTypeNode << typeOptNode;
 
-    Reference ref(context->identDef()->getText());
+    Reference ref = qualifyRef(any_cast<Reference>(visitIdentRef(context->identRef())));
     if (context->EXPORT()) {
         export_->addRef(ref);
     }
@@ -655,9 +705,9 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
         {
             semanticPart(
                 camel::source::SemanticRole::FuncName,
-                deriveAstAnchorOrigin(funcDeclNode, context->identDef(), "ast.func.name"),
+                deriveAstAnchorOrigin(funcDeclNode, context->identRef(), "ast.func.name"),
                 -1,
-                ref.ident()),
+                ref.toString()),
             semanticPart(
                 camel::source::SemanticRole::GenericParameter,
                 nodeOrigin(funcTypeNode->at(0)),
@@ -683,6 +733,56 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
 
     LEAVE("FuncDecl");
     return funcDeclNode;
+}
+
+/*
+namespaceDecl : NAMESPACE identRef '{' SEP? (namespaceItem SEP?)* '}' ;
+*/
+any Builder::visitNamespaceDecl(OpenCMLParser::NamespaceDeclContext *context) {
+    ENTER("NamespaceDecl");
+    const Reference nsRef     = any_cast<Reference>(visitIdentRef(context->identRef()));
+    const size_t previousSize = namespaceStack_.size();
+    pushNamespace(nsRef);
+
+    std::vector<node_ptr_t> nodes;
+    for (const auto &item : context->namespaceItem()) {
+        any res = visitNamespaceItem(item);
+        if (!res.has_value()) {
+            continue;
+        }
+        if (res.type() == typeid(node_ptr_t)) {
+            node_ptr_t node = any2node(res);
+            if (node) {
+                nodes.push_back(node);
+            }
+        } else if (res.type() == typeid(std::vector<node_ptr_t>)) {
+            auto nested = std::any_cast<std::vector<node_ptr_t>>(res);
+            nodes.insert(nodes.end(), nested.begin(), nested.end());
+        }
+    }
+
+    popNamespace(previousSize);
+    LEAVE("NamespaceDecl");
+    return nodes;
+}
+
+/*
+namespaceItem
+    : namespaceDecl
+    | importDecl
+    | exportDecl
+    | usingNamespaceDecl
+ |
+ * funcDecl
+    | typeDecl
+    | useDecl
+    ;
+*/
+any Builder::visitNamespaceItem(OpenCMLParser::NamespaceItemContext *context) {
+    ENTER("NamespaceItem");
+    any res = visit(context->children[0]);
+    LEAVE("NamespaceItem");
+    return res;
 }
 
 /*
@@ -815,13 +915,13 @@ any Builder::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
 }
 
 /*
-typeDecl   : implMark? TYPE identDef '=' (typeExpr | STRING) ;
+typeDecl   : implMark? TYPE identRef '=' (typeExpr | STRING) ;
 */
 any Builder::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     ENTER("TypeDecl");
     string uri;
     ImplMark implMark = ImplMark::Graph;
-    Reference ref(context->identDef()->getText());
+    Reference ref     = qualifyRef(any_cast<Reference>(visitIdentRef(context->identRef())));
     if (context->implMark()) {
         if (context->implMark()->INNER()) {
             implMark = ImplMark::Inner;

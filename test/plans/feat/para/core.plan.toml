@@ -1,0 +1,105 @@
+id = "para.core"
+order = 350
+tier = "feat"
+tags = ["feat", "para"]
+
+[[tests]]
+name = "bootstrap_medians"
+desc = "Checks PRL can execute repeated sample processing and parallel sort reductions coherently."
+kind = "behavior"
+case = "../../../cases/para/core/bootstrap_medians.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "file_chunk_hash"
+desc = "Checks PRL can combine chunked file IO, worker-local hashing, and deterministic reduction."
+kind = "behavior"
+case = "../../../cases/para/core/file_chunk_hash.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "monte_carlo_pi"
+desc = "Checks PRL can execute a parallel Monte Carlo map-reduce estimator and finish within a routine feature-test budget."
+kind = "behavior"
+case = "../../../cases/para/core/monte_carlo_pi.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "unordered_foreach_smoke.nvm"
+desc = "Checks NVM accepts unordered_foreach and executes a side-effect-free compute workload."
+kind = "behavior"
+case = "../../../cases/para/core/unordered_foreach_smoke.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "unordered_foreach_smoke.fvm"
+desc = "Checks FVM accepts unordered_foreach and executes a side-effect-free compute workload."
+kind = "behavior"
+case = "../../../cases/para/core/unordered_foreach_smoke.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "unordered_foreach_smoke.prl"
+desc = "Checks PRL accepts unordered_foreach and executes a side-effect-free compute workload."
+kind = "behavior"
+case = "../../../cases/para/core/unordered_foreach_smoke.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "unordered_foreach_timing.prl"
+desc = "Uses wall-clock time as a correctness proxy that unordered_foreach is not serialized under PRL."
+kind = "behavior"
+case = "../../../cases/para/core/unordered_foreach_timing.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "unordered_reduce_sum.nvm"
+desc = "Checks NVM accepts unordered_reduce and preserves the expected aggregate."
+kind = "behavior"
+case = "../../../cases/para/core/unordered_reduce_sum.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "unordered_reduce_sum.fvm"
+desc = "Checks FVM accepts unordered_reduce and preserves the expected aggregate."
+kind = "behavior"
+case = "../../../cases/para/core/unordered_reduce_sum.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "unordered_reduce_sum.prl"
+desc = "Checks PRL accepts unordered_reduce and preserves the expected aggregate."
+kind = "behavior"
+case = "../../../cases/para/core/unordered_reduce_sum.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+

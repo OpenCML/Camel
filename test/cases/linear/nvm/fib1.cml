@@ -1,0 +1,28 @@
+/**
+ * Verifies recursion can mutate shared state with wait semantics so each activation contributes to the global call counter.
+ */
+module fib
+
+import { now } from time
+
+var cnt = 0
+
+func fibonacci(n: int): int sync {
+    wait cnt += 1
+    return match n {
+        case 0 => 0
+        case 1 => 1
+        case _ => fibonacci(n - 1) + fibonacci(n - 2)
+    }
+}
+
+func main(): int sync {
+    let idx = 10
+    'Start computing fibonacci({})...'->format<idx>->println
+    let start = now()
+    let res = fibonacci(idx)
+    let duration = now() - start
+    'Total calls made: {}'->format<cnt>->println
+    'Fibonacci({}) = {} (computed in {:.4f} seconds)'->format<idx, res, duration>->println
+    return 0
+}

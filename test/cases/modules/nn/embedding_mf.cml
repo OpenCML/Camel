@@ -1,0 +1,68 @@
+/**
+ * Embedding matrix factorization trained through true gather calls.
+ */
+module embedding_mf
+
+import {
+    Tensor,
+    full, reshape, sum
+} from tensor
+
+import {
+    Parameter,
+    apply_gradients, embedding, grad, parameter, value
+} from nn
+
+type EmbeddingMf = {
+    user_table: Parameter,
+    item_table: Parameter
+}
+
+with <model: EmbeddingMf>
+func score(user_ids: Tensor, item_ids: Tensor): float {
+    let users = embedding(value(model.user_table), user_ids)
+    let items = embedding(value(model.item_table), item_ids)
+    return sum(users * items)
+}
+
+with <rating: float>
+func mse_loss(pred: float): float {
+    let diff = pred - rating
+    return diff * diff
+}
+
+with <model: EmbeddingMf, item_ids: Tensor, rating: float>
+func model_loss(user_ids: Tensor): float {
+    let pred = score<model>(user_ids, item_ids)
+    return pred->mse_loss<rating>
+}
+
+func main(): int sync {
+    var model = {
+        user_table: parameter(full([3, 2], 0.1)),
+        item_table: parameter(full([4, 2], 0.2))
+    }
+    let user_ids = reshape([1, 1], [2])
+    let item_ids = reshape([0, 1], [2])
+    let rating = 1.0
+
+    let step = apply_gradients(<model: EmbeddingMf, item_ids: Tensor, rating: float> (user_ids: Tensor): float => {
+        let pred = score<model>(user_ids, item_ids)
+        return pred->mse_loss<rating>
+    })
+
+    let before = user_ids->model_loss<model, item_ids, rating>
+    let step_loss = wait step<model, item_ids, rating>(user_ids, 0.2)
+    let after = user_ids->model_loss<model, item_ids, rating>
+    let user_table = value(model.user_table)
+    let item_table = value(model.item_table)
+    let user_grad = grad(model.user_table)
+    let item_grad = grad(model.item_table)
+
+    'embedding_mf metrics before={} step={} after={}'->format<before, step_loss, after>->println
+    'embedding_mf user_table={}'->format<user_table>->println
+    'embedding_mf item_table={}'->format<item_table>->println
+    'embedding_mf user_grad={}'->format<user_grad>->println
+    'embedding_mf item_grad={}'->format<item_grad>->println
+    return 0
+}

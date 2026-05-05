@@ -1,0 +1,18 @@
+/**
+ * Verifies inlining preserves side-effect anchors so value results do not bypass the control gate that prints before return.
+ */
+module inline_value_ctrl_gate_anchor
+
+func calc(): int sync {
+    let y = 40 + 2
+    'gate_anchor_side_effect'->println
+    return y
+}
+
+func main(): int sync {
+    let out = calc()
+    'inline_value_ctrl_gate_anchor out={}'->format<out>->println
+    return 0
+}
+
+

@@ -1,0 +1,71 @@
+id = "perf.para"
+order = 410
+tier = "benchmark"
+tags = ["perf", "para"]
+
+[[tests]]
+name = "asian_option_mc.nvm_timeit"
+desc = "Benchmarks the heavy Asian option Monte Carlo workload on the baseline NVM scheduler."
+kind = "benchmark"
+case = "../../cases/para/core/asian_option_mc.cml"
+args = ["--timeit", "std::nvm/1", "--output-format", "json", "${case}", "${run_nvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "asian_option_mc.prl_timeit"
+desc = "Benchmarks the heavy Asian option Monte Carlo workload on the PRL scheduler."
+kind = "benchmark"
+case = "../../cases/para/core/asian_option_mc.cml"
+args = ["--timeit", "std::prl/1", "--output-format", "json", "${case}", "${run_prl}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "merge_sort.nvm_timeit"
+desc = "Benchmarks the large recursive mergesort workload on the baseline NVM scheduler."
+kind = "benchmark"
+case = "../../cases/para/core/merge_sort.cml"
+args = ["--timeit", "std::nvm/1", "--output-format", "json", "${case}", "${run_nvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "merge_sort.prl_timeit"
+desc = "Benchmarks the large recursive mergesort workload on the PRL scheduler."
+kind = "benchmark"
+case = "../../cases/para/core/merge_sort.cml"
+args = ["--timeit", "std::prl/1", "--output-format", "json", "${case}", "${run_prl}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "monte_carlo_pi.nvm_timeit"
+desc = "Benchmarks the heavy Monte Carlo PI estimator on the baseline NVM scheduler."
+kind = "benchmark"
+case = "../../cases/para/core/monte_carlo_pi.cml"
+args = ["--timeit", "std::nvm/1", "--output-format", "json", "${case}", "${run_nvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "monte_carlo_pi.prl_timeit"
+desc = "Benchmarks the heavy Monte Carlo PI estimator on the PRL scheduler."
+kind = "benchmark"
+case = "../../cases/para/core/monte_carlo_pi.cml"
+args = ["--timeit", "std::prl/1", "--output-format", "json", "${case}", "${run_prl}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+

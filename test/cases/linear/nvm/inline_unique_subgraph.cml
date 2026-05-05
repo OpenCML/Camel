@@ -1,0 +1,24 @@
+/**
+ * Verifies branch-local helper functions stay distinct so each call site keeps its own inlined subgraph semantics.
+ */
+module inline_unique_subgraph
+
+func choose(flag: int, x: int): int {
+    func plus1(v: int): int {
+        return v + 1
+    }
+
+    func plus2(v: int): int {
+        return v + 2
+    }
+
+    return if flag != 0 then plus1(x) else plus2(x)
+}
+
+func main(): int sync {
+    let a = choose(1, 40)
+    let b = choose(0, 40)
+    'inline_unique_subgraph a={} b={}'->format<a, b>->println
+    return 0
+}
+

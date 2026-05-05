@@ -45,7 +45,7 @@ let n = 100000  // number of terms
 let a = 1       // first term
 ```
 
-（来自 `test/run/linear/var.cml`、`test/run/linear/acc.cml`）
+（来自 `test/cases/linear/nvm/var.cml`、`test/cases/linear/nvm/acc.cml`）
 
 ### 2.2.2 块注释
 
@@ -61,7 +61,7 @@ let a = 1       // first term
 module arithmetic_sum
 ```
 
-（来自 `test/run/linear/acc.cml`）
+（来自 `test/cases/linear/nvm/acc.cml`）
 
 ### 2.2.3 命令/预处理行
 
@@ -100,7 +100,7 @@ merge_sorted_arrays
 |------|--------|
 | 声明与模块 | `as`, `let`, `var`, `use`, `from`, `func`, `type`, `enum`, `with`, `module`, `import`, `export` |
 | 控制与异常 | `if`, `then`, `else`, `match`, `case`, `for`, `in`, `of`, `try`, `catch`, `finally`, `throw`, `raise`, `return` |
-| 类型与值 | `wait`, `const`, `keyof`, `typeas`, `typeof`, `namespace` |
+| 类型与值 | `wait`, `const`, `keyof`, `typeas`, `typeof`, `using`, `namespace` |
 | 修饰符 | `sync`, `macro`, `inner`, `outer`, `atomic`, `shared` |
 | 字面量 | `null`, `true`, `false` |
 
@@ -282,3 +282,4 @@ range(0, HEIGHT)->foreach<(y: int) => sync { ... }>
 - **`[ ]`**：数组、下标、切片。
 - **`{ }`**：结构体、块、模式。
 - **`< >`**：泛型/显式参数，如 `format<idx>`、`slice<0, len(arr)>`。
+

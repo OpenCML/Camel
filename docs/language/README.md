@@ -24,7 +24,7 @@
 | 章节 | 文档 | 内容概要 |
 |------|------|----------|
 | **4** | [04_execution_model.md](04_execution_model.md) | 程序结构、命名与绑定、异常、sync 与 wait（含控制流与同步示例） |
-| **5** | [05_modules.md](05_modules.md) | 模块声明、import、export、模块名与路径（含多文件示例） |
+| **5** | [05_modules.md](05_modules.md) | 模块声明、import、export、namespace、using namespace、模块名与路径（含多文件示例） |
 
 ### 第四部分：表达式与语句
 
@@ -45,16 +45,16 @@
 
 文档中的示例多来自项目内可运行用例：
 
-- **test/run/linear/**：hello.cml、fib.cml、var.cml、lambda.cml、snake.cml、index.cml、acc.cml、neuro.cml、zen.cml、render.cml 等
-- **test/run/para/**：msort.cml（归并排序、管道与 slice）
-- **test/run/nn/**：lr.cml、mlp.cml、svm.cml（张量、with 参数、sync 函数）
+- **test/cases/linear/nvm/**：hello.cml、fib.cml、var.cml、lambda.cml、snake.cml、index.cml、acc.cml、neuro.cml、zen.cml、render.cml 等
+- **test/cases/para/core/**：msort.cml（归并排序、管道与 slice）
+- **test/cases/modules/nn/**：lr.cml、mlp.cml、svm.cml（张量、with 参数、sync 函数）
 - **stdlib/**：标准库签名与用法
 
 运行示例（在项目根目录）：
 
 ```bash
-camel run test/run/linear/hello.cml
-camel run test/run/linear/fib.cml
+camel run test/cases/linear/nvm/hello.cml
+camel run test/cases/linear/nvm/fib.cml
 ```
 
 ---
@@ -65,3 +65,4 @@ camel run test/run/linear/fib.cml
 - [语言规范摘要](../technical/02_language_spec.md)：简短语法与语义归纳
 - [ANTLR 文法](../../antlr/)：OpenCML.g4、OpenCMLLex.g4
 - [AST 定义](../Camel.asdl)：抽象语法树结构
+

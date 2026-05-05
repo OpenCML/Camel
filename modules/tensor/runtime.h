@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 10, 2026
- * Updated: Mar. 11, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -158,6 +158,11 @@ TensorObject *tensorMaxAxis(const TensorObject *tensor, int64_t axis, mm::IAlloc
 TensorObject *tensorArgmaxAxis(const TensorObject *tensor, int64_t axis, mm::IAllocator &allocator);
 TensorObject *tensorExp(const TensorObject *tensor, mm::IAllocator &allocator);
 TensorObject *tensorLog(const TensorObject *tensor, mm::IAllocator &allocator);
+TensorObject *tensorSigmoid(const TensorObject *tensor, mm::IAllocator &allocator);
+TensorObject *tensorTanh(const TensorObject *tensor, mm::IAllocator &allocator);
+TensorObject *tensorSoftmaxRows2D(const TensorObject *tensor, mm::IAllocator &allocator);
+TensorObject *tensorSoftmaxRows2DGrad(
+    const TensorObject *output, const TensorObject *dy, mm::IAllocator &allocator);
 double tensorIndex1D(const TensorObject *tensor, int64_t index);
 double tensorIndex2D(const TensorObject *tensor, int64_t row, int64_t col);
 

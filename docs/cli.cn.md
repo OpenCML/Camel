@@ -42,7 +42,6 @@
 - `-S`, `--scheduler <type>`：指定图调度器类型
 - `-t`, `--threads <num>`：最大线程数
 - `-n`, `--no-cache`：不使用缓存模块
-- `-r`, `--repeat <times>`：重复执行若干次
 - `-I`, `--include <dir>`：添加模块搜索路径（可多次指定）
 - `-L`, `--stdlib <path>`：指定标准库路径（默认当前目录下的 `./stdlib`）
 - `-E`, `--error-format <text|json>`：错误输出格式，默认为 `text`
@@ -134,7 +133,7 @@ camel --input main.cml --passes std::gir,other
 camel -P main.cml
 
 # 转译到 C++ 并编译（一步到位，产物到 tmp/）
-camel-cpp test/run/linear/fib.cml
+camel-cpp test/cases/linear/nvm/fib.cml
 
 # 格式化代码（使用 camel-format，不是 camel format）
 camel-format -i src/xxx.cml
@@ -148,3 +147,4 @@ camel inspect --gir main.cml
 # 查看 Zen
 camel --zen
 ```
+

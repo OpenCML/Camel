@@ -1,6 +1,6 @@
 # GIR 到 C++ 的 `fib` 特化 Lowering
 
-本文档定义 `test/run/linear/fib.cml` 的首版 GIR 到 C++ 转译契约，目标不是把现有 `Frame` 机械地搬成一个 C++ 栈上 `slot_t[]`，而是在纯数值图上尽可能把 `Frame` 完全编译掉，让 C++ 编译器直接看到参数、局部变量和结构化控制流。
+本文档定义 `test/cases/linear/nvm/fib.cml` 的首版 GIR 到 C++ 转译契约，目标不是把现有 `Frame` 机械地搬成一个 C++ 栈上 `slot_t[]`，而是在纯数值图上尽可能把 `Frame` 完全编译掉，让 C++ 编译器直接看到参数、局部变量和结构化控制流。
 
 ## 1. 适用范围
 
@@ -175,3 +175,4 @@ lowering 参考：
 - “在 lowering 阶段利用 `Frame`/槽位语义做分析，在生成阶段把它彻底消掉”
 
 这条路线最符合当前仓库的 `NodeVM` / `FastVM` 语义，也最有利于让 C++ 编译器释放性能。
+

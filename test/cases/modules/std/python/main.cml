@@ -1,0 +1,64 @@
+/**
+ * Broader Python integration case covering calls, imports, attributes, code execution, scripts, and keyword arguments.
+ */
+module main
+
+import {
+    py_call,
+    py_exec,
+    py_eval,
+    py_run,
+    py_attr,
+    py_import,
+    py_wrap,
+    py_unwrap,
+    PyObject
+} from python
+
+func main(): int sync {
+    println("=== Python Integration Tests ===")
+
+    println("\n[1] py_call('print', py_wrap(1))")
+    py_call("print", py_wrap(1))
+
+    println("\n[2] py_call('builtins.print', py_wrap('hello'))")
+    py_call("builtins.print", py_wrap("hello"))
+
+    println("\n[3] py_call via py_attr(builtins, 'print')")
+    let builtins = py_import("builtins")
+    let print_fn = py_attr(builtins, "print")
+    py_call(print_fn, py_wrap("from py_attr"))
+
+    println("\n[4] py_call('len', py_wrap([1, 2, 3]))")
+    let len_result = py_call("len", py_wrap([1, 2, 3]))
+    py_call("print", py_call("str", len_result))
+
+    println("\n[5] py_eval('1 + 2 * 3')")
+    let sum_result = py_eval("1 + 2 * 3")
+    py_call("print", sum_result)
+
+    println("\n[5b] py_eval(\"'hello' + ' world'\")")
+    let str_result = py_eval("'hello' + ' world'")
+    py_call("print", str_result)
+
+    println("\n[6] py_exec")
+    py_exec("print('Exec: Hello from exec!')")
+
+    println("\n[7] py_run('test/cases/modules/std/python/hello.py')")
+    py_run("test/cases/modules/std/python/hello.py")
+
+    println("\n[8] py_attr(math, 'sqrt') -> math.sqrt(16)")
+    let math_mod = py_import("math")
+    let sqrt_fn = py_attr(math_mod, "sqrt")
+    let sqrt_result = py_call(sqrt_fn, py_wrap(16))
+    py_call("print", sqrt_result)
+
+    println("\n[9] py_call with *args and **kwargs")
+    py_exec("def _greet(name, greeting='Hello'): print(f'{greeting}, {name}!')")
+    let args_tuple = (py_wrap("World"),)
+    let kwargs_struct = { greeting: py_wrap("Hi") }
+    py_call("_greet", args_tuple, kwargs_struct)
+
+    println("\n=== All tests completed ===")
+    return 0
+}

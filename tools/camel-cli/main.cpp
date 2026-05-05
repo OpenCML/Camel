@@ -14,12 +14,9 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: May. 01, 2026
+ * Updated: May. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
-
-#include "camel/utils/windows_parser_guard.h"
-#include "nlohmann/json.hpp"
 
 #include "antlr4-runtime/antlr4-runtime.h"
 
@@ -45,13 +42,11 @@
 #include "service/codegen/source/generator.h"
 #include "service/profiler/advanced/advanced_tracer.h"
 #include "service/profiler/core/trace.h"
+#include "timeit.h"
 
-#include <chrono>
 #include <filesystem>
 #include <format>
-#include <iomanip>
 #include <iostream>
-#include <queue>
 #include <string>
 
 namespace mm = camel::core::mm;
@@ -109,6 +104,15 @@ int main(int argc, char *argv[]) {
 
     bool useJsonFormat = (errorFormat == "json");
 
+    // Initialize memory management subsystems before any run-mode graph work.
+    (void)mm::autoSpace();
+    (void)mm::metaSpace();
+    (void)mm::permSpace();
+
+    if (selectedCommand == Command::Run && Run::timeitEnabled) {
+        return runTimeitMode(os, useJsonFormat);
+    }
+
     fs::path entryPath(targetFile);
     // if targetFile is relative (or "stdin"), the entryDir is the current working directory
     // if targetFile is absolute, the entryDir is the parent directory of targetFile
@@ -153,177 +157,167 @@ int main(int argc, char *argv[]) {
     auto mainModule     = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
     ctx->setMainModule(mainModule);
 
-    // Initialize memory management subsystems
-    (void)mm::autoSpace();
-    (void)mm::metaSpace();
-    (void)mm::permSpace();
+    try {
+        parser->parse(*input);
+        CAMEL_LOG_INFO_S("Main", "run | parse | done | {}", targetFile);
 
-    int lastRunExitCode = 0;
-    while (Run::repeat--) {
-        try {
-            parser->parse(*input);
-            CAMEL_LOG_INFO_S("Main", "run | parse | done | {}", targetFile);
-
-            if (selectedCommand == Command::Inspect) {
-                if (Inspect::dumpTokens) {
-                    parser->dumpTokens(os);
-                }
-                if (Inspect::dumpCST) {
-                    auto cst     = parser->cst();
-                    auto visitor = CSTDumpVisitor(os);
-                    visitor.visit(cst);
-                }
-                if (Inspect::dumpAST) {
-                    auto ast = parser->ast();
-                    if (ast) {
-                        ast->print(os);
-                    }
-                }
-                if (Inspect::geneCode) {
-                    auto ast = parser->ast();
-                    if (ast) {
-                        ASTCodeGen::Generator generator = ASTCodeGen::Generator();
-                        os << generator.generate(ast);
-                    }
-                }
-                if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS) {
-                    // Inspect Command ends here if only
-                    // tokens, CST or AST is requested
-                    return 0;
+        if (selectedCommand == Command::Inspect) {
+            if (Inspect::dumpTokens) {
+                parser->dumpTokens(os);
+            }
+            if (Inspect::dumpCST) {
+                auto cst     = parser->cst();
+                auto visitor = CSTDumpVisitor(os);
+                visitor.visit(cst);
+            }
+            if (Inspect::dumpAST) {
+                auto ast = parser->ast();
+                if (ast) {
+                    ast->print(os);
                 }
             }
-
-            if (selectedCommand == Command::Inspect) {
-                if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
-                    mainModule->compile(CompileStage::GCT);
+            if (Inspect::geneCode) {
+                auto ast = parser->ast();
+                if (ast) {
+                    ASTCodeGen::Generator generator = ASTCodeGen::Generator();
+                    os << generator.generate(ast);
                 }
-                if (Inspect::dumpGIR || Inspect::dumpTNS) {
-                    mainModule->compile(CompileStage::Done);
-                }
-            } else {
-                mainModule->compile(CompileStage::Done);
             }
-
-            if (selectedCommand == Command::Inspect) {
-                if (Inspect::dumpGCT && mainModule->gct()) {
-                    mainModule->gct()->print(os);
-                }
-                if (Inspect::dumpGIR) {
-                    GraphVizDumpPass pass(ctx);
-                    auto *root = ctx->runtimeRootGraph();
-                    (void)pass.apply(root, os);
-                }
-                if (Inspect::dumpTNS) {
-                    auto *entry = ctx->runtimeRootGraph();
-                    TopoNodeSeqDumpPass pass(ctx);
-                    (void)pass.apply(entry, os);
-                }
+            if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS) {
+                // Inspect Command ends here if only
+                // tokens, CST or AST is requested
                 return 0;
             }
+        }
 
-            if (!mainModule->loaded()) {
-                ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
-                return selectedCommand == Command::Check ? 0 : 1;
+        if (selectedCommand == Command::Inspect) {
+            if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
+                mainModule->compile(CompileStage::GCT);
             }
+            if (Inspect::dumpGIR || Inspect::dumpTNS) {
+                mainModule->compile(CompileStage::Done);
+            }
+        } else {
+            mainModule->compile(CompileStage::Done);
+        }
 
-            CAMEL_LOG_INFO_S(
-                "Main",
-                "run | compile | runtime_root={} | user_modules={}",
-                ctx->runtimeRootGraph() ? ctx->runtimeRootGraph()->name() : std::string{"<none>"},
-                ctx->allUserModules().size());
+        if (selectedCommand == Command::Inspect) {
+            if (Inspect::dumpGCT && mainModule->gct()) {
+                mainModule->gct()->print(os);
+            }
+            if (Inspect::dumpGIR) {
+                GraphVizDumpPass pass(ctx);
+                auto *root = ctx->runtimeRootGraph();
+                (void)pass.apply(root, os);
+            }
+            if (Inspect::dumpTNS) {
+                auto *entry = ctx->runtimeRootGraph();
+                TopoNodeSeqDumpPass pass(ctx);
+                (void)pass.apply(entry, os);
+            }
+            return 0;
+        }
 
-            if (selectedCommand == Command::Run) {
-                ctx->clearProcessExitCode();
-                EXEC_WHEN_DEBUG({
-                    if (Run::profile) {
-                        // Initialize and start advanced tracing using profiler configuration
-                        profiler::AdvancedTracer::Config config;
-                        config.enablePerfettoIntegration = true;
-                        config.perfettoOutput = "profile_reports/camel_trace.perfetto-trace";
-                        config.outputFile     = "profile_reports/camel_trace.json";
-                        profiler::start_advanced_tracing(config);
-                    }
-                });
+        if (!mainModule->loaded()) {
+            ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+            return selectedCommand == Command::Check ? 0 : 1;
+        }
 
-                // memperf::enable_logging(true);
+        CAMEL_LOG_INFO_S(
+            "Main",
+            "run | compile | runtime_root={} | user_modules={}",
+            ctx->runtimeRootGraph() ? ctx->runtimeRootGraph()->name() : std::string{"<none>"},
+            ctx->allUserModules().size());
 
-                memperf::start();
+        if (selectedCommand == Command::Run) {
+            ctx->clearProcessExitCode();
+            EXEC_WHEN_DEBUG({
+                if (Run::profile) {
+                    // Initialize and start advanced tracing using profiler configuration
+                    profiler::AdvancedTracer::Config config;
+                    config.enablePerfettoIntegration = true;
+                    config.perfettoOutput            = "profile_reports/camel_trace.perfetto-trace";
+                    config.outputFile                = "profile_reports/camel_trace.json";
+                    profiler::start_advanced_tracing(config);
+                }
+            });
 
+            // memperf::enable_logging(true);
+
+            memperf::start();
+
+            try {
                 try {
-                    try {
-                        auto *graph = ctx->runtimeRootGraph();
-                        auto result = applyPassesDetailed(graph, Run::resolvedPassList, ctx, os);
-                        graph       = result.graph;
-                        if (result.failed()) {
+                    auto *graph = ctx->runtimeRootGraph();
+                    auto result = applyPassesDetailed(graph, Run::resolvedPassList, ctx, os);
+                    graph       = result.graph;
+                    if (result.failed()) {
+                        const auto &diags = ctx->runtimeDiagSink();
+                        if (diags->hasErrors()) {
+                            diags->dump(os, useJsonFormat);
+                            return 1;
+                        }
+                        os << "[camel] execution failed without diagnostics after resolved passes."
+                           << endl;
+                        return 1;
+                    }
+                    if (!result.consumed()) {
+                        auto fallbackResult =
+                            applyPassesDetailed(graph, Run::fallbackPasses, ctx, os);
+                        graph = fallbackResult.graph;
+                        if (fallbackResult.failed()) {
                             const auto &diags = ctx->runtimeDiagSink();
                             if (diags->hasErrors()) {
                                 diags->dump(os, useJsonFormat);
                                 return 1;
                             }
-                            os << "[camel] execution failed without diagnostics after resolved "
+                            os << "[camel] execution failed without diagnostics after fallback "
                                   "passes."
                                << endl;
                             return 1;
                         }
-                        if (!result.consumed()) {
-                            auto fallbackResult =
-                                applyPassesDetailed(graph, Run::fallbackPasses, ctx, os);
-                            graph = fallbackResult.graph;
-                            if (fallbackResult.failed()) {
-                                const auto &diags = ctx->runtimeDiagSink();
-                                if (diags->hasErrors()) {
-                                    diags->dump(os, useJsonFormat);
-                                    return 1;
-                                }
-                                os << "[camel] execution failed without diagnostics after fallback "
-                                      "passes."
-                                   << endl;
-                                return 1;
-                            }
-                        }
-                    } catch (Diagnostic &d) {
-                        if (!d.persisted) {
-                            ctx->runtimeDiagSink()->add(std::move(d));
-                        }
                     }
-                } catch (DiagnosticsLimitExceededBaseException &e) {
-                    const auto &diags = ctx->runtimeDiagSink();
-                    diags->dump(os, useJsonFormat);
-                    return selectedCommand == Command::Check ? 0 : 1;
+                } catch (Diagnostic &d) {
+                    if (!d.persisted) {
+                        ctx->runtimeDiagSink()->add(std::move(d));
+                    }
                 }
-
-                memperf::stop();
-
-                memperf::report(os);
-
-                EXEC_WHEN_DEBUG({
-                    if (Run::profile) {
-                        profiler::stop_advanced_tracing();
-                        profiler::generate_advanced_report();
-                    }
-                });
-
-                lastRunExitCode = ctx->processExitCodeOr(0);
+            } catch (DiagnosticsLimitExceededBaseException &e) {
+                const auto &diags = ctx->runtimeDiagSink();
+                diags->dump(os, useJsonFormat);
+                return selectedCommand == Command::Check ? 0 : 1;
             }
 
-        } catch (DiagnosticsLimitExceededBaseException &e) {
-            ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
-            return selectedCommand == Command::Check ? 0 : 1;
-        } catch (Diagnostic &d) {
-            RangeConverter conv(parser->getTokens());
-            d.fetchRange(conv);
-            os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText()) << endl;
-            return selectedCommand == Command::Check ? 0 : 1;
-        } catch (exception &e) {
-            os << e.what() << endl;
-            ASSERT(false, e.what());
-            return selectedCommand == Command::Check ? 0 : 1;
-        } catch (...) {
-            os << "Unknown error occurred." << endl;
-            ASSERT(false, "Unknown error occurred.");
-            return 1;
+            memperf::stop();
+
+            memperf::report(os);
+
+            EXEC_WHEN_DEBUG({
+                if (Run::profile) {
+                    profiler::stop_advanced_tracing();
+                    profiler::generate_advanced_report();
+                }
+            });
+
+            return ctx->processExitCodeOr(0);
         }
+    } catch (DiagnosticsLimitExceededBaseException &e) {
+        ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+        return selectedCommand == Command::Check ? 0 : 1;
+    } catch (Diagnostic &d) {
+        RangeConverter conv(parser->getTokens());
+        d.fetchRange(conv);
+        os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText()) << endl;
+        return selectedCommand == Command::Check ? 0 : 1;
+    } catch (exception &e) {
+        os << e.what() << endl;
+        ASSERT(false, e.what());
+        return selectedCommand == Command::Check ? 0 : 1;
+    } catch (...) {
+        os << "Unknown error occurred." << endl;
+        ASSERT(false, "Unknown error occurred.");
+        return 1;
     }
 
-    return selectedCommand == Command::Run ? lastRunExitCode : 0;
+    return 0;
 }

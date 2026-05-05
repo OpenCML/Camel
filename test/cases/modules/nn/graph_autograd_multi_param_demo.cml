@@ -1,0 +1,59 @@
+/**
+ * Exercises graph-based apply_gradients with multiple Parameter leaves and a
+ * broadcast bias gradient.
+ */
+module graph_autograd_multi_param_demo
+
+import {
+    Tensor,
+    ones, shape, sum, zeros
+} from tensor
+
+import {
+    Parameter,
+    apply_gradients, grad, parameter, value
+} from nn
+
+type LinearBias = {
+    weight: Parameter,
+    bias: Parameter
+}
+
+with <model: LinearBias, y: Tensor>
+func mse_loss(x: Tensor): float {
+    let pred = (x @ value(model.weight)) + value(model.bias)
+    let errors = pred - y
+    let squared = errors * errors
+    return sum(squared) / float(shape(x)[0])
+}
+
+func main(): int sync {
+    var model = {
+        weight: parameter(zeros([2, 1])),
+        bias: parameter(zeros([1, 1]))
+    }
+    let X = ones([4, 2])
+    let y = ones([4, 1])
+
+    let step = apply_gradients(<model: LinearBias, y: Tensor> (x: Tensor): float => {
+        let pred = (x @ value(model.weight)) + value(model.bias)
+        let errors = pred - y
+        let squared = errors * errors
+        return sum(squared) / float(shape(x)[0])
+    })
+
+    let before = X->mse_loss<model, y>
+    let step_loss = wait step<model, y>(X, 0.01)
+    let after = X->mse_loss<model, y>
+    let trained_weight = value(model.weight)
+    let trained_bias = value(model.bias)
+    let weight_grad = grad(model.weight)
+    let bias_grad = grad(model.bias)
+
+    'graph_autograd_multi_param_demo metrics before={} step={} after={}'->format<before, step_loss, after>->println
+    'graph_autograd_multi_param_demo weight={}'->format<trained_weight>->println
+    'graph_autograd_multi_param_demo bias={}'->format<trained_bias>->println
+    'graph_autograd_multi_param_demo weight_grad={}'->format<weight_grad>->println
+    'graph_autograd_multi_param_demo bias_grad={}'->format<bias_grad>->println
+    return 0
+}

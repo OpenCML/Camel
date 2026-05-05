@@ -1,0 +1,22 @@
+/**
+ * Tail-recursive arithmetic-series accumulator used to check that the linear runtime can execute deep self recursion without stack blowup.
+ */
+module arithmetic_sum
+
+import { now } from time
+
+func sum(n: int, a: int, d: int, acc: int): int {
+    return if n == 0 then acc else sum(n - 1, a + d, d, acc + a)
+}
+
+func main(): int sync {
+    let n = 100000  // number of terms
+    let a = 1       // first term
+    let d = 3       // common difference
+    'Start computing arithmetic_sum(n={}, a={}, d={})...'->format<n, a, d>->println
+    let start = now()
+    let res = sum(n, a, d, 0)
+    let duration = now() - start
+    'Sum of arithmetic series = {} (computed in {:.6f} seconds)'->format<res, duration>->println
+    return 0
+}

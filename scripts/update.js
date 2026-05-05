@@ -2,6 +2,7 @@ import fs from 'fs'
 import fsp from 'fs/promises'
 import readline from 'readline'
 import { execSync } from 'child_process'
+import { explicitFilesArg, splitLineList, uniqueFiles } from './file-list.js'
 
 let updatedFiles = 0
 
@@ -76,23 +77,23 @@ async function updateFile(filePath) {
     }
 }
 
+function updateTargets(files) {
+    return uniqueFiles(files).filter(
+        (line) =>
+            line &&
+            (line.endsWith('.c') ||
+                line.endsWith('.cpp') ||
+                line.endsWith('.h') ||
+                line.endsWith('.hpp'))
+    )
+}
+
 function getChangedFiles() {
     try {
         const stdout = execSync('git diff --name-only && git diff --name-only --cached', {
             encoding: 'utf8'
         })
-        const files = stdout
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(
-                (line) =>
-                    line &&
-                    (line.endsWith('.c') ||
-                        line.endsWith('.cpp') ||
-                        line.endsWith('.h') ||
-                        line.endsWith('.hpp'))
-            )
-        return [...new Set(files)]
+        return splitLineList(stdout)
     } catch (err) {
         console.error('Failed to get changed files from git:', err)
         return []
@@ -100,7 +101,7 @@ function getChangedFiles() {
 }
 
 ;(async () => {
-    const changedFiles = getChangedFiles()
+    const changedFiles = updateTargets(explicitFilesArg() ?? getChangedFiles())
 
     if (changedFiles.length === 0) {
         console.log('No changes detected by git. Nothing to update.')

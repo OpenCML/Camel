@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,6 +58,8 @@ inline camel::source::SemanticPart semanticPart(
         .slot   = slot,
         .label  = label};
 }
+
+Reference defaultImportNamespace(const std::string &path);
 
 inline std::vector<camel::source::origin_id_t> collectChildOrigins(const node_ptr_t &node) {
     std::vector<camel::source::origin_id_t> origins;
@@ -356,7 +358,7 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     // Extract the import load details
     const auto &load = ast->loadAs<AST::ImportLoad>();
     const auto &path = load->getPath();
-    const auto &refs = load->getRefs();
+    const auto &refs = load->refs();
 
     // Attempt to import the module (importModule throws ModuleNotFound with detail on failure)
     const module_ptr_t &mod = context_->importModule(path, module_->name());
@@ -371,12 +373,16 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     // default-import refs so operator groups and other ambient symbols can participate
     // in name/operator resolution after a normal import.
     if (refs.empty()) {
-        module_->importAllRefsFromMod(mod);
+        module_->importDefaultRefsFromMod(mod);
+        const Reference localNamespace =
+            load->hasAs() ? load->getAs() : defaultImportNamespace(path);
+        module_->markImportedNamespaceFromMod(localNamespace, mod);
     } else {
         module_->importDefaultRefsFromMod(mod);
         // Import specific references
         for (const Reference &ref : refs) {
             module_->markImportedRefFromMod(ref, mod);
+            module_->markImportedNamespaceFromMod(ref, ref, mod);
         }
     }
 
@@ -422,6 +428,9 @@ node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
     case AST::StmtType::Name:
         stmtNode = visitNameDecl(ast);
         break;
+    case AST::StmtType::UsingNamespace:
+        stmtNode = visitUsingNamespaceDecl(ast);
+        break;
     case AST::StmtType::Expr:
         stmtNode = visitExprStmt(ast);
         break;
@@ -449,6 +458,22 @@ inline bool validateIdent(const std::string &str) {
     // Check if the string starts and ends with "__"
     // If true, return false indicating the identifier is invalid; otherwise, return true
     return !(str.substr(0, 2) == "__" && str.substr(str.length() - 2) == "__");
+}
+
+Reference defaultImportNamespace(const std::string &path) {
+    size_t begin = 0;
+    while (begin < path.size() && path[begin] == '.') {
+        ++begin;
+    }
+    const size_t dot = path.find_last_of('.');
+    if (dot != std::string::npos && dot + 1 < path.size()) {
+        begin = dot + 1;
+    }
+    std::string name = path.substr(begin);
+    if (name.empty()) {
+        name = path;
+    }
+    return Reference(name);
 }
 
 /*
@@ -701,6 +726,23 @@ node_ptr_t Builder::visitNameDecl(const AST::node_ptr_t &ast) {
     throw BuildAbortException();
     LEAVE("NameDecl");
     return nullptr;
+}
+
+/*
+UsingNamespace(Ref ref) ;
+*/
+node_ptr_t Builder::visitUsingNamespaceDecl(const AST::node_ptr_t &ast) {
+    ENTER("UsingNamespaceDecl");
+    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for UsingNamespace");
+    const auto &load = ast->loadAs<AST::UsingNamespaceLoad>();
+    if (!module_->importAllRefsFromImportedNamespace(load->ref())) {
+        diags_->of(SemanticDiag::UnresolvedReference)
+            .at(ast->load()->tokenRange())
+            .commit(load->ref().toString());
+        throw BuildAbortException();
+    }
+    LEAVE("UsingNamespaceDecl");
+    return createNodeAs<ExecLoad>();
 }
 
 /*
@@ -1754,7 +1796,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         tt::as_ptr<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
     node_ptr_t typeNode  = createNodeAs<TypeLoad>(funcType, funcType->implMark());
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
-    node_ptr_t funcNode  = createNodeAs<FuncLoad>(funcData->ref().ident());
+    node_ptr_t funcNode  = createNodeAs<FuncLoad>(funcData->ref().toString());
     *funcNode << typeNode << stmtsNode;
     setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.func.type");
     setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.func");
@@ -1769,7 +1811,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
                     astSemantic(context_, ast),
                     camel::source::SemanticRole::FuncName),
                 -1,
-                funcData->ref().ident()),
+                funcData->ref().toString()),
             semanticPart(camel::source::SemanticRole::ReturnType, nodeOrigin(typeNode), -1, "type"),
             semanticPart(
                 camel::source::SemanticRole::ValueProducer,

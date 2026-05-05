@@ -1,0 +1,91 @@
+id = "linear.control_flow_and_ops"
+order = 343
+tier = "feat"
+tags = ["feat", "linear", "control_flow", "ops"]
+
+[[tests]]
+name = "branch_join.jit"
+desc = "Checks JIT branch lowering on nested joins so each control-flow arm returns the expected value."
+kind = "behavior"
+case = "../../../cases/linear/jit/branch_join.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/branch_join a=([0-9]+) b=([0-9]+) c=([0-9]+) d=([0-9]+) e=([0-9]+) f=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 8, `expected a=8, got ${found[1]}`)
+    assert(Number(found[2]) === 102, `expected b=102, got ${found[2]}`)
+    assert(Number(found[3]) === 10, `expected c=10, got ${found[3]}`)
+    assert(Number(found[4]) === 20, `expected d=20, got ${found[4]}`)
+    assert(Number(found[5]) === 30, `expected e=30, got ${found[5]}`)
+    assert(Number(found[6]) === 40, `expected f=40, got ${found[6]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "comparison_matrix.jit"
+desc = "Checks JIT code generation for the full integer comparison matrix and its packed result encoding."
+kind = "behavior"
+case = "../../../cases/linear/jit/comparison_matrix.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/comparison_matrix s0=([0-9]+) s1=([0-9]+) s2=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 100011, `expected s0=100011, got ${found[1]}`)
+    assert(Number(found[2]) === 11010, `expected s1=11010, got ${found[2]}`)
+    assert(Number(found[3]) === 101100, `expected s2=101100, got ${found[3]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "operator_branch_mix.jit"
+desc = "Checks JIT ordering when builtin operators feed branch conditions and arithmetic."
+kind = "behavior"
+case = "../../../cases/linear/jit/operator_branch_mix.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/operator_branch_mix a=([0-9]+) b=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 8, `expected a=8, got ${found[1]}`)
+    assert(Number(found[2]) === 2, `expected b=2, got ${found[2]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "float_arith.jit"
+desc = "Checks JIT floating-point arithmetic stays within the expected numeric range."
+kind = "behavior"
+case = "../../../cases/linear/jit/float_arith.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match, approx }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/float_arith y=([0-9]+\.[0-9]+)/, input.normalized.stdout)
+    assert(approx(Number(found[1]), 1.75, 1e-6), `expected y~=1.75, got ${found[1]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "neural_forward.nvm"
+desc = "Checks numeric zip/map/reduce and floating-point math for a neural-style forward pass."
+kind = "behavior"
+case = "../../../cases/linear/nvm/neuro.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 09, 2026
+ * Updated: May. 04, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,6 +32,10 @@ using namespace camel::core::type;
 namespace {
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
+        OperatorGroup::create(
+            "sleep",
+            {{"os:sleep",
+              StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void())}}),
         OperatorGroup::create(
             "whoami",
             {{"os:whoami", StaticFuncTypeResolver::create({}, {}, Type::String())}}),

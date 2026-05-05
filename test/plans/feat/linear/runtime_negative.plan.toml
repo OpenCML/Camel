@@ -1,0 +1,19 @@
+id = "linear.runtime_negative"
+order = 345
+tier = "feat"
+tags = ["feat", "linear", "runtime", "negative"]
+
+[[tests]]
+name = "divide_by_zero.nvm"
+desc = "Checks runtime diagnostics report division by zero with source location information."
+kind = "negative"
+case = "../../../cases/linear/runtime/divide_by_zero.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+

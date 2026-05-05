@@ -1,0 +1,24 @@
+/**
+ * Exercises non-interactive OS helpers such as identity lookup, zero-duration sleep, and CPU discovery.
+ */
+module main
+
+import { whoami, sleep, cpu_count } from os
+
+func main(): int sync {
+    println("=== OS Module Basic Tests ===")
+
+    println("\n[1] whoami()")
+    let user = whoami()
+    println("  user =", user)
+
+    println("\n[2] sleep(0)")
+    sleep(0)
+    println("  sleep(0) OK")
+
+    println("\n[3] cpu_count()")
+    println("  logical cpu count =", cpu_count())
+
+    println("\n=== OS tests completed ===")
+    return 0
+}

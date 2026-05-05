@@ -1,0 +1,92 @@
+/**
+ * Residual MLP trained through helper/layer calls lowered by apply_gradients.
+ */
+module residual_mlp
+
+import {
+    Tensor,
+    full, shape, sum, tanh, zeros
+} from tensor
+
+import {
+    Parameter,
+    apply_gradients, grad, parameter, value
+} from nn
+
+type Linear = {
+    weight: Parameter,
+    bias: Parameter
+}
+
+type ResidualMlp = {
+    l0: Linear,
+    l1: Linear,
+    skip: Linear
+}
+
+with <layer: Linear>
+func linear(x: Tensor): Tensor {
+    return (x @ value(layer.weight)) + value(layer.bias)
+}
+
+with <model: ResidualMlp>
+func residual_block(x: Tensor): Tensor {
+    let hidden = tanh(x->linear<model.l0>)
+    let body = hidden->linear<model.l1>
+    let skip = x->linear<model.skip>
+    return body + skip
+}
+
+with <target: Tensor>
+func mse_loss(pred: Tensor): float {
+    let diff = pred - target
+    let squared = diff * diff
+    return sum(squared) / float(shape(pred)[0])
+}
+
+with <model: ResidualMlp, target: Tensor>
+func model_loss(x: Tensor): float {
+    let pred = x->residual_block<model>
+    return pred->mse_loss<target>
+}
+
+func main(): int sync {
+    var model = {
+        l0: {
+            weight: parameter(full([2, 2], 0.05)),
+            bias: parameter(zeros([1, 2]))
+        },
+        l1: {
+            weight: parameter(full([2, 2], 0.05)),
+            bias: parameter(zeros([1, 2]))
+        },
+        skip: {
+            weight: parameter(full([2, 2], 0.05)),
+            bias: parameter(zeros([1, 2]))
+        }
+    }
+    let x = full([2, 2], 1.0)
+    let target = full([2, 2], 1.0)
+
+    let step = apply_gradients(<model: ResidualMlp, target: Tensor> (x: Tensor): float => {
+        let pred = x->residual_block<model>
+        return pred->mse_loss<target>
+    })
+
+    let before = x->model_loss<model, target>
+    let step_loss = wait step<model, target>(x, 0.05)
+    let after = x->model_loss<model, target>
+    let l0_weight = value(model.l0.weight)
+    let l1_weight = value(model.l1.weight)
+    let skip_weight = value(model.skip.weight)
+    let l0_grad = grad(model.l0.weight)
+    let skip_grad = grad(model.skip.weight)
+
+    'residual_mlp metrics before={} step={} after={}'->format<before, step_loss, after>->println
+    'residual_mlp l0_weight={}'->format<l0_weight>->println
+    'residual_mlp l1_weight={}'->format<l1_weight>->println
+    'residual_mlp skip_weight={}'->format<skip_weight>->println
+    'residual_mlp l0_grad={}'->format<l0_grad>->println
+    'residual_mlp skip_grad={}'->format<skip_grad>->println
+    return 0
+}

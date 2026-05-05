@@ -1,0 +1,18 @@
+/**
+ * Verifies unordered_reduce preserves order-independent reduction semantics on integer data.
+ */
+module unordered_reduce_sum
+
+import { unordered_reduce } from para
+
+func main(): int sync {
+    let n = 16
+    let nums = range(1, n + 1)
+    let actual = unordered_reduce<(acc: int, item: int): int => acc + item, 0>(nums)
+    let expected = n * (n + 1) / 2
+
+    'unordered sum = {}'->format<actual>->println
+    'expected = {}'->format<expected>->println
+
+    return if actual == expected then 0 else 1
+}

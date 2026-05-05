@@ -1,0 +1,56 @@
+/**
+ * Demonstrates a with-context model whose Parameter is updated in place by a macro-generated step.
+ */
+module with_context_step_demo
+
+import {
+    Tensor,
+    ones, shape, sum, zeros
+} from tensor
+
+import {
+    Parameter,
+    apply_gradients, grad, parameter, value
+} from nn
+
+type Linear = {
+    weight: Parameter
+}
+
+with <layer: Linear>
+func linear(x: Tensor): Tensor {
+    return x @ value(layer.weight)
+}
+
+with <layer: Linear, y: Tensor>
+func mse_loss(x: Tensor): float {
+    let pred = x->linear<layer>
+    let errors = pred - y
+    let squared = errors * errors
+    return sum(squared) / float(shape(x)[0])
+}
+
+func main(): int sync {
+    var layer = {
+        weight: parameter(zeros([2, 1]))
+    }
+    let X = ones([4, 2])
+    let y = ones([4, 1])
+
+    let step = apply_gradients(<layer: Linear, y: Tensor> (x: Tensor): float => {
+        let pred = x @ value(layer.weight)
+        let errors = pred - y
+        let squared = errors * errors
+        return sum(squared) / float(shape(x)[0])
+    })
+    let before = X->mse_loss<layer, y>
+    let step_loss = wait step<layer, y>(X, 0.01)
+    let after = X->mse_loss<layer, y>
+    let trained_weight = value(layer.weight)
+    let trained_grad = grad(layer.weight)
+
+    'with_context_step_demo metrics before={} step={} after={}'->format<before, step_loss, after>->println
+    'with_context_step_demo weight={}'->format<trained_weight>->println
+    'with_context_step_demo grad={}'->format<trained_grad>->println
+    return 0
+}

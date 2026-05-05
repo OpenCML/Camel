@@ -1,0 +1,18 @@
+/**
+ * Verifies zero-argument callees can be inlined even when the rewritten graph has to reconnect from the return root backward.
+ */
+module inline_no_param_reverse_root
+
+func calc(): int {
+    let base = 20
+    let y = base + 22
+    return y
+}
+
+func main(): int sync {
+    let out = calc()
+    'inline_no_param_reverse_root out={}'->format<out>->println
+    return 0
+}
+
+

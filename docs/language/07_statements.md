@@ -1,6 +1,6 @@
 # 7. 语句
 
-本章描述 Camel 的**简单语句**与**复合语句**：表达式语句、return/raise/throw、let/var、use、块、if、match、try、函数定义、类型定义，并配有完整程序片段示例。
+本章描述 Camel 的**简单语句**与**复合语句**：表达式语句、return/raise/throw、let/var、use、using namespace、块、if、match、try、函数定义、类型定义，并配有完整程序片段示例。
 
 ---
 
@@ -99,6 +99,15 @@ var result: Point[] = []
 
 - **useDecl**：**`use (identDef '=')? identRef`**；将某符号（或模块）以可选别名引入当前作用域（具体语义依实现）。
 
+### 7.1.5 using namespace 语句
+
+- **usingNamespaceDecl**：**`using namespace identRef`**；将已导入命名空间中的导出符号注入当前作用域。
+
+```cml
+import tensor
+using namespace tensor
+```
+
 ---
 
 ## 7.2 复合语句
@@ -181,7 +190,7 @@ match dir {
 
 ### 7.2.5 函数定义
 
-- **funcDecl**：**`(with angledParams)? export? implMark? modifiers? func identDef parentParams (':' typeExpr)? stmtBlock`**。
+- **funcDecl**：**`(with angledParams)? export? implMark? modifiers? func identRef parentParams (':' typeExpr)? stmtBlock`**。
 - **implMark**：**inner** | **outer**。
 - **modifiers**：**atomic**、**shared**、**sync**、**macro** 等组合。
 - **parentParams**：**`'(' pairedParams? ','? ')'`**；**keyParamPair**：**`var? identDef ':' typeExpr ('=' dataExpr)?`**。
@@ -261,7 +270,7 @@ func render(snake: Point[]): void sync {
 
 ### 7.2.6 类型定义
 
-- **typeDecl**：**`implMark? type identDef '=' (typeExpr | STRING)`**。
+- **typeDecl**：**`implMark? type identRef '=' (typeExpr | STRING)`**。
 
 **结构体类型别名**
 

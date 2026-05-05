@@ -15,9 +15,9 @@
 
 ## 6.2 原子（primaryData）
 
-### 6.2.1 标识符
+### 6.2.1 标识符与限定引用
 
-- 变量或函数名。
+- 变量名、函数名，或带 `::` 的限定引用。
 
 ```cml
 n
@@ -28,6 +28,9 @@ format
 WIDTH
 now_head
 predicate
+Tensor::ones
+Parameter::new
+tensor::shape
 ```
 
 ### 6.2.2 字面量

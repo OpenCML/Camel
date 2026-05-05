@@ -1,0 +1,20 @@
+/**
+ * Baseline recursive Fibonacci program used to validate ordinary call/return behavior and observable output formatting on NVM.
+ */
+module fib
+
+import { now } from time
+
+func fib(n: int): int {
+    return if n <= 1 then n else fib(n - 1) + fib(n - 2)
+}
+
+func main(): int sync {
+    let idx = 5
+    'Start computing fibonacci({})...'->format<idx>->println
+    let start = now()
+    let res = fib(idx)
+    let duration = now() - start
+    'Fibonacci({}) = {} (computed in {:.4f} seconds)'->format<idx, res, duration>->println
+    return 0
+}

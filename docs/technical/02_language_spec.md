@@ -1,6 +1,6 @@
 # Camel 语言规范
 
-本文档描述 Camel 语言的**语法与语义**，从用户可见的源码与行为角度归纳，不涉及编译器内部树结构。示例与用法参考项目内 **test/** 下的用例（如 `test/run/linear/`）。
+本文档描述 Camel 语言的**语法与语义**，从用户可见的源码与行为角度归纳，不涉及编译器内部树结构。示例与用法参考项目内 **test/** 下的用例（如 `test/cases/linear/nvm/`）。
 
 ---
 
@@ -8,9 +8,13 @@
 
 - 文件以**模块**为单位。可声明模块名：`module <名称>`（如 `module fib`、`module main`）。
 - 顶层可包含：
-  - **import**：从其他模块引入符号，如 `import { now } from time`、`import { set_terminal_raw_mode, has_input, get_char } from os`。
+  - **import**：从其他模块引入符号，如 `import { now } from time`、`import tensor`。
+  - **using namespace**：显式展开已导入命名空间，如 `using namespace tensor`。
   - **export**：导出符号（可选）。
+  - **namespace**：组织限定名，如 `namespace Tensor { ... }`。
   - **类型定义**、**常量/变量**、**函数**（见下）。
+
+裸 `import moduleName` 只导入模块命名空间，不直接注入符号；导出符号应通过 `moduleName::symbol` 访问，或通过 `using namespace moduleName` 显式注入。命名空间内声明的函数和类型使用限定名访问，例如 `Foo::new()`、`Tensor::ones()`。
 
 ---
 
@@ -49,7 +53,7 @@
 ### 5.1 字面量与引用
 
 - 整数：`0`、`30`；字符串：`'Hello, Camel!'`、`'Fibonacci({}) = {} (computed in {:.4f} seconds)'`。
-- 标识符：变量或函数名，如 `n`、`println`、`fib`、`now`、`format`。
+- 标识符与限定引用：变量或函数名，如 `n`、`println`、`fib`、`now`、`format`；带命名空间时可写 `Tensor::ones`、`Parameter::new`、`tensor::shape`。
 
 ### 5.2 调用与管道
 
@@ -109,3 +113,4 @@
 - 上述语法经**词法/语法分析**得到**具象语法树（CST）**，再得到**抽象语法树（AST）**。
 - AST 经**图构造树（GCT）** 转为**图中间表示（GIR）**；函数体对应图，表达式与控制流对应节点与边。
 - 类型与算子信息用于类型检查与运行时分发。各树与 GIR 的详细结构属实现细节，见《各种树与中间结构》文档。
+

@@ -1,0 +1,29 @@
+/**
+ * Checks bare built-in module imports expose symbols through module:: references.
+ */
+module module_import_builtins
+
+import tensor
+import nn
+
+func main(): int sync {
+    let a = tensor::Tensor::ones([2, 2])
+    let b = tensor::new([[1.0, 2.0], [3.0, 4.0]])
+    let p = nn::Parameter::new(tensor::Tensor::zeros([2, 2]))
+    let v = nn::Parameter::value(p)
+
+    let a0 = tensor::shape(a)[0]
+    let b1 = tensor::Tensor::shape(b)[1]
+    let v0 = tensor::shape(v)[0]
+    'module_import_builtins shape={} {} {}'->format<a0, b1, v0>->println
+
+    if a0 != 2 then {
+        return 1
+    } else if b1 != 2 then {
+        return 2
+    } else if v0 != 2 then {
+        return 3
+    } else {
+        return 0
+    }
+}

@@ -1,0 +1,28 @@
+/**
+ * Hot-call-chain case used to stress repeated small-function dispatch and accumulation under JIT execution.
+ */
+module jit_call_chain_hot
+
+func inc(x: int): int {
+    return x + 1
+}
+
+func twice(x: int): int {
+    return inc(inc(x))
+}
+
+func sixfold(x: int): int {
+    return twice(twice(twice(x)))
+}
+
+func repeat(n: int, acc: int): int {
+    return if n == 0 then acc else repeat(n - 1, sixfold(acc))
+}
+
+func main(): int sync {
+    let a = sixfold(1)
+    let b = repeat(1000, 1)
+    'call_chain_hot a={} b={}'->format<a, b>->println
+    return 0
+}
+

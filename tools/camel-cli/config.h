@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Apr. 01, 2026
+ * Updated: May. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,9 +21,10 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.1.20"
+#define VERSION "0.1.21"
 
 #include <string>
+#include <vector>
 
 enum class Command { Run, Info, Check, Inspect };
 
@@ -46,17 +47,20 @@ extern std::vector<std::string> scriptsDirs;
 extern std::vector<std::string> targetFiles;
 extern std::vector<std::string> passes; // from --passes (comma-separated) or positional
 extern std::string passesOpt;           // raw --passes value (e.g. "a,b,c")
+extern std::string timeitSpec;          // raw --timeit value (e.g. "std::jit/10")
 extern std::string inputFile;           // input from --input (alternative to first positional)
 // Resolved after parse (used by main): no need to branch on --input/--passes vs positional
 extern std::string resolvedInputPath;             // effective input file path (or "" for stdin)
 extern std::vector<std::string> resolvedPassList; // effective pass list for run
 extern std::vector<std::string> fallbackPasses;   // run when graph != null after list; from rc
                                                   // passes.fallback or ["std::default"]
+extern std::string timeitPass;                    // parsed target pass from --timeit
+extern unsigned int timeitIterations;             // parsed iteration count from --timeit
+extern bool timeitEnabled;
 
 extern bool profile;
 extern bool noCache;
 extern bool semanticOnly;
-extern unsigned int repeat;
 extern int maxThreads;
 } // namespace Run
 

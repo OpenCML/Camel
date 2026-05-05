@@ -1,0 +1,54 @@
+/**
+ * Demonstrates macro-generated gradient descent for a linear MSE loss.
+ */
+module autograd_linear_demo
+
+import {
+    Tensor,
+    ones, shape, sum, zeros
+} from tensor
+
+import {
+    Parameter,
+    apply_gradients, parameter, value
+} from nn
+
+type Linear = {
+    weight: Parameter
+}
+
+with <layer: Linear, y: Tensor>
+func mse_loss(X: Tensor): float {
+    let pred = X @ value(layer.weight)
+    let errors = pred - y
+    let squared = errors * errors
+    let m = shape(X)[0]
+    return sum(squared) / float(m)
+}
+
+func main(): int sync {
+    let X = ones([4, 2])
+    let y = ones([4, 1])
+    var layer = {
+        weight: parameter(zeros([2, 1]))
+    }
+
+    let step = apply_gradients(<layer: Linear, y: Tensor> (X: Tensor): float => {
+        let pred = X @ value(layer.weight)
+        let errors = pred - y
+        let squared = errors * errors
+        let m = shape(X)[0]
+        return sum(squared) / float(m)
+    })
+
+    let w0 = value(layer.weight)
+    let before = X->mse_loss<layer, y>
+    let step_loss = wait step<layer, y>(X, 0.01)
+    let after = X->mse_loss<layer, y>
+    let w1 = value(layer.weight)
+
+    'autograd_linear_demo metrics before={} step={} after={}'->format<before, step_loss, after>->println
+    'autograd_linear_demo w0={}'->format<w0>->println
+    'autograd_linear_demo w1={}'->format<w1>->println
+    return 0
+}
