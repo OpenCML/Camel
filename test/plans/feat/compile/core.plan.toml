@@ -44,3 +44,4 @@ expect_diagnostic_line = 7
 expect_diagnostic_column = 17
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
+

@@ -1,33 +1,33 @@
-import { execSync } from 'child_process'
+import { execFileSync, execSync } from 'child_process'
+import { explicitFilesArg, splitLineList, uniqueFiles } from './file-list.js'
 
-const dirs = [
-    'src',
-    'include',
-    'modules',
-    'tools',
-]
+const dirs = ['src', 'include', 'modules', 'tools']
 
 function getChangedFiles() {
     try {
         const output = execSync('git diff --name-only --diff-filter=ACMR HEAD', { encoding: 'utf-8' })
-        return output
-            .split('\n')
-            .map((f) => f.trim())
-            .filter((f) => f.match(/\.(cpp|h)$/) && dirs.some(dir => f.startsWith(dir + '/')))
+        return splitLineList(output)
     } catch (err) {
         console.error('Error getting changed files from git:', err)
         return []
     }
 }
 
-const changedFiles = getChangedFiles()
+function formatTargets(files) {
+    return uniqueFiles(files).filter(
+        (file) =>
+            /\.(cpp|h)$/.test(file) && dirs.some((dir) => file.startsWith(`${dir}/`))
+    )
+}
+
+const changedFiles = formatTargets(explicitFilesArg() ?? getChangedFiles())
 
 if (changedFiles.length === 0) {
     console.log('No modified .cpp or .h files to format.')
 } else {
     changedFiles.forEach((file) => {
         try {
-            execSync(`clang-format -i "${file}"`, { stdio: 'inherit' })
+            execFileSync('clang-format', ['-i', file], { stdio: 'inherit' })
             console.log(`Formatted: ${file}`)
         } catch (error) {
             console.error(`Failed to format: ${file}`)

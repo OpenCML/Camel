@@ -50,6 +50,7 @@ $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 ## Test Execution
 - Main entry: `node scripts/test.js`
 - Test plans live under `test/plans/`; you may pass either a single `*.plan.toml` file or a plan directory.
+- When adding a new feature or a new test case, first run the relevant case manually from the command line and inspect the execution flow and stdout/stderr directly before relying on the plan runner. Only add or refine automated `verify_*` logic after the manual run confirms the observable behavior you actually want to lock in.
 - `npm run test` runs the default developer set: `smoke` plus all `feat/**` plans.
 - `npm run test:all` runs all plans under `test/plans/`, including `perf/**`.
 - Prefer passing the target explicitly instead of adding new `npm run test:*` aliases.

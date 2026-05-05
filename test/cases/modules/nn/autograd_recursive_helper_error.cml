@@ -1,0 +1,40 @@
+/**
+ * Negative case: apply_gradients must reject recursive helper call lowering.
+ */
+module autograd_recursive_helper_error
+
+import {
+    Tensor,
+    full, sum
+} from tensor
+
+import {
+    Parameter,
+    apply_gradients, parameter, value
+} from nn
+
+type Tiny = {
+    weight: Parameter
+}
+
+with <model: Tiny>
+func recursive_pred(x: Tensor): Tensor {
+    let local = x @ value(model.weight)
+    return local->recursive_pred<model>
+}
+
+func main(): int sync {
+    var model = {
+        weight: parameter(full([1, 1], 0.1))
+    }
+    let x = full([1, 1], 1.0)
+
+    let step = apply_gradients(<model: Tiny> (x: Tensor): float => {
+        let pred = x->recursive_pred<model>
+        return sum(pred * pred)
+    })
+
+    let loss = wait step<model>(x, 0.1)
+    'autograd_recursive_helper_error loss={}'->format<loss>->println
+    return 0
+}

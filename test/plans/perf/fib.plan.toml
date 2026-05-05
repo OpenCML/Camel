@@ -86,3 +86,4 @@ timeout_ms = 1500
 perf_budget_platform = "local.sample"
 perf_budget_mean_ms = 3
 perf_budget_tolerance_pct = 10
+

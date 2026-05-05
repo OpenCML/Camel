@@ -13,27 +13,11 @@ func check(n: int, expected: int, code: int): int {
 }
 
 func main(): int sync {
-    let c0 = check(0, 0, 1)
-    if c0 != 0 then {
-        return c0
-    } else {
-        let c1 = check(1, 1, 2)
-        if c1 != 0 then {
-            return c1
-        } else {
-            let c2 = check(10, 55, 3)
-            if c2 != 0 then {
-                return c2
-            } else {
-                let c3 = check(15, 610, 4)
-                if c3 != 0 then {
-                    return c3
-                } else {
-                    'fib_recursive ok'->println
-                    return 0
-                }
-            }
-        }
-    }
+    let f0 = fib(0)
+    let f1 = fib(1)
+    let f10 = fib(10)
+    let f15 = fib(15)
+    'fib_recursive f0={} f1={} f10={} f15={}'->format<f0, f1, f10, f15>->println
+    return 0
 }
 

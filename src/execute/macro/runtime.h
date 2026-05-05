@@ -13,6 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -82,6 +83,9 @@ class MacroEvaluator {
         camel::runtime::GCGraph *ownerGraph, camel::runtime::gc_node_ref_t nodeRef,
         std::ostream &os);
     std::optional<MacroEvalResult> tryExecuteIndirectCall(
+        camel::runtime::GCGraph *ownerGraph, camel::runtime::gc_node_ref_t nodeRef,
+        std::ostream &os);
+    std::optional<MacroEvalResult> tryExecuteStaticOper(
         camel::runtime::GCGraph *ownerGraph, camel::runtime::gc_node_ref_t nodeRef,
         std::ostream &os);
     slot_t executeFunction(

@@ -18,22 +18,7 @@ func main(): int sync {
     let d = layered(0)
     let e = layered(3)
     let f = layered(9)
-
-    if a != 8 then {
-        return 1
-    } else if b != 102 then {
-        return 2
-    } else if c != 10 then {
-        return 3
-    } else if d != 20 then {
-        return 4
-    } else if e != 30 then {
-        return 5
-    } else if f != 40 then {
-        return 6
-    } else {
-        'branch_join ok'->println
-        return 0
-    }
+    'branch_join a={} b={} c={} d={} e={} f={}'->format<a, b, c, d, e, f>->println
+    return 0
 }
 

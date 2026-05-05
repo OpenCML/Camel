@@ -110,5 +110,15 @@ kind = "behavior"
 case = "../../cases/smoke/core/prl_scheduler.cml"
 args = ["${case}", "${run_prl}"]
 expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/prl_scheduler a=([0-9]+) b=([0-9]+) sum=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 25, `expected a=25, got ${found[1]}`)
+    assert(Number(found[2]) === 36, `expected b=36, got ${found[2]}`)
+    assert(Number(found[3]) === 61, `expected sum=61, got ${found[3]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+

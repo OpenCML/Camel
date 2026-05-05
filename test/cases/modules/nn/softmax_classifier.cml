@@ -1,0 +1,75 @@
+/**
+ * Tiny helper-based classifier trained with fused softmax cross entropy.
+ */
+module softmax_classifier
+
+import {
+    Tensor,
+    reshape
+} from tensor
+
+import {
+    Parameter,
+    apply_gradients, grad, parameter, softmax_cross_entropy, value
+} from nn
+
+type Linear = {
+    weight: Parameter,
+    bias: Parameter
+}
+
+type Classifier = {
+    head: Linear
+}
+
+with <layer: Linear>
+func linear(x: Tensor): Tensor {
+    return (x @ value(layer.weight)) + value(layer.bias)
+}
+
+with <model: Classifier>
+func logits(x: Tensor): Tensor {
+    return x->linear<model.head>
+}
+
+with <target: Tensor>
+func classifier_loss(logits_value: Tensor): float {
+    return softmax_cross_entropy(logits_value, target)
+}
+
+with <model: Classifier, target: Tensor>
+func model_loss(x: Tensor): float {
+    let pred = x->logits<model>
+    return pred->classifier_loss<target>
+}
+
+func main(): int sync {
+    var model = {
+        head: {
+            weight: parameter(reshape([0.1, 0.1, 0.1, 0.1], [2, 2])),
+            bias: parameter(reshape([0.0, 0.0], [1, 2]))
+        }
+    }
+    let x = reshape([1.0, 0.0, 0.0, 1.0], [2, 2])
+    let target = reshape([1.0, 0.0, 0.0, 1.0], [2, 2])
+
+    let step = apply_gradients(<model: Classifier, target: Tensor> (x: Tensor): float => {
+        let pred = x->logits<model>
+        return pred->classifier_loss<target>
+    })
+
+    let before = x->model_loss<model, target>
+    let step_loss = wait step<model, target>(x, 0.5)
+    let after = x->model_loss<model, target>
+    let weight = value(model.head.weight)
+    let bias = value(model.head.bias)
+    let weight_grad = grad(model.head.weight)
+    let bias_grad = grad(model.head.bias)
+
+    'softmax_classifier metrics before={} step={} after={}'->format<before, step_loss, after>->println
+    'softmax_classifier weight={}'->format<weight>->println
+    'softmax_classifier bias={}'->format<bias>->println
+    'softmax_classifier weight_grad={}'->format<weight_grad>->println
+    'softmax_classifier bias_grad={}'->format<bias_grad>->println
+    return 0
+}

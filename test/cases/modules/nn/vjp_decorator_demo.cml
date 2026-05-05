@@ -1,0 +1,23 @@
+/**
+ * Verifies nn.vjp can be used as a macro decorator and preserves the decorated function value.
+ */
+module vjp_decorator_demo
+
+import {
+    vjp
+} from nn
+
+func identity_vjp(x: int): int {
+    return x
+}
+
+@vjp<identity_vjp>
+func identity(x: int): int {
+    return x + 1
+}
+
+func main(): int sync {
+    let value = identity(41)
+    'vjp_decorator_demo value={}'->format<value>->println
+    return 0
+}

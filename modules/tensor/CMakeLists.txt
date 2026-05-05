@@ -4,6 +4,7 @@ add_camel_module(
   SOURCES
     executor.cpp
     module.cpp
+    nn_ops.cpp
     operators.cpp
     runtime.cpp
     type.cpp

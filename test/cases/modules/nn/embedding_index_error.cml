@@ -1,0 +1,20 @@
+/**
+ * Negative case: embedding must reject out-of-range indices.
+ */
+module embedding_index_error
+
+import {
+    reshape, sum
+} from tensor
+
+import {
+    embedding
+} from nn
+
+func main(): int sync {
+    let table = reshape([0.1, 0.2, 0.3, 0.4], [2, 2])
+    let indices = reshape([0, 2], [2])
+    let gathered = embedding(table, indices)
+    'embedding_index_error gathered_sum={}'->format<sum(gathered)>->println
+    return 0
+}

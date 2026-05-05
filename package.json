@@ -4,10 +4,11 @@
     "version": "0.1.21",
     "type": "module",
     "pre-commit": [
-        "upd"
+        "precommit:staged"
     ],
     "scripts": {
         "prepare": "husky && node ./scripts/psrgen.js && node ./scripts/install.js",
+        "precommit:staged": "node ./scripts/precommit-staged.js",
         "upd": "node ./scripts/update.js",
         "cnt": "node ./scripts/cnt.js",
         "init": "node ./scripts/psrgen.js && node ./scripts/install.js",

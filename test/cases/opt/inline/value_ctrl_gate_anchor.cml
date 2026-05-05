@@ -11,12 +11,8 @@ func calc(): int sync {
 
 func main(): int sync {
     let out = calc()
-    if out != 42 then {
-        return 1
-    } else sync {
-        'inline_value_ctrl_gate_anchor ok'->println
-        return 0
-    }
+    'inline_value_ctrl_gate_anchor out={}'->format<out>->println
+    return 0
 }
 
 

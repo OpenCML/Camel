@@ -10,6 +10,17 @@ kind = "behavior"
 case = "../../../cases/linear/nvm/duplicate_inputs.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/duplicate_inputs a=([0-9]+) b=([0-9]+) arr0=([0-9]+) arr1=([0-9]+) y=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 7, `expected a=7, got ${found[1]}`)
+    assert(Number(found[2]) === 7, `expected b=7, got ${found[2]}`)
+    assert(Number(found[3]) === 7, `expected arr0=7, got ${found[3]}`)
+    assert(Number(found[4]) === 7, `expected arr1=7, got ${found[4]}`)
+    assert(Number(found[5]) === 14, `expected y=14, got ${found[5]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -60,6 +71,14 @@ kind = "behavior"
 case = "../../../cases/linear/nvm/inline_unique_subgraph.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/inline_unique_subgraph a=([0-9]+) b=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 41, `expected a=41, got ${found[1]}`)
+    assert(Number(found[2]) === 42, `expected b=42, got ${found[2]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -80,6 +99,18 @@ kind = "behavior"
 case = "../../../cases/linear/jit/list_transform.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/list_transform ys_len=([0-9]+) ys3=([0-9]+) ys7=([0-9]+) zs_len=([0-9]+) zs0=([0-9]+) zs4=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 8, `expected ys_len=8, got ${found[1]}`)
+    assert(Number(found[2]) === 9, `expected ys3=9, got ${found[2]}`)
+    assert(Number(found[3]) === 49, `expected ys7=49, got ${found[3]}`)
+    assert(Number(found[4]) === 5, `expected zs_len=5, got ${found[4]}`)
+    assert(Number(found[5]) === 100, `expected zs0=100, got ${found[5]}`)
+    assert(Number(found[6]) === 25, `expected zs4=25, got ${found[6]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -90,6 +121,18 @@ kind = "behavior"
 case = "../../../cases/linear/jit/list_transform_chain.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/list_transform_chain ys_len=([0-9]+) ys3=([0-9]+) ys7=([0-9]+) zs_len=([0-9]+) zs0=([0-9]+) zs4=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 8, `expected ys_len=8, got ${found[1]}`)
+    assert(Number(found[2]) === 9, `expected ys3=9, got ${found[2]}`)
+    assert(Number(found[3]) === 49, `expected ys7=49, got ${found[3]}`)
+    assert(Number(found[4]) === 5, `expected zs_len=5, got ${found[4]}`)
+    assert(Number(found[5]) === 100, `expected zs0=100, got ${found[5]}`)
+    assert(Number(found[6]) === 25, `expected zs4=25, got ${found[6]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -100,6 +143,16 @@ kind = "behavior"
 case = "../../../cases/linear/jit/tuple_pipeline.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/tuple_pipeline a0=([0-9]+) a1=([0-9]+) b0=([0-9]+) b1=([0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 2, `expected a0=2, got ${found[1]}`)
+    assert(Number(found[2]) === 4, `expected a1=4, got ${found[2]}`)
+    assert(Number(found[3]) === 9, `expected b0=9, got ${found[3]}`)
+    assert(Number(found[4]) === 19, `expected b1=19, got ${found[4]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -110,5 +163,15 @@ kind = "behavior"
 case = "../../../cases/linear/jit/struct_match.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
+verify_script = """
+({ input, assert, match }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/struct_match p1y=(-?[0-9]+) p2x=(-?[0-9]+) p3y=(-?[0-9]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 4, `expected p1y=4, got ${found[1]}`)
+    assert(Number(found[2]) === 5, `expected p2x=5, got ${found[2]}`)
+    assert(Number(found[3]) === 5, `expected p3y=5, got ${found[3]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+

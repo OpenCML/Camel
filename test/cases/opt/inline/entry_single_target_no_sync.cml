@@ -11,13 +11,8 @@ func inc(v: int): int {
 func main(): int sync {
     let x = 7
     let y = inc(x)
-
-    if y != 8 then {
-        return 1
-    } else sync {
-        'inline_entry_single_target_no_sync ok'->println
-        return 0
-    }
+    'inline_entry_single_target_no_sync x={} y={}'->format<x, y>->println
+    return 0
 }
 
 

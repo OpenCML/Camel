@@ -13,6 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +28,24 @@
 
 namespace camel::execute::macro_runtime {
 
+namespace {
+
+bool isNativeMacroOperUri(std::string_view uri) { return uri == "nn:apply_gradients"; }
+
+bool isMacroOper(camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t ref) {
+    const auto *node = graph ? graph->node(ref) : nullptr;
+    if (!node || node->kind != camel::runtime::GCNodeKind::Oper) {
+        return false;
+    }
+    if (node->isMacro()) {
+        return true;
+    }
+    const auto *body = graph->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+    return body != nullptr && isNativeMacroOperUri(body->uri());
+}
+
+} // namespace
+
 std::vector<MacroCandidate>
 collectMacroCandidates(std::span<camel::runtime::GCGraph *const> closure) {
     std::vector<MacroCandidate> candidates;
@@ -40,7 +59,7 @@ collectMacroCandidates(std::span<camel::runtime::GCGraph *const> closure) {
                 continue;
             }
             if (node->kind == camel::runtime::GCNodeKind::Func ||
-                node->kind == camel::runtime::GCNodeKind::Call) {
+                node->kind == camel::runtime::GCNodeKind::Call || isMacroOper(graph, it.ref())) {
                 candidates.push_back(MacroCandidate{.runtimeGraph = graph, .nodeRef = it.ref()});
             }
         }

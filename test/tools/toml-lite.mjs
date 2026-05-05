@@ -102,11 +102,34 @@ function parseValue(raw) {
     throw new Error(`unsupported TOML value: ${value}`)
 }
 
+function parseMultilineString(lines, startIndex, firstValue) {
+    const delimiter = firstValue.slice(0, 3)
+    let rest = firstValue.slice(3)
+    const chunks = []
+    while (true) {
+        const end = rest.indexOf(delimiter)
+        if (end >= 0) {
+            chunks.push(rest.slice(0, end))
+            return {
+                value: chunks.join('\n'),
+                nextIndex: startIndex,
+            }
+        }
+        chunks.push(rest)
+        startIndex++
+        if (startIndex >= lines.length) {
+            throw new Error('unterminated multiline string')
+        }
+        rest = lines[startIndex]
+    }
+}
+
 export function parseTomlString(content) {
     const doc = {}
     let current = doc
     const lines = content.split(/\r?\n/)
-    for (const rawLine of lines) {
+    for (let i = 0; i < lines.length; i++) {
+        const rawLine = lines[i]
         const line = stripComment(rawLine).trim()
         if (!line) continue
         const arrayTable = line.match(/^\[\[(.+)\]\]$/)
@@ -120,12 +143,19 @@ export function parseTomlString(content) {
             current = entry
             continue
         }
-        const match = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*(.+)$/)
+        const match = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*(.*)$/)
         if (!match) {
             throw new Error(`unsupported TOML line: ${rawLine}`)
         }
         const [, key, value] = match
-        current[key] = parseValue(value)
+        const trimmedValue = value.trim()
+        if (trimmedValue.startsWith('"""') || trimmedValue.startsWith("'''")) {
+            const parsed = parseMultilineString(lines, i, trimmedValue)
+            current[key] = parsed.value
+            i = parsed.nextIndex
+        } else {
+            current[key] = parseValue(value)
+        }
     }
     return doc
 }

@@ -13,13 +13,8 @@ func main(): int sync {
     let p = 5
     let q = 10
     let r = combine(p, q)
-
-    if r != 18 then {
-        return 1
-    } else sync {
-        'inline_entry_multi_target_with_sync ok'->println
-        return 0
-    }
+    'inline_entry_multi_target_with_sync p={} q={} r={}'->format<p, q, r>->println
+    return 0
 }
 
 

@@ -13,12 +13,7 @@ func main(): int sync {
     let d = 3
     let expected = 14999950000
     let actual = sum(n, a, d, 0)
-
-    if actual != expected then {
-        return 1
-    } else {
-        'tail_accumulate ok'->println
-        return 0
-    }
+    'tail_accumulate actual={} expected={}'->format<actual, expected>->println
+    return 0
 }
 

@@ -16,13 +16,6 @@ func main(): int sync {
     let add20 = make_adder(20)
     let lhs = add10(5)
     let rhs = add20(5)
-
-    if lhs != 15 then {
-        return 1
-    } else if rhs != 25 then {
-        return 2
-    } else sync {
-        'macro_closure_isolation ok'->println
-        return 0
-    }
+    'macro_closure_isolation lhs={} rhs={}'->format<lhs, rhs>->println
+    return 0
 }

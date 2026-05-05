@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 02, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1019,8 +1019,31 @@ DraftInlineResult inlineCallableInDraft(
     if (result.ctrlExit == kInvalidNodeRef) {
         result.ctrlExit = result.valueExit;
     }
+    const bool needValueCtrlBridge =
+        result.ctrlExit != kInvalidNodeRef && result.ctrlExit != result.valueExit;
     if (hasExternalCtrl && needControlBridge &&
         (result.ctrlEntry == kInvalidNodeRef || !draft.isControlAnchor(result.ctrlEntry))) {
+        const DraftNodeHeader *valueHeader        = draft.header(result.valueExit);
+        std::vector<gc_node_ref_t> gateCtrlInputs = ctrlPreds;
+        if (result.ctrlExit != kInvalidNodeRef) {
+            gateCtrlInputs = appendUniqueRefs(
+                std::span<const gc_node_ref_t>(gateCtrlInputs.data(), gateCtrlInputs.size()),
+                std::span<const gc_node_ref_t>(&result.ctrlExit, 1));
+        }
+        DraftNodeInit gateInit{
+            .dataIndex    = valueHeader ? valueHeader->dataIndex : static_cast<gc_slot_idx_t>(0),
+            .dataType     = valueHeader ? valueHeader->dataType : nullptr,
+            .kind         = GCNodeKind::Gate,
+            .runtimeFlags = 0,
+            .normInputs   = std::span<const gc_node_ref_t>(&result.valueExit, 1),
+            .ctrlInputs   = gateCtrlInputs,
+        };
+        const gc_node_ref_t bridgeGate = draft.addNode(gateInit);
+        result.ctrlEntry               = bridgeGate;
+        result.ctrlExit                = bridgeGate;
+        result.valueExit               = bridgeGate;
+    }
+    if (needValueCtrlBridge) {
         const DraftNodeHeader *valueHeader = draft.header(result.valueExit);
         DraftNodeInit gateInit{
             .dataIndex    = valueHeader ? valueHeader->dataIndex : static_cast<gc_slot_idx_t>(0),
@@ -1028,12 +1051,14 @@ DraftInlineResult inlineCallableInDraft(
             .kind         = GCNodeKind::Gate,
             .runtimeFlags = 0,
             .normInputs   = std::span<const gc_node_ref_t>(&result.valueExit, 1),
-            .ctrlInputs   = ctrlPreds,
+            .ctrlInputs   = std::span<const gc_node_ref_t>(&result.ctrlExit, 1),
         };
         const gc_node_ref_t bridgeGate = draft.addNode(gateInit);
-        result.ctrlEntry               = bridgeGate;
-        result.ctrlExit                = bridgeGate;
         result.valueExit               = bridgeGate;
+        result.ctrlExit                = bridgeGate;
+        if (result.ctrlEntry == kInvalidNodeRef) {
+            result.ctrlEntry = bridgeGate;
+        }
     } else if (result.ctrlEntry == kInvalidNodeRef) {
         result.ctrlEntry = result.ctrlExit;
     }

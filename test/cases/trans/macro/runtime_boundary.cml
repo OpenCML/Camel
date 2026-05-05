@@ -13,11 +13,6 @@ macro func add_one(x: int): int {
 
 func main(): int sync {
     let value = add_one(seed())
-
-    if value != 42 then {
-        return 1
-    } else sync {
-        'macro_runtime_boundary ok'->println
-        return 0
-    }
+    'macro_runtime_boundary value={}'->format<value>->println
+    return 0
 }

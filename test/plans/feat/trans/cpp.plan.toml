@@ -22,3 +22,4 @@ args = ["${case}", "std::cpp"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+

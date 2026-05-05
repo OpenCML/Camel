@@ -24,6 +24,12 @@ The repository uses the plan-based runner under `test/`.
 - plans: `test/plans/**/*.plan.toml`
 - cases: `test/cases/**`
 - shared args templates: `test/vars.toml`
+- plan field reference: `docs/test-plans.md`
+
+Plans may use `verify_script = """..."""` for inline JavaScript assertions over
+the Camel process result, or `verify_script_path = "relative/script.mjs"` for a
+reusable external verifier. Full field constraints and examples live in
+`docs/test-plans.md`.
 
 ## Main Test Scripts
 
@@ -31,6 +37,12 @@ The repository uses the plan-based runner under `test/`.
 |------|------|
 | `npm run test` | Main set: `smoke`, `feat/**` |
 | `npm run test:all` | Full suite (`test/plans/`) |
+| `npm run precommit:staged` | Format/update only files already staged for the current commit |
+
+The staged pre-commit script delegates file selection to `scripts/format.js` and
+`scripts/update.js`; it only constrains auto-staging to the original staged path
+set. It rejects partially staged files before re-adding paths, so unstaged hunks
+are not pulled into the commit by the hook.
 
 Use `npm run test -- <target>` for everything else instead of adding more fixed aliases.
 
