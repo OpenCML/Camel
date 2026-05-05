@@ -100,7 +100,7 @@ merge_sorted_arrays
 |------|--------|
 | 声明与模块 | `as`, `let`, `var`, `use`, `from`, `func`, `type`, `enum`, `with`, `module`, `import`, `export` |
 | 控制与异常 | `if`, `then`, `else`, `match`, `case`, `for`, `in`, `of`, `try`, `catch`, `finally`, `throw`, `raise`, `return` |
-| 类型与值 | `wait`, `const`, `keyof`, `typeas`, `typeof`, `namespace` |
+| 类型与值 | `wait`, `const`, `keyof`, `typeas`, `typeof`, `using`, `namespace` |
 | 修饰符 | `sync`, `macro`, `inner`, `outer`, `atomic`, `shared` |
 | 字面量 | `null`, `true`, `false` |
 

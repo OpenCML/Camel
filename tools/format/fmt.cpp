@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Mar. 18, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,6 +37,21 @@ inline std::vector<std::string> regex_split(const std::string &input, const std:
     std::sregex_token_iterator begin(input.begin(), input.end(), re, -1);
     std::sregex_token_iterator end;
     return {begin, end};
+}
+
+Formatter::Formatter(const std::vector<antlr4::Token *> tokens) : Formatter(tokens, Options{}) {}
+
+Formatter::Formatter(const std::vector<antlr4::Token *> tokens, Options options) : tokens(tokens) {
+    configure(options);
+}
+
+void Formatter::configure(const Options &options) {
+    indent  = options.indent.empty() ? "    " : options.indent;
+    newline = options.newline.empty() ? "\n" : options.newline;
+    quotePrefer =
+        options.quotePrefer == "double" ? QuotePreference::Double : QuotePreference::Single;
+    indentLevel = 0;
+    currentIndent.clear();
 }
 
 string Formatter::formatStringLiteral(const string &input, bool multiLine = false) {
@@ -105,6 +120,13 @@ inline bool isMultiLine(const antlr4::ParserRuleContext *context) {
         secondTokenLine = context->getStop()->getLine();
     }
     return firstTokenLine != secondTokenLine;
+}
+
+inline bool hasTrailingComma(const antlr4::ParserRuleContext *context) {
+    if (!context || context->children.size() < 3) {
+        return false;
+    }
+    return context->children[context->children.size() - 2]->getText() == ",";
 }
 
 void Formatter::insertComment(antlr4::Token *comment, string &result) {
@@ -210,6 +232,9 @@ decl
     : moduleDecl
     | importDecl
     | exportDecl
+    | namespaceDecl
+    |
+usingNamespaceDecl
     | dataDecl
     | funcDecl
     | typeDecl
@@ -226,7 +251,9 @@ stmt
     | funcDecl
     | typeDecl
     | dataExpr
-    | useDecl
+    | usingNamespaceDecl
+    |
+useDecl
     | retStmt
     | blockStmt
     ;
@@ -292,6 +319,13 @@ any Formatter::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
     } else {
         return result + any_cast<string>(visitBracedIdents(bracedIdents));
     }
+}
+
+/*
+usingNamespaceDecl : USING NAMESPACE identRef ;
+*/
+any Formatter::visitUsingNamespaceDecl(OpenCMLParser::UsingNamespaceDeclContext *context) {
+    return "using namespace " + any_cast<string>(visitIdentRef(context->identRef()));
 }
 
 /*
@@ -386,7 +420,8 @@ funcDecl   :
         funcAnno*
         (WITH angledParams)?
         EXPORT? implMark? modifiers?
-        FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
+
+FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
 */
 any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     string result;
@@ -394,7 +429,7 @@ any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     const auto &angledParams = context->angledParams();
     const auto &implMark     = context->implMark();
     const auto &modifiers    = context->modifiers();
-    const auto &identDef     = context->identDef();
+    const auto &identRef     = context->identRef();
     const auto &parentParams = context->parentParams();
     const auto &typeExpr     = context->typeExpr();
     const auto &stmtBlock    = context->stmtBlock();
@@ -419,7 +454,7 @@ any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
         result += any_cast<string>(visitModifiers(modifiers)) + " ";
     }
 
-    result += "func " + any_cast<string>(visitIdentDef(identDef)) +
+    result += "func " + any_cast<string>(visitIdentRef(identRef)) +
               any_cast<string>(visitParentParams(parentParams));
 
     if (typeExpr) {
@@ -427,6 +462,32 @@ any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     }
 
     return result + " " + any_cast<string>(visitStmtBlock(stmtBlock));
+}
+
+/*
+namespaceDecl : NAMESPACE identRef '{' SEP? (namespaceItem SEP?)* '}' ;
+*/
+any Formatter::visitNamespaceDecl(OpenCMLParser::NamespaceDeclContext *context) {
+    string result = "namespace " + any_cast<string>(visitIdentRef(context->identRef())) + " {";
+    result +=
+        formatList(context->namespaceItem(), context, "; ", "", PaddingNL | PushScope | Multiline);
+    return result + "}";
+}
+
+/*
+namespaceItem
+    : namespaceDecl
+    | importDecl
+    | exportDecl
+    | usingNamespaceDecl
+ |
+ * funcDecl
+    | typeDecl
+    | useDecl
+    ;
+*/
+any Formatter::visitNamespaceItem(OpenCMLParser::NamespaceItemContext *context) {
+    return visit(context->children[0]);
 }
 
 /*
@@ -492,7 +553,7 @@ any Formatter::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
 }
 
 /*
-typeDecl   : implMark? TYPE identDef '=' (typeExpr | STRING) ;
+typeDecl   : implMark? TYPE identRef '=' (typeExpr | STRING) ;
 */
 any Formatter::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     const auto &implMark = context->implMark();
@@ -500,7 +561,7 @@ any Formatter::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     if (implMark) {
         result += any_cast<string>(visitImplMark(implMark)) + " ";
     }
-    result += "type " + any_cast<string>(visitIdentDef(context->identDef())) + " = ";
+    result += "type " + any_cast<string>(visitIdentRef(context->identRef())) + " = ";
     if (context->typeExpr()) {
         result += any_cast<string>(visitTypeExpr(context->typeExpr()));
     } else {
@@ -639,11 +700,15 @@ any Formatter::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
     const auto &pairedValues = context->pairedValues();
     string result;
     if (indexValues) {
-        result += formatList(indexValues->indexValue(), context, ", ", ",", PaddingNL | PushScope);
+        result += any_cast<string>(visitIndexValues(indexValues));
     }
     if (pairedValues) {
-        result +=
-            formatList(pairedValues->keyValuePair(), context, ", ", ",", PaddingNL | PushScope);
+        if (!result.empty()) {
+            result += indexValues->getStop()->getLine() < pairedValues->getStart()->getLine()
+                          ? "," + lineEnd()
+                          : ", ";
+        }
+        result += any_cast<string>(visitPairedValues(pairedValues));
     }
     return result;
 }
@@ -720,18 +785,25 @@ any Formatter::visitPattern(OpenCMLParser::PatternContext *context) {
         return visitLiteral(context->literal());
         break;
     case 3: // '(' (valueList | identList)? ','? ')'
-        return "(" +
-               (context->dataList() ? any_cast<string>(visitDataList(context->dataList()))
-                                    : any_cast<string>(visitIdentList(context->identList()))) +
-               ")";
-        break;
+    {
+        string body;
+        if (context->dataList()) {
+            body = any_cast<string>(visitDataList(context->dataList()));
+        } else if (context->identList()) {
+            body = any_cast<string>(visitIdentList(context->identList()));
+        }
+        return "(" + body + (hasTrailingComma(context) ? "," : "") + ")";
+    } break;
     case 4: // '{' (pairedValues | identList)? ','? '}'
-        return "{" +
-               (context->pairedValues()
-                    ? any_cast<string>(visitPairedValues(context->pairedValues()))
-                    : any_cast<string>(visitIdentList(context->identList()))) +
-               "}";
-        break;
+    {
+        string body;
+        if (context->pairedValues()) {
+            body = any_cast<string>(visitPairedValues(context->pairedValues()));
+        } else if (context->identList()) {
+            body = any_cast<string>(visitIdentList(context->identList()));
+        }
+        return "{" + body + (hasTrailingComma(context) ? "," : "") + "}";
+    } break;
     case 5: // '_'
         return string("_");
         break;
@@ -1050,7 +1122,7 @@ tupleData
 any Formatter::visitTupleData(OpenCMLParser::TupleDataContext *context) {
     if (context->dataList()) {
         return "(" + any_cast<string>(visitDataList(context->dataList())) +
-               (context->children.size() > 3 ? ", " : "") + ")";
+               (hasTrailingComma(context) ? "," : "") + ")";
     } else {
         return string("()");
     }
@@ -1285,7 +1357,7 @@ tupleType
 */
 any Formatter::visitTupleType(OpenCMLParser::TupleTypeContext *context) {
     return "(" + (context->typeList() ? any_cast<string>(visitTypeList(context->typeList())) : "") +
-           ")";
+           (hasTrailingComma(context) ? "," : "") + ")";
 }
 
 /*

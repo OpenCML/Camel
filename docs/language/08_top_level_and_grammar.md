@@ -10,7 +10,7 @@
 
 - **program**：**`SEP? (decl SEP?)* EOF`**。
   - 即：可选前导分号、若干声明（声明之间可选分号）、文件结束。
-- **decl**：**moduleDecl | importDecl | exportDecl | dataDecl | funcDecl | typeDecl | useDecl**。
+- **decl**：**moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl | dataDecl | funcDecl | typeDecl | useDecl**。
 - 完整程序由若干**声明**组成；执行从入口（如 **main**）开始，由调度器（线性或并行）执行图或字节码。
 
 ### 8.1.2 顶层声明类型
@@ -20,15 +20,18 @@
 | 模块 | **moduleDecl** | `MODULE identDef` |
 | 导入 | **importDecl** | `IMPORT (moduleName \| (identDef \| bracedIdents) FROM moduleName)` |
 | 导出 | **exportDecl** | `EXPORT (dataDecl \| typeDecl \| bracedIdents)` |
+| 命名空间 | **namespaceDecl** | `NAMESPACE identRef '{' SEP? (namespaceItem SEP?)* '}'` |
+| 展开命名空间 | **usingNamespaceDecl** | `USING NAMESPACE identRef` |
 | 数据 | **dataDecl** | `(LET \| VAR) carrier (':' typeList)? '=' dataList` |
-| 函数 | **funcDecl** | `(WITH angledParams)? EXPORT? implMark? modifiers? FUNC identDef parentParams (':' typeExpr)? stmtBlock` |
-| 类型 | **typeDecl** | `implMark? TYPE identDef '=' (typeExpr \| STRING)` |
+| 函数 | **funcDecl** | `(WITH angledParams)? EXPORT? implMark? modifiers? FUNC identRef parentParams (':' typeExpr)? stmtBlock` |
+| 类型 | **typeDecl** | `implMark? TYPE identRef '=' (typeExpr \| STRING)` |
 | use | **useDecl** | `USE (identDef '=')? identRef` |
 
 ### 8.1.3 语句（用于块内与顶层）
 
-- **stmt**：**dataDecl | funcDecl | typeDecl | dataExpr | useDecl | retStmt | blockStmt**。
+- **stmt**：**dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | useDecl | retStmt | blockStmt**。
 - **stmtList**：**stmt (SEP? stmt)* SEP?**。
+- **namespaceItem**：**namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl | typeDecl | useDecl**。
 
 ---
 

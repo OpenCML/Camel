@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: Mar. 18, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,6 +48,7 @@ class Builder : public OpenCMLVisitor {
             }
         }
         root_ = nullptr;
+        namespaceStack_.clear();
         visit(tree);
         return root_;
     }
@@ -62,6 +63,11 @@ class Builder : public OpenCMLVisitor {
     std::shared_ptr<ModuleLoad> module_ = std::make_shared<ModuleLoad>();
     std::vector<std::shared_ptr<ImportLoad>> imports_;
     std::shared_ptr<ExportLoad> export_ = std::make_shared<ExportLoad>();
+    std::vector<std::string> namespaceStack_;
+
+    Reference qualifyRef(const Reference &ref) const;
+    void pushNamespace(const Reference &ref);
+    void popNamespace(size_t previousSize);
 
     // Auto-generated visitor methods
 
@@ -81,6 +87,8 @@ class Builder : public OpenCMLVisitor {
 
     std::any visitExportDecl(OpenCMLParser::ExportDeclContext *context);
 
+    std::any visitUsingNamespaceDecl(OpenCMLParser::UsingNamespaceDeclContext *context);
+
     std::any visitBlockStmt(OpenCMLParser::BlockStmtContext *context);
 
     std::any visitStmtBlock(OpenCMLParser::StmtBlockContext *context);
@@ -92,6 +100,10 @@ class Builder : public OpenCMLVisitor {
     std::any visitFuncAnno(OpenCMLParser::FuncAnnoContext *context);
 
     std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context);
+
+    std::any visitNamespaceDecl(OpenCMLParser::NamespaceDeclContext *context);
+
+    std::any visitNamespaceItem(OpenCMLParser::NamespaceItemContext *context);
 
     std::any visitParentIdents(OpenCMLParser::ParentIdentsContext *context);
 

@@ -1,0 +1,6 @@
+func main(): int sync {
+    let x = call(1, 2, scale: 3, offset: 4)
+    let y = Tensor::new([1, 2], dtype: Float)
+    let z = builder<1, mode: fast>
+    return 0
+}

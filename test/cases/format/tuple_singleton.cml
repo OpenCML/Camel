@@ -1,0 +1,6 @@
+type One=(int,)
+func main():int sync{
+let value=(1,)
+let nested=((2,),)
+return 0
+}

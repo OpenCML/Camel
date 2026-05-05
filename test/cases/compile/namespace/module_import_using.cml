@@ -1,0 +1,14 @@
+/**
+ * Checks using namespace over a module import injects exported module symbols.
+ */
+module module_import_using
+
+import namespace_lib
+using namespace namespace_lib
+
+func main(): int sync {
+    let a = root()
+    let b = Tools::inc(a)
+    'module_import_using a={} b={}'->format<a, b>->println
+    return 0
+}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -89,13 +89,33 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
     return first;
 }
 
+std::vector<std::string> refParts(const Reference &ref) {
+    std::vector<std::string> parts = ref.paths();
+    parts.push_back(ref.ident());
+    return parts;
+}
+
+bool startsWith(const std::vector<std::string> &parts, const std::vector<std::string> &prefix) {
+    if (prefix.size() > parts.size()) {
+        return false;
+    }
+    return std::equal(prefix.begin(), prefix.end(), parts.begin());
+}
+
+std::optional<Reference> refFromParts(const std::vector<std::string> &parts) {
+    if (parts.empty()) {
+        return std::nullopt;
+    }
+    return Reference(parts);
+}
+
 } // namespace
 
 Module::Module(const std::string &name, const std::string &path, context_ptr_t ctx)
     : loaded_(false), name_(name), path_(path), context_(ctx),
       exportedTypeNS_(std::make_shared<Namespace<std::string, Type *>>()),
       exportedEntityNS_(std::make_shared<Namespace<std::string, entity>>()), defaultImportedRefs_(),
-      importedRefModMap_(), importedEntityCache_() {}
+      importedRefMap_(), importedNamespaceBindings_(), importedEntityCache_() {}
 
 void Module::importDefaultRefsFromMod(const module_ptr_t &mod) {
     if (!mod->loaded()) {
@@ -110,13 +130,8 @@ void Module::importAllRefsFromMod(const module_ptr_t &mod) {
     if (!mod->loaded()) {
         mod->load();
     }
-    auto appendModForRef = [this, &mod](const Reference &ref) {
-        auto &vec = importedRefModMap_[ref];
-        if (std::find(vec.begin(), vec.end(), mod) == vec.end()) {
-            vec.push_back(mod);
-        }
-    };
-    auto typeNS = mod->exportedTypeNS();
+    auto appendModForRef = [this, &mod](const Reference &ref) { markImportedRefFromMod(ref, mod); };
+    auto typeNS          = mod->exportedTypeNS();
     typeNS->forEach([&](const Reference &ref, Type *) { appendModForRef(ref); });
     auto entNS = mod->exportedEntityNS();
     entNS->forEach([&](const Reference &ref, const entity &) { appendModForRef(ref); });
@@ -124,25 +139,150 @@ void Module::importAllRefsFromMod(const module_ptr_t &mod) {
 }
 
 bool Module::imports(const module_ptr_t &mod) const {
-    for (const auto &[ref, mods] : importedRefModMap_) {
-        if (std::find(mods.begin(), mods.end(), mod) != mods.end()) {
+    for (const auto &[ref, bindings] : importedRefMap_) {
+        auto it =
+            std::find_if(bindings.begin(), bindings.end(), [&](const ImportedRefBinding &binding) {
+                return binding.mod == mod;
+            });
+        if (it != bindings.end()) {
             return true;
         }
+    }
+    auto nsIt = std::find_if(
+        importedNamespaceBindings_.begin(),
+        importedNamespaceBindings_.end(),
+        [&](const ImportedNamespaceBinding &binding) { return binding.mod == mod; });
+    if (nsIt != importedNamespaceBindings_.end()) {
+        return true;
     }
     return false;
 }
 
 void Module::markImportedRefFromMod(const Reference &ref, const module_ptr_t &mod) {
-    auto &vec = importedRefModMap_[ref];
-    if (std::find(vec.begin(), vec.end(), mod) == vec.end()) {
-        vec.push_back(mod);
+    markImportedRefFromMod(ref, ref, mod);
+}
+
+void Module::markImportedRefFromMod(
+    const Reference &localRef, const Reference &remoteRef, const module_ptr_t &mod) {
+    auto &vec = importedRefMap_[localRef];
+    auto it   = std::find_if(vec.begin(), vec.end(), [&](const ImportedRefBinding &binding) {
+        return binding.mod == mod && binding.remoteRef == remoteRef;
+    });
+    if (it == vec.end()) {
+        vec.push_back(ImportedRefBinding{mod, remoteRef});
     }
-    importedEntityCache_.erase(ref);
+    importedEntityCache_.erase(localRef);
+}
+
+void Module::markImportedNamespaceFromMod(const Reference &localPrefix, const module_ptr_t &mod) {
+    ImportedNamespaceBinding binding{
+        .localPrefixParts  = refParts(localPrefix),
+        .remotePrefixParts = {},
+        .mod               = mod,
+    };
+    auto it = std::find_if(
+        importedNamespaceBindings_.begin(),
+        importedNamespaceBindings_.end(),
+        [&](const ImportedNamespaceBinding &other) {
+            return other.mod == binding.mod && other.localPrefixParts == binding.localPrefixParts &&
+                   other.remotePrefixParts == binding.remotePrefixParts;
+        });
+    if (it == importedNamespaceBindings_.end()) {
+        importedNamespaceBindings_.push_back(std::move(binding));
+    }
+    importedEntityCache_.clear();
+}
+
+void Module::markImportedNamespaceFromMod(
+    const Reference &localPrefix, const Reference &remotePrefix, const module_ptr_t &mod) {
+    ImportedNamespaceBinding binding{
+        .localPrefixParts  = refParts(localPrefix),
+        .remotePrefixParts = refParts(remotePrefix),
+        .mod               = mod,
+    };
+    auto it = std::find_if(
+        importedNamespaceBindings_.begin(),
+        importedNamespaceBindings_.end(),
+        [&](const ImportedNamespaceBinding &other) {
+            return other.mod == binding.mod && other.localPrefixParts == binding.localPrefixParts &&
+                   other.remotePrefixParts == binding.remotePrefixParts;
+        });
+    if (it == importedNamespaceBindings_.end()) {
+        importedNamespaceBindings_.push_back(std::move(binding));
+    }
+    importedEntityCache_.clear();
+}
+
+std::vector<Module::ImportedRefBinding> Module::importedBindingsForRef(const Reference &ref) const {
+    std::vector<ImportedRefBinding> result;
+    auto exact = importedRefMap_.find(ref);
+    if (exact != importedRefMap_.end()) {
+        result.insert(result.end(), exact->second.begin(), exact->second.end());
+    }
+
+    const auto parts = refParts(ref);
+    for (const auto &binding : importedNamespaceBindings_) {
+        if (!startsWith(parts, binding.localPrefixParts)) {
+            continue;
+        }
+        std::vector<std::string> remoteParts = binding.remotePrefixParts;
+        remoteParts.insert(
+            remoteParts.end(),
+            parts.begin() + static_cast<std::ptrdiff_t>(binding.localPrefixParts.size()),
+            parts.end());
+        auto remoteRef = refFromParts(remoteParts);
+        if (!remoteRef.has_value()) {
+            continue;
+        }
+        result.push_back(ImportedRefBinding{binding.mod, *remoteRef});
+    }
+    return result;
+}
+
+bool Module::importAllRefsFromImportedNamespace(const Reference &localPrefix) {
+    bool importedAny      = false;
+    const auto localParts = refParts(localPrefix);
+
+    for (const auto &binding : importedNamespaceBindings_) {
+        if (!startsWith(localParts, binding.localPrefixParts)) {
+            continue;
+        }
+
+        std::vector<std::string> remotePrefix = binding.remotePrefixParts;
+        remotePrefix.insert(
+            remotePrefix.end(),
+            localParts.begin() + static_cast<std::ptrdiff_t>(binding.localPrefixParts.size()),
+            localParts.end());
+
+        auto importRef = [&](const Reference &remoteRef) {
+            const auto remoteParts = refParts(remoteRef);
+            if (!startsWith(remoteParts, remotePrefix)) {
+                return;
+            }
+            std::vector<std::string> localRefParts(
+                remoteParts.begin() + static_cast<std::ptrdiff_t>(remotePrefix.size()),
+                remoteParts.end());
+            auto localRef = refFromParts(localRefParts);
+            if (!localRef.has_value()) {
+                return;
+            }
+            markImportedRefFromMod(*localRef, remoteRef, binding.mod);
+            importedAny = true;
+        };
+
+        if (!binding.mod->loaded()) {
+            binding.mod->load();
+        }
+        binding.mod->exportedTypeNS()->forEach(
+            [&](const Reference &remoteRef, Type *) { importRef(remoteRef); });
+        binding.mod->exportedEntityNS()->forEach(
+            [&](const Reference &remoteRef, const entity &) { importRef(remoteRef); });
+    }
+    return importedAny;
 }
 
 bool Module::hasImportedRef(const Reference &ref) const {
-    auto it = importedRefModMap_.find(ref);
-    return it != importedRefModMap_.end() && !it->second.empty();
+    return !importedBindingsForRef(ref).empty();
 }
 
 bool Module::exportDefaultImportRef(const Reference &ref) {
@@ -163,21 +303,27 @@ bool Module::exportEntity(const Reference &ref, const entity &ent) {
 }
 
 std::optional<Type *> Module::getImportedType(const Reference &ref) const {
-    auto it = importedRefModMap_.find(ref);
-    if (it == importedRefModMap_.end() || it->second.empty()) {
+    auto bindings = importedBindingsForRef(ref);
+    if (bindings.empty()) {
         return std::nullopt;
     }
     // Types are not overloaded; the first module providing this ref wins.
-    auto &mod = it->second.front();
-    if (!mod->loaded()) {
-        mod->load();
+    for (auto &binding : bindings) {
+        auto &mod = binding.mod;
+        if (!mod->loaded()) {
+            mod->load();
+        }
+        auto type = mod->getExportedType(binding.remoteRef);
+        if (type.has_value()) {
+            return type;
+        }
     }
-    return mod->getExportedType(ref);
+    return std::nullopt;
 }
 
 std::optional<entity> Module::getImportedEntity(const Reference &ref) const {
-    auto it = importedRefModMap_.find(ref);
-    if (it == importedRefModMap_.end() || it->second.empty()) {
+    auto bindings = importedBindingsForRef(ref);
+    if (bindings.empty()) {
         return std::nullopt;
     }
     // Return the cached result directly to avoid repeated merges.
@@ -186,11 +332,12 @@ std::optional<entity> Module::getImportedEntity(const Reference &ref) const {
         return cacheIt->second;
     }
     std::vector<entity> collected;
-    for (const auto &mod : it->second) {
+    for (const auto &binding : bindings) {
+        const auto &mod = binding.mod;
         if (!mod->loaded()) {
             mod->load();
         }
-        auto opt = mod->getExportedEntity(ref);
+        auto opt = mod->getExportedEntity(binding.remoteRef);
         if (opt) {
             collected.push_back(std::move(*opt));
         }

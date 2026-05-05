@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: May. 02, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -156,6 +156,8 @@ PassScopePtr initPassScope() {
                     {"null", def(PASS(NullGraphIRPass))},
                     {"macro", def(PASS(MacroRewritePass))},
                     {"graphviz", def(PASS(GraphVizDumpPass))},
+                    {"readable_graphviz",
+                     def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.readableOnly = true}))},
                     {"cpp",
                      def(PASS(CppDumpPass),
                          {
@@ -241,6 +243,8 @@ std::unordered_map<std::string, std::string> passAliases = {
     // Common translation and dump aliases
     {"std::dot", "std::graphviz"},
     {"std::gir", "std::graphviz"},
+    {"std::rdot", "std::readable_graphviz"},
+    {"std::rgir", "std::readable_graphviz"},
     {"std::cxx", "std::cpp"},
     {"std::cppmod", "std::cpp::module"},
     {"std::cppinspect", "std::cpp::inspect"},

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Mar. 07, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -90,6 +90,7 @@ class Builder {
     node_ptr_t visitFuncDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitTypeDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitNameDecl(const AST::node_ptr_t &ast);
+    node_ptr_t visitUsingNamespaceDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitExprStmt(const AST::node_ptr_t &ast);
     node_ptr_t visitExitStmt(const AST::node_ptr_t &ast);
     node_ptr_t visitStmtBlock(const AST::node_ptr_t &ast);

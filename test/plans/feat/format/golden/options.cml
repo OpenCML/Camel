@@ -1,0 +1,8 @@
+func main(): int sync {
+  let msg = "hello"
+  if true then {
+    return 1
+  } else {
+    return 0
+  }
+}

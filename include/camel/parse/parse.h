@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 24, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -157,7 +157,7 @@ class CamelParser {
         return modLoad->getModuleNameOrEmpty();
     }
 
-    bool parse(std::istream &is) {
+    bool parseCST(std::istream &is) {
         input_.load(is);
         if (sourceContext_) {
             // Register the full source text before parsing so later AST construction can build
@@ -170,7 +170,11 @@ class CamelParser {
         tokens_ = std::make_unique<antlr4::CommonTokenStream>(lexer_.get());
         parser_ = std::make_unique<OpenCMLParser>(tokens_.get());
         EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("CTS", this); });
-        if (!buildCST() || !buildAST())
+        return buildCST();
+    }
+
+    bool parse(std::istream &is) {
+        if (!parseCST(is) || !buildAST())
             return false;
         // Use declared module name from source (e.g. "module mnist_json") for diagnostics
         std::string declaredName = getDeclaredModuleName();

@@ -13,6 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,6 +33,11 @@ NnModule::NnModule(context_ptr_t ctx) : BuiltinModule("nn", ctx) {
     exportType(Reference("Parameter"), camel::nn::ParameterType::Default());
     for (const auto &group : getNnOperatorGroups()) {
         exportEntity(group->name(), group);
+        if (group->name() == "parameter") {
+            exportEntity(Reference(std::vector<std::string>{"Parameter"}, "new"), group);
+        } else if (group->name() == "value" || group->name() == "grad") {
+            exportEntity(Reference(std::vector<std::string>{"Parameter"}, group->name()), group);
+        }
     }
 }
 

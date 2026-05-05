@@ -1,0 +1,10 @@
+/**
+ * Bare module import should not inject exported symbols directly.
+ */
+module module_import_no_direct_inject
+
+import namespace_lib
+
+func main(): int sync {
+    return root()
+}

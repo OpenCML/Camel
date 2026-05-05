@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Mar. 18, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,13 @@
 #include "camel/utils/assert.h"
 
 class Formatter : public OpenCMLVisitor {
+  public:
+    struct Options {
+        std::string indent      = "    ";
+        std::string newline     = "\n";
+        std::string quotePrefer = "single";
+    };
+
   private:
     enum class QuotePreference { Single, Double };
     enum class CommentPreference { Hash, Slash };
@@ -34,7 +41,7 @@ class Formatter : public OpenCMLVisitor {
     // bool compact = false;
     // unsigned int threshold = 80;
     std::string indent          = "    ";
-    std::string newline         = "\r\n";
+    std::string newline         = "\n";
     bool preferSemis            = false;
     QuotePreference quotePrefer = QuotePreference::Single;
 
@@ -56,6 +63,8 @@ class Formatter : public OpenCMLVisitor {
     }
 
     std::string formatStringLiteral(const std::string &input, bool multiLine);
+
+    void configure(const Options &options);
 
     void insertComment(antlr4::Token *comment, std::string &result);
 
@@ -376,7 +385,9 @@ class Formatter : public OpenCMLVisitor {
     }
 
   public:
-    Formatter(const std::vector<antlr4::Token *> tokens) : tokens(tokens) {}
+    Formatter(const std::vector<antlr4::Token *> tokens);
+
+    Formatter(const std::vector<antlr4::Token *> tokens, Options options);
 
     // Auto-generated visitor methods
 
@@ -396,6 +407,8 @@ class Formatter : public OpenCMLVisitor {
 
     std::any visitExportDecl(OpenCMLParser::ExportDeclContext *context);
 
+    std::any visitUsingNamespaceDecl(OpenCMLParser::UsingNamespaceDeclContext *context);
+
     std::any visitBlockStmt(OpenCMLParser::BlockStmtContext *context);
 
     std::any visitStmtBlock(OpenCMLParser::StmtBlockContext *context);
@@ -407,6 +420,10 @@ class Formatter : public OpenCMLVisitor {
     std::any visitFuncAnno(OpenCMLParser::FuncAnnoContext *context);
 
     std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context);
+
+    std::any visitNamespaceDecl(OpenCMLParser::NamespaceDeclContext *context);
+
+    std::any visitNamespaceItem(OpenCMLParser::NamespaceItemContext *context);
 
     std::any visitParentIdents(OpenCMLParser::ParentIdentsContext *context);
 

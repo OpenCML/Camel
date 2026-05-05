@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Apr. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,8 +23,13 @@
 
 #include <unordered_set>
 
+struct GraphVizDumpConfig {
+    bool readableOnly = false;
+};
+
 class GraphVizDumpPass : public RuntimeGraphTranslatePass {
     bool showRawPtr = false;
+    GraphVizDumpConfig config_;
     std::unordered_map<std::string, size_t> ptrCnt_;
     std::unordered_map<std::string, std::unordered_map<uintptr_t, size_t>> ptrsMap_;
     std::unordered_set<camel::runtime::GCGraph *> visitedGraphs_;
@@ -42,6 +47,7 @@ class GraphVizDumpPass : public RuntimeGraphTranslatePass {
 
   public:
     GraphVizDumpPass(const camel::core::context::context_ptr_t &context);
+    GraphVizDumpPass(const camel::core::context::context_ptr_t &context, GraphVizDumpConfig config);
     virtual ~GraphVizDumpPass() = default;
 
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;

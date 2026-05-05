@@ -1,0 +1,21 @@
+/**
+ * Checks that a user-defined namespace function can be called through a
+ * type-qualified reference.
+ */
+module type_namespace_constructor
+
+type Foo = {
+    x: int
+}
+
+namespace Foo {
+    func new(x: int): Foo {
+        return { x: x }
+    }
+}
+
+func main(): int sync {
+    let f = Foo::new(7)
+    'type_namespace_constructor x={}'->format<f.x>->println
+    return 0
+}

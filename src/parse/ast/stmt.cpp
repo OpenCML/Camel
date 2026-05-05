@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Mar. 07, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -143,6 +143,10 @@ const std::string TypeDeclLoad::geneCode() const {
 
 const std::string NameDeclLoad::geneCode() const {
     return "name " + ref_.toString() + " as " + alias_.toString();
+}
+
+const std::string UsingNamespaceLoad::geneCode() const {
+    return "using namespace " + ref_.toString();
 }
 
 const std::string ExitStmtLoad::geneCode() const {

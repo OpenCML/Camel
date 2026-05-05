@@ -280,14 +280,14 @@ void linkNodes(LinkType type, node_handle_t from, node_handle_t to) {
 
 std::string makeCompileGraphStableId(const std::string &name) {
     static std::atomic<uint64_t> seq = 1;
-    return std::format("cgraph:{}:{}", name.empty() ? "anonymous" : name, seq++);
+    return std::format("{}_{}", name.empty() ? "g" : name, seq++);
 }
 
 compile_graph_ptr_t createCompileGraph(
     FunctionType *funcType, const compile_graph_ptr_t &outer, std::string name = "") {
     auto graph = std::make_shared<DraftGraphBuilder>(funcType ? funcType : FunctionType::create());
     if (name.empty()) {
-        name = std::format("__graph_{}", makeCompileGraphStableId("anon"));
+        name = std::format("__{}__", makeCompileGraphStableId(""));
     }
     graph->setName(std::move(name));
     graph->setStableId(makeCompileGraphStableId(graph->name()));
@@ -299,14 +299,14 @@ compile_graph_ptr_t createCompileGraph(
         for (size_t i = 0; i < funcType->withTypesCount(); ++i) {
             const std::string portName = i < funcType->argNamesCount()
                                              ? std::string(funcType->argNameAt(i))
-                                             : std::format("__with{}", i);
+                                             : std::format("__w{}", i);
             graph->addPortNode(funcType->withTypeAt(i), portName, true, funcType->withIsVarAt(i));
         }
         for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
             const size_t argIndex      = funcType->withTypesCount() + i;
             const std::string portName = argIndex < funcType->argNamesCount()
                                              ? std::string(funcType->argNameAt(argIndex))
-                                             : std::format("__arg{}", i);
+                                             : std::format("__n{}", i);
             graph->addPortNode(funcType->normTypeAt(i), portName, false, funcType->normIsVarAt(i));
         }
     }
@@ -497,6 +497,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     varied_ = false;
     diags_  = diags;
     usedGraphs_.clear();
+    typeDecls_.clear();
     syntheticRefIndex_ = 0;
 
     nodeScope_      = node_scope_t::create();
@@ -709,17 +710,17 @@ any Builder::visit(const GCT::node_ptr_t &node) {
 
 void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     ENTER("DECL");
-    const auto &declLoad = gct->loadAs<GCT::DeclLoad>();
+    const auto &declLoad     = gct->loadAs<GCT::DeclLoad>();
+    GCT::node_ptr_t typeNode = gct->atAs<GCT::TypeLoad>(0);
+    Type *type               = typeNode->loadAs<GCT::TypeLoad>()->dataType();
     if (!declLoad->isFunc()) {
+        typeDecls_[declLoad->ref()] = type;
         LEAVE("DECL");
         return nullptr;
     }
 
-    GCT::node_ptr_t typeNode = gct->atAs<GCT::TypeLoad>(0);
-    Type *type               = typeNode->loadAs<GCT::TypeLoad>()->dataType();
-    FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
-
-    compile_graph_ptr_t graph = enterScope(funcType, declLoad->ref().ident());
+    FunctionType *funcType    = tt::as_ptr<FunctionType>(type);
+    compile_graph_ptr_t graph = enterScope(funcType, declLoad->ref().toString());
     leaveScope();
 
     LEAVE("DECL");
@@ -897,8 +898,8 @@ void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
 
 node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     ENTER("DREF");
-    const string &name = gct->loadAs<GCT::DRefLoad>()->ref();
-    auto optNode       = nodeAt(name);
+    const string name = gct->loadAs<GCT::DRefLoad>()->ref().toString();
+    auto optNode      = nodeAt(name);
     if (optNode.has_value()) {
         node_handle_t node = optNode.value();
         if (!sameGraph(node, currGraph_)) {
@@ -937,6 +938,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             diags_->of(SemanticDiag::ImportNameNotExported)
                 .atOrigin(gct->load()->origin())
                 .commit(name);
+            throw BuildAbortException();
         }
         const auto &e = opt.value();
         if (camel::core::module::detail::EntityAccess::isNode(e)) {
@@ -1896,6 +1898,11 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
     const auto &exptLoad = gct->loadAs<GCT::ExptLoad>();
     const auto &exports  = exptLoad->exports();
     for (const Reference &ref : exports) {
+        auto optType = typeDecls_.find(ref);
+        if (optType != typeDecls_.end()) {
+            module_->exportType(ref, optType->second);
+            continue;
+        }
         auto optDecorated = decoratedGraphAt(ref.toString());
         if (optDecorated.has_value()) {
             module_->exportEntity(

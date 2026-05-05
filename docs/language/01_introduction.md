@@ -44,7 +44,7 @@ func main(): int sync {
 - **第 2 章 词法分析**：行与分隔、注释、标识符、关键字、字面量、运算符。
 - **第 3 章 数据模型**：值、类型、let/var、类型层次、算子。
 - **第 4 章 执行模型**：程序结构、命名与绑定、异常、sync 与 wait。
-- **第 5 章 模块与导入**：module、import、export。
+- **第 5 章 模块与导入**：module、import、export、namespace、using namespace。
 - **第 6 章 表达式**：原子、访问、管道、运算、控制表达式、Lambda。
 - **第 7 章 语句**：简单语句与复合语句（块、if、match、try、函数、类型定义）。
 - **第 8 章 顶层与文法**：程序组成、文法概要。

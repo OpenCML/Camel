@@ -17,6 +17,16 @@ const LOG_ROOT = path.join(RESULTS_ROOT, 'log')
 const REPO_ROOT = path.dirname(TEST_ROOT)
 const IS_WINDOWS = process.platform === 'win32'
 const CAMEL_EXE = path.join(REPO_ROOT, 'out', 'latest', 'bin', IS_WINDOWS ? 'camel.exe' : 'camel')
+const TOOL_EXES = {
+    camel: CAMEL_EXE,
+    'camel-format': path.join(
+        REPO_ROOT,
+        'out',
+        'latest',
+        'bin',
+        IS_WINDOWS ? 'camel-format.exe' : 'camel-format'
+    ),
+}
 const COLORS = {
     green: '\x1b[32m',
     red: '\x1b[31m',
@@ -146,9 +156,24 @@ function formatDurationMs(valueMs, digits = 2) {
     return `${valueMs.toFixed(digits)} ms`
 }
 
+function benchmarkSampleCount(benchmark) {
+    if (Array.isArray(benchmark.samples_ms)) {
+        return benchmark.samples_ms.length
+    }
+    if (Number.isInteger(benchmark.iterations) && benchmark.iterations >= 0) {
+        return benchmark.iterations
+    }
+    return null
+}
+
 function formatMetric(result) {
     if (result.benchmark) {
-        return `${formatDurationMs(result.benchmark.mean_ms)} +/- ${formatDurationMs(result.benchmark.ci95_ms)}`
+        const samples = benchmarkSampleCount(result.benchmark)
+        const sampleSuffix = samples === null ? '' : ` (n=${samples})`
+        if (samples !== null && samples < 2) {
+            return `${formatDurationMs(result.benchmark.mean_ms)}${sampleSuffix}`
+        }
+        return `${formatDurationMs(result.benchmark.mean_ms)} +/- ${formatDurationMs(result.benchmark.ci95_ms)}${sampleSuffix}`
     }
     if (typeof result.wallMs === 'number') {
         return formatDurationMs(result.wallMs)
@@ -504,6 +529,11 @@ function validateTest(test, result, context) {
 
 function runOneTest(test, sharedVars, logContext) {
     const casePath = path.resolve(path.dirname(test.__planPath), test.case)
+    const toolName = test.tool || 'camel'
+    const toolExe = TOOL_EXES[toolName]
+    if (!toolExe) {
+        throw new Error(`unknown test tool: ${toolName}`)
+    }
     const scope = {
         ...sharedVars,
         case: casePath,
@@ -514,7 +544,7 @@ function runOneTest(test, sharedVars, logContext) {
     env.PATH = `${path.join(env.CAMEL_HOME, 'bin')}${path.delimiter}${env.PATH || ''}`
 
     const started = performance.now()
-    const proc = spawnSync(CAMEL_EXE, args, {
+    const proc = spawnSync(toolExe, args, {
         cwd: REPO_ROOT,
         env,
         encoding: 'utf8',
@@ -522,7 +552,7 @@ function runOneTest(test, sharedVars, logContext) {
     })
     const ended = performance.now()
     const raw = {
-        command: `${CAMEL_EXE} ${args.join(' ')}`.trim(),
+        command: `${toolExe} ${args.join(' ')}`.trim(),
         exitCode: typeof proc.status === 'number' ? proc.status : null,
         signal: proc.signal ?? null,
         timedOut: Boolean(proc.error && proc.error.code === 'ETIMEDOUT'),

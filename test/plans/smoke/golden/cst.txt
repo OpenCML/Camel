@@ -19,7 +19,7 @@ Program
 |-Decl
 |  \-FuncDecl
 |     |- func
-|     |-IdentDef
+|     |-IdentRef
 |     |  \- fib
 |     |-ParentParams
 |     |  |- (
@@ -216,7 +216,7 @@ Program
 |-Decl
 |  \-FuncDecl
 |     |- func
-|     |-IdentDef
+|     |-IdentRef
 |     |  \- main
 |     |-ParentParams
 |     |  |- (

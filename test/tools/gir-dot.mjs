@@ -1,6 +1,42 @@
+function splitAttributes(raw) {
+    const parts = []
+    let current = ''
+    let inQuotes = false
+    let escaped = false
+
+    for (const ch of raw) {
+        if (escaped) {
+            current += ch
+            escaped = false
+            continue
+        }
+        if (ch === '\\') {
+            current += ch
+            escaped = true
+            continue
+        }
+        if (ch === '"') {
+            current += ch
+            inQuotes = !inQuotes
+            continue
+        }
+        if (ch === ',' && !inQuotes) {
+            parts.push(current)
+            current = ''
+            continue
+        }
+        current += ch
+    }
+
+    if (current) {
+        parts.push(current)
+    }
+    return parts
+}
+
 function parseAttributes(raw) {
     const attrs = {}
-    for (const part of raw.split(',')) {
+    for (const part of splitAttributes(raw)) {
         const segment = part.trim()
         if (!segment) continue
         const idx = segment.indexOf('=')
@@ -41,11 +77,16 @@ function parseDot(dot) {
 }
 
 function nodeSignature(attrs, graph, id) {
-    const label = attrs.label || ''
+    const type = attrs.type || ''
     const shape = attrs.shape || ''
+    const style = attrs.style || ''
     const incoming = graph.edges.filter((edge) => edge.to === id).length
     const outgoing = graph.edges.filter((edge) => edge.from === id).length
-    return `${label}|${shape}|in:${incoming}|out:${outgoing}`
+    return `${type}|${shape}|${style}|in:${incoming}|out:${outgoing}`
+}
+
+function edgeType(attrs) {
+    return attrs.type || attrs.linktype || ''
 }
 
 export function compareGirDotIsomorphic(actualText, expectedText) {
@@ -68,16 +109,18 @@ export function compareGirDotIsomorphic(actualText, expectedText) {
         .map((edge) => {
             const fromSig = nodeSignature(actual.nodes.get(edge.from) || {}, actual, edge.from)
             const toSig = nodeSignature(actual.nodes.get(edge.to) || {}, actual, edge.to)
+            const linkType = edgeType(edge.attrs)
             const label = edge.attrs.label || ''
-            return `${fromSig}=>${toSig}|${label}`
+            return `${fromSig}=>${toSig}|${linkType}|${label}`
         })
         .sort()
     const expectedEdgeSigs = expected.edges
         .map((edge) => {
             const fromSig = nodeSignature(expected.nodes.get(edge.from) || {}, expected, edge.from)
             const toSig = nodeSignature(expected.nodes.get(edge.to) || {}, expected, edge.to)
+            const linkType = edgeType(edge.attrs)
             const label = edge.attrs.label || ''
-            return `${fromSig}=>${toSig}|${label}`
+            return `${fromSig}=>${toSig}|${linkType}|${label}`
         })
         .sort()
     if (JSON.stringify(actualEdgeSigs) !== JSON.stringify(expectedEdgeSigs)) {
