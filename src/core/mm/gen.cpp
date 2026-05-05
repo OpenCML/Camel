@@ -19,6 +19,12 @@
 
 #include "camel/core/mm/gen.h"
 
+#include "camel/core/mm/root_handle.h"
+#include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/string.h"
+#include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/brpred.h"
 #include "camel/utils/log.h"
@@ -28,6 +34,7 @@
 #include <format>
 #include <mutex>
 #include <new>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -87,6 +94,68 @@ void GenerationalAllocatorWithGC::unregisterExternalRootTracer(const void *owner
     });
 }
 
+void writeBarrier(
+    rtdata::Object *ownerObject, const type::Type *ownerType, slot_t storedSlot,
+    const type::Type *storedType) {
+    autoSpace().writeBarrier(ownerObject, ownerType, storedSlot, storedType);
+}
+
+void writeBarrier(
+    rtdata::Object *ownerObject, const type::Type *ownerType, rtdata::Object *storedObject,
+    const type::Type *storedType) {
+    autoSpace().writeBarrier(ownerObject, ownerType, storedObject, storedType);
+}
+
+void GenerationalAllocatorWithGC::writeBarrier(
+    rtdata::Object *ownerObject, const type::Type *ownerType, slot_t storedSlot,
+    const type::Type *storedType) {
+    if (!storedType || !storedType->isGCTraced() || storedSlot == NullSlot) {
+        return;
+    }
+    writeBarrier(
+        ownerObject,
+        ownerType,
+        rtdata::fromSlot<rtdata::Object *>(storedSlot),
+        storedType);
+}
+
+void GenerationalAllocatorWithGC::writeBarrier(
+    rtdata::Object *ownerObject, const type::Type *ownerType, rtdata::Object *storedObject,
+    const type::Type *storedType) {
+    if (!enableYoungGenCopying_ || !ownerObject || !storedObject || !storedType ||
+        !storedType->isGCTraced()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    ++stats_.writeBarriers;
+    recordObjectTypeUnlocked(ownerObject, ownerType);
+    recordObjectTypeUnlocked(storedObject, storedType);
+
+    ObjectHeader *storedHeader = autoHeaderForPayload(storedObject);
+    if (!inYoungGenSpace(storedHeader)) {
+        return;
+    }
+
+    ObjectHeader *ownerHeader = autoHeaderForPayload(ownerObject);
+    if (!ownerHeader || (!inElderGenSpace(ownerHeader) && !inLargeObjSpace(ownerHeader))) {
+        return;
+    }
+
+    rememberedSet_[ownerHeader] = RememberedSetEntry{
+        .object = ownerObject,
+        .type   = ownerType,
+    };
+}
+
+void GenerationalAllocatorWithGC::recordOldToYoungRef(void *oldObj, void *youngObj) {
+    writeBarrier(
+        static_cast<rtdata::Object *>(oldObj),
+        nullptr,
+        static_cast<rtdata::Object *>(youngObj),
+        nullptr);
+}
+
 void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
     std::lock_guard<std::mutex> lock(mutex_);
     ++stats_.safepoints;
@@ -99,16 +168,6 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
     pendingSafepointCollection_     = CollectionKind::None;
     const std::string_view gcReason = reason.empty() ? std::string_view{"safepoint"} : reason;
     collectAtSafepointUnlocked(requested, gcReason);
-}
-
-void GenerationalAllocatorWithGC::recordOldToYoungRef(void *oldObj, void *youngObj) {
-    (void)youngObj;
-    if (!enableYoungGenCopying_) {
-        return;
-    }
-    std::lock_guard<std::mutex> lock(mutex_);
-    ObjectHeader *header = headerOf(oldObj);
-    rememberedSet_.insert(header);
 }
 
 void GenerationalAllocatorWithGC::minorGC() {
@@ -127,6 +186,102 @@ void GenerationalAllocatorWithGC::majorGC() {
     CollectionKind requested    = pendingSafepointCollection_;
     pendingSafepointCollection_ = CollectionKind::None;
     collectAtSafepointUnlocked(requested, "manual major GC");
+}
+
+bool GenerationalAllocatorWithGC::debugRunRememberedSetSelfTest() {
+    if (!enableYoungGenCopying_) {
+        throw std::runtime_error(
+            "GC remembered-set self-test requires CAMEL_GC_ENABLE_YOUNG_COPYING=1");
+    }
+
+    auto *stringType = type::Type::String();
+    auto *tupleType  = type::TupleType::create(std::vector<type::Type *>{stringType});
+    Tuple *owner     = Tuple::create(1, *this);
+    RootHandle ownerRoot(*this, owner, tupleType, "GC.remembered_set.selftest.owner");
+
+    for (size_t i = 0; i < promotionAgeThreshold_; ++i) {
+        minorGC();
+    }
+
+    owner = ownerRoot.getAs<Tuple>();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!inElderGenSpace(autoHeaderForPayload(owner))) {
+            throw std::runtime_error("GC remembered-set self-test failed to promote owner object");
+        }
+    }
+
+    String *child = String::from("remembered-child", *this);
+    owner->set<rtdata::Object *>(0, child, tupleType);
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (rememberedSet_.empty()) {
+            throw std::runtime_error(
+                "GC remembered-set self-test did not record old-to-young edge");
+        }
+    }
+
+    // Two minor collections prove the entry is retained after the first relocation; otherwise the
+    // second collection would leave the old tuple pointing into the reset survivor-from space.
+    minorGC();
+    minorGC();
+
+    owner             = ownerRoot.getAs<Tuple>();
+    auto *storedChild = owner->get<String *>(0);
+    if (!storedChild || storedChild->view() != "remembered-child") {
+        throw std::runtime_error("GC remembered-set self-test lost the young child reference");
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!inYoungGenSpace(autoHeaderForPayload(storedChild))) {
+            throw std::runtime_error(
+                "GC remembered-set self-test child was not kept in young space");
+        }
+        if (rememberedSet_.empty()) {
+            throw std::runtime_error(
+                "GC remembered-set self-test did not retain old-to-young edge");
+        }
+    }
+
+    auto *arrayType   = type::ArrayType::create(stringType);
+    Array *arrayOwner = Array::create(*this, 11);
+    RootHandle arrayRoot(*this, arrayOwner, arrayType, "GC.remembered_set.selftest.array_owner");
+
+    for (size_t i = 0; i < promotionAgeThreshold_; ++i) {
+        minorGC();
+    }
+
+    arrayOwner = arrayRoot.getAs<Array>();
+    {
+        std::lock_guard<std::mutex> arrayLock(mutex_);
+        if (!inElderGenSpace(autoHeaderForPayload(arrayOwner))) {
+            throw std::runtime_error(
+                "GC remembered-set self-test failed to promote array owner object");
+        }
+    }
+
+    String *arrayChild = String::from("remembered-array-child", *this);
+    arrayOwner->set<rtdata::Object *>(10, arrayChild, arrayType);
+    verifyHeapOrThrow("during GC remembered-set self-test array store");
+
+    minorGC();
+    (void)String::from("array-overwrite", *this);
+    minorGC();
+
+    arrayOwner             = arrayRoot.getAs<Array>();
+    auto *storedArrayChild = arrayOwner->get<String *>(10);
+    if (!storedArrayChild || storedArrayChild->view() != "remembered-array-child") {
+        throw std::runtime_error("GC remembered-set self-test lost the array child reference");
+    }
+
+    std::lock_guard<std::mutex> arrayLock(mutex_);
+    if (!inYoungGenSpace(autoHeaderForPayload(storedArrayChild))) {
+        throw std::runtime_error(
+            "GC remembered-set self-test array child was not kept in young space");
+    }
+    return true;
 }
 
 void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t align) {
@@ -151,6 +306,7 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
         }
         auto *header = headerOf(ptr);
         header->setRegion(AllocRegion::LargeObj);
+        objectTypes_.erase(header);
         return ptr;
     }
 
@@ -166,6 +322,7 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
 
         auto *header = headerOf(ptr);
         header->setRegion(AllocRegion::ElderGen);
+        objectTypes_.erase(header);
         return ptr;
     }
 
@@ -186,11 +343,13 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
         }
         auto *header = headerOf(ptr);
         header->setRegion(AllocRegion::ElderGen);
+        objectTypes_.erase(header);
         return ptr;
     }
 
     auto *header = headerOf(ptr);
     header->setRegion(AllocRegion::YoungGen);
+    objectTypes_.erase(header);
     return ptr;
 }
 
@@ -306,22 +465,36 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
             entry.tracer(relocateYoung);
         }
 
-        // 3. Process old-to-young references (remembered set)
-        for (ObjectHeader *oldHeader : rememberedSet_) {
-            if (!oldHeader->isValid())
+        // 3. Process old-to-young references. Entries are retained after relocation while the
+        // old object still points into the young generation; clearing them blindly would lose the
+        // edge on the next minor collection.
+        std::unordered_map<ObjectHeader *, RememberedSetEntry> retainedRememberedSet;
+        for (const auto &[oldHeader, entry] : rememberedSet_) {
+            if (!oldHeader || !oldHeader->isValid())
                 continue;
 
-            rtdata::Object *oldObj = payloadOf<rtdata::Object>(oldHeader);
+            rtdata::Object *oldObj =
+                entry.object ? entry.object : payloadOf<rtdata::Object>(oldHeader);
+            const type::Type *oldType =
+                entry.type ? entry.type : knownObjectTypeUnlocked(oldHeader);
 
             // Walk and update refs in old-gen objects (layout is per Object / allocator contract).
-            oldObj->updateRefs(relocateYoung, nullptr);
+            oldObj->updateRefs(relocateYoung, oldType);
+            recordObjectTypeUnlocked(oldObj, oldType);
+            if (!collectYoungReferenceEdges(oldObj, oldType).empty()) {
+                retainedRememberedSet[oldHeader] = RememberedSetEntry{
+                    .object = oldObj,
+                    .type   = oldType,
+                };
+            }
         }
-
-        // Remembered set is stale after the young-gen collection.
-        rememberedSet_.clear();
+        rememberedSet_ = std::move(retainedRememberedSet);
 
         // 4. Scan copied/promoted objects with their static layouts.
         scanRelocatedObjects();
+        for (const TraceEntry &entry : relocationScan_) {
+            rememberOldObjectIfYoungRefsUnlocked(entry.object, entry.type);
+        }
 
         // 5. Reset Birth and Cache
         birthSpace_.reset();
@@ -353,6 +526,18 @@ void GenerationalAllocatorWithGC::majorGCUnlocked() {
     sweepLargeObjects();
 }
 
+ObjectHeader *GenerationalAllocatorWithGC::autoHeaderForPayload(rtdata::Object *object) const {
+    if (!object) {
+        return nullptr;
+    }
+    if (birthSpace_.contains(object) || havenSpace_.contains(object) ||
+        cacheSpace_.contains(object) || elderGenSpace_.contains(object) ||
+        largeObjSpace_.contains(object)) {
+        return headerOf(object);
+    }
+    return nullptr;
+}
+
 bool GenerationalAllocatorWithGC::inYoungGenSpace(ObjectHeader *header) const {
     return header && header->region_ == AllocRegion::YoungGen &&
            (birthSpace_.contains(header) || havenSpace_.contains(header) ||
@@ -368,6 +553,71 @@ bool GenerationalAllocatorWithGC::inLargeObjSpace(ObjectHeader *header) const {
            largeObjSpace_.contains(payloadOf<rtdata::Object>(header));
 }
 
+bool GenerationalAllocatorWithGC::isPreciseGCType(const type::Type *objectType) {
+    return objectType && objectType->isGCTraced() && objectType->code() != type::TypeCode::Ref &&
+           objectType->code() != type::TypeCode::Any;
+}
+
+void GenerationalAllocatorWithGC::recordObjectTypeUnlocked(
+    rtdata::Object *object, const type::Type *objectType) {
+    if (!isPreciseGCType(objectType)) {
+        return;
+    }
+    if (ObjectHeader *header = autoHeaderForPayload(object)) {
+        objectTypes_[header] = objectType;
+    }
+}
+
+const type::Type *GenerationalAllocatorWithGC::knownObjectTypeUnlocked(ObjectHeader *header) const {
+    auto it = objectTypes_.find(header);
+    return it == objectTypes_.end() ? nullptr : it->second;
+}
+
+std::vector<GenerationalAllocatorWithGC::RememberedEdge>
+GenerationalAllocatorWithGC::collectYoungReferenceEdges(
+    rtdata::Object *object, const type::Type *objectType) const {
+    std::vector<RememberedEdge> edges;
+    ObjectHeader *ownerHeader = autoHeaderForPayload(object);
+    if (!ownerHeader || !object) {
+        return edges;
+    }
+
+    object->updateRefs(
+        [&](rtdata::Object *ref,
+            const type::Type *refType,
+            const rtdata::RefTraceInfo &info) -> rtdata::Object * {
+            if (ref && inYoungGenSpace(autoHeaderForPayload(ref))) {
+                edges.push_back(
+                    RememberedEdge{
+                        .ownerHeader = ownerHeader,
+                        .owner       = object,
+                        .ownerType   = objectType,
+                        .target      = ref,
+                        .slotType    = refType,
+                        .info        = info,
+                    });
+            }
+            return ref;
+        },
+        objectType);
+    return edges;
+}
+
+void GenerationalAllocatorWithGC::rememberOldObjectIfYoungRefsUnlocked(
+    rtdata::Object *object, const type::Type *objectType) {
+    ObjectHeader *header = autoHeaderForPayload(object);
+    if (!header || (!inElderGenSpace(header) && !inLargeObjSpace(header))) {
+        return;
+    }
+    recordObjectTypeUnlocked(object, objectType);
+    if (!collectYoungReferenceEdges(object, objectType).empty()) {
+        rememberedSet_[header] = RememberedSetEntry{
+            .object = object,
+            .type   = objectType,
+        };
+    }
+}
+
 rtdata::Object *
 GenerationalAllocatorWithGC::forward(rtdata::Object *obj, const type::Type *objType) {
     ObjectHeader *header = headerOf(obj);
@@ -375,7 +625,9 @@ GenerationalAllocatorWithGC::forward(rtdata::Object *obj, const type::Type *objT
 
     // Already forwarded: return the forwardee.
     if (header->forwarded()) {
-        return static_cast<rtdata::Object *>(header->forwardedAddr());
+        auto *forwarded = static_cast<rtdata::Object *>(header->forwardedAddr());
+        recordObjectTypeUnlocked(forwarded, objType);
+        return forwarded;
     }
 
     size_t objSize = header->objSize();
@@ -452,6 +704,7 @@ GenerationalAllocatorWithGC::forward(rtdata::Object *obj, const type::Type *objT
     if (promoted) {
         ++stats_.promotedObjects;
     }
+    recordObjectTypeUnlocked(gcObj, objType);
     if (debugConfig_.logMovements) {
         CAMEL_LOG_INFO_S(
             "GC",
@@ -560,6 +813,7 @@ void GenerationalAllocatorWithGC::markObject(rtdata::Object *obj, const type::Ty
             continue;
 
         header->mark();
+        recordObjectTypeUnlocked(current, entry.type);
 
         // The parent layout supplies refType wherever static slot metadata is available.
         current->updateRefs(
@@ -586,6 +840,10 @@ void GenerationalAllocatorWithGC::sweepOldGen() {
     });
 
     stats_.freedElderObjects += unreachable.size();
+    for (ObjectHeader *header : unreachable) {
+        rememberedSet_.erase(header);
+        objectTypes_.erase(header);
+    }
     elderGenSpace_.freeBulk(unreachable);
 }
 
@@ -599,6 +857,10 @@ void GenerationalAllocatorWithGC::sweepLargeObjects() {
     });
 
     stats_.freedLargeObjects += unreachable.size();
+    for (ObjectHeader *header : unreachable) {
+        rememberedSet_.erase(header);
+        objectTypes_.erase(header);
+    }
     largeObjSpace_.freeBulk(unreachable);
 }
 

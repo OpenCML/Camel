@@ -438,6 +438,7 @@ void FastVMSchedPass::evalMarkedOperator(
 void FastVMSchedPass::evalMarkedOperator_map_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
     const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
+    auto *resultType     = currFrame.typeAt<ArrayType>(self);
 
     Array *res = Array::create(mm::autoSpace(), arrSize);
     currFrame.set(self, res);
@@ -455,13 +456,14 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
 #else
         slot_t result = call(site.entryPc, frame);
 #endif
-        currFrame.get<Array *>(self)->data()[i] = result;
+        currFrame.get<Array *>(self)->set<slot_t>(i, result, resultType);
     }
 }
 
 void FastVMSchedPass::evalMarkedOperator_apply_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
     const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
+    auto *arrType        = currFrame.typeAt<ArrayType>(nargs[0]);
 
     for (size_t i = 0; i < arrSize; ++i) {
         Array *arr                     = currFrame.get<Array *>(nargs[0]);
@@ -476,7 +478,7 @@ void FastVMSchedPass::evalMarkedOperator_apply_arr(
 #else
         slot_t result = call(site.entryPc, frame);
 #endif
-        currFrame.get<Array *>(nargs[0])->data()[i] = result;
+        currFrame.get<Array *>(nargs[0])->set<slot_t>(i, result, arrType);
     }
 
     currFrame.set(self, currFrame.get<Array *>(nargs[0]));
@@ -485,6 +487,7 @@ void FastVMSchedPass::evalMarkedOperator_apply_arr(
 void FastVMSchedPass::evalMarkedOperator_filter_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
     const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
+    auto *resultType     = currFrame.typeAt<ArrayType>(self);
 
     Array *filtered = Array::create(mm::autoSpace(), arrSize);
     currFrame.set(self, filtered);
@@ -504,11 +507,13 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
 #endif
 
         if (fromSlot<bool>(result)) {
-            currFrame.get<Array *>(self)->append(currFrame.get<Array *>(nargs[0])->data()[i]);
+            currFrame.get<Array *>(self)->append(
+                currFrame.get<Array *>(nargs[0])->data()[i],
+                resultType);
         }
     }
 
-    currFrame.get<Array *>(self)->shrinkToFit();
+    currFrame.get<Array *>(self)->shrinkToFit(resultType);
 }
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(

@@ -82,6 +82,7 @@ class Function : public rtdata::Object {
         if (closure_) {
             const type::TupleType *tupleTypePtr = tupleType();
             fnNew->closure_ = static_cast<Tuple *>(closure_->clone(allocator, tupleTypePtr, deep));
+            camel::core::mm::writeBarrier(fnNew, type, fnNew->closure_, tupleTypePtr);
         } else {
             fnNew->closure_ = nullptr;
         }

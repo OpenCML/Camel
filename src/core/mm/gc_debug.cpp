@@ -482,6 +482,7 @@ GenerationalAllocatorWithGC::verifyHeapUnlocked() {
         if (!current.object) {
             continue;
         }
+        recordObjectTypeUnlocked(current.object, current.type);
         current.object->updateRefs(
             [&](rtdata::Object *ref,
                 const type::Type *refType,
@@ -497,8 +498,82 @@ GenerationalAllocatorWithGC::verifyHeapUnlocked() {
             current.type);
     }
 
+    verifyRememberedSetUnlocked(issues);
+
     stats_.lastTracedRootReferenceCount = tracedRootRefs;
     return issues;
+}
+
+void GenerationalAllocatorWithGC::verifyRememberedSetUnlocked(
+    std::vector<HeapVerificationIssue> &issues) {
+    if (!enableYoungGenCopying_) {
+        return;
+    }
+
+    auto verifyOldRegion = [&](const auto &allocator, std::string_view regionName) {
+        allocator.iterateAllocated([&](ObjectHeader *header) {
+            if (!header || !header->isValid()) {
+                return;
+            }
+            const type::Type *objectType = knownObjectTypeUnlocked(header);
+            if (!objectType) {
+                return;
+            }
+            rtdata::Object *object = payloadOf<rtdata::Object>(header);
+
+            const auto edges = collectYoungReferenceEdges(object, objectType);
+            if (!edges.empty() && !rememberedSet_.contains(header)) {
+                for (const RememberedEdge &edge : edges) {
+                    issues.push_back(makeIssue(
+                        "Old-to-young reference is missing from remembered set",
+                        {},
+                        edge.info.describe(),
+                        edge.slotType ? edge.slotType->toString() : std::string{"<unknown>"},
+                        std::string(regionName),
+                        reinterpret_cast<uintptr_t>(edge.owner),
+                        reinterpret_cast<uintptr_t>(edge.target)));
+                }
+            }
+        });
+    };
+
+    verifyOldRegion(elderGenSpace_, "auto.elder");
+    verifyOldRegion(largeObjSpace_, "auto.large");
+
+    for (const auto &[header, entry] : rememberedSet_) {
+        if (!header || !header->isValid()) {
+            issues.push_back(makeIssue(
+                "Remembered set contains an invalid object header",
+                {},
+                {},
+                {},
+                "remembered",
+                reinterpret_cast<uintptr_t>(header)));
+            continue;
+        }
+        if (!inElderGenSpace(header) && !inLargeObjSpace(header)) {
+            issues.push_back(makeIssue(
+                "Remembered set contains a non-old owner",
+                {},
+                {},
+                {},
+                "remembered",
+                reinterpret_cast<uintptr_t>(header)));
+            continue;
+        }
+
+        rtdata::Object *object = entry.object ? entry.object : payloadOf<rtdata::Object>(header);
+        const type::Type *objectType = entry.type ? entry.type : knownObjectTypeUnlocked(header);
+        if (objectType && collectYoungReferenceEdges(object, objectType).empty()) {
+            issues.push_back(makeIssue(
+                "Remembered set contains an owner with no current young references",
+                {},
+                {},
+                objectType->toString(),
+                "remembered",
+                reinterpret_cast<uintptr_t>(object)));
+        }
+    }
 }
 
 } // namespace camel::core::mm

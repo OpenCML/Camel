@@ -124,6 +124,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
+name = "gc.remembered_set_minor_copying"
+desc = "Checks an old tuple retaining a young child through the remembered set survives repeated minor copying."
+kind = "behavior"
+case = "../../cases/smoke/core/fib10_pipeline.cml"
+args = ["${case}", "std::gc::remembered_set"]
+env = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both"]
+expect_exit = 0
+expect_stdout_contains = ["\"ok\":true", "\"kind\":\"gc.remembered_set\"", "Fibonacci(10) = 55"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
+timeout_ms = 4000
+
+[[tests]]
 name = "prl.gc_verify_stress"
 desc = "Checks GC verification and deterministic stress requests can run across PRL scheduler safepoints."
 kind = "behavior"

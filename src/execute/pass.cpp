@@ -101,6 +101,17 @@ class GcVerifyPass final : public GraphIRPass {
     }
 };
 
+class GcRememberedSetPass final : public GraphIRPass {
+  public:
+    explicit GcRememberedSetPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        camel::core::mm::autoSpace().debugRunRememberedSetSelfTest();
+        os << "{\"ok\":true,\"kind\":\"gc.remembered_set\"}\n";
+        return graph;
+    }
+};
+
 std::vector<std::string> splitPath(const std::string &path) {
     std::vector<std::string> result;
     size_t start = 0;
@@ -204,6 +215,7 @@ PassScopePtr initPassScope() {
                      scope({
                          {"snapshot", def(PASS(GcSnapshotPass))},
                          {"verify", def(PASS(GcVerifyPass))},
+                         {"remembered_set", def(PASS(GcRememberedSetPass))},
                      })},
                     {"nodevm", def(PASS(NodeVMSchedPass))},
                     {"fastvm",
@@ -291,6 +303,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::tns", "std::topo_node_seq"},
     {"std::gcsnap", "std::gc::snapshot"},
     {"std::gcverify", "std::gc::verify"},
+    {"std::gcremembered", "std::gc::remembered_set"},
     {"std::bc", "std::fastvm::bytecode"},
     {"std::lbc", "std::fastvm::linked_bytecode"},
     {"std::bin", "std::fastvm::jit::dump::bin"},

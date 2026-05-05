@@ -123,9 +123,9 @@ GenerationalAllocatorWithGC &autoSpace() {
                 .largeObjThreshold     = 4 * KB, // Large-object threshold.
                 .minorGCTriggerRatio   = 0.9f,   // Minor GC trigger ratio.
                 .majorGCTriggerRatio   = 0.8f,   // Major GC trigger ratio.
-                .enableYoungGenCopying =
-                    false // Runtime execution keeps raw pointers across allocations.
-            });
+                // Production remains address-stable by default; Phase 3 tests can opt into the
+                // copying path explicitly to exercise remembered-set behavior.
+                .enableYoungGenCopying = envFlag("CAMEL_GC_ENABLE_YOUNG_COPYING")});
         instance->configureDebug(debugConfigFromEnv());
         return instance;
     }();

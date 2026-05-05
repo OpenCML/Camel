@@ -1084,9 +1084,10 @@ void TaskflowExecSchedPass::mark_map_arr(
           }).name("MAP_ELEM");
     }
     sf.join();
-    Array *res = Array::create(camel::core::mm::autoSpace(), arr->size());
+    Array *res       = Array::create(camel::core::mm::autoSpace(), arr->size());
+    auto *resultType = frame->typeAt<ArrayType>(dataIndexOf(graph, nodeRef));
     for (size_t i = 0; i < arr->size(); ++i) {
-        res->set(i, results[i]);
+        res->set<slot_t>(i, results[i], resultType);
     }
     frame->set(dataIndexOf(graph, nodeRef), res);
 }
@@ -1107,8 +1108,10 @@ void TaskflowExecSchedPass::mark_apply_arr(
           }).name("APPLY_ELEM");
     }
     sf.join();
+    auto *arrType =
+        frame->typeAt<ArrayType>(dataIndexOf(graph, graph->normInputsOf(nodeRef).front()));
     for (size_t i = 0; i < arr->size(); ++i) {
-        arr->set(i, results[i]);
+        arr->set<slot_t>(i, results[i], arrType);
     }
     frame->set(dataIndexOf(graph, nodeRef), arr);
 }
@@ -1129,13 +1132,14 @@ void TaskflowExecSchedPass::mark_filter_arr(
           }).name("FILTER_PRED");
     }
     sf.join();
-    Array *filtered = Array::create(camel::core::mm::autoSpace(), 0);
+    Array *filtered  = Array::create(camel::core::mm::autoSpace(), 0);
+    auto *resultType = frame->typeAt<ArrayType>(dataIndexOf(graph, nodeRef));
     for (size_t i = 0; i < arr->size(); ++i) {
         if (keep[i]) {
-            filtered->append(arr->get<slot_t>(i));
+            filtered->append(arr->get<slot_t>(i), resultType);
         }
     }
-    filtered->shrinkToFit();
+    filtered->shrinkToFit(resultType);
     frame->set(dataIndexOf(graph, nodeRef), filtered);
 }
 

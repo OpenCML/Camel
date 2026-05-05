@@ -77,6 +77,29 @@ The current non-moving domains are intentional:
 - Native module bridges that hold auto-space objects across a safepoint must use `mm::RootHandle` or
   store the value in a traced frame/static slot before crossing the boundary.
 
+## Phase 3 Write Barrier Contract
+
+`autoSpace` owns the single authoritative old-to-young write barrier. Typed composite mutation paths
+call `mm::writeBarrier(owner, ownerType, storedSlot, storedType)` before storing GC-traced values
+into tuples, structs, arrays, fixed-array backing stores, and frame static tuples. The barrier is
+cheap when young copying is disabled, when the stored slot is null or not GC-traced, when the owner
+is not an old/large auto-space object, or when the target is not young.
+
+Remembered-set entries carry the old owner plus the owner's runtime layout. Minor GC treats those
+entries as typed roots, relocates their young targets, and keeps an entry if the old object still
+contains young references after relocation. Newly promoted objects are also scanned after copying and
+remembered when promotion leaves old-to-young edges behind.
+
+The verifier compares remembered entries against typed old/large objects whose layouts are known
+from barriers, roots, or relocation metadata. Missing remembered entries report the owner slot, slot
+type, region, and young target. `CAMEL_GC_ENABLE_YOUNG_COPYING=1` is an explicit test/debug opt-in;
+the production default remains address-stable.
+
+Intentionally unbarriered paths are limited to storage that is not an old auto-space container:
+dynamic frame slots are traced roots, graph-space static tuples are graph roots rather than
+auto-space owners, macro/static bridge buffers use their own lifetime contracts, and compile-time
+data objects do not participate in runtime auto-space collection.
+
 ## Phase 1 Observability Controls
 
 GC diagnostics are configured explicitly through environment variables so language-level test cases
@@ -90,6 +113,8 @@ do not need source changes:
 - `CAMEL_GC_STRESS_SAFEPOINT=N` requests a collection every `N` explicit runtime safepoints.
 - `CAMEL_GC_STRESS_MODE=minor|major|both` selects which collection kind stress requests use.
 - `CAMEL_GC_LOG_MOVES=1` emits movement records when the copying path relocates an object.
+- `CAMEL_GC_ENABLE_YOUNG_COPYING=1` enables the experimental young-copying path for targeted GC
+  tests. It is off by default.
 
 The verifier checks allocator structure, object header validity, region tags, and every typed
 GC-traced reference reachable from the named root sources. External roots are registered with stable
@@ -103,3 +128,5 @@ Two runtime passes expose the same infrastructure:
 - `std::gc::snapshot` / `std::gcsnap` prints JSON with region object counts/bytes, collection
   counters, deferred/emergency collection counters, moved/promoted/freed counters, root-source data,
   and remembered-set size.
+- `std::gc::remembered_set` runs a targeted old-to-young remembered-set self-test and leaves the
+  graph available for later passes.

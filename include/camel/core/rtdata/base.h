@@ -100,22 +100,6 @@ class Object {
         }
         return static_cast<T *>(obj->clone(allocator, type, deep));
     }
-
-    // template <typename T> void setField(T *&field, T *newValue, GenerationalAllocatorWithGC *gc)
-    // {
-    //     ObjectHeader *thisHeader = headerOf(this);
-
-    //     if (newValue) {
-    //         ObjectHeader *newHeader = headerOf(newValue);
-
-    //         // Write barrier: if an old-generation object references a young-generation object.
-    //         if (gc->inElderGenSpace(thisHeader) && gc->inYoungGenSpace(newHeader)) {
-    //             gc->recordOldToYoungRef(this, newValue);
-    //         }
-    //     }
-
-    //     field = newValue;
-    // }
 };
 
 template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b) noexcept {
@@ -130,6 +114,18 @@ template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b
 constexpr Object *NullRef = nullptr;
 
 } // namespace camel::core::rtdata
+
+namespace camel::core::mm {
+
+void writeBarrier(
+    camel::core::rtdata::Object *ownerObject, const camel::core::type::Type *ownerType,
+    slot_t storedSlot, const camel::core::type::Type *storedType);
+
+void writeBarrier(
+    camel::core::rtdata::Object *ownerObject, const camel::core::type::Type *ownerType,
+    camel::core::rtdata::Object *storedObject, const camel::core::type::Type *storedType);
+
+} // namespace camel::core::mm
 
 namespace camel::core::rtdata {
 

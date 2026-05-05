@@ -60,10 +60,15 @@ class FixedArray : public rtdata::Object {
 
     template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, "Index out of range");
-        if constexpr (std::is_same_v<T, rtdata::Object *>) {
-            // writeBarrier(arr[index], value);
-        }
         data_[index] = toSlot(value);
+    }
+
+    template <typename T> void set(size_t index, T value, const type::ArrayType *arrayType) {
+        ASSERT(index < size_, "Index out of range");
+        ASSERT(arrayType != nullptr, "ArrayType is required for a typed FixedArray write.");
+        const slot_t slot = rtdata::toSlot(value);
+        camel::core::mm::writeBarrier(this, arrayType, slot, arrayType->elemType());
+        data_[index] = slot;
     }
 
     virtual bool
@@ -128,9 +133,19 @@ class FixedArray : public rtdata::Object {
                         rtdata::Object *clonedRef =
                             oriRef->clone(allocator, arrayType->elemType(), true);
                         dstArr[i] = clonedRef;
+                        camel::core::mm::writeBarrier(
+                            newArray,
+                            arrayType,
+                            clonedRef,
+                            arrayType->elemType());
                     } else {
                         // Shallow copy: copy the reference directly.
                         dstArr[i] = const_cast<rtdata::Object *>(oriRef);
+                        camel::core::mm::writeBarrier(
+                            newArray,
+                            arrayType,
+                            dstArr[i],
+                            arrayType->elemType());
                     }
                 } else {
                     dstArr[i] = rtdata::NullRef;
@@ -242,16 +257,29 @@ class Array : public rtdata::Object {
 
     template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, "Index out of range");
-        if constexpr (std::is_same_v<T, rtdata::Object *>) {
-            // writeBarrier(arr[index], value);
-        }
         dataPtr_[index] = rtdata::toSlot(value);
+    }
+
+    template <typename T> void set(size_t index, T value, const type::ArrayType *arrayType) {
+        ASSERT(index < size_, "Index out of range");
+        ASSERT(arrayType != nullptr, "ArrayType is required for a typed Array write.");
+        const slot_t slot     = rtdata::toSlot(value);
+        rtdata::Object *owner = fixedArray_ ? static_cast<rtdata::Object *>(fixedArray_)
+                                            : static_cast<rtdata::Object *>(this);
+        camel::core::mm::writeBarrier(owner, arrayType, slot, arrayType->elemType());
+        dataPtr_[index] = slot;
     }
 
     void reserve(size_t newCapacity) {
         if (newCapacity <= capacity_)
             return;
-        reallocate(newCapacity);
+        reallocate(newCapacity, nullptr);
+    }
+
+    void reserve(size_t newCapacity, const type::ArrayType *arrayType) {
+        if (newCapacity <= capacity_)
+            return;
+        reallocate(newCapacity, arrayType);
     }
 
     template <typename T> void append(const T value) {
@@ -259,10 +287,20 @@ class Array : public rtdata::Object {
             reserve(capacity_ * 3 / 2);
         }
 
-        if constexpr (std::is_same_v<T, rtdata::Object *>) {
-            // writeBarrier(arr[size_], value);
-        }
         dataPtr_[size_++] = rtdata::toSlot(value);
+    }
+
+    template <typename T> void append(const T value, const type::ArrayType *arrayType) {
+        ASSERT(arrayType != nullptr, "ArrayType is required for a typed Array append.");
+        if (size_ >= capacity_) {
+            reserve(capacity_ * 3 / 2, arrayType);
+        }
+
+        const slot_t slot     = rtdata::toSlot(value);
+        rtdata::Object *owner = fixedArray_ ? static_cast<rtdata::Object *>(fixedArray_)
+                                            : static_cast<rtdata::Object *>(this);
+        camel::core::mm::writeBarrier(owner, arrayType, slot, arrayType->elemType());
+        dataPtr_[size_++] = slot;
     }
 
     void pop() {
@@ -279,7 +317,13 @@ class Array : public rtdata::Object {
     void shrinkToFit() {
         if (size_ == capacity_)
             return;
-        reallocate(size_ > 0 ? size_ : SMALL_ARRAY_SIZE);
+        reallocate(size_ > 0 ? size_ : SMALL_ARRAY_SIZE, nullptr);
+    }
+
+    void shrinkToFit(const type::ArrayType *arrayType) {
+        if (size_ == capacity_)
+            return;
+        reallocate(size_ > 0 ? size_ : SMALL_ARRAY_SIZE, arrayType);
     }
 
     virtual bool
@@ -338,6 +382,7 @@ class Array : public rtdata::Object {
             newArray->fixedArray_ =
                 reinterpret_cast<FixedArray *>(fixedArray_->clone(allocator, type, deep));
             newArray->dataPtr_ = newArray->fixedArray_->data();
+            camel::core::mm::writeBarrier(newArray, arrayType, newArray->fixedArray_, arrayType);
         } else {
             // Inline storage: copy the data ourselves.
             newArray->fixedArray_ = nullptr;
@@ -353,6 +398,11 @@ class Array : public rtdata::Object {
                     if (oriRef) {
                         dstArr[i] = deep ? oriRef->clone(allocator, arrayType->elemType(), true)
                                          : const_cast<rtdata::Object *>(oriRef);
+                        camel::core::mm::writeBarrier(
+                            newArray,
+                            arrayType,
+                            dstArr[i],
+                            arrayType->elemType());
                     } else {
                         dstArr[i] = rtdata::NullRef;
                     }
@@ -453,10 +503,19 @@ class Array : public rtdata::Object {
         }
     }
 
-    void reallocate(size_t newCapacity) {
+    void reallocate(size_t newCapacity, const type::ArrayType *arrayType) {
         if (UNLIKELY(newCapacity <= SMALL_ARRAY_SIZE)) {
             if (fixedArray_ != nullptr && size_ > 0) {
                 std::memcpy(inlineData_, dataPtr_, size_ * sizeof(slot_t));
+                if (arrayType && type::isGCTraced(arrayType->elemTypeCode())) {
+                    for (size_t i = 0; i < size_; ++i) {
+                        camel::core::mm::writeBarrier(
+                            this,
+                            arrayType,
+                            inlineData_[i],
+                            arrayType->elemType());
+                    }
+                }
             }
             fixedArray_ = nullptr;
             dataPtr_    = inlineData_;
@@ -465,10 +524,22 @@ class Array : public rtdata::Object {
             FixedArray *newArray = FixedArray::create(newCapacity, *allocator_);
             if (size_ > 0) {
                 std::memcpy(newArray->data(), dataPtr_, size_ * sizeof(slot_t));
+                if (arrayType && type::isGCTraced(arrayType->elemTypeCode())) {
+                    for (size_t i = 0; i < size_; ++i) {
+                        camel::core::mm::writeBarrier(
+                            newArray,
+                            arrayType,
+                            newArray->data()[i],
+                            arrayType->elemType());
+                    }
+                }
             }
             fixedArray_ = newArray;
             dataPtr_    = newArray->data();
             capacity_   = newCapacity;
+            if (arrayType) {
+                camel::core::mm::writeBarrier(this, arrayType, fixedArray_, arrayType);
+            }
         }
     }
 

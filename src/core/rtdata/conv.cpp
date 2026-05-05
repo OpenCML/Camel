@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 07, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,9 @@
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/data/composite/tuple.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/struct.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/graph.h"
 
 using namespace camel::core::data;
@@ -96,17 +99,18 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
     }
 
     case TypeCode::Array: {
-        auto arrayData = tt::as_shared<camel::core::data::ArrayData>(data);
-        Array *gcArray = Array::create(allocator, 0);
+        auto arrayData        = tt::as_shared<camel::core::data::ArrayData>(data);
+        const auto *arrayType = tt::as_ptr<camel::core::type::ArrayType>(arrayData->type());
+        Array *gcArray        = Array::create(allocator, 0);
         for (const auto &elem : arrayData->raw()) {
             if (elem->type()->isGCTraced()) {
                 Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);
-                gcArray->append<Object *>(elemRef);
+                gcArray->append<Object *>(elemRef, arrayType);
             } else if (camel::core::type::isPrimitive(elem->type()->code())) {
                 slot_t slot = makeSlotFromPrimitiveData(elem);
-                gcArray->append<slot_t>(slot);
+                gcArray->append<slot_t>(slot, arrayType);
             } else {
-                gcArray->append<slot_t>(NullSlot);
+                gcArray->append<slot_t>(NullSlot, arrayType);
             }
         }
         return gcArray;
@@ -121,12 +125,12 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
             const auto &elem = elems[i];
             if (elem->type()->isGCTraced()) {
                 Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);
-                gcTuple->set<Object *>(i, elemRef);
+                gcTuple->set<Object *>(i, elemRef, tupleType);
             } else if (elem->type()->isPrimitive()) {
                 slot_t slot = makeSlotFromPrimitiveData(elem);
-                gcTuple->set<slot_t>(i, slot);
+                gcTuple->set<slot_t>(i, slot, tupleType);
             } else {
-                gcTuple->set<slot_t>(i, NullSlot);
+                gcTuple->set<slot_t>(i, NullSlot, tupleType);
             }
         }
         return gcTuple;
@@ -154,8 +158,9 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
         auto funcData = tt::as_shared<camel::core::data::FunctionData>(data);
         auto *graph   = funcData->graph();
         ASSERT(graph != nullptr, "FunctionData must carry a runtime graph.");
-        auto *gcFunc   = ::Function::create(graph, graph->closureType(), allocator);
-        Tuple *gcTuple = gcFunc->tuple();
+        auto *gcFunc            = ::Function::create(graph, graph->closureType(), allocator);
+        Tuple *gcTuple          = gcFunc->tuple();
+        const auto *closureType = graph->closureType();
 
         if (gcTuple->size() == 0) {
             return gcFunc;
@@ -176,18 +181,18 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
                 const auto &elem = closureData[i];
                 if (elem->type()->isGCTraced()) {
                     Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);
-                    gcTuple->set<Object *>(i, elemRef);
+                    gcTuple->set<Object *>(i, elemRef, closureType);
                 } else if (elem->type()->isPrimitive()) {
                     slot_t slot = makeSlotFromPrimitiveData(elem);
-                    gcTuple->set<slot_t>(i, slot);
+                    gcTuple->set<slot_t>(i, slot, closureType);
                 } else {
-                    gcTuple->set<slot_t>(i, NullSlot);
+                    gcTuple->set<slot_t>(i, NullSlot, closureType);
                 }
             }
         } else {
             // No closure values were captured, so fill with nulls.
             for (size_t i = 0; i < gcTuple->size(); ++i) {
-                gcTuple->set<slot_t>(i, NullSlot);
+                gcTuple->set<slot_t>(i, NullSlot, closureType);
             }
         }
 

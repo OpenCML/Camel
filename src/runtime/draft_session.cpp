@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -224,7 +224,8 @@ slot_t cloneStaticSlot(
                               closureType->typeAt(i),
                               rewritten,
                               objectCache)
-                        : closure->get<slot_t>(i));
+                        : closure->get<slot_t>(i),
+                    closureType);
             }
         }
         return toSlot<Object *>(cloned);
@@ -243,7 +244,8 @@ slot_t cloneStaticSlot(
                                                                          tupleType->typeAt(i),
                                                                          rewritten,
                                                                          objectCache)
-                                                                   : tuple->get<slot_t>(i));
+                                                                   : tuple->get<slot_t>(i),
+                tupleType);
         }
         return toSlot<Object *>(clonedTuple);
     }
@@ -261,7 +263,8 @@ slot_t cloneStaticSlot(
                                                                           arrayType->elemType(),
                                                                           rewritten,
                                                                           objectCache)
-                                                                    : array->get<slot_t>(i));
+                                                                    : array->get<slot_t>(i),
+                arrayType);
         }
         return toSlot<Object *>(clonedArray);
     }
@@ -279,7 +282,8 @@ slot_t cloneStaticSlot(
                                                                           structType->typeAt(i),
                                                                           rewritten,
                                                                           objectCache)
-                                                                    : st->get<slot_t>(i));
+                                                                    : st->get<slot_t>(i),
+                structType);
         }
         return toSlot<Object *>(clonedStruct);
     }

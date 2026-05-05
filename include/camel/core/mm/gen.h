@@ -29,7 +29,7 @@
 #include <mutex>
 #include <string>
 #include <string_view>
-#include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 // ============================================================================
@@ -229,6 +229,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         uint64_t deferredCollections          = 0;
         uint64_t requestedCollections         = 0;
         uint64_t allocationFailureCollections = 0;
+        uint64_t writeBarriers                = 0;
         uint64_t minorCollections             = 0;
         uint64_t majorCollections             = 0;
         uint64_t movedObjects                 = 0;
@@ -276,7 +277,17 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     void safepoint(std::string_view reason = {});
 
+    void writeBarrier(
+        rtdata::Object *ownerObject, const type::Type *ownerType, slot_t storedSlot,
+        const type::Type *storedType);
+
+    void writeBarrier(
+        rtdata::Object *ownerObject, const type::Type *ownerType, rtdata::Object *storedObject,
+        const type::Type *storedType);
+
     void recordOldToYoungRef(void *oldObj, void *youngObj);
+
+    bool debugRunRememberedSetSelfTest();
 
     // Minor GC: collect the young generation (Birth + From).
     void minorGC();
@@ -373,7 +384,14 @@ class GenerationalAllocatorWithGC : public IAllocator {
         ExternalRootTracer tracer;
     };
     std::vector<ExternalRootTracerEntry> externalRootTracers_;
-    std::unordered_set<ObjectHeader *> rememberedSet_; // Remembered set: old→young edges
+    struct RememberedSetEntry {
+        rtdata::Object *object = nullptr;
+        const type::Type *type = nullptr;
+    };
+    // Old/large auto-space objects that currently contain at least one young reference. The typed
+    // layout is required because composite objects do not carry their own runtime type metadata.
+    std::unordered_map<ObjectHeader *, RememberedSetEntry> rememberedSet_;
+    std::unordered_map<ObjectHeader *, const type::Type *> objectTypes_;
     DebugConfig debugConfig_{};
     RuntimeStats stats_{};
     CollectionKind pendingSafepointCollection_ = CollectionKind::None;
@@ -387,9 +405,31 @@ class GenerationalAllocatorWithGC : public IAllocator {
     std::vector<TraceEntry> relocationScan_;
     size_t relocationScanIndex_ = 0;
 
+    ObjectHeader *autoHeaderForPayload(rtdata::Object *object) const;
+
     bool inYoungGenSpace(ObjectHeader *header) const;
     bool inElderGenSpace(ObjectHeader *header) const;
     bool inLargeObjSpace(ObjectHeader *header) const;
+
+    static bool isPreciseGCType(const type::Type *objectType);
+
+    void recordObjectTypeUnlocked(rtdata::Object *object, const type::Type *objectType);
+
+    const type::Type *knownObjectTypeUnlocked(ObjectHeader *header) const;
+
+    struct RememberedEdge {
+        ObjectHeader *ownerHeader   = nullptr;
+        rtdata::Object *owner       = nullptr;
+        const type::Type *ownerType = nullptr;
+        rtdata::Object *target      = nullptr;
+        const type::Type *slotType  = nullptr;
+        rtdata::RefTraceInfo info;
+    };
+
+    std::vector<RememberedEdge>
+    collectYoungReferenceEdges(rtdata::Object *object, const type::Type *objectType) const;
+
+    void rememberOldObjectIfYoungRefsUnlocked(rtdata::Object *object, const type::Type *objectType);
 
     rtdata::Object *forward(rtdata::Object *obj, const type::Type *objType);
 
@@ -440,6 +480,8 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     std::vector<HeapVerificationIssue> verifyHeapUnlocked();
 
+    void verifyRememberedSetUnlocked(std::vector<HeapVerificationIssue> &issues);
+
     // Mark phase: depth-first mark all reachable objects.
     void markPhase();
 
@@ -453,5 +495,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // Sweep unmarked objects from the large-object space.
     void sweepLargeObjects();
 };
+
+GenerationalAllocatorWithGC &autoSpace();
 
 } // namespace camel::core::mm

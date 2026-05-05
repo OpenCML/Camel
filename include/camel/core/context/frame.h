@@ -206,7 +206,7 @@ class Frame : public rtdata::Object {
                         idx,
                         staticArea_->size()));
             });
-            staticArea_->set<T>(idx, value);
+            staticArea_->set<T>(idx, value, staticDataLayout());
         }
     }
 
@@ -295,8 +295,8 @@ class Frame : public rtdata::Object {
 class FrameView {
   public:
     FrameView(const Frame *frame)
-        : staticArea_(frame->staticArea_), dynamicArea_(const_cast<slot_t *>(frame->dynamicArea_)) {
-    }
+        : staticArea_(frame->staticArea_), staticDataType_(frame->staticDataLayout()),
+          dynamicArea_(const_cast<slot_t *>(frame->dynamicArea_)) {}
 
     template <typename T> T get(data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
@@ -342,12 +342,13 @@ class FrameView {
                         idx,
                         staticArea_->size()));
             });
-            staticArea_->set<T>(idx, value);
+            staticArea_->set<T>(idx, value, staticDataType_);
         }
     }
 
   private:
     ::Tuple *staticArea_;
+    const type::TupleType *staticDataType_;
     slot_t *dynamicArea_;
 };
 
@@ -652,7 +653,7 @@ class SlotArgsView : public ArgsView {
         if (dataIdx > 0)
             slots_[dataIdx] = value;
         else
-            staticArea_->set<slot_t>(static_cast<size_t>(-dataIdx), value);
+            staticArea_->set<slot_t>(static_cast<size_t>(-dataIdx), value, staticDataType_);
     }
 
     type::TypeCode code(size_t index) const override {

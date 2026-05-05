@@ -56,10 +56,15 @@ class Tuple : public rtdata::Object {
 
     template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, "Index out of range");
-        if constexpr (std::is_same_v<T, rtdata::Object *>) {
-            // writeBarrier(arr[index], value);
-        }
         data_[index] = rtdata::toSlot(value);
+    }
+
+    template <typename T> void set(size_t index, T value, const type::TupleType *tupleType) {
+        ASSERT(index < size_, "Index out of range");
+        ASSERT(tupleType != nullptr && index < tupleType->size(), "TupleType is invalid.");
+        const slot_t slot = rtdata::toSlot(value);
+        camel::core::mm::writeBarrier(this, tupleType, slot, tupleType->typeAt(index));
+        data_[index] = slot;
     }
 
     slot_t *data() { return data_; }
@@ -132,6 +137,7 @@ class Tuple : public rtdata::Object {
                     }
                 }
                 reinterpret_cast<rtdata::Object **>(dst)[i] = newRef;
+                camel::core::mm::writeBarrier(newTuple, tupleType, newRef, tupleType->typeAt(i));
             } else {
                 // Non-reference types: copy the slot data directly.
                 dst[i] = src[i];
