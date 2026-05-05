@@ -58,10 +58,12 @@ export function getCmakeEnv() {
     return { ...process.env, PATH: [...normal, ...nodeParts].join(path.delimiter) }
 }
 
-/** Windows + Clang: 显式指定编译器，因 Conan 工具链可能未设置，CMake 会误选 MSVC */
+/** 显式指定 Clang，避免 CMake/Conan 在 CI 或本地误选 GCC/MSVC。 */
 export function getCmakeClangFlags() {
-    if (process.platform !== 'win32') return ''
-    return '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_RC_COMPILER=llvm-rc'
+    if (process.platform === 'win32') {
+        return '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_RC_COMPILER=llvm-rc'
+    }
+    return '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++'
 }
 
 export function removeDir(dir) {
