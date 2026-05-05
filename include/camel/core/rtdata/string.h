@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -174,9 +174,8 @@ class String : public rtdata::Object {
     }
 
     virtual void onMoved() override {}
-    virtual void updateRefs(
-        const std::function<rtdata::Object *(rtdata::Object *)> &,
-        const type::Type * /*type*/) override {}
+    virtual void
+    updateRefs(const rtdata::Object::RefRelocator &, const type::Type * /*type*/) override {}
 
     static constexpr size_t npos = static_cast<size_t>(-1);
 

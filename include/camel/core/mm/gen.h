@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -184,10 +184,11 @@
 namespace camel::core::mm {
 
 namespace rtdata = camel::core::rtdata;
+namespace type   = camel::core::type;
 
 class GenerationalAllocatorWithGC : public IAllocator {
   public:
-    using RefRelocator       = std::function<rtdata::Object *(rtdata::Object *)>;
+    using RefRelocator       = rtdata::Object::RefRelocator;
     using ExternalRootTracer = std::function<void(const RefRelocator &)>;
 
     struct Config {
@@ -336,33 +337,33 @@ class GenerationalAllocatorWithGC : public IAllocator {
         inGC_ = true;
 
         try {
+            relocationScan_.clear();
+            relocationScanIndex_ = 0;
+
             // 1. Swap Cache and Haven
             cacheSpace_.swap(havenSpace_);
             havenSpace_.reset(); // Clear the new Haven (To) space
 
-            // 2. Forward young-gen objects referenced from roots
-            for (rtdata::Object *&rootObj : *rootObjectSet_) {
-                if (!rootObj)
-                    continue;
+            auto relocateYoung =
+                [this](rtdata::Object *ref, const type::Type *refType) -> rtdata::Object * {
+                return forwardYoungRef(ref, refType);
+            };
 
-                ObjectHeader *header = headerOf(rootObj);
+            // 2. Forward young-gen objects referenced from roots. The root set currently stores
+            // runtime GCGraph carriers, which live in graphSpace rather than autoSpace; tracing the
+            // root object's fields is therefore required to update static data roots.
+            if (rootObjectSet_) {
+                for (rtdata::Object *&rootObj : *rootObjectSet_) {
+                    if (!rootObj) {
+                        continue;
+                    }
 
-                // Only young-gen objects need forwarding here
-                if (inYoungGenSpace(header)) {
-                    rootObj = forward(rootObj);
+                    rootObj = forwardYoungRef(rootObj, nullptr);
+                    rootObj->updateRefs(relocateYoung, nullptr);
                 }
             }
             for (const auto &[_, tracer] : externalRootTracers_) {
-                tracer([this](rtdata::Object *ref) -> rtdata::Object * {
-                    if (!ref) {
-                        return nullptr;
-                    }
-                    ObjectHeader *refHeader = headerOf(ref);
-                    if (inYoungGenSpace(refHeader)) {
-                        return forward(ref);
-                    }
-                    return ref;
-                });
+                tracer(relocateYoung);
             }
 
             // 3. Process old-to-young references (remembered set)
@@ -374,36 +375,26 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
                 // Walk and update refs in old-gen objects (layout is per Object / allocator
                 // contract)
-                oldObj->updateRefs(
-                    [this](rtdata::Object *ref) -> rtdata::Object * {
-                        if (!ref)
-                            return nullptr;
-
-                        ObjectHeader *refHeader = headerOf(ref);
-
-                        // Young-gen targets must be forwarded (copied)
-                        if (inYoungGenSpace(refHeader)) {
-                            return forward(ref);
-                        }
-
-                        return ref;
-                    },
-                    nullptr);
+                oldObj->updateRefs(relocateYoung, nullptr);
             }
 
             // Remembered set is stale after the young-gen collection
             rememberedSet_.clear();
 
-            // 4. Cheney scan over To (haven) space
-            cheneyScavenge();
+            // 4. Scan copied/promoted objects with their static layouts.
+            scanRelocatedObjects();
 
             // 5. Reset Birth and Cache
             birthSpace_.reset();
             cacheSpace_.reset();
 
-            inGC_ = false;
+            relocationScan_.clear();
+            relocationScanIndex_ = 0;
+            inGC_                = false;
         } catch (...) {
-            inGC_ = false;
+            relocationScan_.clear();
+            relocationScanIndex_ = 0;
+            inGC_                = false;
             throw;
         }
     }
@@ -477,23 +468,37 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // ============================================================================
     // GC state and roots
     // ============================================================================
-    bool inGC_ = false;                              // Reentrancy guard for nested GC
-    std::vector<rtdata::Object *> *rootObjectSet_{}; // Roots: stack, globals, etc.
+    bool inGC_ = false; // Reentrancy guard for nested GC
+    // Untyped roots are reserved for graph carriers whose updateRefs implementation owns its
+    // layout. Runtime frames and temporary values must register typed external tracers instead.
+    std::vector<rtdata::Object *> *rootObjectSet_{};
     std::vector<std::pair<const void *, ExternalRootTracer>> externalRootTracers_;
     std::unordered_set<ObjectHeader *> rememberedSet_; // Remembered set: old→young edges
     mutable std::mutex mutex_;
 
+    struct TraceEntry {
+        rtdata::Object *object = nullptr;
+        const type::Type *type = nullptr;
+    };
+
+    std::vector<TraceEntry> relocationScan_;
+    size_t relocationScanIndex_ = 0;
+
     bool inYoungGenSpace(ObjectHeader *header) const {
-        return header->region_ == AllocRegion::YoungGen;
+        return header && header->region_ == AllocRegion::YoungGen &&
+               (birthSpace_.contains(header) || havenSpace_.contains(header) ||
+                cacheSpace_.contains(header));
     }
     bool inElderGenSpace(ObjectHeader *header) const {
-        return header->region_ == AllocRegion::ElderGen;
+        return header && header->region_ == AllocRegion::ElderGen &&
+               elderGenSpace_.contains(header);
     }
     bool inLargeObjSpace(ObjectHeader *header) const {
-        return header->region_ == AllocRegion::LargeObj;
+        return header && header->region_ == AllocRegion::LargeObj &&
+               largeObjSpace_.contains(payloadOf<rtdata::Object>(header));
     }
 
-    rtdata::Object *forward(rtdata::Object *obj) {
+    rtdata::Object *forward(rtdata::Object *obj, const type::Type *objType) {
         ObjectHeader *header = headerOf(obj);
         ASSERT(header->isValid(), "Invalid ObjectHeader encountered during forwarding");
 
@@ -569,6 +574,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         // Notify the moved object (fix interior pointers, etc.)
         rtdata::Object *gcObj = reinterpret_cast<rtdata::Object *>(newObj);
         gcObj->onMoved();
+        relocationScan_.push_back(TraceEntry{gcObj, objType});
 
         // Install forwarding pointer in the old header
         header->forward(newObj);
@@ -576,41 +582,28 @@ class GenerationalAllocatorWithGC : public IAllocator {
         return static_cast<rtdata::Object *>(newObj);
     }
 
-    // Cheney scan: BFS over copied objects in To space
-    void cheneyScavenge() {
-        std::byte *scan = havenSpace_.start(); // Scan cursor in To space
-        std::byte *free = havenSpace_.top();   // Allocation frontier
+    rtdata::Object *forwardYoungRef(rtdata::Object *ref, const type::Type *refType) {
+        if (!ref) {
+            return nullptr;
+        }
+        ObjectHeader *refHeader = headerOf(ref);
+        if (inYoungGenSpace(refHeader)) {
+            return forward(ref, refType);
+        }
+        return ref;
+    }
 
-        // BFS: scan catches up to free as copies append
-        while (scan < free) {
-            ObjectHeader *header = reinterpret_cast<ObjectHeader *>(scan);
-            void *payload        = scan + sizeof(ObjectHeader);
-
-            // Actual heap object
-            rtdata::Object *ref = reinterpret_cast<rtdata::Object *>(payload);
-
-            // Forward all reference fields (layout per Object / allocator contract)
-            ref->updateRefs(
-                [this](rtdata::Object *ref) -> rtdata::Object * {
-                    if (!ref)
-                        return nullptr;
-
-                    ObjectHeader *refHeader = headerOf(ref);
-
-                    // Old-gen targets are not moved by minor GC
-                    if (!inYoungGenSpace(refHeader)) {
-                        return ref;
-                    }
-
-                    // Copy or follow existing forward
-                    return forward(ref);
+    void scanRelocatedObjects() {
+        while (relocationScanIndex_ < relocationScan_.size()) {
+            TraceEntry entry = relocationScan_[relocationScanIndex_++];
+            if (!entry.object || !entry.type) {
+                continue;
+            }
+            entry.object->updateRefs(
+                [this](rtdata::Object *ref, const type::Type *refType) -> rtdata::Object * {
+                    return forwardYoungRef(ref, refType);
                 },
-                nullptr);
-
-            // Advance to next object in To space
-            scan += header->size();
-            // free may move when forward() copies more young objects
-            free = havenSpace_.top();
+                entry.type);
         }
     }
 
@@ -619,16 +612,18 @@ class GenerationalAllocatorWithGC : public IAllocator {
         // Clear all marks.
         clearMarks();
 
-        // Start marking from the root set.
-        for (rtdata::Object *root : *rootObjectSet_) {
-            if (root) {
-                markObject(root);
+        if (rootObjectSet_) {
+            // Start marking from the root set.
+            for (rtdata::Object *root : *rootObjectSet_) {
+                if (root) {
+                    markObject(root, nullptr);
+                }
             }
         }
         for (const auto &[_, tracer] : externalRootTracers_) {
-            tracer([this](rtdata::Object *ref) -> rtdata::Object * {
+            tracer([this](rtdata::Object *ref, const type::Type *refType) -> rtdata::Object * {
                 if (ref) {
-                    markObject(ref);
+                    markObject(ref, refType);
                 }
                 return ref;
             });
@@ -636,6 +631,12 @@ class GenerationalAllocatorWithGC : public IAllocator {
     }
 
     void clearMarks() {
+        // Young generation marks matter when the copying collector is enabled. Clearing them keeps
+        // a later major collection from skipping an already-marked survivor and missing its edges.
+        birthSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
+        havenSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
+        cacheSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
+
         // Clear old-generation marks.
         elderGenSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
 
@@ -656,15 +657,16 @@ class GenerationalAllocatorWithGC : public IAllocator {
         }
     }
 
-    void markObject(rtdata::Object *obj) {
+    void markObject(rtdata::Object *obj, const type::Type *objType) {
         if (!obj)
             return;
 
-        std::vector<rtdata::Object *> markStack;
-        markStack.push_back(obj);
+        std::vector<TraceEntry> markStack;
+        markStack.push_back(TraceEntry{obj, objType});
 
         while (!markStack.empty()) {
-            rtdata::Object *current = markStack.back();
+            TraceEntry entry        = markStack.back();
+            rtdata::Object *current = entry.object;
             markStack.pop_back();
 
             if (!current)
@@ -681,16 +683,15 @@ class GenerationalAllocatorWithGC : public IAllocator {
             header->mark();
 
             // Collect all referenced objects onto the stack (the type is
-            // agreed between each Object and the allocator at creation time;
-            // none is available here yet).
+            // supplied by the parent layout wherever the runtime has one.
             current->updateRefs(
-                [&markStack](rtdata::Object *ref) -> rtdata::Object * {
+                [&markStack](rtdata::Object *ref, const type::Type *refType) -> rtdata::Object * {
                     if (ref) {
-                        markStack.push_back(ref);
+                        markStack.push_back(TraceEntry{ref, refType});
                     }
                     return ref;
                 },
-                nullptr);
+                entry.type);
         }
     }
 

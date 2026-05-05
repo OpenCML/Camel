@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -168,9 +168,8 @@ class FixedArray : public rtdata::Object {
         // its address is computed by offset at access time.
     }
 
-    virtual void updateRefs(
-        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
-        const type::Type *type) override {
+    virtual void
+    updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override {
         if (!type || type->code() != type::TypeCode::Array)
             return;
         const type::ArrayType *arrayType = static_cast<const type::ArrayType *>(type);
@@ -183,7 +182,7 @@ class FixedArray : public rtdata::Object {
 
         for (size_t i = 0; i < size_; ++i) {
             if (rtdata::Object *&ref = refArr[i]) {
-                ref = relocate(ref);
+                ref = relocate(ref, arrayType->elemType());
             }
         }
     }
@@ -381,16 +380,29 @@ class Array : public rtdata::Object {
         }
     }
 
-    virtual void updateRefs(
-        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
-        const type::Type *type) override {
+    virtual void
+    updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override {
         if (!type || type->code() != type::TypeCode::Array)
             return;
-        // Update the reference to FixedArray.
+        const type::ArrayType *arrayType = static_cast<const type::ArrayType *>(type);
+        type::Type *elemType             = arrayType->elemType();
+
         if (fixedArray_) {
-            rtdata::Object *newPtr = relocate(fixedArray_);
+            rtdata::Object *newPtr = relocate(fixedArray_, type);
             fixedArray_            = static_cast<FixedArray *>(newPtr);
             dataPtr_               = fixedArray_->data();
+            return;
+        }
+
+        if (!type::isGCTraced(arrayType->elemTypeCode())) {
+            return;
+        }
+
+        rtdata::Object **refArr = reinterpret_cast<rtdata::Object **>(inlineData_);
+        for (size_t i = 0; i < size_; ++i) {
+            if (rtdata::Object *&ref = refArr[i]) {
+                ref = relocate(ref, elemType);
+            }
         }
     }
 

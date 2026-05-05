@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -160,9 +160,8 @@ class Tuple : public rtdata::Object {
 
     virtual void onMoved() override {}
 
-    virtual void updateRefs(
-        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
-        const type::Type *type) override {
+    virtual void
+    updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override {
         if (!type || type->code() != type::TypeCode::Tuple)
             return;
         const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
@@ -172,7 +171,7 @@ class Tuple : public rtdata::Object {
         for (size_t i = 0; i < size_; ++i) {
             if (type::isGCTraced(codes[i])) {
                 if (rtdata::Object *&ref = refArr[i]) {
-                    ref = relocate(ref);
+                    ref = relocate(ref, tupleType->typeAt(i));
                 }
             }
         }

@@ -184,14 +184,15 @@ void ParameterObject::print(std::ostream &os, const Type *type) const {
     os << ")";
 }
 
-void ParameterObject::updateRefs(
-    const std::function<Object *(Object *)> &relocate, const Type *type) {
+void ParameterObject::updateRefs(const Object::RefRelocator &relocate, const Type *type) {
     (void)type;
     if (data_) {
-        data_ = static_cast<tensor::TensorObject *>(relocate(data_));
+        data_ = static_cast<tensor::TensorObject *>(
+            relocate(data_, camel::tensor::TensorType::Default()));
     }
     if (grad_) {
-        grad_ = static_cast<tensor::TensorObject *>(relocate(grad_));
+        grad_ = static_cast<tensor::TensorObject *>(
+            relocate(grad_, camel::tensor::TensorType::Default()));
     }
 }
 

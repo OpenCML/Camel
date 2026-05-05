@@ -87,9 +87,7 @@ class TensorObject : public rtdata::Object {
     clone(mm::IAllocator &allocator, const type::Type *type, bool deep = false) const override;
     void print(std::ostream &os, const type::Type *type) const override;
     void onMoved() override;
-    void updateRefs(
-        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
-        const type::Type *type) override;
+    void updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override;
 
   private:
     TensorObject(type::TypeCode dtype, uint32_t rank, uint64_t numel, uint64_t byteSize);

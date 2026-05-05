@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -96,12 +96,12 @@ class Function : public rtdata::Object {
         // updated through updateRefs when the GC relocates traced objects.
     }
 
-    virtual void updateRefs(
-        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
-        const type::Type *type) override {
+    virtual void
+    updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override {
+        (void)type;
         if (closure_) {
             const type::TupleType *tupleTypePtr = tupleType();
-            closure_->updateRefs(relocate, tupleTypePtr);
+            closure_ = static_cast<Tuple *>(relocate(closure_, tupleTypePtr));
         }
     }
 

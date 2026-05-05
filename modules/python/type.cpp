@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: Mar. 07, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,8 +36,8 @@ PyObjectType::PyObjectType(TypeCode code, size_t paramCount, Type **params)
     : OtherType(code, paramCount, params) {}
 
 PyObjectType *PyObjectType::create() {
-    void *mem = mm::autoSpace().alloc(sizeof(PyObjectType), alignof(PyObjectType));
-    ASSERT(mem != nullptr, "Failed to allocate PyObjectType from autoSpace");
+    void *mem = mm::permSpace().alloc(sizeof(PyObjectType), alignof(PyObjectType));
+    ASSERT(mem != nullptr, "Failed to allocate PyObjectType from permSpace");
     return new (mem) PyObjectType(typeCode());
 }
 
@@ -106,8 +106,8 @@ bool PyObjectType::assignableFrom(Type *sourceType) const {
 
 OtherType *PyObjectType::cloneWithParams(std::span<Type *const> params) const {
     Type **p  = OtherType::copyParams(params);
-    void *mem = mm::autoSpace().alloc(sizeof(PyObjectType), alignof(PyObjectType));
-    ASSERT(mem != nullptr, "Failed to allocate PyObjectType from autoSpace");
+    void *mem = mm::permSpace().alloc(sizeof(PyObjectType), alignof(PyObjectType));
+    ASSERT(mem != nullptr, "Failed to allocate PyObjectType from permSpace");
     return new (mem) PyObjectType(code_, params.size(), p);
 }
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 09, 2026
- * Updated: Apr. 11, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,9 +25,16 @@
 namespace camel::core::context {
 
 TaskflowFramePool::TaskflowFramePool(size_t chunkBytes, size_t minChunkFrames)
-    : chunkBytes_(chunkBytes), minChunkFrames_(std::max<size_t>(1, minChunkFrames)) {}
+    : chunkBytes_(chunkBytes), minChunkFrames_(std::max<size_t>(1, minChunkFrames)) {
+    camel::core::mm::autoSpace().registerExternalRootTracer(
+        this,
+        [this](const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) {
+            traceActiveFrames(relocate);
+        });
+}
 
 TaskflowFramePool::~TaskflowFramePool() {
+    camel::core::mm::autoSpace().unregisterExternalRootTracer(this);
     for (auto &[_, arena] : arenas_) {
         for (std::byte *chunk : arena->chunks)
             std::free(chunk);
@@ -87,6 +94,7 @@ void TaskflowFramePool::allocateChunk(GraphArena &arena, size_t minFrameCount) {
             arena.runtimeDataType->size(),
             camel::core::mm::kDebugUninitializedSlot);
 #endif
+        clearGcSlots(frame);
         arena.freeFrames.push_back(frame);
     }
 }
@@ -104,6 +112,8 @@ Frame *TaskflowFramePool::acquire(camel::runtime::GCGraph *graph) {
         arena.runtimeDataType->size(),
         camel::core::mm::kDebugUninitializedSlot);
 #endif
+    clearGcSlots(frame);
+    arena.activeFrames.insert(frame);
     return frame;
 }
 
@@ -114,6 +124,7 @@ void TaskflowFramePool::release(Frame *frame) {
         "Taskflow runtime frame pool can only release frames bound to a runtime graph.");
     GraphArena &arena = getOrCreateArena(frame->runtimeGraph());
     std::scoped_lock lock(arena.mutex);
+    arena.activeFrames.erase(frame);
     arena.freeFrames.push_back(frame);
 }
 
@@ -125,6 +136,37 @@ void TaskflowFramePool::warmup(camel::runtime::GCGraph *graph, size_t count) {
     if (arena.freeFrames.size() >= count)
         return;
     allocateChunk(arena, count - arena.freeFrames.size());
+}
+
+void TaskflowFramePool::clearGcSlots(Frame *frame) const {
+    ASSERT(frame != nullptr, "Cannot clear a null taskflow frame.");
+    const auto *layout = frame->dynamicAreaType_;
+    if (!layout || layout->refCount() == 0) {
+        return;
+    }
+    const size_t *refs = layout->refs();
+    for (size_t i = 0; i < layout->refCount(); ++i) {
+        frame->dynamicArea_[refs[i]] = NullSlot;
+    }
+}
+
+void TaskflowFramePool::traceActiveFrames(
+    const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) {
+    std::scoped_lock arenasLock(arenasMutex_);
+    for (auto &[_, arena] : arenas_) {
+        std::scoped_lock arenaLock(arena->mutex);
+        for (Frame *frame : arena->activeFrames) {
+            if (!frame) {
+                continue;
+            }
+            if (frame->staticArea_ && frame->staticDataLayout()) {
+                frame->staticArea_->updateRefs(relocate, frame->staticDataLayout());
+            }
+            if (frame->dynamicAreaType_ && frame->dynamicAreaType_->refCount() != 0) {
+                frame->updateRefs(relocate, nullptr);
+            }
+        }
+    }
 }
 
 } // namespace camel::core::context

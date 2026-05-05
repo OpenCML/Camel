@@ -229,7 +229,7 @@ void MacroEvaluator::traceValueRoots(
         if (!root || !root->type || !root->type->isGCTraced() || root->value == NullSlot) {
             continue;
         }
-        auto *relocated = relocate(fromSlot<Object *>(root->value));
+        auto *relocated = relocate(fromSlot<Object *>(root->value), root->type);
         root->value     = toSlot(relocated);
     }
 }

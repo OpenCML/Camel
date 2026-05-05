@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -243,16 +243,15 @@ class Frame : public rtdata::Object {
         }
     }
 
-    virtual void updateRefs(
-        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
-        const type::Type *type) override {
+    virtual void
+    updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override {
         (void)type;
         auto codes              = dynamicAreaType_->codes();
         rtdata::Object **refArr = reinterpret_cast<rtdata::Object **>(dynamicArea_);
         for (size_t i = 0; i < dynamicAreaType_->size(); ++i) {
             if (type::isGCTraced(codes[i])) {
                 if (rtdata::Object *&ref = refArr[i]) {
-                    ref = relocate(ref);
+                    ref = relocate(ref, dynamicAreaType_->typeAt(i));
                 }
             }
         }

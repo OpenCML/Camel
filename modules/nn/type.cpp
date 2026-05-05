@@ -13,6 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,8 +36,8 @@ TypeCode ParameterType::typeCode() {
 
 Type *ParameterType::Default() {
     static ParameterType *type = [] {
-        void *mem = mm::autoSpace().alloc(sizeof(ParameterType), alignof(ParameterType));
-        ASSERT(mem != nullptr, "Failed to allocate ParameterType from autoSpace");
+        void *mem = mm::permSpace().alloc(sizeof(ParameterType), alignof(ParameterType));
+        ASSERT(mem != nullptr, "Failed to allocate ParameterType from permSpace");
         return new (mem) ParameterType();
     }();
     return type;

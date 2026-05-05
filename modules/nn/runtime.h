@@ -13,6 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,8 +42,7 @@ class ParameterObject : public rtdata::Object {
     ParameterObject(const ParameterObject &)            = delete;
     ParameterObject &operator=(const ParameterObject &) = delete;
 
-    static ParameterObject *
-    create(camel::tensor::TensorObject *data, mm::IAllocator &allocator);
+    static ParameterObject *create(camel::tensor::TensorObject *data, mm::IAllocator &allocator);
 
     camel::tensor::TensorObject *data() const { return data_; }
     camel::tensor::TensorObject *grad() const { return grad_; }
@@ -57,13 +57,10 @@ class ParameterObject : public rtdata::Object {
     clone(mm::IAllocator &allocator, const type::Type *type, bool deep = false) const override;
     void print(std::ostream &os, const type::Type *type) const override;
     void onMoved() override {}
-    void updateRefs(
-        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
-        const type::Type *type) override;
+    void updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override;
 
   private:
-    ParameterObject(
-        camel::tensor::TensorObject *data, camel::tensor::TensorObject *grad);
+    ParameterObject(camel::tensor::TensorObject *data, camel::tensor::TensorObject *grad);
 
     camel::tensor::TensorObject *data_;
     camel::tensor::TensorObject *grad_;

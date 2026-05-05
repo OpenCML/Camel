@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 11, 2026
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -105,14 +105,13 @@ void StaticFunction::print(std::ostream &os, const type::Type *type) const {
 }
 
 void StaticFunction::updateRefs(
-    const std::function<camel::core::rtdata::Object *(camel::core::rtdata::Object *)> &relocate,
-    const type::Type *type) {
+    const camel::core::rtdata::Object::RefRelocator &relocate, const type::Type *type) {
     (void)type;
     if (!closure_) {
         return;
     }
     const type::TupleType *tupleTypePtr = tupleType();
-    closure_->updateRefs(relocate, tupleTypePtr);
+    closure_                            = static_cast<::Tuple *>(relocate(closure_, tupleTypePtr));
 }
 
 } // namespace camel::compile::gir
