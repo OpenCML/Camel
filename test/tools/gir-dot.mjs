@@ -85,6 +85,10 @@ function nodeSignature(attrs, graph, id) {
     return `${type}|${shape}|${style}|in:${incoming}|out:${outgoing}`
 }
 
+function edgeType(attrs) {
+    return attrs.type || attrs.linktype || ''
+}
+
 export function compareGirDotIsomorphic(actualText, expectedText) {
     const actual = parseDot(actualText)
     const expected = parseDot(expectedText)
@@ -105,7 +109,7 @@ export function compareGirDotIsomorphic(actualText, expectedText) {
         .map((edge) => {
             const fromSig = nodeSignature(actual.nodes.get(edge.from) || {}, actual, edge.from)
             const toSig = nodeSignature(actual.nodes.get(edge.to) || {}, actual, edge.to)
-            const linkType = edge.attrs.linktype || ''
+            const linkType = edgeType(edge.attrs)
             const label = edge.attrs.label || ''
             return `${fromSig}=>${toSig}|${linkType}|${label}`
         })
@@ -114,7 +118,7 @@ export function compareGirDotIsomorphic(actualText, expectedText) {
         .map((edge) => {
             const fromSig = nodeSignature(expected.nodes.get(edge.from) || {}, expected, edge.from)
             const toSig = nodeSignature(expected.nodes.get(edge.to) || {}, expected, edge.to)
-            const linkType = edge.attrs.linktype || ''
+            const linkType = edgeType(edge.attrs)
             const label = edge.attrs.label || ''
             return `${fromSig}=>${toSig}|${linkType}|${label}`
         })

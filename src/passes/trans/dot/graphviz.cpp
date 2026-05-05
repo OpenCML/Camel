@@ -406,15 +406,21 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     res += baseIndent_;
 
     if (depth_ == 0) {
-        res += std::format(
-            "digraph GraphIR {{\r\n"
-            "    graph [rankdir=LR, fontsize=18];\r\n"
-            "    node [fixedsize=true, width=1, height=1, fontsize=18];\r\n"
-            "    edge [minlen=2];\r\n");
+        if (config_.readableOnly) {
+            res += "digraph GraphIR {\n";
+        } else {
+            res += std::format(
+                "digraph GraphIR {{\n"
+                "    graph [rankdir=LR, fontsize=18];\n"
+                "    node [fixedsize=true, width=1, height=1, fontsize=18];\n"
+                "    edge [minlen=2];\n");
+        }
     } else {
-        res += std::format("subgraph cluster_{} {{\r\n", funcId);
-        res += std::format("{}{}label=\"{}\";\r\n", baseIndent_, indent_, funcName);
-        res += std::format("{}{}tooltip=\"{}\";\r\n", baseIndent_, indent_, graphTooltip(graph));
+        res += std::format("subgraph cluster_{} {{\n", funcId);
+        res += std::format("{}{}label=\"{}\";\n", baseIndent_, indent_, funcName);
+        if (!config_.readableOnly) {
+            res += std::format("{}{}tooltip=\"{}\";\n", baseIndent_, indent_, graphTooltip(graph));
+        }
     }
 
     graph->traceGraphs([&](camel::runtime::GCGraph *dep) {
@@ -432,58 +438,100 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     });
 
     if (!graph->isRoot() && (!graph->normPorts().empty() || !graph->withPorts().empty())) {
-        res += std::format(
-            "{}{}{} [label=\"ARGS\", type=\"ARGS\", style=dashed, shape=circle];\r\n",
-            baseIndent_,
-            indent_,
-            funcId);
+        if (config_.readableOnly) {
+            res += std::format(
+                "{}{}{} [label=\"ARGS\", type=\"ARGS\"];\n",
+                baseIndent_,
+                indent_,
+                funcId);
+        } else {
+            res += std::format(
+                "{}{}{} [label=\"ARGS\", type=\"ARGS\", style=dashed, shape=circle];\n",
+                baseIndent_,
+                indent_,
+                funcId);
+        }
     }
 
-    res += std::format(
-        "{}{}{} [label=\"EXIT\", type=\"EXIT\", style=dashed, shape=circle];\r\n",
-        baseIndent_,
-        indent_,
-        exitId);
+    if (config_.readableOnly) {
+        res +=
+            std::format("{}{}{} [label=\"EXIT\", type=\"EXIT\"];\n", baseIndent_, indent_, exitId);
+    } else {
+        res += std::format(
+            "{}{}{} [label=\"EXIT\", type=\"EXIT\", style=dashed, shape=circle];\n",
+            baseIndent_,
+            indent_,
+            exitId);
+    }
 
     for (uint32_t portIndex : graph->withPorts()) {
         const auto *port = lookupRecord(graph, portIndex);
         ASSERT(port != nullptr, "Runtime with-port record is missing.");
-        string label   = portLabel(graph, portIndex, *port);
-        string tooltip = recordTooltip(graph, *port);
-        res += std::format(
-            "{}{}{} [label=\"{}\", type=\"PORT\", shape=circle, style=solid, tooltip=\"{}\"];\r\n",
-            baseIndent_,
-            indent_,
-            nodeIdent(port),
-            escape(wrapText(label, 7, 2)),
-            std::format("{}\\n{}", escape(label), escape(tooltip)));
+        string label = portLabel(graph, portIndex, *port);
+        if (config_.readableOnly) {
+            res += std::format(
+                "{}{}{} [label=\"{}\", type=\"PORT\"];\n",
+                baseIndent_,
+                indent_,
+                nodeIdent(port),
+                escape(label));
+        } else {
+            string tooltip = recordTooltip(graph, *port);
+            res += std::format(
+                "{}{}{} [label=\"{}\", type=\"PORT\", shape=circle, style=solid, "
+                "tooltip=\"{}\"];\n",
+                baseIndent_,
+                indent_,
+                nodeIdent(port),
+                escape(wrapText(label, 7, 2)),
+                std::format("{}\\n{}", escape(label), escape(tooltip)));
+        }
     }
     for (uint32_t portIndex : graph->normPorts()) {
         const auto *port = lookupRecord(graph, portIndex);
         ASSERT(port != nullptr, "Runtime norm-port record is missing.");
-        string label   = portLabel(graph, portIndex, *port);
-        string tooltip = recordTooltip(graph, *port);
-        res += std::format(
-            "{}{}{} [label=\"{}\", type=\"PORT\", shape=circle, style=solid, tooltip=\"{}\"];\r\n",
-            baseIndent_,
-            indent_,
-            nodeIdent(port),
-            escape(wrapText(label, 7, 2)),
-            std::format("{}\\n{}", escape(label), escape(tooltip)));
+        string label = portLabel(graph, portIndex, *port);
+        if (config_.readableOnly) {
+            res += std::format(
+                "{}{}{} [label=\"{}\", type=\"PORT\"];\n",
+                baseIndent_,
+                indent_,
+                nodeIdent(port),
+                escape(label));
+        } else {
+            string tooltip = recordTooltip(graph, *port);
+            res += std::format(
+                "{}{}{} [label=\"{}\", type=\"PORT\", shape=circle, style=solid, "
+                "tooltip=\"{}\"];\n",
+                baseIndent_,
+                indent_,
+                nodeIdent(port),
+                escape(wrapText(label, 7, 2)),
+                std::format("{}\\n{}", escape(label), escape(tooltip)));
+        }
     }
     for (uint32_t closureIndex : graph->closureNodes()) {
         const auto *port = lookupRecord(graph, closureIndex);
         ASSERT(port != nullptr, "Runtime closure-port record is missing.");
-        string label   = portLabel(graph, closureIndex, *port);
-        string tooltip = recordTooltip(graph, *port);
-        res += std::format(
-            "{}{}{} [label=\"{}\", type=\"CLOSURE_PORT\", shape=circle, style=dashed, "
-            "tooltip=\"{}\"];\r\n",
-            baseIndent_,
-            indent_,
-            nodeIdent(port),
-            escape(wrapText(label, 7, 2)),
-            std::format("{}\\n{}", escape(label), escape(tooltip)));
+        string label = portLabel(graph, closureIndex, *port);
+        if (config_.readableOnly) {
+            res += std::format(
+                "{}{}{} [label=\"{}\", type=\"CLOSURE_PORT\"];\n",
+                baseIndent_,
+                indent_,
+                nodeIdent(port),
+                escape(label));
+        } else {
+            string tooltip = recordTooltip(graph, *port);
+            res += std::format(
+                "{}{}{} [label=\"{}\", type=\"CLOSURE_PORT\", shape=circle, style=dashed, "
+                "tooltip=\"{}\"];\n",
+                baseIndent_,
+                indent_,
+                nodeIdent(port),
+                escape(wrapText(label, 7, 2)),
+                std::format("{}\\n{}", escape(label), escape(tooltip)));
+        }
     }
 
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
@@ -499,52 +547,96 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         string style   = recordStyle(*node);
         string size    = recordSize(*node);
         string type    = recordType(*node);
-        res += std::format(
-            "{}{}{} [label=\"{}\", type=\"{}\", shape={}, style={}{}, tooltip=\"{}\"];\r\n",
-            baseIndent_,
-            indent_,
-            nodeIdent(node),
-            escape(wrapText(label, 7, 2)),
-            type,
-            shape,
-            style,
-            size.empty() ? "" : ", " + size,
-            std::format("{}\\n{}", escape(label), escape(tooltip)));
+        if (config_.readableOnly) {
+            res += std::format(
+                "{}{}{} [label=\"{}\", type=\"{}\"];\n",
+                baseIndent_,
+                indent_,
+                nodeIdent(node),
+                escape(label),
+                type);
+        } else {
+            string tooltip = recordTooltip(graph, *node);
+            res += std::format(
+                "{}{}{} [label=\"{}\", type=\"{}\", shape={}, style={}{}, tooltip=\"{}\"];\n",
+                baseIndent_,
+                indent_,
+                nodeIdent(node),
+                escape(wrapText(label, 7, 2)),
+                type,
+                shape,
+                style,
+                size.empty() ? "" : ", " + size,
+                std::format("{}\\n{}", escape(label), escape(tooltip)));
+        }
     }
 
     for (size_t i = 0; i < graph->withPorts().size(); ++i) {
         const auto *port = lookupRecord(graph, graph->withPorts()[i]);
         ASSERT(port != nullptr, "Runtime with-port record is missing.");
-        res += std::format(
-            "{}{}{} -> {} [label=\"{}\", linktype=\"WITH_PORT\", style=dashed, "
-            "arrowhead=empty];\r\n",
-            baseIndent_,
-            indent_,
-            funcId,
-            nodeIdent(port),
-            i);
+        if (config_.readableOnly) {
+            res += std::format(
+                "{}{}{} -> {} [label=\"{}\", type=\"{}\"];\n",
+                baseIndent_,
+                indent_,
+                funcId,
+                nodeIdent(port),
+                i,
+                "WITH_PORT");
+        } else {
+            res += std::format(
+                "{}{}{} -> {} [label=\"{}\", type=\"WITH_PORT\", style=dashed, "
+                "arrowhead=empty];\n",
+                baseIndent_,
+                indent_,
+                funcId,
+                nodeIdent(port),
+                i);
+        }
     }
     for (size_t i = 0; i < graph->normPorts().size(); ++i) {
         const auto *port = lookupRecord(graph, graph->normPorts()[i]);
         ASSERT(port != nullptr, "Runtime norm-port record is missing.");
-        res += std::format(
-            "{}{}{} -> {} [label=\"{}\", linktype=\"NORM_PORT\", style=solid];\r\n",
-            baseIndent_,
-            indent_,
-            funcId,
-            nodeIdent(port),
-            i);
+        if (config_.readableOnly) {
+            res += std::format(
+                "{}{}{} -> {} [label=\"{}\", type=\"{}\"];\n",
+                baseIndent_,
+                indent_,
+                funcId,
+                nodeIdent(port),
+                i,
+                "NORM_PORT");
+        } else {
+            res += std::format(
+                "{}{}{} -> {} [label=\"{}\", type=\"NORM_PORT\", style=solid];\n",
+                baseIndent_,
+                indent_,
+                funcId,
+                nodeIdent(port),
+                i);
+        }
     }
 
     const auto *exitRecord = graph->exitNode();
     ASSERT(exitRecord != nullptr, "Runtime graph exit node is missing.");
-    res += std::format(
-        "{}{}{} -> {} [label=\"{}\", linktype=\"EXIT\", style=solid];\r\n",
-        baseIndent_,
-        indent_,
-        nodeIdent(exitRecord),
-        exitId,
-        0);
+    if (config_.readableOnly) {
+        res += std::format(
+            "{}{}{} -> {} [label=\"{}\", type=\"{}\"];\n",
+            baseIndent_,
+            indent_,
+            nodeIdent(exitRecord),
+            exitId,
+            0,
+            "EXIT");
+    } else {
+        res += std::format(
+            "{}{}{} -> {} [label=\"{}\", type=\"EXIT\", style=solid];\n",
+            baseIndent_,
+            indent_,
+            nodeIdent(exitRecord),
+            exitId,
+            0);
+    }
 
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
         const auto nodeIndex = it.ref();
@@ -562,14 +654,26 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 }
                 outIdx++;
             }
-            res += std::format(
-                "{}{}{} -> {} [label=\"{}|{}\", linktype=\"WITH\", style=dashed];\r\n",
-                baseIndent_,
-                indent_,
-                nodeIdent(input),
-                nodeIdent(node),
-                outIdx,
-                i);
+            if (config_.readableOnly) {
+                res += std::format(
+                    "{}{}{} -> {} [label=\"{}|{}\", type=\"{}\"];\n",
+                    baseIndent_,
+                    indent_,
+                    nodeIdent(input),
+                    nodeIdent(node),
+                    outIdx,
+                    i,
+                    "WITH");
+            } else {
+                res += std::format(
+                    "{}{}{} -> {} [label=\"{}|{}\", type=\"WITH\", style=dashed];\n",
+                    baseIndent_,
+                    indent_,
+                    nodeIdent(input),
+                    nodeIdent(node),
+                    outIdx,
+                    i);
+            }
         }
 
         for (size_t i = 0; i < graph->normInputsOf(nodeIndex).size(); ++i) {
@@ -583,14 +687,26 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 }
                 outIdx++;
             }
-            res += std::format(
-                "{}{}{} -> {} [label=\"{}|{}\", linktype=\"NORM\"];\r\n",
-                baseIndent_,
-                indent_,
-                nodeIdent(input),
-                nodeIdent(node),
-                outIdx,
-                i);
+            if (config_.readableOnly) {
+                res += std::format(
+                    "{}{}{} -> {} [label=\"{}|{}\", type=\"{}\"];\n",
+                    baseIndent_,
+                    indent_,
+                    nodeIdent(input),
+                    nodeIdent(node),
+                    outIdx,
+                    i,
+                    "NORM");
+            } else {
+                res += std::format(
+                    "{}{}{} -> {} [label=\"{}|{}\", type=\"NORM\"];\n",
+                    baseIndent_,
+                    indent_,
+                    nodeIdent(input),
+                    nodeIdent(node),
+                    outIdx,
+                    i);
+            }
         }
 
         for (size_t i = 0; i < graph->ctrlInputsOf(nodeIndex).size(); ++i) {
@@ -604,24 +720,39 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 }
                 outIdx++;
             }
-            res += std::format(
-                "{}{}{} -> {} [label=\"{}|{}\", linktype=\"CTRL\", style=dashed, "
-                "arrowhead=empty];\r\n",
-                baseIndent_,
-                indent_,
-                nodeIdent(input),
-                nodeIdent(node),
-                outIdx,
-                i);
+            if (config_.readableOnly) {
+                res += std::format(
+                    "{}{}{} -> {} [label=\"{}|{}\", type=\"{}\"];\n",
+                    baseIndent_,
+                    indent_,
+                    nodeIdent(input),
+                    nodeIdent(node),
+                    outIdx,
+                    i,
+                    "CTRL");
+            } else {
+                res += std::format(
+                    "{}{}{} -> {} [label=\"{}|{}\", type=\"CTRL\", style=dashed, "
+                    "arrowhead=empty];\n",
+                    baseIndent_,
+                    indent_,
+                    nodeIdent(input),
+                    nodeIdent(node),
+                    outIdx,
+                    i);
+            }
         }
     }
 
-    res += baseIndent_ + "}\r\n";
+    res += baseIndent_ + "}\n";
     return res;
 }
 
 GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context)
     : RuntimeGraphTranslatePass(context) {}
+
+GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context, GraphVizDumpConfig config)
+    : RuntimeGraphTranslatePass(context), config_(std::move(config)) {}
 
 camel::runtime::GCGraph *GraphVizDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     os << dumpGraph(graph);

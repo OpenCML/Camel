@@ -104,6 +104,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
+name = "gir.rgir_snapshot"
+desc = "Pins the AI-readable GIR dump with only label/type node and edge attributes."
+kind = "snapshot"
+case = "../../cases/smoke/core/fib10_pipeline.cml"
+args = ["${case}", "${run_rgir}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/rgir.dot"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
 name = "prl.runtime"
 desc = "Checks a minimal PRL scheduling example can launch, wait, and join independent work."
 kind = "behavior"

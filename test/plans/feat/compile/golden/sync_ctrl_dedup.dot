@@ -5,22 +5,22 @@ digraph GraphIR {
     subgraph cluster_F01 {
         label="main";
         tooltip="() => i64";
-        O01 [label="EXIT", style=dashed, shape=circle];
-        N00 [label="40", shape=circle, style=solid, tooltip="40\nmain::node#-1"];
-        N01 [label="2", shape=circle, style=solid, tooltip="2\nmain::node#-2"];
-        N02 [label=":op/\nadd_l", shape=diamond, style=solid, tooltip=":op/add_l\nmain::node#1"];
-        N03 [label=":io/p\nrintln", shape=diamond, style=solid, tooltip=":io/println\nmain::node#2"];
-        N04 [label="GATE", shape=diamond, style=dashed, tooltip="GATE\nmain::node#3"];
-        N04 -> O01 [label="0", style=solid];
-        N00 -> N02 [label="0|0"];
-        N01 -> N02 [label="0|1"];
-        N02 -> N03 [label="0|0"];
-        N02 -> N04 [label="1|0"];
-        N03 -> N04 [label="0|0", style=dashed, arrowhead=empty];
+        O01 [label="EXIT", type="EXIT", style=dashed, shape=circle];
+        N00 [label="40", type="DATA", shape=circle, style=solid, tooltip="40\nmain::node#-1"];
+        N01 [label="2", type="DATA", shape=circle, style=solid, tooltip="2\nmain::node#-2"];
+        N02 [label=":op/\nadd_l", type="OPER", shape=diamond, style=solid, tooltip=":op/add_l\nmain::node#1"];
+        N03 [label=":io/p\nrintln", type="OPER", shape=diamond, style=solid, tooltip=":io/println\nmain::node#2"];
+        N04 [label="GATE", type="GATE", shape=diamond, style=dashed, tooltip="GATE\nmain::node#3"];
+        N04 -> O01 [label="0", type="EXIT", style=solid];
+        N00 -> N02 [label="0|0", type="NORM"];
+        N01 -> N02 [label="0|1", type="NORM"];
+        N02 -> N03 [label="0|0", type="NORM"];
+        N02 -> N04 [label="1|0", type="NORM"];
+        N03 -> N04 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
     }
-    O00 [label="EXIT", style=dashed, shape=circle];
-    N05 [label="Function(gra\nph=main, tup\nleSlots=0)", shape=circle, style=solid, tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
-    N06 [label="CALL", shape=diamond, style=solid, tooltip="CALL\n__root__::node#1"];
-    N06 -> O00 [label="0", style=solid];
-    N05 -> N06 [label="0|0", style=dashed];
+    O00 [label="EXIT", type="EXIT", style=dashed, shape=circle];
+    N05 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
+    N06 [label="CALL", type="CALL", shape=diamond, style=solid, tooltip="CALL\n__root__::node#1"];
+    N06 -> O00 [label="0", type="EXIT", style=solid];
+    N05 -> N06 [label="0|0", type="WITH", style=dashed];
 }

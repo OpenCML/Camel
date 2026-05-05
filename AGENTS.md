@@ -70,13 +70,19 @@ node test\tools\run-tests.mjs --update-golden test\plans\smoke\core.plan.toml
 | Pass | Description |
 |------|-------------|
 | `std::gir` | Translation pass: prints the current GIR and returns an empty graph |
+| `std::rgir` | Translation pass: prints an AI-readable GIR DOT with only `label` and `type` attributes, then returns an empty graph |
 | `std::nvm` | Scheduling pass: executes on the node VM linearly, then returns an empty graph |
 | `std::fvm` | Scheduling pass: high-performance bytecode VM, returns an empty graph |
 | `std::jit` | Scheduling pass: JIT-enabled bytecode VM, returns an empty graph |
 | `std::inline` | Optimization pass: inlines small functions into larger graphs to reduce call overhead; returns an optimized graph |
 
+### Graph Inspection Preference
+- Prefer `std::rgir` when inspecting graphs in terminal output, snapshots intended for AI review, or structural debugging where visual styling is noise.
+- Use `std::gir` when Graphviz-oriented styling, shapes, sizing, or richer rendering metadata is specifically needed for human visualization.
+
 ### Examples
 ```powershell
+camel fib.cml std::rgir
 camel fib.cml std::gir
 camel fib.cml std::inline std::fvm
 ```
