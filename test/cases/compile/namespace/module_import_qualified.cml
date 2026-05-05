@@ -1,0 +1,13 @@
+/**
+ * Checks bare module imports expose exported symbols through module:: references.
+ */
+module module_import_qualified
+
+import namespace_lib
+
+func main(): int sync {
+    let a = namespace_lib::root()
+    let b = namespace_lib::Tools::inc(a)
+    'module_import_qualified a={} b={}'->format<a, b>->println
+    return 0
+}

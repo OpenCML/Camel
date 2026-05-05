@@ -1,0 +1,18 @@
+/**
+ * Checks import declarations are accepted inside namespace blocks.
+ */
+module namespace_inner_import
+
+namespace Local {
+    import namespace_lib
+
+    export func call(): int sync {
+        return namespace_lib::Tools::inc(namespace_lib::root())
+    }
+}
+
+func main(): int sync {
+    let value = Local::call()
+    'namespace_inner_import value={}'->format<value>->println
+    return 0
+}

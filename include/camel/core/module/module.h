@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <variant>
@@ -71,6 +72,17 @@ using context_ptr_t = camel::core::context::context_ptr_t;
 
 class Module : public std::enable_shared_from_this<Module> {
   protected:
+    struct ImportedRefBinding {
+        std::shared_ptr<Module> mod;
+        Reference remoteRef;
+    };
+
+    struct ImportedNamespaceBinding {
+        std::vector<std::string> localPrefixParts;
+        std::vector<std::string> remotePrefixParts;
+        std::shared_ptr<Module> mod;
+    };
+
     bool loaded_;
     std::string name_;
     std::string path_;
@@ -79,10 +91,14 @@ class Module : public std::enable_shared_from_this<Module> {
     entity_ns_ptr_t exportedEntityNS_;
     std::vector<Reference> defaultImportedRefs_;
     /// A ref may come from multiple modules (same-name function/operator overloads);
-    /// group modules by ref.
-    std::unordered_map<Reference, std::vector<std::shared_ptr<Module>>> importedRefModMap_;
+    /// group imported bindings by the local ref visible in this module.
+    std::unordered_map<Reference, std::vector<ImportedRefBinding>> importedRefMap_;
+    /// Namespace imports map a local prefix to an exported prefix in another module.
+    std::vector<ImportedNamespaceBinding> importedNamespaceBindings_;
     /// Cache merged imported entities to avoid re-merging on every query.
     mutable std::unordered_map<Reference, entity> importedEntityCache_;
+
+    std::vector<ImportedRefBinding> importedBindingsForRef(const Reference &ref) const;
 
   public:
     Module(const std::string &name, const std::string &path, context_ptr_t ctx);
@@ -95,6 +111,14 @@ class Module : public std::enable_shared_from_this<Module> {
     virtual bool loaded() const { return loaded_; }
 
     void markImportedRefFromMod(const Reference &ref, const std::shared_ptr<Module> &mod);
+    void markImportedRefFromMod(
+        const Reference &localRef, const Reference &remoteRef, const std::shared_ptr<Module> &mod);
+    void
+    markImportedNamespaceFromMod(const Reference &localPrefix, const std::shared_ptr<Module> &mod);
+    void markImportedNamespaceFromMod(
+        const Reference &localPrefix, const Reference &remotePrefix,
+        const std::shared_ptr<Module> &mod);
+    bool importAllRefsFromImportedNamespace(const Reference &localPrefix);
     void importDefaultRefsFromMod(const std::shared_ptr<Module> &mod);
     void importAllRefsFromMod(const std::shared_ptr<Module> &mod);
     bool hasImportedRef(const Reference &ref) const;

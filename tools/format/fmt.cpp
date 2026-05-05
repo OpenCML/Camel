@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Mar. 18, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -210,6 +210,9 @@ decl
     : moduleDecl
     | importDecl
     | exportDecl
+    | namespaceDecl
+    |
+usingNamespaceDecl
     | dataDecl
     | funcDecl
     | typeDecl
@@ -226,7 +229,9 @@ stmt
     | funcDecl
     | typeDecl
     | dataExpr
-    | useDecl
+    | usingNamespaceDecl
+    |
+useDecl
     | retStmt
     | blockStmt
     ;
@@ -292,6 +297,13 @@ any Formatter::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
     } else {
         return result + any_cast<string>(visitBracedIdents(bracedIdents));
     }
+}
+
+/*
+usingNamespaceDecl : USING NAMESPACE identRef ;
+*/
+any Formatter::visitUsingNamespaceDecl(OpenCMLParser::UsingNamespaceDeclContext *context) {
+    return "using namespace " + any_cast<string>(visitIdentRef(context->identRef()));
 }
 
 /*
@@ -386,7 +398,8 @@ funcDecl   :
         funcAnno*
         (WITH angledParams)?
         EXPORT? implMark? modifiers?
-        FUNC identDef parentParams (':' typeExpr)? stmtBlock ;
+
+FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
 */
 any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     string result;
@@ -394,7 +407,7 @@ any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     const auto &angledParams = context->angledParams();
     const auto &implMark     = context->implMark();
     const auto &modifiers    = context->modifiers();
-    const auto &identDef     = context->identDef();
+    const auto &identRef     = context->identRef();
     const auto &parentParams = context->parentParams();
     const auto &typeExpr     = context->typeExpr();
     const auto &stmtBlock    = context->stmtBlock();
@@ -419,7 +432,7 @@ any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
         result += any_cast<string>(visitModifiers(modifiers)) + " ";
     }
 
-    result += "func " + any_cast<string>(visitIdentDef(identDef)) +
+    result += "func " + any_cast<string>(visitIdentRef(identRef)) +
               any_cast<string>(visitParentParams(parentParams));
 
     if (typeExpr) {
@@ -427,6 +440,32 @@ any Formatter::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     }
 
     return result + " " + any_cast<string>(visitStmtBlock(stmtBlock));
+}
+
+/*
+namespaceDecl : NAMESPACE identRef '{' SEP? (namespaceItem SEP?)* '}' ;
+*/
+any Formatter::visitNamespaceDecl(OpenCMLParser::NamespaceDeclContext *context) {
+    string result = "namespace " + any_cast<string>(visitIdentRef(context->identRef())) + " {";
+    result +=
+        formatList(context->namespaceItem(), context, "; ", "", PaddingNL | PushScope | Multiline);
+    return result + "}";
+}
+
+/*
+namespaceItem
+    : namespaceDecl
+    | importDecl
+    | exportDecl
+    | usingNamespaceDecl
+ |
+ * funcDecl
+    | typeDecl
+    | useDecl
+    ;
+*/
+any Formatter::visitNamespaceItem(OpenCMLParser::NamespaceItemContext *context) {
+    return visit(context->children[0]);
 }
 
 /*
@@ -492,7 +531,7 @@ any Formatter::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
 }
 
 /*
-typeDecl   : implMark? TYPE identDef '=' (typeExpr | STRING) ;
+typeDecl   : implMark? TYPE identRef '=' (typeExpr | STRING) ;
 */
 any Formatter::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     const auto &implMark = context->implMark();
@@ -500,7 +539,7 @@ any Formatter::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     if (implMark) {
         result += any_cast<string>(visitImplMark(implMark)) + " ";
     }
-    result += "type " + any_cast<string>(visitIdentDef(context->identDef())) + " = ";
+    result += "type " + any_cast<string>(visitIdentRef(context->identRef())) + " = ";
     if (context->typeExpr()) {
         result += any_cast<string>(visitTypeExpr(context->typeExpr()));
     } else {

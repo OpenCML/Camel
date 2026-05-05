@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -176,6 +176,7 @@ class ImportLoad : public Load {
     }
 
     void setAs(const Reference &as) { as_ = as; }
+    bool hasAs() const { return !as_.empty(); }
     const Reference &getAs() const {
         if (as_.empty()) {
             throw std::runtime_error("ImportLoad: 'as' Reference is not set");

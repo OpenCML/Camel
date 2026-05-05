@@ -1,0 +1,13 @@
+/**
+ * Checks using namespace can inject one nested imported namespace.
+ */
+module nested_namespace_using
+
+import namespace_lib
+using namespace namespace_lib::Tools
+
+func main(): int sync {
+    let a = inc(8)
+    'nested_namespace_using a={}'->format<a>->println
+    return 0
+}

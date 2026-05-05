@@ -40,6 +40,7 @@ slot_t __tensor_le__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_gt__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_ge__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_eq__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __tensor_new__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_empty__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_zeros__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __tensor_ones__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);

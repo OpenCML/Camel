@@ -1,0 +1,17 @@
+/**
+ * Checks namespace-qualified exported types can be referenced through module imports.
+ */
+module module_import_type_export
+
+import namespace_lib
+
+func read_box(box: namespace_lib::Models::Box): int sync {
+    return box.x
+}
+
+func main(): int sync {
+    let box = namespace_lib::Models::new(11)
+    let value = read_box(box)
+    'module_import_type_export value={}'->format<value>->println
+    return 0
+}

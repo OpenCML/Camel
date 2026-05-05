@@ -76,14 +76,20 @@ sync func update(var w: Tensor): Tensor {
 ### 4.2.4 import：从模块引入符号
 
 - **`import { a, b } from mod`**：将模块 **mod** 中的 **a**、**b** 引入当前模块。
-- **`import x from mod`**：将 **mod** 的默认导出或整体以 **x** 引入（依实现）。
-- 引入的名字在**当前模块**可见。
+- **`import mod`**：导入模块命名空间，但不把模块导出的符号直接注入当前模块；应通过 **`mod::name`** 或 **`mod::Namespace::name`** 访问。
+- **`using namespace mod`**：将已导入的模块命名空间中的导出符号注入当前模块。
+- **`using namespace mod::Namespace`**：只注入某个嵌套命名空间下的导出符号。
+- 显式列出的名字在**当前模块**可见；裸 `import mod` 本身不使 `name` 直接可见。
 
 ```cml
 import { now } from time
 import { set_terminal_raw_mode, has_input, get_char, clear_input_buffer } from os
 import { zen } from this
 import { Tensor, ones, zeros, sum, transpose, shape, concat, random } from tensor
+import tensor
+let a = tensor::Tensor::ones([2, 2])
+using namespace tensor
+let b = Tensor::ones([2, 2])
 ```
 
 ### 4.2.5 with：上下文/泛型式参数

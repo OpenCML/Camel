@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Mar. 18, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -68,6 +68,10 @@ class CSTDumpVisitor : public OpenCMLVisitor {
         return dumpNode(context, "ExportDecl");
     };
 
+    std::any visitUsingNamespaceDecl(OpenCMLParser::UsingNamespaceDeclContext *context) {
+        return dumpNode(context, "UsingNamespaceDecl");
+    };
+
     std::any visitBlockStmt(OpenCMLParser::BlockStmtContext *context) {
         return dumpNode(context, "BlockStmt");
     };
@@ -90,6 +94,14 @@ class CSTDumpVisitor : public OpenCMLVisitor {
 
     std::any visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
         return dumpNode(context, "FuncDecl");
+    };
+
+    std::any visitNamespaceDecl(OpenCMLParser::NamespaceDeclContext *context) {
+        return dumpNode(context, "NamespaceDecl");
+    };
+
+    std::any visitNamespaceItem(OpenCMLParser::NamespaceItemContext *context) {
+        return dumpNode(context, "NamespaceItem");
     };
 
     std::any visitParentIdents(OpenCMLParser::ParentIdentsContext *context) {

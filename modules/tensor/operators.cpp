@@ -146,6 +146,13 @@ std::optional<Type *> resolveShapeCtor(const type_vec_t &norm) {
     return tensorType();
 }
 
+std::optional<Type *> resolveTensorCtor(const type_vec_t &norm) {
+    if (norm.size() != 1 || norm[0]->code() != TypeCode::Array) {
+        return std::nullopt;
+    }
+    return tensorType();
+}
+
 std::optional<Type *> resolveTensorArrayConcat(const type_vec_t &norm) {
     if (norm.size() != 3 || norm[2]->code() != TypeCode::Int64) {
         return std::nullopt;
@@ -172,6 +179,7 @@ std::unordered_map<std::string, operator_t> getTensorOpsMap() {
         {"gt", __tensor_gt__},
         {"ge", __tensor_ge__},
         {"eq", __tensor_eq__},
+        {"new", __tensor_new__},
         {"empty", __tensor_empty__},
         {"zeros", __tensor_zeros__},
         {"ones", __tensor_ones__},
@@ -318,6 +326,14 @@ const std::vector<oper_group_ptr_t> &getTensorOperatorGroups() {
                   "(lhs: Tensor | number, rhs: Tensor | number) => Tensor<bool>",
                   [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                       -> std::optional<Type *> { return resolveTensorCompare(norm); })}}),
+        OperatorGroup::create(
+            "new",
+            {{"tensor:new",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {1, {false}}},
+                  "(values: number[]) => Tensor",
+                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> { return resolveTensorCtor(norm); })}}),
         OperatorGroup::create(
             "empty",
             {{"tensor:empty",
@@ -996,6 +1012,15 @@ slot_t __tensor_eq__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
                 requireTensorOrConvertArray(norm, 1),
                 camel::tensor::CompareOp::Equal,
                 mm::autoSpace()));
+    });
+}
+
+slot_t __tensor_new__(ArgsView &with, ArgsView &norm, ctx::Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return withTensorErrors([&]() -> slot_t {
+        return wrapTensor(
+            camel::tensor::tensorFromArray(norm.slot(0), norm.type(0), mm::autoSpace()));
     });
 }
 

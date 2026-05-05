@@ -41,7 +41,7 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 - **引用名（identRef）**：用于命名空间限定时可含 `::`，如 `mod::name`；否则同标识符。
 - **关键字**（保留，不可作普通标识符）：  
   `as`, `let`, `var`, `use`, `from`, `func`, `type`, `enum`, `with`, `wait`, `const`, `keyof`,  
-  `return`, `module`, `import`, `export`, `typeas`, `typeof`, `namespace`,  
+  `return`, `module`, `import`, `export`, `typeas`, `typeof`, `using`, `namespace`,
   `if`, `then`, `else`, `match`, `case`, `for`, `in`, `of`, `try`, `catch`, `finally`, `throw`, `raise`,  
   `sync`, `macro`, `inner`, `outer`, `atomic`, `shared`,  
   `null`, `true`, `false`。  
@@ -108,7 +108,10 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 - **作用域**：模块顶层、函数参数、块（`{ }`）各自引入作用域；内层可遮蔽外层同名。
 - **let**：在当前作用域引入不可变绑定；同一作用域内同一名字不能重复 `let`。
 - **var**：引入可变变量；可重复赋值。
-- **import**：从其他模块引入符号，如 `import { a, b } from mod`、`import x from mod`；引入的名字在当前模块可见。
+- **import**：从其他模块引入符号。
+  - `import { a, b } from mod`：将 `mod` 导出的 `a`、`b` 直接引入当前模块。
+  - `import mod`：只导入模块命名空间，不直接注入导出符号；通过 `mod::name` 或 `mod::Namespace::name` 访问。
+  - `using namespace mod` / `using namespace mod::Namespace`：将已导入命名空间中的导出符号注入当前模块。
 - **with**：在函数上声明「上下文/泛型式」参数，调用时通过 `func<with_args>` 传入，函数体内使用对应名字。
 
 ### 4.3 异常与退出
@@ -129,6 +132,8 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 - **模块声明**：`module <名称>`，如 `module main`、`module fib`。模块名为标识符或点分名。
 - **导入**：`import (moduleName | (identDef | bracedIdents) from moduleName)`。  
   - 例：`import { now } from time`、`import { set_terminal_raw_mode, has_input, get_char } from os`、`import { zen } from this`。
+- **命名空间**：`namespace IdentRef { ... }`，命名空间内可声明函数、类型、导入、导出和嵌套命名空间。声明会以限定引用导出或访问，如 `Tensor::ones`、`Parameter::new`、`module::Tools::inc`。
+- **using namespace**：`using namespace identRef`，将已导入命名空间中的导出符号注入当前模块或当前命名空间。
 - **导出**：`export (dataDecl | typeDecl | bracedIdents)`，使符号可被其他模块导入。
 - **模块名**：可选前导 `.`/`..`/`...`，后接 `IDENTIFIER ('.' IDENTIFIER)*`，如 `time`、`os`、`this`。
 
@@ -273,7 +278,7 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 
 ### 8.5 函数定义
 
-- **funcDecl**：`(with angledParams)? export? implMark? modifiers? func identDef parentParams (':' typeExpr)? stmtBlock`。  
+- **funcDecl**：`(with angledParams)? export? implMark? modifiers? func identRef parentParams (':' typeExpr)? stmtBlock`。
   - **implMark**：`inner` | `outer`。  
   - **modifiers**：`atomic`、`shared`、`sync`、`macro` 等组合。  
   - **parentParams**：`'(' pairedParams? ','? ')'`；**keyParamPair**：`var? identDef ':' typeExpr ('=' dataExpr)?`。  
@@ -281,7 +286,7 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 
 ### 8.6 类型定义
 
-- **typeDecl**：`implMark? type identDef '=' (typeExpr | STRING)`。  
+- **typeDecl**：`implMark? type identRef '=' (typeExpr | STRING)`。
   - 例：`type Point = { x: int, y: int }`、`type Signal = (int, int)`。
 
 ---
@@ -291,7 +296,7 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 ### 9.1 程序与文件
 
 - **program**：`SEP? (decl SEP?)* EOF`。  
-- **decl**：`moduleDecl | importDecl | exportDecl | dataDecl | funcDecl | typeDecl | useDecl`。  
+- **decl**：`moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl | dataDecl | funcDecl | typeDecl | useDecl`。
 - 完整程序由若干声明组成；执行从入口（如 `main`）开始，由调度器（线性或并行）执行图或字节码。
 
 ### 9.2 文件输入与交互
@@ -305,8 +310,8 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 以下与 `antlr/OpenCML.g4`、`OpenCMLLex.g4` 对应，仅作提纲；精确语法以文法文件为准。
 
 - **程序**：`program : SEP? (decl SEP?)* EOF`。  
-- **声明**：`decl`：moduleDecl | importDecl | exportDecl | dataDecl | funcDecl | typeDecl | useDecl。  
-- **语句**：`stmt`：dataDecl | funcDecl | typeDecl | dataExpr | useDecl | retStmt | blockStmt。  
+- **声明**：`decl`：moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl | dataDecl | funcDecl | typeDecl | useDecl。
+- **语句**：`stmt`：dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | useDecl | retStmt | blockStmt。
 - **块**：`stmtBlock : SYNC? '{' stmtList? '}'`；`blockStmt : WAIT? stmtBlock`。  
 - **表达式层次**（从高到低）：  
   waitExpr → assignExpr → logicalOrExpr → logicalAndExpr → equalityExpr → relationalExpr  

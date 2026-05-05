@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,9 @@ TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     exportType(Reference("Tensor"), camel::tensor::TensorType::Default());
     for (const auto &group : getTensorOperatorGroups()) {
         exportEntity(group->name(), group);
+        if (!group->name().starts_with("__")) {
+            exportEntity(Reference(std::vector<std::string>{"Tensor"}, group->name()), group);
+        }
         if (group->name().starts_with("__")) {
             exportDefaultImportRef(group->name());
         }

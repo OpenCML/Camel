@@ -24,7 +24,7 @@
 | 章节 | 文档 | 内容概要 |
 |------|------|----------|
 | **4** | [04_execution_model.md](04_execution_model.md) | 程序结构、命名与绑定、异常、sync 与 wait（含控制流与同步示例） |
-| **5** | [05_modules.md](05_modules.md) | 模块声明、import、export、模块名与路径（含多文件示例） |
+| **5** | [05_modules.md](05_modules.md) | 模块声明、import、export、namespace、using namespace、模块名与路径（含多文件示例） |
 
 ### 第四部分：表达式与语句
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -64,6 +64,7 @@ class Builder {
     node_scope_ptr_t nodeScope_;
     graph_scope_ptr_t graphScope_;
     decorated_scope_ptr_t decoratedScope_;
+    std::unordered_map<Reference, Type *> typeDecls_;
 
     camel::core::context::context_ptr_t context_;
     camel::core::module::module_ptr_t module_;

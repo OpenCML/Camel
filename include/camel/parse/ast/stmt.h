@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Mar. 07, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
 
 namespace camel::parse::ast {
 
-enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block };
+enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block, UsingNamespace };
 
 enum class UnpackType { Array, Tuple, Struct };
 
@@ -103,6 +103,18 @@ class NameDeclLoad : public StmtLoad {
   private:
     Reference ref_;
     Reference alias_;
+};
+
+class UsingNamespaceLoad : public StmtLoad {
+  public:
+    UsingNamespaceLoad(Reference ref) : StmtLoad(StmtType::UsingNamespace), ref_(ref) {}
+
+    const Reference &ref() const { return ref_; }
+    const std::string toString() const override { return "UsingNamespace: " + ref_.toString(); }
+    const std::string geneCode() const override;
+
+  private:
+    Reference ref_;
 };
 
 class ExprStmtLoad : public StmtLoad {
