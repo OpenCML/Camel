@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,6 +40,76 @@ lookupRecord(camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t index
     return graph ? graph->node(index) : nullptr;
 }
 
+camel::core::type::Type *
+nodeStaticSlotType(camel::runtime::GCGraph *graph, const camel::runtime::GCNode &record) {
+    if (graph == nullptr || record.dataIndex >= 0) {
+        return record.dataType;
+    }
+    const auto staticTypes = graph->staticDataType();
+    const size_t staticIdx = static_cast<size_t>(-record.dataIndex);
+    if (staticTypes != nullptr && staticIdx < staticTypes->size()) {
+        return staticTypes->typeAt(staticIdx);
+    }
+    return record.dataType;
+}
+
+string formatStaticDataValue(camel::runtime::GCGraph *graph, const camel::runtime::GCNode &record) {
+    if (graph == nullptr || record.dataIndex >= 0) {
+        return {};
+    }
+    const auto staticSlots = graph->staticSlots();
+    const size_t staticIdx = static_cast<size_t>(-record.dataIndex);
+    if (staticIdx >= staticSlots.size()) {
+        return {};
+    }
+
+    auto *slotType = nodeStaticSlotType(graph, record);
+    if (slotType == nullptr) {
+        return {};
+    }
+
+    std::ostringstream os;
+    camel::core::rtdata::printSlot(os, staticSlots[staticIdx], slotType);
+    return os.str();
+}
+
+string portLabel(
+    camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
+    const camel::runtime::GCNode &record) {
+    (void)record;
+    if (graph == nullptr || graph->funcType() == nullptr ||
+        graph->funcType()->argNamesCount() == 0) {
+        return "PORT";
+    }
+
+    size_t argIndex = 0;
+    bool found      = false;
+    for (size_t i = 0; i < graph->withPorts().size(); ++i) {
+        if (graph->withPorts()[i] == nodeRef) {
+            argIndex = i;
+            found    = true;
+            break;
+        }
+    }
+    if (!found) {
+        const size_t withCount = graph->withPorts().size();
+        for (size_t i = 0; i < graph->normPorts().size(); ++i) {
+            if (graph->normPorts()[i] == nodeRef) {
+                argIndex = withCount + i;
+                found    = true;
+                break;
+            }
+        }
+    }
+
+    if (!found || argIndex >= graph->funcType()->argNamesCount()) {
+        return "PORT";
+    }
+
+    const std::string_view argName = graph->funcType()->argNameAt(argIndex);
+    return argName.empty() ? "PORT" : std::string(argName);
+}
+
 string graphTooltip(camel::runtime::GCGraph *graph) {
     ASSERT(graph != nullptr, "Graph tooltip requires a runtime graph.");
     auto *funcType = graph->funcType();
@@ -51,19 +121,16 @@ string recordTooltip(camel::runtime::GCGraph *graph, const camel::runtime::GCNod
     return std::format("{}::node#{}", graph->name(), record.dataIndex);
 }
 
-string portLabel(const camel::runtime::GCNode &record) {
-    (void)record;
-    return "PORT";
-}
-
 string recordLabel(
     camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
     const camel::runtime::GCNode &record) {
     switch (record.kind) {
-    case camel::runtime::GCNodeKind::Data:
-        return "DATA";
+    case camel::runtime::GCNodeKind::Data: {
+        const string value = formatStaticDataValue(graph, record);
+        return value.empty() ? "DATA" : value;
+    }
     case camel::runtime::GCNodeKind::Port:
-        return portLabel(record);
+        return portLabel(graph, nodeRef, record);
     case camel::runtime::GCNodeKind::Cast:
         return "CAST";
     case camel::runtime::GCNodeKind::Copy:
@@ -344,7 +411,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     for (uint32_t portIndex : graph->withPorts()) {
         const auto *port = lookupRecord(graph, portIndex);
         ASSERT(port != nullptr, "Runtime with-port record is missing.");
-        string label   = portLabel(*port);
+        string label   = portLabel(graph, portIndex, *port);
         string tooltip = recordTooltip(graph, *port);
         res += std::format(
             "{}{}{} [label=\"{}\", shape=circle, style=solid, tooltip=\"{}\"];\r\n",
@@ -357,7 +424,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     for (uint32_t portIndex : graph->normPorts()) {
         const auto *port = lookupRecord(graph, portIndex);
         ASSERT(port != nullptr, "Runtime norm-port record is missing.");
-        string label   = portLabel(*port);
+        string label   = portLabel(graph, portIndex, *port);
         string tooltip = recordTooltip(graph, *port);
         res += std::format(
             "{}{}{} [label=\"{}\", shape=circle, style=solid, tooltip=\"{}\"];\r\n",
@@ -370,7 +437,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     for (uint32_t closureIndex : graph->closureNodes()) {
         const auto *port = lookupRecord(graph, closureIndex);
         ASSERT(port != nullptr, "Runtime closure-port record is missing.");
-        string label   = portLabel(*port);
+        string label   = portLabel(graph, closureIndex, *port);
         string tooltip = recordTooltip(graph, *port);
         res += std::format(
             "{}{}{} [label=\"{}\", shape=circle, style=dashed, tooltip=\"{}\"];\r\n",

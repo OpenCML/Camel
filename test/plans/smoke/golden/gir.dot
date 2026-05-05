@@ -9,27 +9,27 @@ digraph GraphIR {
             label="fib";
             tooltip="(n: i64) => i64";
             subgraph cluster_F03 {
-                label="__graph_cgraph:anon:4";
+                label="__g_4__";
                 tooltip="() => i64";
                 F03 [label="ARGS", style=dashed, shape=circle];
                 O03 [label="EXIT", style=dashed, shape=circle];
-                N00 [label="PORT", shape=circle, style=solid, tooltip="PORT\n__graph_cgraph:anon:4::node#1"];
+                N00 [label="PORT", shape=circle, style=solid, tooltip="PORT\n__g_4__::node#1"];
                 F03 -> N00 [label="0", style=dashed, arrowhead=empty];
                 N00 -> O03 [label="0", style=solid];
             }
             subgraph cluster_F04 {
-                label="__graph_cgraph:anon:6";
+                label="__g_6__";
                 tooltip="() => i64";
                 F04 [label="ARGS", style=dashed, shape=circle];
                 O04 [label="EXIT", style=dashed, shape=circle];
-                N01 [label="PORT", shape=circle, style=solid, tooltip="PORT\n__graph_cgraph:anon:6::node#1"];
-                N02 [label="DATA", shape=circle, style=solid, tooltip="DATA\n__graph_cgraph:anon:6::node#-1"];
-                N03 [label=":op/\nsub_l", shape=diamond, style=solid, tooltip=":op/sub_l\n__graph_cgraph:anon:6::node#2"];
-                N04 [label="fib", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="fib\n__graph_cgraph:anon:6::node#3"];
-                N05 [label="DATA", shape=circle, style=solid, tooltip="DATA\n__graph_cgraph:anon:6::node#-2"];
-                N06 [label=":op/\nsub_l", shape=diamond, style=solid, tooltip=":op/sub_l\n__graph_cgraph:anon:6::node#4"];
-                N07 [label="fib", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="fib\n__graph_cgraph:anon:6::node#5"];
-                N08 [label=":op/\nadd_l", shape=diamond, style=solid, tooltip=":op/add_l\n__graph_cgraph:anon:6::node#6"];
+                N01 [label="PORT", shape=circle, style=solid, tooltip="PORT\n__g_6__::node#1"];
+                N02 [label="1", shape=circle, style=solid, tooltip="1\n__g_6__::node#-1"];
+                N03 [label=":op/\nsub_l", shape=diamond, style=solid, tooltip=":op/sub_l\n__g_6__::node#2"];
+                N04 [label="fib", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="fib\n__g_6__::node#3"];
+                N05 [label="2", shape=circle, style=solid, tooltip="2\n__g_6__::node#-2"];
+                N06 [label=":op/\nsub_l", shape=diamond, style=solid, tooltip=":op/sub_l\n__g_6__::node#4"];
+                N07 [label="fib", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="fib\n__g_6__::node#5"];
+                N08 [label=":op/\nadd_l", shape=diamond, style=solid, tooltip=":op/add_l\n__g_6__::node#6"];
                 F04 -> N01 [label="0", style=dashed, arrowhead=empty];
                 N08 -> O04 [label="0", style=solid];
                 N01 -> N03 [label="0|0"];
@@ -43,13 +43,13 @@ digraph GraphIR {
             }
             F02 [label="ARGS", style=dashed, shape=circle];
             O02 [label="EXIT", style=dashed, shape=circle];
-            N09 [label="PORT", shape=circle, style=solid, tooltip="PORT\nfib::node#1"];
-            N0A [label="DATA", shape=circle, style=solid, tooltip="DATA\nfib::node#-1"];
+            N09 [label="n", shape=circle, style=solid, tooltip="n\nfib::node#1"];
+            N0A [label="1", shape=circle, style=solid, tooltip="1\nfib::node#-1"];
             N0B [label=":op/\nle_l", shape=diamond, style=solid, tooltip=":op/le_l\nfib::node#2"];
             N0C [label="JOIN", shape=diamond, style=solid, tooltip="JOIN\nfib::node#6"];
             N0D [label="BRCH", shape=diamond, style=solid, tooltip="BRCH\nfib::node#3"];
-            N0E [label="__graph\n_cgr...", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="__graph_cgraph:anon:4\nfib::node#4"];
-            N0F [label="__graph\n_cgr...", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="__graph_cgraph:anon:6\nfib::node#5"];
+            N0E [label="__g_4__", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="__g_4__\nfib::node#4"];
+            N0F [label="__g_6__", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="__g_6__\nfib::node#5"];
             F02 -> N09 [label="0", style=solid];
             N0C -> O02 [label="0", style=solid];
             N09 -> N0B [label="0|0"];
@@ -65,18 +65,18 @@ digraph GraphIR {
             N0D -> N0F [label="1|0", style=dashed, arrowhead=empty];
         }
         O01 [label="EXIT", style=dashed, shape=circle];
-        N10 [label="DATA", shape=circle, style=solid, tooltip="DATA\nmain::node#-1"];
-        N11 [label="DATA", shape=circle, style=solid, tooltip="DATA\nmain::node#-2"];
+        N10 [label="10", shape=circle, style=solid, tooltip="10\nmain::node#-1"];
+        N11 [label="Start comput\ning fibonacc\ni({})...", shape=circle, style=solid, tooltip="Start computing fibonacci({})...\nmain::node#-2"];
         N12 [label=":str/\nformat", shape=diamond, style=solid, tooltip=":str/format\nmain::node#1"];
         N13 [label=":io/p\nrintln", shape=diamond, style=solid, tooltip=":io/println\nmain::node#2"];
         N14 [label="time\n:now", shape=diamond, style=solid, tooltip="time:now\nmain::node#3"];
         N15 [label="fib", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="fib\nmain::node#4"];
         N16 [label="time\n:now", shape=diamond, style=solid, tooltip="time:now\nmain::node#5"];
         N17 [label=":op/\nsub_d", shape=diamond, style=solid, tooltip=":op/sub_d\nmain::node#6"];
-        N18 [label="DATA", shape=circle, style=solid, tooltip="DATA\nmain::node#-3"];
+        N18 [label="Fibonacci({}\n) = {} (comp\nuted in {...", shape=circle, style=solid, tooltip="Fibonacci({}) = {} (computed in {:.4f} seconds)\nmain::node#-3"];
         N19 [label=":str/\nformat", shape=diamond, style=solid, tooltip=":str/format\nmain::node#7"];
         N1A [label=":io/p\nrintln", shape=diamond, style=solid, tooltip=":io/println\nmain::node#8"];
-        N1B [label="DATA", shape=circle, style=solid, tooltip="DATA\nmain::node#-4"];
+        N1B [label="0", shape=circle, style=solid, tooltip="0\nmain::node#-4"];
         N1C [label="GATE", shape=diamond, style=dashed, tooltip="GATE\nmain::node#9"];
         N1C -> O01 [label="0", style=solid];
         N10 -> N12 [label="0|0", style=dashed];
@@ -97,7 +97,7 @@ digraph GraphIR {
         N1A -> N1C [label="0|0", style=dashed, arrowhead=empty];
     }
     O00 [label="EXIT", style=dashed, shape=circle];
-    N1D [label="DATA", shape=circle, style=solid, tooltip="DATA\n__root__::node#-1"];
+    N1D [label="Function(gra\nph=main, tup\nleSlots=0)", shape=circle, style=solid, tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
     N1E [label="CALL", shape=diamond, style=solid, tooltip="CALL\n__root__::node#1"];
     N1E -> O00 [label="0", style=solid];
     N1D -> N1E [label="0|0", style=dashed];
