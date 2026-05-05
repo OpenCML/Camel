@@ -5,3 +5,6 @@
 - `tools/` contains the runner and helpers.
 - `results/` stores execution logs.
 - `vars.toml` defines reusable command fragments.
+
+Plan entries run `camel` by default. Set `tool = "camel-format"` when a case must execute the
+standalone formatter instead of the main compiler/runtime CLI.

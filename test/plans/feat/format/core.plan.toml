@@ -1,0 +1,107 @@
+id = "format.core"
+order = 320
+tier = "feat"
+tags = ["feat", "format", "formatter"]
+
+[[tests]]
+name = "format.namespace_snapshot"
+desc = "Formats namespace, using namespace, and type-qualified calls through camel-format."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/namespace_messy.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/namespace.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "format.mixed_arguments_snapshot"
+desc = "Preserves commas between positional and named arguments in calls and type-qualified constructors."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/mixed_arguments.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/mixed_arguments.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "format.options_snapshot"
+desc = "Applies quote preference and tab-size options through camel-format."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/options.cml"
+args = ["--quote-prefer", "double", "--tab-size", "2", "${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/options.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "format.use_tabs_option"
+desc = "Applies tab indentation when --use-tabs is passed."
+kind = "behavior"
+tool = "camel-format"
+case = "../../../cases/format/options.cml"
+args = ["--use-tabs", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    assert(input.exit_code === 0, `camel-format exited ${input.exit_code}`)
+    assert(/\tlet msg = 'hello'/.test(input.stdout), "expected a tab-indented let statement")
+    assert(!input.stdout.includes("    let msg = 'hello'"), "did not expect four-space indentation")
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "format.pattern_empty_snapshot"
+desc = "Formats empty tuple and struct match patterns using CST-only parsing."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/pattern_empty.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/pattern_empty.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "format.tuple_singleton_snapshot"
+desc = "Preserves singleton tuple commas in both type and value syntax."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/tuple_singleton.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/tuple_singleton.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "format.syntax_error"
+desc = "Reports parser diagnostics instead of crashing on malformed input."
+kind = "negative"
+tool = "camel-format"
+case = "../../../cases/format/syntax_error.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnknownSyntaxError"
+expect_diagnostic_code = "0x02000000"
+expect_diagnostic_line = 1
+expect_diagnostic_column = 11
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

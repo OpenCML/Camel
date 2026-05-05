@@ -1,0 +1,12 @@
+import   namespace_lib
+using namespace   namespace_lib
+
+namespace Foo{type Point={x:int,y:int}
+func new(x:int,y:int):Point{return {x:x,y:y}}
+}
+
+func main():int sync{
+let p=Foo::new(1,2)
+let q=Tensor::ones([2,2])
+return 0
+}
