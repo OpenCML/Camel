@@ -163,7 +163,7 @@ void TaskflowFramePool::traceActiveFrames(
             if (frame->staticArea_ && frame->staticDataLayout()) {
                 frame->staticArea_->updateRefs(relocate, frame->staticDataLayout());
             }
-            if (frame->dynamicAreaType_ && frame->dynamicAreaType_->refCount() != 0) {
+            if (frame->dynamicAreaType_) {
                 frame->updateRefs(relocate, nullptr);
             }
         }

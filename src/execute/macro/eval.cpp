@@ -441,6 +441,7 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
         FrameArgsView normView(*frame, nargs);
         (void)os;
         CAMEL_LOG_INFO_S("Macro", "Execute static operator '{}'.", std::string(body->uri()));
+        mm::autoSpace().safepoint("macro static operator");
         slot_t value = (*op)(withView, normView, *context_);
         framePool_.release(frame);
         return anchorResult(value, node->dataType, node->flags);
@@ -458,6 +459,11 @@ slot_t MacroEvaluator::executeFunction(
     }
     auto *runtimeGraph = funcObj->graph();
     ASSERT(runtimeGraph != nullptr, "Macro function must carry a runtime graph.");
+    mm::RootHandle funcRoot(
+        mm::autoSpace(),
+        funcObj,
+        runtimeGraph->funcType(),
+        "MacroEvaluator.function");
     if (requireMacroGraph && !runtimeGraph->isMacro()) {
         throw MacroExecutionError(
             std::format("'{}' is not marked as macro.", runtimeGraph->name()));
@@ -473,7 +479,7 @@ slot_t MacroEvaluator::executeFunction(
     try {
         fillArgs(frame, runtimeGraph);
         if (!runtimeGraph->closureNodes().empty()) {
-            auto *closure           = funcObj->tuple();
+            auto *closure           = funcRoot.getAs<::Function>()->tuple();
             const auto closureNodes = runtimeGraph->closureNodes();
             ASSERT(
                 closure != nullptr && closureNodes.size() == closure->size(),
@@ -486,7 +492,8 @@ slot_t MacroEvaluator::executeFunction(
         }
         recursionDepth_++;
         enteredExecution = true;
-        slot_t result    = executeGraph(frame, runtimeGraph);
+        mm::autoSpace().safepoint("macro function entry");
+        slot_t result = executeGraph(frame, runtimeGraph);
         recursionDepth_--;
         framePool_.release(frame);
         return result;
@@ -723,6 +730,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
     };
 
     for (uint32_t runtimeNodeIndex : runtimeTopoIndices) {
+        mm::autoSpace().safepoint("macro node boundary");
         if (tillRuntimeIndex.has_value()) {
             if (*tillRuntimeIndex == runtimeNodeIndex) {
                 tillRuntimeIndex.reset();

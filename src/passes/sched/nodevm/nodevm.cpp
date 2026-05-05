@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: May. 02, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -351,6 +351,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
 
         // Tail-call loop. Rebind currRuntimeGraph/currFrame instead of growing the C++ stack.
     loop_start: {
+        mm::autoSpace().safepoint("nodevm graph boundary");
         const size_t nodesSize = currNodes.size();
 
         size_t i = 0;
@@ -392,6 +393,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 tillNode = joinNode;
             }
 
+            mm::autoSpace().safepoint("nodevm node boundary");
             EXEC_WHEN_DEBUG({
                 CAMEL_LOG_DEBUG_S(
                     "NodeVM",
@@ -804,20 +806,20 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(
     ASSERT(
         !normInputs.empty() && !withInputs.empty(),
         "map_arr requires array and function inputs.");
-    const auto arrSlot  = dataIndexOf(graph, normInputs.front());
-    const auto funcSlot = dataIndexOf(graph, withInputs.front());
-    Array *arr          = currFrame.get<Array *>(arrSlot);
-    Array *res          = Array::create(mm::autoSpace(), arr->size());
+    const auto arrSlot   = dataIndexOf(graph, normInputs.front());
+    const auto funcSlot  = dataIndexOf(graph, withInputs.front());
+    const size_t arrSize = currFrame.get<Array *>(arrSlot)->size();
+    Array *res           = Array::create(mm::autoSpace(), arrSize);
     currFrame.set(dataIndexOf(graph, nodeRef), res);
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr            = currFrame.get<Array *>(arrSlot);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr     = currFrame.get<Array *>(arrSlot);
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->data()[i];
         Frame *frame   = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
-        Array *target     = currFrame.get<Array *>(dataIndexOf(graph, nodeRef));
-        target->data()[i] = call(func->graph(), frame);
+        slot_t result                                                  = call(func->graph(), frame);
+        currFrame.get<Array *>(dataIndexOf(graph, nodeRef))->data()[i] = result;
     }
 }
 
@@ -828,17 +830,18 @@ void NodeVMSchedPass::evalMarkedOperator_apply_arr(
     ASSERT(
         !normInputs.empty() && !withInputs.empty(),
         "apply_arr requires array and function inputs.");
-    const auto arrSlot  = dataIndexOf(graph, normInputs.front());
-    const auto funcSlot = dataIndexOf(graph, withInputs.front());
-    Array *arr          = currFrame.get<Array *>(arrSlot);
+    const auto arrSlot   = dataIndexOf(graph, normInputs.front());
+    const auto funcSlot  = dataIndexOf(graph, withInputs.front());
+    const size_t arrSize = currFrame.get<Array *>(arrSlot)->size();
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr            = currFrame.get<Array *>(arrSlot);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr     = currFrame.get<Array *>(arrSlot);
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->data()[i];
         Frame *frame   = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
-        arr->data()[i] = call(func->graph(), frame);
+        slot_t result                              = call(func->graph(), frame);
+        currFrame.get<Array *>(arrSlot)->data()[i] = result;
     }
     currFrame.set(dataIndexOf(graph, nodeRef), currFrame.get<Array *>(arrSlot));
 }
@@ -850,14 +853,14 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(
     ASSERT(
         !normInputs.empty() && !withInputs.empty(),
         "filter_arr requires array and function inputs.");
-    const auto arrSlot  = dataIndexOf(graph, normInputs.front());
-    const auto funcSlot = dataIndexOf(graph, withInputs.front());
-    Array *arr          = currFrame.get<Array *>(arrSlot);
-    Array *filtered     = Array::create(mm::autoSpace(), arr->size());
+    const auto arrSlot   = dataIndexOf(graph, normInputs.front());
+    const auto funcSlot  = dataIndexOf(graph, withInputs.front());
+    const size_t arrSize = currFrame.get<Array *>(arrSlot)->size();
+    Array *filtered      = Array::create(mm::autoSpace(), arrSize);
     currFrame.set(dataIndexOf(graph, nodeRef), filtered);
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr            = currFrame.get<Array *>(arrSlot);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr     = currFrame.get<Array *>(arrSlot);
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->data()[i];
         Frame *frame   = framePool_.acquire(func->graph());
@@ -865,7 +868,7 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(
         slot_t result = call(func->graph(), frame);
         if (fromSlot<bool>(result)) {
             Array *target = currFrame.get<Array *>(dataIndexOf(graph, nodeRef));
-            target->append(arr->data()[i]);
+            target->append(currFrame.get<Array *>(arrSlot)->data()[i]);
         }
     }
     currFrame.get<Array *>(dataIndexOf(graph, nodeRef))->shrinkToFit();
@@ -882,17 +885,17 @@ void NodeVMSchedPass::evalMarkedOperator_reduce_arr(
     const auto funcSlot   = dataIndexOf(graph, withInputs[0]);
     const auto initSlot   = dataIndexOf(graph, withInputs[1]);
     const auto resultSlot = dataIndexOf(graph, nodeRef);
-    Array *arr            = currFrame.get<Array *>(arrSlot);
+    const size_t arrSize  = currFrame.get<Array *>(arrSlot)->size();
     slot_t init           = currFrame.get<slot_t>(initSlot);
 
-    if (arr->size() == 0) {
+    if (arrSize == 0) {
         currFrame.set(resultSlot, init);
         return;
     }
     currFrame.set(resultSlot, init);
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr                 = currFrame.get<Array *>(arrSlot);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr          = currFrame.get<Array *>(arrSlot);
         Function *func      = currFrame.get<Function *>(funcSlot);
         const slot_t args[] = {currFrame.get<slot_t>(resultSlot), arr->data()[i]};
         Frame *frame        = framePool_.acquire(func->graph());
@@ -908,12 +911,12 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
     ASSERT(
         !normInputs.empty() && !withInputs.empty(),
         "foreach_arr requires array and function inputs.");
-    const auto arrSlot  = dataIndexOf(graph, normInputs.front());
-    const auto funcSlot = dataIndexOf(graph, withInputs.front());
-    Array *arr          = currFrame.get<Array *>(arrSlot);
+    const auto arrSlot   = dataIndexOf(graph, normInputs.front());
+    const auto funcSlot  = dataIndexOf(graph, withInputs.front());
+    const size_t arrSize = currFrame.get<Array *>(arrSlot)->size();
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr            = currFrame.get<Array *>(arrSlot);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr     = currFrame.get<Array *>(arrSlot);
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->data()[i];
         Frame *frame   = framePool_.acquire(func->graph());

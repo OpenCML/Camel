@@ -57,6 +57,26 @@ layout type during scan, graph/static roots are traced even when the root object
 autoSpace, and young marks are cleared during major collection. Fully enabling copying still requires
 complete typed root coverage and write barriers for old-to-young references.
 
+## Phase 2 Safepoint Contract
+
+Moving-capable collection is serviced only by explicit `autoSpace().safepoint(...)` calls. Allocation
+and allocation-failure paths may queue a minor or major request for the next safepoint, but they do
+not run young-generation copying directly. If an allocation cannot be satisfied, the allocator may
+run an emergency non-moving mark-sweep over elder and large-object spaces before retrying.
+
+Runtime safepoints are installed at pass boundaries, NodeVM node/function-call boundaries, FastVM
+bytecode boundaries, macro execution boundaries, and Taskflow's linear scheduler boundaries. At
+those points, live runtime values must be recoverable from registered roots: graph roots, active
+frames, macro value roots, or explicit `mm::RootHandle` instances for C++ locals.
+
+The current non-moving domains are intentional:
+
+- JIT machine code has no stack maps yet, so JIT execution remains outside the moving-GC contract.
+- Taskflow worker subflows do not yet provide a global stop-the-world worker barrier; they are safe
+  with the production non-moving auto-space mode and must not be treated as fully moving-safe.
+- Native module bridges that hold auto-space objects across a safepoint must use `mm::RootHandle` or
+  store the value in a traced frame/static slot before crossing the boundary.
+
 ## Phase 1 Observability Controls
 
 GC diagnostics are configured explicitly through environment variables so language-level test cases
@@ -67,7 +87,7 @@ do not need source changes:
 - `CAMEL_GC_STRESS_ALLOC=N` requests a collection after every `N` auto-space allocations. The
   request is serviced at the next GC safepoint, not inside the raw allocation path, so object
   constructors are not interrupted with half-initialized payloads.
-- `CAMEL_GC_STRESS_SAFEPOINT=N` requests a collection every `N` pass-boundary safepoints.
+- `CAMEL_GC_STRESS_SAFEPOINT=N` requests a collection every `N` explicit runtime safepoints.
 - `CAMEL_GC_STRESS_MODE=minor|major|both` selects which collection kind stress requests use.
 - `CAMEL_GC_LOG_MOVES=1` emits movement records when the copying path relocates an object.
 
@@ -81,4 +101,5 @@ Two runtime passes expose the same infrastructure:
 
 - `std::gc::verify` validates the heap and leaves the graph available for later passes.
 - `std::gc::snapshot` / `std::gcsnap` prints JSON with region object counts/bytes, collection
-  counters, moved/promoted/freed counters, root-source data, and remembered-set size.
+  counters, deferred/emergency collection counters, moved/promoted/freed counters, root-source data,
+  and remembered-set size.

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -437,47 +437,46 @@ void FastVMSchedPass::evalMarkedOperator(
 
 void FastVMSchedPass::evalMarkedOperator_map_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
+    const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
 
-    Array *res = Array::create(mm::autoSpace(), arr->size());
+    Array *res = Array::create(mm::autoSpace(), arrSize);
     currFrame.set(self, res);
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr                            = currFrame.get<Array *>(nargs[0]);
-        func                           = currFrame.get<Function *>(wargs[0]);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr                     = currFrame.get<Array *>(nargs[0]);
+        Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
 #if ENABLE_FASTVM_JIT
-        currFrame.get<Array *>(self)->data()[i] =
-            invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
+        slot_t result = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
 #else
-        currFrame.get<Array *>(self)->data()[i] = call(site.entryPc, frame);
+        slot_t result = call(site.entryPc, frame);
 #endif
+        currFrame.get<Array *>(self)->data()[i] = result;
     }
 }
 
 void FastVMSchedPass::evalMarkedOperator_apply_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
+    const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr                            = currFrame.get<Array *>(nargs[0]);
-        func                           = currFrame.get<Function *>(wargs[0]);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr                     = currFrame.get<Array *>(nargs[0]);
+        Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
 #if ENABLE_FASTVM_JIT
-        arr->data()[i] = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
+        slot_t result = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
 #else
-        arr->data()[i] = call(site.entryPc, frame);
+        slot_t result = call(site.entryPc, frame);
 #endif
+        currFrame.get<Array *>(nargs[0])->data()[i] = result;
     }
 
     currFrame.set(self, currFrame.get<Array *>(nargs[0]));
@@ -485,15 +484,14 @@ void FastVMSchedPass::evalMarkedOperator_apply_arr(
 
 void FastVMSchedPass::evalMarkedOperator_filter_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
+    const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
 
-    Array *filtered = Array::create(mm::autoSpace(), arr->size());
+    Array *filtered = Array::create(mm::autoSpace(), arrSize);
     currFrame.set(self, filtered);
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr                            = currFrame.get<Array *>(nargs[0]);
-        func                           = currFrame.get<Function *>(wargs[0]);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr                     = currFrame.get<Array *>(nargs[0]);
+        Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
@@ -506,7 +504,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
 #endif
 
         if (fromSlot<bool>(result)) {
-            currFrame.get<Array *>(self)->append(arr->data()[i]);
+            currFrame.get<Array *>(self)->append(currFrame.get<Array *>(nargs[0])->data()[i]);
         }
     }
 
@@ -515,21 +513,20 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
-    slot_t init    = currFrame.get<slot_t>(wargs[1]);
+    const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
+    slot_t init          = currFrame.get<slot_t>(wargs[1]);
 
     // Preserve left-fold semantics: an empty array returns the initial value immediately.
-    if (arr->size() == 0) {
+    if (arrSize == 0) {
         currFrame.set(self, init);
         return;
     }
 
     currFrame.set(self, init);
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr                            = currFrame.get<Array *>(nargs[0]);
-        func                           = currFrame.get<Function *>(wargs[0]);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr                     = currFrame.get<Array *>(nargs[0]);
+        Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         const slot_t args[]            = {currFrame.get<slot_t>(self), arr->data()[i]};
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
@@ -547,12 +544,11 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
 
 void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *arr     = currFrame.get<Array *>(nargs[0]);
-    Function *func = currFrame.get<Function *>(wargs[0]);
+    const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
 
-    for (size_t i = 0; i < arr->size(); ++i) {
-        arr                            = currFrame.get<Array *>(nargs[0]);
-        func                           = currFrame.get<Function *>(wargs[0]);
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr                     = currFrame.get<Array *>(nargs[0]);
+        Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = makeHigherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);

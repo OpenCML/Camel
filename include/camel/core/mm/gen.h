@@ -226,7 +226,9 @@ class GenerationalAllocatorWithGC : public IAllocator {
     struct RuntimeStats {
         uint64_t allocations                  = 0;
         uint64_t safepoints                   = 0;
+        uint64_t deferredCollections          = 0;
         uint64_t requestedCollections         = 0;
+        uint64_t allocationFailureCollections = 0;
         uint64_t minorCollections             = 0;
         uint64_t majorCollections             = 0;
         uint64_t movedObjects                 = 0;
@@ -296,7 +298,11 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     void requestStressCollectionUnlocked(std::string_view reason);
 
-    void collectUnlocked(CollectionKind kind, std::string_view reason);
+    void requestCollectionAtSafepointUnlocked(CollectionKind kind, std::string_view reason);
+
+    void collectAtSafepointUnlocked(CollectionKind kind, std::string_view reason);
+
+    void collectNonMovingUnlocked(std::string_view reason);
 
     void minorGCUnlocked();
 
@@ -370,7 +376,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     std::unordered_set<ObjectHeader *> rememberedSet_; // Remembered set: old→young edges
     DebugConfig debugConfig_{};
     RuntimeStats stats_{};
-    CollectionKind pendingStressCollection_ = CollectionKind::None;
+    CollectionKind pendingSafepointCollection_ = CollectionKind::None;
     mutable std::mutex mutex_;
 
     struct TraceEntry {

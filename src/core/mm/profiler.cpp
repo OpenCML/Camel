@@ -170,7 +170,9 @@ std::string snapshotToJson() {
          {
              {"allocations", stats.allocations},
              {"safepoints", stats.safepoints},
+             {"deferredCollections", stats.deferredCollections},
              {"requestedCollections", stats.requestedCollections},
+             {"allocationFailureCollections", stats.allocationFailureCollections},
              {"minorCollections", stats.minorCollections},
              {"majorCollections", stats.majorCollections},
              {"movedObjects", stats.movedObjects},

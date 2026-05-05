@@ -36,8 +36,8 @@ namespace camel::core::mm {
 
 void GenerationalAllocatorWithGC::configureDebug(DebugConfig config) {
     std::lock_guard<std::mutex> lock(mutex_);
-    debugConfig_             = config;
-    pendingStressCollection_ = CollectionKind::None;
+    debugConfig_                = config;
+    pendingSafepointCollection_ = CollectionKind::None;
 }
 
 GenerationalAllocatorWithGC::DebugConfig GenerationalAllocatorWithGC::debugConfig() const {

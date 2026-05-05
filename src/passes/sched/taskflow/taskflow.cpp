@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -171,6 +171,7 @@ slot_t TaskflowExecSchedPass::evalGraphLinear(GCGraph *graph, Frame *frame) {
     gc_node_ref_t joinNode = kInvalidNodeRef;
 
 loop_start:
+    camel::core::mm::autoSpace().safepoint("taskflow graph boundary");
     const gc_node_ref_t lastNode = camel::execute::resolveRuntimeTailValueRef(currRuntimeGraph);
     const bool lastNodeIsJoin =
         lastNode != kInvalidNodeRef && currRuntimeGraph->node(lastNode)->kind == GCNodeKind::Join;
@@ -192,6 +193,7 @@ loop_start:
         }
 
         if (node->kind == GCNodeKind::Brch) {
+            camel::core::mm::autoSpace().safepoint("taskflow branch boundary");
             const size_t jumpIdx =
                 camel::execute::selectRuntimeBranchArm(currRuntimeGraph, nodeRef, currFrame);
             currFrame->set(node->dataIndex, static_cast<Int32>(jumpIdx));
@@ -273,6 +275,7 @@ loop_start:
             }
         }
 
+        camel::core::mm::autoSpace().safepoint("taskflow node boundary");
         (void)executeLinearNode(currRuntimeGraph, nodeRef, currFrame);
     }
 

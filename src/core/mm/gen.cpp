@@ -95,9 +95,10 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
         requestStressCollectionUnlocked("safepoint interval");
     }
 
-    CollectionKind requested = pendingStressCollection_;
-    pendingStressCollection_ = CollectionKind::None;
-    collectUnlocked(requested, reason.empty() ? "safepoint" : reason);
+    CollectionKind requested        = pendingSafepointCollection_;
+    pendingSafepointCollection_     = CollectionKind::None;
+    const std::string_view gcReason = reason.empty() ? std::string_view{"safepoint"} : reason;
+    collectAtSafepointUnlocked(requested, gcReason);
 }
 
 void GenerationalAllocatorWithGC::recordOldToYoungRef(void *oldObj, void *youngObj) {
@@ -112,12 +113,20 @@ void GenerationalAllocatorWithGC::recordOldToYoungRef(void *oldObj, void *youngO
 
 void GenerationalAllocatorWithGC::minorGC() {
     std::lock_guard<std::mutex> lock(mutex_);
-    collectUnlocked(CollectionKind::Minor, "manual minor GC");
+    ++stats_.safepoints;
+    requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "manual minor GC");
+    CollectionKind requested    = pendingSafepointCollection_;
+    pendingSafepointCollection_ = CollectionKind::None;
+    collectAtSafepointUnlocked(requested, "manual minor GC");
 }
 
 void GenerationalAllocatorWithGC::majorGC() {
     std::lock_guard<std::mutex> lock(mutex_);
-    collectUnlocked(CollectionKind::Major, "manual major GC");
+    ++stats_.safepoints;
+    requestCollectionAtSafepointUnlocked(CollectionKind::Major, "manual major GC");
+    CollectionKind requested    = pendingSafepointCollection_;
+    pendingSafepointCollection_ = CollectionKind::None;
+    collectAtSafepointUnlocked(requested, "manual major GC");
 }
 
 void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t align) {
@@ -132,7 +141,10 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
     if (UNLIKELY(payloadSize > largeObjThreshold_)) {
         void *ptr = largeObjSpace_.alloc(payloadSize, align);
         if (UNLIKELY(!ptr)) {
-            collectUnlocked(CollectionKind::Major, "large object allocation failure");
+            requestCollectionAtSafepointUnlocked(
+                CollectionKind::Major,
+                "large object allocation failure");
+            collectNonMovingUnlocked("large object allocation failure");
             ptr = largeObjSpace_.alloc(payloadSize, align);
             if (!ptr)
                 throw std::bad_alloc();
@@ -145,7 +157,8 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
     if (!enableYoungGenCopying_) {
         void *ptr = elderGenSpace_.alloc(payloadSize, align);
         if (UNLIKELY(!ptr)) {
-            collectUnlocked(CollectionKind::Major, "elder allocation failure");
+            requestCollectionAtSafepointUnlocked(CollectionKind::Major, "elder allocation failure");
+            collectNonMovingUnlocked("elder allocation failure");
             ptr = elderGenSpace_.alloc(payloadSize, align);
             if (!ptr)
                 throw std::bad_alloc();
@@ -159,14 +172,21 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
     // Try allocating in the birth space first.
     void *ptr = birthSpace_.alloc(payloadSize, align);
     if (UNLIKELY(!ptr)) {
-        collectUnlocked(CollectionKind::Minor, "birth allocation failure");
-        ptr = birthSpace_.alloc(payloadSize, align);
+        requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "birth allocation failure");
+        ptr = elderGenSpace_.alloc(payloadSize, align);
         if (UNLIKELY(!ptr)) {
-            collectUnlocked(CollectionKind::Major, "birth allocation failure after minor GC");
-            ptr = birthSpace_.alloc(payloadSize, align);
-            if (!ptr)
+            requestCollectionAtSafepointUnlocked(
+                CollectionKind::Major,
+                "birth allocation failure after elder fallback");
+            collectNonMovingUnlocked("birth allocation failure after elder fallback");
+            ptr = elderGenSpace_.alloc(payloadSize, align);
+            if (!ptr) {
                 throw std::bad_alloc();
+            }
         }
+        auto *header = headerOf(ptr);
+        header->setRegion(AllocRegion::ElderGen);
+        return ptr;
     }
 
     auto *header = headerOf(ptr);
@@ -186,12 +206,21 @@ GenerationalAllocatorWithGC::combineCollectionKinds(CollectionKind lhs, Collecti
 }
 
 void GenerationalAllocatorWithGC::requestStressCollectionUnlocked(std::string_view reason) {
-    (void)reason;
-    pendingStressCollection_ =
-        combineCollectionKinds(pendingStressCollection_, debugConfig_.stressCollection);
+    requestCollectionAtSafepointUnlocked(debugConfig_.stressCollection, reason);
 }
 
-void GenerationalAllocatorWithGC::collectUnlocked(CollectionKind kind, std::string_view reason) {
+void GenerationalAllocatorWithGC::requestCollectionAtSafepointUnlocked(
+    CollectionKind kind, std::string_view reason) {
+    (void)reason;
+    if (kind == CollectionKind::None) {
+        return;
+    }
+    ++stats_.deferredCollections;
+    pendingSafepointCollection_ = combineCollectionKinds(pendingSafepointCollection_, kind);
+}
+
+void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
+    CollectionKind kind, std::string_view reason) {
     if (kind == CollectionKind::None) {
         return;
     }
@@ -215,6 +244,24 @@ void GenerationalAllocatorWithGC::collectUnlocked(CollectionKind kind, std::stri
     case CollectionKind::None:
         break;
     }
+
+    if (debugConfig_.verifyAfterGC) {
+        throwIfVerificationFailed(verifyHeapUnlocked(), std::format("after {}", reason));
+    }
+}
+
+void GenerationalAllocatorWithGC::collectNonMovingUnlocked(std::string_view reason) {
+    ++stats_.requestedCollections;
+    ++stats_.allocationFailureCollections;
+
+    if (debugConfig_.verifyBeforeGC) {
+        throwIfVerificationFailed(verifyHeapUnlocked(), std::format("before {}", reason));
+    }
+
+    ++stats_.majorCollections;
+    markPhase();
+    sweepOldGen();
+    sweepLargeObjects();
 
     if (debugConfig_.verifyAfterGC) {
         throwIfVerificationFailed(verifyHeapUnlocked(), std::format("after {}", reason));

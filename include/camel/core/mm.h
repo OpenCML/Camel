@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include "mm/alloc/bump_ptr.h"
 #include "mm/alloc/free_list.h"
 #include "mm/gen.h"
+#include "mm/root_handle.h"
 
 namespace camel::core::mm {
 

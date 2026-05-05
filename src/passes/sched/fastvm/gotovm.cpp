@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: May. 02, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -105,9 +105,15 @@ static thread_local size_t s_jit_save_depth = 0;
         }                                                                                          \
     } while (0)
 
+#define FASTVM_SAFEPOINT()                                                                         \
+    do {                                                                                           \
+        mm::autoSpace().safepoint("fastvm bytecode boundary");                                     \
+    } while (0)
+
 #define NEXT()                                                                                     \
     do {                                                                                           \
         pc += bc->opsize;                                                                          \
+        FASTVM_SAFEPOINT();                                                                        \
         SYNC_RUNTIME_ORIGIN();                                                                     \
         bc = &base[pc];                                                                            \
         goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                      \
@@ -115,6 +121,7 @@ static thread_local size_t s_jit_save_depth = 0;
 
 #define JUMP()                                                                                     \
     do {                                                                                           \
+        FASTVM_SAFEPOINT();                                                                        \
         SYNC_RUNTIME_ORIGIN();                                                                     \
         bc = &base[pc];                                                                            \
         goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                      \
