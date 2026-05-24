@@ -1,14 +1,90 @@
 [0.1.22]
+New Features:
+- 引入并完善垃圾回收（GC）运行时能力：写屏障、safepoint 约束、外部资源句柄与 GC 观测/验证控制进一步落地。
+- 启动路径与运行时分配行为优化，降低初始化阶段的额外预分配开销。
+- 补充分支/发布工作流规范文档，明确 feature、develop、main 之间的合并与发布顺序。
+
+Bug Fixes:
+- 修复 GC safepoint 周围的 VM 性能回退问题。
+- 修复 Python 嵌入运行时的宿主环境继承边界，稳定虚拟环境包复用与测试环境变量覆盖行为。
+- 修复 MNIST Python 可视化输出目录缺失导致的结果图保存失败问题。
+
+Technical Notes:
+- GC tracing、运行时生命周期、验证计划与 young-copying 相关测试覆盖进一步收敛。
+- Python 与 pyplot 模块的嵌入式解释器初始化逻辑统一加强，新增更可控的环境变量隔离策略。
+- 测试运行器统一使用 `envs` 字段传递环境变量，GC 计划同步整理。
+
+Others:
+- 更新分支规范，要求发布前确认版本号、下一开发版本号以及 `changes.log` 内容。
 
 [0.1.21]
+New Features:
+- 重构测试系统：统一 plan 组织与运行入口，补齐功能、性能与快照验证能力。
+- 新增命名空间支持，包括限定导入、命名空间类型构造与更清晰的 GIR DOT 导出。
+- 自动求导模块扩展：补全图式 autograd step、softmax cross entropy、embedding、attention 等神经网络算子支持。
+
+Bug Fixes:
+- 修复格式化器、GraphViz / GIR 输出、golden snapshot 归一化及 benchmark 样本展示等已知问题。
+- 稳定 macro、module、parallel 相关测试运行，并修复 GIR 同步与 DREF 图完整性问题。
+- 修复 pre-commit 自动暂存约束与测试验证脚本中的边界问题。
+
+Technical Notes:
+- 测试目录重组到按用途分类的新结构，verify 脚本与 timeit 工作流重建。
+- GIR DOT 标识、结构类型标注与 trace 输出路径进一步整理。
+- 命名空间与 autograd 相关实现跨编译、执行与测试层面完成一轮系统性收敛。
 
 [0.1.20]
+New Features:
+- 移除编译期 GIR，转向新的运行时图结构与执行链路，相关模块完成大规模重构。
+- Logger 进一步优化，补充 GHA / PyPI 打包与跨平台构建流程支持。
+- Linux 下 JIT 性能优化与若干运行时细节能力补齐。
+
+Bug Fixes:
+- 修复 Linux 下 JIT 计算错误、NodeVM 尾调用、PORT 节点识别及 duplicate value input 等问题。
+- 修复部分 FILL 运行时处理、编译产物组织与若干已知兼容性问题。
+
+Technical Notes:
+- 运行时图重写、GIR 运行时对象、direct-call 布局与模块/路由加载机制持续重构。
+- 清理旧 GIR API 与历史实现，文件结构、测试目录、打包脚本与 GHA 工作流同步调整。
+- 编译告警、日志模块与若干底层实现细节完成一轮系统整理。
 
 [0.1.19]
+New Features:
+- 新增装饰器语法并持续完善实现。
+- 图生命周期管理、内联图重写遍与 Inline pass 完成一轮较大规模优化。
+- JIT 编译策略与适配性继续增强。
+
+Bug Fixes:
+- 修复 EXIT 类型 GIR 节点相关适配问题与若干内联 / 生命周期边界问题。
+
+Technical Notes:
+- GIR 完成多阶段重构，包含一至三阶段整理与更深一轮结构收敛。
+- JIT、Inline 与装饰器实现围绕新 GIR 结构同步适配。
 
 [0.1.18]
+New Features:
+- 引入宏调度遍与 CPP 转译遍。
+- FastVM 与 JIT 完成一轮重构优化，性能与执行路径进一步增强。
+- 新增 Python 模块测试用例，退出码机制优化。
+
+Bug Fixes:
+- 修复 JIT 逻辑 bug、编译问题及若干已知问题。
+
+Technical Notes:
+- FastVM 调度模型、JIT 优化链路与部分脚本/注释同步整理。
 
 [0.1.17]
+New Features:
+- 诊断系统优化，支持节点源码逆映射与语义级源码映射。
+- 恢复 TaskFlowVM 与 Tensor 支持，加入运行时配置和线程安全内存分配器改进。
+- Profiler、Debugger 与相关接口继续完善。
+
+Bug Fixes:
+- 修复 NodeVM、Tensor、诊断与若干运行时已知问题。
+
+Technical Notes:
+- NodeVM 功能恢复与优化，模块组织、文档与日志体系进一步整理。
+- 执行器、调试器与内存管理相关代码完成一轮系统重构。
 
 [0.1.16]
 New Features:
