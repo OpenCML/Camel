@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 20, 2026
- * Updated: May. 05, 2026
+ * Updated: May. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,6 +30,8 @@
 #include "executor.h"
 #include "operators.h"
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -37,6 +39,7 @@
 #include <pybind11/pybind11.h>
 #include <sstream>
 #include <string>
+#include <vector>
 
 using namespace camel::core::error;
 using namespace camel::core::context;
@@ -51,6 +54,32 @@ namespace py = pybind11;
 namespace fs = std::filesystem;
 
 namespace {
+
+bool envFlagEnabled(const std::string &key) {
+    std::string value = getEnv(key);
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return value == "1" || value == "true" || value == "yes" || value == "on";
+}
+
+std::vector<std::string> splitPathList(const std::string &value) {
+    std::vector<std::string> out;
+    if (value.empty())
+        return out;
+#ifdef _WIN32
+    constexpr char delim = ';';
+#else
+    constexpr char delim = ':';
+#endif
+    std::stringstream ss(value);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        if (!item.empty())
+            out.push_back(item);
+    }
+    return out;
+}
 
 struct PyMajorMinor {
     int major = -1;
@@ -123,6 +152,27 @@ std::optional<std::string> activeVenvPath() {
         return conda;
     }
     return std::nullopt;
+}
+
+std::vector<std::string> activeEnvSitePackagePaths() {
+    std::vector<std::string> out;
+    std::string venv = getEnv("VIRTUAL_ENV");
+    if (!venv.empty()) {
+#ifdef _WIN32
+        out.push_back(venv + "\\Lib\\site-packages");
+#else
+        out.push_back(venv + "/lib/python/site-packages");
+#endif
+    }
+    std::string conda = getEnv("CONDA_PREFIX");
+    if (!conda.empty()) {
+#ifdef _WIN32
+        out.push_back(conda + "\\Lib\\site-packages");
+#else
+        out.push_back(conda + "/lib/python/site-packages");
+#endif
+    }
+    return out;
 }
 
 bool isVenvVersionCompatible(const std::string &venvPath) {
@@ -233,6 +283,33 @@ static void prepend_path_if_missing(py::list &path, py::object &normalize, const
     path.attr("insert")(0, dirStr);
 }
 
+static void ensure_extra_python_paths_in_path() {
+    if (!Py_IsInitialized())
+        return;
+    try {
+        py::module_ sys      = py::module_::import("sys");
+        py::module_ os       = py::module_::import("os");
+        py::object normalize = py::cpp_function([&os](const std::string &value) {
+            py::object pathMod = os.attr("path");
+            return pathMod.attr("normcase")(pathMod.attr("normpath")(value));
+        });
+        py::list path        = sys.attr("path");
+        for (const auto &dir : splitPathList(getEnv("CAMEL_PYTHONPATH"))) {
+            prepend_path_if_missing(path, normalize, dir);
+        }
+        if (envFlagEnabled("CAMEL_PYTHON_INHERIT_HOST_PYTHONPATH")) {
+            for (const auto &dir : splitPathList(getEnv("PYTHONPATH"))) {
+                prepend_path_if_missing(path, normalize, dir);
+            }
+        }
+        for (const auto &dir : activeEnvSitePackagePaths()) {
+            prepend_path_if_missing(path, normalize, dir);
+        }
+    } catch (...) {
+        // 失败时继续，不阻塞加载
+    }
+}
+
 // 让 Python 侧能直接 import 入口脚本同目录下的辅助模块，例如 test/run/nn/mnist_loader.py。
 // 这里只同步 Camel 上下文的入口目录；site-packages 仍由上面的 venv 逻辑负责。
 static void ensure_context_paths_in_path(const context_ptr_t &ctx) {
@@ -251,6 +328,20 @@ static void ensure_context_paths_in_path(const context_ptr_t &ctx) {
         // 失败时继续，不阻塞加载
     }
 }
+
+struct PythonInitEnvGuard {
+    std::optional<ScopedEnvVar> pythonHome;
+    std::optional<ScopedEnvVar> pythonPath;
+
+    PythonInitEnvGuard() {
+        if (envFlagEnabled("CAMEL_PYTHON_INHERIT_HOST_ENV"))
+            return;
+        pythonHome.emplace("PYTHONHOME", std::nullopt);
+        if (!envFlagEnabled("CAMEL_PYTHON_INHERIT_HOST_PYTHONPATH")) {
+            pythonPath.emplace("PYTHONPATH", std::nullopt);
+        }
+    }
+};
 
 namespace {
 
@@ -522,9 +613,11 @@ bool PythonModule::load() {
                     ". Use a matching venv, or provide routed multi-version bridges.");
         }
         if (!Py_IsInitialized()) {
+            PythonInitEnvGuard envGuard;
             set_python_home_from_venv();
             py::initialize_interpreter();
             ensure_site_packages_in_path();
+            ensure_extra_python_paths_in_path();
         }
         // Python 解释器可能早于当前脚本上下文初始化，因此每次加载模块时都重新同步入口目录。
         ensure_context_paths_in_path(context_);

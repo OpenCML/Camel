@@ -13,13 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2025
- * Updated: Mar. 11, 2026
+ * Updated: May. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include <cstdlib>
+#include <optional>
 #include <string>
 
 #ifdef _WIN32
@@ -41,3 +42,47 @@ inline std::string getEnv(const std::string &key, const std::string &defaultVal 
     return val ? std::string(val) : defaultVal;
 #endif
 }
+
+inline void setEnv(const std::string &key, const std::string &value) {
+#ifdef _WIN32
+    _putenv_s(key.c_str(), value.c_str());
+#else
+    setenv(key.c_str(), value.c_str(), 1);
+#endif
+}
+
+inline void unsetEnv(const std::string &key) {
+#ifdef _WIN32
+    _putenv_s(key.c_str(), "");
+#else
+    unsetenv(key.c_str());
+#endif
+}
+
+class ScopedEnvVar {
+  public:
+    ScopedEnvVar(const std::string &key, std::optional<std::string> value)
+        : key_(key), existed_(!getEnv(key).empty()), oldValue_(getEnv(key)) {
+        if (value.has_value()) {
+            setEnv(key_, value.value());
+        } else {
+            unsetEnv(key_);
+        }
+    }
+
+    ~ScopedEnvVar() {
+        if (existed_) {
+            setEnv(key_, oldValue_);
+        } else {
+            unsetEnv(key_);
+        }
+    }
+
+    ScopedEnvVar(const ScopedEnvVar &)            = delete;
+    ScopedEnvVar &operator=(const ScopedEnvVar &) = delete;
+
+  private:
+    std::string key_;
+    bool existed_;
+    std::string oldValue_;
+};

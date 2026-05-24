@@ -540,7 +540,7 @@ function runOneTest(test, sharedVars, logContext) {
     }
     const args = expandArgs(test.args || [], scope)
     const env = { ...process.env }
-    for (const entry of test.env || []) {
+    for (const entry of test.envs || []) {
         const text = String(entry)
         const eq = text.indexOf('=')
         if (eq <= 0) {
