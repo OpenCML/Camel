@@ -11,6 +11,7 @@ In particular, before any `develop` -> `main` release merge, you must confirm th
 - Follow the refactor, test, commit, and branching rules in `agents/refactor.md`, `agents/test.md`, `agents/commit.md`, and `agents/branching.md`.
 - Do not create additional git worktrees unless the user explicitly asks for one.
 - When preparing a commit, describe the common purpose of the entire staged set, not just the most recent edit.
+- Merge commits must also summarize the integrated content itself; do not use vague merge-action-only subjects.
 
 ## Build And Runtime
 - Standard build: `npm run build`

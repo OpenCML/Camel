@@ -12,12 +12,16 @@ This repository uses a strict `main` / `develop` / feature-branch workflow. Foll
 
 - Merge feature branches into `develop` with `git merge --no-ff`.
 - Keep the merge commit explicit.
+- The merge commit message must summarize the integrated work itself, not merely the merge action.
+- Do not use vague subjects such as `merge: integrate xxx`, `merge branch`, or `release: merge develop`.
+- A valid merge commit subject should describe the shared product change, feature set, refactor theme, or release content that the merge introduces.
 - After the merge completes, rebase the merged feature branch so it stays synchronized with the updated `develop`.
 
 ## `develop` To `main`
 
 - Only merge `develop` into `main` when intentionally releasing a new version.
 - Merge `develop` into `main` with `git merge --no-ff`.
+- The release merge commit on `main` must summarize the released content, not just state that `develop` was merged.
 - Before merging `develop` into `main`, explicitly ask the user to confirm:
   - the release version number to publish now
   - the next development version number after release
@@ -53,3 +57,4 @@ After the post-release version bump commit on `develop`:
 - If a task involves merges or releases, read this file first and follow it exactly.
 - Do not guess release version numbers without explicit user confirmation.
 - Do not merge `develop` into `main` until both version confirmation and `changes.log` confirmation have been completed with the user.
+- Never write a merge commit subject that only describes the mechanical act of merging.
