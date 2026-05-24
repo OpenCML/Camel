@@ -9,7 +9,7 @@ desc = "Checks GC verification and deterministic stress requests can run at NVM 
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
 args = ["${case}", "std::gc::verify", "${run_nvm}"]
-env = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "Fibonacci(10) = 55"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
@@ -21,7 +21,7 @@ desc = "Checks GC verification and deterministic stress requests can run around 
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
 args = ["${case}", "std::gc::verify", "${run_fvm}"]
-env = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "Fibonacci(10) = 55"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
@@ -33,7 +33,7 @@ desc = "Checks GC verification and deterministic stress requests can run across 
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_prl_scheduler.cml"
 args = ["${case}", "std::gc::verify", "${run_prl}"]
-env = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "prl_scheduler a=25 b=36 sum=61"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -66,12 +66,60 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
+name = "gc.config_and_summary"
+desc = "Checks GC configuration and human-readable summary diagnostic passes stay composable."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_fib10.cml"
+args = ["${case}", "std::gc::config", "std::gc::summary", "std::gcsnap"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=7", "CAMEL_GC_STRESS_SAFEPOINT=3", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_contains = ["\"youngCopying\": true", "\"allocInterval\": 7", "GC summary", "mode: young-copying", "\"regions\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "gc.manual_collect_passes"
+desc = "Checks explicit minor and major GC diagnostic passes run and leave the graph executable."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
+args = ["${case}", "std::gc::minor", "std::gc::major", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both"]
+expect_exit = 0
+expect_stdout_contains = ["\"kind\":\"gc.minor\"", "\"kind\":\"gc.major\"", "\"kind\":\"gc.verify\"", "gc_heap boxes=16 first=5 last=36 mapped3=9"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "gc.young_copying_major_stress_heap"
+desc = "Checks a language-level heap workload survives young-copying major stress."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_contains = ["\"ok\":true", "gc_heap boxes=16 first=5 last=36 mapped3=9"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "gc.young_copying_both_stress_heap"
+desc = "Checks a language-level heap workload survives combined minor and major young-copying stress."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["\"ok\":true", "gc_heap boxes=16 first=5 last=36 mapped3=9"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
 name = "gc.remembered_set_minor_copying"
 desc = "Checks an old tuple retaining a young child through the remembered set survives repeated minor copying."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
 args = ["${case}", "std::gc::remembered_set"]
-env = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both"]
 expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "\"kind\":\"gc.remembered_set\"", "Fibonacci(10) = 55"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
@@ -83,7 +131,7 @@ desc = "Checks foreign-resource dispose/finalize and rooted/pinned handle accoun
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
 args = ["${case}", "std::gc::foreign_resource"]
-env = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both"]
 expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "\"kind\":\"gc.foreign_resource\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

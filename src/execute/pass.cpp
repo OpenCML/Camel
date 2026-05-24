@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: May. 05, 2026
+ * Updated: May. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,6 +42,7 @@
 
 #include "camel/utils/log.h"
 
+#include <algorithm>
 #include <format>
 #include <memory>
 #include <sstream>
@@ -71,6 +72,25 @@ FastVMConfig makeDefaultFastVmJitConfig() {
     return config;
 }
 
+std::string
+formatGcIssue(const camel::core::mm::GenerationalAllocatorWithGC::HeapVerificationIssue &issue) {
+    std::ostringstream os;
+    os << issue.message;
+    if (!issue.path.empty())
+        os << " | path=" << issue.path;
+    if (!issue.owner.empty())
+        os << " | owner=" << issue.owner;
+    if (!issue.slotType.empty())
+        os << " | slotType=" << issue.slotType;
+    if (!issue.region.empty())
+        os << " | region=" << issue.region;
+    if (issue.object != 0)
+        os << " | object=0x" << std::hex << issue.object << std::dec;
+    if (issue.target != 0)
+        os << " | target=0x" << std::hex << issue.target << std::dec;
+    return os.str();
+}
+
 class GcSnapshotPass final : public GraphIRPass {
   public:
     explicit GcSnapshotPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
@@ -89,15 +109,64 @@ class GcVerifyPass final : public GraphIRPass {
     GCGraph *apply(GCGraph *graph, std::ostream &os) override {
         auto issues = camel::core::mm::autoSpace().verifyHeap();
         if (!issues.empty()) {
-            const auto &first = issues.front();
+            constexpr size_t maxIssues = 10;
+            std::ostringstream details;
+            const size_t shown = std::min(maxIssues, issues.size());
+            for (size_t i = 0; i < shown; ++i) {
+                details << "\n  [" << i << "] " << formatGcIssue(issues[i]);
+            }
+            if (issues.size() > shown) {
+                details << "\n  ... " << (issues.size() - shown) << " more issue(s)";
+            }
             throw std::runtime_error(
                 std::format(
-                    "GC heap verification failed with {} issue(s): {}{}",
+                    "GC heap verification failed with {} issue(s):{}",
                     issues.size(),
-                    first.message,
-                    first.path.empty() ? "" : std::format(" | path={}", first.path)));
+                    details.str()));
         }
         os << "{\"ok\":true,\"kind\":\"gc.verify\"}\n";
+        return graph;
+    }
+};
+
+class GcMinorPass final : public GraphIRPass {
+  public:
+    explicit GcMinorPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        camel::core::mm::autoSpace().minorGC();
+        os << "{\"ok\":true,\"kind\":\"gc.minor\"}\n";
+        return graph;
+    }
+};
+
+class GcMajorPass final : public GraphIRPass {
+  public:
+    explicit GcMajorPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        camel::core::mm::autoSpace().majorGC();
+        os << "{\"ok\":true,\"kind\":\"gc.major\"}\n";
+        return graph;
+    }
+};
+
+class GcConfigPass final : public GraphIRPass {
+  public:
+    explicit GcConfigPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        os << camel::core::mm::profiler::configToJson() << '\n';
+        return graph;
+    }
+};
+
+class GcSummaryPass final : public GraphIRPass {
+  public:
+    explicit GcSummaryPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        os << camel::core::mm::profiler::summaryToText();
         return graph;
     }
 };
@@ -227,6 +296,10 @@ PassScopePtr initPassScope() {
                      scope({
                          {"snapshot", def(PASS(GcSnapshotPass))},
                          {"verify", def(PASS(GcVerifyPass))},
+                         {"minor", def(PASS(GcMinorPass))},
+                         {"major", def(PASS(GcMajorPass))},
+                         {"config", def(PASS(GcConfigPass))},
+                         {"summary", def(PASS(GcSummaryPass))},
                          {"remembered_set", def(PASS(GcRememberedSetPass))},
                          {"foreign_resource", def(PASS(GcForeignResourcePass))},
                      })},
@@ -316,6 +389,10 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::tns", "std::topo_node_seq"},
     {"std::gcsnap", "std::gc::snapshot"},
     {"std::gcverify", "std::gc::verify"},
+    {"std::gcminor", "std::gc::minor"},
+    {"std::gcmajor", "std::gc::major"},
+    {"std::gcconfig", "std::gc::config"},
+    {"std::gcsummary", "std::gc::summary"},
     {"std::gcremembered", "std::gc::remembered_set"},
     {"std::gcforeign", "std::gc::foreign_resource"},
     {"std::bc", "std::fastvm::bytecode"},

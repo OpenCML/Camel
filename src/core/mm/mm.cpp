@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 10, 2025
- * Updated: May. 06, 2026
+ * Updated: May. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <iostream>
 #include <string>
 
 namespace camel::core::mm {
@@ -111,12 +112,43 @@ GenerationalAllocatorWithGC::DebugConfig debugConfigFromEnv() {
     return config;
 }
 
+const char *collectionKindName(GenerationalAllocatorWithGC::CollectionKind kind) {
+    switch (kind) {
+    case GenerationalAllocatorWithGC::CollectionKind::None:
+        return "none";
+    case GenerationalAllocatorWithGC::CollectionKind::Minor:
+        return "minor";
+    case GenerationalAllocatorWithGC::CollectionKind::Major:
+        return "major";
+    case GenerationalAllocatorWithGC::CollectionKind::MinorAndMajor:
+        return "minor+major";
+    }
+    return "unknown";
+}
+
+void maybePrintDebugConfig(
+    bool youngCopying, const GenerationalAllocatorWithGC::DebugConfig &config) {
+    if (!envFlag("CAMEL_GC_PRINT_CONFIG")) {
+        return;
+    }
+    std::cerr << "[camel] GC config:"
+              << " youngCopying=" << (youngCopying ? "true" : "false")
+              << " verifyBefore=" << (config.verifyBeforeGC ? "true" : "false")
+              << " verifyAfter=" << (config.verifyAfterGC ? "true" : "false")
+              << " stressAlloc=" << config.stressEveryNAllocations
+              << " stressSafepoint=" << config.stressEveryNSafepoints
+              << " stressMode=" << collectionKindName(config.stressCollection)
+              << " logMoves=" << (config.logMovements ? "true" : "false") << '\n';
+}
+
 } // namespace
 
 // Managed automatically by the GC system and must remain reachable from roots.
 GenerationalAllocatorWithGC &autoSpace() {
     static auto *allocator = [] {
-        auto *instance = new GenerationalAllocatorWithGC(
+        const bool youngCopying = envFlag("CAMEL_GC_ENABLE_YOUNG_COPYING");
+        const auto debugConfig  = debugConfigFromEnv();
+        auto *instance          = new GenerationalAllocatorWithGC(
             GenerationalAllocatorWithGC::Config{
                 // Keep the default process-start footprint modest. The current runtime disables
                 // young-generation copying, so large preallocated semispaces only add startup cost.
@@ -129,8 +161,9 @@ GenerationalAllocatorWithGC &autoSpace() {
                 .majorGCTriggerRatio   = 0.8f,   // Major GC trigger ratio.
                 // Production remains address-stable by default; Phase 3 tests can opt into the
                 // copying path explicitly to exercise remembered-set behavior.
-                .enableYoungGenCopying = envFlag("CAMEL_GC_ENABLE_YOUNG_COPYING")});
-        instance->configureDebug(debugConfigFromEnv());
+                .enableYoungGenCopying = youngCopying});
+        instance->configureDebug(debugConfig);
+        maybePrintDebugConfig(youngCopying, debugConfig);
         return instance;
     }();
     return *allocator;

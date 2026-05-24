@@ -54,8 +54,9 @@ the elder free-list space and major GC performs mark-sweep over elder and large-
 
 The young-copying path is kept structurally valid for future work: relocated objects carry their
 layout type during scan, graph/static roots are traced even when the root object itself is outside
-autoSpace, and young marks are cleared during major collection. Fully enabling copying still requires
-complete typed root coverage and write barriers for old-to-young references.
+autoSpace, and moving major collection relocates young objects before marking final heap locations.
+Fully enabling copying still requires complete typed root coverage and write barriers for
+old-to-young references.
 
 ## Phase 2 Safepoint Contract
 
@@ -166,6 +167,8 @@ do not need source changes:
 - `CAMEL_GC_LOG_MOVES=1` emits movement records when the copying path relocates an object.
 - `CAMEL_GC_ENABLE_YOUNG_COPYING=1` enables the experimental young-copying path for targeted GC
   tests. It is off by default.
+- `CAMEL_GC_PRINT_CONFIG=1` prints the effective GC diagnostic configuration to stderr when the
+  process-level allocator is initialized.
 
 The verifier checks allocator structure, object header validity, region tags, and every typed
 GC-traced reference reachable from the named root sources. External roots are registered with stable
@@ -173,9 +176,17 @@ source names such as `FramePool.activeFrames`, `TaskflowFramePool.activeFrames`,
 `MacroEvaluator.valueRoots`; failures include the root path plus owner/slot/type information from
 the tracing callback.
 
-Two runtime passes expose the same infrastructure:
+Runtime passes expose the same infrastructure:
 
 - `std::gc::verify` validates the heap and leaves the graph available for later passes.
+- `std::gc::minor` runs one explicit minor collection and leaves the graph available for later
+  passes.
+- `std::gc::major` runs one explicit major collection and leaves the graph available for later
+  passes.
+- `std::gc::config` prints the active GC diagnostic configuration as JSON and leaves the graph
+  available for later passes.
+- `std::gc::summary` prints a compact human-readable GC summary and leaves the graph available for
+  later passes.
 - `std::gc::snapshot` / `std::gcsnap` prints JSON with region object counts/bytes, collection
   counters, deferred/emergency collection counters, moved/promoted/freed counters, root-source data,
   remembered-set size, and foreign-resource diagnostics.

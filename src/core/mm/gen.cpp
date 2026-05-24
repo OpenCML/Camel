@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: May. 06, 2026
+ * Updated: May. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -162,12 +162,11 @@ void GenerationalAllocatorWithGC::writeBarrier(
     };
 }
 
-void GenerationalAllocatorWithGC::recordOldToYoungRef(void *oldObj, void *youngObj) {
-    writeBarrier(
-        static_cast<rtdata::Object *>(oldObj),
-        nullptr,
-        static_cast<rtdata::Object *>(youngObj),
-        nullptr);
+void GenerationalAllocatorWithGC::recordOldToYoungRef(
+    rtdata::Object *oldObj, const type::Type *oldType, rtdata::Object *youngObj,
+    const type::Type *youngType) {
+    ASSERT(youngType != nullptr, "recordOldToYoungRef requires the stored object's precise type.");
+    writeBarrier(oldObj, oldType, youngObj, youngType);
 }
 
 void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
@@ -325,6 +324,9 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
             requestCollectionAtSafepointUnlocked(
                 CollectionKind::Major,
                 "large object allocation failure");
+            // Emergency allocation-failure recovery is intentionally non-moving: callers may be
+            // in the middle of constructing an object graph whose newest local pointers are not
+            // registered as relocatable roots yet.
             collectNonMovingUnlocked("large object allocation failure");
             ptr = largeObjSpace_.alloc(payloadSize, align);
             if (!ptr)
@@ -340,6 +342,9 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
         void *ptr = elderGenSpace_.alloc(payloadSize, align);
         if (UNLIKELY(!ptr)) {
             requestCollectionAtSafepointUnlocked(CollectionKind::Major, "elder allocation failure");
+            // Keep allocation-failure recovery address-stable. Constructors that allocate several
+            // objects must still use RootHandle for intermediate objects, but this avoids moving
+            // unregistered raw locals from the allocator slow path itself.
             collectNonMovingUnlocked("elder allocation failure");
             ptr = elderGenSpace_.alloc(payloadSize, align);
             if (!ptr)
@@ -361,6 +366,8 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
             requestCollectionAtSafepointUnlocked(
                 CollectionKind::Major,
                 "birth allocation failure after elder fallback");
+            // The birth-space fallback can run while a just-created young object is still held only
+            // by a C++ local. Do not perform moving collection from this allocation slow path.
             collectNonMovingUnlocked("birth allocation failure after elder fallback");
             ptr = elderGenSpace_.alloc(payloadSize, align);
             if (!ptr) {
@@ -547,16 +554,23 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
 
 void GenerationalAllocatorWithGC::majorGCUnlocked() {
     ++stats_.majorCollections;
-    // 1. Mark phase: mark all reachable objects
+
+    if (enableYoungGenCopying_) {
+        // Moving major collection must first relocate young objects into their final locations.
+        // Marking before promotion can leave newly promoted elder objects unmarked and therefore
+        // sweep live objects. After the minor pass, roots and remembered-set edges point at the
+        // final young/elder objects, so the full mark phase sees the heap shape that sweep will
+        // use.
+        minorGCUnlocked();
+    }
+
+    // Mark all reachable objects in their final locations for this major cycle.
     markPhase();
 
-    // 2. Collect the young generation
-    minorGCUnlocked();
-
-    // 3. Sweep old generation (mark-sweep; no compaction here)
+    // Sweep old generation (mark-sweep; no compaction here).
     sweepOldGen();
 
-    // 4. Sweep large-object space
+    // Sweep large-object space.
     sweepLargeObjects();
 }
 
@@ -698,7 +712,12 @@ GenerationalAllocatorWithGC::forward(rtdata::Object *obj, const type::Type *objT
         // Promote to old generation.
         newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
         if (!newObj) {
-            // Old gen full: run full collection.
+            if (inGC_) {
+                // Re-entering major GC while forwarding would invalidate the active relocation
+                // state. Surface allocation pressure instead of corrupting forwarding metadata.
+                throw std::bad_alloc();
+            }
+            // Old gen full outside an active relocation pass: run full collection and retry.
             majorGCUnlocked();
             newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
             if (!newObj)
@@ -721,16 +740,8 @@ GenerationalAllocatorWithGC::forward(rtdata::Object *obj, const type::Type *objT
                     throw std::bad_alloc();
                 }
 
-                // Run major GC from nested forward path.
-                inGC_ = true;
-                try {
-                    majorGCUnlocked();
-                    newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
-                    inGC_  = false;
-                } catch (...) {
-                    inGC_ = false;
-                    throw;
-                }
+                majorGCUnlocked();
+                newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
 
                 if (!newObj)
                     throw std::bad_alloc();

@@ -55,6 +55,14 @@ roots, frame roots, and module state.
 Current GC diagnostic passes:
 
 - `std::gc::verify`: runs heap verification and leaves the graph available for later passes.
+- `std::gc::minor`: runs one explicit minor collection and leaves the graph available for later
+  passes.
+- `std::gc::major`: runs one explicit major collection and leaves the graph available for later
+  passes.
+- `std::gc::config`: prints the effective GC diagnostic configuration as JSON and leaves the graph
+  available for later passes.
+- `std::gc::summary`: prints a compact human-readable GC summary and leaves the graph available for
+  later passes.
 - `std::gc::snapshot` / `std::gcsnap`: prints JSON memory and GC diagnostics, then consumes the
   graph.
 - `std::gc::remembered_set`: runs a white-box old-to-young remembered-set self-test and leaves the
@@ -74,6 +82,7 @@ Use these controls for deterministic GC validation:
 | `CAMEL_GC_STRESS_MODE=minor|major|both` | Select the requested stress collection kind. |
 | `CAMEL_GC_LOG_MOVES=1` | Log object movement in the young-copying path. |
 | `CAMEL_GC_ENABLE_YOUNG_COPYING=1` | Enable the experimental young-generation copying path. |
+| `CAMEL_GC_PRINT_CONFIG=1` | Print the effective GC diagnostic configuration to stderr at allocator initialization. |
 
 GC stress is a diagnostic mode: it asks the allocator to request collections at deterministic
 allocation or safepoint intervals so missed roots, missing barriers, and relocation bugs fail
@@ -128,6 +137,7 @@ Automated tests in `test/plans/feat/mm/gc.plan.toml`:
 - `gc.verify_stress_fvm`
 - `gc.verify_stress_prl`
 - `gc.snapshot_json`
+- `gc.config_and_summary`
 
 Manual examples:
 
@@ -147,6 +157,8 @@ Expected evidence:
 - Program output remains correct.
 - `std::gcsnap` JSON has `regions`, `gc`, `summary`, root-source data, remembered-set size, and
   `foreignResources`.
+- `std::gc::config` and `std::gc::summary` show the effective stress and verification settings
+  before a snapshot consumes the graph.
 
 ### Phase 2: Safepoint-Only Moving-GC Foundation
 
@@ -158,6 +170,9 @@ Automated tests:
 - `gc.verify_stress_nvm`
 - `gc.verify_stress_fvm`
 - `gc.verify_stress_prl`
+- `gc.manual_collect_passes`
+- `gc.young_copying_major_stress_heap`
+- `gc.young_copying_both_stress_heap`
 
 Manual stress command:
 
@@ -174,6 +189,8 @@ Expected evidence:
 - The same source program runs correctly under NVM and PRL with active runtime safepoint stress.
 - The FVM case runs correctly with GC verification and stress diagnostics enabled while preserving
   the no-per-bytecode-safepoint performance policy.
+- A language-level heap workload covering arrays, structs, strings, closures, and mutation survives
+  explicit `std::gc::minor` / `std::gc::major` passes and young-copying `major` / `both` stress.
 - Heap verification reports named root paths if a root is missed.
 
 ### Phase 3: Write Barriers And Remembered Set
@@ -199,6 +216,8 @@ Expected evidence:
 - The program still prints the expected Fibonacci result.
 - Missing barriers fail through the remembered-set verifier with owner, slot, slot type, region, and
   young target information.
+- The remembered-set case is a C++ white-box self-test carried by a normal runtime graph. The
+  `.cml` program is not itself the source of the old-to-young edge.
 
 ### Phase 4: Foreign Resources And Native Handles
 
@@ -227,11 +246,28 @@ Expected evidence:
   `foreignResources.disposedResources`, `foreignResources.finalizedWrappers`,
   `foreignResources.liveControlBlocks`, `foreignResources.activeRootedHandles`, and
   `foreignResources.activePinnedHandles`.
+- The foreign-resource case is a C++ white-box self-test carried by a normal runtime graph. Separate
+  language-level Python module tests cover the public Python API.
 
 The Python module also has a language-level FFI smoke case in
 `test/cases/modules/std/python/basic.cml` that calls `py_dispose` twice. That case belongs to the
 Python module plan because it verifies the public Python API, while the GC/MM lifetime assertions
 remain centralized in `feat/mm`.
+
+## Test Interpretation
+
+GC/MM tests intentionally mix three levels of evidence:
+
+- Pipeline smoke tests use small `.cml` programs such as `gc_fib10.cml` to prove diagnostics,
+  safepoints, graph roots, and scheduler frame roots work inside the real CLI pipeline.
+- White-box self-tests such as `std::gc::remembered_set` and `std::gc::foreign_resource` construct
+  precise allocator scenarios in C++ while using a normal runtime graph as the pass carrier.
+- Language-level heap workloads such as `gc_heap_workload.cml` allocate arrays, structs, strings,
+  closures, and mutations from Camel source so stress modes exercise ordinary runtime behavior.
+
+Do not treat the carrier program alone as proof of the white-box scenario. For example,
+`gc_fib10.cml std::gc::remembered_set` tests the C++ remembered-set self-test, not a Fibonacci
+program's natural heap behavior.
 
 ## Adding New GC Tests
 
