@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: May. 06, 2026
+ * Updated: May. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -294,7 +294,9 @@ class GenerationalAllocatorWithGC : public IAllocator {
         rtdata::Object *ownerObject, const type::Type *ownerType, rtdata::Object *storedObject,
         const type::Type *storedType);
 
-    void recordOldToYoungRef(void *oldObj, void *youngObj);
+    void recordOldToYoungRef(
+        rtdata::Object *oldObj, const type::Type *oldType, rtdata::Object *youngObj,
+        const type::Type *youngType);
 
     bool debugRunRememberedSetSelfTest();
 
@@ -310,6 +312,8 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     // Major GC: collect the entire heap.
     void majorGC();
+
+    bool youngGenCopyingEnabled() const { return enableYoungGenCopying_; }
 
   private:
     void *allocUnlocked(size_t payloadSize, size_t align = alignof(slot_t));

@@ -1,0 +1,43 @@
+/**
+ * Heap-heavy GC diagnostic workload covering arrays, structs, strings, closures, and mutation.
+ */
+module gc_heap_workload
+
+type Box = {
+    label: string,
+    values: int[]
+}
+
+func score(box: Box): int {
+    return box.values[0] + box.values[1] + len(box.label)
+}
+
+with <fn: (x: int) => int>
+func map_one(xs: int[]): int[] sync {
+    var out: int[] = []
+    xs->foreach<(x: int) => sync {
+        out->append<fn(x)>
+        return null
+    }>
+    return out
+}
+
+func main(): int sync {
+    var boxes: Box[] = []
+    range(0, 16)->foreach<(i: int) => sync {
+        let vals = [i, i + 1, i + 2]
+        boxes->append<{ label: 'box{}'->format<i>, values: vals }>
+        return null
+    }>
+
+    let first = boxes[0]
+    let last = boxes[15]
+    let offset = score(first)
+    let mapped = [1, 2, 3, 4]->map_one<(x: int): int => {
+        return x + offset
+    }>
+    let mapped3 = mapped[3]
+
+    'gc_heap boxes={} first={} last={} mapped3={}'->format<len(boxes), score(first), score(last), mapped3>->println
+    return 0
+}

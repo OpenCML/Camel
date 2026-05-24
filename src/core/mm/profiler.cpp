@@ -6,7 +6,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: May. 05, 2026
+ * Updated: May. 24, 2026
  */
 
 #include "camel/core/mm.h"
@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <sstream>
 
 namespace camel::core::mm {
 namespace profiler {
@@ -132,6 +133,41 @@ static json largeObjRegionToJson(const LargeObjectAllocator &alloc) {
     };
 }
 
+static const char *collectionKindName(GenerationalAllocatorWithGC::CollectionKind kind) {
+    switch (kind) {
+    case GenerationalAllocatorWithGC::CollectionKind::None:
+        return "none";
+    case GenerationalAllocatorWithGC::CollectionKind::Minor:
+        return "minor";
+    case GenerationalAllocatorWithGC::CollectionKind::Major:
+        return "major";
+    case GenerationalAllocatorWithGC::CollectionKind::MinorAndMajor:
+        return "minor+major";
+    }
+    return "unknown";
+}
+
+std::string configToJson() {
+    auto &autoSp           = autoSpace();
+    const auto debugConfig = autoSp.debugConfig();
+    json root              = {
+        {"youngCopying", autoSp.youngGenCopyingEnabled()},
+        {"stress",
+         {
+             {"allocInterval", debugConfig.stressEveryNAllocations},
+             {"safepointInterval", debugConfig.stressEveryNSafepoints},
+             {"mode", collectionKindName(debugConfig.stressCollection)},
+         }},
+        {"verify",
+         {
+             {"before", debugConfig.verifyBeforeGC},
+             {"after", debugConfig.verifyAfterGC},
+         }},
+        {"logMoves", debugConfig.logMovements},
+    };
+    return root.dump(2);
+}
+
 std::string snapshotToJson() {
     auto &autoSp = autoSpace();
     auto &metaSp = metaSpace();
@@ -208,6 +244,44 @@ std::string snapshotToJson() {
     };
 
     return root.dump(2);
+}
+
+std::string summaryToText() {
+    auto &autoSp           = autoSpace();
+    const auto stats       = autoSp.stats();
+    const auto debugConfig = autoSp.debugConfig();
+    const auto foreign     = camel::core::rtdata::foreignResourceStats();
+
+    std::ostringstream os;
+    os << "GC summary\n";
+    os << "  mode: " << (autoSp.youngGenCopyingEnabled() ? "young-copying" : "non-moving") << "\n";
+    os << "  stress: alloc=" << debugConfig.stressEveryNAllocations
+       << " safepoint=" << debugConfig.stressEveryNSafepoints
+       << " mode=" << collectionKindName(debugConfig.stressCollection) << "\n";
+    os << "  verify: before=" << (debugConfig.verifyBeforeGC ? "true" : "false")
+       << " after=" << (debugConfig.verifyAfterGC ? "true" : "false") << "\n";
+    os << "  collections: minor=" << stats.minorCollections << " major=" << stats.majorCollections
+       << " requested=" << stats.requestedCollections << " deferred=" << stats.deferredCollections
+       << " emergency=" << stats.allocationFailureCollections << "\n";
+    os << "  movement: moved=" << stats.movedObjects << " promoted=" << stats.promotedObjects
+       << " rememberedSet=" << stats.rememberedSetSize << "\n";
+    os << "  roots: sources=" << stats.rootSourceCount
+       << " lastTracedRefs=" << stats.lastTracedRootReferenceCount << "\n";
+    os << "  freed: elder=" << stats.freedElderObjects << " large=" << stats.freedLargeObjects
+       << "\n";
+    os << "  foreign: live=" << foreign.liveControlBlocks
+       << " rooted=" << foreign.activeRootedHandles << " pinned=" << foreign.activePinnedHandles
+       << " finalized=" << foreign.finalizedWrappers << "\n";
+
+    const auto sources = autoSp.rootSourceDescriptions();
+    if (!sources.empty()) {
+        os << "  rootSources:";
+        for (const auto &source : sources) {
+            os << " " << source;
+        }
+        os << "\n";
+    }
+    return os.str();
 }
 
 std::string regionMemoryRawToJson(const char *regionName, size_t offset, size_t limit) {

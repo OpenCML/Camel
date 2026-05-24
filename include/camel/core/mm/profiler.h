@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Apr. 10, 2026
+ * Updated: May. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,12 @@ namespace profiler {
 
 // Collect snapshots of all memory regions and return a JSON string.
 std::string snapshotToJson();
+
+// Return a compact JSON object describing GC mode, stress, and verification settings.
+std::string configToJson();
+
+// Return a short human-readable GC summary for terminal diagnostics.
+std::string summaryToText();
 
 // ---- Region view API (for the Debugger Web UI) ----
 
