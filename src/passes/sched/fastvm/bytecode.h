@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -332,6 +332,44 @@ struct BytecodeHeader {                  // 8 bytes
         return reinterpret_cast<const uint64_t *>(this + opsize - extraWords + 2);
     }
 #endif
+
+    static constexpr size_t directCallExtraWordCount() {
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+        return 3;
+#else
+        return 2;
+#endif
+    }
+
+    // FUNC/TAIL are the tightest recursive-call path. Their payload layout is fixed by
+    // appendBytecode(..., extraUnits), so use constant-offset accessors instead of extra(), whose
+    // generic opcode switch is measurable when fib-like code calls through this on every frame.
+    inline BytecodeExtra *directCallExtra() {
+        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        return reinterpret_cast<BytecodeExtra *>(this + opsize - directCallExtraWordCount());
+    }
+    inline const BytecodeExtra *directCallExtra() const {
+        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        return reinterpret_cast<const BytecodeExtra *>(this + opsize - directCallExtraWordCount());
+    }
+    inline uint64_t *directCallExtra2() {
+        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        return reinterpret_cast<uint64_t *>(this + opsize - directCallExtraWordCount() + 1);
+    }
+    inline const uint64_t *directCallExtra2() const {
+        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        return reinterpret_cast<const uint64_t *>(this + opsize - directCallExtraWordCount() + 1);
+    }
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+    inline uint64_t *directCallExtra3() {
+        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        return reinterpret_cast<uint64_t *>(this + opsize - directCallExtraWordCount() + 2);
+    }
+    inline const uint64_t *directCallExtra3() const {
+        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        return reinterpret_cast<const uint64_t *>(this + opsize - directCallExtraWordCount() + 2);
+    }
+#endif
 };
 
 using Bytecode = BytecodeHeader;
@@ -352,10 +390,10 @@ union BytecodeExtra {                           // 8 bytes
 // - extra2() : [targetPc:16 | directCallCount:48]
 // - extra3() : JIT entry pointer (JIT builds only; 0 means interpreter entry)
 inline camel::runtime::GCGraph *getFuncExtraRuntimeGraph(const BytecodeHeader *bc) {
-    return bc->extra()->runtimeGraph;
+    return bc->directCallExtra()->runtimeGraph;
 }
 inline void setFuncExtraRuntimeGraph(BytecodeHeader *bc, camel::runtime::GCGraph *graph) {
-    bc->extra()->runtimeGraph = graph;
+    bc->directCallExtra()->runtimeGraph = graph;
 }
 
 constexpr uint64_t kFuncExtraCountMask     = (1ull << 48) - 1;
@@ -363,36 +401,39 @@ constexpr uint64_t kFuncExtraTargetPcShift = 48;
 constexpr uint64_t kFuncExtraTargetPcMask  = 0xFFFFull;
 
 inline uint32_t getFuncExtraCount(const BytecodeHeader *bc) {
-    const uint64_t count = *bc->extra2() & kFuncExtraCountMask;
+    const uint64_t count = *bc->directCallExtra2() & kFuncExtraCountMask;
     return count >= static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())
                ? std::numeric_limits<uint32_t>::max()
                : static_cast<uint32_t>(count);
 }
 inline size_t getFuncExtraTargetPc(const BytecodeHeader *bc) {
-    return static_cast<size_t>((*bc->extra2() >> kFuncExtraTargetPcShift) & kFuncExtraTargetPcMask);
+    return static_cast<size_t>(
+        (*bc->directCallExtra2() >> kFuncExtraTargetPcShift) & kFuncExtraTargetPcMask);
 }
 inline void setFuncExtraTargetPc(BytecodeHeader *bc, size_t targetPc) {
     ASSERT(targetPc <= kFuncExtraTargetPcMask, "JIT target pc exceeds packed FuncExtra range.");
-    const uint64_t count = *bc->extra2() & kFuncExtraCountMask;
-    *bc->extra2()        = (static_cast<uint64_t>(targetPc) << kFuncExtraTargetPcShift) | count;
+    const uint64_t count    = *bc->directCallExtra2() & kFuncExtraCountMask;
+    *bc->directCallExtra2() = (static_cast<uint64_t>(targetPc) << kFuncExtraTargetPcShift) | count;
 }
 inline uint32_t incFuncExtraCount(BytecodeHeader *bc) {
-    const uint64_t targetPc = *bc->extra2() & ~kFuncExtraCountMask;
-    uint64_t count          = *bc->extra2() & kFuncExtraCountMask;
+    const uint64_t targetPc = *bc->directCallExtra2() & ~kFuncExtraCountMask;
+    uint64_t count          = *bc->directCallExtra2() & kFuncExtraCountMask;
     if (count < static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
         ++count;
     }
-    *bc->extra2() = targetPc | count;
+    *bc->directCallExtra2() = targetPc | count;
     return static_cast<uint32_t>(count);
 }
 
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
-inline void *getFuncExtraFn(BytecodeHeader *bc) { return reinterpret_cast<void *>(*bc->extra3()); }
+inline void *getFuncExtraFn(BytecodeHeader *bc) {
+    return reinterpret_cast<void *>(*bc->directCallExtra3());
+}
 inline void *getFuncExtraFn(const BytecodeHeader *bc) {
-    return reinterpret_cast<void *>(*bc->extra3());
+    return reinterpret_cast<void *>(*bc->directCallExtra3());
 }
 inline void setFuncExtraFn(BytecodeHeader *bc, void *fn) {
-    *bc->extra3() = reinterpret_cast<uint64_t>(fn);
+    *bc->directCallExtra3() = reinterpret_cast<uint64_t>(fn);
 }
 #endif
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: May. 04, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -132,7 +132,8 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
     ASSERT(graph != nullptr, "Taskflow requires a non-null runtime root graph.");
 
     linearTopoCache_.clear();
-    Frame *rootFrame = framePool_.acquire(graph);
+    gcSafepointsEnabled_ = camel::core::mm::autoSpaceSafepointSlowPathEnabled();
+    Frame *rootFrame     = framePool_.acquire(graph);
     try {
         slot_t result = evalGraphTF(graph, rootFrame);
         context_->captureProcessExitCode(graph, result);
@@ -165,12 +166,21 @@ slot_t TaskflowExecSchedPass::evalGraphLinear(GCGraph *graph, Frame *frame) {
     Frame *twinFrame       = nullptr;
     auto *currRuntimeGraph = graph;
     auto currNodes         = topoNodesForLinear(currRuntimeGraph);
+    auto gcSafepoint       = [&](std::string_view reason) {
+        // Taskflow's linear fallback uses coarse safepoints only when GC diagnostics or pending
+        // deferred collection make them necessary; the ordinary scheduler path stays branch-only.
+        if (gcSafepointsEnabled_) {
+            camel::core::mm::autoSpace().safepoint(reason);
+            gcSafepointsEnabled_ = camel::core::mm::autoSpaceSafepointSlowPathEnabled();
+        }
+    };
 
     gc_node_ref_t tillNode = kInvalidNodeRef;
     gc_node_ref_t skipNode = kInvalidNodeRef;
     gc_node_ref_t joinNode = kInvalidNodeRef;
 
 loop_start:
+    gcSafepoint("taskflow graph boundary");
     const gc_node_ref_t lastNode = camel::execute::resolveRuntimeTailValueRef(currRuntimeGraph);
     const bool lastNodeIsJoin =
         lastNode != kInvalidNodeRef && currRuntimeGraph->node(lastNode)->kind == GCNodeKind::Join;
@@ -192,6 +202,7 @@ loop_start:
         }
 
         if (node->kind == GCNodeKind::Brch) {
+            gcSafepoint("taskflow branch boundary");
             const size_t jumpIdx =
                 camel::execute::selectRuntimeBranchArm(currRuntimeGraph, nodeRef, currFrame);
             currFrame->set(node->dataIndex, static_cast<Int32>(jumpIdx));
@@ -1081,9 +1092,10 @@ void TaskflowExecSchedPass::mark_map_arr(
           }).name("MAP_ELEM");
     }
     sf.join();
-    Array *res = Array::create(camel::core::mm::autoSpace(), arr->size());
+    Array *res       = Array::create(camel::core::mm::autoSpace(), arr->size());
+    auto *resultType = frame->typeAt<ArrayType>(dataIndexOf(graph, nodeRef));
     for (size_t i = 0; i < arr->size(); ++i) {
-        res->set(i, results[i]);
+        res->set<slot_t>(i, results[i], resultType);
     }
     frame->set(dataIndexOf(graph, nodeRef), res);
 }
@@ -1104,8 +1116,10 @@ void TaskflowExecSchedPass::mark_apply_arr(
           }).name("APPLY_ELEM");
     }
     sf.join();
+    auto *arrType =
+        frame->typeAt<ArrayType>(dataIndexOf(graph, graph->normInputsOf(nodeRef).front()));
     for (size_t i = 0; i < arr->size(); ++i) {
-        arr->set(i, results[i]);
+        arr->set<slot_t>(i, results[i], arrType);
     }
     frame->set(dataIndexOf(graph, nodeRef), arr);
 }
@@ -1126,13 +1140,14 @@ void TaskflowExecSchedPass::mark_filter_arr(
           }).name("FILTER_PRED");
     }
     sf.join();
-    Array *filtered = Array::create(camel::core::mm::autoSpace(), 0);
+    Array *filtered  = Array::create(camel::core::mm::autoSpace(), 0);
+    auto *resultType = frame->typeAt<ArrayType>(dataIndexOf(graph, nodeRef));
     for (size_t i = 0; i < arr->size(); ++i) {
         if (keep[i]) {
-            filtered->append(arr->get<slot_t>(i));
+            filtered->append(arr->get<slot_t>(i), resultType);
         }
     }
-    filtered->shrinkToFit();
+    filtered->shrinkToFit(resultType);
     frame->set(dataIndexOf(graph, nodeRef), filtered);
 }
 

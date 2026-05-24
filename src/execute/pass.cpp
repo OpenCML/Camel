@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: May. 05, 2026
+ * Updated: May. 24, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,9 @@
 #include "camel/common/scope.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/mm.h"
+#include "camel/core/mm/foreign_handle.h"
+#include "camel/core/mm/profiler.h"
 #include "macro/macro.h"
 #include "passes/opt/devirtualize/devirtualize.h"
 #include "passes/opt/inline/inline.h"
@@ -39,9 +42,11 @@
 
 #include "camel/utils/log.h"
 
+#include <algorithm>
 #include <format>
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 
 using namespace camel::core::error;
 using namespace camel::core::context;
@@ -66,6 +71,127 @@ FastVMConfig makeDefaultFastVmJitConfig() {
     config.enableJitTraceMir = false;
     return config;
 }
+
+std::string
+formatGcIssue(const camel::core::mm::GenerationalAllocatorWithGC::HeapVerificationIssue &issue) {
+    std::ostringstream os;
+    os << issue.message;
+    if (!issue.path.empty())
+        os << " | path=" << issue.path;
+    if (!issue.owner.empty())
+        os << " | owner=" << issue.owner;
+    if (!issue.slotType.empty())
+        os << " | slotType=" << issue.slotType;
+    if (!issue.region.empty())
+        os << " | region=" << issue.region;
+    if (issue.object != 0)
+        os << " | object=0x" << std::hex << issue.object << std::dec;
+    if (issue.target != 0)
+        os << " | target=0x" << std::hex << issue.target << std::dec;
+    return os.str();
+}
+
+class GcSnapshotPass final : public GraphIRPass {
+  public:
+    explicit GcSnapshotPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        (void)graph;
+        os << camel::core::mm::profiler::snapshotToJson() << '\n';
+        return nullptr;
+    }
+};
+
+class GcVerifyPass final : public GraphIRPass {
+  public:
+    explicit GcVerifyPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        auto issues = camel::core::mm::autoSpace().verifyHeap();
+        if (!issues.empty()) {
+            constexpr size_t maxIssues = 10;
+            std::ostringstream details;
+            const size_t shown = std::min(maxIssues, issues.size());
+            for (size_t i = 0; i < shown; ++i) {
+                details << "\n  [" << i << "] " << formatGcIssue(issues[i]);
+            }
+            if (issues.size() > shown) {
+                details << "\n  ... " << (issues.size() - shown) << " more issue(s)";
+            }
+            throw std::runtime_error(
+                std::format(
+                    "GC heap verification failed with {} issue(s):{}",
+                    issues.size(),
+                    details.str()));
+        }
+        os << "{\"ok\":true,\"kind\":\"gc.verify\"}\n";
+        return graph;
+    }
+};
+
+class GcMinorPass final : public GraphIRPass {
+  public:
+    explicit GcMinorPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        camel::core::mm::autoSpace().minorGC();
+        os << "{\"ok\":true,\"kind\":\"gc.minor\"}\n";
+        return graph;
+    }
+};
+
+class GcMajorPass final : public GraphIRPass {
+  public:
+    explicit GcMajorPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        camel::core::mm::autoSpace().majorGC();
+        os << "{\"ok\":true,\"kind\":\"gc.major\"}\n";
+        return graph;
+    }
+};
+
+class GcConfigPass final : public GraphIRPass {
+  public:
+    explicit GcConfigPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        os << camel::core::mm::profiler::configToJson() << '\n';
+        return graph;
+    }
+};
+
+class GcSummaryPass final : public GraphIRPass {
+  public:
+    explicit GcSummaryPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        os << camel::core::mm::profiler::summaryToText();
+        return graph;
+    }
+};
+
+class GcRememberedSetPass final : public GraphIRPass {
+  public:
+    explicit GcRememberedSetPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        camel::core::mm::autoSpace().debugRunRememberedSetSelfTest();
+        os << "{\"ok\":true,\"kind\":\"gc.remembered_set\"}\n";
+        return graph;
+    }
+};
+
+class GcForeignResourcePass final : public GraphIRPass {
+  public:
+    explicit GcForeignResourcePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        camel::core::mm::debugRunForeignResourceSelfTest(camel::core::mm::autoSpace());
+        os << "{\"ok\":true,\"kind\":\"gc.foreign_resource\"}\n";
+        return graph;
+    }
+};
 
 std::vector<std::string> splitPath(const std::string &path) {
     std::vector<std::string> result;
@@ -166,6 +292,17 @@ PassScopePtr initPassScope() {
                              {"bench", def(PASS(CppBenchDumpPass))},
                          })},
                     {"topo_node_seq", def(PASS(TopoNodeSeqDumpPass))},
+                    {"gc",
+                     scope({
+                         {"snapshot", def(PASS(GcSnapshotPass))},
+                         {"verify", def(PASS(GcVerifyPass))},
+                         {"minor", def(PASS(GcMinorPass))},
+                         {"major", def(PASS(GcMajorPass))},
+                         {"config", def(PASS(GcConfigPass))},
+                         {"summary", def(PASS(GcSummaryPass))},
+                         {"remembered_set", def(PASS(GcRememberedSetPass))},
+                         {"foreign_resource", def(PASS(GcForeignResourcePass))},
+                     })},
                     {"nodevm", def(PASS(NodeVMSchedPass))},
                     {"fastvm",
                      def(PASS(FastVMSchedPass),
@@ -250,6 +387,14 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::cppinspect", "std::cpp::inspect"},
     {"std::cppbench", "std::cpp::bench"},
     {"std::tns", "std::topo_node_seq"},
+    {"std::gcsnap", "std::gc::snapshot"},
+    {"std::gcverify", "std::gc::verify"},
+    {"std::gcminor", "std::gc::minor"},
+    {"std::gcmajor", "std::gc::major"},
+    {"std::gcconfig", "std::gc::config"},
+    {"std::gcsummary", "std::gc::summary"},
+    {"std::gcremembered", "std::gc::remembered_set"},
+    {"std::gcforeign", "std::gc::foreign_resource"},
     {"std::bc", "std::fastvm::bytecode"},
     {"std::lbc", "std::fastvm::linked_bytecode"},
     {"std::bin", "std::fastvm::jit::dump::bin"},
@@ -327,9 +472,11 @@ PassApplyResult applyPassesDetailed(
 
         auto factory = findPassFactory(p, os);
         if (factory) {
+            camel::core::mm::autoSpace().safepoint(std::format("before pass {}", p));
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), graph); });
             auto pass = factory(ctx);
             graph     = pass->apply(graph, os);
+            camel::core::mm::autoSpace().safepoint(std::format("after pass {}", p));
             if (ctx->rtmDiags()->hasErrors()) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (see diagnostics)", p);
                 return {nullptr, PassApplyStatus::Failed};

@@ -6,15 +6,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Apr. 10, 2026
+ * Updated: May. 24, 2026
  */
 
 #include "camel/core/mm.h"
 #include "camel/core/mm/alloc/header.h"
+#include "camel/core/rtdata/foreign.h"
 #include "nlohmann/json.hpp"
 
 #include <cstdint>
 #include <cstring>
+#include <sstream>
 
 namespace camel::core::mm {
 namespace profiler {
@@ -30,10 +32,12 @@ static json bumpRegionToJson(const char *name, const BumpPointerAllocator &alloc
     size_t used     = (top && start) ? static_cast<size_t>(top - start) : 0;
 
     std::vector<json> objects;
+    size_t objectBytes = 0;
     alloc.iterateAllocated([&](ObjectHeader *hdr) {
         // Skip forwarded objects (logically moved out and represented by the target).
         if (hdr->forwarded())
             return;
+        objectBytes += hdr->size();
         objects.push_back({
             {"addr", reinterpret_cast<uintptr_t>(hdr)},
             {"size", hdr->size()},
@@ -52,6 +56,7 @@ static json bumpRegionToJson(const char *name, const BumpPointerAllocator &alloc
         {"used", used},
         {"available", alloc.available()},
         {"objectCount", objects.size()},
+        {"objectBytes", objectBytes},
         {"objects", objects},
     };
 }
@@ -65,7 +70,9 @@ static json freeListRegionToJson(const char *name, const FreeListAllocator &allo
     size_t used      = capacity - available;
 
     std::vector<json> objects;
+    size_t objectBytes = 0;
     alloc.iterateAllocated([&](ObjectHeader *hdr) {
+        objectBytes += hdr->size();
         objects.push_back({
             {"addr", reinterpret_cast<uintptr_t>(hdr)},
             {"size", hdr->size()},
@@ -83,6 +90,7 @@ static json freeListRegionToJson(const char *name, const FreeListAllocator &allo
         {"used", used},
         {"available", available},
         {"objectCount", objects.size()},
+        {"objectBytes", objectBytes},
         {"objects", objects},
     };
 }
@@ -105,7 +113,9 @@ static const BumpPointerAllocator *getBumpRegionByName(const char *name) {
 // LargeObject region: no contiguous blocks, only an object list.
 static json largeObjRegionToJson(const LargeObjectAllocator &alloc) {
     std::vector<json> objects;
+    size_t objectBytes = 0;
     alloc.iterateAllocated([&](ObjectHeader *hdr) {
+        objectBytes += hdr->size();
         objects.push_back({
             {"addr", reinterpret_cast<uintptr_t>(hdr)},
             {"size", hdr->size()},
@@ -118,8 +128,44 @@ static json largeObjRegionToJson(const LargeObjectAllocator &alloc) {
         {"name", "largeObj"},
         {"type", "largeobj"},
         {"objectCount", objects.size()},
+        {"objectBytes", objectBytes},
         {"objects", objects},
     };
+}
+
+static const char *collectionKindName(GenerationalAllocatorWithGC::CollectionKind kind) {
+    switch (kind) {
+    case GenerationalAllocatorWithGC::CollectionKind::None:
+        return "none";
+    case GenerationalAllocatorWithGC::CollectionKind::Minor:
+        return "minor";
+    case GenerationalAllocatorWithGC::CollectionKind::Major:
+        return "major";
+    case GenerationalAllocatorWithGC::CollectionKind::MinorAndMajor:
+        return "minor+major";
+    }
+    return "unknown";
+}
+
+std::string configToJson() {
+    auto &autoSp           = autoSpace();
+    const auto debugConfig = autoSp.debugConfig();
+    json root              = {
+        {"youngCopying", autoSp.youngGenCopyingEnabled()},
+        {"stress",
+         {
+             {"allocInterval", debugConfig.stressEveryNAllocations},
+             {"safepointInterval", debugConfig.stressEveryNSafepoints},
+             {"mode", collectionKindName(debugConfig.stressCollection)},
+         }},
+        {"verify",
+         {
+             {"before", debugConfig.verifyBeforeGC},
+             {"after", debugConfig.verifyAfterGC},
+         }},
+        {"logMoves", debugConfig.logMovements},
+    };
+    return root.dump(2);
 }
 
 std::string snapshotToJson() {
@@ -146,15 +192,96 @@ std::string snapshotToJson() {
     // Perm Space.
     regions.push_back(bumpRegionToJson("permSpace", permSp));
 
+    size_t totalObjectCount = 0;
+    size_t totalObjectBytes = 0;
+    for (const auto &region : regions) {
+        totalObjectCount += region.value("objectCount", 0);
+        totalObjectBytes += region.value("objectBytes", 0);
+    }
+
+    const auto stats        = autoSp.stats();
+    const auto foreignStats = camel::core::rtdata::foreignResourceStats();
+
     json root = {
         {"regions", regions},
+        {"gc",
+         {
+             {"allocations", stats.allocations},
+             {"safepoints", stats.safepoints},
+             {"deferredCollections", stats.deferredCollections},
+             {"requestedCollections", stats.requestedCollections},
+             {"allocationFailureCollections", stats.allocationFailureCollections},
+             {"writeBarriers", stats.writeBarriers},
+             {"minorCollections", stats.minorCollections},
+             {"majorCollections", stats.majorCollections},
+             {"movedObjects", stats.movedObjects},
+             {"promotedObjects", stats.promotedObjects},
+             {"freedElderObjects", stats.freedElderObjects},
+             {"freedLargeObjects", stats.freedLargeObjects},
+             {"rootSourceCount", stats.rootSourceCount},
+             {"lastTracedRootReferenceCount", stats.lastTracedRootReferenceCount},
+             {"rememberedSetSize", stats.rememberedSetSize},
+             {"rootSources", autoSp.rootSourceDescriptions()},
+         }},
+        {"foreignResources",
+         {
+             {"createdControlBlocks", foreignStats.createdControlBlocks},
+             {"disposedResources", foreignStats.disposedResources},
+             {"finalizedWrappers", foreignStats.finalizedWrappers},
+             {"releasedControlBlocks", foreignStats.releasedControlBlocks},
+             {"liveControlBlocks", foreignStats.liveControlBlocks},
+             {"createdRootedHandles", foreignStats.createdRootedHandles},
+             {"createdPinnedHandles", foreignStats.createdPinnedHandles},
+             {"activeRootedHandles", foreignStats.activeRootedHandles},
+             {"activePinnedHandles", foreignStats.activePinnedHandles},
+         }},
         {"summary",
          {
              {"regionCount", regions.size()},
+             {"objectCount", totalObjectCount},
+             {"objectBytes", totalObjectBytes},
          }},
     };
 
     return root.dump(2);
+}
+
+std::string summaryToText() {
+    auto &autoSp           = autoSpace();
+    const auto stats       = autoSp.stats();
+    const auto debugConfig = autoSp.debugConfig();
+    const auto foreign     = camel::core::rtdata::foreignResourceStats();
+
+    std::ostringstream os;
+    os << "GC summary\n";
+    os << "  mode: " << (autoSp.youngGenCopyingEnabled() ? "young-copying" : "non-moving") << "\n";
+    os << "  stress: alloc=" << debugConfig.stressEveryNAllocations
+       << " safepoint=" << debugConfig.stressEveryNSafepoints
+       << " mode=" << collectionKindName(debugConfig.stressCollection) << "\n";
+    os << "  verify: before=" << (debugConfig.verifyBeforeGC ? "true" : "false")
+       << " after=" << (debugConfig.verifyAfterGC ? "true" : "false") << "\n";
+    os << "  collections: minor=" << stats.minorCollections << " major=" << stats.majorCollections
+       << " requested=" << stats.requestedCollections << " deferred=" << stats.deferredCollections
+       << " emergency=" << stats.allocationFailureCollections << "\n";
+    os << "  movement: moved=" << stats.movedObjects << " promoted=" << stats.promotedObjects
+       << " rememberedSet=" << stats.rememberedSetSize << "\n";
+    os << "  roots: sources=" << stats.rootSourceCount
+       << " lastTracedRefs=" << stats.lastTracedRootReferenceCount << "\n";
+    os << "  freed: elder=" << stats.freedElderObjects << " large=" << stats.freedLargeObjects
+       << "\n";
+    os << "  foreign: live=" << foreign.liveControlBlocks
+       << " rooted=" << foreign.activeRootedHandles << " pinned=" << foreign.activePinnedHandles
+       << " finalized=" << foreign.finalizedWrappers << "\n";
+
+    const auto sources = autoSp.rootSourceDescriptions();
+    if (!sources.empty()) {
+        os << "  rootSources:";
+        for (const auto &source : sources) {
+            os << " " << source;
+        }
+        os << "\n";
+    }
+    return os.str();
 }
 
 std::string regionMemoryRawToJson(const char *regionName, size_t offset, size_t limit) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: May. 04, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1350,7 +1350,7 @@ void GCGraph::print(std::ostream &os, const camel::core::type::Type *type) const
 }
 
 void GCGraph::updateRefs(
-    const std::function<camel::core::rtdata::Object *(camel::core::rtdata::Object *)> &relocate,
+    const camel::core::rtdata::Object::RefRelocator &relocate,
     const camel::core::type::Type *type) {
     (void)type;
     if (staticArea_ && staticDataType()) {
@@ -1359,11 +1359,41 @@ void GCGraph::updateRefs(
 }
 
 void GCGraphManager::replaceRoot(GCGraph *rootGraph) {
-    clear();
-    adoptRoot(rootGraph);
+    std::vector<GCGraph *> newGraphs =
+        rootGraph ? collectReachableGraphs(rootGraph) : std::vector<GCGraph *>{};
+    std::unordered_set<GCGraph *> keep(newGraphs.begin(), newGraphs.end());
+
+    for (GCGraph *graph : graphs_) {
+        if (!graph || keep.contains(graph)) {
+            continue;
+        }
+        delete graph->debug_;
+        graph->~GCGraph();
+        mm::graphSpace().free(graph);
+    }
+
+    root_   = rootGraph;
+    graphs_ = std::move(newGraphs);
+    gcRoots_.clear();
+    debugRecords_.clear();
+    gcRoots_.reserve(graphs_.size());
+    for (GCGraph *graph : graphs_) {
+        if (!graph) {
+            continue;
+        }
+        gcRoots_.push_back(graph);
+        if (graph->debug_) {
+            debugRecords_.push_back(graph->debug_);
+        }
+    }
 }
 
 void GCGraphManager::adoptRoot(GCGraph *rootGraph) {
+    if (root_ || !graphs_.empty()) {
+        replaceRoot(rootGraph);
+        return;
+    }
+
     root_ = rootGraph;
     if (!root_) {
         return;
@@ -1396,6 +1426,14 @@ std::vector<GCGraph *> GCGraphManager::reachableFromRoots() const {
 }
 
 void GCGraphManager::clear() {
+    for (GCGraph *graph : graphs_) {
+        if (!graph) {
+            continue;
+        }
+        delete graph->debug_;
+        graph->~GCGraph();
+        mm::graphSpace().free(graph);
+    }
     gcRoots_.clear();
     debugRecords_.clear();
     graphs_.clear();

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 05, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -207,6 +207,7 @@ MacroEvaluator::MacroEvaluator(const context_ptr_t &context)
     framePool_.registerGcTracer();
     mm::autoSpace().registerExternalRootTracer(
         this,
+        "MacroEvaluator.valueRoots",
         [this](const mm::GenerationalAllocatorWithGC::RefRelocator &relocate) {
             traceValueRoots(relocate);
         });
@@ -229,8 +230,18 @@ void MacroEvaluator::traceValueRoots(
         if (!root || !root->type || !root->type->isGCTraced() || root->value == NullSlot) {
             continue;
         }
-        auto *relocated = relocate(fromSlot<Object *>(root->value));
-        root->value     = toSlot(relocated);
+        auto *relocated = relocate(
+            fromSlot<Object *>(root->value),
+            root->type,
+            RefTraceInfo{
+                .owner     = nullptr,
+                .ownerType = nullptr,
+                .slotType  = root->type,
+                .ownerKind = "MacroEvaluator",
+                .slotName  = "valueRoot",
+                .slotIndex = RefTraceInfo::npos,
+            });
+        root->value = toSlot(relocated);
     }
 }
 
@@ -430,6 +441,7 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
         FrameArgsView normView(*frame, nargs);
         (void)os;
         CAMEL_LOG_INFO_S("Macro", "Execute static operator '{}'.", std::string(body->uri()));
+        mm::safepoint("macro static operator");
         slot_t value = (*op)(withView, normView, *context_);
         framePool_.release(frame);
         return anchorResult(value, node->dataType, node->flags);
@@ -447,6 +459,11 @@ slot_t MacroEvaluator::executeFunction(
     }
     auto *runtimeGraph = funcObj->graph();
     ASSERT(runtimeGraph != nullptr, "Macro function must carry a runtime graph.");
+    mm::RootHandle funcRoot(
+        mm::autoSpace(),
+        funcObj,
+        runtimeGraph->funcType(),
+        "MacroEvaluator.function");
     if (requireMacroGraph && !runtimeGraph->isMacro()) {
         throw MacroExecutionError(
             std::format("'{}' is not marked as macro.", runtimeGraph->name()));
@@ -462,7 +479,7 @@ slot_t MacroEvaluator::executeFunction(
     try {
         fillArgs(frame, runtimeGraph);
         if (!runtimeGraph->closureNodes().empty()) {
-            auto *closure           = funcObj->tuple();
+            auto *closure           = funcRoot.getAs<::Function>()->tuple();
             const auto closureNodes = runtimeGraph->closureNodes();
             ASSERT(
                 closure != nullptr && closureNodes.size() == closure->size(),
@@ -475,7 +492,8 @@ slot_t MacroEvaluator::executeFunction(
         }
         recursionDepth_++;
         enteredExecution = true;
-        slot_t result    = executeGraph(frame, runtimeGraph);
+        mm::safepoint("macro function entry");
+        slot_t result = executeGraph(frame, runtimeGraph);
         recursionDepth_--;
         framePool_.release(frame);
         return result;
@@ -712,6 +730,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
     };
 
     for (uint32_t runtimeNodeIndex : runtimeTopoIndices) {
+        mm::safepoint("macro node boundary");
         if (tillRuntimeIndex.has_value()) {
             if (*tillRuntimeIndex == runtimeNodeIndex) {
                 tillRuntimeIndex.reset();

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 16, 2025
- * Updated: May. 04, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -206,7 +206,7 @@ class Frame : public rtdata::Object {
                         idx,
                         staticArea_->size()));
             });
-            staticArea_->set<T>(idx, value);
+            staticArea_->set<T>(idx, value, staticDataLayout());
         }
     }
 
@@ -243,16 +243,26 @@ class Frame : public rtdata::Object {
         }
     }
 
-    virtual void updateRefs(
-        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
-        const type::Type *type) override {
+    virtual void
+    updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override {
         (void)type;
         auto codes              = dynamicAreaType_->codes();
         rtdata::Object **refArr = reinterpret_cast<rtdata::Object **>(dynamicArea_);
         for (size_t i = 0; i < dynamicAreaType_->size(); ++i) {
             if (type::isGCTraced(codes[i])) {
                 if (rtdata::Object *&ref = refArr[i]) {
-                    ref = relocate(ref);
+                    type::Type *slotType = dynamicAreaType_->typeAt(i);
+                    ref                  = relocate(
+                        ref,
+                        slotType,
+                        rtdata::RefTraceInfo{
+                            .owner     = this,
+                            .ownerType = dynamicAreaType_,
+                            .slotType  = slotType,
+                            .ownerKind = "Frame",
+                            .slotName  = {},
+                            .slotIndex = i,
+                        });
                 }
             }
         }
@@ -285,8 +295,8 @@ class Frame : public rtdata::Object {
 class FrameView {
   public:
     FrameView(const Frame *frame)
-        : staticArea_(frame->staticArea_), dynamicArea_(const_cast<slot_t *>(frame->dynamicArea_)) {
-    }
+        : staticArea_(frame->staticArea_), staticDataType_(frame->staticDataLayout()),
+          dynamicArea_(const_cast<slot_t *>(frame->dynamicArea_)) {}
 
     template <typename T> T get(data_idx_t index) const {
         ASSERT(index != 0, "Data index is invalid.");
@@ -332,12 +342,13 @@ class FrameView {
                         idx,
                         staticArea_->size()));
             });
-            staticArea_->set<T>(idx, value);
+            staticArea_->set<T>(idx, value, staticDataType_);
         }
     }
 
   private:
     ::Tuple *staticArea_;
+    const type::TupleType *staticDataType_;
     slot_t *dynamicArea_;
 };
 
@@ -372,6 +383,7 @@ class FramePool {
         }
         camel::core::mm::autoSpace().registerExternalRootTracer(
             this,
+            "FramePool.activeFrames",
             [this](const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) {
                 traceActiveFrames(relocate);
             });
@@ -412,7 +424,9 @@ class FramePool {
         if (LIKELY(
                 lastFrame->runtimeGraph_ == graph &&
                 (!MatchStaticArea || lastFrame->staticArea_ == staticArea))) {
-            clearGcSlots(lastFrame);
+            if (UNLIKELY(hasGcSlots(lastFrame))) {
+                clearGcSlots(lastFrame);
+            }
             EXEC_WHEN_DEBUG({
                 CAMEL_LOG_INFO_S(
                     "FramePool",
@@ -448,7 +462,9 @@ class FramePool {
             graph,
             MatchStaticArea ? staticArea : graph->staticArea(),
             graph->runtimeDataType());
-        clearGcSlots(frame);
+        if (UNLIKELY(graph->runtimeDataType()->refCount() != 0)) {
+            clearGcSlots(frame);
+        }
 
         EXEC_WHEN_DEBUG({
             CAMEL_LOG_INFO_S(
@@ -539,6 +555,14 @@ class FramePool {
         }
     }
 
+    // Frame reuse must clear stale managed references, but scalar-only frames dominate FVM hot
+    // paths such as recursive fib. Test the precomputed ref count before entering the clearing
+    // loop so GC safety stays tied to the layout while pure-scalar frames stay cheap.
+    static bool hasGcSlots(const Frame *frame) {
+        const type::TupleType *layout = frame->dynamicAreaType_;
+        return layout && layout->refCount() != 0;
+    }
+
     void clearGcSlots(Frame *frame) {
         ASSERT(frame != nullptr, "Cannot clear a null frame.");
         const type::TupleType *layout = frame->dynamicAreaType_;
@@ -557,7 +581,7 @@ class FramePool {
             if (frame->staticArea_ && frame->staticDataLayout()) {
                 frame->staticArea_->updateRefs(relocate, frame->staticDataLayout());
             }
-            if (frame->dynamicAreaType_ && frame->dynamicAreaType_->refCount() != 0) {
+            if (frame->dynamicAreaType_) {
                 frame->updateRefs(relocate, nullptr);
             }
         });
@@ -641,7 +665,7 @@ class SlotArgsView : public ArgsView {
         if (dataIdx > 0)
             slots_[dataIdx] = value;
         else
-            staticArea_->set<slot_t>(static_cast<size_t>(-dataIdx), value);
+            staticArea_->set<slot_t>(static_cast<size_t>(-dataIdx), value, staticDataType_);
     }
 
     type::TypeCode code(size_t index) const override {

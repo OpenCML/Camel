@@ -3,6 +3,8 @@ MNIST visualization for Camel - loss curve and sample predictions.
 Call from Camel via py_call with wrapped arrays.
 """
 
+import os
+
 
 def visualize(loss_history: list, images_flat: list, n: int, d: int,
               labels: list, pred: list, show_window: bool = True) -> None:
@@ -71,6 +73,8 @@ def visualize(loss_history: list, images_flat: list, n: int, d: int,
     if show_window:
         plt.show()
     else:
-        fig.savefig("test/tmp/mnist/mnist_result.png")
+        out_path = "test/tmp/mnist/mnist_result.png"
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        fig.savefig(out_path)
         plt.close(fig)
-        print("Saved to test/tmp/mnist/mnist_result.png")
+        print(f"Saved to {out_path}")

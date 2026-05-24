@@ -1,12 +1,15 @@
 # Agent Development Guide
 
 This file is the entry point. Read the detailed rules under `agents/` before making changes.
+For any branch, merge, rebase, or release task, you must read `agents/branching.md` first and follow it exactly.
+In particular, before any `develop` -> `main` release merge, you must confirm the release version, confirm the next development version, and confirm the `changes.log` release-note content with the user.
 
 ## Core Rules
 - Runtime shell: Windows PowerShell.
 - Use `;` to chain commands. Do not use `&&`.
 - Prefer the repo build commands documented below.
-- Follow the refactor, test, and commit rules in `agents/refactor.md`, `agents/test.md`, and `agents/commit.md`.
+- Follow the refactor, test, commit, and branching rules in `agents/refactor.md`, `agents/test.md`, `agents/commit.md`, and `agents/branching.md`.
+- Do not create additional git worktrees unless the user explicitly asks for one.
 - When preparing a commit, describe the common purpose of the entire staged set, not just the most recent edit.
 
 ## Build And Runtime

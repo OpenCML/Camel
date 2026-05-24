@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 06, 2026
- * Updated: May. 02, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/log.h"
@@ -562,29 +563,33 @@ void writeRuntimeFillSlots(
 
     switch (targetType->code()) {
     case camel::core::type::TypeCode::Tuple: {
-        auto *tuple = tt::as_ptr<Tuple>(target);
+        auto *tuple     = tt::as_ptr<Tuple>(target);
+        auto *tupleType = tt::as_ptr<camel::core::type::TupleType>(targetType);
         for (size_t i = 0; i < values.size(); ++i) {
-            tuple->set<slot_t>(slots[i], values[i]);
+            tuple->set<slot_t>(slots[i], values[i], tupleType);
         }
     } break;
     case camel::core::type::TypeCode::Array: {
-        auto *array = tt::as_ptr<Array>(target);
+        auto *array     = tt::as_ptr<Array>(target);
+        auto *arrayType = tt::as_ptr<camel::core::type::ArrayType>(targetType);
         for (size_t i = 0; i < values.size(); ++i) {
-            array->set<slot_t>(slots[i], values[i]);
+            array->set<slot_t>(slots[i], values[i], arrayType);
         }
     } break;
     case camel::core::type::TypeCode::Struct: {
-        auto *str = tt::as_ptr<Struct>(target);
+        auto *str        = tt::as_ptr<Struct>(target);
+        auto *structType = tt::as_ptr<camel::core::type::StructType>(targetType);
         for (size_t i = 0; i < values.size(); ++i) {
-            str->set<slot_t>(slots[i], values[i]);
+            str->set<slot_t>(slots[i], values[i], structType);
         }
     } break;
     case camel::core::type::TypeCode::Function: {
         auto *func         = tt::as_ptr<Function>(target);
         Tuple *closureData = func->tuple();
         ASSERT(closureData != nullptr, "Runtime FILL function closure storage is null.");
+        const auto *tupleType = func->tupleType();
         for (size_t i = 0; i < values.size(); ++i) {
-            closureData->set<slot_t>(slots[i], values[i]);
+            closureData->set<slot_t>(slots[i], values[i], tupleType);
         }
     } break;
     default:

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 10, 2026
- * Updated: Mar. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,8 +41,8 @@ TypeCode TensorType::typeCode() {
 }
 
 TensorType *TensorType::create(Type *elementType, const std::vector<size_t> &shape) {
-    void *mem = mm::autoSpace().alloc(sizeof(TensorType), alignof(TensorType));
-    ASSERT(mem != nullptr, "Failed to allocate TensorType from autoSpace");
+    void *mem = mm::permSpace().alloc(sizeof(TensorType), alignof(TensorType));
+    ASSERT(mem != nullptr, "Failed to allocate TensorType from permSpace");
     return new (mem) TensorType(shape, elementType);
 }
 
@@ -137,8 +137,8 @@ OtherType *TensorType::cloneWithParams(std::span<Type *const> params) const {
         return TensorType::Dynamic(params[0]);
     }
     Type **p  = OtherType::copyParams(params);
-    void *mem = mm::autoSpace().alloc(sizeof(TensorType), alignof(TensorType));
-    ASSERT(mem != nullptr, "Failed to allocate TensorType from autoSpace");
+    void *mem = mm::permSpace().alloc(sizeof(TensorType), alignof(TensorType));
+    ASSERT(mem != nullptr, "Failed to allocate TensorType from permSpace");
     return new (mem) TensorType(typeCode(), params.size(), p);
 }
 

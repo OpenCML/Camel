@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -73,10 +73,15 @@ class Struct : public rtdata::Object {
 
     template <typename T> void set(size_t index, T value) {
         ASSERT(index < size_, std::format("Index out of range: {}", index));
-        if constexpr (std::is_same_v<T, rtdata::Object *>) {
-            // writeBarrier(arr[index], value);
-        }
         data_[index] = rtdata::toSlot(value);
+    }
+
+    template <typename T> void set(size_t index, T value, const type::StructType *structType) {
+        ASSERT(index < size_, std::format("Index out of range: {}", index));
+        ASSERT(structType != nullptr && index < structType->size(), "StructType is invalid.");
+        const slot_t slot = rtdata::toSlot(value);
+        camel::core::mm::writeBarrier(this, structType, slot, structType->typeAt(index));
+        data_[index] = slot;
     }
 
     template <typename T> void set(std::string_view name, T value, const type::Type *type) {
@@ -84,7 +89,7 @@ class Struct : public rtdata::Object {
         const type::StructType *structType = static_cast<const type::StructType *>(type);
         auto optIndex                      = structType->findField(name);
         ASSERT(optIndex.has_value(), std::format("Field name not found: {}", name));
-        set<T>(optIndex.value(), value);
+        set<T>(optIndex.value(), value, structType);
     }
 
     slot_t *data() { return data_; }
@@ -162,6 +167,7 @@ class Struct : public rtdata::Object {
                 }
 
                 reinterpret_cast<rtdata::Object **>(dst)[i] = newRef;
+                camel::core::mm::writeBarrier(newStruct, structType, newRef, structType->typeAt(i));
             } else {
                 // Non-reference types: copy the slot data directly.
                 dst[i] = src[i];
@@ -199,9 +205,8 @@ class Struct : public rtdata::Object {
         // No adjustment is needed.
     }
 
-    virtual void updateRefs(
-        const std::function<rtdata::Object *(rtdata::Object *)> &relocate,
-        const type::Type *type) override {
+    virtual void
+    updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override {
         if (!type || type->code() != type::TypeCode::Struct)
             return;
         const type::StructType *structType = static_cast<const type::StructType *>(type);
@@ -210,7 +215,18 @@ class Struct : public rtdata::Object {
         for (size_t i = 0; i < size_; ++i) {
             if (type::isGCTraced(codes[i])) {
                 if (rtdata::Object *&ref = refArr[i]) {
-                    ref = relocate(ref);
+                    const type::Type *slotType = structType->typeAt(i);
+                    ref                        = relocate(
+                        ref,
+                        slotType,
+                        rtdata::RefTraceInfo{
+                            .owner     = this,
+                            .ownerType = type,
+                            .slotType  = slotType,
+                            .ownerKind = "Struct",
+                            .slotName  = structType->fieldName(i),
+                            .slotIndex = i,
+                        });
                 }
             }
         }

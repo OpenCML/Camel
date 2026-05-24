@@ -10,6 +10,14 @@
 
 `python` 为标准库模块，随 Camel 发布，直接 `import python` 即可。若自编译或需单独部署，可将 `python.cmo` 放置在 Camel 能访问的模块搜索路径下。首次使用时会初始化 Python 解释器。
 
+### 运行时环境兼容
+
+- 默认行为：Camel 会优先复用激活的 `VIRTUAL_ENV` / `CONDA_PREFIX` 中的包，但在初始化嵌入式解释器时会隔离宿主 `PYTHONHOME` / `PYTHONPATH`，避免外部 Python 环境污染 Camel 运行时。
+- `CAMEL_PYTHONPATH`：为 Camel 的嵌入式 Python 追加额外搜索路径；Windows 使用 `;` 分隔。
+- `CAMEL_PYTHON_INHERIT_HOST_PYTHONPATH=1`：保留并继承宿主 `PYTHONPATH`。
+- `CAMEL_PYTHON_INHERIT_HOST_ENV=1`：完全回退到旧行为，初始化时不屏蔽宿主 `PYTHONHOME` / `PYTHONPATH`。
+- 若激活了版本不匹配的 venv，Camel 会拒绝加载 Python 模块并给出明确版本错误，而不是继续在污染状态下运行。
+
 ## 接口
 
 ### 调用与执行

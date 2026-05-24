@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,6 +30,13 @@ using namespace std;
 using namespace camel::core::type;
 
 namespace {
+
+bool isRuntimeReferenceSlot(Type *type) {
+    if (!type) {
+        return false;
+    }
+    return type->isGCTraced() || type->code() == TypeCode::Ref;
+}
 
 TupleTypeLayout computeLayout(size_t size, size_t refCount) {
     size_t typesSize     = size * sizeof(Type *);
@@ -79,7 +86,7 @@ TupleType::TupleType(TupleTypeFactory &factory, const TupleTypeLayout &layout)
         Type *t        = factory.types_[i];
         p.types[i]     = t;
         p.typeCodes[i] = t->code();
-        if (t->code() == TypeCode::Ref) {
+        if (isRuntimeReferenceSlot(t)) {
             p.refs[refIdx++] = i;
         }
     }
@@ -96,7 +103,7 @@ TupleType::TupleType(const TupleTypeLayout &layout, const std::vector<Type *> &t
         Type *t        = types[i];
         p.types[i]     = t;
         p.typeCodes[i] = t->code();
-        if (t->code() == TypeCode::Ref) {
+        if (isRuntimeReferenceSlot(t)) {
             p.refs[refIdx++] = i;
         }
     }
@@ -116,7 +123,7 @@ TupleType *TupleType::create() {
 TupleType *TupleType::create(const std::vector<Type *> &types) {
     size_t refCount = 0;
     for (Type *t : types) {
-        if (t && t->code() == TypeCode::Ref)
+        if (isRuntimeReferenceSlot(t))
             ++refCount;
     }
     TupleTypeLayout layout = computeLayout(types.size(), refCount);
@@ -137,7 +144,7 @@ TupleType *TupleType::fromFactory(TupleTypeFactory &factory) {
     size_t size     = factory.types_.size();
     size_t refCount = 0;
     for (Type *t : factory.types_) {
-        if (t && t->code() == TypeCode::Ref)
+        if (isRuntimeReferenceSlot(t))
             ++refCount;
     }
     TupleTypeLayout layout = computeLayout(size, refCount);

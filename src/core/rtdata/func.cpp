@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 17, 2025
- * Updated: May. 01, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,6 +43,7 @@ Function *Function::create(
 
     auto *fn     = new (mem) Function(graph, tt);
     fn->closure_ = Tuple::create(tt->size(), allocator);
+    camel::core::mm::writeBarrier(fn, nullptr, fn->closure_, tt);
     return fn;
 }
 

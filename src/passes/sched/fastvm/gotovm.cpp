@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: May. 02, 2026
+ * Updated: May. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -108,6 +108,11 @@ static thread_local size_t s_jit_save_depth = 0;
 #define NEXT()                                                                                     \
     do {                                                                                           \
         pc += bc->opsize;                                                                          \
+        /* FVM intentionally has no per-bytecode GC safepoint. Pass boundaries and selected \
+                                                                                                 \
+         * * coarse schedulers service pending GC work; putting a mutex-backed poll here dominates \
+         * \
+         * recursive-call benchmarks. */                                                                                       \
         SYNC_RUNTIME_ORIGIN();                                                                     \
         bc = &base[pc];                                                                            \
         goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                      \
@@ -115,6 +120,7 @@ static thread_local size_t s_jit_save_depth = 0;
 
 #define JUMP()                                                                                     \
     do {                                                                                           \
+        /* Keep branch/call transitions on the same no-per-bytecode-safepoint policy as NEXT(). */ \
         SYNC_RUNTIME_ORIGIN();                                                                     \
         bc = &base[pc];                                                                            \
         goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                      \
@@ -122,26 +128,57 @@ static thread_local size_t s_jit_save_depth = 0;
 
 #define DEF_BIN_OP_LABEL(LABEL, TYPE, OP)                                                          \
     label_##LABEL : {                                                                              \
-        TYPE lhs = currFrame->get<TYPE>(bc->fastop[0]);                                            \
-        TYPE rhs = currFrame->get<TYPE>(bc->fastop[1]);                                            \
+        TYPE lhs = fastFrameGet<TYPE>(currFrame, bc->fastop[0]);                                   \
+        TYPE rhs = fastFrameGet<TYPE>(currFrame, bc->fastop[1]);                                   \
         TYPE res = lhs OP rhs;                                                                     \
-        currFrame->set(bc->result, res);                                                           \
+        fastFrameSet(currFrame, bc->result, res);                                                  \
         NEXT();                                                                                    \
     }
 
 #define DEF_BIN_DIV_LABEL(LABEL, TYPE, ZERO_CHECK)                                                 \
     label_##LABEL : {                                                                              \
-        TYPE lhs = currFrame->get<TYPE>(bc->fastop[0]);                                            \
-        TYPE rhs = currFrame->get<TYPE>(bc->fastop[1]);                                            \
+        TYPE lhs = fastFrameGet<TYPE>(currFrame, bc->fastop[0]);                                   \
+        TYPE rhs = fastFrameGet<TYPE>(currFrame, bc->fastop[1]);                                   \
         if (rhs == ZERO_CHECK) {                                                                   \
             throwRuntimeFault(RuntimeDiag::DivisionByZero);                                        \
         }                                                                                          \
         TYPE res = lhs / rhs;                                                                      \
-        currFrame->set(bc->result, res);                                                           \
+        fastFrameSet(currFrame, bc->result, res);                                                  \
         NEXT();                                                                                    \
     }
 
 using namespace std;
+
+namespace {
+
+// Computed-goto handlers mostly operate on positive dynamic slots. Those slots are raw frame
+// storage and do not require type lookup, static-area routing, or slot-0 handling. Keep the rare
+// static/control cases on Frame::get/set so the interpreter preserves the generic semantics.
+template <typename T> inline T fastFrameGet(Frame *frame, data_idx_t index) {
+    return LIKELY(index > 0) ? fromSlot<T>(frame->slotBase()[static_cast<size_t>(index)])
+                             : frame->get<T>(index);
+}
+
+inline slot_t fastFrameGetSlot(Frame *frame, data_idx_t index) {
+    return LIKELY(index > 0) ? frame->slotBase()[static_cast<size_t>(index)]
+                             : frame->get<slot_t>(index);
+}
+
+template <typename T> inline void fastFrameSet(Frame *frame, data_idx_t index, T value) {
+    if (LIKELY(index > 0)) {
+        frame->slotBase()[static_cast<size_t>(index)] = toSlot(value);
+        return;
+    }
+    frame->set(index, value);
+}
+
+inline void fastFrameSetSlot(Frame *frame, data_idx_t index, slot_t value) {
+    if (LIKELY(index > 0)) {
+        frame->slotBase()[static_cast<size_t>(index)] = value;
+        return;
+    }
+    frame->set(index, value);
+}
 
 static void writeComputedGotoFillSlots(
     Frame *frame, const Bytecode *bc, Object *target, Type *targetType,
@@ -155,12 +192,17 @@ static void writeComputedGotoFillSlots(
     camel::execute::writeRuntimeFillSlots(target, targetType, fillBody, fillValues);
 }
 
+} // namespace
+
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
     Frame *currFrame            = rootFrame;
     Frame *rootActiveFrame      = rootFrame;
     const Bytecode *base        = bytecodes_.data();
     const Bytecode *bc          = nullptr;
     const size_t stackDepthBase = stackDepth_;
+#if ENABLE_FASTVM_JIT
+    const bool useJit = jitEnabled();
+#endif
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
     const size_t jitSaveBase = s_jit_save_depth;
 #endif
@@ -232,7 +274,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
-        slot_t result = bc->fastop[0] == 0 ? NullSlot : currFrame->get<slot_t>(bc->fastop[0]);
+        slot_t result = bc->fastop[0] == 0 ? NullSlot : fastFrameGetSlot(currFrame, bc->fastop[0]);
         if (currFrame == rootActiveFrame) {
             return CallResult{result, currFrame};
         }
@@ -245,7 +287,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         currFrame                = lastFrame;
 
         Bytecode &lbc = bytecodes_[pc];
-        currFrame->set(lbc.result, result);
+        fastFrameSetSlot(currFrame, lbc.result, result);
 
         NEXT();
     }
@@ -327,12 +369,12 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
         size_t jumpIdx;
         if (bc->withCnt() == 0) {
-            jumpIdx = currFrame->get<bool>(bc->operands()[0]) ? 0 : 1;
+            jumpIdx = fastFrameGet<bool>(currFrame, bc->operands()[0]) ? 0 : 1;
         } else {
             jumpIdx = camel::passes::sched::fastvm::selectBranchArm(*bc, currFrame);
         }
 
-        currFrame->set(bc->result, fromSlot<Int32>(jumpIdx));
+        fastFrameSet(currFrame, bc->result, fromSlot<Int32>(jumpIdx));
         pc += bc->opsize + jumpIdx;
 
         JUMP();
@@ -345,17 +387,21 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
         const data_arr_t nargs = bc->nargs();
         const data_arr_t wargs = bc->wargs();
-        int32_t brIndex        = currFrame->get<int32_t>(nargs[0]);
+        int32_t brIndex        = fastFrameGet<int32_t>(currFrame, nargs[0]);
         ASSERT(
             brIndex >= 0 && static_cast<size_t>(brIndex) < bc->withCnt(),
             "JOIN opcode choosen index out of range in FastVM.");
         if (bc->result != 0) {
-            if (bc->extra()->pType == Type::Void()) {
-                currFrame->set(bc->result, NullSlot);
+            // JOIN always owns exactly one trailing extra word containing the result type. Avoid
+            // BytecodeHeader::extra() here because its generic opcode switch is on the recursive
+            // if/else join path.
+            auto *joinType = reinterpret_cast<const BytecodeExtra *>(bc + bc->opsize - 1)->pType;
+            if (joinType == Type::Void()) {
+                fastFrameSetSlot(currFrame, bc->result, NullSlot);
                 NEXT();
             }
-            slot_t result = currFrame->get<slot_t>(wargs[static_cast<size_t>(brIndex)]);
-            currFrame->set(bc->result, result);
+            slot_t result = fastFrameGetSlot(currFrame, wargs[static_cast<size_t>(brIndex)]);
+            fastFrameSetSlot(currFrame, bc->result, result);
         }
         NEXT();
     }
@@ -423,14 +469,24 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         const data_arr_t dstSlots = bc->directCallDstSlots();
 
 #if ENABLE_FASTVM_JIT
-        if (!jitEnabled()) {
+        if (!useJit) {
+            // std::fvm is a pure interpreter mode even in builds that include JIT support. Keep it
+            // away from materializeCallTarget()/getFuncExtraFn() so the non-JIT benchmark does not
+            // pay for tiering metadata on every recursive call.
             push(pc, currFrame);
             auto *runtimeTarget = getFuncExtraRuntimeGraph(bc);
             ASSERT(
                 runtimeTarget != nullptr,
                 "FastVM direct FUNC target must have a materialized runtime graph.");
             Frame *funcFrame = acquireFrameForCall(runtimeTarget);
-            populateDirectCallFrame(currFrame, funcFrame, srcArgs, dstSlots);
+            // Recursive scalar functions are commonly unary after inlining/normalization. Keep that
+            // arity in the bytecode hot path and fall back to the generic copier only for wider
+            // calls.
+            if (LIKELY(srcArgs.size() == 1)) {
+                fastFrameSetSlot(funcFrame, dstSlots[0], fastFrameGetSlot(currFrame, srcArgs[0]));
+            } else {
+                populateDirectCallFrame(currFrame, funcFrame, srcArgs, dstSlots);
+            }
             pc        = getFuncExtraTargetPc(bc);
             currFrame = funcFrame;
             JUMP();
@@ -447,7 +503,14 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             JitEntryFn fn    = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
             Frame *funcFrame = [&]() {
                 Frame *frame = framePool_.acquire(runtimeTarget);
-                populateDirectCallFrame(currFrame, frame, callSrcArgs, callDstSlots);
+                if (LIKELY(callSrcArgs.size() == 1)) {
+                    fastFrameSetSlot(
+                        frame,
+                        callDstSlots[0],
+                        fastFrameGetSlot(currFrame, callSrcArgs[0]));
+                } else {
+                    populateDirectCallFrame(currFrame, frame, callSrcArgs, callDstSlots);
+                }
                 return frame;
             }();
             slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
@@ -460,7 +523,14 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         push(pc, currFrame);
         Frame *funcFrame = [&]() {
             Frame *frame = framePool_.acquire(runtimeTarget);
-            populateDirectCallFrame(currFrame, frame, callSrcArgs, callDstSlots);
+            if (LIKELY(callSrcArgs.size() == 1)) {
+                fastFrameSetSlot(
+                    frame,
+                    callDstSlots[0],
+                    fastFrameGetSlot(currFrame, callSrcArgs[0]));
+            } else {
+                populateDirectCallFrame(currFrame, frame, callSrcArgs, callDstSlots);
+            }
             return frame;
         }();
         pc        = getFuncExtraTargetPc(bc);
@@ -473,7 +543,11 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             runtimeTarget != nullptr,
             "FastVM direct FUNC target must have a materialized runtime graph.");
         Frame *funcFrame = acquireFrameForCall(runtimeTarget);
-        populateDirectCallFrame(currFrame, funcFrame, srcArgs, dstSlots);
+        if (LIKELY(srcArgs.size() == 1)) {
+            fastFrameSetSlot(funcFrame, dstSlots[0], fastFrameGetSlot(currFrame, srcArgs[0]));
+        } else {
+            populateDirectCallFrame(currFrame, funcFrame, srcArgs, dstSlots);
+        }
         pc        = getFuncExtraTargetPc(bc);
         currFrame = funcFrame;
         JUMP();
@@ -488,6 +562,35 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         const data_arr_t dstSlots = bc->directCallDstSlots();
 
 #if ENABLE_FASTVM_JIT
+        if (!useJit) {
+            // Same split as FUNC: tail-call frame reuse is needed in std::fvm, but JIT materialized
+            // call-target state is not. The target pc was already linked into the bytecode.
+            auto *lastGraph         = currFrame->graph();
+            auto *targetGraph       = getFuncExtraRuntimeGraph(bc);
+            auto *runtimeTailTarget = targetGraph;
+            ASSERT(
+                runtimeTailTarget != nullptr,
+                "FastVM direct TAIL target must have a materialized runtime graph.");
+            slot_t tailArg0 = NullSlot;
+            if (LIKELY(srcArgs.size() == 1)) {
+                tailArg0 = fastFrameGetSlot(currFrame, srcArgs[0]);
+            } else {
+                captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
+            }
+            framePool_.release(currFrame);
+            currFrame = acquireFrameForTail(runtimeTailTarget);
+            if (LIKELY(srcArgs.size() == 1)) {
+                fastFrameSetSlot(currFrame, dstSlots[0], tailArg0);
+            } else {
+                populateDirectCallFrameFromValues(currFrame, dstSlots, tailArgValuesScratch_);
+            }
+            if (targetGraph != lastGraph) {
+                framePool_._resetTop();
+            }
+            pc = getFuncExtraTargetPc(bc);
+            JUMP();
+        }
+
         bc                      = materializeCallTarget(pc, const_cast<Bytecode *>(bc));
         auto *runtimeTailTarget = getFuncExtraRuntimeGraph(bc);
         [[maybe_unused]] auto *tailTargetGraph = runtimeTailTarget;
@@ -497,11 +600,20 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 "FastVM direct TAIL target '{}' must have a materialized runtime graph.",
                 tailTargetGraph->name()));
         if (getFuncExtraFn(bc) != nullptr) {
-            captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
+            slot_t tailArg0 = NullSlot;
+            if (LIKELY(srcArgs.size() == 1)) {
+                tailArg0 = fastFrameGetSlot(currFrame, srcArgs[0]);
+            } else {
+                captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
+            }
             framePool_.release(currFrame);
             Frame *newFrame = [&]() {
                 Frame *frame = framePool_._acquire(runtimeTailTarget);
-                populateDirectCallFrameFromValues(frame, dstSlots, tailArgValuesScratch_);
+                if (LIKELY(srcArgs.size() == 1)) {
+                    fastFrameSetSlot(frame, dstSlots[0], tailArg0);
+                } else {
+                    populateDirectCallFrameFromValues(frame, dstSlots, tailArgValuesScratch_);
+                }
                 framePool_._resetTop();
                 return frame;
             }();
@@ -513,11 +625,20 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             JUMP();
         }
         size_t targetPc = getFuncExtraTargetPc(bc);
-        captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
+        slot_t tailArg0 = NullSlot;
+        if (LIKELY(srcArgs.size() == 1)) {
+            tailArg0 = fastFrameGetSlot(currFrame, srcArgs[0]);
+        } else {
+            captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
+        }
         framePool_.release(currFrame);
         currFrame = [&]() {
             Frame *frame = framePool_._acquire(runtimeTailTarget);
-            populateDirectCallFrameFromValues(frame, dstSlots, tailArgValuesScratch_);
+            if (LIKELY(srcArgs.size() == 1)) {
+                fastFrameSetSlot(frame, dstSlots[0], tailArg0);
+            } else {
+                populateDirectCallFrameFromValues(frame, dstSlots, tailArgValuesScratch_);
+            }
             framePool_._resetTop();
             return frame;
         }();
@@ -530,10 +651,19 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         ASSERT(
             runtimeTailTarget != nullptr,
             "FastVM direct TAIL target must have a materialized runtime graph.");
-        captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
+        slot_t tailArg0 = NullSlot;
+        if (LIKELY(srcArgs.size() == 1)) {
+            tailArg0 = fastFrameGetSlot(currFrame, srcArgs[0]);
+        } else {
+            captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
+        }
         framePool_.release(currFrame);
         currFrame = acquireFrameForTail(runtimeTailTarget);
-        populateDirectCallFrameFromValues(currFrame, dstSlots, tailArgValuesScratch_);
+        if (LIKELY(srcArgs.size() == 1)) {
+            fastFrameSetSlot(currFrame, dstSlots[0], tailArg0);
+        } else {
+            populateDirectCallFrameFromValues(currFrame, dstSlots, tailArgValuesScratch_);
+        }
         if (targetGraph != lastGraph) {
             framePool_._resetTop();
         }

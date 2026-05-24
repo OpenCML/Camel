@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Apr. 10, 2026
+ * Updated: May. 05, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,7 +49,8 @@ class BumpPointerAllocator : public IAllocator {
         size_t aligned_capacity = alignUp(capacity, alignof(slot_t));
         size_t num_units        = aligned_capacity / sizeof(slot_t);
 
-        buffer_ = std::make_unique<slot_t[]>(num_units);
+        // Avoid value-initializing the whole arena: headers are installed explicitly on demand.
+        buffer_ = std::unique_ptr<slot_t[]>(new slot_t[num_units]);
         start_  = reinterpret_cast<std::byte *>(buffer_.get());
         top_.store(start_, std::memory_order_relaxed);
         end_ = start_ + aligned_capacity; // Actual usable byte count.
