@@ -3,12 +3,15 @@
  * common/camel.py for the protocol). Models call `run_benchmark` with their
  * forward function; this module loads inputs, runs warmup and timed
  * repetitions, prints `CAMEL_BENCH` lines, and saves the output for the
- * agreement check. Imported through CAMEL_PACKAGES=benchmarks/common.
+ * agreement check. When CAMEL_BENCH_EXPORT names a path, it exports the
+ * forward function to ONNX there instead (camel_onnx_ort configuration).
+ * Imported through CAMEL_PACKAGES=benchmarks/common.
  */
 module camel_bench
 
 import { Tensor, load_npy, save_npy, set_num_threads } from tensor
 import { get_env } from sys
+import { export_model } from onnx
 import { now } from time
 
 /// Loads weight `name` from CAMEL_BENCH_WEIGHTS.
@@ -33,8 +36,17 @@ sync func timed(forward: (x: Tensor) => Tensor, x: Tensor, remaining: int): int 
     }
 }
 
-/// Runs the benchmark protocol for `forward` and returns the process exit code.
-export func run_benchmark(forward: (x: Tensor) => Tensor): int sync {
+/// Exports `forward`, specialized to the benchmark input's dtype and shape, to `path`.
+func export_onnx(forward: (x: Tensor) => Tensor, path: string): int sync {
+    let x = load_npy(get_env('CAMEL_BENCH_INPUT'))
+    let start = now()
+    export_model(forward, x, path)
+    'CAMEL_BENCH export_ms={}'->format<(now() - start) * 1000.0>->println
+    return 0
+}
+
+/// Runs warmup and timed repetitions of `forward` and saves its output.
+func measure(forward: (x: Tensor) => Tensor): int sync {
     set_num_threads(int(get_env('CAMEL_BENCH_THREADS')))
     let x = load_npy(get_env('CAMEL_BENCH_INPUT'))
     let warmStart = now()
@@ -45,4 +57,10 @@ export func run_benchmark(forward: (x: Tensor) => Tensor): int sync {
     let status = timed(forward, x, int(get_env('CAMEL_BENCH_REPS')))
     save_npy(first, get_env('CAMEL_BENCH_OUTPUT'))
     return status
+}
+
+/// Runs the benchmark protocol for `forward` and returns the process exit code.
+export func run_benchmark(forward: (x: Tensor) => Tensor): int {
+    let exportPath = get_env('CAMEL_BENCH_EXPORT')
+    return if exportPath == '' then measure(forward) else export_onnx(forward, exportPath)
 }

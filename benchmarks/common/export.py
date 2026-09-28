@@ -1,9 +1,11 @@
 """Export one model to ONNX with one framework exporter, in a fresh process.
 
-``python common/export.py --model M --exporter torch|tf`` writes
+``python common/export.py --model M --exporter torch|tf|camel`` writes
 ``artifacts/<model>/<exporter>.onnx`` and prints ``RESULT {json}`` with the
 export wall time (framework import excluded) so run.py can report it
-separately from ONNX Runtime session creation.
+separately from ONNX Runtime session creation. The Camel export time is the
+time spent inside ``onnx.export_model`` (process start-up and weight loading
+excluded, matching the framework exporters).
 """
 
 from __future__ import annotations
@@ -25,9 +27,17 @@ from common.weights import load  # noqa: E402
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--exporter", required=True, choices=["torch", "tf"])
+    ap.add_argument("--exporter", required=True, choices=["torch", "tf", "camel"])
     ap.add_argument("--threads", type=int, default=4)
     args = ap.parse_args()
+
+    if args.exporter == "camel":
+        from common import camel
+
+        path = cfgs.onnx_path(args.model, "camel")
+        export_s = camel.export_onnx(args.model, path)
+        print("RESULT " + json.dumps({"export_s": export_s, "path": str(path)}), flush=True)
+        return
 
     weights, x = load(args.model)
     framework = "torch" if args.exporter == "torch" else "tf"

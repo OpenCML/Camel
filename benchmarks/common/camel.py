@@ -19,6 +19,8 @@ Stdout lines starting with ``CAMEL_BENCH`` carry ``key=value`` pairs:
                                         p10_ms=<float> p90_ms=<float>
   CAMEL_BENCH compile_ms=<float>        optional: first-call overhead
   CAMEL_BENCH warmup_ms=<float>         optional: total warmup time
+  CAMEL_BENCH export_ms=<float>         export mode only (CAMEL_BENCH_EXPORT=<path>):
+                                        time spent in onnx.export_model
 All other output is ignored.
 """
 
@@ -63,28 +65,54 @@ def parse_bench_lines(stdout: str) -> CamelResult:
     return res
 
 
-def run_camel(model: str, passes: Sequence[str], threads: int, warmup: int, reps: int, env: Dict[str, str]) -> CamelResult:
+def _camel_env(model: str, extra: Dict[str, str]) -> Dict[str, str]:
+    """Child environment for running ``benchmarks/<model>/model.cml``."""
     mdir = model_dir(model)
-    out_npy = mdir / "camel_output.npy"
-    if out_npy.exists():
-        out_npy.unlink()
     child_env = dict(os.environ)
-    child_env.update(env)
+    child_env.update(extra)
     child_env.setdefault("CAMEL_HOME", str(REPO_ROOT / "out" / "latest"))
     # Models import the shared driver module `camel_bench` from benchmarks/common.
     packages = str(REPO_ROOT / "benchmarks" / "common")
     existing = child_env.get("CAMEL_PACKAGES")
     child_env["CAMEL_PACKAGES"] = packages + (os.pathsep + existing if existing else "")
-    child_env.update(
+    child_env["CAMEL_BENCH_WEIGHTS"] = str(mdir / "weights")
+    child_env["CAMEL_BENCH_INPUT"] = str(mdir / "input.npy")
+    return child_env
+
+
+def export_onnx(model: str, path: Path) -> float:
+    """Export the model's forward function to ONNX via ``onnx.export_model``.
+
+    Returns the export time in seconds as measured inside Camel (weight loading
+    and process start-up excluded).
+    """
+    if path.exists():
+        path.unlink()
+    env = _camel_env(model, {"CAMEL_BENCH_EXPORT": str(path)})
+    cml = camel_model(model)
+    returncode, stdout, stderr, _ = run_with_peak_rss([str(camel_binary()), str(cml)], cwd=cml.parent, env=env)
+    if returncode != 0 or not path.exists():
+        raise RuntimeError(f"camel export exited with {returncode}: {stderr.strip()[-2000:]}")
+    res = parse_bench_lines(stdout)
+    return res.summary.get("export_ms", float("nan")) / 1000.0
+
+
+def run_camel(model: str, passes: Sequence[str], threads: int, warmup: int, reps: int, env: Dict[str, str]) -> CamelResult:
+    mdir = model_dir(model)
+    out_npy = mdir / "camel_output.npy"
+    if out_npy.exists():
+        out_npy.unlink()
+    child_env = _camel_env(
+        model,
         {
-            "CAMEL_BENCH_WEIGHTS": str(mdir / "weights"),
-            "CAMEL_BENCH_INPUT": str(mdir / "input.npy"),
+            **env,
             "CAMEL_BENCH_OUTPUT": str(out_npy),
             "CAMEL_BENCH_WARMUP": str(warmup),
             "CAMEL_BENCH_REPS": str(reps),
             "CAMEL_BENCH_THREADS": str(threads),
-        }
+        },
     )
+    child_env.pop("CAMEL_BENCH_EXPORT", None)
     cml = camel_model(model)
     cmd = [str(camel_binary()), str(cml), *passes]
     t0 = time.perf_counter()
