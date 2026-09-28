@@ -26,6 +26,7 @@
 #include "camel/core/mm/profiler.h"
 #include "macro/macro.h"
 #include "passes/opt/devirtualize/devirtualize.h"
+#include "passes/opt/generic/generic.h"
 #include "passes/opt/inline/inline.h"
 #include "passes/opt/opt/opt.h"
 #include "passes/opt/specialize/specialize.h"
@@ -349,7 +350,13 @@ PassScopePtr initPassScope() {
                          })},
                     {"devirtualize", def(PASS(DevirtualizeRewritePass))},
                     {"specialize", def(PASS(SpecializeRewritePass))},
-                    {"opt", def(PASS(OptimizeRewritePass))},
+                    {"opt",
+                     def(PASS(OptimizeRewritePass),
+                         {
+                             {"fold", def(PASS(ConstantFoldPass))},
+                             {"cse", def(PASS(CommonSubexpressionPass))},
+                             {"dce", def(PASS(DeadCodePass))},
+                         })},
                     {"taskflow", def(PASS(TaskflowExecSchedPass))},
                     {"tfdump", def(PASS(TfDumpPass))},
                 }),

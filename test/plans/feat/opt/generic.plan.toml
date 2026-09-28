@@ -1,0 +1,103 @@
+id = "opt.generic"
+order = 321
+tier = "feat"
+tags = ["feat", "opt", "generic"]
+
+[[tests]]
+name = "results_reference"
+desc = "Results and print order of the generic-pass inputs are unchanged by: no pass."
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "results_fold"
+desc = "Results and print order of the generic-pass inputs are unchanged by: std::opt::fold."
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "results_cse"
+desc = "Results and print order of the generic-pass inputs are unchanged by: std::opt::cse."
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "std::opt::cse"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "results_dce"
+desc = "Results and print order of the generic-pass inputs are unchanged by: std::opt::dce."
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "results_all"
+desc = "Results and print order of the generic-pass inputs are unchanged by: std::opt::fold", "std::opt::cse", "std::opt::dce."
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "rewrites"
+desc = "fold evaluates 3 + 4 * 5, cse merges the second n * 7 + 1 (not the branch arms'), dce drops the unused product inside the sync chain."
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (uri) => (out.match(new RegExp(`label="${uri}"`, 'g')) || []).length
+assert(count(':op/mul_l') === 3, `expected 3 multiplications (p and one per branch arm), got ${count(':op/mul_l')}`)
+assert(count(':op/add_l') === 2, `expected 2 additions (p and the else arm), got ${count(':op/add_l')}`)
+assert(count(':io/println') === 3, 'effects must be kept')
+}
+"""
+timeout_ms = 4000
