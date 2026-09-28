@@ -138,23 +138,53 @@ An unknown rank is represented by an absent shape.
 
 ### 3.4 Operator traits and generic graph passes (core)
 
-Core gains a small, module-agnostic `OperatorTraits` registry keyed by URI:
-purity (pure / effectful / stateful) and whether the operator is elementwise.
-Modules register traits for their operators at load time.
+`camel::core::OperatorTraitsRegistry` (`include/camel/core/operator_traits.h`)
+maps operator URIs to traits: `pure` (no side effects, no hidden state) and
+`elementwise`. The builtin table registers its pure operators (`op/*` except the
+in-place assignment family, and the non-mutating string/array helpers); the
+tensor `OpRegistry` mirrors every `OpDef`'s traits. Unregistered operators are
+treated as effectful.
 
-Generic passes use only traits, never module knowledge:
+Generic passes (`src/passes/opt/generic/`) use only traits, never module
+knowledge:
 
-- `std::opt::fold`: evaluates pure operators whose inputs are all static, and
-  materializes the result as a static slot.
-- `std::opt::cse`: merges identical pure operator nodes.
-- `std::opt::dce`: removes pure nodes with no consumers.
+- `std::opt::fold` evaluates pure operators whose inputs are all static DATA
+  nodes through the regular kernels and materializes the result as a static
+  value. Kernel failures are left for runtime to report.
+- `std::opt::cse` merges pure operator nodes with the same URI, type, and inputs,
+  after merging equal scalar constants (value numbering), but only within the
+  same branch-arm region and never onto a node downstream of the replaced one.
+- `std::opt::dce` removes value-only nodes (pure operators, static data,
+  CAST/COPY/ACCS/FILL) that have no value users.
+
+Ordering rule shared by all three: in `sync` code every call sits on a control
+chain, and a pure node on that chain still orders its dependents after the
+effects before it. When a node is replaced, *all* of its users (value and
+control) therefore inherit its control predecessors; nodes that anchor the graph
+(exit, output, return, entry, branch-arm heads and tails) are never rewritten.
+A sweep over every test case with `fold cse dce` enabled matches the unoptimized
+output (the only differences are three unseeded random nn cases that differ
+between plain runs too).
 
 ### 3.5 Module-contributed passes
 
-Tensor-specific rewrites (for example `matmul + add (+ relu)` -> `linear`)
-need tensor knowledge, so they belong in the tensor module, not in core. Core
-gains a context-scoped pass registry that modules populate on load
-(`tensor::fuse`). `findPassFactory` consults it after the static `std` scope.
+`registerModulePass(path, factory)` (`include/camel/execute/pass/base.h`) lets a
+loaded module add a scoped pass; `findPassFactory` resolves it after the static
+`std` scope, and the "pass not found" listing includes module passes. The tensor
+module contributes `tensor::fuse`:
+
+- It rewrites `x @ w + b` and `relu(x @ w + b)` into `matmul_add` /
+  `matmul_add_relu`, one pattern at a time (a fused add can be the bias of the
+  next pattern, as in GRU gates).
+- Intermediates must be unobserved outside the pattern; their control
+  dependencies move to the fused node, so patterns inside `sync` code fuse too.
+- The fused kernel preloads a row bias as the GEMM accumulator and applies relu
+  in place; for other bias shapes and dtypes it runs the unfused computation, so
+  the rewrite needs no static shape information.
+- The nn module has VJP rules for both fused operators (and for `relu`), so
+  fused training graphs differentiate like the patterns they replace; five nn
+  training tests run a second time under `tensor::fuse`.
+- ONNX lowers the fused operators to MatMul/Add(/Relu).
 
 ### 3.6 ONNX export (`modules/onnx/`)
 
@@ -326,6 +356,28 @@ rejection reason. That resolver extension is part of step 2.
     (they are immutable), and array literals take the unified element type.
     Precise tensor types previously made `{ w: Tensor<float32> }` unusable
     where `{ w: Tensor }` was declared.
+
+### Step 3 landed: graph optimization and kernel quality
+
+- Traits registry, module pass registry, `std::opt::{fold,cse,dce}`, and
+  `tensor::fuse` as described in sections 3.4 and 3.5.
+- Per-operator profiling of the native Transformer showed that the dominant
+  cost was not the VMs but the unary kernels: a per-element `switch` on the
+  operator and scalar libm calls kept every elementwise loop scalar (gelu on
+  8x64x512 took 1.9 ms, a third of the forward pass). Unary operators now
+  dispatch once to operator-specialized loops, and exp/tanh/sigmoid/gelu use
+  branch-free float implementations (`kernels/vmath.h`, exp within 1 ulp,
+  IEEE-like saturation) that vectorize; softmax computes exp once per element.
+- Effect on the 4-core container (medians, ms):
+
+  | Model | before | kernels | kernels + `tensor::fuse` |
+  |---|---|---|---|
+  | GRU | 4.75 | 2.6-2.8 | 2.5-2.6 |
+  | Transformer | 5.87 | 2.2 | 1.97 |
+
+  The container is shared (load average ~2.5 on 4 cores), so sub-millisecond
+  results vary by up to 1.7x between runs; paper numbers need a quiet machine
+  and repeated trials.
 
 ## 7. Delivery Order
 
