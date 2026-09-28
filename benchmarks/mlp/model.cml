@@ -1,0 +1,30 @@
+/**
+ * Camel implementation of the `mlp` benchmark model (benchmarks/README.md):
+ * x[64,784] -> Linear(784,256) -> ReLU -> Linear(256,128) -> ReLU -> Linear(128,10).
+ */
+module mlp
+
+import { Tensor, relu } from tensor
+import { weight, run_benchmark } from camel_bench
+
+type Mlp = {
+    fc1_w: Tensor, fc1_b: Tensor,
+    fc2_w: Tensor, fc2_b: Tensor,
+    fc3_w: Tensor, fc3_b: Tensor
+}
+
+with <m: Mlp>
+func forward(x: Tensor): Tensor {
+    let h1 = relu(x @ m.fc1_w + m.fc1_b)
+    let h2 = relu(h1 @ m.fc2_w + m.fc2_b)
+    return h2 @ m.fc3_w + m.fc3_b
+}
+
+func main(): int sync {
+    let m = {
+        fc1_w: weight('fc1_w'), fc1_b: weight('fc1_b'),
+        fc2_w: weight('fc2_w'), fc2_b: weight('fc2_b'),
+        fc3_w: weight('fc3_w'), fc3_b: weight('fc3_b')
+    }
+    return run_benchmark((x: Tensor): Tensor => forward<m>(x))
+}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: May. 01, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,6 +40,27 @@ namespace jit = camel::jit;
 #endif
 
 namespace ctx = camel::core::context;
+
+/// FVM call transitions between checks of the GC slow-path flag.
+inline constexpr uint32_t kFastVmCallsPerSafepointPoll = 64;
+
+/**
+ * GC safepoint for FVM call transitions (CALL / FUNC / TAIL). FVM does not poll
+ * per bytecode; at a call boundary every live value sits in a FramePool frame
+ * (a registered root), so a pending collection can run here. `countdown` is an
+ * interpreter-local counter: the global flag is read once every
+ * kFastVmCallsPerSafepointPoll calls, which keeps call-heavy code at full speed
+ * while delaying a requested collection by at most that many calls.
+ */
+inline void fastVmCallBoundarySafepoint(uint32_t &countdown) {
+    if (--countdown != 0) [[likely]] {
+        return;
+    }
+    countdown = kFastVmCallsPerSafepointPoll;
+    if (camel::core::mm::autoSpaceSafepointSlowPathEnabled()) [[unlikely]] {
+        camel::core::mm::autoSpace().safepoint("fastvm call boundary");
+    }
+}
 
 struct FastVMConfig {
     enum class JitMode {

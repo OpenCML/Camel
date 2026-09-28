@@ -25,7 +25,7 @@
  * only visited rows while leaving unvisited rows with zero gradients.
  */
 
-#include "operators.h"
+#include "layers.h"
 
 #include "../tensor/tensor.h"
 #include "../tensor/type.h"
@@ -41,22 +41,11 @@ using namespace camel::core::error;
 using namespace camel::core::rtdata;
 using namespace camel::core::type;
 
-namespace {
+namespace camel::nn {
 
 namespace tensor = camel::tensor;
 
-bool isTensorType(Type *type) { return type && type->code() == tensor::TensorType::typeCode(); }
-
-tensor::TensorObject *requireTensor(ArgsView &norm, size_t index, const char *what) {
-    if (!isTensorType(norm.type(index))) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "{} expects Tensor arguments", what);
-    }
-    auto *value = norm.get<tensor::TensorObject *>(index);
-    if (!value) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "{} received a null Tensor", what);
-    }
-    return value;
-}
+namespace {
 
 void requireEmbeddingInputs(
     const tensor::TensorObject *table, const tensor::TensorObject *indices, const char *what) {
@@ -81,6 +70,8 @@ int64_t checkedIndex(const tensor::TensorObject *indices, uint64_t offset, int64
     }
     return index;
 }
+
+} // namespace
 
 tensor::TensorObject *embedding(
     const tensor::TensorObject *table, const tensor::TensorObject *indices,
@@ -138,37 +129,4 @@ tensor::TensorObject *embeddingTableGrad(
     return grad;
 }
 
-template <typename Fn> slot_t withLayerErrors(Fn &&fn) {
-    try {
-        return fn();
-    } catch (const std::exception &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, e.what());
-    }
-}
-
-} // namespace
-
-slot_t __nn_embedding__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    (void)with;
-    (void)ctx;
-    return withLayerErrors([&]() -> slot_t {
-        tensor::TensorObject *out = embedding(
-            requireTensor(norm, 0, "embedding"),
-            requireTensor(norm, 1, "embedding"),
-            mm::autoSpace());
-        return toSlot(static_cast<Object *>(out));
-    });
-}
-
-slot_t __nn_embedding_table_grad__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    (void)with;
-    (void)ctx;
-    return withLayerErrors([&]() -> slot_t {
-        tensor::TensorObject *grad = embeddingTableGrad(
-            requireTensor(norm, 0, "embedding_table_grad"),
-            requireTensor(norm, 1, "embedding_table_grad"),
-            requireTensor(norm, 2, "embedding_table_grad"),
-            mm::autoSpace());
-        return toSlot(static_cast<Object *>(grad));
-    });
-}
+} // namespace camel::nn

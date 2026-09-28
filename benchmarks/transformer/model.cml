@@ -1,0 +1,63 @@
+/**
+ * Camel implementation of the `transformer` benchmark model (benchmarks/README.md):
+ * pre-LN block over x[8,64,128] with 4-head self-attention and a GELU(tanh)
+ * feed-forward network of width 512:
+ *   h = x + MHA(LN1(x));  y = h + FFN(LN2(h)).
+ */
+module transformer
+
+import {
+    Tensor, layer_norm, softmax, gelu, reshape, permute, transpose, shape
+} from tensor
+import { sqrt } from math
+import { weight, run_benchmark } from camel_bench
+
+type Block = {
+    ln1_gamma: Tensor, ln1_beta: Tensor,
+    q_w: Tensor, q_b: Tensor, k_w: Tensor, k_b: Tensor,
+    v_w: Tensor, v_b: Tensor, o_w: Tensor, o_b: Tensor,
+    ln2_gamma: Tensor, ln2_beta: Tensor,
+    ffn1_w: Tensor, ffn1_b: Tensor, ffn2_w: Tensor, ffn2_b: Tensor
+}
+
+/// [B, S, D] -> [B, H, S, D / H]
+func split_heads(t: Tensor, heads: int): Tensor {
+    let dims = shape(t)
+    return permute(reshape(t, [dims[0], dims[1], heads, dims[2] / heads]), [0, 2, 1, 3])
+}
+
+/// [B, H, S, Dh] -> [B, S, H * Dh]
+func merge_heads(t: Tensor): Tensor {
+    let dims = shape(t)
+    return reshape(permute(t, [0, 2, 1, 3]), [dims[0], dims[2], dims[1] * dims[3]])
+}
+
+with <m: Block>
+func attention(x: Tensor): Tensor {
+    let heads = 4
+    let q = split_heads(x @ m.q_w + m.q_b, heads)
+    let k = split_heads(x @ m.k_w + m.k_b, heads)
+    let v = split_heads(x @ m.v_w + m.v_b, heads)
+    let scale = 1.0 / sqrt(float(shape(q)[3]))
+    let weights = softmax((q @ transpose(k)) * scale)
+    return merge_heads(weights @ v) @ m.o_w + m.o_b
+}
+
+with <m: Block>
+func forward(x: Tensor): Tensor {
+    let h = x + attention<m>(layer_norm(x, m.ln1_gamma, m.ln1_beta))
+    let f = gelu(layer_norm(h, m.ln2_gamma, m.ln2_beta) @ m.ffn1_w + m.ffn1_b)
+    return h + (f @ m.ffn2_w + m.ffn2_b)
+}
+
+func main(): int sync {
+    let m = {
+        ln1_gamma: weight('ln1_gamma'), ln1_beta: weight('ln1_beta'),
+        q_w: weight('q_w'), q_b: weight('q_b'), k_w: weight('k_w'), k_b: weight('k_b'),
+        v_w: weight('v_w'), v_b: weight('v_b'), o_w: weight('o_w'), o_b: weight('o_b'),
+        ln2_gamma: weight('ln2_gamma'), ln2_beta: weight('ln2_beta'),
+        ffn1_w: weight('ffn1_w'), ffn1_b: weight('ffn1_b'),
+        ffn2_w: weight('ffn2_w'), ffn2_b: weight('ffn2_b')
+    }
+    return run_benchmark((x: Tensor): Tensor => forward<m>(x))
+}

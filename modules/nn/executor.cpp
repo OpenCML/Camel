@@ -13,10 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "executor.h"
+#include "../tensor/ops/registry.h"
 #include "operators.h"
 
 namespace {
@@ -31,5 +33,7 @@ class NnExecutor : public Executor {
 } // namespace
 
 executor_ptr_t createNnExecutor(camel::core::context::context_ptr_t ctx) {
-    return std::make_shared<NnExecutor>(std::move(ctx), getNnOpsMap());
+    auto kernels = getNnOpsMap();
+    kernels.merge(camel::tensor::ops::OpRegistry::instance().kernelMap("nn"));
+    return std::make_shared<NnExecutor>(std::move(ctx), std::move(kernels));
 }

@@ -13,15 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 05, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "module.h"
 
+#include "../tensor/ops/registry.h"
 #include "camel/core/context/context.h"
 #include "camel/core/module/module.h"
 #include "executor.h"
+#include "layers.h"
 #include "operators.h"
 #include "type.h"
 #include "vjp_registry.h"
@@ -30,7 +32,11 @@ using namespace camel::core::context;
 using namespace camel::core::module;
 
 NnModule::NnModule(context_ptr_t ctx) : BuiltinModule("nn", ctx) {
+    camel::nn::registerNnTensorOps();
     exportType(Reference("Parameter"), camel::nn::ParameterType::Default());
+    for (const auto &group : camel::tensor::ops::OpRegistry::instance().operatorGroups("nn")) {
+        exportEntity(group->name(), group);
+    }
     for (const auto &group : getNnOperatorGroups()) {
         exportEntity(group->name(), group);
         if (group->name() == "parameter") {

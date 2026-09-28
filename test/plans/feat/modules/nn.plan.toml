@@ -567,8 +567,8 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(input.exit_code !== 0, 'conv2d shape error case unexpectedly succeeded')
-assert(text.includes('conv2d input channels must match kernel channels'), 'missing conv2d channel diagnostic')
-assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic category')
+assert(text.includes("Tensor shape mismatch in 'conv2d': conv2d input channels 1 do not match kernel channels 2"), 'missing conv2d channel diagnostic')
+assert(text.includes('RuntimeDiag::TensorDimensionMismatch'), 'missing tensor shape diagnostic category')
 }
 """
 timeout_ms = 4000
@@ -834,4 +834,24 @@ args = ["${case}"]
 expect_exit = 0
 failure_note = "The SVM helper path still has a neural-network runtime regression."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "spatial_ops"
+desc = "Strided/padded conv2d, pooling, their gradients, and batch_norm match PyTorch reference fixtures."
+kind = "behavior"
+case = "../../../cases/modules/nn/spatial_ops.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, match }) => {
+const out = input.normalized.stdout
+const conv = match(/spatial conv=([0-9.eE+-]+) dx=([0-9.eE+-]+) dw=([0-9.eE+-]+) db=([0-9.eE+-]+)/, out)
+const pool = match(/spatial max_pool=([0-9.eE+-]+) max_pool_grad=([0-9.eE+-]+) avg_pool=([0-9.eE+-]+) avg_pool_grad=([0-9.eE+-]+) batch_norm=([0-9.eE+-]+)/, out)
+for (const value of [...conv.slice(1), ...pool.slice(1)]) {
+    assert(Number(value) < 1e-3, `spatial operator deviates from the PyTorch reference: ${conv[0]} / ${pool[0]}`)
+}
+}
+"""
 timeout_ms = 4000

@@ -115,3 +115,15 @@ assert(Number(found[1]) < 0.05, `GEMM deviates from the reference product: total
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "gc_tail_chain"
+desc = "Tensors in the root frame survive GC stress across a chain of distinct NodeVM tail calls (else-if ladder)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gc_tail_chain.cml"
+args = ["${case}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_contains = ["gc_tail_chain sum=22"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

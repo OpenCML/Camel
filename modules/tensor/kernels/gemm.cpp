@@ -20,10 +20,10 @@
 /*
  * GEMM backend selection and the matmul/linear operators built on it.
  *
- * The builtin backend is compiled twice from gemm_blocked.inl: a portable
- * unit and an AVX2+FMA unit. The AVX2 unit is selected at first use when the
- * CPU reports AVX2 and FMA (and the OS enables AVX state), so default builds
- * stay portable while still using wide vectors where available. With
+ * The builtin backend is compiled from gemm_blocked.inl once per ISA: a
+ * portable unit, an AVX2+FMA unit, and an AVX-512F unit (x86-64 builds). The
+ * widest unit the CPU and OS support is selected at first use, so default
+ * builds stay portable while still using wide vectors where available. With
  * CAMEL_TENSOR_USE_CBLAS the call is forwarded to cblas_sgemm instead.
  */
 
@@ -54,6 +54,9 @@ void sgemmGeneric(
 void sgemmAvx2(
     bool transA, bool transB, int64_t M, int64_t N, int64_t K, float alpha, const float *A,
     int64_t lda, const float *B, int64_t ldb, float beta, float *C, int64_t ldc);
+void sgemmAvx512(
+    bool transA, bool transB, int64_t M, int64_t N, int64_t K, float alpha, const float *A,
+    int64_t lda, const float *B, int64_t ldb, float beta, float *C, int64_t ldc);
 #endif
 } // namespace detail
 
@@ -62,8 +65,12 @@ using type::TypeCode;
 namespace {
 
 #if defined(CAMEL_TENSOR_HAS_AVX2_UNIT)
-/// True when the CPU supports AVX2 + FMA and the OS saves YMM state.
-bool cpuHasAvx2Fma() {
+struct CpuFeatures {
+    bool avx2Fma = false; // AVX2 + FMA with OS-enabled YMM state
+    bool avx512f = false; // AVX-512F with OS-enabled ZMM and opmask state
+};
+
+CpuFeatures detectCpuFeatures() {
     unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
     auto cpuid = [&](unsigned int leaf, unsigned int sub) {
 #if defined(_MSC_VER) && !defined(__clang__)
@@ -76,24 +83,26 @@ bool cpuHasAvx2Fma() {
                              : "a"(leaf), "c"(sub));
 #endif
     };
+    CpuFeatures features;
     cpuid(0, 0);
     if (eax < 7) {
-        return false;
+        return features;
     }
     cpuid(1, 0);
     const bool fma     = (ecx & (1u << 12)) != 0;
     const bool osxsave = (ecx & (1u << 27)) != 0;
     const bool avx     = (ecx & (1u << 28)) != 0;
-    if (!(fma && osxsave && avx)) {
-        return false;
+    if (!(osxsave && avx)) {
+        return features;
     }
     unsigned int xcr0Low = 0, xcr0High = 0;
     __asm__ __volatile__("xgetbv" : "=a"(xcr0Low), "=d"(xcr0High) : "c"(0));
-    if ((xcr0Low & 0x6u) != 0x6u) { // XMM and YMM state enabled
-        return false;
-    }
+    const bool ymmState = (xcr0Low & 0x06u) == 0x06u; // XMM, YMM
+    const bool zmmState = (xcr0Low & 0xE6u) == 0xE6u; // + opmask, ZMM_Hi256, Hi16_ZMM
     cpuid(7, 0);
-    return (ebx & (1u << 5)) != 0; // AVX2
+    features.avx2Fma = ymmState && fma && (ebx & (1u << 5)) != 0;
+    features.avx512f = zmmState && features.avx2Fma && (ebx & (1u << 16)) != 0;
+    return features;
 }
 #endif
 
@@ -105,7 +114,11 @@ struct BuiltinBackend {
 const BuiltinBackend &builtinBackend() {
     static const BuiltinBackend backend = [] {
 #if defined(CAMEL_TENSOR_HAS_AVX2_UNIT)
-        if (cpuHasAvx2Fma()) {
+        const CpuFeatures cpu = detectCpuFeatures();
+        if (cpu.avx512f) {
+            return BuiltinBackend{&detail::sgemmAvx512, "builtin-avx512"};
+        }
+        if (cpu.avx2Fma) {
             return BuiltinBackend{&detail::sgemmAvx2, "builtin-avx2"};
         }
 #endif

@@ -25,6 +25,7 @@
 #include "../interop.h"
 #include "../kernels/gemm.h"
 #include "../kernels/parallel.h"
+#include "../npy.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/string.h"
 #include "catalog.h"
@@ -80,6 +81,19 @@ slot_t showKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
+slot_t loadNpyKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("load_npy", [&] {
+        return wrap(loadNpy(stringArg(norm, 0), resultAllocator()));
+    });
+}
+
+slot_t saveNpyKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("save_npy", [&] {
+        saveNpy(tensorArg(norm, 0), stringArg(norm, 1));
+        return NullSlot;
+    });
+}
+
 slot_t setThreadsKernel(ArgsView &, ArgsView &norm, context::Context &) {
     k::setNumThreads(static_cast<int>(intArg(norm, 0)));
     return NullSlot;
@@ -122,6 +136,24 @@ std::vector<OpDef> utilityOps() {
         .resultDoc = "void",
         .infer     = voidResult,
         .kernel    = &showKernel,
+        .traits    = impure});
+    defs.push_back(OpDef{
+        .name      = "load_npy",
+        .exports   = {"load_npy"},
+        .params    = {{"path", ParamKind::String}},
+        .resultDoc = "Tensor",
+        .infer     = [](const InferContext &) -> std::optional<Type *> {
+            return TensorType::Default();
+        },
+        .kernel = &loadNpyKernel,
+        .traits = impure});
+    defs.push_back(OpDef{
+        .name      = "save_npy",
+        .exports   = {"save_npy"},
+        .params    = {{"t", ParamKind::Tensor}, {"path", ParamKind::String}},
+        .resultDoc = "void",
+        .infer     = voidResult,
+        .kernel    = &saveNpyKernel,
         .traits    = impure});
     defs.push_back(OpDef{
         .name      = "set_num_threads",

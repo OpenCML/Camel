@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 05, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -606,14 +606,6 @@ std::unordered_map<std::string, operator_t> getNnOpsMap() {
         {"zero_grad", __nn_zero_grad__},
         {"add_grad", __nn_add_grad__},
         {"sgd", __nn_sgd__},
-        {"softmax_cross_entropy", __nn_softmax_cross_entropy__},
-        {"softmax_cross_entropy_grad", __nn_softmax_cross_entropy_grad__},
-        {"embedding", __nn_embedding__},
-        {"embedding_table_grad", __nn_embedding_table_grad__},
-        {"conv2d", __nn_conv2d__},
-        {"conv2d_input_grad", __nn_conv2d_input_grad__},
-        {"conv2d_kernel_grad", __nn_conv2d_kernel_grad__},
-        {"conv2d_bias_grad", __nn_conv2d_bias_grad__},
     };
 }
 
@@ -659,62 +651,6 @@ const std::vector<oper_group_ptr_t> &getNnOperatorGroups() {
                   {{parameterType(), true}, {Type::Float64(), false}},
                   Type::Void(),
                   Modifier::Sync)}}),
-        OperatorGroup::create(
-            "softmax_cross_entropy",
-            {{"nn:softmax_cross_entropy",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{tensorType(), false}, {tensorType(), false}},
-                  Type::Float64())}}),
-        OperatorGroup::create(
-            "softmax_cross_entropy_grad",
-            {{"nn:softmax_cross_entropy_grad",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{tensorType(), false}, {tensorType(), false}, {Type::Float64(), false}},
-                  tensorType())}}),
-        OperatorGroup::create(
-            "embedding",
-            {{"nn:embedding",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{tensorType(), false}, {tensorType(), false}},
-                  tensorType())}}),
-        OperatorGroup::create(
-            "embedding_table_grad",
-            {{"nn:embedding_table_grad",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{tensorType(), false}, {tensorType(), false}, {tensorType(), false}},
-                  tensorType())}}),
-        OperatorGroup::create(
-            "conv2d",
-            {{"nn:conv2d",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{tensorType(), false}, {tensorType(), false}, {tensorType(), false}},
-                  tensorType())}}),
-        OperatorGroup::create(
-            "conv2d_input_grad",
-            {{"nn:conv2d_input_grad",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{tensorType(), false}, {tensorType(), false}, {tensorType(), false}},
-                  tensorType())}}),
-        OperatorGroup::create(
-            "conv2d_kernel_grad",
-            {{"nn:conv2d_kernel_grad",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{tensorType(), false}, {tensorType(), false}, {tensorType(), false}},
-                  tensorType())}}),
-        OperatorGroup::create(
-            "conv2d_bias_grad",
-            {{"nn:conv2d_bias_grad",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{tensorType(), false}, {tensorType(), false}},
-                  tensorType())}}),
     };
     return groups;
 }
