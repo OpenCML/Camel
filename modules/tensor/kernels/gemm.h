@@ -35,6 +35,7 @@
 #pragma once
 
 #include "../tensor.h"
+#include "elementwise.h"
 
 #include <string_view>
 
@@ -54,6 +55,18 @@ TensorObject *matmul(const TensorObject *lhs, const TensorObject *rhs, mm::IAllo
 /// y = x @ weight (+ bias). `weight` is [in, out]; `bias` is [out] or null.
 TensorObject *linear(
     const TensorObject *x, const TensorObject *weight, const TensorObject *bias,
+    mm::IAllocator &allocator);
+
+/**
+ * matmul(x, weight) + bias, then relu when `relu` is set: the kernel behind the fused operators
+ * produced by the `tensor::fuse` pass. Shapes, dtypes, and errors are those of the unfused
+ * expression. When x and weight are float, weight is rank 2, and bias broadcasts only along the
+ * last axis, the bias is folded into the GEMM as its initial accumulator (so values may differ
+ * from the unfused expression by float rounding) and relu is applied in place; otherwise the
+ * unfused operations run.
+ */
+TensorObject *matmulAdd(
+    const TensorObject *x, const TensorObject *weight, Operand bias, bool relu,
     mm::IAllocator &allocator);
 
 } // namespace camel::tensor::kernels

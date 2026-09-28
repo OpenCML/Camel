@@ -19,8 +19,8 @@
 
 /*
  * Tensor module wiring: exports the operator groups and types derived from
- * the operator registry and serves the registry's kernels through the
- * module executor.
+ * the operator registry, serves the registry's kernels through the module
+ * executor, and contributes the tensor graph passes (tensor::fuse).
  */
 
 #include "module.h"
@@ -29,6 +29,7 @@
 #include "camel/core/module/module.h"
 #include "camel/execute/executor.h"
 #include "ops/registry.h"
+#include "passes/fuse.h"
 #include "type.h"
 
 using namespace camel::core::context;
@@ -47,6 +48,7 @@ class TensorExecutor : public Executor {
 
 TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     camel::tensor::ops::registerTensorOps();
+    camel::tensor::passes::registerTensorPasses();
     exportType(Reference("Tensor"), camel::tensor::TensorType::Default());
     for (const auto &group : OpRegistry::instance().operatorGroups("tensor")) {
         exportEntity(group->name(), group);

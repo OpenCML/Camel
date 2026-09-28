@@ -25,6 +25,7 @@ add_camel_module(
     ops/registry.cpp
     ops/support.cpp
     ops/utility_ops.cpp
+    passes/fuse.cpp
   EXTRA_INCLUDES
     ${CMAKE_SOURCE_DIR}/src
 )

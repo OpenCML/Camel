@@ -330,4 +330,75 @@ TensorObject *linear(
     return y;
 }
 
+namespace {
+
+/// True when `bias` only broadcasts along the last axis of a result of rank `resultRank` whose
+/// last extent is `out`: shape [out] or [1, ..., 1, out] with rank <= resultRank.
+bool isRowBias(const Operand &bias, size_t resultRank, int64_t out) {
+    const auto shape = bias.shape;
+    if (shape.empty() || shape.size() > resultRank || shape.back() != out) {
+        return false;
+    }
+    return std::all_of(shape.begin(), shape.end() - 1, [](int64_t d) { return d == 1; });
+}
+
+void reluInPlace(TensorObject *t) {
+    dispatchDType(t->dtype(), [&]<typename T>() {
+        T *data = t->dataAs<T>();
+        parallelFor(static_cast<int64_t>(t->numel()), 1 << 15, [&](int64_t begin, int64_t end) {
+            for (int64_t i = begin; i < end; ++i) {
+                data[i] = data[i] > T{} ? data[i] : T{};
+            }
+        });
+    });
+}
+
+} // namespace
+
+TensorObject *matmulAdd(
+    const TensorObject *x, const TensorObject *weight, Operand bias, bool relu,
+    mm::IAllocator &allocator) {
+    const bool fused = x->rank() >= 1 && weight->rank() == 2 &&
+                       x->dim(x->rank() - 1) == weight->dim(0) && x->dtype() == TypeCode::Float32 &&
+                       weight->dtype() == TypeCode::Float32 && bias.dtype == TypeCode::Float32 &&
+                       isRowBias(bias, x->rank(), weight->dim(1));
+    TensorObject *y = nullptr;
+    if (fused) {
+        // GEMM with the bias rows preloaded as C (beta = 1): one allocation, one output pass.
+        const int64_t in  = weight->dim(0);
+        const int64_t out = weight->dim(1);
+        const int64_t M   = static_cast<int64_t>(x->numel()) / std::max<int64_t>(in, 1);
+        Shape outShape    = x->shapeVector();
+        outShape.back()   = out;
+        y                 = TensorObject::create(TypeCode::Float32, outShape, allocator);
+        float *dst        = y->dataAs<float>();
+        const auto *pb    = static_cast<const float *>(bias.data);
+        for (int64_t i = 0; i < M; ++i) {
+            std::memcpy(dst + i * out, pb, static_cast<size_t>(out) * sizeof(float));
+        }
+        sgemm(
+            false,
+            false,
+            M,
+            out,
+            in,
+            1.0f,
+            x->dataAs<float>(),
+            in,
+            weight->dataAs<float>(),
+            out,
+            1.0f,
+            dst,
+            out);
+    } else {
+        // Exactly the unfused expression (NumPy matmul, broadcasting add with promotion).
+        const TensorObject *product = matmul(x, weight, allocator);
+        y                           = binary(BinaryOp::Add, Operand::of(product), bias, allocator);
+    }
+    if (relu) {
+        reluInPlace(y);
+    }
+    return y;
+}
+
 } // namespace camel::tensor::kernels
