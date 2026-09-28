@@ -415,15 +415,17 @@ bool Type::assignableFrom(Type *from) const {
     if (from->code_ == TypeCode::Any)
         return false;
 
-    // Composite types must override assignableFrom.
-    if (camel::core::type::isComposite(to->code_)) {
-        const auto &self = static_cast<const CompositeType &>(*this);
+    // Third-party types rely on their own overridden assignableFrom. This must be
+    // checked before the composite flag: an Other type may also be flagged
+    // Composite (e.g. Tensor) but is never a CompositeType object.
+    if (camel::core::type::isOtherType(to->code_)) {
+        const auto &self = static_cast<const OtherType &>(*this);
         return self.assignableFrom(from);
     }
 
-    // Third-party types rely on their own overridden assignableFrom.
-    if (camel::core::type::isOtherType(to->code_)) {
-        const auto &self = static_cast<const OtherType &>(*this);
+    // Built-in composite types must override assignableFrom.
+    if (camel::core::type::isComposite(to->code_)) {
+        const auto &self = static_cast<const CompositeType &>(*this);
         return self.assignableFrom(from);
     }
 
