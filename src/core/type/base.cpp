@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -135,6 +135,10 @@ bool Type::equals(Type *type) const {
         return false;
     return code_ == type->code_;
 }
+
+Type *Type::unify(Type *other) const { return equals(other) ? const_cast<Type *>(this) : nullptr; }
+
+Type *Type::widened() const { return const_cast<Type *>(this); }
 
 std::optional<CastSafety> Type::checkCastSafetyWithAny(TypeCode targetCode, Type *sourceType) {
     if (!sourceType)
