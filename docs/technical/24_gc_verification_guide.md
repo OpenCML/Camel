@@ -96,10 +96,12 @@ next boundary.
 Production defaults keep young copying disabled. Tests that assert movement, remembered-set
 behavior, or foreign wrapper relocation must opt in with `CAMEL_GC_ENABLE_YOUNG_COPYING=1`.
 
-FVM is intentionally different from NVM/PRL here: default FVM does not poll a GC safepoint at every
-bytecode transition. The GC plan still verifies FVM execution with GC diagnostics enabled, but the
-collection opportunities are pass-boundary or other explicit safepoints around that execution, not
-per-opcode bytecode-loop safepoints.
+FVM polls less often than NVM/PRL: it does not poll a GC safepoint at every bytecode transition,
+only at call transitions (`CALL`, `FUNC`, `TAIL`), where every live value is in a FramePool frame.
+The poll is the same single atomic load, so recursive-call benchmarks keep their speed while
+long-running FVM programs still service deferred collections (for example the large-object budget).
+JIT-compiled code does not poll; collections requested there run at the next interpreter call or
+pass boundary.
 
 ## Standard Verification Commands
 

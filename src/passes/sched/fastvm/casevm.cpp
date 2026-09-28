@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: May. 06, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,15 +58,15 @@ using namespace camel::jit;
     } break;
 
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
-    Frame *currFrame            = rootFrame;
-    Frame *rootActiveFrame      = rootFrame;
-    const size_t stackDepthBase = stackDepth_;
+    Frame *currFrame                = rootFrame;
+    uint32_t callSafepointCountdown = kFastVmCallsPerSafepointPoll;
+    Frame *rootActiveFrame          = rootFrame;
+    const size_t stackDepthBase     = stackDepth_;
 
     try {
         while (true) {
-            // The switch interpreter follows the same policy as computed-goto FVM: no GC safepoint
-            // inside the bytecode loop. Pass-boundary safepoints keep diagnostics available without
-            // taxing every opcode dispatch.
+            // The switch interpreter follows the same policy as computed-goto FVM: no per-opcode
+            // GC safepoint; call transitions poll fastVmCallBoundarySafepoint().
             if (InternalGlobalConfig::IsInspectionMode() && context_) {
                 if (auto sourceContext = context_->sourceContext()) {
                     sourceContext->setCurrentRuntimeOrigin(sourceContext->debugMap().pcOrigin(pc));
@@ -214,6 +214,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             } break;
 
             case OpCode::CALL: {
+                fastVmCallBoundarySafepoint(callSafepointCountdown);
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
                 auto function          = currFrame->get<Function *>(wargs[0]);
@@ -241,6 +242,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             } break;
 
             case OpCode::FUNC: {
+                fastVmCallBoundarySafepoint(callSafepointCountdown);
                 const data_arr_t srcArgs  = bc.directCallSrcArgs();
                 const data_arr_t dstSlots = bc.directCallDstSlots();
 #if ENABLE_FASTVM_JIT
@@ -300,6 +302,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             } break;
 
             case OpCode::TAIL: {
+                fastVmCallBoundarySafepoint(callSafepointCountdown);
                 const data_arr_t srcArgs  = bc.directCallSrcArgs();
                 const data_arr_t dstSlots = bc.directCallDstSlots();
 #if ENABLE_FASTVM_JIT
