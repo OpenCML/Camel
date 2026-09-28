@@ -1,0 +1,16 @@
+/**
+ * Side effects cannot be expressed in an ONNX model: an impure operator inside
+ * the exported function is rejected even when its arguments are constants.
+ */
+module export_impure
+
+import { Tensor, reshape, randn } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    export_model((t: Tensor): Tensor => t + randn([2, 2]), x, get_env('ONNX_OUT'))
+    println('unreachable')
+    return 0
+}

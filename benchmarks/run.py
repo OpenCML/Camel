@@ -91,7 +91,7 @@ def main() -> int:
     ap.add_argument("--reps", type=int, default=50)
     ap.add_argument("--out", default=None, help="CSV path (default results/<timestamp>.csv)")
     ap.add_argument("--timeout", type=int, default=1800, help="per-subprocess timeout in seconds")
-    ap.add_argument("--no-export", action="store_true", help="reuse existing torch/tf .onnx files")
+    ap.add_argument("--no-export", action="store_true", help="reuse existing torch/tf/camel .onnx files")
     args = ap.parse_args()
 
     models = [m for m in args.models.split(",") if m]
@@ -122,7 +122,7 @@ def main() -> int:
         export_err: Dict[str, str] = {}
         for config in configs:
             exporter = cfgs.CONFIGS[config].exporter
-            if exporter not in ("torch", "tf") or exporter in export_s or not cfgs.applies(config, model):
+            if exporter not in ("torch", "tf", "camel") or exporter in export_s or not cfgs.applies(config, model):
                 continue
             if args.no_export and cfgs.onnx_path(model, exporter).exists():
                 export_s[exporter] = None

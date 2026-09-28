@@ -47,14 +47,15 @@ one definition.
 
 ```text
             +-----------------------------------------------+
-  modules/  |  onnx module: onnx.export(fn, examples, path) |
-            |  (graph walk + protobuf writer)               |
+  modules/  |  onnx module: onnx.export_model(fn, x, path)  |
+            |  partial evaluator + lowering table (by URI)  |
+            |  + protobuf writer                            |
             +-----------------------+-----------------------+
-                                    | reads OpDef.onnx lowering
+                                    | reads OpDef.infer / traits,
+                                    | runs OpDef.kernel on constants
             +-----------------------v-----------------------+
             |  OpDef registry (tensor module, nn adds defs) |
-            |  signature | infer | kernel | vjp | traits |  |
-            |  onnx lowering                                |
+            |  signature | infer | kernel | vjp | traits    |
             +-----+-----------------+----------------+------+
                   | generates       | registers      | registers
      OperatorGroups + executor map  | VJP rules      | core OperatorTraits
@@ -101,7 +102,6 @@ struct OpDef {
     operator_t kernel;                      // runtime entry point
     nn::BuiltinVjpRule vjp = nullptr;       // optional backward rule
     OpTraits traits;                        // pure, elementwise, fusion class
-    OnnxLowering onnx;                      // op_type, attribute and input mapping
 };
 ```
 
@@ -112,8 +112,11 @@ Everything else is derived from the table, so no operator is declared twice:
 - the executor's URI -> kernel map,
 - VJP registrations (the `nn` module consumes the table instead of maintaining
   its own URI list),
-- core `OperatorTraits` registrations,
-- the ONNX lowering table.
+- core `OperatorTraits` registrations.
+
+Backend lowerings are deliberately not a field of `OpDef`: each backend owns a
+table keyed by operator URI (section 3.6), so operators stay independent of
+export targets and a backend's table doubles as its capability registry.
 
 `nn` operators (`conv2d`, `embedding`, pooling, normalization) are defined as
 `OpDef`s in the `nn` module and registered into the same registry.
@@ -158,28 +161,50 @@ gains a context-scoped pass registry that modules populate on load
 Export is a runtime operator, not a tracer:
 
 ```camel
-import { export } from onnx
-export(predict<model>, [example_x], 'model.onnx')
+import { export_model } from onnx
+export_model((x: Tensor): Tensor => forward<model>(x), example_x, 'model.onnx')
 ```
 
-The first argument is a function value: a graph plus its closure. The exporter
-walks that graph directly, so control flow stays control flow. Closure-bound
-tensors (model parameters) become ONNX initializers; graph parameters become
-ONNX inputs; example inputs fix the input dtypes and shapes.
+(`export` is a Camel keyword, hence `export_model`.) The first argument is a
+function value: a runtime graph (`GCGraph`) plus its closure. The exporter
+partially evaluates that graph, demand-driven from its return value, with the
+parameter bound to a symbolic tensor carrying `example_x`'s dtype and shape.
+Every node evaluates to either a constant or a symbolic tensor:
 
-- Tensor operators lower through `OpDef::onnx`.
-- Scalar arithmetic, struct field access on the closure, and static helper calls
-  are resolved at export time (helper calls are inlined through the existing
-  draft inline machinery).
-- `BRCH`/`JOIN` lower to ONNX `If`. Recursion and indirect calls are rejected with
-  a diagnostic naming the node and the reason; they are not silently traced
-  through.
-- The model is written with a minimal protobuf wire-format writer (ONNX
-  `ModelProto`, opset 17). No protobuf library dependency, so Windows builds are
-  unaffected.
-- The exporter's per-operator capability check (does this operator have an ONNX
-  lowering for the target opset?) is the capability registry that the paper's
-  ORT_007 exemplar needs.
+- Nodes whose inputs are all constants run concretely through the same kernels
+  the VMs use (`ExecutorManager::find(uri)`), so closure-captured weights,
+  hyper-parameters, `shape(x)` arithmetic, struct field access, and helper
+  calls fold away. Constant tensors that reach the ONNX graph become
+  initializers named after the struct field they came from.
+- Operators with a symbolic input are lowered through the backend's lowering
+  table (`lowering.h`/`lowering.cpp`, keyed by URI and minimum opset). Result
+  dtype and shape come from the operator's `OpDef::infer` with constant
+  arguments supplied, so the emitted graph carries full shape information.
+  Operand dtypes are converted to the inferred result dtype, which reproduces
+  Camel's promotion rules (ONNX requires equal input types).
+- `FUNC` and `CALL` nodes are inlined. Recursion driven by constants (for
+  example the GRU time-step loop) unrolls; a call-depth bound turns recursion
+  that depends on the model input into a diagnostic.
+- `BRCH`/`JOIN` with a constant condition select their arm, using the VMs'
+  selection rule. A condition that depends on the model input is rejected:
+  lowered values are tensors while Camel conditions are scalars, so such a
+  condition needs a model-dependent scalar (an element read), which has no
+  lowering. Mapping those branches to ONNX `If` is future work.
+- Impure operators (`OpTraits::pure == false`, e.g. `randn`) are rejected even
+  with constant arguments. Operators without a lowering are rejected with their
+  URI and the opset. Values that depend on the input may not be stored in
+  tuples, structs, arrays, or closures.
+- Only data dependencies are followed; control-only (`SYNC`) ordering has no
+  ONNX counterpart.
+- Constants produced during export are rooted (`mm::RootHandle`) until the
+  model is written, because an allocation failure may run a non-moving
+  collection.
+- The model is written with a minimal protobuf wire-format writer
+  (`proto/onnx_writer.*`, ONNX `ModelProto`, IR 8, opset 17). No protobuf
+  library dependency, so Windows builds are unaffected.
+- `LoweringRegistry::supported(opset)` lists what the backend can express at an
+  opset. That per-operator capability table is what the paper's ORT_007
+  exemplar needs.
 
 Export covers inference graphs. Training steps produced by `apply_gradients` are
 not exported.
@@ -277,6 +302,30 @@ rejection reason. That resolver extension is part of step 2.
   because they operate on Parameter objects and graphs, not tensors. The
   conv2d VJP forwards stride and padding; pooling has VJP rules.
 - `tensor.load_npy` / `tensor.save_npy` read and write NumPy files.
+
+### Step 4 landed: ONNX exporter
+
+- `modules/onnx`: `value.h` (constant / symbolic values), `emitter.*` (graph
+  construction, initializer deduplication, dtype casts), `lowering.*` (49
+  tensor and nn lowerings, opset-aware), `exporter.*` (partial evaluator),
+  `module.*` (`onnx.export_model`).
+- All four benchmark models export; the models pass `onnx.checker` (full check)
+  and match the NumPy float64 reference under ONNX Runtime (max abs error
+  7e-7 MLP, 5e-7 LeNet, 4e-7 GRU, 1.7e-6 Transformer). The GRU's 16 steps
+  unroll to 399 nodes; the zero initial state makes the first step's hidden
+  matmuls fold at export time.
+- Benchmark integration: with `CAMEL_BENCH_EXPORT=<path>`, `camel_bench`'s
+  `run_benchmark` exports instead of timing, so each model has one source for
+  both the native and the `camel_onnx_ort` configurations.
+- Fixes found on the way:
+  - `isOfSameCls` compared vtable pointers. Modules are loaded with
+    `RTLD_LOCAL`, and classes without a key function (`String`) get a private
+    vtable copy per module, so `get_env(...) == ''` was false. It now falls
+    back to comparing dynamic types.
+  - Struct, tuple, and array assignability is covariant in the element types
+    (they are immutable), and array literals take the unified element type.
+    Precise tensor types previously made `{ w: Tensor<float32> }` unusable
+    where `{ w: Tensor }` was declared.
 
 ## 7. Delivery Order
 

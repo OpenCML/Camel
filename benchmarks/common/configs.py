@@ -96,13 +96,11 @@ def skip_reason(config: str, model: str) -> Optional[str]:
     cfg = CONFIGS[config]
     if not applies(config, model):
         return f"{config} only applies to {', '.join(cfg.models)}"
-    if cfg.framework == "camel":
+    if cfg.framework == "camel" or cfg.exporter == "camel":
         if not camel_binary().exists():
             return f"Camel binary not found at {camel_binary()} (build it with `npm run build`)"
         if not camel_model(model).exists():
             return f"{camel_model(model).relative_to(REPO_ROOT)} does not exist yet"
-    if cfg.exporter == "camel" and not onnx_path(model, "camel").exists():
-        return f"{onnx_path(model, 'camel').relative_to(REPO_ROOT)} does not exist yet (Camel ONNX export)"
     return None
 
 
@@ -148,6 +146,10 @@ def export(model: str, exporter: str, weights: Dict[str, np.ndarray], x: np.ndar
         importlib.import_module(f"{model}.model_torch").export_onnx(weights, x, path)
     elif exporter == "tf":
         importlib.import_module(f"{model}.model_tf").export_onnx(weights, path)
+    elif exporter == "camel":
+        from common import camel
+
+        camel.export_onnx(model, path)
     else:
         raise ValueError(f"exporter {exporter!r} is not driven by the harness")
     return path

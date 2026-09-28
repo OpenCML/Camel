@@ -1,0 +1,16 @@
+/**
+ * Reading a tensor element produces a scalar that depends on the model input;
+ * ONNX export has no lowering for it and reports the operator.
+ */
+module export_unsupported
+
+import { Tensor, reshape } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    export_model((t: Tensor): Tensor => t * t[0], x, get_env('ONNX_OUT'))
+    println('unreachable')
+    return 0
+}

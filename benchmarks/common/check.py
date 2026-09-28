@@ -83,7 +83,7 @@ def main() -> int:
                         continue
                     out = np.load(res.output_path)
                 else:
-                    if cfg.exporter in ("torch", "tf"):
+                    if cfg.exporter in ("torch", "tf", "camel"):
                         path = cfgs.onnx_path(model, cfg.exporter)
                         if args.export or not path.exists():
                             cfgs.export(model, cfg.exporter, weights, x)

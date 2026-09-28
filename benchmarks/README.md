@@ -189,6 +189,13 @@ The Camel exporter writes `artifacts/<model>/camel.onnx` with a single float32
 input with the model's input shape, and a single output. Input and output names
 are free. Weights are embedded as initializers.
 
+The harness produces it by running the same `model.cml` with
+`CAMEL_BENCH_EXPORT=<path>`: `camel_bench.run_benchmark` then calls
+`onnx.export_model` on the forward function (specialized to `input.npy`'s dtype
+and shape) instead of timing it, and prints `CAMEL_BENCH export_ms=<float>`,
+the time spent inside the exporter. `common/export.py --exporter camel` wraps
+this, so `run.py` records `export_s` for Camel as it does for torch and tf.
+
 ## Running
 
 ```bash

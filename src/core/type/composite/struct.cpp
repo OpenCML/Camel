@@ -298,4 +298,26 @@ CastSafety StructType::castSafetyFrom(Type *sourceType) const {
     return CastSafety::Forbidden;
 }
 
-bool StructType::assignableFrom(Type *sourceType) const { return equals(sourceType); }
+// Fields are immutable, so a struct accepts any struct with the same field names whose field
+// types are assignable (e.g. { w: Tensor<float32> } where { w: Tensor } is expected).
+bool StructType::assignableFrom(Type *sourceType) const {
+    if (!sourceType || sourceType->code() != TypeCode::Struct) {
+        return false;
+    }
+    auto other = static_cast<const StructType *>(sourceType);
+    if (size_ != other->size_) {
+        return false;
+    }
+    for (size_t i = 0; i < size_; ++i) {
+        auto optIdx = other->findField(std::string(fieldName(i)));
+        if (!optIdx.has_value()) {
+            return false;
+        }
+        Type *target = typeAt(i);
+        Type *source = other->typeAt(optIdx.value());
+        if (!target || !source || !target->assignableFrom(source)) {
+            return false;
+        }
+    }
+    return true;
+}
