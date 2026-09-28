@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 05, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -55,6 +55,13 @@ bool isFloat64(Type *type) { return type && type->equals(Type::Float64()); }
 
 void requireInputCount(const VjpPrimitiveCall &call, size_t expected) {
     if (call.inputs.size() != expected) {
+        throw std::runtime_error(
+            std::string("VJP rule input-count mismatch for ") + std::string(call.key));
+    }
+}
+
+void requireInputRange(const VjpPrimitiveCall &call, size_t minimum, size_t maximum) {
+    if (call.inputs.size() < minimum || call.inputs.size() > maximum) {
         throw std::runtime_error(
             std::string("VJP rule input-count mismatch for ") + std::string(call.key));
     }
@@ -367,27 +374,43 @@ void embeddingVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
 }
 
 void conv2dVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
-    requireInputCount(call, 3);
+    // conv2d(input, kernel, bias, stride?, padding?): stride and padding are
+    // forwarded unchanged to the gradient operators.
+    requireInputRange(call, 3, 5);
     auto dy = ctx.gradientOf(call.output);
     if (!dy) {
         return;
     }
 
-    std::array<rt::gc_node_ref_t, 3> inputGradInputs{call.inputs[0], call.inputs[1], *dy};
+    std::vector<rt::gc_node_ref_t> gradInputs{call.inputs[0], call.inputs[1], *dy};
+    gradInputs.insert(gradInputs.end(), call.inputs.begin() + 3, call.inputs.end());
     ctx.accumulateGradient(
         call.inputs[0],
-        ctx.addOper(tensorType(), "nn:conv2d_input_grad", inputGradInputs));
-
-    std::array<rt::gc_node_ref_t, 3> kernelGradInputs{call.inputs[0], call.inputs[1], *dy};
+        ctx.addOper(tensorType(), "nn:conv2d_input_grad", gradInputs));
     ctx.accumulateGradient(
         call.inputs[1],
-        ctx.addOper(tensorType(), "nn:conv2d_kernel_grad", kernelGradInputs));
+        ctx.addOper(tensorType(), "nn:conv2d_kernel_grad", gradInputs));
 
     std::array<rt::gc_node_ref_t, 2> biasGradInputs{call.inputs[2], *dy};
     ctx.accumulateGradient(
         call.inputs[2],
         ctx.addOper(tensorType(), "nn:conv2d_bias_grad", biasGradInputs));
 }
+
+/// pool2d(input, kernel, stride?, padding?) -> pool2d_grad(input, dy, kernel, stride?, padding?)
+template <const char *GradUri> void pool2dVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputRange(call, 2, 4);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    std::vector<rt::gc_node_ref_t> gradInputs{call.inputs[0], *dy};
+    gradInputs.insert(gradInputs.end(), call.inputs.begin() + 1, call.inputs.end());
+    ctx.accumulateGradient(call.inputs[0], ctx.addOper(tensorType(), GradUri, gradInputs));
+}
+
+constexpr char kMaxPoolGradUri[] = "nn:max_pool2d_grad";
+constexpr char kAvgPoolGradUri[] = "nn:avg_pool2d_grad";
 
 void registerGraphAliases(VjpRegistry &registry, rt::GCGraph *target, rt::GCGraph *vjpGraph) {
     if (!target || !vjpGraph) {
@@ -598,6 +621,8 @@ void ensureBuiltinVjpRulesRegistered() {
         registry.registerBuiltin(":op/mul_d", mulScalarVjp, "mul_d_vjp");
         registry.registerBuiltin(":op/div_d", divScalarVjp, "div_d_vjp");
         registry.registerBuiltin("nn:value", valueVjp, "parameter_value_vjp");
+        registry.registerBuiltin("nn:max_pool2d", pool2dVjp<kMaxPoolGradUri>, "max_pool2d_vjp");
+        registry.registerBuiltin("nn:avg_pool2d", pool2dVjp<kAvgPoolGradUri>, "avg_pool2d_vjp");
         registry.registerBuiltin(
             "nn:softmax_cross_entropy",
             softmaxCrossEntropyVjp,

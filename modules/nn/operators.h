@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 05, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,14 +44,8 @@ slot_t __nn_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __nn_zero_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __nn_add_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __nn_sgd__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __nn_softmax_cross_entropy__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __nn_softmax_cross_entropy_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __nn_embedding__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __nn_embedding_table_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __nn_conv2d__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __nn_conv2d_input_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __nn_conv2d_kernel_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __nn_conv2d_bias_grad__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
+/// Kernels of the training operators (tensor computations come from the operator registry).
 std::unordered_map<std::string, operator_t> getNnOpsMap();
+/// Groups of the training operators (tensor computations come from the operator registry).
 const std::vector<oper_group_ptr_t> &getNnOperatorGroups();

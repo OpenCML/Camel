@@ -4,9 +4,11 @@ add_camel_module(
   SOURCES
     dtype.cpp
     interop.cpp
+    npy.cpp
     module.cpp
     tensor.cpp
     type.cpp
+    kernels/conv.cpp
     kernels/elementwise.cpp
     kernels/gemm.cpp
     kernels/gemm_generic.cpp
