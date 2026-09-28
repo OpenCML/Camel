@@ -106,7 +106,8 @@ class InferContext {
 
 using InferFn = std::function<std::optional<type::Type *>(const InferContext &)>;
 
-/// Semantic properties used by generic graph passes and exporters.
+/// Semantic properties used by exporters and, mirrored into the core OperatorTraitsRegistry on
+/// registration, by generic graph passes. Operators are pure unless marked otherwise.
 struct OpTraits {
     bool pure        = true;  // no side effects; result depends only on arguments
     bool elementwise = false; // output element i depends only on input elements i (after broadcast)

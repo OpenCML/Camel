@@ -115,6 +115,24 @@ std::optional<Type *> linearInfer(const InferContext &ctx) {
     return tensorOf(dtype, out);
 }
 
+/// Kernel of matmul_add / matmul_add_relu (created by the tensor::fuse pass, not exported).
+template <bool Relu> slot_t matmulAddKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel(Relu ? "matmul_add_relu" : "matmul_add", [&] {
+        k::ScalarOperand scalar{};
+        const k::Operand bias = operandArg(norm, 2, scalar);
+        return wrap(
+            k::matmulAdd(tensorArg(norm, 0), tensorArg(norm, 1), bias, Relu, resultAllocator()));
+    });
+}
+
+/// Result of matmul(x, weight) broadcast-added with bias (relu preserves it).
+std::optional<Type *> matmulAddInfer(const InferContext &ctx) {
+    const TensorFacts x = ctx.facts(0), w = ctx.facts(1), b = ctx.facts(2);
+    return tensorOf(
+        promote(promote(x.dtype, w.dtype), b.dtype),
+        broadcast(matmulStaticShape(x.shape, w.shape), b.shape));
+}
+
 } // namespace
 
 std::vector<OpDef> linalgOps() {
@@ -137,6 +155,29 @@ std::vector<OpDef> linalgOps() {
         .resultDoc = "Tensor",
         .infer     = linearInfer,
         .kernel    = &linearKernel,
+        .traits    = {}});
+    // Fused forms of `x @ w + b` and `relu(x @ w + b)`. They have no source-level name: only the
+    // tensor::fuse pass creates them, and they compute what the pattern computes (up to float
+    // rounding, see kernels::matmulAdd).
+    const std::vector<ParamSpec> matmulAddParams = {
+        {"x", ParamKind::Tensor},
+        {"weight", ParamKind::Tensor},
+        {"bias", ParamKind::TensorOrScalar}};
+    defs.push_back(OpDef{
+        .name      = "matmul_add",
+        .exports   = {},
+        .params    = matmulAddParams,
+        .resultDoc = "Tensor",
+        .infer     = matmulAddInfer,
+        .kernel    = &matmulAddKernel<false>,
+        .traits    = {}});
+    defs.push_back(OpDef{
+        .name      = "matmul_add_relu",
+        .exports   = {},
+        .params    = matmulAddParams,
+        .resultDoc = "Tensor",
+        .infer     = matmulAddInfer,
+        .kernel    = &matmulAddKernel<true>,
         .traits    = {}});
     return defs;
 }

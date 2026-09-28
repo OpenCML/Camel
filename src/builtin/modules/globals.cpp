@@ -1619,6 +1619,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
 }
 
 GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
+    registerBuiltinOperatorTraits();
     for (const auto &group : getGlobalOperatorGroups()) {
         exportEntity(group->name(), group);
     }

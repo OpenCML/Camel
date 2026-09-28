@@ -303,3 +303,13 @@ bool TupleType::assignableFrom(Type *sourceType) const {
     }
     return true;
 }
+
+Type *TupleType::widened() const {
+    std::vector<Type *> types;
+    bool changed = false;
+    for (size_t i = 0; i < size_; i++) {
+        types.push_back(typesPtr_[i]->widened());
+        changed = changed || types.back() != typesPtr_[i];
+    }
+    return changed ? TupleType::create(std::move(types)) : const_cast<TupleType *>(this);
+}

@@ -53,6 +53,18 @@ CONFIGS: Dict[str, Config] = {
         Config("camel_native", "camel", "camel <model.cml> (default std::nvm)"),
         Config("camel_fvm", "camel", "camel <model.cml> std::fvm", camel_passes=("std::fvm",)),
         Config("camel_jit", "camel", "camel <model.cml> std::jit", camel_passes=("std::jit",)),
+        Config(
+            "camel_opt",
+            "camel",
+            "camel <model.cml> tensor::fuse (graph optimization, then std::nvm)",
+            camel_passes=("tensor::fuse",),
+        ),
+        Config(
+            "camel_opt_fvm",
+            "camel",
+            "camel <model.cml> tensor::fuse std::fvm",
+            camel_passes=("tensor::fuse", "std::fvm"),
+        ),
         Config("camel_onnx_ort", "ort", "Camel ONNX export -> ONNX Runtime", exporter="camel"),
     )
 }
@@ -67,6 +79,7 @@ DEFAULT_CONFIGS = [
     "tf_xla",
     "tf_onnx_ort",
     "camel_native",
+    "camel_opt",
     "camel_onnx_ort",
 ]
 

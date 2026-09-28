@@ -164,3 +164,45 @@ assert(Number(p[1]) === 0.5 && Number(p[2]) === 0.5 && Number(p[3]) === 0 && Num
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "fuse_linear_reference"
+desc = "Reference results of the tensor::fuse patterns without the pass."
+kind = "behavior"
+case = "../../../cases/modules/tensor/fuse_linear.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["fuse a=0 c=-12.825000286102295 chained=-12.825000286102295 product=-12.625 d=-12.825000286102295 e=-2.625"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "fuse_linear_pass"
+desc = "tensor::fuse leaves every result unchanged, including chained patterns, a product with a second user, and a non-row bias."
+kind = "behavior"
+case = "../../../cases/modules/tensor/fuse_linear.cml"
+args = ["${case}", "tensor::fuse"]
+expect_exit = 0
+expect_stdout_contains = ["fuse a=0 c=-12.825000286102295 chained=-12.825000286102295 product=-12.625 d=-12.825000286102295 e=-2.625"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "fuse_linear_graph"
+desc = "tensor::fuse rewrites four matmul+add patterns and one relu pattern, and keeps the shared product unfused."
+kind = "behavior"
+case = "../../../cases/modules/tensor/fuse_linear.cml"
+args = ["${case}", "tensor::fuse", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (uri) => (out.match(new RegExp(`label="${uri}"`, 'g')) || []).length
+assert(count('tensor:matmul_add') === 4, `expected 4 matmul_add, got ${count('tensor:matmul_add')}`)
+assert(count('tensor:matmul_add_relu') === 1, `expected 1 matmul_add_relu, got ${count('tensor:matmul_add_relu')}`)
+assert(count('tensor:matmul') === 1 && count('tensor:add') === 1, 'the shared product and its add must stay unfused')
+assert(count('tensor:relu') === 0, 'the relu must be fused')
+}
+"""
+timeout_ms = 4000
