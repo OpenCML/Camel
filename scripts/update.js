@@ -68,7 +68,10 @@ async function updateFile(filePath) {
             if (updateIndex) {
                 lines.splice(updateIndex, 0, updatedLine)
             }
-            await fsp.writeFile(filePath, lines.join('\r\n'), 'utf8')
+            // Keep the file's existing line endings; readline strips them.
+            const original = await fsp.readFile(filePath, 'utf8')
+            const eol = original.includes('\r\n') ? '\r\n' : '\n'
+            await fsp.writeFile(filePath, lines.join(eol), 'utf8')
             console.log(`Updated: ${filePath}`)
             updatedFiles++
         }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Apr. 11, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -263,7 +263,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1])) {
+                            // The target keeps its declared type; the value only has to fit it.
+                            if (!norm[0]->assignableFrom(norm[1])) {
                                 return nullopt;
                             }
                             return norm[0];
@@ -315,7 +316,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1])) {
+                            // The target keeps its declared type; the value only has to fit it.
+                            if (!norm[0]->assignableFrom(norm[1])) {
                                 return nullopt;
                             }
                             return norm[0];
@@ -360,7 +362,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1])) {
+                            // The target keeps its declared type; the value only has to fit it.
+                            if (!norm[0]->assignableFrom(norm[1])) {
                                 return nullopt;
                             }
                             return norm[0];
@@ -405,7 +408,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1])) {
+                            // The target keeps its declared type; the value only has to fit it.
+                            if (!norm[0]->assignableFrom(norm[1])) {
                                 return nullopt;
                             }
                             return norm[0];
@@ -450,7 +454,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1])) {
+                            // The target keeps its declared type; the value only has to fit it.
+                            if (!norm[0]->assignableFrom(norm[1])) {
                                 return nullopt;
                             }
                             return norm[0];
@@ -481,7 +486,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1])) {
+                            // The target keeps its declared type; the value only has to fit it.
+                            if (!norm[0]->assignableFrom(norm[1])) {
                                 return nullopt;
                             }
                             return norm[0];
@@ -498,7 +504,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1])) {
+                            // The target keeps its declared type; the value only has to fit it.
+                            if (!norm[0]->assignableFrom(norm[1])) {
                                 return nullopt;
                             }
                             return norm[0];
@@ -515,7 +522,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(var self: typeas T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1])) {
+                            // The target keeps its declared type; the value only has to fit it.
+                            if (!norm[0]->assignableFrom(norm[1])) {
                                 return nullopt;
                             }
                             return norm[0];

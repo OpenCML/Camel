@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: May. 05, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,7 @@
 
 #include "operators.h"
 
-#include "../tensor/runtime.h"
+#include "../tensor/tensor.h"
 #include "../tensor/type.h"
 
 #include "camel/core/error/runtime.h"
@@ -119,10 +119,11 @@ tensor::TensorObject *embeddingTableGrad(
         throw std::invalid_argument("embedding_table_grad dy must be floating point");
     }
 
-    tensor::TensorObject *grad = tensor::tensorZeros(
+    tensor::TensorObject *grad = tensor::TensorObject::create(
         table->dtype(),
         std::span<const int64_t>(table->shape(), table->rank()),
-        allocator);
+        allocator,
+        true);
     const int64_t count = indices->dim(0);
     const int64_t dim   = table->dim(1);
     for (int64_t row = 0; row < count; ++row) {

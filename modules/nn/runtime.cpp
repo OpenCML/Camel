@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 05, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -106,10 +106,11 @@ ParameterObject *ParameterObject::create(tensor::TensorObject *data, mm::IAlloca
     requireFloatingTensor(data, "parameter");
     tensor::TensorObject *ownedData = static_cast<tensor::TensorObject *>(
         data->clone(allocator, camel::tensor::TensorType::Default(), false));
-    tensor::TensorObject *grad = tensor::tensorZeros(
+    tensor::TensorObject *grad = tensor::TensorObject::create(
         ownedData->dtype(),
         std::span<const int64_t>(ownedData->shape(), ownedData->rank()),
-        allocator);
+        allocator,
+        true);
     void *mem = allocator.alloc(sizeof(ParameterObject), alignof(ParameterObject));
     if (!mem) {
         throw std::bad_alloc();
@@ -192,12 +193,12 @@ void ParameterObject::updateRefs(const Object::RefRelocator &relocate, const Typ
             data_,
             tensorType,
             rtdata::RefTraceInfo{
-                .owner     = this,
-                .ownerType = type,
-                .slotType  = tensorType,
-                .ownerKind = "ParameterObject",
-                .slotName  = "data",
-                .slotIndex = rtdata::RefTraceInfo::npos,
+                           .owner     = this,
+                           .ownerType = type,
+                           .slotType  = tensorType,
+                           .ownerKind = "ParameterObject",
+                           .slotName  = "data",
+                           .slotIndex = rtdata::RefTraceInfo::npos,
             }));
     }
     if (grad_) {
@@ -206,12 +207,12 @@ void ParameterObject::updateRefs(const Object::RefRelocator &relocate, const Typ
             grad_,
             tensorType,
             rtdata::RefTraceInfo{
-                .owner     = this,
-                .ownerType = type,
-                .slotType  = tensorType,
-                .ownerKind = "ParameterObject",
-                .slotName  = "grad",
-                .slotIndex = rtdata::RefTraceInfo::npos,
+                           .owner     = this,
+                           .ownerType = type,
+                           .slotType  = tensorType,
+                           .ownerKind = "ParameterObject",
+                           .slotName  = "grad",
+                           .slotIndex = rtdata::RefTraceInfo::npos,
             }));
     }
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 05, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@
 
 #pragma once
 
-#include "../tensor/runtime.h"
+#include "../tensor/tensor.h"
 
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"

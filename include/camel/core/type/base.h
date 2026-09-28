@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -150,6 +150,20 @@ class Type {
     virtual Type *clone(bool deep = false) const;
 
     virtual bool equals(Type *type) const;
+    /**
+     * Least common type of `this` and `other`, used where control flow merges
+     * values (branch joins). The default accepts only equal types and returns
+     * nullptr otherwise; types with a refinement lattice (for example tensors
+     * with partially known shapes) override it to widen instead of failing.
+     */
+    virtual Type *unify(Type *other) const;
+    /**
+     * The type given to a mutable (`var`) binding initialized with a value of
+     * this type. Refinement-carrying types widen to their general form so that
+     * later assignments are not restricted to the initializer's exact
+     * refinement. The default is the type itself.
+     */
+    virtual Type *widened() const;
     virtual CastSafety castSafetyFrom(Type *sourceType) const;
     virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const;
     bool assignableFrom(Type *sourceType) const;
