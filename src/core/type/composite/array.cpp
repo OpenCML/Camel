@@ -144,3 +144,8 @@ bool ArrayType::assignableFrom(Type *sourceType) const {
     }
     return elemType_->assignableFrom(static_cast<const ArrayType &>(*sourceType).elemType_);
 }
+
+Type *ArrayType::widened() const {
+    Type *elem = elemType_->widened();
+    return elem == elemType_ ? const_cast<ArrayType *>(this) : ArrayType::create(elem);
+}

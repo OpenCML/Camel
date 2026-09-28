@@ -321,3 +321,15 @@ bool StructType::assignableFrom(Type *sourceType) const {
     }
     return true;
 }
+
+Type *StructType::widened() const {
+    StructTypeFactory factory;
+    bool changed = false;
+    for (size_t i = 0; i < size_; ++i) {
+        Type *fieldType = typeAt(i);
+        Type *widened   = fieldType ? fieldType->widened() : fieldType;
+        changed         = changed || widened != fieldType;
+        factory.add(std::string(fieldName(i)), widened);
+    }
+    return changed ? factory.build() : const_cast<StructType *>(this);
+}
