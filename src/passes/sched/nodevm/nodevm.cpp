@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: May. 06, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -297,27 +297,81 @@ NodeVMSchedPass::topoNodesFor(camel::runtime::GCGraph *runtimeGraph) {
 }
 
 // =============================================================================
-// Tail-call optimization: frame lifetime for mutually recursive calls that may
-// also invoke a third graph.
+// Tail-call optimization: frame lifetime
 // =============================================================================
 //
-// Let A be the root frame. A and B may tail-call each other, and either may
-// also call C in the middle.
+// FramePool is a stack allocator, so frames must be released in LIFO order and
+// every live frame must stay below the pool top (the GC only scans frames below
+// it). A call keeps its caller-owned rootFrame plus at most two tail-call frames
+// above it, tailLow and tailHigh (tailHigh on top). currFrame is always one of
+// rootFrame, tailLow, tailHigh.
 //
-// Case 1: A or B performs a normal call into C. C's frame is released when the
-// call returns.
+// A tail call to a different graph T (see tailCallFrame):
+//   - T already owns tailLow or tailHigh (mutual recursion, e.g. branch arms):
+//     bind arguments into that frame and switch to it; nothing is released.
+//   - A free position exists directly above currFrame: acquire T there.
+//   - Otherwise stage the arguments in scratch, release the tail frames that
+//     are not needed (top first), and acquire T in the freed position.
+// Self recursion rebinds the current frame through the same staging path.
 //
-// Case 2: A tail-calls C while twin points at B. B must be released first
-// before allocating C's frame.
-//
-// Case 3: B tail-calls C while twin points at A. The root frame A cannot be
-// released early, so cleanup happens when the C++ stack frame exits.
-//
-// Release order on exit:
-//   1. Release curr if it is not root.
-//   2. Release twin if it exists and is not root.
-//   3. Release root last. The call owns rootFrame and is responsible for it.
+// On exit (normal or exceptional) tailHigh, tailLow, and rootFrame are released
+// in that order.
 // =============================================================================
+
+Frame *NodeVMSchedPass::tailCallFrame(
+    camel::runtime::GCGraph *target, Frame *rootFrame, Frame *source, Frame *&tailLow,
+    Frame *&tailHigh, const NodeVMCallLayoutCache *layout,
+    std::span<const runtime_data_idx_t> argSlots) {
+    // Existing live frame for the target: self recursion or an alternating
+    // partner (branch arms). rootFrame qualifies too; it is reused, never released.
+    for (Frame *candidate : {source, tailHigh, tailLow, rootFrame}) {
+        if (candidate != nullptr && candidate->runtimeGraph() == target) {
+            bindDirectCallFrameSlots(source, candidate, layout, argSlots, callArgScratch_);
+            return candidate;
+        }
+    }
+    // A free position directly above the source frame.
+    if (source == rootFrame && tailLow == nullptr) {
+        tailLow = framePool_.acquire(target);
+        bindDirectCallFrameSlots(source, tailLow, layout, argSlots, callArgScratch_);
+        return tailLow;
+    }
+    if (source == tailLow && tailHigh == nullptr) {
+        tailHigh = framePool_.acquire(target);
+        bindDirectCallFrameSlots(source, tailHigh, layout, argSlots, callArgScratch_);
+        return tailHigh;
+    }
+    if (source == tailLow) {
+        // Replace the partner above the source; the source itself stays live.
+        framePool_.release(tailHigh);
+        tailHigh = framePool_.acquire(target);
+        bindDirectCallFrameSlots(source, tailHigh, layout, argSlots, callArgScratch_);
+        return tailHigh;
+    }
+    // The source is rootFrame with tail frames above it, or tailHigh: stage the
+    // arguments, drop both tail frames (top first), and start over above root.
+    callArgScratch_.resize(argSlots.size());
+    for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
+        callArgScratch_[argIndex] = source->get<slot_t>(argSlots[argIndex]);
+    }
+    releaseTailFrames(tailLow, tailHigh);
+    tailLow = framePool_.acquire(target);
+    for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
+        tailLow->set(layout->calleePortSlots[argIndex], callArgScratch_[argIndex]);
+    }
+    return tailLow;
+}
+
+void NodeVMSchedPass::releaseTailFrames(Frame *&tailLow, Frame *&tailHigh) {
+    if (tailHigh != nullptr) {
+        framePool_.release(tailHigh);
+        tailHigh = nullptr;
+    }
+    if (tailLow != nullptr) {
+        framePool_.release(tailLow);
+        tailLow = nullptr;
+    }
+}
 
 // Execute one runtime graph call. Arguments for CALL/FUNC are copied from the
 // source frame into the callee frame's ports and closure slots.
@@ -329,15 +383,14 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
         "NodeVM runtime graph must be materialized before execution.");
 
     Frame *currFrame       = rootFrame;
-    Frame *twinFrame       = nullptr;
+    Frame *tailLow         = nullptr; // tail-call frames above rootFrame, in stack order
+    Frame *tailHigh        = nullptr;
     auto *currRuntimeGraph = rootRuntimeGraph;
     auto gcSafepoint       = [&](std::string_view reason) {
-        // NVM keeps safepoints at graph boundaries only. Cache the slow-path state so normal
-        // execution does not acquire the GC mutex or reload the global atomic at every node.
-        if (gcSafepointsEnabled_) {
-            mm::autoSpace().safepoint(reason);
-            gcSafepointsEnabled_ = mm::autoSpaceSafepointSlowPathEnabled();
-        }
+        // NVM keeps safepoints at graph boundaries only. Each boundary checks the global
+        // slow-path flag (one atomic load), so collections requested during execution, such as
+        // the large-object budget, run at the next graph boundary instead of never.
+        mm::safepoint(reason);
     };
     try {
         if (currRecursionDepth_ > maxRecursionDepth_) {
@@ -576,13 +629,8 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     tillNode         = kInvalidNodeRef;
                     skipNode         = kInvalidNodeRef;
 
-                    if (runtimeTarget == currRuntimeGraph) {
-                        // Self recursion can keep both the current frame and node sequence.
-                        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                            "NodeVM",
-                            "Optimizing self-recursion for graph: {}",
-                            currFrame->graph()->name()));
-                    } else {
+                    const auto argSlots = directCallArgSlotsOf(currCache, i);
+                    if (runtimeTarget != currRuntimeGraph) {
                         // Switch to the callee graph and its topo sequence.
                         currRuntimeGraph = runtimeTarget;
                         currNodes        = topoNodesFor(currRuntimeGraph);
@@ -590,55 +638,17 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                         ASSERT(
                             currCache != nullptr,
                             "NodeVM callee cache must be initialized before tail-call execution.");
-
-                        // Mutual tail recursion is common because branches are
-                        // compiled as subgraphs. Keep a twin frame and swap
-                        // between A/B without growing the C++ stack.
-                        if (twinFrame && twinFrame->runtimeGraph() == runtimeTarget) {
-                            // Reuse the cached twin frame when it already matches the target.
-                            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                                "NodeVM",
-                                "Optimizing mutual-tail-recursion for graph: {}",
-                                currFrame->graph()->name()));
-                            currFrame = twinFrame;
-                            twinFrame = lastFrame;
-                        } else {
-                            if (twinFrame != nullptr && twinFrame != rootFrame) {
-                                framePool_.release(twinFrame);
-                            }
-                            twinFrame = currFrame;
-
-                            Frame *funcFrame = framePool_.acquire(runtimeTarget);
-                            const auto argSlots =
-                                directCallArgSlotsOf(nodeVmCacheOf(callerRuntimeGraph), i);
-                            topoNodesFor(runtimeTarget);
-                            auto *layout = nodeVmCallLayoutOf(runtimeTarget);
-                            ASSERT(layout != nullptr, "NodeVM call layout cache must exist.");
-                            bindDirectCallFrameSlots(
-                                lastFrame,
-                                funcFrame,
-                                layout,
-                                argSlots,
-                                callArgScratch_);
-
-                            currFrame = funcFrame;
-                            goto loop_start;
-                        }
                     }
-
-                    // Self recursion and mutual recursion both land here to
-                    // refresh the callee-visible argument slots.
-                    const auto argSlots =
-                        directCallArgSlotsOf(nodeVmCacheOf(callerRuntimeGraph), i);
-                    topoNodesFor(runtimeTarget);
                     auto *layout = nodeVmCallLayoutOf(runtimeTarget);
                     ASSERT(layout != nullptr, "NodeVM call layout cache must exist.");
-                    bindDirectCallFrameSlots(
+                    currFrame = tailCallFrame(
+                        runtimeTarget,
+                        rootFrame,
                         lastFrame,
-                        currFrame,
+                        tailLow,
+                        tailHigh,
                         layout,
-                        argSlots,
-                        callArgScratch_);
+                        argSlots);
                     goto loop_start;
                 }
 
@@ -731,24 +741,13 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
 
         result = camel::execute::readRuntimeGraphReturn(currRuntimeGraph, currFrame);
 
-        // Release frames in the documented order from the header comment above.
-        if (currFrame != nullptr && currFrame != rootFrame) {
-            framePool_.release(currFrame);
-        }
-        if (twinFrame != nullptr && twinFrame != rootFrame && twinFrame != currFrame) {
-            framePool_.release(twinFrame);
-        }
+        releaseTailFrames(tailLow, tailHigh);
         framePool_.release(rootFrame);
 
         return result;
     } catch (const RuntimeFault &fault) {
         currRecursionDepth_--;
-        if (currFrame && currFrame != rootFrame) {
-            framePool_.release(currFrame);
-        }
-        if (twinFrame && twinFrame != rootFrame && twinFrame != currFrame) {
-            framePool_.release(twinFrame);
-        }
+        releaseTailFrames(tailLow, tailHigh);
         if (rootFrame) {
             framePool_.release(rootFrame);
         }
@@ -765,12 +764,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                       currRecursionDepth_));
     } catch (Diagnostic &) {
         currRecursionDepth_--;
-        if (currFrame && currFrame != rootFrame) {
-            framePool_.release(currFrame);
-        }
-        if (twinFrame && twinFrame != rootFrame && twinFrame != currFrame) {
-            framePool_.release(twinFrame);
-        }
+        releaseTailFrames(tailLow, tailHigh);
         if (rootFrame) {
             framePool_.release(rootFrame);
         }
@@ -782,9 +776,8 @@ camel::runtime::GCGraph *NodeVMSchedPass::apply(camel::runtime::GCGraph *graph, 
     (void)os;
     ASSERT(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
     graphCaches_.clear();
-    gcSafepointsEnabled_ = mm::autoSpaceSafepointSlowPathEnabled();
-    Frame *rootFrame     = framePool_.acquire(graph);
-    slot_t result        = call(graph, rootFrame);
+    Frame *rootFrame = framePool_.acquire(graph);
+    slot_t result    = call(graph, rootFrame);
     context_->captureProcessExitCode(graph, result);
     return nullptr;
 }
