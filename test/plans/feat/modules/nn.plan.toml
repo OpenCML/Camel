@@ -855,3 +855,139 @@ for (const value of [...conv.slice(1), ...pool.slice(1)]) {
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "autoencoder_fused"
+desc = "Same as autoencoder, after tensor::fuse (fused ops must differentiate like the patterns they replace)."
+kind = "behavior"
+case = "../../../cases/modules/nn/autoencoder.cml"
+args = ["${case}", "tensor::fuse", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/autoencoder metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/autoencoder enc_w=tensor/, input.normalized.stdout)
+match(/autoencoder dec_w=tensor/, input.normalized.stdout)
+match(/autoencoder enc_grad=tensor/, input.normalized.stdout)
+match(/autoencoder dec_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tiny_rnn_fused"
+desc = "Same as tiny_rnn, after tensor::fuse (fused ops must differentiate like the patterns they replace)."
+kind = "behavior"
+case = "../../../cases/modules/nn/tiny_rnn.cml"
+args = ["${case}", "tensor::fuse", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/tiny_rnn metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/tiny_rnn wxh=tensor/, input.normalized.stdout)
+match(/tiny_rnn whh=tensor/, input.normalized.stdout)
+match(/tiny_rnn why=tensor/, input.normalized.stdout)
+match(/tiny_rnn wxh_grad=tensor/, input.normalized.stdout)
+match(/tiny_rnn whh_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "softmax_classifier_fused"
+desc = "Same as softmax_classifier, after tensor::fuse (fused ops must differentiate like the patterns they replace)."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_classifier.cml"
+args = ["${case}", "tensor::fuse", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/softmax_classifier metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/softmax_classifier weight=tensor/, input.normalized.stdout)
+match(/softmax_classifier bias=tensor/, input.normalized.stdout)
+match(/softmax_classifier weight_grad=tensor/, input.normalized.stdout)
+match(/softmax_classifier bias_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "residual_mlp_fused"
+desc = "Same as residual_mlp, after tensor::fuse (fused ops must differentiate like the patterns they replace)."
+kind = "behavior"
+case = "../../../cases/modules/nn/residual_mlp.cml"
+args = ["${case}", "tensor::fuse", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/residual_mlp metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/residual_mlp l0_weight=tensor/, input.normalized.stdout)
+match(/residual_mlp l1_weight=tensor/, input.normalized.stdout)
+match(/residual_mlp skip_weight=tensor/, input.normalized.stdout)
+match(/residual_mlp l0_grad=tensor/, input.normalized.stdout)
+match(/residual_mlp skip_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "gru_lite_fused"
+desc = "Same as gru_lite, after tensor::fuse (fused ops must differentiate like the patterns they replace)."
+kind = "behavior"
+case = "../../../cases/modules/nn/gru_lite.cml"
+args = ["${case}", "tensor::fuse", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/gru_lite metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+)/, input.normalized.stdout)
+const before = Number(found[1])
+const step = Number(found[2])
+const after = Number(found[3])
+assert(Number.isFinite(before) && Number.isFinite(step) && Number.isFinite(after), 'metrics are not finite')
+assert(approx(step, before, 1e-9), `step loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected loss to decrease: before=${before}, after=${after}`)
+match(/gru_lite wxz=tensor/, input.normalized.stdout)
+match(/gru_lite whz=tensor/, input.normalized.stdout)
+match(/gru_lite wxn=tensor/, input.normalized.stdout)
+match(/gru_lite whn=tensor/, input.normalized.stdout)
+match(/gru_lite wxz_grad=tensor/, input.normalized.stdout)
+match(/gru_lite whz_grad=tensor/, input.normalized.stdout)
+match(/gru_lite wxn_grad=tensor/, input.normalized.stdout)
+match(/gru_lite whn_grad=tensor/, input.normalized.stdout)
+}
+"""
+timeout_ms = 4000

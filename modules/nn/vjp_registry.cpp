@@ -67,27 +67,46 @@ void requireInputRange(const VjpPrimitiveCall &call, size_t minimum, size_t maxi
     }
 }
 
+/// Gradients of lhs @ rhs given the output gradient dy.
+void accumulateMatmulGradients(
+    VjpBuildContext &ctx, rt::gc_node_ref_t lhs, rt::gc_node_ref_t rhs, rt::gc_node_ref_t dy) {
+    std::array<rt::gc_node_ref_t, 1> rhsTransposeInputs{rhs};
+    const rt::gc_node_ref_t rhsT =
+        ctx.addOper(tensorType(), "tensor:transpose", rhsTransposeInputs);
+    std::array<rt::gc_node_ref_t, 2> lhsGradInputs{dy, rhsT};
+    ctx.accumulateGradient(lhs, ctx.addOper(tensorType(), "tensor:matmul", lhsGradInputs));
+
+    std::array<rt::gc_node_ref_t, 1> lhsTransposeInputs{lhs};
+    const rt::gc_node_ref_t lhsT =
+        ctx.addOper(tensorType(), "tensor:transpose", lhsTransposeInputs);
+    std::array<rt::gc_node_ref_t, 2> rhsGradInputs{lhsT, dy};
+    ctx.accumulateGradient(rhs, ctx.addOper(tensorType(), "tensor:matmul", rhsGradInputs));
+}
+
+/// Gradient of an addend (tensor or float) of a sum whose gradient is dy.
+void accumulateAddendGradient(
+    VjpBuildContext &ctx, rt::gc_node_ref_t addend, rt::gc_node_ref_t dy) {
+    if (isTensorType(ctx.nodeType(addend)) || isFloat64(ctx.nodeType(addend))) {
+        ctx.accumulateGradient(addend, dy);
+    }
+}
+
+/// dy masked by the relu output: dy * (y > 0).
+rt::gc_node_ref_t
+reluGradient(VjpBuildContext &ctx, rt::gc_node_ref_t output, rt::gc_node_ref_t dy) {
+    std::array<rt::gc_node_ref_t, 2> maskInputs{output, ctx.addStaticFloat(0.0)};
+    const rt::gc_node_ref_t mask = ctx.addOper(tensorType(), "tensor:gt", maskInputs);
+    std::array<rt::gc_node_ref_t, 2> gradInputs{dy, mask};
+    return ctx.addOper(tensorType(), "tensor:multiply", gradInputs);
+}
+
 void matmulVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
     requireInputCount(call, 2);
     auto dy = ctx.gradientOf(call.output);
     if (!dy) {
         return;
     }
-
-    const rt::gc_node_ref_t lhs = call.inputs[0];
-    const rt::gc_node_ref_t rhs = call.inputs[1];
-
-    std::array<rt::gc_node_ref_t, 1> rhsTransposeInputs{rhs};
-    const rt::gc_node_ref_t rhsT =
-        ctx.addOper(tensorType(), "tensor:transpose", rhsTransposeInputs);
-    std::array<rt::gc_node_ref_t, 2> lhsGradInputs{*dy, rhsT};
-    ctx.accumulateGradient(lhs, ctx.addOper(tensorType(), "tensor:matmul", lhsGradInputs));
-
-    std::array<rt::gc_node_ref_t, 1> lhsTransposeInputs{lhs};
-    const rt::gc_node_ref_t lhsT =
-        ctx.addOper(tensorType(), "tensor:transpose", lhsTransposeInputs);
-    std::array<rt::gc_node_ref_t, 2> rhsGradInputs{lhsT, *dy};
-    ctx.accumulateGradient(rhs, ctx.addOper(tensorType(), "tensor:matmul", rhsGradInputs));
+    accumulateMatmulGradients(ctx, call.inputs[0], call.inputs[1], *dy);
 }
 
 void addVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
@@ -96,15 +115,30 @@ void addVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
     if (!dy) {
         return;
     }
+    accumulateAddendGradient(ctx, call.inputs[0], *dy);
+    accumulateAddendGradient(ctx, call.inputs[1], *dy);
+}
 
-    const rt::gc_node_ref_t lhs = call.inputs[0];
-    const rt::gc_node_ref_t rhs = call.inputs[1];
-    if (isTensorType(ctx.nodeType(lhs)) || isFloat64(ctx.nodeType(lhs))) {
-        ctx.accumulateGradient(lhs, *dy);
+void reluVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 1);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
     }
-    if (isTensorType(ctx.nodeType(rhs)) || isFloat64(ctx.nodeType(rhs))) {
-        ctx.accumulateGradient(rhs, *dy);
+    ctx.accumulateGradient(call.inputs[0], reluGradient(ctx, call.output, *dy));
+}
+
+/// matmul_add(x, w, b) and matmul_add_relu(x, w, b), produced by tensor::fuse: the composition
+/// of the matmul, add (and relu) rules.
+template <bool Relu> void matmulAddVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
+    requireInputCount(call, 3);
+    auto dy = ctx.gradientOf(call.output);
+    if (!dy) {
+        return;
     }
+    const rt::gc_node_ref_t g = Relu ? reluGradient(ctx, call.output, *dy) : *dy;
+    accumulateMatmulGradients(ctx, call.inputs[0], call.inputs[1], g);
+    accumulateAddendGradient(ctx, call.inputs[2], g);
 }
 
 void subtractVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
@@ -605,6 +639,12 @@ void ensureBuiltinVjpRulesRegistered() {
         auto &registry = VjpRegistry::instance();
         registry.registerBuiltin("tensor:add", addVjp, "add_vjp");
         registry.registerBuiltin("tensor:matmul", matmulVjp, "matmul_vjp");
+        registry.registerBuiltin("tensor:relu", reluVjp, "relu_vjp");
+        registry.registerBuiltin("tensor:matmul_add", matmulAddVjp<false>, "matmul_add_vjp");
+        registry.registerBuiltin(
+            "tensor:matmul_add_relu",
+            matmulAddVjp<true>,
+            "matmul_add_relu_vjp");
         registry.registerBuiltin("tensor:subtract", subtractVjp, "subtract_vjp");
         registry.registerBuiltin("tensor:multiply", multiplyVjp, "multiply_vjp");
         registry.registerBuiltin("tensor:divide", divideVjp, "divide_vjp");
