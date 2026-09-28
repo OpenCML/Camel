@@ -1,0 +1,15 @@
+/**
+ * Negative case: incompatible broadcast reports TensorDimensionMismatch.
+ */
+module shape_error
+
+import {
+    ones, sum
+} from tensor
+
+func main(): int sync {
+    let a = ones([2, 3])
+    let b = ones([4, 3])
+    'shape_error sum={}'->format<sum(a + b)>->println
+    return 0
+}

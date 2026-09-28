@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: May. 05, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,7 +27,7 @@
 
 #include "operators.h"
 
-#include "../tensor/runtime.h"
+#include "../tensor/tensor.h"
 #include "../tensor/type.h"
 
 #include "camel/core/error/runtime.h"

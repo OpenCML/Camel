@@ -11,15 +11,19 @@
  *
  * See the the MIT license for more details.
  *
- * Author: Zhenjie Wei
- * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Author: Camel Contributors
+ * Created: Sep. 28, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#pragma once
+/*
+ * AVX2 + FMA SGEMM instantiation: 8-wide vectors, 6 x 16 tiles. This unit is
+ * compiled with AVX2/FMA flags and only called after a runtime CPU check.
+ */
 
-#include "camel/core/context/context.h"
-#include "camel/execute/executor.h"
-
-executor_ptr_t createTensorExecutor(camel::core::context::context_ptr_t ctx);
+#define CAMEL_GEMM_VEC_WIDTH 8
+#define CAMEL_GEMM_MR 6
+#define CAMEL_GEMM_NR 16
+#define CAMEL_GEMM_ENTRY sgemmAvx2
+#include "gemm_blocked.inl"

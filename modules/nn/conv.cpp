@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: May. 05, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,7 @@
 
 #include "operators.h"
 
-#include "../tensor/runtime.h"
+#include "../tensor/tensor.h"
 #include "../tensor/type.h"
 
 #include "camel/core/error/runtime.h"
@@ -187,13 +187,14 @@ tensor::TensorObject *conv2dInputGrad(
     }
     int64_t dummyBiasShape[] = {kernel->dim(0)};
     tensor::TensorObject *dummyBias =
-        tensor::tensorZeros(TypeCode::Float32, dummyBiasShape, allocator);
+        tensor::TensorObject::create(TypeCode::Float32, dummyBiasShape, allocator, true);
     const Conv2DShape s = convShape(input, kernel, dummyBias, "conv2d_input_grad");
     requireDyShape(dy, s, "conv2d_input_grad");
-    tensor::TensorObject *grad = tensor::tensorZeros(
+    tensor::TensorObject *grad = tensor::TensorObject::create(
         input->dtype(),
         std::span<const int64_t>(input->shape(), input->rank()),
-        allocator);
+        allocator,
+        true);
 
     for (int64_t n = 0; n < s.batch; ++n) {
         for (int64_t oc = 0; oc < s.outChannels; ++oc) {
@@ -243,13 +244,14 @@ tensor::TensorObject *conv2dKernelGrad(
     }
     int64_t dummyBiasShape[] = {kernel->dim(0)};
     tensor::TensorObject *dummyBias =
-        tensor::tensorZeros(TypeCode::Float32, dummyBiasShape, allocator);
+        tensor::TensorObject::create(TypeCode::Float32, dummyBiasShape, allocator, true);
     const Conv2DShape s = convShape(input, kernel, dummyBias, "conv2d_kernel_grad");
     requireDyShape(dy, s, "conv2d_kernel_grad");
-    tensor::TensorObject *grad = tensor::tensorZeros(
+    tensor::TensorObject *grad = tensor::TensorObject::create(
         kernel->dtype(),
         std::span<const int64_t>(kernel->shape(), kernel->rank()),
-        allocator);
+        allocator,
+        true);
 
     for (int64_t oc = 0; oc < s.outChannels; ++oc) {
         for (int64_t ic = 0; ic < s.inChannels; ++ic) {
@@ -295,10 +297,11 @@ tensor::TensorObject *conv2dBiasGrad(
     if (bias->rank() != 1 || dy->rank() != 4 || dy->dim(1) != bias->dim(0)) {
         throw std::invalid_argument("conv2d_bias_grad requires bias [O] and dy [N, O, H, W]");
     }
-    tensor::TensorObject *grad = tensor::tensorZeros(
+    tensor::TensorObject *grad = tensor::TensorObject::create(
         bias->dtype(),
         std::span<const int64_t>(bias->shape(), bias->rank()),
-        allocator);
+        allocator,
+        true);
     for (int64_t n = 0; n < dy->dim(0); ++n) {
         for (int64_t oc = 0; oc < dy->dim(1); ++oc) {
             double acc = grad->getAsDouble(static_cast<uint64_t>(oc));

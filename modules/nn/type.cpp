@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 05, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,8 +29,7 @@ namespace mm = camel::core::mm;
 ParameterType::ParameterType() : OtherType(typeCode()) {}
 
 TypeCode ParameterType::typeCode() {
-    static TypeCode code =
-        registerOtherType("Parameter", TypeFlag::Composite | TypeFlag::GC_Traced);
+    static TypeCode code = registerOtherType("Parameter", TypeFlag::GC_Traced);
     return code;
 }
 

@@ -464,18 +464,18 @@ assert(countStep('nn:sgd') === 4, 'expected one update for Q/K/V/output projecti
 timeout_ms = 4000
 
 [[tests]]
-name = "softmax_rank_error"
-desc = "Rejects non-rank-2 softmax input with a readable diagnostic."
+name = "softmax_axis_error"
+desc = "Rejects a softmax axis outside the input rank with a readable diagnostic."
 kind = "behavior"
-case = "../../../cases/modules/nn/softmax_rank_error.cml"
+case = "../../../cases/modules/nn/softmax_axis_error.cml"
 args = ["${case}"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(input.exit_code !== 0, 'softmax rank error case unexpectedly succeeded')
-assert(text.includes('softmax currently requires a rank-2 tensor'), 'missing softmax rank diagnostic')
+assert(input.exit_code !== 0, 'softmax axis error case unexpectedly succeeded')
+assert(text.includes('softmax: axis 1 is out of range for a rank-1 tensor'), 'missing softmax axis diagnostic')
 assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic category')
 }
 """
