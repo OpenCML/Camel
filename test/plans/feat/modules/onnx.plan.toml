@@ -1,0 +1,67 @@
+id = "modules.onnx"
+order = 363
+tier = "feat"
+tags = ["feat", "modules", "onnx"]
+
+[[tests]]
+name = "export_fold"
+desc = "Export folds weights, shape arithmetic, and constant-driven recursion; only input-dependent tensor ops are emitted."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_fold.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_fold.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_fold.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('MatMul') === 3 && count('Relu') === 3 && count('Mul') === 3, `expected 3 unrolled steps, got ${model.ops}`)
+assert(count('Reshape') === 1 && count('Identity') === 1, `unexpected tail ops ${model.ops}`)
+assert(model.ops.length === 14, `shape arithmetic must fold away, got ${model.ops}`)
+assert(model.initializers.includes('w') && model.initializers.includes('b'), `weights not named by field: ${model.initializers}`)
+assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "export_unsupported_op"
+desc = "An input-dependent operator without an ONNX lowering is reported by URI."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_unsupported.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_unsupported.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes("operator 'tensor:idx' has no ONNX lowering at opset 17"), 'missing unsupported-operator detail')
+assert(!text.includes('unreachable'), 'export must fail before the next statement')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "export_impure_op"
+desc = "Impure operators inside the exported function are rejected."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_impure.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_impure.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes("impure operator 'tensor:randn' cannot be exported"), 'missing impure-operator detail')
+assert(!text.includes('unreachable'), 'export must fail before the next statement')
+}
+"""
+timeout_ms = 4000
