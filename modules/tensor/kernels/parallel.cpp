@@ -20,10 +20,15 @@
 /*
  * Worker pool behind `parallelFor`.
  *
- * Workers sleep on a condition variable. A parallel region publishes a job
- * (body, chunk boundaries, generation number), wakes the workers, runs chunk 0
- * on the calling thread, and waits until every chunk has completed. Chunks are
- * claimed through an atomic counter, so a slow worker never blocks others.
+ * A parallel region publishes a job (body, chunk count) under a new
+ * generation number, runs chunks on the calling thread, and waits until every
+ * chunk has completed. Workers claim chunks one at a time, so a slow worker
+ * never blocks others.
+ *
+ * Tensor programs issue many short regions back to back, so both sides spin
+ * briefly before blocking: an idle worker polls the generation counter, and the
+ * caller polls the completion count, for about kSpinIterations pause
+ * instructions before falling back to the condition variables.
  */
 
 #include "parallel.h"
@@ -37,9 +42,23 @@
 #include <thread>
 #include <vector>
 
+#if defined(__x86_64__) || defined(_M_X64)
+#include <immintrin.h>
+#endif
+
 namespace camel::tensor::kernels {
 
 namespace {
+
+constexpr int kSpinIterations = 4096;
+
+inline void cpuRelax() {
+#if defined(__x86_64__) || defined(_M_X64)
+    _mm_pause();
+#else
+    std::this_thread::yield();
+#endif
+}
 
 // True while the current thread executes a chunk of a parallel region. Nested
 // regions then run serially without touching the pool (and its mutexes).
@@ -75,7 +94,7 @@ class WorkerPool {
         std::lock_guard regionGuard(regionMutex_);
         stopWorkers();
         threadCount_ = threads;
-        stopping_    = false;
+        stopping_.store(false);
         for (int i = 1; i < threadCount_; ++i) {
             workers_.emplace_back([this] { workerLoop(); });
         }
@@ -102,13 +121,20 @@ class WorkerPool {
             chunkCount_ = chunks;
             nextChunk_  = 0;
             doneChunks_ = 0;
+            doneCount_.store(0, std::memory_order_relaxed);
             firstError_ = nullptr;
-            generation_ += 1;
+            generation_.fetch_add(1, std::memory_order_release);
         }
         wake_.notify_all();
 
         runChunks();
 
+        for (int spin = 0; spin < kSpinIterations; ++spin) {
+            if (doneCount_.load(std::memory_order_acquire) == chunks) {
+                break;
+            }
+            cpuRelax();
+        }
         std::unique_lock guard(stateMutex_);
         finished_.wait(guard, [this] { return doneChunks_ == chunkCount_; });
         body_ = nullptr;
@@ -121,13 +147,22 @@ class WorkerPool {
     void workerLoop() {
         uint64_t seenGeneration = 0;
         for (;;) {
+            for (int spin = 0; spin < kSpinIterations; ++spin) {
+                if (generation_.load(std::memory_order_acquire) != seenGeneration ||
+                    stopping_.load(std::memory_order_acquire)) {
+                    break;
+                }
+                cpuRelax();
+            }
             {
                 std::unique_lock guard(stateMutex_);
-                wake_.wait(guard, [&] { return stopping_ || generation_ != seenGeneration; });
-                if (stopping_) {
+                wake_.wait(guard, [&] {
+                    return stopping_.load() || generation_.load() != seenGeneration;
+                });
+                if (stopping_.load()) {
                     return;
                 }
-                seenGeneration = generation_;
+                seenGeneration = generation_.load();
             }
             runChunks();
         }
@@ -164,6 +199,7 @@ class WorkerPool {
                     firstError_ = error;
                 }
                 doneChunks_ += 1;
+                doneCount_.store(doneChunks_, std::memory_order_release);
                 if (doneChunks_ == chunkCount_) {
                     finished_.notify_all();
                 }
@@ -174,7 +210,7 @@ class WorkerPool {
     void stopWorkers() {
         {
             std::lock_guard guard(stateMutex_);
-            stopping_ = true;
+            stopping_.store(true);
         }
         wake_.notify_all();
         for (auto &worker : workers_) {
@@ -189,14 +225,15 @@ class WorkerPool {
     std::condition_variable finished_;
     std::vector<std::thread> workers_;
     int threadCount_ = 1;
-    bool stopping_   = false;
+    std::atomic<bool> stopping_{false};
 
     const RangeFn *body_ = nullptr;
     int64_t count_       = 0;
     int64_t chunkCount_  = 0;
     int64_t nextChunk_   = 0;
     int64_t doneChunks_  = 0;
-    uint64_t generation_ = 0;
+    std::atomic<int64_t> doneCount_{0};   // mirror of doneChunks_ for lock-free polling
+    std::atomic<uint64_t> generation_{0}; // bumped once per published region
     std::exception_ptr firstError_;
 };
 

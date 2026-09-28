@@ -29,10 +29,11 @@ add_camel_module(
     ${CMAKE_SOURCE_DIR}/src
 )
 
-# x86-64: add an AVX2+FMA GEMM unit, selected at runtime after a CPU check.
+# x86-64: add AVX2+FMA and AVX-512F GEMM units, selected at runtime after a CPU check.
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|X86_64")
-  target_sources(tensor_cmo PRIVATE kernels/gemm_avx2.cpp)
+  target_sources(tensor_cmo PRIVATE kernels/gemm_avx2.cpp kernels/gemm_avx512.cpp)
   set_source_files_properties(kernels/gemm_avx2.cpp PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma")
+  set_source_files_properties(kernels/gemm_avx512.cpp PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx2;-mfma")
   target_compile_definitions(tensor_cmo PRIVATE CAMEL_TENSOR_HAS_AVX2_UNIT=1)
 endif()
 
