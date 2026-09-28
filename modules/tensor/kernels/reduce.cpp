@@ -29,6 +29,7 @@
 
 #include "elementwise.h"
 #include "parallel.h"
+#include "vmath.h"
 
 #include <algorithm>
 #include <cmath>
@@ -213,16 +214,21 @@ TensorObject *softmaxImpl(
         for (int64_t k = 0; k < split.extent; ++k) {
             maxValue = std::max(maxValue, src[base + k * stride]);
         }
+        // exp is evaluated once per element into dst. It runs in its own reduction-free loop,
+        // so the vectorizable vmath::exp is actually vectorized; the sum is accumulated in
+        // double separately.
+        for (int64_t k = 0; k < split.extent; ++k) {
+            const int64_t idx = base + k * stride;
+            dst[idx]          = vmath::exp(src[idx] - maxValue);
+        }
         double sum = 0.0;
         for (int64_t k = 0; k < split.extent; ++k) {
-            sum += std::exp(static_cast<double>(src[base + k * stride] - maxValue));
+            sum += dst[base + k * stride];
         }
         if (kind == SoftmaxKind::Softmax) {
-            const double inv = 1.0 / sum;
+            const float inv = static_cast<float>(1.0 / sum);
             for (int64_t k = 0; k < split.extent; ++k) {
-                const int64_t idx = base + k * stride;
-                dst[idx] =
-                    static_cast<float>(std::exp(static_cast<double>(src[idx] - maxValue)) * inv);
+                dst[base + k * stride] *= inv;
             }
         } else {
             const float logSum = static_cast<float>(std::log(sum));

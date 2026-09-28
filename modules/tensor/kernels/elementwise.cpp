@@ -35,6 +35,7 @@
 
 #include "../interop.h"
 #include "parallel.h"
+#include "vmath.h"
 
 #include <algorithm>
 #include <cmath>
@@ -348,47 +349,79 @@ void binaryTyped(BinaryOp op, const BroadcastPlan &plan, const T *a, const T *b,
     }
 }
 
-template <typename T> T applyUnary(UnaryOp op, T x) {
+/// Elementwise unary function, fixed at compile time so that the loop calling it vectorizes.
+template <UnaryOp Op, typename T> inline T unaryOf(T x) {
     if constexpr (std::is_same_v<T, float>) {
-        switch (op) {
-        case UnaryOp::Neg:
+        if constexpr (Op == UnaryOp::Neg) {
             return -x;
-        case UnaryOp::Abs:
+        } else if constexpr (Op == UnaryOp::Abs) {
             return std::fabs(x);
-        case UnaryOp::Exp:
-            return std::exp(x);
-        case UnaryOp::Log:
+        } else if constexpr (Op == UnaryOp::Exp) {
+            return vmath::exp(x);
+        } else if constexpr (Op == UnaryOp::Log) {
             return std::log(x);
-        case UnaryOp::Sqrt:
+        } else if constexpr (Op == UnaryOp::Sqrt) {
             return std::sqrt(x);
-        case UnaryOp::Rsqrt:
+        } else if constexpr (Op == UnaryOp::Rsqrt) {
             return 1.0f / std::sqrt(x);
-        case UnaryOp::Sigmoid:
-            return 1.0f / (1.0f + std::exp(-x));
-        case UnaryOp::Tanh:
-            return std::tanh(x);
-        case UnaryOp::Relu:
+        } else if constexpr (Op == UnaryOp::Sigmoid) {
+            return vmath::sigmoid(x);
+        } else if constexpr (Op == UnaryOp::Tanh) {
+            return vmath::tanh(x);
+        } else if constexpr (Op == UnaryOp::Relu) {
             return x > 0.0f ? x : 0.0f;
-        case UnaryOp::Gelu: {
-            constexpr float kScale = 0.7978845608028654f; // sqrt(2 / pi)
-            return 0.5f * x * (1.0f + std::tanh(kScale * (x + 0.044715f * x * x * x)));
-        }
-        case UnaryOp::Erf:
+        } else if constexpr (Op == UnaryOp::Gelu) {
+            return vmath::gelu(x);
+        } else {
+            static_assert(Op == UnaryOp::Erf);
             return std::erf(x);
         }
-        return x;
     } else {
         // Integer and bool tensors only reach the dtype-preserving ops.
-        switch (op) {
-        case UnaryOp::Neg:
+        if constexpr (Op == UnaryOp::Neg) {
             return static_cast<T>(-x);
-        case UnaryOp::Abs:
+        } else if constexpr (Op == UnaryOp::Abs) {
             return x < T{} ? static_cast<T>(-x) : x;
-        case UnaryOp::Relu:
+        } else if constexpr (Op == UnaryOp::Relu) {
             return x > T{} ? x : T{};
-        default:
+        } else {
             return x;
         }
+    }
+}
+
+template <UnaryOp Op, typename T> void unaryLoop(const T *src, T *dst, int64_t count) {
+    parallelFor(count, kElementGrain, [&](int64_t begin, int64_t end) {
+        for (int64_t i = begin; i < end; ++i) {
+            dst[i] = unaryOf<Op, T>(src[i]);
+        }
+    });
+}
+
+template <typename T> void runUnary(UnaryOp op, const T *src, T *dst, int64_t count) {
+    switch (op) {
+    case UnaryOp::Neg:
+        return unaryLoop<UnaryOp::Neg>(src, dst, count);
+    case UnaryOp::Abs:
+        return unaryLoop<UnaryOp::Abs>(src, dst, count);
+    case UnaryOp::Exp:
+        return unaryLoop<UnaryOp::Exp>(src, dst, count);
+    case UnaryOp::Log:
+        return unaryLoop<UnaryOp::Log>(src, dst, count);
+    case UnaryOp::Sqrt:
+        return unaryLoop<UnaryOp::Sqrt>(src, dst, count);
+    case UnaryOp::Rsqrt:
+        return unaryLoop<UnaryOp::Rsqrt>(src, dst, count);
+    case UnaryOp::Sigmoid:
+        return unaryLoop<UnaryOp::Sigmoid>(src, dst, count);
+    case UnaryOp::Tanh:
+        return unaryLoop<UnaryOp::Tanh>(src, dst, count);
+    case UnaryOp::Relu:
+        return unaryLoop<UnaryOp::Relu>(src, dst, count);
+    case UnaryOp::Gelu:
+        return unaryLoop<UnaryOp::Gelu>(src, dst, count);
+    case UnaryOp::Erf:
+        return unaryLoop<UnaryOp::Erf>(src, dst, count);
     }
 }
 
@@ -428,13 +461,7 @@ TensorObject *unary(UnaryOp op, const TensorObject *input, mm::IAllocator &alloc
     TensorObject *out      = TensorObject::create(outType, input->shapeSpan(), allocator);
     const auto count       = static_cast<int64_t>(input->numel());
     dispatchDType(outType, [&]<typename T>() {
-        const T *src = static_cast<const T *>(in.data);
-        T *dst       = out->dataAs<T>();
-        parallelFor(count, kElementGrain, [&](int64_t begin, int64_t end) {
-            for (int64_t i = begin; i < end; ++i) {
-                dst[i] = applyUnary<T>(op, src[i]);
-            }
-        });
+        runUnary<T>(op, static_cast<const T *>(in.data), out->dataAs<T>(), count);
     });
     return out;
 }
