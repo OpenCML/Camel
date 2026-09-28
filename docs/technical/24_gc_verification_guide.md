@@ -83,11 +83,15 @@ Use these controls for deterministic GC validation:
 | `CAMEL_GC_LOG_MOVES=1` | Log object movement in the young-copying path. |
 | `CAMEL_GC_ENABLE_YOUNG_COPYING=1` | Enable the experimental young-generation copying path. |
 | `CAMEL_GC_PRINT_CONFIG=1` | Print the effective GC diagnostic configuration to stderr at allocator initialization. |
+| `CAMEL_GC_LARGE_BUDGET_MB=N` | Minimum large-object allocation (MB) between collections; default 4. Not a diagnostic switch: it tunes production pacing. |
 
 GC stress is a diagnostic mode: it asks the allocator to request collections at deterministic
 allocation or safepoint intervals so missed roots, missing barriers, and relocation bugs fail
 quickly. It is not a production scheduling policy. With stress disabled and no pending deferred
-collection, scheduler safepoint checks stay on the fast path and do not enter the allocator mutex.
+collection, scheduler safepoint checks stay on the fast path (one atomic load of the slow-path
+flag) and do not enter the allocator mutex. NVM and PRL check that flag at every graph boundary,
+so collections requested during execution, such as the large-object budget below, run at the
+next boundary.
 
 Production defaults keep young copying disabled. Tests that assert movement, remembered-set
 behavior, or foreign wrapper relocation must opt in with `CAMEL_GC_ENABLE_YOUNG_COPYING=1`.
