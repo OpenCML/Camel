@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: May. 05, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -795,10 +795,10 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             ASSERT(
                 holes.size() == refNodes.size(),
                 "Composite holes must match unresolved reference count.");
-            auto filledType = dataType->resolved()
-                                  ? dataType
-                                  : tt::as_ptr<CompositeType>(dataType->clone())->resolve(refTypes);
-            auto payload    = runtime::makeFillPayload(fillKindForType(filledType), holes);
+            auto filledType       = dataType->resolved()
+                                        ? dataType
+                                        : tt::as_ptr<CompositeType>(dataType->clone())->resolve(refTypes);
+            auto payload          = runtime::makeFillPayload(fillKindForType(filledType), holes);
             node_handle_t srcNode = currGraph_->addStaticDataNode(data, filledType);
             node                  = currGraph_->addFillNode(filledType, payload);
             linkNodes(LinkType::Norm, srcNode, node);
@@ -1005,6 +1005,12 @@ node_handle_t Builder::visitVariNode(const GCT::node_ptr_t &gct) {
         "Unexpected result type from Enter the child of VARI node.");
     node_handle_t node = any_cast<node_handle_t>(res);
     varied_            = old;
+    // A mutable binding takes the widened type of its initializer, so later
+    // assignments may store values with a different refinement (e.g. shape).
+    Type *valueType = nodeTypeOf(node);
+    if (Type *widened = valueType->widened(); widened != valueType) {
+        setNodeType(node, widened);
+    }
     LEAVE("VARI");
     return node;
 }
@@ -1261,14 +1267,26 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         withInputTypes.push_back(nodeTypeOf(inputNode));
     }
 
+    // Call results take the callee's current exit type (a recursive callee's
+    // exit type is only final after its body is built), unless the node was
+    // deliberately widened as a `var` binding (see visitVariNode).
+    auto callResultType = [&](node_handle_t inputNode, Type *exitType) -> Type * {
+        Type *recorded = nodeTypeOf(inputNode);
+        if (exitType != nullptr && recorded != exitType && recorded == exitType->widened()) {
+            return recorded;
+        }
+        return exitType;
+    };
     auto callableValueType = [&](node_handle_t inputNode) -> Type * {
         if (nodeIsKind(inputNode, runtime::GCNodeKind::Func)) {
             auto callee = nodeGraphOf(inputNode)->funcTarget(inputNode);
             ASSERT(callee != nullptr, "Compile FUNC node target is null.");
-            return callee->funcType()->exitType();
+            return callResultType(inputNode, callee->funcType()->exitType());
         }
         if (nodeIsKind(inputNode, runtime::GCNodeKind::Oper)) {
-            return nodeGraphOf(inputNode)->operTarget(inputNode)->funcType()->exitType();
+            return callResultType(
+                inputNode,
+                nodeGraphOf(inputNode)->operTarget(inputNode)->funcType()->exitType());
         }
         return nodeTypeOf(inputNode);
     };
@@ -1433,7 +1451,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     for (size_t i = 0; i < withInputNodes.size(); i++) {
         node_handle_t inputNode = withInputNodes[i];
         bool isVar              = (i < targetFuncType->withTypesCount()) &&
-                                  targetFuncType->withIsVarAt(static_cast<size_t>(i));
+                     targetFuncType->withIsVarAt(static_cast<size_t>(i));
         tryRemoveCtrlLink(inputNode, targetNode);
         linkNodes(LinkType::With, inputNode, targetNode);
         if (auto modifierNode = modifierOf(inputNode); modifierNode.has_value()) {
@@ -1682,17 +1700,23 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
         auto funcNode = createFuncDataNode(subGraph, false, true);
         branchFuncs.push_back(funcNode);
-        branchArms.push_back(
-            runtime::GCBranchArm{
-                .head = nodeIdOf(funcNode),
-                .tail = nodeIdOf(funcNode),
-            });
+        branchArms.push_back(runtime::GCBranchArm{
+            .head = nodeIdOf(funcNode),
+            .tail = nodeIdOf(funcNode),
+        });
 
         if (joinType == nullptr) {
             joinType = exitType;
             setNodeType(joinNode, joinType);
         } else {
-            if (!exitType->equals(joinType)) {
+            // Arms must agree up to refinement: unify widens (for example two
+            // tensors whose shapes differ in one extent) or fails.
+            Type *unified = joinType->unify(exitType);
+            if (unified != nullptr && unified != joinType) {
+                joinType = unified;
+                setNodeType(joinNode, joinType);
+            }
+            if (unified == nullptr) {
                 diags_->of(SemanticDiag::BranchReturnTypeMismatch)
                     .atOrigin(gct->load()->origin())
                     .commit(
