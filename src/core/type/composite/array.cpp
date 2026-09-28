@@ -85,7 +85,11 @@ Type *ArrayType::resolve(const type_vec_t &typeList) const {
         if (newElemType->code() == TypeCode::Void || newElemType->code() == TypeCode::Any ||
             newElemType->code() == TypeCode::Ref) {
             newElemType = type;
-        } else if (!newElemType->equals(type)) {
+        } else if (Type *joined = newElemType->unify(type)) {
+            // Elements of refinement-carrying types (e.g. tensors of different shapes) share
+            // their least common type.
+            newElemType = joined;
+        } else {
             throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
                 .commit("Array", type->toString(), newElemType->toString());
         }
@@ -129,4 +133,14 @@ CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
     return CastSafety::Forbidden;
 }
 
-bool ArrayType::assignableFrom(Type *sourceType) const { return equals(sourceType); }
+// Arrays have no element mutation, so they accept arrays of assignable element types
+// (e.g. Tensor<float32>[] where Tensor[] is expected).
+bool ArrayType::assignableFrom(Type *sourceType) const {
+    if (this == sourceType) {
+        return true;
+    }
+    if (!sourceType || sourceType->code() != TypeCode::Array) {
+        return false;
+    }
+    return elemType_->assignableFrom(static_cast<const ArrayType &>(*sourceType).elemType_);
+}

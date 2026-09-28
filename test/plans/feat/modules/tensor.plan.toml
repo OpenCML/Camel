@@ -127,3 +127,14 @@ expect_exit = 0
 expect_stdout_contains = ["gc_tail_chain sum=22"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "struct_covariance"
+desc = "Structs, tuples, and arrays of precisely typed tensors are accepted where plain Tensor aggregates are declared."
+kind = "behavior"
+case = "../../../cases/modules/tensor/struct_covariance.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["covariance struct=5 array=8 tuple=5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

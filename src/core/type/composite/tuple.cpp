@@ -284,4 +284,22 @@ CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
     return CastSafety::Forbidden;
 }
 
-bool TupleType::assignableFrom(Type *sourceType) const { return equals(sourceType); }
+// Elements are immutable, so a tuple accepts any same-length tuple of assignable element types.
+bool TupleType::assignableFrom(Type *sourceType) const {
+    if (this == sourceType) {
+        return true;
+    }
+    if (!sourceType || sourceType->code() != TypeCode::Tuple) {
+        return false;
+    }
+    const TupleType &other = static_cast<const TupleType &>(*sourceType);
+    if (size_ != other.size_) {
+        return false;
+    }
+    for (size_t i = 0; i < size_; i++) {
+        if (!typesPtr_[i]->assignableFrom(other.typesPtr_[i])) {
+            return false;
+        }
+    }
+    return true;
+}
