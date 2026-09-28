@@ -1,0 +1,48 @@
+/**
+ * Shared driver for the Camel benchmark models (see benchmarks/README.md and
+ * common/camel.py for the protocol). Models call `run_benchmark` with their
+ * forward function; this module loads inputs, runs warmup and timed
+ * repetitions, prints `CAMEL_BENCH` lines, and saves the output for the
+ * agreement check. Imported through CAMEL_PACKAGES=benchmarks/common.
+ */
+module camel_bench
+
+import { Tensor, load_npy, save_npy, set_num_threads } from tensor
+import { get_env } from sys
+import { now } from time
+
+/// Loads weight `name` from CAMEL_BENCH_WEIGHTS.
+export func weight(name: string): Tensor {
+    return load_npy(get_env('CAMEL_BENCH_WEIGHTS') + '/' + name + '.npy')
+}
+
+sync func warmup(forward: (x: Tensor) => Tensor, x: Tensor, remaining: int): int {
+    return if remaining <= 0 then 0 else sync {
+        let y = forward(x)
+        return warmup(forward, x, remaining - 1)
+    }
+}
+
+sync func timed(forward: (x: Tensor) => Tensor, x: Tensor, remaining: int): int {
+    return if remaining <= 0 then 0 else sync {
+        let start = now()
+        let y = forward(x)
+        let elapsed = now() - start
+        'CAMEL_BENCH latency_ms={}'->format<elapsed * 1000.0>->println
+        return timed(forward, x, remaining - 1)
+    }
+}
+
+/// Runs the benchmark protocol for `forward` and returns the process exit code.
+export func run_benchmark(forward: (x: Tensor) => Tensor): int sync {
+    set_num_threads(int(get_env('CAMEL_BENCH_THREADS')))
+    let x = load_npy(get_env('CAMEL_BENCH_INPUT'))
+    let warmStart = now()
+    let first = forward(x)
+    'CAMEL_BENCH compile_ms={}'->format<(now() - warmStart) * 1000.0>->println
+    let warmed = warmup(forward, x, int(get_env('CAMEL_BENCH_WARMUP')) - 1)
+    'CAMEL_BENCH warmup_ms={}'->format<(now() - warmStart) * 1000.0>->println
+    let status = timed(forward, x, int(get_env('CAMEL_BENCH_REPS')))
+    save_npy(first, get_env('CAMEL_BENCH_OUTPUT'))
+    return status
+}

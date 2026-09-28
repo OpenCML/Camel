@@ -5,6 +5,7 @@ and parses its stdout. Protocol expected from ``model.cml`` (see README.md):
 
 Environment provided to the Camel process:
   CAMEL_HOME            <repo>/out/latest (unless already set)
+  CAMEL_PACKAGES        <repo>/benchmarks/common (the shared camel_bench driver module)
   CAMEL_BENCH_WEIGHTS   absolute path of artifacts/<model>/weights/
   CAMEL_BENCH_INPUT     absolute path of artifacts/<model>/input.npy
   CAMEL_BENCH_OUTPUT    absolute path where the model may save its output .npy
@@ -70,6 +71,10 @@ def run_camel(model: str, passes: Sequence[str], threads: int, warmup: int, reps
     child_env = dict(os.environ)
     child_env.update(env)
     child_env.setdefault("CAMEL_HOME", str(REPO_ROOT / "out" / "latest"))
+    # Models import the shared driver module `camel_bench` from benchmarks/common.
+    packages = str(REPO_ROOT / "benchmarks" / "common")
+    existing = child_env.get("CAMEL_PACKAGES")
+    child_env["CAMEL_PACKAGES"] = packages + (os.pathsep + existing if existing else "")
     child_env.update(
         {
             "CAMEL_BENCH_WEIGHTS": str(mdir / "weights"),

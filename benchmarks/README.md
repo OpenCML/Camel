@@ -24,10 +24,11 @@ benchmarks/
     export.py               exports one model to ONNX in a fresh process
     camel.py                plug-in driver for native Camel configs
     torch_utils.py / tf_utils.py / runner.py / memory.py   shared helpers
+    camel_bench.cml         shared Camel driver: weight loading, warmup/timed loops, output
   mlp/ lenet/ gru/ transformer/
     model_torch.py          PyTorch implementation
     model_tf.py             TensorFlow implementation
-    model.cml               Camel implementation (added by the Camel side)
+    model.cml               Camel implementation (imports common/camel_bench.cml)
   artifacts/<model>/        generated; git-ignored
     weights/<name>.npy  input.npy  manifest.json
     torch.onnx  tf.onnx     exported by the harness
