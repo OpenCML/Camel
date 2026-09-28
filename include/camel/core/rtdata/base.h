@@ -32,6 +32,7 @@
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <typeinfo>
 
 namespace camel::core::rtdata {
 
@@ -106,10 +107,16 @@ class Object {
 template <typename T, typename U> inline bool isOfSameCls(const T *a, const U *b) noexcept {
     if (!a || !b)
         return false;
-    // Use the vtable pointer to determine whether the objects are of the same class.
+    // Fast path: the same vtable means the same class.
     auto vptrA = *reinterpret_cast<void *const *>(a);
     auto vptrB = *reinterpret_cast<void *const *>(b);
-    return vptrA == vptrB;
+    if (vptrA == vptrB) {
+        return true;
+    }
+    // Modules are loaded with RTLD_LOCAL, and a class whose virtual functions are all inline
+    // (no key function, e.g. String) gets a private vtable copy in each module that constructs
+    // it. Different vtables therefore do not prove different classes; compare dynamic types.
+    return typeid(*a) == typeid(*b);
 }
 
 constexpr Object *NullRef = nullptr;
