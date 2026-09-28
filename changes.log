@@ -1,4 +1,10 @@
 [0.1.23]
+New Features:
+- 新增 refinement 类型统一与拓宽接口。
+
+Bug Fixes:
+- 修复特殊类型的可赋值性判断。
+- 修复文件头更新脚本的换行符保留。
 
 [0.1.22]
 New Features:
