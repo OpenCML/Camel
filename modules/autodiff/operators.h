@@ -23,6 +23,7 @@
  *   grad(f)            <W...>(N...) => gradient      (macro)
  *   value_and_grad(f)  <W...>(N...) => (value, gradient)  (macro)
  *   stop_gradient(x)   x, through which no gradient flows
+ *   @vjp<rule> func f  f with a custom derivative rule (see rules.h)
  *
  * grad and value_and_grad are macro operators: with a static f, std::macro
  * builds the gradient graph at compile time and later passes see it as

@@ -202,3 +202,35 @@ assert(passed === 6, `expected 6 passing checks, got ${passed}: ${out}`)
 }
 """
 timeout_ms = 20000
+
+[[tests]]
+name = "custom_rule.macro.nvm"
+desc = "Uses @vjp custom derivative rules at call sites instead of differentiating the decorated body."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/custom_rule.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('custom_rule value=8 cube=20 clip=4 mix=(3, 3)'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "custom_rule.macro.fvm"
+desc = "Uses @vjp custom derivative rules at call sites instead of differentiating the decorated body."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/custom_rule.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('custom_rule value=8 cube=20 clip=4 mix=(3, 3)'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000

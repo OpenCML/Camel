@@ -24,6 +24,7 @@
 #include "operators.h"
 
 #include "pullback.h"
+#include "rules.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/derivative.h"
@@ -118,6 +119,43 @@ class IdentityResolver final : public type::FuncTypeResolver {
     std::string signature() const override { return "(x: T) => T"; }
 };
 
+/// vjp, as a decorator: <rule: (params..., dy) => gradients> (f) => f.
+class VjpResolver final : public type::FuncTypeResolver {
+  public:
+    std::optional<FunctionType *> resolve(
+        const type_vec_t &with, const type_vec_t &norm,
+        const ModifierSet &modifiers) const override {
+        (void)modifiers;
+        if (with.size() != 1 || norm.size() != 1 || with[0]->code() != TypeCode::Function ||
+            norm[0]->code() != TypeCode::Function) {
+            return std::nullopt;
+        }
+        auto *rule     = tt::as_ptr<FunctionType>(with[0]);
+        auto *function = tt::as_ptr<FunctionType>(norm[0]);
+        if (rule->normTypesCount() != function->withTypesCount() + function->normTypesCount() + 1) {
+            return std::nullopt;
+        }
+        return FunctionType::create(
+            {{with[0], false}},
+            {{norm[0], false}},
+            norm[0],
+            Modifier::Macro);
+    }
+
+    std::string signature() const override {
+        return "<rule: (params..., dy) => gradients> (f: (params...) => y) => f";
+    }
+};
+
+slot_t vjpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    auto *rule     = with.get<::Function *>(0);
+    auto *function = norm.get<::Function *>(0);
+    if (rule == nullptr || function == nullptr || function->graph() == nullptr) {
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "autodiff: vjp needs function values");
+    }
+    return toSlot<::Function *>(attachRule(ctx.shared_from_this(), function, rule));
+}
+
 slot_t gradFunction(ArgsView &norm, Context &ctx, bool withValue) {
     auto *function = norm.get<::Function *>(0);
     if (function == nullptr || function->graph() == nullptr) {
@@ -158,6 +196,7 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
         OperatorGroup::create(
             "value_and_grad",
             {{"autodiff:value_and_grad", std::make_shared<GradResolver>(true)}}),
+        OperatorGroup::create("vjp", {{"autodiff:vjp", std::make_shared<VjpResolver>()}}),
         OperatorGroup::create(
             "stop_gradient",
             {{"autodiff:stop_gradient", std::make_shared<IdentityResolver>()}}),
@@ -170,6 +209,7 @@ std::unordered_map<std::string, operator_t> operatorKernels() {
         {"grad", &gradKernel},
         {"value_and_grad", &valueAndGradKernel},
         {"stop_gradient", &stopGradientKernel},
+        {"vjp", &vjpKernel},
     };
 }
 

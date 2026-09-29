@@ -23,6 +23,8 @@
 
 #include "pullback.h"
 
+#include "rules.h"
+
 #include "camel/core/derivative.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
@@ -374,6 +376,8 @@ struct CallSite {
     gc_node_ref_t pullback = kInvalidNodeRef;
     std::vector<gc_node_ref_t> inputs;
     PullbackPlan plan;
+    /// A call of a function carrying a custom rule (see rules.h): the rule replaces the pullback.
+    ::Function *rule = nullptr;
 };
 
 class Engine;
@@ -393,6 +397,9 @@ class ForwardRewrite {
   private:
     void rewriteBranch(gc_node_ref_t join);
     void rewriteCall(gc_node_ref_t call);
+    /// Calls of static function values: records custom-rule call sites, and turns calls of other
+    /// capture-free functions into direct calls. Returns the direct call created, if any.
+    std::optional<gc_node_ref_t> rewriteIndirectCall(gc_node_ref_t call);
     /// Makes `node` return `plan`'s (value, pullback) and splits the pair for its users.
     void split(gc_node_ref_t node, const PullbackPlan &plan, std::vector<gc_node_ref_t> inputs);
     void retarget(gc_node_ref_t func, const PullbackPlan &plan);
@@ -472,6 +479,7 @@ class Backward final : public VjpBuilder {
 
     void visit(gc_node_ref_t node);
     void visitCallSite(gc_node_ref_t node, const CallSite &site);
+    void visitRuleSite(gc_node_ref_t node, const CallSite &site);
     void visitOper(gc_node_ref_t node);
     void visitAccs(gc_node_ref_t node);
     void visitFill(gc_node_ref_t node);
@@ -521,6 +529,7 @@ class Engine {
 void ForwardRewrite::run() {
     std::vector<gc_node_ref_t> joins;
     std::vector<gc_node_ref_t> calls;
+    std::vector<gc_node_ref_t> indirect;
     std::unordered_set<gc_node_ref_t> arms;
     for (gc_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
         if (!draft_.alive(id)) {
@@ -536,8 +545,16 @@ void ForwardRewrite::run() {
         case GCNodeKind::Func:
             calls.push_back(id);
             break;
+        case GCNodeKind::Call:
+            indirect.push_back(id);
+            break;
         default:
             break;
+        }
+    }
+    for (gc_node_ref_t call : indirect) {
+        if (auto direct = rewriteIndirectCall(call)) {
+            calls.push_back(*direct);
         }
     }
     for (gc_node_ref_t join : joins) {
@@ -581,6 +598,57 @@ void ForwardRewrite::split(
     sites_.emplace(
         value,
         CallSite{.pullback = pullback, .inputs = std::move(inputs), .plan = plan});
+}
+
+std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t call) {
+    const std::vector<gc_node_ref_t> withInputs = copyOf(draft_.withInputsOf(call));
+    if (withInputs.empty()) {
+        return std::nullopt;
+    }
+    const auto calleeValue = staticValue(draft_, withInputs.front());
+    auto *function         = calleeValue ? fromSlot<::Function *>(*calleeValue) : nullptr;
+    if (function == nullptr || function->graph() == nullptr) {
+        return std::nullopt; // a function computed at run time
+    }
+    GCGraph *graph = function->graph();
+    std::vector<gc_node_ref_t> inputs(withInputs.begin() + 1, withInputs.end());
+    for (gc_node_ref_t input : draft_.normInputsOf(call)) {
+        inputs.push_back(input);
+    }
+    if (carriesRule(graph)) {
+        FunctionType *type = graph->funcType();
+        sites_.emplace(
+            call,
+            CallSite{
+                .inputs = std::move(inputs),
+                .plan   = makePlanTypes(portTypesOf(type), type->exitType()),
+                .rule   = ruleOf(function),
+            });
+        return std::nullopt;
+    }
+    if (function->tupleType()->size() != 0) {
+        return std::nullopt; // a closure: its graph cannot be called directly
+    }
+    // A static capture-free function: call its graph directly.
+    const gc_node_ref_t direct = draft_.addFuncNode(graph, typeOf(draft_, call));
+    draft_.setWithInputs(direct, std::span(withInputs).subspan(1));
+    draft_.setNormInputs(direct, copyOf(draft_.normInputsOf(call)));
+    draft_.setCtrlInputs(direct, copyOf(draft_.ctrlInputsOf(call)));
+    draft_.replaceAllValueUses(call, direct);
+    for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(call))) {
+        draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
+    }
+    if (draft_.outputNode() == call) {
+        draft_.setOutputNode(direct);
+    }
+    if (draft_.exitNode() == call) {
+        draft_.setExitNode(direct);
+    }
+    if (draft_.returnNode() == call) {
+        draft_.setReturnNode(direct, draft_.returnKind());
+    }
+    draft_.eraseNode(call);
+    return direct;
 }
 
 void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
@@ -876,6 +944,10 @@ void Backward::visit(gc_node_ref_t node) {
 }
 
 void Backward::visitCallSite(gc_node_ref_t node, const CallSite &site) {
+    if (site.rule != nullptr) {
+        visitRuleSite(node, site);
+        return;
+    }
     const gc_node_ref_t dy       = gradient(node);
     const gc_node_ref_t pullback = ref(site.pullback);
     const gc_node_ref_t tangents =
@@ -885,6 +957,30 @@ void Backward::visitCallSite(gc_node_ref_t node, const CallSite &site) {
             accumulate(
                 site.inputs[i],
                 addAccs(target_, tangentTypeOf(site.plan.portTypes[i]), tangents, *position));
+        }
+    }
+}
+
+// rule(inputs..., dy) returns the gradient of the one differentiable input, or a tuple of the
+// gradients of all of them.
+void Backward::visitRuleSite(gc_node_ref_t node, const CallSite &site) {
+    FunctionType *ruleType = site.rule->graph()->funcType();
+    std::vector<gc_node_ref_t> args;
+    for (gc_node_ref_t input : site.inputs) {
+        args.push_back(ref(input));
+    }
+    args.push_back(gradient(node));
+    const gc_node_ref_t rule =
+        target_.materializeStaticValue(toSlot<::Function *>(site.rule), ruleType);
+    const gc_node_ref_t result = addCall(target_, ruleType->exitType(), rule, args);
+    const size_t count         = site.plan.tangentsType->size();
+    for (size_t i = 0; i < site.inputs.size(); ++i) {
+        if (const auto position = site.plan.tangentIndex(i)) {
+            accumulate(
+                site.inputs[i],
+                count == 1
+                    ? result
+                    : addAccs(target_, tangentTypeOf(site.plan.portTypes[i]), result, *position));
         }
     }
 }
