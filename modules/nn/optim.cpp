@@ -26,6 +26,7 @@
 #include "state.h"
 
 #include "../tensor/kernels/elementwise.h"
+#include "../tensor/npy.h"
 #include "../tensor/tensor.h"
 #include "../tensor/type.h"
 
@@ -33,6 +34,7 @@
 #include "camel/core/derivative.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
+#include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
@@ -40,6 +42,7 @@
 #include "camel/utils/type.h"
 
 #include <cmath>
+#include <filesystem>
 #include <format>
 #include <functional>
 #include <span>
@@ -333,6 +336,42 @@ slot_t adamKernel(ArgsView &, ArgsView &norm, Context &) {
     });
 }
 
+// ---------------------------------------------------------------- checkpoints
+
+/// Saves every tensor leaf of `value` as <dir>/<path>.npy, the path joining struct field names
+/// and tuple indices with dots.
+void saveLeaves(
+    Type *type, slot_t value, const std::filesystem::path &dir, const std::string &path) {
+    if (isTensorLeaf(type)) {
+        camel::tensor::saveNpy(fromSlot<TensorObject *>(value), dir / (path + ".npy"));
+        return;
+    }
+    if (!isAggregate(type)) {
+        return; // scalars and other members are not tensors
+    }
+    for (size_t i = 0; i < aggregateSize(type); ++i) {
+        const std::string name =
+            type->code() == TypeCode::Struct
+                ? std::string(tt::as_ptr<camel::core::type::StructType>(type)->fieldName(i))
+                : std::to_string(i);
+        saveLeaves(
+            aggregateElement(type, i),
+            elementOf(type, value, i),
+            dir,
+            path.empty() ? name : path + "." + name);
+    }
+}
+
+// save_params(tree, dir)
+slot_t saveParamsKernel(ArgsView &, ArgsView &norm, Context &) {
+    return runOptimizer("save_params", [&] {
+        const std::filesystem::path dir(norm.get<::String *>(1)->toString());
+        std::filesystem::create_directories(dir);
+        saveLeaves(norm.type(0), norm.get<slot_t>(0), dir, "");
+        return NullSlot;
+    });
+}
+
 // ---------------------------------------------------------------- types
 
 bool isNumber(Type *t) {
@@ -341,9 +380,11 @@ bool isNumber(Type *t) {
 }
 
 /// Whether `grads` can be the gradient of `params`.
+/// Whether `grads` can be the gradient of `params`. Static facts (e.g. tensor shapes inferred for
+/// a literal model) are ignored: the gradient is typed by the declared parameter types.
 bool gradientOf(Type *params, Type *grads) {
     Type *tangent = tangentTypeOf(params);
-    return tangent != nullptr && (tangent->equals(grads) || tangent->assignableFrom(grads));
+    return tangent != nullptr && tangent->widened()->equals(grads->widened());
 }
 
 class OptimizerResolver final : public camel::core::type::FuncTypeResolver {
@@ -422,6 +463,19 @@ const std::vector<oper_group_ptr_t> &optimizerOperatorGroups() {
         OperatorGroup::create(
             "adam",
             {{"nn:adam", std::make_shared<OptimizerResolver>(Kind::Adam)}}),
+        OperatorGroup::create(
+            "save_params",
+            {{"nn:save_params",
+              camel::core::type::DynamicFuncTypeResolver::create(
+                  {{0, {}}, {2, {false, false}}},
+                  "(params: P, dir: string) => void",
+                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      if (norm[1]->code() != TypeCode::String) {
+                          return std::nullopt;
+                      }
+                      return Type::Void();
+                  })}}),
     };
     return groups;
 }
@@ -431,6 +485,7 @@ std::unordered_map<std::string, operator_t> optimizerKernels() {
         {"sgd", &sgdKernel},
         {"adam_state", &adamStateKernel},
         {"adam", &adamKernel},
+        {"save_params", &saveParamsKernel},
     };
 }
 

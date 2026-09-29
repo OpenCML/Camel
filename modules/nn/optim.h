@@ -30,6 +30,7 @@
  *   sgd(params, grads, lr)                      => params
  *   adam_state(params)                          => OptimizerState
  *   adam(params, grads, state, lr)              => (params, OptimizerState)
+ *   save_params(params, dir)                    writes each tensor as <dir>/<field.path>.npy
  *
  * Updates are functional: they return new tensors rather than writing into
  * the old ones, so a model value can be shared freely.
