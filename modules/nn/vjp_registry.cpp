@@ -61,61 +61,8 @@ void requireInputCount(const VjpPrimitiveCall &call, size_t expected) {
     }
 }
 
-// Rules for operators without an OpDef (builtin float arithmetic, Parameter reads). Tensor and
-// nn operators carry their rules in their OpDef (tensor/ops/vjp.h).
-
-void divScalarVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
-    requireInputCount(call, 2);
-    auto dy = ctx.gradientOf(call.output);
-    if (!dy) {
-        return;
-    }
-
-    const rt::gc_node_ref_t numerator   = call.inputs[0];
-    const rt::gc_node_ref_t denominator = call.inputs[1];
-    std::array<rt::gc_node_ref_t, 2> numeratorGradInputs{*dy, denominator};
-    ctx.accumulateGradient(
-        numerator,
-        ctx.addOper(Type::Float64(), ":op/div_d", numeratorGradInputs));
-}
-
-void addScalarVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
-    requireInputCount(call, 2);
-    auto dy = ctx.gradientOf(call.output);
-    if (!dy) {
-        return;
-    }
-    ctx.accumulateGradient(call.inputs[0], *dy);
-    ctx.accumulateGradient(call.inputs[1], *dy);
-}
-
-void subScalarVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
-    requireInputCount(call, 2);
-    auto dy = ctx.gradientOf(call.output);
-    if (!dy) {
-        return;
-    }
-    ctx.accumulateGradient(call.inputs[0], *dy);
-    const rt::gc_node_ref_t zero = ctx.addStaticFloat(0.0);
-    std::array<rt::gc_node_ref_t, 2> negInputs{zero, *dy};
-    ctx.accumulateGradient(call.inputs[1], ctx.addOper(Type::Float64(), ":op/sub_d", negInputs));
-}
-
-void mulScalarVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
-    requireInputCount(call, 2);
-    auto dy = ctx.gradientOf(call.output);
-    if (!dy) {
-        return;
-    }
-    std::array<rt::gc_node_ref_t, 2> lhsGradInputs{*dy, call.inputs[1]};
-    ctx.accumulateGradient(
-        call.inputs[0],
-        ctx.addOper(Type::Float64(), ":op/mul_d", lhsGradInputs));
-    std::array<rt::gc_node_ref_t, 2> rhsGradInputs{*dy, call.inputs[0]};
-    ctx.accumulateGradient(
-        call.inputs[1],
-        ctx.addOper(Type::Float64(), ":op/mul_d", rhsGradInputs));
-}
+// Parameter reads have no OpDef; every other operator publishes its rule in the core derivative
+// registry.
 
 void valueVjp(VjpBuildContext &ctx, const VjpPrimitiveCall &call) {
     requireInputCount(call, 1);
@@ -207,8 +154,16 @@ std::string VjpBuildContext::parameterAliasKey(rt::gc_node_ref_t parameter) cons
     return key;
 }
 
-rt::gc_node_ref_t VjpBuildContext::addStaticFloat(double value) {
-    return draft_.materializeStaticValue(toSlot<Float64>(value), Type::Float64());
+std::optional<slot_t> VjpBuildContext::staticValueOf(rt::gc_node_ref_t node) const {
+    const auto *header = draft_.header(node);
+    if (!header || header->kind != rt::GCNodeKind::Data || header->dataIndex >= 0) {
+        return std::nullopt;
+    }
+    return draft_.staticSlots()[static_cast<size_t>(-header->dataIndex)];
+}
+
+rt::gc_node_ref_t VjpBuildContext::addStatic(slot_t value, Type *type) {
+    return draft_.materializeStaticValue(value, type);
 }
 
 rt::gc_node_ref_t VjpBuildContext::addOper(
@@ -317,10 +272,6 @@ void ensureBuiltinVjpRulesRegistered() {
     static std::once_flag once;
     std::call_once(once, [] {
         auto &registry = VjpRegistry::instance();
-        registry.registerBuiltin(":op/add_d", addScalarVjp, "add_d_vjp");
-        registry.registerBuiltin(":op/sub_d", subScalarVjp, "sub_d_vjp");
-        registry.registerBuiltin(":op/mul_d", mulScalarVjp, "mul_d_vjp");
-        registry.registerBuiltin(":op/div_d", divScalarVjp, "div_d_vjp");
         registry.registerBuiltin("nn:value", valueVjp, "parameter_value_vjp");
     });
 }
@@ -329,8 +280,8 @@ void applyVjpRule(
     VjpBuildContext &ctx, std::string_view key, std::span<const rt::gc_node_ref_t> inputs,
     rt::gc_node_ref_t output) {
     ensureBuiltinVjpRulesRegistered();
-    // Rules registered here (builtin float operators, Parameter reads) take precedence; tensor
-    // and nn operators carry their rule in their OpDef.
+    // Parameter reads are registered here; every other operator publishes its rule in the core
+    // derivative registry.
     if (const VjpRule *rule = VjpRegistry::instance().lookup(key);
         rule && rule->kind == VjpRuleKind::Builtin && rule->builtin) {
         rule->builtin(
@@ -342,8 +293,8 @@ void applyVjpRule(
             });
         return;
     }
-    if (const auto *def = camel::tensor::ops::OpRegistry::instance().find(key); def && def->vjp) {
-        def->vjp(ctx, camel::tensor::ops::VjpCall{.uri = key, .inputs = inputs, .output = output});
+    if (auto rule = camel::core::DerivativeRegistry::instance().findRule(key)) {
+        rule(ctx, camel::core::VjpCall{.uri = key, .inputs = inputs, .output = output});
         return;
     }
     throwRuntimeFault(

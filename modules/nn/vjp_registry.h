@@ -72,7 +72,8 @@ class VjpBuildContext final : public camel::tensor::ops::VjpBuilder {
     camel::runtime::GraphDraft &draft() { return draft_; }
     camel::core::type::Type *nodeType(camel::runtime::gc_node_ref_t node) const override;
 
-    camel::runtime::gc_node_ref_t addStaticFloat(double value) override;
+    std::optional<slot_t> staticValueOf(camel::runtime::gc_node_ref_t node) const override;
+    camel::runtime::gc_node_ref_t addStatic(slot_t value, camel::core::type::Type *type) override;
     camel::runtime::gc_node_ref_t addOper(
         camel::core::type::Type *type, std::string_view uri,
         std::span<const camel::runtime::gc_node_ref_t> normInputs) override;
