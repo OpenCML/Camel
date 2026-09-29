@@ -1268,6 +1268,48 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
     return decoratedGraph;
 }
 
+node_handle_t Builder::lowerDecoratedGraphValue(
+    const compile_graph_ptr_t &decoratedGraph, const GCT::node_ptr_t &origin) {
+    currGraph_->addDependencyGraph(decoratedGraph);
+    if (!decoratedGraph->funcType()->hasExitType() ||
+        decoratedGraph->funcType()->exitType()->code() != TypeCode::Function) {
+        diags_->of(SemanticDiag::ArgumentsMismatch)
+            .atOrigin(origin->load()->origin())
+            .commit(
+                "decorated graph should return function",
+                decoratedGraph->funcType()->toString());
+        throw BuildAbortException();
+    }
+    node_handle_t decoratorFactoryValue = createFuncDataNode(decoratedGraph, true, false);
+    node_handle_t decoratorInvoke = currGraph_->addCallNode(decoratedGraph->funcType()->exitType());
+    linkNodes(LinkType::With, decoratorFactoryValue, decoratorInvoke);
+    return decoratorInvoke;
+}
+
+node_handle_t Builder::argumentNodeOf(const std::any &res, const GCT::node_ptr_t &origin) {
+    if (res.type() == typeid(graph_ptr_t)) {
+        return createFuncDataNode(any_cast<graph_ptr_t>(res), true, false);
+    }
+    ASSERT(res.type() == typeid(node_handle_t), "Argument did not produce a value node.");
+    node_handle_t node = any_cast<node_handle_t>(res);
+    if (!nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+        return node;
+    }
+    // A function named as a value: a decorated function yields what its decorators return, a
+    // plain one its function value.
+    const auto &target = nodeGraphOf(node)->drefTarget(node);
+    if (std::holds_alternative<graph_ptr_t>(target)) {
+        return lowerDecoratedGraphValue(std::get<graph_ptr_t>(target), origin);
+    }
+    if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+        auto graphs = asCompileGraphVec(target);
+        if (graphs && graphs->size() == 1) {
+            return createFuncDataNode(graphs->front(), true, false);
+        }
+    }
+    return node;
+}
+
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ENTER("LINK");
     any targetNodeRes = visit(gct->at(0));
@@ -1313,46 +1355,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return nodeTypeOf(inputNode);
     };
 
-    auto lowerDecoratedGraphValue =
-        [&](const compile_graph_ptr_t &decoratedGraph) -> node_handle_t {
-        currGraph_->addDependencyGraph(decoratedGraph);
-        if (!decoratedGraph->funcType()->hasExitType() ||
-            decoratedGraph->funcType()->exitType()->code() != TypeCode::Function) {
-            diags_->of(SemanticDiag::ArgumentsMismatch)
-                .atOrigin(gct->load()->origin())
-                .commit(
-                    "decorated graph should return function",
-                    decoratedGraph->funcType()->toString());
-            throw BuildAbortException();
-        }
-        node_handle_t decoratorFactoryValue = createFuncDataNode(decoratedGraph, true, false);
-        node_handle_t decoratorInvoke =
-            currGraph_->addCallNode(decoratedGraph->funcType()->exitType());
-        linkNodes(LinkType::With, decoratorFactoryValue, decoratorInvoke);
-        return decoratorInvoke;
-    };
-
     for (size_t i = 1; i < gct->size(); i++) {
-        any dataRes = visit(gct->at(i));
-        if (dataRes.type() == typeid(graph_ptr_t)) {
-            graph_ptr_t inputGraph = any_cast<graph_ptr_t>(dataRes);
-            currGraph_->addDependencyGraph(inputGraph);
-            auto inputNode = createFuncDataNode(inputGraph, true, false);
-            normInputNodes.push_back(inputNode);
-            normInputTypes.push_back(nodeTypeOf(inputNode));
-        } else if (dataRes.type() == typeid(node_handle_t)) {
-            node_handle_t inputNode = any_cast<node_handle_t>(dataRes);
-            if (nodeIsKind(inputNode, runtime::GCNodeKind::Dref)) {
-                const auto &target = nodeGraphOf(inputNode)->drefTarget(inputNode);
-                if (std::holds_alternative<graph_ptr_t>(target)) {
-                    inputNode = lowerDecoratedGraphValue(std::get<graph_ptr_t>(target));
-                }
-            }
-            normInputNodes.push_back(inputNode);
-            normInputTypes.push_back(callableValueType(inputNode));
-        } else {
-            ASSERT(false, std::format("Unexpected result type from the {} child of LINK node", i));
-        }
+        node_handle_t inputNode = argumentNodeOf(visit(gct->at(i)), gct);
+        normInputNodes.push_back(inputNode);
+        normInputTypes.push_back(callableValueType(inputNode));
     }
 
     if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
@@ -1450,7 +1456,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             targetFuncType = targetOperator->funcType();
         } else if (std::holds_alternative<graph_ptr_t>(drefTarget)) {
             auto decoratedGraph           = std::get<graph_ptr_t>(drefTarget);
-            node_handle_t decoratorInvoke = lowerDecoratedGraphValue(decoratedGraph);
+            node_handle_t decoratorInvoke = lowerDecoratedGraphValue(decoratedGraph, gct);
             FunctionType *factoryType     = tt::as_ptr<FunctionType>(nodeTypeOf(decoratorInvoke));
             targetNode                    = currGraph_->addCallNode(factoryType->exitType());
             linkNodes(LinkType::With, decoratorInvoke, targetNode);
@@ -1558,30 +1564,8 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         "Unexpected result type from Enter the child of WITH node.");
     node_handle_t targetNode = any_cast<node_handle_t>(targetNodeRes);
     vector<node_handle_t> inputs;
-    auto lowerGraphValue = [&](const graph_ptr_t &graph) -> node_handle_t {
-        return createFuncDataNode(graph, true, false);
-    };
     for (size_t i = 1; i < gct->size(); i++) {
-        any dataRes = visit(gct->at(i));
-        if (dataRes.type() == typeid(graph_ptr_t)) {
-            inputs.push_back(lowerGraphValue(any_cast<graph_ptr_t>(dataRes)));
-        } else if (dataRes.type() == typeid(node_handle_t)) {
-            node_handle_t inputNode = any_cast<node_handle_t>(dataRes);
-            if (nodeIsKind(inputNode, runtime::GCNodeKind::Dref)) {
-                const auto &target = nodeGraphOf(inputNode)->drefTarget(inputNode);
-                if (std::holds_alternative<graph_ptr_t>(target)) {
-                    inputNode = lowerGraphValue(std::get<graph_ptr_t>(target));
-                } else if (std::holds_alternative<graph_vec_ptr_t>(target)) {
-                    auto graphs = asCompileGraphVec(target);
-                    if (graphs && graphs->size() == 1) {
-                        inputNode = lowerGraphValue(graphs->front());
-                    }
-                }
-            }
-            inputs.push_back(inputNode);
-        } else {
-            ASSERT(false, std::format("Unexpected result type from the {} child of WITH node", i));
-        }
+        inputs.push_back(argumentNodeOf(visit(gct->at(i)), gct));
     }
     auto &bound = boundWithArgs_[targetNode];
     bound.insert(bound.end(), inputs.begin(), inputs.end());
@@ -1928,9 +1912,15 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     node_handle_t res{};
     for (size_t i = 0; i < gct->size(); i++) {
         try {
-            any result = visit(gct->at(i));
+            const auto &child = gct->at(i);
+            any result        = visit(child);
             if (result.has_value() && result.type() == typeid(node_handle_t)) {
                 res = any_cast<node_handle_t>(result);
+            } else if (
+                result.type() == typeid(graph_ptr_t) && child->type() == GCT::LoadType::FUNC &&
+                child->loadAs<GCT::FuncLoad>()->name().empty()) {
+                // A function literal is a value like any other expression, e.g. a branch arm.
+                res = valueNodeOf(result);
             }
         } catch (const BuildAbortException &e) {
             continue;

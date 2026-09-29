@@ -33,3 +33,19 @@ assert(out.includes('bound_closures with=7'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "closure.function_values"
+desc = "Passes a named function as an argument and returns function literals from branch arms."
+kind = "behavior"
+case = "../../../cases/compile/closure/function_values.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('function_values named=9 positive=6 negative=0.5'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000

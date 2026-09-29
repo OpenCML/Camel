@@ -139,6 +139,11 @@ class Builder {
     // The value node of a visited expression: a node as is, or a function literal (a graph) as
     // its callable function value.
     node_handle_t valueNodeOf(const std::any &res);
+    // The value node of a call or with-argument: also lowers functions named as values.
+    node_handle_t argumentNodeOf(const std::any &res, const GCT::node_ptr_t &origin);
+    // The function a decorated graph produces when its decorators run.
+    node_handle_t lowerDecoratedGraphValue(
+        const compile_graph_ptr_t &decoratedGraph, const GCT::node_ptr_t &origin);
     std::optional<node_handle_t> modifierOf(node_handle_t node) const;
     void setModifier(node_handle_t input, node_handle_t modifier);
     compile_graph_ptr_t buildDecoratedGraph(
