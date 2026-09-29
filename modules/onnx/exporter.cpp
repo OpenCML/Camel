@@ -23,15 +23,18 @@
 
 #include "exporter.h"
 
+#include "../tensor/dtype.h"
 #include "../tensor/interop.h"
 #include "../tensor/ops/registry.h"
 #include "../tensor/tensor.h"
 #include "emitter.h"
 #include "lowering.h"
 
+#include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/executor.h"
@@ -78,6 +81,14 @@ ExportArgsView constantArgs(std::span<const Value> values) {
     return ExportArgsView(std::move(slots), std::move(types));
 }
 
+bool isIntArrayType(type::Type *t) {
+    if (!t || t->code() != TypeCode::Array) {
+        return false;
+    }
+    type::Type *elem = static_cast<type::ArrayType *>(t)->elemType();
+    return elem && (elem->code() == TypeCode::Int32 || elem->code() == TypeCode::Int64);
+}
+
 bool allConstant(std::span<const Value> values) {
     return std::ranges::all_of(values, [](const Value &v) { return v.isConstant(); });
 }
@@ -112,7 +123,9 @@ class Evaluator {
     struct Activation {
         GCGraph *graph;
         std::unordered_map<gc_node_ref_t, Value> ports;
-        std::unordered_map<gc_node_ref_t, Value> memo;
+        // Memo layers: the base layer plus one per enclosing If arm being emitted. A value first
+        // computed inside an arm lives in that arm's subgraph and is only visible there.
+        std::vector<std::unordered_map<gc_node_ref_t, Value>> memo;
     };
 
     Value eval(Activation &act, gc_node_ref_t ref);
@@ -120,6 +133,10 @@ class Evaluator {
     Value evalOper(Activation &act, gc_node_ref_t ref);
     Value evalJoin(Activation &act, gc_node_ref_t ref);
     Value evalFill(Activation &act, gc_node_ref_t ref);
+    Value symbolicIntArray(
+        Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values);
+    Value
+    evalSymbolicBranch(Activation &act, const Value &cond, std::span<const gc_node_ref_t> arms);
     Value evalAccs(Activation &act, gc_node_ref_t ref);
     Value
     callFunctionValue(const Value &fn, std::span<const Value> with, std::span<const Value> norm);
@@ -152,7 +169,7 @@ Value Evaluator::call(
         throw ExportError(std::format("argument count mismatch calling '{}'", graph->name()));
     }
 
-    Activation act{.graph = graph, .ports = {}, .memo = {}};
+    Activation act{.graph = graph, .ports = {}, .memo = {{}}};
     for (size_t i = 0; i < with.size(); ++i) {
         act.ports.emplace(withPorts[i], with[i]);
     }
@@ -176,11 +193,13 @@ Value Evaluator::call(
 }
 
 Value Evaluator::eval(Activation &act, gc_node_ref_t ref) {
-    if (auto found = act.memo.find(ref); found != act.memo.end()) {
-        return found->second;
+    for (auto it = act.memo.rbegin(); it != act.memo.rend(); ++it) {
+        if (auto found = it->find(ref); found != it->end()) {
+            return found->second;
+        }
     }
     Value v = evalNode(act, ref);
-    act.memo.emplace(ref, v);
+    act.memo.back().emplace(ref, v);
     return v;
 }
 
@@ -229,12 +248,22 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         if (src.isConstant()) {
             return keep(n->dataType->castSlotFrom(src.slot, src.ty), n->dataType);
         }
-        if (!tensor::asTensorType(n->dataType)) {
-            unsupported(
-                act,
-                std::format("cast of a model-dependent tensor to '{}'", n->dataType->toString()));
+        if (tensor::asTensorType(n->dataType)) {
+            return src;
         }
-        return src;
+        if (src.form == Value::Form::Scalar &&
+            tensor::isSupportedTensorScalar(n->dataType->code())) {
+            const TypeCode target = tensor::normalizeTensorDType(n->dataType->code());
+            return Value::symbolicScalar(
+                emitter_.node(
+                    "Cast",
+                    {src.name},
+                    {Attribute::makeInt("to", static_cast<int64_t>(elemTypeOf(target)))}),
+                n->dataType);
+        }
+        unsupported(
+            act,
+            std::format("cast of a model-dependent value to '{}'", n->dataType->toString()));
     }
     case GCNodeKind::Copy:
         // Exported values are never mutated in place, so a copy can share its source.
@@ -344,7 +373,8 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
             unsupported(act, std::format("'{}': {}", uri, e.what()));
         }
     }
-    return lowering->lower(LowerContext(emitter_, uri, norm, std::move(facts)));
+    return lowering->lower(
+        LowerContext(emitter_, uri, norm, std::move(facts), g->node(ref)->dataType));
 }
 
 Value Evaluator::evalJoin(Activation &act, gc_node_ref_t join) {
@@ -354,9 +384,12 @@ Value Evaluator::evalJoin(Activation &act, gc_node_ref_t join) {
     const auto caseRefs      = g->withInputsOf(brch);
     const Value cond         = eval(act, g->normInputsOf(brch).front());
     if (!cond.isConstant()) {
-        // Lowered values are tensors while Camel conditions are scalars; a model-dependent
-        // condition needs a model-dependent scalar (e.g. an element read), which has no lowering.
-        unsupported(act, "a branch condition that depends on the model input cannot be exported");
+        if (!caseRefs.empty() || arms.size() != 2 || cond.form != Value::Form::Scalar) {
+            unsupported(
+                act,
+                "a match on a value that depends on the model input cannot be exported");
+        }
+        return evalSymbolicBranch(act, cond, arms);
     }
 
     // Same selection rule as the VMs: if-then-else on a bool, or the first matching case.
@@ -387,18 +420,86 @@ Value Evaluator::evalJoin(Activation &act, gc_node_ref_t join) {
     return eval(act, arms[arm]);
 }
 
+/// if-then-else on a condition that depends on the input: ONNX If with one subgraph per arm.
+/// Both arms must yield values of the same form and dtype.
+Value Evaluator::evalSymbolicBranch(
+    Activation &act, const Value &cond, std::span<const gc_node_ref_t> arms) {
+    const std::string condName = emitter_.operand(cond, TypeCode::Bool);
+    Graph bodies[2];
+    Value results[2];
+    for (size_t i = 0; i < 2; ++i) {
+        emitter_.pushScope(i == 0 ? "then_branch" : "else_branch");
+        act.memo.emplace_back();
+        try {
+            results[i]          = eval(act, arms[i]);
+            const TensorFacts f = factsOf(results[i]);
+            const std::string out =
+                emitter_.node("Identity", {emitter_.operand(results[i])}, {}, "arm_out");
+            act.memo.pop_back();
+            bodies[i] = emitter_.popScope();
+            bodies[i].outputs.push_back(valueInfoOf(out, f));
+        } catch (...) {
+            act.memo.pop_back();
+            emitter_.popScope();
+            throw;
+        }
+    }
+    const TensorFacts a = factsOf(results[0]), b = factsOf(results[1]);
+    const bool sameForm =
+        results[0].isConstant() || results[1].isConstant() || results[0].form == results[1].form;
+    if (!a.dtype || a.dtype != b.dtype || !sameForm) {
+        unsupported(
+            act,
+            "the arms of a branch on a model-dependent condition yield different types");
+    }
+    // Extents that agree survive; others become dynamic.
+    std::optional<tensor::StaticShape> shape;
+    if (a.shape && b.shape && a.shape->size() == b.shape->size()) {
+        shape = a.shape;
+        for (size_t d = 0; d < shape->size(); ++d) {
+            if ((*a.shape)[d] != (*b.shape)[d]) {
+                (*shape)[d] = tensor::kUnknownDim;
+            }
+        }
+    }
+    const std::string out = emitter_.node(
+        "If",
+        {condName},
+        {Attribute::makeGraph("then_branch", std::move(bodies[0])),
+         Attribute::makeGraph("else_branch", std::move(bodies[1]))});
+    // The If stands for a Camel scalar when the arms do (symbolic scalars or scalar constants).
+    const auto scalarTypeOf = [](const Value &v) -> type::Type * {
+        if (v.isSymbolic()) {
+            return v.form == Value::Form::Scalar ? v.camelType : nullptr;
+        }
+        return tensor::asTensorType(v.ty) ? nullptr : v.ty;
+    };
+    for (const Value &r : results) {
+        if (r.isSymbolic() && r.form == Value::Form::IntArray) {
+            unsupported(act, "a branch on a model-dependent condition cannot yield an int array");
+        }
+    }
+    if (type::Type *scalar = scalarTypeOf(results[0])) {
+        return Value::symbolicScalar(out, scalar);
+    }
+    return Value::symbolic(out, a.dtype, shape);
+}
+
 Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
     GCGraph *g                = act.graph;
     const Value source        = eval(act, g->normInputsOf(ref).front());
     std::vector<Value> values = evalAll(act, g->withInputsOf(ref));
+    type::Type *targetType    = g->node(ref)->dataType;
+    if (source.isConstant() && !allConstant(values) && isIntArrayType(targetType)) {
+        return symbolicIntArray(act, ref, source, values);
+    }
     if (!source.isConstant() || !allConstant(values)) {
         unsupported(
             act,
             "a value that depends on the model input is stored in a tuple, struct, array or "
             "closure; pass it as a function argument instead");
     }
-    type::Type *targetType = g->node(ref)->dataType;
-    auto *object           = rtdata::fromSlot<rtdata::Object *>(source.slot)
+    auto *object = rtdata::fromSlot<rtdata::Object *>(source.slot)
                        ->clone(core::mm::autoSpace(), targetType, false);
     emitter_.retain(object, targetType);
     std::vector<slot_t> slots;
@@ -411,6 +512,41 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
         g->nodeBodyAs<camel::runtime::GCFillBody>(ref),
         slots);
     return Value::constant(rtdata::toSlot(object), targetType);
+}
+
+/// An int[] literal with elements that depend on the input (e.g. [shape(x)[0], 128]) becomes a
+/// 1-D int64 tensor: constant and symbolic elements concatenated.
+Value Evaluator::symbolicIntArray(
+    Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values) {
+    auto *templ          = rtdata::fromSlot<::Array *>(source.slot);
+    const auto fillSlots = act.graph->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
+    std::vector<std::optional<Value>> elems(templ->size());
+    for (size_t k = 0; k < fillSlots.size(); ++k) {
+        elems[static_cast<size_t>(fillSlots[k])] = values[k];
+    }
+    std::vector<std::string> parts;
+    std::vector<int64_t> known;
+    for (size_t i = 0; i < elems.size(); ++i) {
+        if (!elems[i] || elems[i]->isConstant()) {
+            const int64_t v = elems[i] ? tensor::scalarToInt64(elems[i]->ty->code(), elems[i]->slot)
+                                       : templ->get<rtdata::Int64>(i);
+            const int64_t one[] = {v};
+            parts.push_back(emitter_.int64s(one));
+            known.push_back(v);
+            continue;
+        }
+        if (elems[i]->form != Value::Form::Scalar) {
+            unsupported(act, "an int array element that depends on the model input must be an int");
+        }
+        const int64_t axis[] = {0};
+        parts.push_back(emitter_.node(
+            "Unsqueeze",
+            {emitter_.operand(*elems[i], TypeCode::Int64), emitter_.int64s(axis)}));
+        known.push_back(tensor::kUnknownDim);
+    }
+    return Value::symbolicIntArray(
+        emitter_.node("Concat", std::move(parts), {Attribute::makeInt("axis", 0)}),
+        std::move(known));
 }
 
 Value Evaluator::evalAccs(Activation &act, gc_node_ref_t ref) {
@@ -454,10 +590,25 @@ Model exportFunction(
     }
 
     Emitter emitter(options.opset);
-    const tensor::StaticShape inputShape(example->shapeSpan().begin(), example->shapeSpan().end());
+    tensor::StaticShape inputShape(example->shapeSpan().begin(), example->shapeSpan().end());
+    const auto rank = static_cast<int64_t>(inputShape.size());
+    std::vector<size_t> dynamic;
+    for (int64_t axis : options.dynamicAxes) {
+        const int64_t a = axis < 0 ? axis + rank : axis;
+        if (a < 0 || a >= rank) {
+            throw ExportError(
+                std::format("dynamic axis {} is out of range for a rank-{} input", axis, rank));
+        }
+        inputShape[static_cast<size_t>(a)] = tensor::kUnknownDim;
+        dynamic.push_back(static_cast<size_t>(a));
+    }
     const Value input    = Value::symbolic(options.inputName, example->dtype(), inputShape);
     emitter.graph().name = options.graphName;
-    emitter.graph().inputs.push_back(valueInfoOf(options.inputName, factsOf(input)));
+    ValueInfo inputInfo  = valueInfoOf(options.inputName, factsOf(input));
+    for (size_t a : dynamic) {
+        (*inputInfo.shape)[a] = Dim{a == 0 ? std::string("batch") : std::format("dim{}", a)};
+    }
+    emitter.graph().inputs.push_back(std::move(inputInfo));
 
     Evaluator evaluator(ctx, emitter, options);
     std::vector<Value> closure;

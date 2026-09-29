@@ -28,10 +28,15 @@
  * opset?" before any model is written.
  *
  * A lowering receives the call's arguments as exporter values (constants or
- * symbolic tensors) together with the statically inferred result facts, and
- * returns the result value: usually a symbolic tensor naming the emitted
- * node's output, but a lowering may also answer with a constant (for
- * example `shape` of a tensor whose shape is static).
+ * symbolic values) together with the statically inferred result facts and
+ * the Camel result type, and returns the result value: usually a symbolic
+ * value naming the emitted node's output, but a lowering may also answer
+ * with a constant (for example `shape` of a tensor whose shape is static).
+ *
+ * Besides tensor and nn operators, the table covers the builtin scalar
+ * operators (int/float arithmetic, comparisons, conversions) and array
+ * indexing, so shape arithmetic on a dynamic batch dimension and branch
+ * conditions computed from the input can be exported.
  */
 
 #pragma once
@@ -51,8 +56,9 @@ class LowerContext {
   public:
     LowerContext(
         Emitter &emitter, std::string_view uri, std::span<const Value> args,
-        tensor::ops::TensorFacts result)
-        : emitter_(emitter), uri_(uri), args_(args), result_(std::move(result)) {}
+        tensor::ops::TensorFacts result, type::Type *resultType)
+        : emitter_(emitter), uri_(uri), args_(args), result_(std::move(result)),
+          resultType_(resultType) {}
 
     Emitter &emitter() const { return emitter_; }
     int64_t opset() const { return emitter_.opset(); }
@@ -67,6 +73,8 @@ class LowerContext {
 
     /// Inferred facts of the result.
     const tensor::ops::TensorFacts &result() const { return result_; }
+    /// Camel static type of the call's result (e.g. int for :op/add_l).
+    type::Type *resultType() const { return resultType_; }
 
     /// Operand name of argument `index`, converted to `dtype` when given.
     std::string input(size_t index, std::optional<type::TypeCode> dtype = std::nullopt) const;
@@ -85,6 +93,10 @@ class LowerContext {
         std::vector<Attribute> attributes = {}) const;
     /// Wraps an already emitted output name with the result facts.
     Value result(std::string name) const;
+    /// Emits a single-output node producing the call's Camel scalar result.
+    Value emitScalar(
+        std::string opType, std::vector<std::string> inputs,
+        std::vector<Attribute> attributes = {}) const;
 
   private:
     std::optional<tensor::ops::ConstArg> constArg(size_t index) const;
@@ -94,6 +106,7 @@ class LowerContext {
     std::string_view uri_;
     std::span<const Value> args_;
     tensor::ops::TensorFacts result_;
+    type::Type *resultType_;
 };
 
 /// Lowers one operator call.

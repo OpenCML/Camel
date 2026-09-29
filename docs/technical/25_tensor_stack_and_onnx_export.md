@@ -215,11 +215,28 @@ Every node evaluates to either a constant or a symbolic tensor:
 - `FUNC` and `CALL` nodes are inlined. Recursion driven by constants (for
   example the GRU time-step loop) unrolls; a call-depth bound turns recursion
   that depends on the model input into a diagnostic.
+- Symbolic values have a form: a tensor, a Camel scalar (rank-0 ONNX
+  tensor), or an `int[]` (1-D int64 tensor, e.g. `shape(x)` with a dynamic
+  batch). The lowering table also covers builtin scalar arithmetic,
+  comparisons and conversions (`:op/add_l`, `:op/gt_d`, `:op/ltod`, ...),
+  `math:sqrt`, array indexing, element reads (`t[i]`), and full reductions,
+  so conditions and shape arithmetic that depend on the input can be
+  exported.
 - `BRCH`/`JOIN` with a constant condition select their arm, using the VMs'
-  selection rule. A condition that depends on the model input is rejected:
-  lowered values are tensors while Camel conditions are scalars, so such a
-  condition needs a model-dependent scalar (an element read), which has no
-  lowering. Mapping those branches to ONNX `If` is future work.
+  selection rule. An if-then-else on a condition computed from the input
+  becomes an ONNX `If`; each arm is emitted into its own subgraph (values first
+  computed inside an arm stay in that arm). Matches on input-dependent values
+  are rejected.
+- `export_model(fn, x, path, dynamic_axes)` leaves input axes dynamic (axis 0
+  is named `batch`). `shape(x)` then becomes `Shape`, but its statically known
+  entries are tracked, so `shape(x)[3]` still folds and only the dynamic
+  extent flows through `Gather`/`Concat`; `zeros(shape)` becomes
+  `ConstantOfShape` and `reshape` takes the computed shape. All four benchmark
+  models export with a dynamic batch and match the reference at batch sizes
+  64/32/8 and 5.
+- The emitter merges structurally identical nodes (same operator, inputs and
+  attributes) per scope; every emitted operator is deterministic, so this is
+  plain CSE (it removes the per-step `Shape` of the unrolled GRU).
 - Impure operators (`OpTraits::pure == false`, e.g. `randn`) are rejected even
   with constant arguments. Operators without a lowering are rejected with their
   URI and the opset. Values that depend on the input may not be stored in
@@ -233,8 +250,8 @@ Every node evaluates to either a constant or a symbolic tensor:
   (`proto/onnx_writer.*`, ONNX `ModelProto`, IR 8, opset 17). No protobuf
   library dependency, so Windows builds are unaffected.
 - `LoweringRegistry::supported(opset)` lists what the backend can express at an
-  opset. That per-operator capability table is what the paper's ORT_007
-  exemplar needs.
+  opset, and `onnx.supported_operators()` exposes it to Camel programs. That
+  per-operator capability table is what the paper's ORT_007 exemplar needs.
 
 Export covers inference graphs. Training steps produced by `apply_gradients` are
 not exported.

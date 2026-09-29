@@ -20,10 +20,12 @@
 /*
  * The onnx module: exports Camel functions as ONNX models.
  *
- *   onnx.export_model(fn, example, path)
+ *   onnx.export_model(fn, example, path[, dynamic_axes])
+ *   onnx.supported_operators()
  *
  * writes the model of `fn` applied to a tensor with `example`'s dtype and
- * shape to `path` (see exporter.h for what can be exported).
+ * shape to `path`, leaving the listed input axes dynamic, and lists the
+ * operator URIs the backend can lower (see exporter.h).
  */
 
 #pragma once
