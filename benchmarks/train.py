@@ -49,6 +49,8 @@ CAMEL_CONFIGS: Dict[str, Tuple[str, ...]] = {
     "camel_nvm": ("std::macro", "std::nvm"),
     "camel_fvm": ("std::macro", "std::fvm"),
     "camel_fuse_nvm": ("std::macro", "tensor::fuse", "std::nvm"),
+    # Generic simplification first: pullback closures collapse into straight-line code.
+    "camel_opt_nvm": ("std::macro", "std::opt", "std::opt::fold", "std::opt::dce", "std::nvm"),
 }
 
 
@@ -69,9 +71,9 @@ def run_camel(model: str, passes: Tuple[str, ...], env: Dict[str, str], timeout:
     return proc.stdout
 
 
-def camel_gradients(model: str) -> Dict[str, np.ndarray]:
+def camel_gradients(model: str, config: str = "camel_nvm") -> Dict[str, np.ndarray]:
     with tempfile.TemporaryDirectory() as tmp:
-        run_camel(model, CAMEL_CONFIGS["camel_nvm"], {"CAMEL_BENCH_GRADS": tmp})
+        run_camel(model, CAMEL_CONFIGS[config], {"CAMEL_BENCH_GRADS": tmp})
         return {p.stem: np.load(p) for p in Path(tmp).glob("*.npy")}
 
 
@@ -115,12 +117,12 @@ def torch_gradients(model: str) -> Tuple[Dict[str, np.ndarray], Dict[str, np.nda
     return grads, names
 
 
-def check(models: List[str], rtol: float) -> bool:
+def check(models: List[str], rtol: float, configs: List[str]) -> bool:
     ok = True
-    for model in models:
-        camel = camel_gradients(model)
+    for model, config in [(m, c) for m in models for c in configs]:
+        camel = camel_gradients(model, config)
         torch_grads, names = torch_gradients(model)
-        print(f"== {model}")
+        print(f"== {model} ({config})")
         # Scale errors by the weight's largest gradient, floored so that weights whose exact
         # gradient is zero (e.g. the key bias under softmax, which shifts every score of a
         # query equally) compare rounding noise against the model's gradient scale instead.
@@ -239,6 +241,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--models", default=",".join(MODELS))
     parser.add_argument("--check", action="store_true", help="compare gradients with PyTorch")
+    parser.add_argument(
+        "--check-configs", default="camel_nvm,camel_opt_nvm", help="Camel configurations to check"
+    )
     parser.add_argument("--rtol", type=float, default=1e-4, help="gradient tolerance relative to max |grad| (see check)")
     parser.add_argument("--time", action="store_true", help="time training steps")
     parser.add_argument("--trials", type=int, default=3)
@@ -252,7 +257,7 @@ def main() -> int:
     models = [m for m in args.models.split(",") if m]
     ok = True
     if args.check or not args.time:
-        ok = check(models, args.rtol)
+        ok = check(models, args.rtol, [c for c in args.check_configs.split(",") if c])
         print("gradient check:", "PASS" if ok else "FAIL")
     if args.time:
         report = time_models(models, args.trials, args.reps, args.warmup, args.threads)
