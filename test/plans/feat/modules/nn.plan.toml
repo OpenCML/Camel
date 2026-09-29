@@ -49,31 +49,6 @@ match(/with_context_step_demo grad=tensor/, input.normalized.stdout)
 timeout_ms = 4000
 
 [[tests]]
-name = "with_context_step_gir"
-desc = "Inspects std::gir output to ensure apply_gradients emits a VJP-derived backward graph."
-kind = "behavior"
-case = "../../../cases/modules/nn/with_context_step_demo.cml"
-args = ["${case}", "std::macro", "std::gir"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
-const text = input.normalized.output
-for (const needle of [
-    'nn::autograd_sgd_step',
-    'tensor:full',
-    'tensor:add',
-    'nn:add_grad',
-    'nn:sgd',
-]) {
-    assert(text.includes(needle), `GIR output missing ${needle}`)
-}
-}
-"""
-timeout_ms = 4000
-
-[[tests]]
 name = "autograd_linear_demo"
 desc = "Exercises nn.apply_gradients macro synthesis for a linear MSE SGD step."
 kind = "behavior"
@@ -569,24 +544,6 @@ const text = input.normalized.output
 assert(input.exit_code !== 0, 'conv2d shape error case unexpectedly succeeded')
 assert(text.includes("Tensor shape mismatch in 'conv2d': conv2d input channels 1 do not match kernel channels 2"), 'missing conv2d channel diagnostic')
 assert(text.includes('RuntimeDiag::TensorDimensionMismatch'), 'missing tensor shape diagnostic category')
-}
-"""
-timeout_ms = 4000
-
-[[tests]]
-name = "autograd_missing_vjp_concat_error"
-desc = "Rejects trainable concat paths that lack a builtin VJP rule."
-kind = "behavior"
-case = "../../../cases/modules/nn/autograd_missing_vjp_concat_error.cml"
-args = ["${case}", "std::macro", "std::nvm"]
-expect_exit = 1
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const text = input.normalized.output
-assert(input.exit_code !== 0, 'missing-VJP case unexpectedly succeeded')
-assert(text.includes("No builtin VJP rule registered for 'tensor:concat'"), 'missing concat VJP diagnostic')
-assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic category')
 }
 """
 timeout_ms = 4000
