@@ -1,7 +1,34 @@
 # Automatic Differentiation as Graph Rewriting
 
-Status: design proposal (not implemented). Supersedes the tape-based synthesis
-inside `nn.apply_gradients` described in `nn-autograd.md`.
+Status: implemented through phase 5 and phase 7 (§8); phase 6 (thin ONNX) is
+open. Supersedes the tape-based synthesis inside `nn.apply_gradients`, which
+has been removed together with `Parameter`.
+
+Implementation map:
+
+- Core: `include/camel/core/derivative.h` (VjpBuilder, rule registry, tangent
+  spaces, tangent types of aggregates). Scalar rules live in
+  `src/builtin/operators/derivative.cpp`.
+- Engine: `modules/autodiff` (`grad`, `value_and_grad`, `vjp`,
+  `stop_gradient`; the pullback transform in `pullback.cpp`). It is an
+  ordinary package, not part of the core: grad is a macro operator like any
+  other, and third-party packages can ship their own.
+- Tensor and nn rules: `modules/tensor/ops/vjp.cpp` and the `vjp` entries of the
+  op definitions; tree optimizers in `modules/nn/optim.cpp`.
+- Verification: `test/cases/modules/autodiff` (finite differences, branches,
+  recursion, `@vjp`), and `benchmarks/train.py --check`, which matches the
+  MLP, GRU and Transformer gradients against PyTorch weight by weight.
+
+Deviations from the proposal below:
+
+- Activity analysis: only values that have a tangent and depend on a
+  differentiated input are differentiated, so operators on static data
+  (shape arithmetic, integer comparisons) need no rule.
+- `grad` is not restricted by the core; rules and engines are package
+  contributions, and `@vjp` is a decorator evaluated by `std::macro`.
+- Pullback closures are not yet collapsed by generic simplification passes,
+  and FastVM/JIT do not yet compile graphs created during macro evaluation;
+  both limit training-step performance today.
 
 ## 1. Principles
 
@@ -65,7 +92,7 @@ let model2   = sgd(model, dm, 0.01)    // optimizers are functions over trees
   `float -> float`, `int`/`bool`/`string` have no tangent,
   structs/tuples/arrays map element-wise and drop non-differentiable members.
   `grad(loss)` therefore type-checks at compile time.
-- `apply_gradients` stays as sugar implemented on top of `grad` + `sgd`.
+- `apply_gradients` was removed; a training step is `value_and_grad` + `sgd`.
 
 ## 4. The Transformation
 
@@ -176,7 +203,7 @@ mutable parameter objects.
   implemented once over `Struct`/`Tuple`/`Array` values with tensor leaves.
 - **Freezing** uses `stop_gradient(t)`, or differentiation restricted to a
   subtree.
-- **`Parameter` objects** stay for compatibility; new code does not need them.
+- **`Parameter` objects** were removed; models are plain trees.
 
 ## 7. ONNX as a Thin Translation Pass
 
