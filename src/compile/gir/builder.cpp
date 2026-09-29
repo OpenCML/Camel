@@ -874,12 +874,8 @@ Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
 node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     ENTER("NREF");
     const string &ident = gct->loadAs<GCT::NRefLoad>()->ref();
-    const auto &res     = visit(gct->at(0));
-    ASSERT(
-        res.type() == typeid(node_handle_t),
-        "Unexpected result type from Enter the child of NREF node.");
-    node_handle_t node = any_cast<node_handle_t>(res);
-    bool success       = insertNode(ident, node);
+    node_handle_t node  = valueNodeOf(visit(gct->at(0)));
+    bool success        = insertNode(ident, node);
     if (!success) {
         diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->load()->origin()).commit(ident);
         throw BuildAbortException();
@@ -1060,6 +1056,14 @@ node_handle_t Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
 //
 // When `allowParameterization=true`, unresolved closure captures may be rewritten into explicit
 // with-ports on the target graph. That mutation is only valid during the build phase.
+node_handle_t Builder::valueNodeOf(const std::any &res) {
+    if (res.type() == typeid(graph_ptr_t)) {
+        return createFuncDataNode(any_cast<graph_ptr_t>(res), true, false);
+    }
+    ASSERT(res.type() == typeid(node_handle_t), "Expression did not produce a value node.");
+    return any_cast<node_handle_t>(res);
+}
+
 node_handle_t Builder::createFuncDataNode(
     const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
     ASSERT(
@@ -1278,9 +1282,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     node_vec_t withInputNodes, normInputNodes;
     type_vec_t withInputTypes, normInputTypes;
 
-    for (draft_node_ref_t inputId : withInputsOf(targetNode)) {
-        node_handle_t inputNode = nodeDraftOf(targetNode)->node(inputId);
-        withInputNodes.push_back(inputNode);
+    if (auto bound = boundWithArgs_.find(targetNode); bound != boundWithArgs_.end()) {
+        withInputNodes = bound->second;
+    }
+    for (node_handle_t inputNode : withInputNodes) {
         withInputTypes.push_back(nodeTypeOf(inputNode));
     }
 
@@ -1554,7 +1559,6 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     node_handle_t targetNode = any_cast<node_handle_t>(targetNodeRes);
     vector<node_handle_t> inputs;
     auto lowerGraphValue = [&](const graph_ptr_t &graph) -> node_handle_t {
-        currGraph_->addDependencyGraph(graph);
         return createFuncDataNode(graph, true, false);
     };
     for (size_t i = 1; i < gct->size(); i++) {
@@ -1579,10 +1583,8 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             ASSERT(false, std::format("Unexpected result type from the {} child of WITH node", i));
         }
     }
-    for (node_handle_t inputNode : inputs) {
-        tryRemoveCtrlLink(inputNode, targetNode);
-        linkNodes(LinkType::With, inputNode, targetNode);
-    }
+    auto &bound = boundWithArgs_[targetNode];
+    bound.insert(bound.end(), inputs.begin(), inputs.end());
     LEAVE("WITH");
     return targetNode;
 }
@@ -1879,35 +1881,14 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
     ENTER("ANNO");
     ASSERT(gct->size() == 1, "ANNO node should have exactly one child.");
-    const auto &res = visit(gct->at(0));
-    if (res.type() == typeid(node_handle_t)) {
-        LEAVE("ANNO");
-        return any_cast<node_handle_t>(res);
-    }
-    if (res.type() == typeid(graph_ptr_t)) {
-        graph_ptr_t graph = any_cast<graph_ptr_t>(res);
-        currGraph_->addDependencyGraph(graph);
-        LEAVE("ANNO");
-        return createFuncDataNode(graph, true, false);
-    }
-    ASSERT(false, "Unexpected child result type in ANNO node.");
+    node_handle_t node = valueNodeOf(visit(gct->at(0)));
     LEAVE("ANNO");
-    return {};
+    return node;
 }
 
 node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
-    auto res = visit(gct->at(0));
-    node_handle_t resNode{};
-    if (res.type() == typeid(node_handle_t)) {
-        resNode = any_cast<node_handle_t>(res);
-    } else if (res.type() == typeid(graph_ptr_t)) {
-        graph_ptr_t subGraph = any_cast<graph_ptr_t>(res);
-        currGraph_->addDependencyGraph(subGraph);
-        resNode = createFuncDataNode(subGraph, true, false);
-    } else {
-        ASSERT(false, "Unexpected result type from Enter child of EXIT node.");
-    }
+    node_handle_t resNode      = valueNodeOf(visit(gct->at(0)));
     node_handle_t outputAnchor = resNode;
     node_vec_t pendingCtrlInputs;
     if (auto modifier = modifierOf(resNode); modifier.has_value()) {

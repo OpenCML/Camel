@@ -80,6 +80,10 @@ class Builder {
 
     std::unordered_set<DraftGraphBuilder *> usedGraphs_;
     std::unordered_map<DraftGraphBuilder *, node_modifier_map_t> nodeModifierMaps_;
+    // With-arguments bound to a callee by `f<a, b>`, consumed when the callee is invoked. Kept
+    // beside the graph rather than as edges: the callee node is a value (a function literal, a
+    // closure FILL whose with-inputs are its captures) that the binding must not alter.
+    std::unordered_map<node_handle_t, std::vector<node_handle_t>> boundWithArgs_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -132,6 +136,9 @@ class Builder {
 
     node_handle_t createFuncDataNode(
         const compile_graph_ptr_t &graph, bool getCallableNode, bool allowParameterization);
+    // The value node of a visited expression: a node as is, or a function literal (a graph) as
+    // its callable function value.
+    node_handle_t valueNodeOf(const std::any &res);
     std::optional<node_handle_t> modifierOf(node_handle_t node) const;
     void setModifier(node_handle_t input, node_handle_t modifier);
     compile_graph_ptr_t buildDecoratedGraph(
