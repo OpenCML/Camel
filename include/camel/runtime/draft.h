@@ -202,7 +202,7 @@ class GraphDraft {
         ASSERT(hasFrameLayout(), "Runtime draft frame layout is not available.");
         return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeDataType_->size();
     }
-    bool hasFrameLayout() const { return runtimeDataType_ != nullptr && !staticSlots_.empty(); }
+    bool hasFrameLayout() const { return runtimeDataType_ != nullptr; }
     bool isMacroGraph() const { return funcType_ != nullptr && funcType_->modifiers().macro(); }
     gc_cnt_t nodeCount() const { return liveNodeCount_; }
     size_t nodeSlotCount() const { return nodesById_.size(); }
