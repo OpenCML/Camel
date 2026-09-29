@@ -113,3 +113,15 @@ assert(Number(found[1]) > 100, `capability list too small: ${found[1]}`)
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "export_import_order"
+desc = "Importing onnx before tensor keeps a single tensor module (one operator registry), so inference still knows shapes."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_import_order.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_import_order.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
