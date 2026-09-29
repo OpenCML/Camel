@@ -159,6 +159,7 @@ add_subdirectory(modules/para)
 add_subdirectory(modules/sim)
 add_subdirectory(modules/tensor)
 add_subdirectory(modules/nn)
+add_subdirectory(modules/autodiff)
 add_subdirectory(modules/onnx)
 
 # CLI and tools: link the libcamel shell (camel-cli lives under tools).

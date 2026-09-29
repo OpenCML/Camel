@@ -46,6 +46,15 @@ using namespace camel::jit;
         currFrame->set(bc.result, res);                                                            \
     } break;
 
+// Comparisons produce a bool slot, whatever the operand type.
+#define DEF_CMP_OP_CASE(CODE, TYPE, OP)                                                            \
+    case OpCode::CODE: {                                                                           \
+        TYPE lhs = currFrame->get<TYPE>(bc.fastop[0]);                                             \
+        TYPE rhs = currFrame->get<TYPE>(bc.fastop[1]);                                             \
+        Bool res = lhs OP rhs;                                                                     \
+        currFrame->set(bc.result, res);                                                            \
+    } break;
+
 #define DEF_BIN_DIV_CASE(CODE, TYPE, ZERO_CHECK)                                                   \
     case OpCode::CODE: {                                                                           \
         TYPE lhs = currFrame->get<TYPE>(bc.fastop[0]);                                             \
@@ -405,35 +414,35 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 DEF_BIN_DIV_CASE(FDIV, Float, 0.0f);
                 DEF_BIN_DIV_CASE(DDIV, Double, 0.0);
 
-                DEF_BIN_OP_CASE(ILT, Int, <);
-                DEF_BIN_OP_CASE(LLT, Long, <);
-                DEF_BIN_OP_CASE(FLT, Float, <);
-                DEF_BIN_OP_CASE(DLT, Double, <);
+                DEF_CMP_OP_CASE(ILT, Int, <);
+                DEF_CMP_OP_CASE(LLT, Long, <);
+                DEF_CMP_OP_CASE(FLT, Float, <);
+                DEF_CMP_OP_CASE(DLT, Double, <);
 
-                DEF_BIN_OP_CASE(IGT, Int, >);
-                DEF_BIN_OP_CASE(LGT, Long, >);
-                DEF_BIN_OP_CASE(FGT, Float, >);
-                DEF_BIN_OP_CASE(DGT, Double, >);
+                DEF_CMP_OP_CASE(IGT, Int, >);
+                DEF_CMP_OP_CASE(LGT, Long, >);
+                DEF_CMP_OP_CASE(FGT, Float, >);
+                DEF_CMP_OP_CASE(DGT, Double, >);
 
-                DEF_BIN_OP_CASE(IEQ, Int, ==);
-                DEF_BIN_OP_CASE(LEQ, Int, ==);
-                DEF_BIN_OP_CASE(FEQ, Float, ==);
-                DEF_BIN_OP_CASE(DEQ, Double, ==);
+                DEF_CMP_OP_CASE(IEQ, Int, ==);
+                DEF_CMP_OP_CASE(LEQ, Long, ==);
+                DEF_CMP_OP_CASE(FEQ, Float, ==);
+                DEF_CMP_OP_CASE(DEQ, Double, ==);
 
-                DEF_BIN_OP_CASE(INE, Int, !=);
-                DEF_BIN_OP_CASE(LNE, Long, !=);
-                DEF_BIN_OP_CASE(FNE, Float, !=);
-                DEF_BIN_OP_CASE(DNE, Double, !=);
+                DEF_CMP_OP_CASE(INE, Int, !=);
+                DEF_CMP_OP_CASE(LNE, Long, !=);
+                DEF_CMP_OP_CASE(FNE, Float, !=);
+                DEF_CMP_OP_CASE(DNE, Double, !=);
 
-                DEF_BIN_OP_CASE(ILE, Int, <=);
-                DEF_BIN_OP_CASE(LLE, Long, <=);
-                DEF_BIN_OP_CASE(FLE, Float, <=);
-                DEF_BIN_OP_CASE(DLE, Double, <=);
+                DEF_CMP_OP_CASE(ILE, Int, <=);
+                DEF_CMP_OP_CASE(LLE, Long, <=);
+                DEF_CMP_OP_CASE(FLE, Float, <=);
+                DEF_CMP_OP_CASE(DLE, Double, <=);
 
-                DEF_BIN_OP_CASE(IGE, Int, >=);
-                DEF_BIN_OP_CASE(LGE, Long, >=);
-                DEF_BIN_OP_CASE(FGE, Float, >=);
-                DEF_BIN_OP_CASE(DGE, Double, >=);
+                DEF_CMP_OP_CASE(IGE, Int, >=);
+                DEF_CMP_OP_CASE(LGE, Long, >=);
+                DEF_CMP_OP_CASE(FGE, Float, >=);
+                DEF_CMP_OP_CASE(DGE, Double, >=);
 
             default: {
                 throwRuntimeFault(RuntimeDiag::UnsupportedBytecode, to_string(bc.opcode));

@@ -33,12 +33,19 @@ void registerTensorOps() {
     std::call_once(once, [] {
         std::vector<OpDef> defs;
         for (auto family :
-             {elementwiseOps, creationOps, layoutOps, reductionOps, linalgOps, utilityOps}) {
+             {elementwiseOps,
+              creationOps,
+              layoutOps,
+              reductionOps,
+              linalgOps,
+              utilityOps,
+              gradientOps}) {
             for (OpDef &def : family()) {
                 defs.push_back(std::move(def));
             }
         }
         OpRegistry::instance().add("tensor", std::move(defs));
+        registerTensorTangentSpace();
     });
 }
 

@@ -940,6 +940,8 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     const GCGraphPayloadShape &payloadShape,
     const std::function<void(GCGraphPayloadArena &)> &emitPayload,
     std::span<const slot_t> staticSlots) {
+    EXEC_WHEN_DEBUG(mm::graphSpace().validateFreeList(
+        std::format("before constructing graph '{}'", debugRecord ? debugRecord->name : "<null>")));
     ASSERT(memory != nullptr, "GCGraph in-place construction requires valid memory.");
     CAMEL_LOG_INFO_S(
         "GCGraphBuild",
@@ -1031,6 +1033,8 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
         ref = graph->nextNodeRef(ref);
     }
     ASSERT(arena.available() == 0, "Graph arena planning did not match graph emission.");
+    EXEC_WHEN_DEBUG(mm::graphSpace().validateFreeList(
+        std::format("constructing graph '{}'", debugRecord ? debugRecord->name : "<null>")));
     CAMEL_LOG_INFO_S(
         "GCGraphBuild",
         "constructInPlace finished: name='{}' graph={}.",
@@ -1087,9 +1091,8 @@ const TupleType *GCGraph::staticDataType() const { return staticDataType_; }
 
 const TupleType *GCGraph::closureType() const { return closureType_; }
 
-bool GCGraph::hasFrameLayout() const {
-    return staticArea_ != nullptr && runtimeDataType() != nullptr;
-}
+// A graph without constants has no static area; its frame layout is the runtime data type.
+bool GCGraph::hasFrameLayout() const { return runtimeDataType() != nullptr; }
 
 size_t GCGraph::frameSize() const {
     ASSERT(hasFrameLayout(), "Runtime graph frame layout is not available.");

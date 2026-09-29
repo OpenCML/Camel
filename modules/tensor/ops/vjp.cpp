@@ -38,8 +38,8 @@ bool isTensorNode(const VjpBuilder &builder, vjp_node_t node) {
 }
 
 bool isFloatNode(const VjpBuilder &builder, vjp_node_t node) {
-    type::Type *t = builder.nodeType(node);
-    return t && t->equals(type::Type::Float64());
+    const type::Type *t = builder.nodeType(node);
+    return t && (t->code() == type::TypeCode::Float64 || t->code() == type::TypeCode::Float32);
 }
 
 void requireVjpInputs(const VjpCall &call, size_t minimum, size_t maximum) {
@@ -56,17 +56,42 @@ addTensorOper(VjpBuilder &builder, std::string_view uri, std::initializer_list<v
         std::span<const vjp_node_t>(inputs.begin(), inputs.size()));
 }
 
-void accumulateMatmulGradients(VjpBuilder &builder, vjp_node_t lhs, vjp_node_t rhs, vjp_node_t dy) {
-    const vjp_node_t rhsT = addTensorOper(builder, "tensor:transpose", {rhs});
-    builder.accumulateGradient(lhs, addTensorOper(builder, "tensor:matmul", {dy, rhsT}));
-    const vjp_node_t lhsT = addTensorOper(builder, "tensor:transpose", {lhs});
-    builder.accumulateGradient(rhs, addTensorOper(builder, "tensor:matmul", {lhsT, dy}));
+vjp_node_t
+addFloatOper(VjpBuilder &builder, std::string_view uri, std::initializer_list<vjp_node_t> inputs) {
+    return builder.addOper(
+        type::Type::Float64(),
+        uri,
+        std::span<const vjp_node_t>(inputs.begin(), inputs.size()));
 }
 
-void accumulateAddendGradient(VjpBuilder &builder, vjp_node_t addend, vjp_node_t dy) {
-    if (isTensorNode(builder, addend) || isFloatNode(builder, addend)) {
-        builder.accumulateGradient(addend, dy);
+vjp_node_t staticInt(VjpBuilder &builder, int64_t value) {
+    return builder.addStatic(camel::core::rtdata::toSlot<int64_t>(value), type::Type::Int64());
+}
+
+vjp_node_t staticBool(VjpBuilder &builder, bool value) {
+    return builder.addStatic(camel::core::rtdata::toSlot<bool>(value), type::Type::Bool());
+}
+
+void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradient) {
+    if (isTensorNode(builder, operand)) {
+        builder.accumulateGradient(
+            operand,
+            addTensorOper(builder, "tensor:sum_to", {gradient, operand}));
+    } else if (isFloatNode(builder, operand)) {
+        const vjp_node_t total = isTensorNode(builder, gradient)
+                                     ? addFloatOper(builder, "tensor:sum", {gradient})
+                                     : gradient;
+        builder.accumulateGradient(operand, total);
     }
+}
+
+void accumulateMatmulGradients(VjpBuilder &builder, vjp_node_t lhs, vjp_node_t rhs, vjp_node_t dy) {
+    builder.accumulateGradient(
+        lhs,
+        addTensorOper(builder, "tensor:matmul_grad_lhs", {dy, lhs, rhs}));
+    builder.accumulateGradient(
+        rhs,
+        addTensorOper(builder, "tensor:matmul_grad_rhs", {dy, lhs, rhs}));
 }
 
 vjp_node_t reluGradient(VjpBuilder &builder, vjp_node_t output, vjp_node_t dy) {

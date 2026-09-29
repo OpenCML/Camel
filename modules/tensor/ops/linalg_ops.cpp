@@ -140,6 +140,17 @@ void matmulVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
+// linear(x, weight, bias?) = x @ weight + bias.
+void linearVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 3);
+    if (auto dy = b.gradientOf(call.output)) {
+        accumulateMatmulGradients(b, call.inputs[0], call.inputs[1], *dy);
+        if (call.inputs.size() > 2) {
+            accumulateOperand(b, call.inputs[2], *dy);
+        }
+    }
+}
+
 /// matmul_add / matmul_add_relu: the composition of the matmul, add (and relu) rules.
 template <bool Relu> void matmulAddVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 3, 3);
@@ -149,7 +160,7 @@ template <bool Relu> void matmulAddVjp(VjpBuilder &b, const VjpCall &call) {
     }
     const vjp_node_t g = Relu ? reluGradient(b, call.output, *dy) : *dy;
     accumulateMatmulGradients(b, call.inputs[0], call.inputs[1], g);
-    accumulateAddendGradient(b, call.inputs[2], g);
+    accumulateOperand(b, call.inputs[2], g);
 }
 
 } // namespace
@@ -199,6 +210,7 @@ std::vector<OpDef> linalgOps() {
         .kernel    = &matmulAddKernel<true>,
         .traits    = {}});
     setVjp(defs, "matmul", &matmulVjp);
+    setVjp(defs, "linear", &linearVjp);
     setVjp(defs, "matmul_add", &matmulAddVjp<false>);
     setVjp(defs, "matmul_add_relu", &matmulAddVjp<true>);
     return defs;

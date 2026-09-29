@@ -19,6 +19,7 @@
 
 #include "globals.h"
 #include "builtin/executors/builtin.h"
+#include "builtin/operators/derivative.h"
 #include "camel/core/context/context.h"
 #include "camel/core/type/resolver.h"
 
@@ -1620,6 +1621,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
 
 GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
     registerBuiltinOperatorTraits();
+    registerBuiltinDerivatives();
     for (const auto &group : getGlobalOperatorGroups()) {
         exportEntity(group->name(), group);
     }

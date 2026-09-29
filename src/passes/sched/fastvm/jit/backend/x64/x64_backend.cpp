@@ -192,6 +192,9 @@ bool X64Backend::compileBytecode(
         return fail("null runtime graph in JIT compilation unit");
     if (!unit.runtimeGraph->hasFrameLayout())
         return fail("incomplete frame layout for graph '" + unit.runtimeGraph->name() + "'");
+    // Graphs without constants are left to the interpreter.
+    if (!unit.runtimeGraph->staticArea())
+        return fail("graph '" + unit.runtimeGraph->name() + "' has no static area");
 
     const Bytecode *base = unit.bytecodes.data();
     size_t pcEnd         = unit.bytecodes.size();

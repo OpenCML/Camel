@@ -27,6 +27,7 @@
 #include "registry.h"
 
 #include "../dtype.h"
+#include "camel/core/derivative.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/resolver.h"
 #include "support.h"
@@ -180,10 +181,14 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
             throw std::logic_error("Operator registered twice: " + uri);
         }
         byUri_.emplace(uri, entries_.size());
-        // Generic graph passes see the definition's semantics through the core registry.
+        // Generic graph passes and autodiff engines see the definition through the core
+        // registries.
         camel::core::OperatorTraitsRegistry::instance().set(
             uri,
             {.pure = def.traits.pure, .elementwise = def.traits.elementwise});
+        if (def.vjp) {
+            camel::core::DerivativeRegistry::instance().setRule(uri, def.vjp);
+        }
         entries_.push_back(Entry{
             std::string(protocol),
             std::move(uri),

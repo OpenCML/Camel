@@ -11,6 +11,7 @@ add_camel_module(
     kernels/conv.cpp
     kernels/cpu.cpp
     kernels/elementwise.cpp
+    kernels/gradient.cpp
     kernels/gemm.cpp
     kernels/gemm_generic.cpp
     kernels/layout.cpp
@@ -20,6 +21,7 @@ add_camel_module(
     ops/catalog.cpp
     ops/creation_ops.cpp
     ops/elementwise_ops.cpp
+    ops/gradient_ops.cpp
     ops/layout_ops.cpp
     ops/linalg_ops.cpp
     ops/op_def.cpp

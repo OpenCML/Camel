@@ -9,8 +9,7 @@ import nn
 func main(): int sync {
     let a = tensor::Tensor::ones([2, 2])
     let b = tensor::new([[1.0, 2.0], [3.0, 4.0]])
-    let p = nn::Parameter::new(tensor::Tensor::zeros([2, 2]))
-    let v = nn::Parameter::value(p)
+    let v = nn::sgd(tensor::Tensor::zeros([2, 2]), tensor::Tensor::ones([2, 2]), 0.5)
 
     let a0 = tensor::shape(a)[0]
     let b1 = tensor::Tensor::shape(b)[1]

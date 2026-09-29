@@ -19,7 +19,7 @@
 
 #include "executor.h"
 #include "../tensor/ops/registry.h"
-#include "operators.h"
+#include "optim.h"
 
 namespace {
 
@@ -33,7 +33,7 @@ class NnExecutor : public Executor {
 } // namespace
 
 executor_ptr_t createNnExecutor(camel::core::context::context_ptr_t ctx) {
-    auto kernels = getNnOpsMap();
+    auto kernels = camel::nn::optimizerKernels();
     kernels.merge(camel::tensor::ops::OpRegistry::instance().kernelMap("nn"));
     return std::make_shared<NnExecutor>(std::move(ctx), std::move(kernels));
 }

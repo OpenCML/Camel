@@ -47,13 +47,15 @@ func forward(x: Tensor) {
 ### 2. Multi-Stage Programming
 
 ```camel
-// Compile-time graph optimization
-inner macro func apply_gradients(g: functor): functor {
-    // inner implemented macro functor that auto
-    // adds the back-propagation part of the given graph
-}
-// usage
-let train = apply_gradients(forward<w, b>..loss)
+import { grad } from autodiff
+import { sgd } from nn
+
+// grad is a macro: std::macro rewrites the loss graph into its gradient graph
+// at compile time, branches and recursion included.
+with <model: Mlp>
+func loss(x: Tensor, y: Tensor): float { ... }
+
+let step = sgd(model, grad(loss)<model>(x, y), 0.01)
 ```
 
 ### 3. Born-async Semantics

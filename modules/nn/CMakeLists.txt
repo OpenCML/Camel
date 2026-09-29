@@ -6,11 +6,9 @@ add_camel_module(
     layers.cpp
     losses.cpp
     module.cpp
-    operators.cpp
-    runtime.cpp
+    optim.cpp
+    state.cpp
     tensor_ops.cpp
-    type.cpp
-    vjp_registry.cpp
   EXTRA_INCLUDES
     ${CMAKE_SOURCE_DIR}/src
   EXTRA_LIBS

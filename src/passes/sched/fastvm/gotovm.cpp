@@ -135,6 +135,16 @@ static thread_local size_t s_jit_save_depth = 0;
         NEXT();                                                                                    \
     }
 
+// Comparisons produce a bool slot, whatever the operand type.
+#define DEF_CMP_OP_LABEL(LABEL, TYPE, OP)                                                          \
+    label_##LABEL : {                                                                              \
+        TYPE lhs = fastFrameGet<TYPE>(currFrame, bc->fastop[0]);                                   \
+        TYPE rhs = fastFrameGet<TYPE>(currFrame, bc->fastop[1]);                                   \
+        Bool res = lhs OP rhs;                                                                     \
+        fastFrameSet(currFrame, bc->result, res);                                                  \
+        NEXT();                                                                                    \
+    }
+
 #define DEF_BIN_DIV_LABEL(LABEL, TYPE, ZERO_CHECK)                                                 \
     label_##LABEL : {                                                                              \
         TYPE lhs = fastFrameGet<TYPE>(currFrame, bc->fastop[0]);                                   \
@@ -739,35 +749,35 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         DEF_BIN_DIV_LABEL(FDIV, Float32, 0.0f);
         DEF_BIN_DIV_LABEL(DDIV, Float64, 0.0);
 
-        DEF_BIN_OP_LABEL(ILT, Int32, <);
-        DEF_BIN_OP_LABEL(LLT, Int64, <);
-        DEF_BIN_OP_LABEL(FLT, Float32, <);
-        DEF_BIN_OP_LABEL(DLT, Float64, <);
+        DEF_CMP_OP_LABEL(ILT, Int32, <);
+        DEF_CMP_OP_LABEL(LLT, Int64, <);
+        DEF_CMP_OP_LABEL(FLT, Float32, <);
+        DEF_CMP_OP_LABEL(DLT, Float64, <);
 
-        DEF_BIN_OP_LABEL(IGT, Int32, >);
-        DEF_BIN_OP_LABEL(LGT, Int64, >);
-        DEF_BIN_OP_LABEL(FGT, Float32, >);
-        DEF_BIN_OP_LABEL(DGT, Float64, >);
+        DEF_CMP_OP_LABEL(IGT, Int32, >);
+        DEF_CMP_OP_LABEL(LGT, Int64, >);
+        DEF_CMP_OP_LABEL(FGT, Float32, >);
+        DEF_CMP_OP_LABEL(DGT, Float64, >);
 
-        DEF_BIN_OP_LABEL(IEQ, Int32, ==);
-        DEF_BIN_OP_LABEL(LEQ, Int32, ==);
-        DEF_BIN_OP_LABEL(FEQ, Float32, ==);
-        DEF_BIN_OP_LABEL(DEQ, Float64, ==);
+        DEF_CMP_OP_LABEL(IEQ, Int32, ==);
+        DEF_CMP_OP_LABEL(LEQ, Int64, ==);
+        DEF_CMP_OP_LABEL(FEQ, Float32, ==);
+        DEF_CMP_OP_LABEL(DEQ, Float64, ==);
 
-        DEF_BIN_OP_LABEL(INE, Int32, !=);
-        DEF_BIN_OP_LABEL(LNE, Int64, !=);
-        DEF_BIN_OP_LABEL(FNE, Float32, !=);
-        DEF_BIN_OP_LABEL(DNE, Float64, !=);
+        DEF_CMP_OP_LABEL(INE, Int32, !=);
+        DEF_CMP_OP_LABEL(LNE, Int64, !=);
+        DEF_CMP_OP_LABEL(FNE, Float32, !=);
+        DEF_CMP_OP_LABEL(DNE, Float64, !=);
 
-        DEF_BIN_OP_LABEL(ILE, Int32, <=);
-        DEF_BIN_OP_LABEL(LLE, Int64, <=);
-        DEF_BIN_OP_LABEL(FLE, Float32, <=);
-        DEF_BIN_OP_LABEL(DLE, Float64, <=);
+        DEF_CMP_OP_LABEL(ILE, Int32, <=);
+        DEF_CMP_OP_LABEL(LLE, Int64, <=);
+        DEF_CMP_OP_LABEL(FLE, Float32, <=);
+        DEF_CMP_OP_LABEL(DLE, Float64, <=);
 
-        DEF_BIN_OP_LABEL(IGE, Int32, >=);
-        DEF_BIN_OP_LABEL(LGE, Int64, >=);
-        DEF_BIN_OP_LABEL(FGE, Float32, >=);
-        DEF_BIN_OP_LABEL(DGE, Float64, >=);
+        DEF_CMP_OP_LABEL(IGE, Int32, >=);
+        DEF_CMP_OP_LABEL(LGE, Int64, >=);
+        DEF_CMP_OP_LABEL(FGE, Float32, >=);
+        DEF_CMP_OP_LABEL(DGE, Float64, >=);
     } catch (const RuntimeFault &fault) {
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
         s_jit_save_depth = jitSaveBase;

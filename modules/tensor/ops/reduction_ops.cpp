@@ -27,9 +27,11 @@
  */
 
 #include "../kernels/reduce.h"
+
 #include "camel/core/type/composite/array.h"
 #include "catalog.h"
 #include "support.h"
+#include <array>
 
 namespace camel::tensor::ops {
 
@@ -152,22 +154,106 @@ slot_t layerNormKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 void sumVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 1, 1);
-    auto dy = b.gradientOf(call.output);
-    if (!dy) {
-        return;
-    }
-    // Broadcast the scalar gradient back to the input's shape.
-    const vjp_node_t in[]  = {call.inputs[0]};
-    const vjp_node_t shape = b.addOper(ArrayType::create(Type::Int64()), "tensor:shape", in);
-    b.accumulateGradient(call.inputs[0], addTensorOper(b, "tensor:full", {shape, *dy}));
-}
-
-void softmaxVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 1, 1);
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:softmax_grad", {call.output, *dy}));
+            addTensorOper(b, "tensor:broadcast_like", {*dy, call.inputs[0]}));
+    }
+}
+
+void meanVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 1);
+    if (auto dy = b.gradientOf(call.output)) {
+        const vjp_node_t x = call.inputs[0];
+        const vjp_node_t count =
+            addFloatOper(b, ":op/ltod", {b.addOper(Type::Int64(), "tensor:numel", std::array{x})});
+        const vjp_node_t share = addFloatOper(b, ":op/div_d", {*dy, count});
+        b.accumulateGradient(x, addTensorOper(b, "tensor:broadcast_like", {share, x}));
+    }
+}
+
+/// dy of a reduction over an axis, re-expanded to the input's shape.
+vjp_node_t expandReduced(VjpBuilder &b, const VjpCall &call, vjp_node_t dy) {
+    const vjp_node_t keepDims = call.inputs.size() > 2 ? call.inputs[2] : staticBool(b, false);
+    return addTensorOper(b, "tensor:expand_axis", {dy, call.inputs[0], call.inputs[1], keepDims});
+}
+
+void sumAxisVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 3);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(call.inputs[0], expandReduced(b, call, *dy));
+    }
+}
+
+void meanAxisVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 3);
+    if (auto dy = b.gradientOf(call.output)) {
+        const vjp_node_t extent = addFloatOper(
+            b,
+            ":op/ltod",
+            {b.addOper(Type::Int64(), "tensor:dim", std::array{call.inputs[0], call.inputs[1]})});
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(b, "tensor:divide", {expandReduced(b, call, *dy), extent}));
+    }
+}
+
+// max / min over an axis: the gradient goes to the elements equal to the extremum.
+void extremumAxisVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 3);
+    if (auto dy = b.gradientOf(call.output)) {
+        const vjp_node_t selected =
+            addTensorOper(b, "tensor:eq", {call.inputs[0], expandReduced(b, call, call.output)});
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(b, "tensor:multiply", {expandReduced(b, call, *dy), selected}));
+    }
+}
+
+void softmaxVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        std::vector<vjp_node_t> inputs{call.output, *dy};
+        if (call.inputs.size() > 1) {
+            inputs.push_back(call.inputs[1]);
+        }
+        b.accumulateGradient(
+            call.inputs[0],
+            b.addOper(vjpTensorType(), "tensor:softmax_grad", inputs));
+    }
+}
+
+// y = log_softmax(x): dx = dy - exp(y) * sum(dy, axis, keepdims).
+void logSoftmaxVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        const vjp_node_t axis = call.inputs.size() > 1 ? call.inputs[1] : staticInt(b, -1);
+        const vjp_node_t total =
+            addTensorOper(b, "tensor:sum_axis", {*dy, axis, staticBool(b, true)});
+        const vjp_node_t probs = addTensorOper(b, "tensor:exp", {call.output});
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(
+                b,
+                "tensor:subtract",
+                {*dy, addTensorOper(b, "tensor:multiply", {probs, total})}));
+    }
+}
+
+// layer_norm(x, gamma, beta, eps?)
+void layerNormVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 3, 4);
+    if (auto dy = b.gradientOf(call.output)) {
+        const vjp_node_t x = call.inputs[0], gamma = call.inputs[1];
+        for (int64_t which = 0; which < 3; ++which) {
+            std::vector<vjp_node_t> inputs{x, gamma, *dy, staticInt(b, which)};
+            if (call.inputs.size() > 3) {
+                inputs.push_back(call.inputs[3]);
+            }
+            b.accumulateGradient(
+                call.inputs[static_cast<size_t>(which)],
+                b.addOper(vjpTensorType(), "tensor:layer_norm_grad", inputs));
+        }
     }
 }
 
@@ -235,7 +321,15 @@ std::vector<OpDef> reductionOps() {
         .kernel    = &layerNormKernel,
         .traits    = {}});
     setVjp(defs, "sum", &sumVjp);
+    setVjp(defs, "mean", &meanVjp);
+    setVjp(defs, "sum_axis", &sumAxisVjp);
+    setVjp(defs, "mean_axis", &meanAxisVjp);
+    setVjp(defs, "max_axis", &extremumAxisVjp);
+    setVjp(defs, "min_axis", &extremumAxisVjp);
+    setVjp(defs, "argmax_axis", &camel::core::noGradient);
     setVjp(defs, "softmax", &softmaxVjp);
+    setVjp(defs, "log_softmax", &logSoftmaxVjp);
+    setVjp(defs, "layer_norm", &layerNormVjp);
     return defs;
 }
 
