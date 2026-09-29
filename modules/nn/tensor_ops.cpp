@@ -268,6 +268,65 @@ std::vector<ParamSpec> poolParams(bool withDy) {
     return params;
 }
 
+// ---------------------------------------------------------------- VJP rules
+
+void softmaxCrossEntropyVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(
+                b,
+                "nn:softmax_cross_entropy_grad",
+                {call.inputs[0], call.inputs[1], *dy}));
+    }
+}
+
+void embeddingVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(b, "nn:embedding_table_grad", {call.inputs[0], call.inputs[1], *dy}));
+    }
+}
+
+/// conv2d(input, kernel, bias, stride?, padding?): stride and padding are forwarded unchanged to
+/// the gradient operators.
+void conv2dVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 3, 5);
+    auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    std::vector<vjp_node_t> gradInputs{call.inputs[0], call.inputs[1], *dy};
+    gradInputs.insert(gradInputs.end(), call.inputs.begin() + 3, call.inputs.end());
+    b.accumulateGradient(
+        call.inputs[0],
+        b.addOper(vjpTensorType(), "nn:conv2d_input_grad", gradInputs));
+    b.accumulateGradient(
+        call.inputs[1],
+        b.addOper(vjpTensorType(), "nn:conv2d_kernel_grad", gradInputs));
+    b.accumulateGradient(
+        call.inputs[2],
+        addTensorOper(b, "nn:conv2d_bias_grad", {call.inputs[2], *dy}));
+}
+
+constexpr char kMaxPoolGradUri[] = "nn:max_pool2d_grad";
+constexpr char kAvgPoolGradUri[] = "nn:avg_pool2d_grad";
+
+/// pool2d(input, kernel, stride?, padding?) -> pool2d_grad(input, dy, kernel, stride?, padding?)
+template <const char *GradUri> void pool2dVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 4);
+    auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    std::vector<vjp_node_t> gradInputs{call.inputs[0], *dy};
+    gradInputs.insert(gradInputs.end(), call.inputs.begin() + 1, call.inputs.end());
+    b.accumulateGradient(call.inputs[0], b.addOper(vjpTensorType(), GradUri, gradInputs));
+}
+
 std::vector<OpDef> nnTensorOps() {
     std::vector<OpDef> defs;
     defs.push_back(OpDef{
@@ -386,6 +445,11 @@ std::vector<OpDef> nnTensorOps() {
         .infer     = shapedLike(0),
         .kernel    = &softmaxCrossEntropyGradKernel,
         .traits    = kPure});
+    setVjp(defs, "conv2d", &conv2dVjp);
+    setVjp(defs, "max_pool2d", &pool2dVjp<kMaxPoolGradUri>);
+    setVjp(defs, "avg_pool2d", &pool2dVjp<kAvgPoolGradUri>);
+    setVjp(defs, "embedding", &embeddingVjp);
+    setVjp(defs, "softmax_cross_entropy", &softmaxCrossEntropyVjp);
     return defs;
 }
 

@@ -259,6 +259,26 @@ std::optional<Type *> sliceInfer(const InferContext &ctx) {
     return tensorOf(in);
 }
 
+// ---------------------------------------------------------------- VJP rules
+
+void transposeVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 1);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(call.inputs[0], addTensorOper(b, "tensor:transpose", {*dy}));
+    }
+}
+
+void reshapeVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    const vjp_node_t in[]  = {call.inputs[0]};
+    const vjp_node_t shape = b.addOper(ArrayType::create(Type::Int64()), "tensor:shape", in);
+    b.accumulateGradient(call.inputs[0], addTensorOper(b, "tensor:reshape", {*dy, shape}));
+}
+
 } // namespace
 
 std::vector<OpDef> layoutOps() {
@@ -333,6 +353,8 @@ std::vector<OpDef> layoutOps() {
         .infer     = sliceInfer,
         .kernel    = &sliceKernel,
         .traits    = {}});
+    setVjp(defs, "transpose", &transposeVjp);
+    setVjp(defs, "reshape", &reshapeVjp);
     return defs;
 }
 

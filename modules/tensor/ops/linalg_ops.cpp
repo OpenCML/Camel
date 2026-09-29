@@ -133,6 +133,25 @@ std::optional<Type *> matmulAddInfer(const InferContext &ctx) {
         broadcast(matmulStaticShape(x.shape, w.shape), b.shape));
 }
 
+void matmulVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        accumulateMatmulGradients(b, call.inputs[0], call.inputs[1], *dy);
+    }
+}
+
+/// matmul_add / matmul_add_relu: the composition of the matmul, add (and relu) rules.
+template <bool Relu> void matmulAddVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 3, 3);
+    auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    const vjp_node_t g = Relu ? reluGradient(b, call.output, *dy) : *dy;
+    accumulateMatmulGradients(b, call.inputs[0], call.inputs[1], g);
+    accumulateAddendGradient(b, call.inputs[2], g);
+}
+
 } // namespace
 
 std::vector<OpDef> linalgOps() {
@@ -179,6 +198,9 @@ std::vector<OpDef> linalgOps() {
         .infer     = matmulAddInfer,
         .kernel    = &matmulAddKernel<true>,
         .traits    = {}});
+    setVjp(defs, "matmul", &matmulVjp);
+    setVjp(defs, "matmul_add", &matmulAddVjp<false>);
+    setVjp(defs, "matmul_add_relu", &matmulAddVjp<true>);
     return defs;
 }
 

@@ -202,6 +202,120 @@ std::optional<Type *> castInfer(const InferContext &ctx) {
     return tensorOf(dtype, ctx.facts(0).shape);
 }
 
+// ---------------------------------------------------------------- VJP rules
+
+void addVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        accumulateAddendGradient(b, call.inputs[0], *dy);
+        accumulateAddendGradient(b, call.inputs[1], *dy);
+    }
+}
+
+void subtractVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    const vjp_node_t lhs = call.inputs[0], rhs = call.inputs[1];
+    if (isTensorNode(b, lhs) || isFloatNode(b, lhs)) {
+        b.accumulateGradient(lhs, *dy);
+    }
+    if (isTensorNode(b, rhs)) {
+        b.accumulateGradient(
+            rhs,
+            addTensorOper(b, "tensor:multiply", {b.addStaticFloat(-1.0), *dy}));
+    } else if (isFloatNode(b, rhs)) {
+        const vjp_node_t in[] = {b.addStaticFloat(0.0), *dy};
+        b.accumulateGradient(rhs, b.addOper(type::Type::Float64(), ":op/sub_d", in));
+    }
+}
+
+void multiplyVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    const vjp_node_t lhs = call.inputs[0], rhs = call.inputs[1];
+    if (isTensorNode(b, lhs)) {
+        b.accumulateGradient(lhs, addTensorOper(b, "tensor:multiply", {*dy, rhs}));
+    }
+    if (isTensorNode(b, rhs)) {
+        b.accumulateGradient(rhs, addTensorOper(b, "tensor:multiply", {*dy, lhs}));
+    }
+}
+
+void divideVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    const vjp_node_t lhs = call.inputs[0], rhs = call.inputs[1];
+    if (isTensorNode(b, lhs)) {
+        b.accumulateGradient(lhs, addTensorOper(b, "tensor:divide", {*dy, rhs}));
+    }
+    if (isTensorNode(b, rhs)) {
+        // d(lhs / rhs)/d rhs = -dy * lhs / rhs^2
+        const vjp_node_t negDy = addTensorOper(b, "tensor:subtract", {b.addStaticFloat(0.0), *dy});
+        const vjp_node_t rhsSquared = addTensorOper(b, "tensor:multiply", {rhs, rhs});
+        const vjp_node_t numerator  = addTensorOper(b, "tensor:multiply", {negDy, lhs});
+        b.accumulateGradient(rhs, addTensorOper(b, "tensor:divide", {numerator, rhsSquared}));
+    }
+}
+
+void reluVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 1);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(call.inputs[0], reluGradient(b, call.output, *dy));
+    }
+}
+
+void expVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 1);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(b, "tensor:multiply", {*dy, call.output}));
+    }
+}
+
+void logVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 1);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(b, "tensor:divide", {*dy, call.inputs[0]}));
+    }
+}
+
+void sigmoidVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 1);
+    auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    // dy * y * (1 - y)
+    const vjp_node_t oneMinusY =
+        addTensorOper(b, "tensor:subtract", {b.addStaticFloat(1.0), call.output});
+    const vjp_node_t slope = addTensorOper(b, "tensor:multiply", {call.output, oneMinusY});
+    b.accumulateGradient(call.inputs[0], addTensorOper(b, "tensor:multiply", {*dy, slope}));
+}
+
+void tanhVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 1);
+    auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    // dy * (1 - y^2)
+    const vjp_node_t ySquared = addTensorOper(b, "tensor:multiply", {call.output, call.output});
+    const vjp_node_t slope = addTensorOper(b, "tensor:subtract", {b.addStaticFloat(1.0), ySquared});
+    b.accumulateGradient(call.inputs[0], addTensorOper(b, "tensor:multiply", {*dy, slope}));
+}
+
 } // namespace
 
 std::vector<OpDef> elementwiseOps() {
@@ -254,6 +368,15 @@ std::vector<OpDef> elementwiseOps() {
         .kernel    = &castKernel,
         .traits    = elementwiseTraits(),
     });
+    setVjp(defs, "add", &addVjp);
+    setVjp(defs, "subtract", &subtractVjp);
+    setVjp(defs, "multiply", &multiplyVjp);
+    setVjp(defs, "divide", &divideVjp);
+    setVjp(defs, "relu", &reluVjp);
+    setVjp(defs, "exp", &expVjp);
+    setVjp(defs, "log", &logVjp);
+    setVjp(defs, "sigmoid", &sigmoidVjp);
+    setVjp(defs, "tanh", &tanhVjp);
     return defs;
 }
 

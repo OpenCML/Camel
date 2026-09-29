@@ -27,6 +27,7 @@
  */
 
 #include "../kernels/reduce.h"
+#include "camel/core/type/composite/array.h"
 #include "catalog.h"
 #include "support.h"
 
@@ -147,6 +148,29 @@ slot_t layerNormKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
+// ---------------------------------------------------------------- VJP rules
+
+void sumVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 1);
+    auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    // Broadcast the scalar gradient back to the input's shape.
+    const vjp_node_t in[]  = {call.inputs[0]};
+    const vjp_node_t shape = b.addOper(ArrayType::create(Type::Int64()), "tensor:shape", in);
+    b.accumulateGradient(call.inputs[0], addTensorOper(b, "tensor:full", {shape, *dy}));
+}
+
+void softmaxVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 1);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(b, "tensor:softmax_grad", {call.output, *dy}));
+    }
+}
+
 } // namespace
 
 std::vector<OpDef> reductionOps() {
@@ -210,6 +234,8 @@ std::vector<OpDef> reductionOps() {
         .infer     = floatLikeFirst,
         .kernel    = &layerNormKernel,
         .traits    = {}});
+    setVjp(defs, "sum", &sumVjp);
+    setVjp(defs, "softmax", &softmaxVjp);
     return defs;
 }
 
