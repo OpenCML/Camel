@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
+#include <format>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -63,6 +64,7 @@ class FreeListAllocator : public IAllocator {
 
         FreeBlock **prevPtr = &freeList_;
         FreeBlock *curr     = freeList_;
+        EXEC_WHEN_DEBUG(validateFreeListUnlocked(std::format("an allocation of {} bytes", size)));
 
         while (curr) {
             ASSERT(curr->size >= sizeof(FreeBlock), "Corrupted free block");
@@ -75,7 +77,10 @@ class FreeListAllocator : public IAllocator {
                     }
                 });
                 std::byte *blockStart = reinterpret_cast<std::byte *>(curr);
-                size_t remaining      = curr->size - total_size;
+                // The header is written over the free block: read its fields first.
+                FreeBlock *const next  = curr->next;
+                const size_t blockSize = curr->size;
+                size_t remaining       = blockSize - total_size;
 
                 if (LIKELY(remaining >= sizeof(FreeBlock))) {
                     // Split the block.
@@ -83,16 +88,16 @@ class FreeListAllocator : public IAllocator {
 
                     FreeBlock *newBlock = reinterpret_cast<FreeBlock *>(blockStart + total_size);
                     newBlock->size      = remaining;
-                    newBlock->next      = curr->next;
+                    newBlock->next      = next;
 
                     *prevPtr = newBlock;
                 } else {
                     // Allocate the whole block.
-                    installHeader(blockStart, curr->size);
-                    *prevPtr = curr->next;
+                    installHeader(blockStart, blockSize);
+                    *prevPtr = next;
                 }
                 void *payloadPtr = blockStart + sizeof(ObjectHeader);
-                size_t allocSize = (remaining >= sizeof(FreeBlock)) ? total_size : curr->size;
+                size_t allocSize = (remaining >= sizeof(FreeBlock)) ? total_size : blockSize;
                 allocatedSizes_[payloadPtr] = allocSize;
                 EXEC_WHEN_DEBUG({
                     if (debugRegion_) {
@@ -108,6 +113,22 @@ class FreeListAllocator : public IAllocator {
         }
 
         return nullptr;
+    }
+
+    /// Checks that every free block lies inside the arena; a violation means some allocation was
+    /// written past its end.
+    void validateFreeList(std::string_view context) const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        validateFreeListUnlocked(context);
+    }
+
+    void validateFreeListUnlocked(std::string_view context) const {
+        for (FreeBlock *fb = freeList_; fb != nullptr; fb = fb->next) {
+            const auto *addr = reinterpret_cast<const std::byte *>(fb);
+            if (addr < start_ || addr >= end_ || addr + fb->size > end_) {
+                ASSERT(false, std::format("Free list corrupted after {}.", context));
+            }
+        }
     }
 
     void free(void *ptr) override {
