@@ -22,13 +22,16 @@
  *
  * The registry maps primitive operator URIs or function graph names to their
  * vector-Jacobian-product rule. Builtin rules emit backward graph fragments
- * directly. Decorator-registered user rules are recorded as graph metadata so
- * helper graphs can
- * still carry explicit custom backward rules when needed.
+ * directly. Tensor and nn operators are not listed here: their rules live in
+ * their OpDef (tensor/ops/vjp.h), which applyVjpRule consults when the
+ * registry has no entry. Decorator-registered user rules are recorded as
+ * graph metadata so helper graphs can still carry explicit custom backward
+ * rules when needed.
  */
 
 #pragma once
 
+#include "../tensor/ops/vjp.h"
 #include "camel/runtime/graph.h"
 
 #include <optional>
@@ -61,23 +64,24 @@ struct VjpPrimitiveCall {
     camel::runtime::gc_node_ref_t output = camel::runtime::kInvalidNodeRef;
 };
 
-class VjpBuildContext {
+/// The autodiff engine's graph builder; operator rules see it through tensor::ops::VjpBuilder.
+class VjpBuildContext final : public camel::tensor::ops::VjpBuilder {
   public:
     explicit VjpBuildContext(camel::runtime::GraphDraft &draft);
 
     camel::runtime::GraphDraft &draft() { return draft_; }
-    camel::core::type::Type *nodeType(camel::runtime::gc_node_ref_t node) const;
+    camel::core::type::Type *nodeType(camel::runtime::gc_node_ref_t node) const override;
 
-    camel::runtime::gc_node_ref_t addStaticFloat(double value);
+    camel::runtime::gc_node_ref_t addStaticFloat(double value) override;
     camel::runtime::gc_node_ref_t addOper(
         camel::core::type::Type *type, std::string_view uri,
-        std::span<const camel::runtime::gc_node_ref_t> normInputs);
+        std::span<const camel::runtime::gc_node_ref_t> normInputs) override;
 
     void seedGradient(camel::runtime::gc_node_ref_t primal, camel::runtime::gc_node_ref_t gradient);
     void accumulateGradient(
-        camel::runtime::gc_node_ref_t primal, camel::runtime::gc_node_ref_t gradient);
+        camel::runtime::gc_node_ref_t primal, camel::runtime::gc_node_ref_t gradient) override;
     std::optional<camel::runtime::gc_node_ref_t>
-    gradientOf(camel::runtime::gc_node_ref_t primal) const;
+    gradientOf(camel::runtime::gc_node_ref_t primal) const override;
 
     void accumulateParameterGradient(
         camel::runtime::gc_node_ref_t parameter, camel::runtime::gc_node_ref_t gradient);

@@ -206,3 +206,21 @@ assert(count('tensor:relu') === 0, 'the relu must be fused')
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "static_shape_error"
+desc = "Shapes known from literals make an incompatible matmul a compile-time ArgumentsRejected error naming the conflict."
+kind = "behavior"
+case = "../../../cases/modules/tensor/static_shape_error.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes("Invalid call to 'matmul' with argument types <> (Tensor<float32, [2, 3]>, Tensor<float32, [4, 5]>): matmul inner dimensions differ: 3 vs 4."), 'missing compile-time conflict detail')
+assert(text.includes('SemanticDiag::ArgumentsRejected'), 'expected a semantic (compile-time) diagnostic')
+assert(!text.includes('unreachable'), 'nothing may run')
+}
+"""
+timeout_ms = 4000

@@ -37,35 +37,74 @@ class Config:
     models: Optional[tuple] = None  # None -> applies to every model
     exporter: Optional[str] = None  # ONNX producer consumed by an ORT config
     camel_passes: tuple = ()  # passes appended to `camel <model.cml>`
+    display: str = ""  # short label for reports/figures (defaults to ``name``)
+    group: str = ""  # report grouping (defaults to the framework's GROUPS label)
+
+    @property
+    def label(self) -> str:
+        return self.display or self.name
+
+    @property
+    def group_label(self) -> str:
+        return self.group or GROUPS.get(self.framework, self.framework)
+
+
+# Report groups, in display order. ORT configs share one group so the three ONNX
+# producers are compared against each other on the same runtime.
+GROUPS: Dict[str, str] = {"torch": "PyTorch", "tf": "TensorFlow", "ort": "ONNX Runtime", "camel": "Camel"}
+GROUP_ORDER = list(GROUPS.values())
+
+# Report labels of the ONNX exporters (export stage), keyed by ``Config.exporter``.
+EXPORTERS: Dict[str, str] = {
+    "torch": "torch.onnx.export",
+    "tf": "tf2onnx",
+    "camel": "Camel onnx.export_model",
+}
 
 
 CONFIGS: Dict[str, Config] = {
     c.name: c
     for c in (
-        Config("torch_eager", "torch", "PyTorch eager, inference_mode"),
-        Config("torch_compile", "torch", "torch.compile (inductor, default mode)"),
-        Config("torch_onnx_ort", "ort", "torch.onnx.export opset 17 -> ONNX Runtime", exporter="torch"),
-        Config("torch_nn_gru", "torch", "library-kernel reference: torch.nn.GRU, same weights", models=("gru",)),
-        Config("tf_eager", "tf", "TensorFlow eager"),
-        Config("tf_function", "tf", "tf.function (graph mode)"),
-        Config("tf_xla", "tf", "tf.function(jit_compile=True)"),
-        Config("tf_onnx_ort", "ort", "tf2onnx opset 17 -> ONNX Runtime", exporter="tf"),
-        Config("camel_native", "camel", "camel <model.cml> (default std::nvm)"),
-        Config("camel_fvm", "camel", "camel <model.cml> std::fvm", camel_passes=("std::fvm",)),
-        Config("camel_jit", "camel", "camel <model.cml> std::jit", camel_passes=("std::jit",)),
+        Config("torch_eager", "torch", "PyTorch eager, inference_mode", display="PyTorch eager"),
+        Config("torch_compile", "torch", "torch.compile (inductor, default mode)", display="torch.compile"),
+        Config(
+            "torch_onnx_ort",
+            "ort",
+            "torch.onnx.export opset 17 -> ONNX Runtime",
+            exporter="torch",
+            display="ORT (torch.onnx)",
+        ),
+        Config(
+            "torch_nn_gru",
+            "torch",
+            "library-kernel reference: torch.nn.GRU, same weights",
+            models=("gru",),
+            display="torch.nn.GRU",
+        ),
+        Config("tf_eager", "tf", "TensorFlow eager", display="TF eager"),
+        Config("tf_function", "tf", "tf.function (graph mode)", display="tf.function"),
+        Config("tf_xla", "tf", "tf.function(jit_compile=True)", display="TF XLA"),
+        Config("tf_onnx_ort", "ort", "tf2onnx opset 17 -> ONNX Runtime", exporter="tf", display="ORT (tf2onnx)"),
+        Config("camel_native", "camel", "camel <model.cml> (default std::nvm)", display="Camel nvm"),
+        Config("camel_fvm", "camel", "camel <model.cml> std::fvm", camel_passes=("std::fvm",), display="Camel fvm"),
+        Config("camel_jit", "camel", "camel <model.cml> std::jit", camel_passes=("std::jit",), display="Camel jit"),
         Config(
             "camel_opt",
             "camel",
             "camel <model.cml> tensor::fuse (graph optimization, then std::nvm)",
             camel_passes=("tensor::fuse",),
+            display="Camel fuse+nvm",
         ),
         Config(
             "camel_opt_fvm",
             "camel",
             "camel <model.cml> tensor::fuse std::fvm",
             camel_passes=("tensor::fuse", "std::fvm"),
+            display="Camel fuse+fvm",
         ),
-        Config("camel_onnx_ort", "ort", "Camel ONNX export -> ONNX Runtime", exporter="camel"),
+        Config(
+            "camel_onnx_ort", "ort", "Camel ONNX export -> ONNX Runtime", exporter="camel", display="ORT (Camel ONNX)"
+        ),
     )
 }
 

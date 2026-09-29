@@ -12,14 +12,16 @@ drives implementations, checks agreement, and records measurements.
 
 ```
 benchmarks/
-  run.py                    benchmark driver (CSV output)
+  run.py                    benchmark driver (CSV output; --trials N for repeated trials)
+  report.py                 paper tables (Markdown, LaTeX) and SVG figures from summary CSVs
   requirements.txt          reference-side Python dependencies
   common/
     models.py               model registry: seeds, shapes, weight names (source of truth)
     weights.py              deterministic weight/input generation + loader
     reference_numpy.py      NumPy float64 reference forward for every model
     check.py                numerical agreement check of all configs
-    configs.py              configuration registry, skip rules, ONNX export, ORT runner
+    configs.py              configuration registry (display names, report groups), skip rules, ONNX export, ORT runner
+    stats.py                median, bootstrap CI, ratio CI, per-trial summaries (`--self-test`)
     worker.py               measures one (model, config) in a fresh process
     export.py               exports one model to ONNX in a fresh process
     camel.py                plug-in driver for native Camel configs
@@ -211,6 +213,82 @@ cd benchmarks
 On Windows, use `.venv\Scripts\python.exe`. `run.py --help` lists all options
 (`--configs`, `--interop`, `--timeout`, `--no-export`). The default config list
 is every config above except `camel_fvm` and `camel_jit`.
+
+## Repeated trials
+
+A single run is one sample per config, so slow drift in machine load (other
+processes, thermal state) can bias whichever config happened to run during a
+busy period. For publishable numbers use `--trials N` (N > 1):
+
+```bash
+cd benchmarks
+.venv/bin/python run.py --models mlp,lenet,gru,transformer --threads 4 \
+    --warmup 10 --reps 50 --trials 10 --seed 0 --baseline torch_eager \
+    --out results/paper.csv
+```
+
+- The export stage runs **once per model**, as in a single run.
+- Then N rounds per model: each round measures every applicable config once
+  (same fresh-process worker / Camel driver, same `--warmup` / `--reps`), in a
+  round-robin order that is **shuffled per round** with `random.Random(--seed)`.
+- A failed or skipped trial never aborts the others; it is recorded and counted.
+- `--trials 1` (the default) keeps the single-run behavior and CSV format unchanged.
+
+Outputs:
+
+- `results/paper.csv`: the raw rows, the single-run columns plus `trial` (1..N)
+  after `config`.
+- `results/paper_summary.csv`: one row per (model, config), computed by
+  `common/stats.py`:
+
+| column | definition |
+|---|---|
+| `status` | `ok` (all trials ok), `partial` (some trials failed/skipped), `failed`, `skipped` |
+| `trials`, `failures` | number of ok trials; number of failed trials |
+| `median_ms` | median of the per-trial `latency_median_ms` |
+| `ci_low_ms`, `ci_high_ms` | 95% percentile-bootstrap CI of that median (resampling trial medians, `--resamples` default 2000, seeded) |
+| `min_ms`, `max_ms` | smallest / largest trial median |
+| `peak_rss_mb` | mean peak RSS over ok trials |
+| `export_s` | export time of the config's ONNX producer (measured once) |
+| `agree` | `yes` if every ok trial agreed with the reference, `NO` if any disagreed |
+| `baseline`, `speedup` | `--baseline` config; baseline `median_ms` / this `median_ms` (> 1 = faster) |
+| `speedup_ci_low`, `speedup_ci_high` | bootstrap 95% CI of the speedup, resampling rounds jointly (paired) when both configs succeeded in the same rounds, independently otherwise |
+| `notes` | failure count (`k/N trials not ok`) and the distinct failure reasons |
+
+With few trials the bootstrap CI cannot extend beyond the observed range of
+trial medians (with 3 trials it is essentially min..max); use 10 or more trials
+for reported intervals. `python common/stats.py --self-test` checks the estimators.
+
+## Report
+
+`report.py` turns one or more summary CSVs into paper-ready tables and figures.
+Later inputs override earlier ones for the same (model, config), so a partial
+re-run can be layered over a full run. A plain single-run CSV is also accepted
+(one trial per config, no CI).
+
+```bash
+cd benchmarks
+.venv/bin/python report.py results/paper_summary.csv --out results/report
+.venv/bin/python report.py results/paper_summary.csv results/rerun_gru_summary.csv   # layered
+```
+
+Outputs in `--out` (default `results/report/`):
+
+| file | content |
+|---|---|
+| `latency.md` | rows = configs grouped by framework, columns = models, cell = `median [CI low–high]` ms, best per model in bold, `†` = some trials failed |
+| `latency.tex` | the same table as a LaTeX `booktabs` table (`\usepackage{booktabs}`) |
+| `memory.md` | mean peak RSS (MB), lowest per model in bold |
+| `export.md` | ONNX export time (s) for the torch, tf and Camel exporters (`—` when the export was skipped, e.g. `--no-export`) |
+| `latency.svg` | grouped bars per model, log-scale ms, 95% CI whiskers |
+| `speedup.svg` | speedup vs the summary's baseline, log scale, bars grow from the 1x line, CI whiskers |
+| `latency.png`, `speedup.png` | only if matplotlib is installed (it is not in `requirements.txt`) |
+
+The SVGs are written directly (no plotting library). Display names and groups
+(PyTorch, TensorFlow, ONNX Runtime, Camel) come from `Config.display` /
+`Config.group_label` in `common/configs.py`; each group has one hue from a
+colorblind-safe categorical palette and its configs are shades of that hue, keyed
+by registry order so a config keeps its color across reports.
 
 ## Thread pinning
 

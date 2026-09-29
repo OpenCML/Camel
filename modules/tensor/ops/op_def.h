@@ -39,6 +39,7 @@
 
 #include "../type.h"
 #include "camel/core/operator.h"
+#include "vjp.h"
 
 #include <functional>
 #include <optional>
@@ -121,6 +122,7 @@ struct OpDef {
     InferFn infer;
     operator_t kernel;
     OpTraits traits;
+    VjpFn vjp = nullptr; // reverse-mode rule; nullptr when the operator is not differentiable
 
     /// Human-readable signature, e.g. "(lhs: Tensor | number, rhs: Tensor | number) => Tensor".
     std::string signature() const;

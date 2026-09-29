@@ -21,7 +21,7 @@
  * OpRegistry: storage of OpDefs and derivation of operator groups and kernel
  * maps. The resolver built for each OpDef performs the generic part of
  * overload matching (arity and parameter kinds) and then defers to the
- * OpDef's inference function.
+ * OpDef's inference function, passing the values of constant arguments.
  */
 
 #include "registry.h"
@@ -29,6 +29,7 @@
 #include "../dtype.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/resolver.h"
+#include "support.h"
 
 #include <stdexcept>
 
@@ -76,34 +77,93 @@ bool matchesKind(ParamKind kind, Type *type) {
     return false;
 }
 
-resolver_ptr_t makeResolver(std::shared_ptr<const OpDef> def) {
-    return DynamicFuncTypeResolver::create(
-        {{0, {}}, {-1, {}}},
-        def->signature(),
-        [def](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-            -> std::optional<Type *> {
-            if (!with.empty() || norm.size() > def->params.size()) {
-                return std::nullopt;
+/// True when the argument count and every argument's kind fit the definition's parameters.
+bool argumentsFit(const OpDef &def, const type_vec_t &with, const type_vec_t &norm) {
+    if (!with.empty() || norm.size() > def.params.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < def.params.size(); ++i) {
+        if (i >= norm.size()) {
+            if (!def.params[i].optional) {
+                return false;
             }
-            for (size_t i = 0; i < def->params.size(); ++i) {
-                if (i >= norm.size()) {
-                    if (!def->params[i].optional) {
-                        return std::nullopt;
-                    }
-                    continue;
-                }
-                if (!matchesKind(def->params[i].kind, norm[i])) {
-                    return std::nullopt;
-                }
-            }
-            try {
-                return def->infer(InferContext(norm));
-            } catch (const std::invalid_argument &) {
-                // Known shapes conflict: the overload does not apply to these arguments.
-                return std::nullopt;
-            }
-        });
+            continue;
+        }
+        if (!matchesKind(def.params[i].kind, norm[i])) {
+            return false;
+        }
+    }
+    return true;
 }
+
+/**
+ * Overload resolution for one OpDef: arity and parameter kinds are matched generically, then
+ * the definition's inference computes the result type. Constant argument values (shape
+ * literals, axes) are passed to inference, so results such as zeros([2, 3]) get a static shape.
+ */
+class OpDefResolver final : public FuncTypeResolver {
+  public:
+    explicit OpDefResolver(std::shared_ptr<const OpDef> def)
+        : def_(std::move(def)), signature_(def_->signature()) {}
+
+    std::optional<FunctionType *> resolve(
+        const type_vec_t &with, const type_vec_t &norm,
+        const ModifierSet &modifiers) const override {
+        return resolveWith(with, norm, {}, modifiers);
+    }
+
+    std::optional<FunctionType *> resolveWith(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &modifiers) const override {
+        if (!argumentsFit(*def_, with, norm)) {
+            return std::nullopt;
+        }
+        std::optional<Type *> result;
+        try {
+            result = infer(norm, normStatics);
+        } catch (const std::invalid_argument &) {
+            return std::nullopt; // statically known shapes or dtypes conflict (see explain)
+        }
+        if (!result) {
+            return std::nullopt;
+        }
+        param_vec_t normParams;
+        for (Type *t : norm) {
+            normParams.emplace_back(t, false);
+        }
+        return FunctionType::create(param_vec_t{}, std::move(normParams), *result, modifiers);
+    }
+
+    std::optional<std::string> explainRejection(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &) const override {
+        if (!argumentsFit(*def_, with, norm)) {
+            return std::nullopt;
+        }
+        try {
+            (void)infer(norm, normStatics);
+        } catch (const std::invalid_argument &e) {
+            return std::string(e.what());
+        }
+        return std::nullopt;
+    }
+
+    std::string signature() const override { return signature_; }
+
+  private:
+    std::optional<Type *> infer(const type_vec_t &norm, static_args_t normStatics) const {
+        std::vector<std::optional<ConstArg>> constants(norm.size());
+        for (size_t i = 0; i < norm.size() && i < normStatics.size(); ++i) {
+            if (normStatics[i]) {
+                constants[i] = constArgOf(*normStatics[i], norm[i]);
+            }
+        }
+        return def_->infer(InferContext(norm, constants));
+    }
+
+    std::shared_ptr<const OpDef> def_;
+    std::string signature_;
+};
 
 } // namespace
 
@@ -152,7 +212,7 @@ std::vector<oper_group_ptr_t> OpRegistry::operatorGroups(std::string_view protoc
             if (inserted) {
                 order.push_back(key);
             }
-            it->second.emplace_back(entry.uri, makeResolver(entry.def));
+            it->second.emplace_back(entry.uri, std::make_shared<OpDefResolver>(entry.def));
         }
     }
     std::vector<oper_group_ptr_t> groups;
