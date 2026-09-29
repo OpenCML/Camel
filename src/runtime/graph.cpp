@@ -658,6 +658,20 @@ void emitDraftPayload(
         return slice;
     };
 
+    // A GATE forwards its (last) norm input: FastVM reads the producer, NodeVM reads the gate's
+    // slot, so the slot must be the input's. Rewrites that rebind a gate's input (inlining binds
+    // parameter gates to the caller's arguments) leave a stale slot, so it is derived here.
+    const auto slotOf = [&](gc_node_ref_t id) {
+        for (size_t hops = 0; hops < plan.nodes.size() + 1; ++hops) {
+            const DraftNodeHeader *h = draft.header(id);
+            if (!h || h->kind != GCNodeKind::Gate || draft.normInputsOf(id).empty()) {
+                return h ? h->dataIndex : static_cast<gc_slot_idx_t>(0);
+            }
+            id = draft.normInputsOf(id).back();
+        }
+        return static_cast<gc_slot_idx_t>(0);
+    };
+
     for (const PlannedDraftNode &planned : plan.nodes) {
         const DraftNodeHeader *draftHeader = draft.header(planned.draftId);
         ASSERT(draftHeader != nullptr, "Draft payload emission requires a non-null node header.");
@@ -671,7 +685,7 @@ void emitDraftPayload(
         auto *header =
             reinterpret_cast<GCNode *>(mutableNodeStorage(payload.nodeBlocks, planned.ref));
         *header = GCNode{
-            .dataIndex   = draftHeader->dataIndex,
+            .dataIndex   = slotOf(planned.draftId),
             .blockCount  = planned.blockCount,
             .normInputs  = appendSlice(draft.normInputsOf(planned.draftId)),
             .withInputs  = appendSlice(draft.withInputsOf(planned.draftId)),
