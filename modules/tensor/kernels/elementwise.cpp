@@ -34,8 +34,8 @@
 #include "elementwise.h"
 
 #include "../interop.h"
+#include "cpu.h"
 #include "parallel.h"
-#include "vmath.h"
 
 #include <algorithm>
 #include <cmath>
@@ -46,6 +46,14 @@
 #include <vector>
 
 namespace camel::tensor::kernels {
+
+namespace detail {
+void unaryF32Generic(UnaryOp op, const float *src, float *dst, int64_t count);
+#if defined(CAMEL_TENSOR_HAS_AVX2_UNIT)
+void unaryF32Avx2(UnaryOp op, const float *src, float *dst, int64_t count);
+void unaryF32Avx512(UnaryOp op, const float *src, float *dst, int64_t count);
+#endif
+} // namespace detail
 
 using type::TypeCode;
 
@@ -349,80 +357,77 @@ void binaryTyped(BinaryOp op, const BroadcastPlan &plan, const T *a, const T *b,
     }
 }
 
-/// Elementwise unary function, fixed at compile time so that the loop calling it vectorizes.
-template <UnaryOp Op, typename T> inline T unaryOf(T x) {
-    if constexpr (std::is_same_v<T, float>) {
-        if constexpr (Op == UnaryOp::Neg) {
-            return -x;
-        } else if constexpr (Op == UnaryOp::Abs) {
-            return std::fabs(x);
-        } else if constexpr (Op == UnaryOp::Exp) {
-            return vmath::exp(x);
-        } else if constexpr (Op == UnaryOp::Log) {
-            return std::log(x);
-        } else if constexpr (Op == UnaryOp::Sqrt) {
-            return std::sqrt(x);
-        } else if constexpr (Op == UnaryOp::Rsqrt) {
-            return 1.0f / std::sqrt(x);
-        } else if constexpr (Op == UnaryOp::Sigmoid) {
-            return vmath::sigmoid(x);
-        } else if constexpr (Op == UnaryOp::Tanh) {
-            return vmath::tanh(x);
-        } else if constexpr (Op == UnaryOp::Relu) {
-            return x > 0.0f ? x : 0.0f;
-        } else if constexpr (Op == UnaryOp::Gelu) {
-            return vmath::gelu(x);
-        } else {
-            static_assert(Op == UnaryOp::Erf);
-            return std::erf(x);
-        }
+/// Integer / bool unary function (only the dtype-preserving operators reach these dtypes).
+template <UnaryOp Op, typename T> inline T unaryInt(T x) {
+    if constexpr (Op == UnaryOp::Neg) {
+        return static_cast<T>(-x);
+    } else if constexpr (Op == UnaryOp::Abs) {
+        return x < T{} ? static_cast<T>(-x) : x;
+    } else if constexpr (Op == UnaryOp::Relu) {
+        return x > T{} ? x : T{};
     } else {
-        // Integer and bool tensors only reach the dtype-preserving ops.
-        if constexpr (Op == UnaryOp::Neg) {
-            return static_cast<T>(-x);
-        } else if constexpr (Op == UnaryOp::Abs) {
-            return x < T{} ? static_cast<T>(-x) : x;
-        } else if constexpr (Op == UnaryOp::Relu) {
-            return x > T{} ? x : T{};
-        } else {
-            return x;
-        }
+        return x;
     }
 }
 
-template <UnaryOp Op, typename T> void unaryLoop(const T *src, T *dst, int64_t count) {
+template <UnaryOp Op, typename T> void unaryIntLoop(const T *src, T *dst, int64_t count) {
     parallelFor(count, kElementGrain, [&](int64_t begin, int64_t end) {
         for (int64_t i = begin; i < end; ++i) {
-            dst[i] = unaryOf<Op, T>(src[i]);
+            dst[i] = unaryInt<Op, T>(src[i]);
         }
     });
 }
 
-template <typename T> void runUnary(UnaryOp op, const T *src, T *dst, int64_t count) {
+template <typename T> void runUnaryInt(UnaryOp op, const T *src, T *dst, int64_t count) {
     switch (op) {
     case UnaryOp::Neg:
-        return unaryLoop<UnaryOp::Neg>(src, dst, count);
+        return unaryIntLoop<UnaryOp::Neg>(src, dst, count);
     case UnaryOp::Abs:
-        return unaryLoop<UnaryOp::Abs>(src, dst, count);
-    case UnaryOp::Exp:
-        return unaryLoop<UnaryOp::Exp>(src, dst, count);
-    case UnaryOp::Log:
-        return unaryLoop<UnaryOp::Log>(src, dst, count);
-    case UnaryOp::Sqrt:
-        return unaryLoop<UnaryOp::Sqrt>(src, dst, count);
-    case UnaryOp::Rsqrt:
-        return unaryLoop<UnaryOp::Rsqrt>(src, dst, count);
-    case UnaryOp::Sigmoid:
-        return unaryLoop<UnaryOp::Sigmoid>(src, dst, count);
-    case UnaryOp::Tanh:
-        return unaryLoop<UnaryOp::Tanh>(src, dst, count);
+        return unaryIntLoop<UnaryOp::Abs>(src, dst, count);
     case UnaryOp::Relu:
-        return unaryLoop<UnaryOp::Relu>(src, dst, count);
-    case UnaryOp::Gelu:
-        return unaryLoop<UnaryOp::Gelu>(src, dst, count);
-    case UnaryOp::Erf:
-        return unaryLoop<UnaryOp::Erf>(src, dst, count);
+        return unaryIntLoop<UnaryOp::Relu>(src, dst, count);
+    default:
+        // Not reached: every other operator produces a float result (unaryProducesFloat).
+        throw std::logic_error("integer unary kernel called for a float-producing operator");
     }
+}
+
+using UnaryF32Fn = void (*)(UnaryOp, const float *, float *, int64_t);
+
+/// The float unary loops for the widest vector ISA the CPU supports.
+UnaryF32Fn unaryF32Kernel() {
+    static const UnaryF32Fn kernel = [] {
+#if defined(CAMEL_TENSOR_HAS_AVX2_UNIT)
+        if (cpuFeatures().avx512f) {
+            return &detail::unaryF32Avx512;
+        }
+        if (cpuFeatures().avx2Fma) {
+            return &detail::unaryF32Avx2;
+        }
+#endif
+        return &detail::unaryF32Generic;
+    }();
+    return kernel;
+}
+
+/// Transcendental operators cost roughly an order of magnitude more per element than a memory
+/// pass, so they are split across threads at proportionally smaller sizes.
+int64_t unaryGrain(UnaryOp op) {
+    switch (op) {
+    case UnaryOp::Neg:
+    case UnaryOp::Abs:
+    case UnaryOp::Relu:
+        return kElementGrain;
+    default:
+        return kElementGrain / 8;
+    }
+}
+
+void runUnaryF32(UnaryOp op, const float *src, float *dst, int64_t count) {
+    const UnaryF32Fn kernel = unaryF32Kernel();
+    parallelFor(count, unaryGrain(op), [&](int64_t begin, int64_t end) {
+        kernel(op, src + begin, dst + begin, end - begin);
+    });
 }
 
 } // namespace
@@ -460,8 +465,12 @@ TensorObject *unary(UnaryOp op, const TensorObject *input, mm::IAllocator &alloc
     const TypedBuffer in   = asDType(Operand::of(input), outType);
     TensorObject *out      = TensorObject::create(outType, input->shapeSpan(), allocator);
     const auto count       = static_cast<int64_t>(input->numel());
+    if (outType == TypeCode::Float32) {
+        runUnaryF32(op, static_cast<const float *>(in.data), out->dataAs<float>(), count);
+        return out;
+    }
     dispatchDType(outType, [&]<typename T>() {
-        runUnary<T>(op, static_cast<const T *>(in.data), out->dataAs<T>(), count);
+        runUnaryInt<T>(op, static_cast<const T *>(in.data), out->dataAs<T>(), count);
     });
     return out;
 }
