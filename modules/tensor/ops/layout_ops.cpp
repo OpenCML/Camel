@@ -32,6 +32,8 @@
 #include "catalog.h"
 #include "support.h"
 
+#include <array>
+
 namespace camel::tensor::ops {
 
 using namespace camel::core::type;
@@ -261,6 +263,7 @@ std::optional<Type *> sliceInfer(const InferContext &ctx) {
 
 // ---------------------------------------------------------------- VJP rules
 
+// transpose swaps the last two axes, so it is its own inverse.
 void transposeVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 1, 1);
     if (auto dy = b.gradientOf(call.output)) {
@@ -268,15 +271,57 @@ void transposeVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-void reshapeVjp(VjpBuilder &b, const VjpCall &call) {
+/// reshape, flatten, unsqueeze: the gradient takes the input's shape back.
+void reshapeLikeVjp(VjpBuilder &b, const VjpCall &call) {
+    if (auto dy = b.gradientOf(call.output); dy && isTensorNode(b, call.inputs[0])) {
+        const vjp_node_t shape = b.addOper(
+            ArrayType::create(Type::Int64()),
+            "tensor:shape",
+            std::span<const vjp_node_t>(call.inputs.data(), 1));
+        b.accumulateGradient(call.inputs[0], addTensorOper(b, "tensor:reshape", {*dy, shape}));
+    }
+}
+
+void permuteVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(b, "tensor:permute_inverse", {*dy, call.inputs[1]}));
+    }
+}
+
+// concat(a, b, axis): each part receives its slice of dy.
+void concatVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 3, 3);
     auto dy = b.gradientOf(call.output);
     if (!dy) {
         return;
     }
-    const vjp_node_t in[]  = {call.inputs[0]};
-    const vjp_node_t shape = b.addOper(ArrayType::create(Type::Int64()), "tensor:shape", in);
-    b.accumulateGradient(call.inputs[0], addTensorOper(b, "tensor:reshape", {*dy, shape}));
+    const vjp_node_t lhs = call.inputs[0], rhs = call.inputs[1], axis = call.inputs[2];
+    if (!isTensorNode(b, lhs) || !isTensorNode(b, rhs)) {
+        return; // numeric array parts take no gradient
+    }
+    const std::array<vjp_node_t, 2> lhsAxis{lhs, axis};
+    const vjp_node_t split = b.addOper(Type::Int64(), "tensor:dim", lhsAxis);
+    const std::array<vjp_node_t, 2> dyAxis{*dy, axis};
+    const vjp_node_t total = b.addOper(Type::Int64(), "tensor:dim", dyAxis);
+    b.accumulateGradient(
+        lhs,
+        addTensorOper(b, "tensor:slice", {*dy, axis, staticInt(b, 0), split}));
+    b.accumulateGradient(rhs, addTensorOper(b, "tensor:slice", {*dy, axis, split, total}));
+}
+
+// slice(t, axis, start, end, step?)
+void sliceVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 4, 5);
+    if (auto dy = b.gradientOf(call.output)) {
+        std::vector<vjp_node_t> inputs{*dy};
+        inputs.insert(inputs.end(), call.inputs.begin(), call.inputs.end());
+        b.accumulateGradient(
+            call.inputs[0],
+            b.addOper(vjpTensorType(), "tensor:slice_grad", inputs));
+    }
 }
 
 } // namespace
@@ -354,7 +399,13 @@ std::vector<OpDef> layoutOps() {
         .kernel    = &sliceKernel,
         .traits    = {}});
     setVjp(defs, "transpose", &transposeVjp);
-    setVjp(defs, "reshape", &reshapeVjp);
+    setVjp(defs, "reshape", &reshapeLikeVjp);
+    setVjp(defs, "flatten", &reshapeLikeVjp);
+    setVjp(defs, "unsqueeze", &reshapeLikeVjp);
+    setVjp(defs, "permute", &permuteVjp);
+    setVjp(defs, "concat", &concatVjp);
+    setVjp(defs, "slice", &sliceVjp);
+    setVjp(defs, "shape", &camel::core::noGradient);
     return defs;
 }
 

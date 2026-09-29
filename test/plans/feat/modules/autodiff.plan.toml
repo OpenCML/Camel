@@ -130,3 +130,75 @@ assert(out.includes('control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10')
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "tensor_grad_check.macro.nvm"
+desc = "Checks every tensor derivative rule against finite differences."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "tensor_grad_check.macro.fvm"
+desc = "Checks every tensor derivative rule against finite differences."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "nn_grad_check.macro.nvm"
+desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/nn_grad_check.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 6, `expected 6 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "nn_grad_check.macro.fvm"
+desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/nn_grad_check.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 6, `expected 6 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000

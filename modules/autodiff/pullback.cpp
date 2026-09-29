@@ -859,6 +859,9 @@ void Backward::visit(gc_node_ref_t node) {
     case GCNodeKind::Brch:
     case GCNodeKind::Sync:
         return;
+    case GCNodeKind::Func:
+        // Calls the forward rewrite left alone take no differentiable input: constants.
+        return;
     case GCNodeKind::Call:
         fail("cannot differentiate through a call of a function value; the callee must be known "
              "statically");
@@ -1101,8 +1104,6 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     const std::vector<gc_node_ref_t> order = valueOrder(*draft, value);
 
     Backward backward(*draft, *draft, rewrite.sites());
-    const auto *space = DerivativeRegistry::instance().findTangentSpace(type->exitType());
-    ASSERT(space && space->zero, "autodiff: float tangent space is missing.");
     const slot_t one = type->exitType()->code() == TypeCode::Float32
                            ? toSlot<camel::core::rtdata::Float32>(1.0f)
                            : toSlot<camel::core::rtdata::Float64>(1.0);

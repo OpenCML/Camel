@@ -35,5 +35,9 @@ std::vector<OpDef> layoutOps();      // shape, reshape, transpose, permute, conc
 std::vector<OpDef> reductionOps();   // sum, mean, max, min, argmax, softmax family, layer_norm
 std::vector<OpDef> linalgOps();      // matmul, linear
 std::vector<OpDef> utilityOps();     // indexing, show, threading controls
+std::vector<OpDef> gradientOps();    // operators derivative rules emit; zeros_like, numel, ...
+
+/// Publishes the tangent space of tensors in the core derivative registry.
+void registerTensorTangentSpace();
 
 } // namespace camel::tensor::ops
