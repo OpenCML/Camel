@@ -1208,7 +1208,8 @@ Builder::applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcV
     ASSERT(annoNode->size() == 1, "ANNO node should have exactly one lowered expression child.");
     ASSERT(funcValueNode != nullptr, "Decorator input function value is null.");
 
-    const auto &withNode = annoNode->atAs<GCT::WithLoad>(0);
+    // `@name` or `@name<args>`: either way the expression is the decorator to call.
+    const auto &decorator = annoNode->at(0);
 
     const std::string tmpScopeName = "__decorator_tmp_scope_" + std::to_string(syntheticRefIndex_);
     const std::string tmpRefName   = "__decorator_tmp_ref_" + std::to_string(syntheticRefIndex_++);
@@ -1217,7 +1218,7 @@ Builder::applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcV
 
     GCT::node_ptr_t linkNode = std::make_shared<GCT::Node>(
         std::dynamic_pointer_cast<GCT::Load>(std::make_shared<GCT::LinkLoad>(1)));
-    *linkNode << withNode->clone();
+    *linkNode << decorator->clone();
     *linkNode << std::make_shared<GCT::Node>(std::dynamic_pointer_cast<GCT::Load>(
         std::make_shared<GCT::DRefLoad>(Reference(tmpRefName))));
 
@@ -1234,8 +1235,10 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
         return rawGraph;
     }
 
+    // Decorators run at macro time: the graph applying them is a macro that yields the decorated
+    // function once its inputs are static.
     graph_ptr_t decoratedGraph = enterScope(
-        FunctionType::create(),
+        FunctionType::create(param_vec_t{}, param_vec_t{}, nullptr, Modifier::Macro),
         "__decorated__" + funcName + "_" + std::to_string(syntheticRefIndex_++));
     registerGraphOrigin(
         context_,

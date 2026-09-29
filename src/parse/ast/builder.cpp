@@ -585,16 +585,21 @@ funcAnno   : '@' identRef angledValues? ;
 any Builder::visitFuncAnno(OpenCMLParser::FuncAnnoContext *context) {
     ENTER("FuncAnno");
 
-    Reference ref       = any_cast<Reference>(visitIdentRef(context->identRef()));
+    Reference ref = any_cast<Reference>(visitIdentRef(context->identRef()));
+    if (!context->angledValues()) {
+        // `@name`: the decorator itself.
+        node_ptr_t refNode = createNodeAs<RefDataLoad>(ref);
+        setNodeTokenRangeByContext(refNode, context);
+        LEAVE("FuncAnno");
+        return refNode;
+    }
+    // `@name<args>`: the decorator bound to its with-arguments.
     node_ptr_t annoNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
     setNodeTokenRangeByContext(annoNode, context);
     *annoNode << createNodeAs<RefDataLoad>(ref);
-
-    if (context->angledValues()) {
-        auto [dataList, namedDataList] =
-            any_cast<std::pair<node_ptr_t, node_ptr_t>>(visitAngledValues(context->angledValues()));
-        *annoNode << dataList << namedDataList;
-    }
+    auto [dataList, namedDataList] =
+        any_cast<std::pair<node_ptr_t, node_ptr_t>>(visitAngledValues(context->angledValues()));
+    *annoNode << dataList << namedDataList;
 
     LEAVE("FuncAnno");
     return annoNode;
