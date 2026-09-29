@@ -28,6 +28,7 @@
 #include "layout.h"
 #include "parallel.h"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -108,7 +109,31 @@ sumTo(const TensorObject *g, std::span<const int64_t> shape, mm::IAllocator &all
     TensorObject *out       = TensorObject::create(TypeCode::Float32, shape, allocator, true);
     const float *in         = src->dataAs<float>();
     float *acc              = out->dataAs<float>();
-    forEachBroadcast(src->shapeSpan(), strides, [&](uint64_t i, int64_t j) { acc[j] += in[i]; });
+    const auto big          = src->shapeSpan();
+    // Common case (bias gradients): only leading axes are reduced, so the result is the sum of
+    // the contiguous rows of `g`.
+    size_t lead = big.size();
+    while (lead > 0 && strides[lead - 1] != 0) {
+        --lead;
+    }
+    bool leadingOnly = true;
+    for (size_t d = lead; d < big.size(); ++d) {
+        leadingOnly &= big[d] == 1 || strides[d] != 0;
+    }
+    if (leadingOnly) {
+        const int64_t cols = static_cast<int64_t>(numelOf(big.subspan(lead)));
+        const int64_t rows = static_cast<int64_t>(numelOf(big.subspan(0, lead)));
+        parallelFor(cols, std::max<int64_t>(64, 16384 / std::max<int64_t>(rows, 1)), [&](int64_t begin, int64_t end) {
+            for (int64_t r = 0; r < rows; ++r) {
+                const float *row = in + r * cols;
+                for (int64_t c = begin; c < end; ++c) {
+                    acc[c] += row[c];
+                }
+            }
+        });
+        return out;
+    }
+    forEachBroadcast(big, strides, [&](uint64_t i, int64_t j) { acc[j] += in[i]; });
     return out;
 }
 
@@ -147,16 +172,27 @@ TensorObject *geluGrad(const TensorObject *x, const TensorObject *dy, mm::IAlloc
     if (!xs->sameShape(gs)) {
         throw ShapeError("gelu gradient: dy shape differs from the input");
     }
-    TensorObject *out      = TensorObject::create(TypeCode::Float32, xs->shapeSpan(), allocator);
-    const float *px        = xs->dataAs<float>();
-    const float *pg        = gs->dataAs<float>();
-    float *po              = out->dataAs<float>();
+    const int64_t n        = static_cast<int64_t>(xs->numel());
     constexpr float kScale = 0.7978845608028654f; // sqrt(2 / pi)
     constexpr float kCubic = 0.044715f;
-    parallelFor(static_cast<int64_t>(xs->numel()), 4096, [&](int64_t begin, int64_t end) {
+    constexpr int64_t kGrain = 4096;
+    const float *px          = xs->dataAs<float>();
+    // tanh goes through the vectorized unary kernel; the polynomial parts vectorize as they are.
+    TensorObject *inner = TensorObject::create(TypeCode::Float32, xs->shapeSpan(), allocator);
+    float *pu           = inner->dataAs<float>();
+    parallelFor(n, kGrain, [&](int64_t begin, int64_t end) {
         for (int64_t i = begin; i < end; ++i) {
-            const float v     = px[i];
-            const float t     = std::tanh(kScale * (v + kCubic * v * v * v));
+            const float v = px[i];
+            pu[i]         = kScale * (v + kCubic * v * v * v);
+        }
+    });
+    const float *pt   = unary(UnaryOp::Tanh, inner, allocator)->dataAs<float>();
+    const float *pg   = gs->dataAs<float>();
+    TensorObject *out = TensorObject::create(TypeCode::Float32, xs->shapeSpan(), allocator);
+    float *po         = out->dataAs<float>();
+    parallelFor(n, kGrain, [&](int64_t begin, int64_t end) {
+        for (int64_t i = begin; i < end; ++i) {
+            const float v = px[i], t = pt[i];
             const float slope = 0.5f * (1.0f + t) +
                                 0.5f * v * (1.0f - t * t) * kScale * (1.0f + 3.0f * kCubic * v * v);
             po[i] = pg[i] * slope;
@@ -345,9 +381,65 @@ MatmulView matrixView(
 
 } // namespace
 
+namespace {
+
+enum class MatmulOperand { Lhs, Rhs };
+
+/// The gradient of a float matmul operand as GEMMs over the operands' storage (sgemm reads the
+/// transposes in place), or nullptr for shapes this does not cover: vectors and broadcast batches.
+///   rhs a matrix:        lhs viewed as [M, K] with M the product of its leading axes; one GEMM.
+///   equal batch shapes:  one GEMM per batch matrix.
+TensorObject *matmulGradGemm(
+    MatmulOperand which, const TensorObject *dy, const TensorObject *lhs, const TensorObject *rhs,
+    mm::IAllocator &allocator) {
+    if (lhs->dtype() != TypeCode::Float32 || rhs->dtype() != TypeCode::Float32 ||
+        dy->dtype() != TypeCode::Float32 || lhs->rank() < 2 || rhs->rank() < 2) {
+        return nullptr;
+    }
+    const size_t lr = lhs->rank(), rr = rhs->rank();
+    const int64_t K = lhs->dim(lr - 1), N = rhs->dim(rr - 1);
+    int64_t batches = 1, M = lhs->dim(lr - 2);
+    if (rr == 2) {
+        M = static_cast<int64_t>(lhs->numel()) / std::max<int64_t>(K, 1);
+    } else {
+        if (lr != rr || !std::equal(
+                            lhs->shapeSpan().begin(), lhs->shapeSpan().end() - 2,
+                            rhs->shapeSpan().begin())) {
+            return nullptr;
+        }
+        batches = static_cast<int64_t>(numelOf(lhs->shapeSpan().first(lr - 2)));
+    }
+    if (static_cast<int64_t>(dy->numel()) != batches * M * N) {
+        throw ShapeError("matmul gradient: dy shape does not match the product");
+    }
+    const float *a = lhs->dataAs<float>(), *b = rhs->dataAs<float>(), *g = dy->dataAs<float>();
+    const bool forLhs = which == MatmulOperand::Lhs;
+    TensorObject *out =
+        TensorObject::create(TypeCode::Float32, (forLhs ? lhs : rhs)->shapeSpan(), allocator);
+    float *o = out->dataAs<float>();
+    const int64_t aSize = M * K, bSize = K * N, gSize = M * N;
+    parallelFor(batches, 1, [&](int64_t begin, int64_t end) {
+        for (int64_t i = begin; i < end; ++i) {
+            if (forLhs) { // dA = dY @ B^T : [M, K]
+                sgemm(false, true, M, K, N, 1.0f, g + i * gSize, N, b + i * bSize, N, 0.0f,
+                      o + i * aSize, K);
+            } else { // dB = A^T @ dY : [K, N]
+                sgemm(true, false, K, N, M, 1.0f, a + i * aSize, K, g + i * gSize, N, 0.0f,
+                      o + i * bSize, N);
+            }
+        }
+    });
+    return out;
+}
+
+} // namespace
+
 TensorObject *matmulGradLhs(
     const TensorObject *dy, const TensorObject *lhs, const TensorObject *rhs,
     mm::IAllocator &allocator) {
+    if (TensorObject *g = matmulGradGemm(MatmulOperand::Lhs, dy, lhs, rhs, allocator)) {
+        return g;
+    }
     const MatmulView v = matrixView(dy, lhs, rhs, allocator);
     TensorObject *g    = matmul(v.dy, transposeLast2(v.rhs, allocator), allocator);
     g                  = sumTo(g, v.lhs->shapeSpan(), allocator);
@@ -357,6 +449,9 @@ TensorObject *matmulGradLhs(
 TensorObject *matmulGradRhs(
     const TensorObject *dy, const TensorObject *lhs, const TensorObject *rhs,
     mm::IAllocator &allocator) {
+    if (TensorObject *g = matmulGradGemm(MatmulOperand::Rhs, dy, lhs, rhs, allocator)) {
+        return g;
+    }
     const MatmulView v = matrixView(dy, lhs, rhs, allocator);
     TensorObject *g    = matmul(transposeLast2(v.lhs, allocator), v.dy, allocator);
     g                  = sumTo(g, v.rhs->shapeSpan(), allocator);

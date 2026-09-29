@@ -26,6 +26,8 @@
 
 #include "registry.h"
 
+#include "op_stats.h"
+
 #include "../dtype.h"
 #include "camel/core/derivative.h"
 #include "camel/core/operator_traits.h"
@@ -233,7 +235,8 @@ std::unordered_map<std::string, operator_t> OpRegistry::kernelMap(std::string_vi
     std::unordered_map<std::string, operator_t> kernels;
     for (const Entry &entry : entries_) {
         if (entry.protocol == protocol) {
-            kernels.emplace(std::string(entry.def->name), entry.def->kernel);
+            const std::string name(entry.def->name);
+            kernels.emplace(name, opStatsEnabled() ? timedKernel(name, entry.def->kernel) : entry.def->kernel);
         }
     }
     return kernels;

@@ -25,6 +25,7 @@ add_camel_module(
     ops/layout_ops.cpp
     ops/linalg_ops.cpp
     ops/op_def.cpp
+    ops/op_stats.cpp
     ops/reduction_ops.cpp
     ops/registry.cpp
     ops/support.cpp
