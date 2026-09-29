@@ -1452,6 +1452,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             targetOperator = *res;
             targetNode     = currGraph_->addOperNode(targetOperator, 0);
+            // An operator whose resolved type is macro runs in std::macro once its inputs are
+            // static, like a call of a macro function.
+            if (targetOperator->funcType()->modifiers().macro()) {
+                setNodeMacro(targetNode, true);
+            }
             registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
             targetFuncType = targetOperator->funcType();
         } else if (std::holds_alternative<graph_ptr_t>(drefTarget)) {
