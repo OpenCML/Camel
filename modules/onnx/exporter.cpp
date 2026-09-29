@@ -41,7 +41,9 @@
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/graph.h"
 
+#include <cstdlib>
 #include <format>
+#include <iostream>
 #include <unordered_map>
 
 namespace camel::onnx {
@@ -79,6 +81,35 @@ ExportArgsView constantArgs(std::span<const Value> values) {
         types.push_back(v.ty);
     }
     return ExportArgsView(std::move(slots), std::move(types));
+}
+
+/// CAMEL_ONNX_TRACE=1 prints every lowered call with the facts of its arguments to stderr.
+bool traceEnabled() {
+    static const bool enabled = [] {
+        const char *v = std::getenv("CAMEL_ONNX_TRACE");
+        return v && *v && std::string_view(v) != "0";
+    }();
+    return enabled;
+}
+
+std::string describe(const Value &v) {
+    const TensorFacts f = factsOf(v);
+    std::string shape   = "?";
+    if (f.shape) {
+        shape = "[";
+        for (size_t i = 0; i < f.shape->size(); ++i) {
+            const int64_t d = (*f.shape)[i];
+            shape +=
+                (i ? "," : "") + (d == tensor::kUnknownDim ? std::string("?") : std::to_string(d));
+        }
+        shape += "]";
+    }
+    const char *kind = v.isConstant() ? "const" : "sym";
+    return std::format(
+        "{} {}{}",
+        kind,
+        v.ty && v.isConstant() ? v.ty->toString() : "tensor",
+        shape);
 }
 
 bool isIntArrayType(type::Type *t) {
@@ -373,8 +404,24 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
             unsupported(act, std::format("'{}': {}", uri, e.what()));
         }
     }
-    return lowering->lower(
-        LowerContext(emitter_, uri, norm, std::move(facts), g->node(ref)->dataType));
+    if (traceEnabled()) {
+        std::string args;
+        for (const Value &v : norm) {
+            args += (args.empty() ? "" : ", ") + describe(v);
+        }
+        std::cerr << std::format("[onnx] {} {}({})\n", act.graph->name(), uri, args);
+    }
+    try {
+        Value result = lowering->lower(
+            LowerContext(emitter_, uri, norm, std::move(facts), g->node(ref)->dataType));
+        if (traceEnabled()) {
+            std::cerr << std::format("[onnx]   -> {}\n", describe(result));
+        }
+        return result;
+    } catch (const ExportError &e) {
+        // Lowerings do not know where they are called from; name the function.
+        unsupported(act, e.what());
+    }
 }
 
 Value Evaluator::evalJoin(Activation &act, gc_node_ref_t join) {
