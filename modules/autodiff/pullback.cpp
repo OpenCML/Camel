@@ -23,8 +23,6 @@
 
 #include "pullback.h"
 
-#include "tangent.h"
-
 #include "camel/core/derivative.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
@@ -53,8 +51,13 @@ namespace {
 namespace mm = camel::core::mm;
 namespace rt = camel::runtime;
 using ::Modifier;
+using camel::core::aggregateElement;
+using camel::core::aggregateSize;
 using camel::core::DerivativeRegistry;
+using camel::core::isAggregate;
+using camel::core::tangentElementIndex;
 using camel::core::TangentSpace;
+using camel::core::tangentTypeOf;
 using camel::core::vjp_node_t;
 using camel::core::VjpBuilder;
 using camel::core::VjpCall;

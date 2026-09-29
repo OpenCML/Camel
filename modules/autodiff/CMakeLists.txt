@@ -5,7 +5,6 @@ add_camel_module(
     module.cpp
     operators.cpp
     pullback.cpp
-    tangent.cpp
   EXTRA_INCLUDES
     ${CMAKE_SOURCE_DIR}/src
 )

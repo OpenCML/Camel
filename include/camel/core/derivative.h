@@ -31,8 +31,10 @@
  *   - a tangent space per type code: the tangent type of a value, how two
  *     tangents add, and what the zero tangent is.
  *
- * Composite types (structs, tuples, arrays) have no entry; engines derive
- * their tangent spaces from their element types. The builtin scalar
+ * Composite types (structs, tuples, arrays) have no entry: tangentTypeOf
+ * derives theirs from their element types, dropping elements without a
+ * tangent (so the gradient of a model struct is a struct of the same shape
+ * holding its trainable members). The builtin scalar
  * operators and types register here from the builtin module; tensor, nn and
  * math register their own when loaded.
  */
@@ -129,5 +131,16 @@ class DerivativeRegistry {
     std::unordered_map<std::string, VjpRule, StringHash, std::equal_to<>> rules_;
     std::unordered_map<type::TypeCode, TangentSpace> tangents_;
 };
+
+/// Tangent type of values of type `primal`, or nullptr when they have no tangent.
+type::Type *tangentTypeOf(type::Type *primal);
+
+/// True for structs and tuples, whose tangents are handled element by element.
+bool isAggregate(const type::Type *t);
+size_t aggregateSize(type::Type *aggregate);
+type::Type *aggregateElement(type::Type *aggregate, size_t index);
+/// Position of element `index` of an aggregate in its tangent, or nullopt when the element has no
+/// tangent.
+std::optional<size_t> tangentElementIndex(type::Type *aggregate, size_t index);
 
 } // namespace camel::core
