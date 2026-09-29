@@ -53,6 +53,7 @@ enum class RuntimeSpecializationBindingKind : uint8_t {
     Norm,
     With,
     Closure,
+    Lift, // closure nodes turned into norm ports (see devirtualizeStaticCallInDraft)
 };
 
 struct RuntimeSpecializationBindingKey {

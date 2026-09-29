@@ -45,7 +45,7 @@ bool isPureOper(const GraphDraft &draft, gc_node_ref_t id);
 /// CAST/COPY/ACCS/FILL.
 bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id);
 
-/// True unless `id` anchors the graph (exit, output, return, entry, or a branch-arm head/tail).
+/// True unless `id` anchors the graph (exit, output, return, or a branch-arm head/tail).
 bool isReplaceable(const GraphDraft &draft, gc_node_ref_t id);
 
 /// True when `to` is reachable from `from` along value or control edges (to is downstream).

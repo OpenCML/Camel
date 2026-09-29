@@ -720,6 +720,145 @@ bool specializeDirectFuncInDraft(
     return true;
 }
 
+gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id) {
+    while (true) {
+        const DraftNodeHeader *header = draft.header(id);
+        if (!header || header->kind != GCNodeKind::Accs) {
+            return id;
+        }
+        const auto *accs = reinterpret_cast<const GCAccsBody *>(draft.payloadOf(id).data());
+        const auto sources = draft.normInputsOf(id);
+        if (accs->accsKind != GCAccsKind::TupleIndex || sources.size() != 1) {
+            return id;
+        }
+        const DraftNodeHeader *sourceHeader = draft.header(sources[0]);
+        if (!sourceHeader || sourceHeader->kind != GCNodeKind::Fill) {
+            return id;
+        }
+        const auto *fill = reinterpret_cast<const GCFillBody *>(draft.payloadOf(sources[0]).data());
+        if (fill->fillKind != GCFillKind::Tuple) {
+            return id;
+        }
+        const auto slots  = fill->slots();
+        const auto values = draft.withInputsOf(sources[0]);
+        const auto it     = std::find(slots.begin(), slots.end(), static_cast<gc_slot_idx_t>(accs->value));
+        if (it == slots.end() || static_cast<size_t>(it - slots.begin()) >= values.size()) {
+            return id; // the element comes from the template
+        }
+        id = values[static_cast<size_t>(it - slots.begin())];
+    }
+}
+
+namespace {
+
+/// `base` with its closure nodes turned into trailing norm ports, in closure order (lambda
+/// lifting): calling it with the captures as extra arguments equals calling the closure.
+GCGraph *liftClosureGraph(RuntimeGraphDraftSession &session, GCGraph *base, size_t nonce) {
+    RuntimeSpecializationKey key{
+        .baseGraph = base,
+        .bindings  = {RuntimeSpecializationBindingKey{.kind = RuntimeSpecializationBindingKind::Lift}},
+    };
+    if (GCGraph *cached = session.findSpecialization(key)) {
+        return cached;
+    }
+    auto draft                            = GraphDraft::decode(base);
+    camel::core::type::FunctionType *type = draft->funcType();
+    if (!type) {
+        return nullptr;
+    }
+    camel::core::type::param_vec_t withTypes, normTypes;
+    for (size_t i = 0; i < type->withTypesCount(); ++i) {
+        withTypes.emplace_back(type->withTypeAt(i), type->withIsVarAt(i));
+    }
+    for (size_t i = 0; i < type->normTypesCount(); ++i) {
+        normTypes.emplace_back(type->normTypeAt(i), type->normIsVarAt(i));
+    }
+    const std::vector<gc_node_ref_t> captures(
+        draft->closureNodes().begin(),
+        draft->closureNodes().end());
+    for (gc_node_ref_t capture : captures) {
+        draft->removeClosureNode(capture);
+        draft->appendNormPort(capture);
+        normTypes.emplace_back(draft->header(capture)->dataType, false);
+    }
+    draft->setFuncType(camel::core::type::FunctionType::create(
+        withTypes,
+        normTypes,
+        type->exitType(),
+        type->modifiers()));
+    draft->setClosureType(nullptr);
+    GCGraph *lifted = encodeSpecializedGraph(*draft, base, "lift", nonce);
+    session.rememberSpecialization(std::move(key), lifted);
+    return lifted;
+}
+
+/// A CALL of a closure built by FILL in this graph becomes a direct FUNC of the lifted graph.
+bool devirtualizeClosureCallInDraft(
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId,
+    gc_node_ref_t fillNodeId) {
+    static size_t liftNonce = 0;
+    const auto *fill = reinterpret_cast<const GCFillBody *>(draft.payloadOf(fillNodeId).data());
+    if (fill->fillKind != GCFillKind::FunctionClosure || draft.normInputsOf(fillNodeId).size() != 1) {
+        return false;
+    }
+    DraftStaticValue source = tryResolveStaticValue(draft, draft.normInputsOf(fillNodeId)[0]);
+    if (!source.valid() || !source.type ||
+        source.type->code() != camel::core::type::TypeCode::Function) {
+        return false;
+    }
+    ::Function *function = camel::core::rtdata::fromSlot<::Function *>(source.value);
+    GCGraph *base        = function ? function->runtimeGraph() : nullptr;
+    if (!base) {
+        return false;
+    }
+    // Every capture must be filled here; captures left in the template are not handled.
+    const auto slots  = fill->slots();
+    const auto values = draft.withInputsOf(fillNodeId);
+    const size_t n    = base->closureNodes().size();
+    if (slots.size() != n || values.size() != n) {
+        return false;
+    }
+    std::vector<gc_node_ref_t> captures(n, kInvalidNodeRef);
+    for (size_t k = 0; k < n; ++k) {
+        const auto slot = static_cast<size_t>(slots[k]);
+        if (slot >= n || captures[slot] != kInvalidNodeRef) {
+            return false;
+        }
+        captures[slot] = values[k];
+    }
+    const auto withInputs = draft.withInputsOf(callNodeId);
+    if (base->withPorts().size() != withInputs.size() - 1) {
+        return false;
+    }
+    GCGraph *lifted = liftClosureGraph(session, base, liftNonce++);
+    if (!lifted) {
+        return false;
+    }
+
+    DraftNodeInit init = snapshotNodeInit(draft, callNodeId);
+    std::vector<gc_node_ref_t> normInputs(
+        draft.normInputsOf(callNodeId).begin(),
+        draft.normInputsOf(callNodeId).end());
+    normInputs.insert(normInputs.end(), captures.begin(), captures.end());
+    const std::vector<gc_node_ref_t> directWith(withInputs.begin() + 1, withInputs.end());
+    GCFuncBody funcBody{.calleeGraph = lifted};
+    std::array<std::byte, sizeof(GCFuncBody)> payload{};
+    std::memcpy(payload.data(), &funcBody, sizeof(funcBody));
+    init.kind       = GCNodeKind::Func;
+    init.payload    = std::span<const std::byte>(payload.data(), payload.size());
+    init.normInputs = normInputs;
+    init.withInputs = directWith;
+    draft.rewriteNode(callNodeId, init);
+    CAMEL_LOG_INFO_S(
+        "DraftOpt",
+        "Devirtualized closure CALL node {} to direct FUNC '{}'.",
+        callNodeId,
+        lifted->name());
+    return true;
+}
+
+} // namespace
+
 bool devirtualizeStaticCallInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId) {
     static size_t specializationNonce = 0;
@@ -736,6 +875,12 @@ bool devirtualizeStaticCallInDraft(
             "Devirtualize CALL node {} skipped: no callee input.",
             callNodeId);
         return false;
+    }
+
+    const gc_node_ref_t callee = resolveTupleProjection(draft, withInputs.front());
+    if (const auto *calleeHeader = draft.header(callee);
+        calleeHeader && calleeHeader->kind == GCNodeKind::Fill) {
+        return devirtualizeClosureCallInDraft(session, draft, callNodeId, callee);
     }
 
     DraftStaticValue calleeStatic = tryResolveStaticValue(draft, withInputs.front());

@@ -94,6 +94,62 @@ bool isSmallRuntimeSubgraphForInline(const GCGraph *bodyGraph, const InlineRewri
     return true;
 }
 
+/// True when values of `type` may hold a function: inlining a callee returning one exposes the
+/// closure it builds, so that calls of it can be devirtualized (autodiff's (value, pullback)).
+bool mayHoldFunction(const camel::core::type::Type *type) {
+    using camel::core::type::TypeCode;
+    if (!type) {
+        return false;
+    }
+    if (type->code() == TypeCode::Function) {
+        return true;
+    }
+    if (type->code() == TypeCode::Tuple) {
+        for (auto *element : static_cast<const camel::core::type::TupleType *>(type)->types()) {
+            if (mayHoldFunction(element)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool returnsClosure(const GCGraph *graph) {
+    const auto *type = graph ? graph->funcType() : nullptr;
+    return type && type->hasExitType() && mayHoldFunction(type->exitType());
+}
+
+/// Number of direct calls of each graph in `closure`, read from the session's drafts where a
+/// graph is being edited (calls of graphs created in this session exist only there).
+std::unordered_map<const GCGraph *, size_t> directCallCounts(
+    const camel::runtime::RuntimeGraphDraftSession &session, const std::vector<GCGraph *> &closure) {
+    std::unordered_map<const GCGraph *, size_t> counts;
+    for (GCGraph *graph : closure) {
+        if (const auto *draft = session.tryDraft(graph)) {
+            for (gc_node_ref_t id = 0; id < draft->nodeSlotCount(); ++id) {
+                const auto *header = draft->header(id);
+                if (!header || header->kind != GCNodeKind::Func) {
+                    continue;
+                }
+                const auto payload = draft->payloadOf(id);
+                if (payload.size_bytes() >= sizeof(GCFuncBody)) {
+                    const auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
+                    if (body->calleeGraph) {
+                        ++counts[body->calleeGraph];
+                    }
+                }
+            }
+            continue;
+        }
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            if (GCGraph *callee = graph->directCalleeGraphOf(it.ref())) {
+                ++counts[callee];
+            }
+        }
+    }
+    return counts;
+}
+
 bool isDraftBranchArmHead(const camel::runtime::GraphDraft &draft, gc_node_ref_t nodeId) {
     if (!draft.alive(nodeId)) {
         return false;
@@ -113,6 +169,8 @@ struct RuntimeCallGraphSccInfo {
     std::unordered_set<const GCGraph *> recursiveGraphs;
     std::unordered_set<const GCGraph *> componentEntryGraphs;
     std::unordered_set<const GCGraph *> externallyCalledGraphs;
+    // Graphs from which a recursive graph is reachable (recursive graphs included).
+    std::unordered_set<const GCGraph *> reachesRecursion;
 };
 
 RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(const std::vector<GCGraph *> &closure) {
@@ -213,6 +271,23 @@ RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(const std::vector<GCGraph *> 
                     info.componentEntryGraphs.insert(closure[idx]);
                     break;
                 }
+            }
+        }
+    }
+
+    std::vector<size_t> work;
+    for (size_t i = 0; i < closure.size(); ++i) {
+        if (info.recursiveGraphs.contains(closure[i])) {
+            info.reachesRecursion.insert(closure[i]);
+            work.push_back(i);
+        }
+    }
+    while (!work.empty()) {
+        const size_t v = work.back();
+        work.pop_back();
+        for (size_t u : reverseEdges[v]) {
+            if (info.reachesRecursion.insert(closure[u]).second) {
+                work.push_back(u);
             }
         }
     }
@@ -363,6 +438,7 @@ bool applyRuntimeOptimizeRewrite(
                 continue;
             }
 
+            const auto callCounts = directCallCounts(session, closure);
             std::vector<gc_node_ref_t> candidates;
             candidates.reserve(draft.nodeCount());
             for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
@@ -389,8 +465,27 @@ bool applyRuntimeOptimizeRewrite(
                     continue;
                 }
 
+                // Beyond small graphs, inlining a callee that reaches no recursion pays when it
+                // cannot duplicate code (a graph with one call site) or when it exposes a
+                // closure the callee builds, so that calls of it can be devirtualized.
+                // Graphs created in this session (specializations, lifted closures) are not in
+                // the call-graph analysis yet; they qualify in the next session.
+                const bool acyclic = sccInfo.componentOf.contains(body->calleeGraph) &&
+                                     !sccInfo.reachesRecursion.contains(body->calleeGraph);
                 const bool isSmall =
-                    isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig);
+                    isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig) ||
+                    (acyclic && callCounts.contains(body->calleeGraph) &&
+                     callCounts.at(body->calleeGraph) == 1) ||
+                    (acyclic && returnsClosure(body->calleeGraph));
+                CAMEL_LOG_INFO_S(
+                    "OptimizePass",
+                    "Inline probe '{}' -> '{}': small={} acyclic={} calls={} closure={}.",
+                    nextGraph->name(),
+                    body->calleeGraph->name(),
+                    isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig),
+                    acyclic,
+                    callCounts.contains(body->calleeGraph) ? callCounts.at(body->calleeGraph) : 0,
+                    returnsClosure(body->calleeGraph));
                 const bool isArm = isDraftBranchArmHead(draft, id);
                 const bool suppressNonRecursiveArmInlining =
                     config.inlineConfig.inlineStrategy == InlineTargetStrategy::Hybrid &&
@@ -471,8 +566,17 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
     if (!hasAnyRewritePhaseEnabled(config)) {
         return graph;
     }
-    if (!applyRuntimeOptimizeRewrite(context, graph, config)) {
-        return graph;
+    // A session only inlines calls that existed when it started; calls exposed by its own
+    // inlining (nested helpers, devirtualized pullbacks) wait for the next session. Repeat until
+    // nothing changes; the bound only guards against a rewrite that never settles.
+    constexpr size_t kMaxSessions = 32;
+    bool changed                  = false;
+    for (size_t i = 0; i < kMaxSessions; ++i) {
+        if (!applyRuntimeOptimizeRewrite(context, graph, config)) {
+            break;
+        }
+        changed = true;
+        graph   = context->runtimeRootGraph();
     }
-    return context->runtimeRootGraph();
+    return changed ? context->runtimeRootGraph() : graph;
 }

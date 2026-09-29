@@ -72,8 +72,10 @@ bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id) {
 }
 
 bool isReplaceable(const GraphDraft &draft, gc_node_ref_t id) {
+    // The entry node is only a marker (erasing it resets it, and encoding then derives it from
+    // the first node), so it does not pin a node; inlining often leaves it on a dead value.
     return id != draft.exitNode() && id != draft.outputNode() && id != draft.returnNode() &&
-           id != draft.entryNode() && !draft.isBranchArmAnchor(id);
+           !draft.isBranchArmAnchor(id);
 }
 
 bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
@@ -122,6 +124,15 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
             const auto existing = draft.ctrlInputsOf(user);
             if (pred != user && std::ranges::find(existing, pred) == existing.end()) {
                 draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
+            }
+        }
+    }
+    // A control user that waited only on `id` now waits on the value replacing it, so it keeps a
+    // control input (a GATE requires one) and still runs after that value exists.
+    if (replacement != kInvalidNodeRef) {
+        for (gc_node_ref_t user : ctrlUsers) {
+            if (user != replacement && draft.ctrlInputsOf(user).empty()) {
+                draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, replacement);
             }
         }
     }

@@ -28,6 +28,7 @@
 
 #include "camel/core/mm/root_handle.h"
 #include "camel/execute/executor.h"
+#include "camel/runtime/draft_inline.h"
 
 #include <deque>
 #include <map>
@@ -149,6 +150,17 @@ size_t foldDraft(
     for (bool changed = true; changed;) {
         changed = false;
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+            // An element projected out of a tuple built in this graph is the value filled there.
+            if (const auto *h = draft.header(id);
+                h && h->kind == GCNodeKind::Accs && isReplaceable(draft, id)) {
+                const gc_node_ref_t value = camel::runtime::resolveTupleProjection(draft, id);
+                if (value != id) {
+                    replaceNode(draft, id, value);
+                    ++folded;
+                    changed = true;
+                }
+                continue;
+            }
             if (!isPureOper(draft, id) || !isReplaceable(draft, id)) {
                 continue;
             }
@@ -247,7 +259,21 @@ size_t dceDraft(GraphDraft &draft) {
     for (bool changed = true; changed;) {
         changed = false;
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-            if (isValueOnly(draft, id) && draft.normUsersOf(id).empty() &&
+            // A SYNC only joins control; replaceNode hands its predecessors to its users, which
+            // keeps every ordering it expressed. A GATE must keep a control input, so a SYNC
+            // without predecessors stays when it is some GATE's only one.
+            const auto *h     = draft.header(id);
+            bool isJoin       = h && h->kind == GCNodeKind::Sync;
+            if (isJoin && draft.ctrlInputsOf(id).empty()) {
+                for (gc_node_ref_t user : draft.ctrlUsersOf(id)) {
+                    const auto *u = draft.header(user);
+                    if (u && u->kind == GCNodeKind::Gate && draft.ctrlInputsOf(user).size() == 1) {
+                        isJoin = false;
+                        break;
+                    }
+                }
+            }
+            if ((isValueOnly(draft, id) || isJoin) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);
                 ++removed;

@@ -23,11 +23,18 @@
  * OperatorTraitsRegistry, never module knowledge:
  *
  *   std::opt::fold  evaluates pure operators whose inputs are all static and
- *                   replaces them by static values;
+ *                   replaces them by static values, and replaces an element
+ *                   projected out of a tuple built in the same graph by the
+ *                   value filled there;
  *   std::opt::cse   merges pure operator nodes with identical operator and
  *                   inputs;
  *   std::opt::dce   removes pure operator (and value-only) nodes whose results
- *                   are unused.
+ *                   are unused, and SYNC control joins.
+ *
+ * Together with std::opt (devirtualization, which also turns calls of closures
+ * built in the caller into direct calls of a lambda-lifted graph, and
+ * inlining), they collapse the pullback closures of autodiff into straight-line
+ * code when the program is static.
  *
  * All three keep side-effect ordering intact: when a node on a control chain
  * (every call in `sync` code is on one) is replaced, all of its users inherit

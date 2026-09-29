@@ -46,7 +46,14 @@ DraftInlineResult inlineCallableInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId);
 bool specializeDirectFuncInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId);
+/// Rewrites a CALL into a direct FUNC when its callee is known: a static Function (its static
+/// captures bound into a specialization), or a closure built in this graph by FILL, whose graph
+/// is lifted so that the captures become trailing norm arguments.
 bool devirtualizeStaticCallInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId);
+
+/// The node whose value `id` reads when `id` projects an element out of a tuple built by FILL
+/// in the same graph (through any chain of such projections); `id` itself otherwise.
+gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id);
 
 } // namespace camel::runtime
