@@ -243,7 +243,9 @@ def main() -> int:
     parser.add_argument("--time", action="store_true", help="time training steps")
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--reps", type=int, default=20)
-    parser.add_argument("--warmup", type=int, default=3)
+    # FastVM's heap grows to its steady-state size over the first few dozen steps (it keeps
+    # more intermediates alive than NodeVM); time the steady state, as for PyTorch.
+    parser.add_argument("--warmup", type=int, default=40)
     parser.add_argument("--threads", type=int, default=os.cpu_count() or 1)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
