@@ -32,8 +32,12 @@
  *     operator's static inference;
  *   - direct (FUNC) and indirect (CALL) calls are inlined, so recursion that
  *     is driven by constants (e.g. a time-step loop) unrolls;
- *   - a branch with a constant condition selects its arm (data-dependent
- *     control flow is rejected with a diagnostic).
+ *   - a branch with a constant condition selects its arm; an if-then-else on
+ *     a condition computed from the input (e.g. an element read compared
+ *     with a threshold) becomes an ONNX If with one subgraph per arm;
+ *   - shape arithmetic on dynamic dimensions (ExportOptions::dynamicAxes)
+ *     becomes Shape/Gather/Concat, while statically known dimensions still
+ *     fold.
  *
  * Only data dependencies are followed: side effects inside the exported
  * function run once at export time, and control-only (SYNC) ordering has no
@@ -45,6 +49,8 @@
 #include "proto/onnx_writer.h"
 
 #include "camel/core/context/context.h"
+
+#include <vector>
 
 class Function;
 
@@ -61,6 +67,9 @@ struct ExportOptions {
     std::string graphName  = "camel";
     /// Bound on nested calls; recursion driven by a symbolic value never terminates.
     size_t maxCallDepth = 4096;
+    /// Input axes left dynamic in the model (e.g. {0} for a variable batch size). The example
+    /// input's extents on these axes are not baked into the graph.
+    std::vector<int64_t> dynamicAxes;
 };
 
 /// Builds the ONNX model of `fn` applied to a tensor like `example`. Throws ExportError.

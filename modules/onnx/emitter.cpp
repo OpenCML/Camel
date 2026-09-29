@@ -87,6 +87,45 @@ std::string sanitize(std::string_view hint) {
     return out.empty() ? std::string("v") : out;
 }
 
+/// Identity of a node for structural CSE, or nullopt for nodes that are never merged (those
+/// with tensor or subgraph attributes, whose comparison is not worth it).
+std::optional<std::string> structuralKey(
+    const std::string &opType, const std::vector<std::string> &inputs,
+    const std::vector<Attribute> &attributes) {
+    std::string key = opType + "(";
+    for (const std::string &in : inputs) {
+        key += in + ",";
+    }
+    key += ")";
+    for (const Attribute &attr : attributes) {
+        key += "|" + attr.name + "=";
+        bool mergeable = true;
+        std::visit(
+            [&](const auto &v) {
+                using V = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<V, float> || std::is_same_v<V, int64_t>) {
+                    key += std::format("{}", v);
+                } else if constexpr (std::is_same_v<V, std::string>) {
+                    key += v;
+                } else if constexpr (
+                    std::is_same_v<V, std::vector<float>> ||
+                    std::is_same_v<V, std::vector<int64_t>> ||
+                    std::is_same_v<V, std::vector<std::string>>) {
+                    for (const auto &e : v) {
+                        key += std::format("{};", e);
+                    }
+                } else {
+                    mergeable = false;
+                }
+            },
+            attr.value);
+        if (!mergeable) {
+            return std::nullopt;
+        }
+    }
+    return key;
+}
+
 } // namespace
 
 ElemType elemTypeOf(TypeCode dtype) {
@@ -100,6 +139,17 @@ ElemType elemTypeOf(TypeCode dtype) {
     default:
         throw ExportError("unsupported tensor dtype");
     }
+}
+
+Value Value::symbolicScalar(std::string name, type::Type *camelType) {
+    Value v;
+    v.kind      = Kind::Symbolic;
+    v.form      = Form::Scalar;
+    v.name      = std::move(name);
+    v.camelType = camelType;
+    v.dtype     = tensor::normalizeTensorDType(camelType->code());
+    v.shape     = tensor::StaticShape{};
+    return v;
 }
 
 TensorFacts factsOf(const Value &value) {
@@ -116,6 +166,13 @@ TensorFacts factsOf(const Value &value) {
 }
 
 type::Type *inferenceTypeOf(const Value &value) {
+    if (value.isSymbolic() && value.form == Value::Form::Scalar) {
+        return value.camelType;
+    }
+    if (value.isSymbolic() && value.form == Value::Form::IntArray) {
+        static type::ArrayType *intArray = type::ArrayType::create(type::Type::Int64());
+        return intArray;
+    }
     if (value.isSymbolic() || constantTensor(value)) {
         const TensorFacts facts = factsOf(value);
         return tensor::TensorType::get(facts.dtype, facts.shape);
@@ -130,7 +187,7 @@ std::optional<ConstArg> constArgOf(const Value &value) {
     return tensor::ops::constArgOf(value.slot, value.ty);
 }
 
-Emitter::Emitter(int64_t opset) : opset_(opset) {}
+Emitter::Emitter(int64_t opset) : opset_(opset) { scopes_.emplace_back(); }
 
 std::string Emitter::fresh(std::string_view hint) {
     const std::string base = sanitize(hint);
@@ -145,14 +202,25 @@ std::string Emitter::fresh(std::string_view hint) {
 std::string Emitter::node(
     std::string opType, std::vector<std::string> inputs, std::vector<Attribute> attributes,
     std::string_view hint) {
+    const std::optional<std::string> key = structuralKey(opType, inputs, attributes);
+    if (key) {
+        for (auto it = scopes_.rbegin(); it != scopes_.rend(); ++it) {
+            if (auto found = it->nodes.find(*key); found != it->nodes.end()) {
+                return found->second;
+            }
+        }
+    }
     std::string output = fresh(hint.empty() ? std::string_view(opType) : hint);
+    if (key) {
+        scopes_.back().nodes.emplace(*key, output);
+    }
     Node n;
     n.opType     = std::move(opType);
     n.name       = "n_" + output;
     n.inputs     = std::move(inputs);
     n.outputs    = {output};
     n.attributes = std::move(attributes);
-    graph_.nodes.push_back(std::move(n));
+    scopes_.back().graph.nodes.push_back(std::move(n));
     return output;
 }
 
@@ -164,15 +232,18 @@ std::string Emitter::operand(const Value &value, std::optional<TypeCode> dtype) 
         return value.name;
     }
     const TypeCode target = tensor::normalizeTensorDType(*dtype);
-    if (auto found = casts_.find({value.name, target}); found != casts_.end()) {
-        return found->second;
+    // A cast is valid in the scope that emitted it and in scopes nested inside it.
+    for (auto it = scopes_.rbegin(); it != scopes_.rend(); ++it) {
+        if (auto found = it->casts.find({value.name, target}); found != it->casts.end()) {
+            return found->second;
+        }
     }
     std::string cast = node(
         "Cast",
         {value.name},
         {Attribute::makeInt("to", static_cast<int64_t>(elemTypeOf(target)))},
         value.name + "_cast");
-    casts_[{value.name, target}] = cast;
+    scopes_.back().casts[{value.name, target}] = cast;
     return cast;
 }
 
@@ -243,7 +314,7 @@ std::string Emitter::int64s(std::span<const int64_t> values) {
 
 std::string Emitter::addInitializer(TensorValue tensor, const std::string &key) {
     std::string name = tensor.name;
-    graph_.initializers.push_back(std::move(tensor));
+    graph().initializers.push_back(std::move(tensor));
     initializerByKey_.emplace(key, name);
     return name;
 }
@@ -252,6 +323,17 @@ void Emitter::retain(rtdata::Object *object, const type::Type *type) {
     if (object) {
         roots_.emplace_back(core::mm::autoSpace(), object, type, "onnx.export_model");
     }
+}
+
+void Emitter::pushScope(std::string name) {
+    scopes_.emplace_back();
+    scopes_.back().graph.name = std::move(name);
+}
+
+Graph Emitter::popScope() {
+    Graph g = std::move(scopes_.back().graph);
+    scopes_.pop_back();
+    return g;
 }
 
 } // namespace camel::onnx

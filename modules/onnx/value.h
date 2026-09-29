@@ -24,8 +24,14 @@
  *   - a constant: a concrete runtime value (slot + type), known at export
  *     time because it does not depend on the exported function's inputs
  *     (weights, hyper-parameters, shape arithmetic, closures), or
- *   - a symbolic tensor: an ONNX value name plus the static facts (dtype and
- *     shape) known about it.
+ *   - a symbolic value: an ONNX value name plus what is statically known
+ *     about it. Its form says which Camel value it stands for:
+ *       Tensor    a tensor (dtype and shape facts),
+ *       Scalar    a Camel int/float/bool (a rank-0 ONNX tensor; `camelType`
+ *                 is the Camel type, floats are carried as float32),
+ *       IntArray  a Camel int[] such as shape(x) with a dynamic batch (a 1-D
+ *                 int64 ONNX tensor; `elements` holds the entries known
+ *                 statically, kUnknownDim for the others).
  */
 
 #pragma once
@@ -35,6 +41,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace camel::onnx {
 
@@ -43,8 +50,10 @@ namespace rtdata = camel::core::rtdata;
 
 struct Value {
     enum class Kind { Constant, Symbolic };
+    enum class Form { Tensor, Scalar, IntArray };
 
     Kind kind = Kind::Constant;
+    Form form = Form::Tensor; // symbolic values only
     // Constant
     slot_t slot    = NullSlot;
     type::Type *ty = nullptr;
@@ -53,6 +62,8 @@ struct Value {
     std::string name;
     std::optional<type::TypeCode> dtype;
     std::optional<tensor::StaticShape> shape;
+    type::Type *camelType = nullptr; // Scalar: the Camel scalar type
+    std::vector<int64_t> elements;   // IntArray: known entries (kUnknownDim when dynamic)
 
     static Value constant(slot_t slot, type::Type *ty) {
         Value v;
@@ -70,6 +81,21 @@ struct Value {
         v.name  = std::move(name);
         v.dtype = dtype;
         v.shape = std::move(shape);
+        return v;
+    }
+
+    /// A symbolic Camel scalar of type `camelType` (int, float, or bool).
+    static Value symbolicScalar(std::string name, type::Type *camelType);
+
+    /// A symbolic int[] whose statically known entries are given (kUnknownDim otherwise).
+    static Value symbolicIntArray(std::string name, std::vector<int64_t> elements) {
+        Value v;
+        v.kind     = Kind::Symbolic;
+        v.form     = Form::IntArray;
+        v.name     = std::move(name);
+        v.dtype    = type::TypeCode::Int64;
+        v.shape    = tensor::StaticShape{static_cast<int64_t>(elements.size())};
+        v.elements = std::move(elements);
         return v;
     }
 

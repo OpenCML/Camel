@@ -32,7 +32,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "export_unsupported_op"
-desc = "An input-dependent operator without an ONNX lowering is reported by URI."
+desc = "An input-dependent operator without an ONNX lowering (a training loss) is reported by URI."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_unsupported.cml"
 args = ["${case}"]
@@ -42,7 +42,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes("operator 'tensor:idx' has no ONNX lowering at opset 17"), 'missing unsupported-operator detail')
+assert(text.includes("operator 'nn:softmax_cross_entropy' has no ONNX lowering at opset 17"), 'missing unsupported-operator detail')
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """
@@ -62,6 +62,54 @@ verify_script = """
 const text = input.normalized.output
 assert(text.includes("impure operator 'tensor:randn' cannot be exported"), 'missing impure-operator detail')
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "export_branch"
+desc = "A branch on a condition computed from the input (t[0] > 0.5) exports as Gather -> Greater -> If."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_branch.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_branch.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["camel gate=2 0 6 1", "exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_branch.onnx'))
+assert(model.ops.join() === 'Gather,Greater,If,Identity', `unexpected top-level ops ${model.ops}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "export_dynamic_batch"
+desc = "dynamic_axes = [0] keeps the batch symbolic: Shape/Gather/Concat/ConstantOfShape replace the folded shape arithmetic."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_dynamic.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_dynamic.onnx"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert, match }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_dynamic.onnx'))
+assert(JSON.stringify(model.inputDims[0]) === '["batch",2]', `input dims ${JSON.stringify(model.inputDims)}`)
+for (const op of ['Shape', 'Gather', 'Concat', 'ConstantOfShape', 'Reshape']) {
+    assert(model.ops.includes(op), `missing ${op} in ${model.ops}`)
+}
+const found = match(/exported supported=([0-9]+)/, input.normalized.stdout)
+assert(Number(found[1]) > 100, `capability list too small: ${found[1]}`)
 }
 """
 timeout_ms = 4000
