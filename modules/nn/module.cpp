@@ -24,26 +24,22 @@
 #include "camel/core/module/module.h"
 #include "executor.h"
 #include "layers.h"
-#include "operators.h"
-#include "type.h"
-#include "vjp_registry.h"
+#include "optim.h"
+#include "state.h"
 
 using namespace camel::core::context;
 using namespace camel::core::module;
 
 NnModule::NnModule(context_ptr_t ctx) : BuiltinModule("nn", ctx) {
+    // nn's operators rely on the tensor catalog (and its tangent space) being registered.
+    camel::tensor::ops::registerTensorOps();
     camel::nn::registerNnTensorOps();
-    exportType(Reference("Parameter"), camel::nn::ParameterType::Default());
+    exportType(Reference("OptimizerState"), camel::nn::OptimizerStateType::Default());
     for (const auto &group : camel::tensor::ops::OpRegistry::instance().operatorGroups("nn")) {
         exportEntity(group->name(), group);
     }
-    for (const auto &group : getNnOperatorGroups()) {
+    for (const auto &group : camel::nn::optimizerOperatorGroups()) {
         exportEntity(group->name(), group);
-        if (group->name() == "parameter") {
-            exportEntity(Reference(std::vector<std::string>{"Parameter"}, "new"), group);
-        } else if (group->name() == "value" || group->name() == "grad") {
-            exportEntity(Reference(std::vector<std::string>{"Parameter"}, group->name()), group);
-        }
     }
 }
 
@@ -53,7 +49,6 @@ bool NnModule::load() {
     if (loaded_) {
         return true;
     }
-    camel::nn::ensureBuiltinVjpRulesRegistered();
     context_->registerExecutorFactory("nn", [ctx = context_]() { return createNnExecutor(ctx); });
     loaded_ = true;
     return true;
