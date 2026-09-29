@@ -124,32 +124,10 @@ type::Type *inferenceTypeOf(const Value &value) {
 }
 
 std::optional<ConstArg> constArgOf(const Value &value) {
-    if (!value.isConstant() || !value.ty) {
+    if (!value.isConstant()) {
         return std::nullopt;
     }
-    const TypeCode code = value.ty->code();
-    switch (code) {
-    case TypeCode::Int32:
-    case TypeCode::Int64:
-        return ConstArg{tensor::scalarToInt64(code, value.slot)};
-    case TypeCode::Float32:
-    case TypeCode::Float64:
-        return ConstArg{tensor::scalarToDouble(code, value.slot)};
-    case TypeCode::Bool:
-        return ConstArg{tensor::scalarToBool(code, value.slot)};
-    case TypeCode::String:
-        return ConstArg{rtdata::fromSlot<::String *>(value.slot)->toString()};
-    case TypeCode::Array: {
-        auto *elem = static_cast<type::ArrayType *>(value.ty)->elemType();
-        if (elem && (elem->code() == TypeCode::Int32 || elem->code() == TypeCode::Int64)) {
-            return ConstArg{
-                tensor::parseIntArray(rtdata::fromSlot<::Array *>(value.slot), value.ty)};
-        }
-        return std::nullopt;
-    }
-    default:
-        return std::nullopt;
-    }
+    return tensor::ops::constArgOf(value.slot, value.ty);
 }
 
 Emitter::Emitter(int64_t opset) : opset_(opset) {}

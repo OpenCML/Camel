@@ -93,6 +93,34 @@ void reportKernelError(std::string_view op, const char *detail) {
     throwRuntimeFault(RuntimeDiag::RuntimeError, std::string(op) + ": " + detail);
 }
 
+std::optional<ConstArg> constArgOf(slot_t slot, type::Type *type) {
+    if (!type) {
+        return std::nullopt;
+    }
+    const TypeCode code = type->code();
+    switch (code) {
+    case TypeCode::Int32:
+    case TypeCode::Int64:
+        return ConstArg{scalarToInt64(code, slot)};
+    case TypeCode::Float32:
+    case TypeCode::Float64:
+        return ConstArg{scalarToDouble(code, slot)};
+    case TypeCode::Bool:
+        return ConstArg{scalarToBool(code, slot)};
+    case TypeCode::String:
+        return ConstArg{rtdata::fromSlot<::String *>(slot)->toString()};
+    case TypeCode::Array: {
+        auto *elem = static_cast<ArrayType *>(type)->elemType();
+        if (elem && (elem->code() == TypeCode::Int32 || elem->code() == TypeCode::Int64)) {
+            return ConstArg{parseIntArray(rtdata::fromSlot<::Array *>(slot), type)};
+        }
+        return std::nullopt;
+    }
+    default:
+        return std::nullopt;
+    }
+}
+
 type::Type *tensorOf(const TensorFacts &facts) { return TensorType::get(facts.dtype, facts.shape); }
 
 type::Type *tensorOf(std::optional<TypeCode> dtype, std::optional<StaticShape> shape) {

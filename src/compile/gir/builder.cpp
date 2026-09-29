@@ -236,6 +236,23 @@ bool nodeIsKind(node_handle_t node, runtime::GCNodeKind kind) {
     return node != nullptr && nodeKindOf(node) == kind;
 }
 
+/// Compile-time value of a node that is static data (possibly behind a COPY), else nullopt.
+std::optional<slot_t> staticValueOf(node_handle_t node) {
+    if (nodeIsKind(node, runtime::GCNodeKind::Copy)) {
+        const auto inputs = normInputsOf(node);
+        if (inputs.size() != 1) {
+            return std::nullopt;
+        }
+        node = nodeDraftOf(node)->node(inputs.front());
+    }
+    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || node->header.dataIndex >= 0) {
+        return std::nullopt;
+    }
+    const auto slots = nodeDraftOf(node)->staticSlots();
+    const auto index = static_cast<size_t>(-node->header.dataIndex);
+    return index < slots.size() ? std::optional<slot_t>(slots[index]) : std::nullopt;
+}
+
 void setNodeType(node_handle_t node, Type *type) {
     ASSERT(node != nullptr, "Cannot update type of null draft node.");
     nodeDraftOf(node)->setNodeDataType(nodeIdOf(node), type);
@@ -1375,12 +1392,39 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             targetFuncType = targetGraph->funcType();
         } else if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             auto ops        = std::get<oper_group_ptr_t>(drefTarget);
-            const auto &res = ops->resolve(withInputTypes, normInputTypes, Modifier::None);
+            // Constant arguments (shape literals, axes) let operators refine their result type.
+            std::vector<std::optional<slot_t>> normStatics;
+            normStatics.reserve(normInputNodes.size());
+            for (node_handle_t input : normInputNodes) {
+                normStatics.push_back(staticValueOf(input));
+            }
+            const auto &res =
+                ops->resolve(withInputTypes, normInputTypes, normStatics, Modifier::None);
             if (!res.has_value()) {
                 std::string argTypesStr = std::format(
                     "<{}> ({})",
                     strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
                     strutil::join(normInputTypes, ", ", [](Type *t) { return t->toString(); }));
+                // An overload whose parameter kinds fit may know the precise reason (e.g. a
+                // static tensor shape conflict); report that instead of "no match".
+                std::vector<std::string> reasons;
+                for (const auto &[uri, resolver] : ops->resolvers()) {
+                    if (auto reason = resolver->explainRejection(
+                            withInputTypes,
+                            normInputTypes,
+                            normStatics,
+                            Modifier::None)) {
+                        if (std::ranges::find(reasons, *reason) == reasons.end()) {
+                            reasons.push_back(std::move(*reason));
+                        }
+                    }
+                }
+                if (!reasons.empty()) {
+                    diags_->of(SemanticDiag::ArgumentsRejected)
+                        .atOrigin(gct->load()->origin())
+                        .commit(ops->name(), argTypesStr, strutil::join(reasons, "; "));
+                    throw BuildAbortException();
+                }
                 std::string overloadsStr =
                     "\n    " +
                     strutil::join(

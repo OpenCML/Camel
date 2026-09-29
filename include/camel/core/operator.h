@@ -118,4 +118,17 @@ class OperatorGroup {
         }
         return std::nullopt;
     }
+
+    /// Like resolve(), also passing the compile-time values of constant norm arguments.
+    std::optional<oper_idx_ptr_t> resolve(
+        const type::type_vec_t &with, const type::type_vec_t &norm, type::static_args_t normStatics,
+        const ModifierSet &modifiers) const {
+        for (const auto &[uri, resolver] : resolvers_) {
+            auto optType = resolver->resolveWith(with, norm, normStatics, modifiers);
+            if (optType) {
+                return std::make_shared<OperatorIndex>(name_, std::move(*optType), uri);
+            }
+        }
+        return std::nullopt;
+    }
 };

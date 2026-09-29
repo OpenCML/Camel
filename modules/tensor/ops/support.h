@@ -94,6 +94,10 @@ broadcast(const std::optional<StaticShape> &lhs, const std::optional<StaticShape
 std::optional<StaticShape>
 reduceShape(const std::optional<StaticShape> &input, std::optional<int64_t> axis, bool keepDims);
 
+/// The value of a constant argument (slot of type `type`) as seen by inference: integers,
+/// numbers, bools, strings, and int arrays; nullopt for anything else.
+std::optional<ConstArg> constArgOf(slot_t slot, type::Type *type);
+
 /// True when at least one of the first `count` arguments is a tensor.
 bool anyTensor(const InferContext &ctx, size_t count);
 /// True when at least one of the first `count` arguments is a tensor or an array.
