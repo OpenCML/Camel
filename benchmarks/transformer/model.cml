@@ -7,10 +7,13 @@
 module transformer
 
 import {
-    Tensor, layer_norm, softmax, gelu, reshape, permute, transpose, shape
+    Tensor, layer_norm, softmax, gelu, reshape, permute, transpose, shape, mean
 } from tensor
 import { sqrt } from math
-import { weight, run_benchmark } from camel_bench
+import { grad, value_and_grad } from autodiff
+import { sgd, save_params } from nn
+import { get_env } from sys
+import { weight, run_benchmark, run_training } from camel_bench
 
 type Block = {
     ln1_gamma: Tensor, ln1_beta: Tensor,
@@ -50,6 +53,24 @@ func forward(x: Tensor): Tensor {
     return h + (f @ m.ffn2_w + m.ffn2_b)
 }
 
+// Training workload (train.py): loss mean(y^2), one SGD step with lr 0.01.
+with <m: Block>
+func loss(x: Tensor): float {
+    let y = forward<m>(x)
+    return mean(y * y)
+}
+
+func train_step(m: Block, x: Tensor): float sync {
+    let vg = value_and_grad(loss)<m>(x)
+    let next = sgd(m, vg.1, 0.01)
+    return vg.0
+}
+
+func dump_grads(m: Block, x: Tensor, dir: string): int sync {
+    save_params(grad(loss)<m>(x), dir)
+    return 0
+}
+
 func main(): int sync {
     let m = {
         ln1_gamma: weight('ln1_gamma'), ln1_beta: weight('ln1_beta'),
@@ -59,5 +80,8 @@ func main(): int sync {
         ffn1_w: weight('ffn1_w'), ffn1_b: weight('ffn1_b'),
         ffn2_w: weight('ffn2_w'), ffn2_b: weight('ffn2_b')
     }
-    return run_benchmark((x: Tensor): Tensor => forward<m>(x))
+    return if get_env('CAMEL_BENCH_WORKLOAD') == 'train' then run_training(
+        (x: Tensor): float => { return train_step(m, x) },
+        (x: Tensor, dir: string): int => { return dump_grads(m, x, dir) }
+    ) else run_benchmark((x: Tensor): Tensor => forward<m>(x))
 }
