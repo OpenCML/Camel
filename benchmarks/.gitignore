@@ -5,5 +5,6 @@ artifacts/
 # Benchmark outputs; only the committed smoke example is tracked
 results/*.csv
 results/*.log
+results/*/
 !results/smoke.csv
 __pycache__/
