@@ -29,6 +29,7 @@
 
 #include "gemm.h"
 
+#include "cpu.h"
 #include "elementwise.h"
 #include "parallel.h"
 
@@ -64,48 +65,6 @@ using type::TypeCode;
 
 namespace {
 
-#if defined(CAMEL_TENSOR_HAS_AVX2_UNIT)
-struct CpuFeatures {
-    bool avx2Fma = false; // AVX2 + FMA with OS-enabled YMM state
-    bool avx512f = false; // AVX-512F with OS-enabled ZMM and opmask state
-};
-
-CpuFeatures detectCpuFeatures() {
-    unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
-    auto cpuid = [&](unsigned int leaf, unsigned int sub) {
-#if defined(_MSC_VER) && !defined(__clang__)
-        int regs[4];
-        __cpuidex(regs, static_cast<int>(leaf), static_cast<int>(sub));
-        eax = regs[0], ebx = regs[1], ecx = regs[2], edx = regs[3];
-#else
-        __asm__ __volatile__("cpuid"
-                             : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
-                             : "a"(leaf), "c"(sub));
-#endif
-    };
-    CpuFeatures features;
-    cpuid(0, 0);
-    if (eax < 7) {
-        return features;
-    }
-    cpuid(1, 0);
-    const bool fma     = (ecx & (1u << 12)) != 0;
-    const bool osxsave = (ecx & (1u << 27)) != 0;
-    const bool avx     = (ecx & (1u << 28)) != 0;
-    if (!(osxsave && avx)) {
-        return features;
-    }
-    unsigned int xcr0Low = 0, xcr0High = 0;
-    __asm__ __volatile__("xgetbv" : "=a"(xcr0Low), "=d"(xcr0High) : "c"(0));
-    const bool ymmState = (xcr0Low & 0x06u) == 0x06u; // XMM, YMM
-    const bool zmmState = (xcr0Low & 0xE6u) == 0xE6u; // + opmask, ZMM_Hi256, Hi16_ZMM
-    cpuid(7, 0);
-    features.avx2Fma = ymmState && fma && (ebx & (1u << 5)) != 0;
-    features.avx512f = zmmState && features.avx2Fma && (ebx & (1u << 16)) != 0;
-    return features;
-}
-#endif
-
 struct BuiltinBackend {
     detail::SgemmFn fn;
     std::string_view name;
@@ -114,7 +73,7 @@ struct BuiltinBackend {
 const BuiltinBackend &builtinBackend() {
     static const BuiltinBackend backend = [] {
 #if defined(CAMEL_TENSOR_HAS_AVX2_UNIT)
-        const CpuFeatures cpu = detectCpuFeatures();
+        const CpuFeatures &cpu = cpuFeatures();
         if (cpu.avx512f) {
             return BuiltinBackend{&detail::sgemmAvx512, "builtin-avx512"};
         }

@@ -39,7 +39,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
-#include <vector>
+#include <memory>
 
 namespace camel::tensor::kernels::detail {
 
@@ -54,6 +54,8 @@ constexpr int kNVec   = kNR / kVecWidth;
 constexpr int64_t kKC = 256;
 constexpr int64_t kMC = 72;  // multiple of both MR choices
 constexpr int64_t kNC = 256; // default column-tile width; multiple of both NR choices
+// Arithmetic per worker below which adding a thread does not pay off (~10 us of FMA work).
+constexpr double kFlopsPerWorker = 2.0 * 1024 * 1024;
 
 typedef float vfloat __attribute__((vector_size(kVecWidth * sizeof(float))));
 
@@ -165,6 +167,17 @@ void microKernel(
     }
 }
 
+/// Per-thread packing buffer that only grows. Packing writes every element the micro-kernel
+/// reads, so the storage is neither zero-filled nor reallocated between calls (for the small
+/// products of inference, allocating and clearing fresh buffers cost more than the arithmetic).
+float *scratch(std::unique_ptr<float[]> &buffer, size_t &capacity, size_t count) {
+    if (capacity < count) {
+        buffer.reset(new float[count]);
+        capacity = count;
+    }
+    return buffer.get();
+}
+
 /// Scales the C tile [ic:ic+mc, jc:jc+nc] by beta (beta == 0 clears it).
 void scaleTile(float *C, int64_t ldc, int64_t ic, int64_t mc, int64_t jc, int64_t nc, float beta) {
     if (beta == 1.0f) {
@@ -190,25 +203,44 @@ void CAMEL_GEMM_ENTRY(
     if (M == 0 || N == 0) {
         return;
     }
-    // Tile the output so every thread has work: with few row blocks (small M,
+    // Use only as many threads as the work pays for: waking a worker costs a few microseconds,
+    // more than a whole small inference product (e.g. 32x64x128) takes on one core.
+    const double flops    = 2.0 * static_cast<double>(M) * static_cast<double>(N) * K;
+    const int64_t workers = std::clamp<int64_t>(
+        static_cast<int64_t>(flops / kFlopsPerWorker),
+        1,
+        std::max(1, numThreads()));
+
+    // Tile the output so every worker has work: with few row blocks (small M,
     // typical for inference batches) the column blocks are narrowed, in NR
-    // multiples, until there are at least as many tiles as threads.
+    // multiples, until there are at least as many tiles as workers.
     const int64_t mTiles = (M + kMC - 1) / kMC;
     int64_t ncTile       = kNC;
-    if (mTiles * ((N + kNC - 1) / kNC) < numThreads()) {
-        const int64_t wanted = (numThreads() + mTiles - 1) / mTiles;
+    if (mTiles * ((N + kNC - 1) / kNC) < workers) {
+        const int64_t wanted = (workers + mTiles - 1) / mTiles;
         const int64_t width  = (N + wanted - 1) / wanted;
         ncTile               = std::max<int64_t>(kNR, (width + kNR - 1) / kNR * kNR);
     }
     const int64_t nTiles = (N + ncTile - 1) / ncTile;
+    const int64_t tiles  = mTiles * nTiles;
+    // parallelFor splits into chunks of at least `grain` tiles; this grain yields `workers` chunks.
+    const int64_t grain = std::max<int64_t>(1, tiles / workers);
 
     // One parallel region for the whole product: each task owns an output tile
     // and walks all K blocks, packing just the A rows and B columns it needs.
     // Re-packing across tiles costs O(1/MC + 1/ncTile) of the arithmetic.
-    parallelFor(mTiles * nTiles, 1, [&](int64_t begin, int64_t end) {
+    parallelFor(tiles, workers == 1 ? tiles : grain, [&](int64_t begin, int64_t end) {
         const int64_t kcMax = std::min(kKC, K);
-        std::vector<float> packedA(static_cast<size_t>(((kMC + kMR - 1) / kMR) * kMR * kcMax));
-        std::vector<float> packedB(static_cast<size_t>(((ncTile + kNR - 1) / kNR) * kNR * kcMax));
+        thread_local std::unique_ptr<float[]> bufferA, bufferB;
+        thread_local size_t capacityA = 0, capacityB = 0;
+        float *packedA = scratch(
+            bufferA,
+            capacityA,
+            static_cast<size_t>(((kMC + kMR - 1) / kMR) * kMR * kcMax));
+        float *packedB = scratch(
+            bufferB,
+            capacityB,
+            static_cast<size_t>(((ncTile + kNR - 1) / kNR) * kNR * kcMax));
         for (int64_t t = begin; t < end; ++t) {
             const int64_t ic = (t / nTiles) * kMC;
             const int64_t mc = std::min(kMC, M - ic);
@@ -220,13 +252,13 @@ void CAMEL_GEMM_ENTRY(
             }
             for (int64_t pc = 0; pc < K; pc += kKC) {
                 const int64_t kc = std::min(kKC, K - pc);
-                packB(B, ldb, transB, pc, kc, jc, nc, packedB.data());
-                packA(A, lda, transA, ic, mc, pc, kc, packedA.data());
+                packB(B, ldb, transB, pc, kc, jc, nc, packedB);
+                packA(A, lda, transA, ic, mc, pc, kc, packedA);
                 for (int64_t jr = 0; jr < nc; jr += kNR) {
-                    const float *Bp  = packedB.data() + (jr / kNR) * kc * kNR;
+                    const float *Bp  = packedB + (jr / kNR) * kc * kNR;
                     const int64_t nr = std::min<int64_t>(kNR, nc - jr);
                     for (int64_t ir = 0; ir < mc; ir += kMR) {
-                        const float *Ap  = packedA.data() + (ir / kMR) * kc * kMR;
+                        const float *Ap  = packedA + (ir / kMR) * kc * kMR;
                         const int64_t mr = std::min<int64_t>(kMR, mc - ir);
                         microKernel(kc, Ap, Bp, C + (ic + ir) * ldc + jc + jr, ldc, alpha, mr, nr);
                     }
