@@ -490,6 +490,7 @@ class Backward final : public VjpBuilder {
     const std::unordered_map<gc_node_ref_t, CallSite> &sites_;
     const bool inPlace_;
     std::unordered_set<gc_node_ref_t> primals_;
+    std::unordered_set<gc_node_ref_t> active_;
     mutable std::unordered_map<gc_node_ref_t, Tangent> gradients_;
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> toTarget_;
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> toPrimal_;
@@ -787,11 +788,10 @@ void Backward::accumulateGradient(vjp_node_t node, vjp_node_t gradient) {
 }
 
 void Backward::accumulate(gc_node_ref_t primal, gc_node_ref_t gradient) {
-    Type *type = typeOf(forward_, primal);
-    if (tangentTypeOf(type) == nullptr || staticValue(forward_, primal)) {
-        return; // no tangent, or a constant
+    if (!active_.contains(primal)) {
+        return; // a constant, or a value no parameter flows into
     }
-    accumulateInto(gradients_[primal], type, gradient);
+    accumulateInto(gradients_[primal], typeOf(forward_, primal), gradient);
 }
 
 void Backward::accumulateInto(Tangent &tangent, Type *primalType, gc_node_ref_t gradient) {
@@ -895,6 +895,25 @@ gc_node_ref_t Backward::gradient(gc_node_ref_t primal) {
 
 void Backward::run(const std::vector<gc_node_ref_t> &order) {
     primals_.insert(order.begin(), order.end());
+    // Activity analysis: a value is active when it has a tangent and depends on a parameter that
+    // has one. Gradients only flow between active values, so values derived from constants or
+    // integers (e.g. a scale computed from a shape) need no rule and cost nothing.
+    std::unordered_set<gc_node_ref_t> ports(forward_.withPorts().begin(), forward_.withPorts().end());
+    ports.insert(forward_.normPorts().begin(), forward_.normPorts().end());
+    for (gc_node_ref_t node : order) {
+        if (tangentTypeOf(typeOf(forward_, node)) == nullptr) {
+            continue;
+        }
+        bool active = ports.contains(node);
+        for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
+            for (gc_node_ref_t input : inputs) {
+                active |= active_.contains(input);
+            }
+        }
+        if (active) {
+            active_.insert(node);
+        }
+    }
     for (auto it = order.rbegin(); it != order.rend(); ++it) {
         auto found = gradients_.find(*it);
         if (found != gradients_.end() && !found->second.empty()) {
@@ -989,14 +1008,13 @@ void Backward::visitOper(gc_node_ref_t node) {
     const auto payload = forward_.payloadOf(node);
     const auto *body   = reinterpret_cast<const rt::GCOperBody *>(payload.data());
     const std::string uri(body->uri());
-    // Operators none of whose inputs can take a gradient (conversions from integers,
-    // constructors from shapes) need no rule.
-    bool differentiable = false;
+    // Operators without an active input (conversions from integers, arithmetic on shapes) pass
+    // no gradient on and need no rule.
+    bool active = false;
     for (gc_node_ref_t input : forward_.normInputsOf(node)) {
-        differentiable |=
-            tangentTypeOf(typeOf(forward_, input)) != nullptr && !staticValue(forward_, input);
+        active |= active_.contains(input);
     }
-    if (!differentiable) {
+    if (!active) {
         return;
     }
     const camel::core::VjpRule rule = DerivativeRegistry::instance().findRule(uri);
@@ -1013,7 +1031,7 @@ void Backward::visitOper(gc_node_ref_t node) {
 void Backward::visitAccs(gc_node_ref_t node) {
     const gc_node_ref_t source = forward_.normInputsOf(node).front();
     Type *sourceType           = typeOf(forward_, source);
-    if (!isAggregate(sourceType) || staticValue(forward_, source)) {
+    if (!isAggregate(sourceType) || !active_.contains(source)) {
         return;
     }
     const auto payload = forward_.payloadOf(node);
@@ -1049,8 +1067,7 @@ void Backward::visitFill(gc_node_ref_t node) {
             continue;
         }
         Type *elementType = aggregateElement(type, slot);
-        if (tangentTypeOf(typeOf(forward_, values[i])) == nullptr ||
-            staticValue(forward_, values[i])) {
+        if (!active_.contains(values[i])) {
             continue;
         }
         mergeInto(gradients_[values[i]], elementType, std::move(element->second));
