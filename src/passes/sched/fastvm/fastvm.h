@@ -62,6 +62,12 @@ inline void fastVmCallBoundarySafepoint(uint32_t &countdown) {
     }
 }
 
+/// The graph and entry pc a higher-order operator (map, foreach, ...) calls.
+struct HigherOrderCallSite {
+    camel::runtime::GCGraph *runtimeGraph = nullptr;
+    size_t entryPc                        = 0;
+};
+
 struct FastVMConfig {
     enum class JitMode {
         Disabled,
@@ -137,6 +143,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     size_t stackDepth_ = 0;
 
     void precompile(camel::runtime::GCGraph *runtimeRoot);
+    /// Compiles and links a graph that has no bytecode yet (see graphEntryPc).
+    void compileLate(camel::runtime::GCGraph *graph);
+    HigherOrderCallSite higherOrderCallSite(Function *func);
 
     void push(size_t pc, ctx::Frame *frame);
     std::pair<size_t, ctx::Frame *> pop();
@@ -189,7 +198,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
 
     CallResult callBorrowed(size_t pc, ctx::Frame *rootFrame);
     slot_t call(size_t pc, ctx::Frame *rootFrame);
-    size_t graphEntryPc(camel::runtime::GCGraph *graph) const;
+    /// Entry pc of `graph`, compiling it (and what it reaches) first when it was created after
+    /// startup, e.g. a gradient built at run time.
+    size_t graphEntryPc(camel::runtime::GCGraph *graph);
     uint32_t noteIndirectCall(camel::runtime::GCGraph *graph) const;
 
 #if ENABLE_FASTVM_JIT

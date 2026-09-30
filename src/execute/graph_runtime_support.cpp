@@ -36,6 +36,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/log.h"
 
+#include <algorithm>
 #include <format>
 #include <functional>
 #include <queue>
@@ -317,6 +318,29 @@ bool runtimeNodeOutputsContain(
            contains(graph->ctrlOutputsOf(nodeRef));
 }
 
+std::vector<gc_node_ref_t>
+collectRuntimeTailJoinArmValues(camel::runtime::GCGraph *graph, gc_node_ref_t tailJoinRef) {
+    ASSERT(graph != nullptr, "Runtime tail-join collection requires a graph.");
+    std::vector<gc_node_ref_t> values;
+    std::vector<gc_node_ref_t> joins{tailJoinRef};
+    while (!joins.empty()) {
+        const gc_node_ref_t joinRef = joins.back();
+        joins.pop_back();
+        for (gc_node_ref_t armRef : graph->withInputsOf(joinRef)) {
+            const gc_node_ref_t value = resolveRuntimeForwardedValueRef(graph, armRef);
+            const auto *node = value != camel::runtime::kInvalidNodeRef ? graph->node(value) : nullptr;
+            if (!node || std::find(values.begin(), values.end(), value) != values.end()) {
+                continue;
+            }
+            values.push_back(value);
+            if (node->kind == camel::runtime::GCNodeKind::Join) {
+                joins.push_back(value);
+            }
+        }
+    }
+    return values;
+}
+
 bool hasOnlyTrivialRuntimeTailSuffixAfter(
     const camel::runtime::GCGraph *graph, std::span<const gc_node_ref_t> topoOrder,
     size_t anchorIndex) {
@@ -494,7 +518,17 @@ gc_node_ref_t resolveRuntimeBranchArmEntry(
     for (auto nodeRef : regionNodes) {
         collectInputs(nodeRef);
     }
-    for (auto nodeRef : topoOrder) {
+    // Only code laid out after the BRCH is still to run: an input of the arm placed before it
+    // (a value the arm reads, computed earlier but not for the selector) has already run, and
+    // entering there would re-run the graph from that point.
+    auto afterBrch = std::find(topoOrder.begin(), topoOrder.end(), brchRef);
+    if (afterBrch != topoOrder.end()) {
+        ++afterBrch;
+    } else {
+        afterBrch = topoOrder.begin();
+    }
+    for (auto it = afterBrch; it != topoOrder.end(); ++it) {
+        const auto nodeRef = *it;
         if (!armRegion.contains(nodeRef)) {
             continue;
         }

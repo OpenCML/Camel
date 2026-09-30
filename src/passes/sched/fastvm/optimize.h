@@ -110,16 +110,30 @@ class JumpToJumpStrategy : public IOptimizeStrategy {
         size_t next   = bc.fastop[0];
         Bytecode &tbc = codes[next];
 
-        // Fold when the target is also a JUMP
-        if (tbc.opcode == OpCode::JUMP) {
+        // Fold when the target is also a JUMP (not itself: an empty loop stays)
+        if (tbc.opcode == OpCode::JUMP && next != curr && tbc.fastop[0] != next) {
             // Point at the second jump's target
             bc.fastop[0] = tbc.fastop[0];
 
-            // Remove the skipped middle JUMP
+            // The middle JUMP goes only when nothing else reaches it: no other JUMP targets it,
+            // it is no dispatch entry, and the instruction before it does not fall through.
+            if (isBrchDispatchJump(codes, next)) {
+                return curr;
+            }
+            for (size_t j = 0; j < codes.size(); j += codes[j].opsize) {
+                if (codes[j].opcode == OpCode::JUMP && static_cast<size_t>(codes[j].fastop[0]) == next) {
+                    return curr;
+                }
+            }
+            const size_t prev = findPrev(codes, next);
+            if (prev != next && codes[prev].opcode != OpCode::JUMP &&
+                codes[prev].opcode != OpCode::TAIL && codes[prev].opcode != OpCode::RETN) {
+                return curr;
+            }
             removeop(codes, next, pcOrigins);
-            redirect(codes, curr, -1, pcOrigins);
+            redirect(codes, next, -1, pcOrigins);
 
-            return curr;
+            return next < curr ? curr - 1 : curr;
         }
 
         return std::nullopt;
@@ -202,7 +216,7 @@ class JoinCleanupStrategy : public IOptimizeStrategy {
         bool hasJumpToSelf = false;
 
         // Scan all JUMPs that target this JOIN
-        for (size_t j = 0; j < codes.size(); j++) {
+        for (size_t j = 0; j < codes.size(); j += codes[j].opsize) {
             Bytecode &nbc = codes[j];
             if (nbc.opcode != OpCode::JUMP)
                 continue;
@@ -227,10 +241,18 @@ class JoinCleanupStrategy : public IOptimizeStrategy {
             }
         }
 
-        // No JUMPs target this JOIN; safe to remove it
-        if (!hasJumpToSelf) {
+        // No JUMP targets this JOIN and nothing falls through into it (every arm returned):
+        // it is unreachable. A JOIN reached by fall-through still writes the branch's value.
+        const size_t prev = findPrev(codes, curr);
+        const bool fallsThrough =
+            prev == curr || !(codes[prev].opcode == OpCode::TAIL ||
+                              codes[prev].opcode == OpCode::RETN ||
+                              codes[prev].opcode == OpCode::JUMP);
+        if (!hasJumpToSelf && !fallsThrough) {
+            // A JOIN spans several slots: targets after it move back by all of them.
+            const int size = static_cast<int>(bc.opsize);
             removeop(codes, curr, pcOrigins);
-            redirect(codes, curr, -1, pcOrigins);
+            redirect(codes, curr, -size, pcOrigins);
 
             // Keep the trailing RETN intact. Optimization runs on one
             // graph-local bytecode chunk before cross-graph linking, so RETN is

@@ -1,0 +1,47 @@
+/**
+ * Effects around code that std::opt::simplify evaluates away. The recursion
+ * builds a constant, so simplify inlines and folds it; the println before it
+ * must still run first, the arm that reads a value computed before its branch
+ * (`items`) must enter after the branch, not at the start of main, and the tail
+ * call through nested branches must not grow the stack.
+ */
+module effect_order_folded
+
+import { Tensor, range, reshape, concat, zeros, show } from tensor
+
+func count_down(i: int, acc: int): int sync {
+    return if i <= 0 then acc else step(i, acc)
+}
+
+// Inlined into count_down's arm, its branch nests inside count_down's: both recursive calls
+// are still tail calls.
+func step(i: int, acc: int): int sync {
+    return if i % 2 == 0 then count_down(i - 1, acc + 2) else count_down(i - 1, acc + 1)
+}
+
+func main(): int sync {
+    println('start')
+    let labels = [3, 1, 4]
+    let n = 3
+    sync func one_hot(i: int, acc: Tensor): Tensor {
+        return if i >= n then acc else sync {
+            let row = reshape((range(0, 10) == labels[i]) * 1.0, [1, 10])
+            let next = if i == 0 then row else concat(acc, row, 0)
+            return one_hot(i + 1, next)
+        }
+    }
+    let y = one_hot(0, zeros([1, 10]))
+    show(y)
+    let items: int[] = [7, 8, 9]
+    var seen: int[] = []
+    sync func visit(i: int): void {
+        return if i >= len(items) then null else sync {
+            seen->append<items[i]>
+            return visit(i + 1)
+        }
+    }
+    wait visit(0)
+    println('seen {}'->format<seen>)
+    println('count {}'->format<count_down(5000, 0)>)
+    return 0
+}

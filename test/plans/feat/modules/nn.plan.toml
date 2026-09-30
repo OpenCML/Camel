@@ -1046,3 +1046,69 @@ match(/gru_lite whn_grad=tensor/, out)
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "svm.simplify.fvm"
+desc = "Exercises a heavier tensor optimization example with SVM-style training and prediction; simplified, then run by FastVM."
+kind = "behavior"
+case = "../../../cases/modules/nn/svm.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "svm.simplify.jit"
+desc = "Exercises a heavier tensor optimization example with SVM-style training and prediction; simplified, then run by the JIT."
+kind = "behavior"
+case = "../../../cases/modules/nn/svm.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "residual_mlp.simplify.fvm"
+desc = "Trains a residual MLP struct model (nested Linear layers plus an int field) with sgd and adam over recursive train loops; simplified, then run by FastVM."
+kind = "behavior"
+case = "../../../cases/modules/nn/residual_mlp.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/residual_mlp start=([0-9.eE+-]+) value=([0-9.eE+-]+) sgd=([0-9.eE+-]+) adam=([0-9.eE+-]+) depth=([0-9]+)/, input.normalized.stdout)
+const [start, value, bySgd, byAdam, depth] = found.slice(1, 6).map(Number)
+assert([start, value, bySgd, byAdam].every(Number.isFinite), 'metrics are not finite')
+assert(start > 0, `expected positive initial loss, got ${start}`)
+assert(approx(value, start, 1e-9), `value_and_grad loss ${value} should equal the direct loss ${start}`)
+assert(bySgd < start, `expected sgd training to lower the loss: start=${start}, sgd=${bySgd}`)
+assert(byAdam < start, `expected adam training to lower the loss: start=${start}, adam=${byAdam}`)
+assert(depth === 2, `expected the int field to survive sgd updates unchanged, got depth=${depth}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "residual_mlp.simplify.jit"
+desc = "Trains a residual MLP struct model (nested Linear layers plus an int field) with sgd and adam over recursive train loops; simplified, then run by the JIT."
+kind = "behavior"
+case = "../../../cases/modules/nn/residual_mlp.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/residual_mlp start=([0-9.eE+-]+) value=([0-9.eE+-]+) sgd=([0-9.eE+-]+) adam=([0-9.eE+-]+) depth=([0-9]+)/, input.normalized.stdout)
+const [start, value, bySgd, byAdam, depth] = found.slice(1, 6).map(Number)
+assert([start, value, bySgd, byAdam].every(Number.isFinite), 'metrics are not finite')
+assert(start > 0, `expected positive initial loss, got ${start}`)
+assert(approx(value, start, 1e-9), `value_and_grad loss ${value} should equal the direct loss ${start}`)
+assert(bySgd < start, `expected sgd training to lower the loss: start=${start}, sgd=${bySgd}`)
+assert(byAdam < start, `expected adam training to lower the loss: start=${start}, adam=${byAdam}`)
+assert(depth === 2, `expected the int field to survive sgd updates unchanged, got depth=${depth}`)
+}
+"""
+timeout_ms = 4000

@@ -263,3 +263,110 @@ for (const [kind, callee] of forward.filter(([k]) => k === 'FUNC')) {
 """
 timeout_ms = 4000
 
+[[tests]]
+name = "effect_order_folded.nvm"
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (NodeVM)."
+kind = "behavior"
+case = "../../../cases/opt/generic/effect_order_folded.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
+assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
+assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "effect_order_folded.simplify.nvm"
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt::simplify, NodeVM)."
+kind = "behavior"
+case = "../../../cases/opt/generic/effect_order_folded.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
+assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
+assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "effect_order_folded.simplify.fvm"
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt::simplify, FastVM)."
+kind = "behavior"
+case = "../../../cases/opt/generic/effect_order_folded.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
+assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
+assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "effect_order_folded.simplify.jit"
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt::simplify, JIT)."
+kind = "behavior"
+case = "../../../cases/opt/generic/effect_order_folded.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
+assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
+assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "effect_order_folded.inline.fvm"
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::inline, FastVM)."
+kind = "behavior"
+case = "../../../cases/opt/generic/effect_order_folded.cml"
+args = ["${case}", "std::macro", "std::inline", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
+assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
+assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "effect_order_folded.inline.jit"
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::inline, JIT)."
+kind = "behavior"
+case = "../../../cases/opt/generic/effect_order_folded.cml"
+args = ["${case}", "std::macro", "std::inline", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
+assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
+assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+}
+"""
+timeout_ms = 8000

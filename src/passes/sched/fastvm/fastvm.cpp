@@ -131,26 +131,6 @@ inline uint32_t incFastVmIndirectCallCountOf(camel::runtime::GCGraph *graph) {
     return next;
 }
 
-struct HigherOrderCallSite {
-    camel::runtime::GCGraph *runtimeGraph = nullptr;
-    size_t entryPc                        = 0;
-};
-
-inline HigherOrderCallSite makeHigherOrderCallSite(Function *func) {
-    ASSERT(func != nullptr, "Higher-order call target function is null.");
-    camel::runtime::GCGraph *runtimeGraph = func->graph();
-    ASSERT(
-        runtimeGraph != nullptr,
-        "FastVM higher-order runtime call requires a materialized runtime graph.");
-    const auto entryPc = fastVmEntryPcOf(runtimeGraph);
-    ASSERT(
-        entryPc.has_value(),
-        std::format("Runtime graph '{}' has no FastVM entry pc.", runtimeGraph->name()));
-    return {
-        .runtimeGraph = runtimeGraph,
-        .entryPc      = *entryPc,
-    };
-}
 
 // Direct-call layouts encode callee port slots during bytecode linking. Most calls move scalar
 // values between positive dynamic slots, so copying through slotBase() avoids the generic
@@ -324,17 +304,26 @@ void FastVMSchedPass::populateMarkedCallFrame(
     populateFunctionClosureFrame(calleeFrame, func);
 }
 
+namespace {
+
+const CompileStrategy kFastVmCompileStrategy{
+    .enableTailCallDetection = true,
+    .enableInlineOperators   = true,
+    .optimizationStrategies  = OptimizationStrategyCode::All,
+};
+
+// Graphs created while the program runs are compiled into the same bytecode vector, which the
+// interpreter and the JIT address by pointer while frames are active: it must never move. Its
+// capacity is reserved up front (untouched pages cost no memory).
+constexpr size_t kLateBytecodeReserve = size_t{1} << 22; // 4M bytecodes, 32 MiB
+
+} // namespace
+
 void FastVMSchedPass::precompile(camel::runtime::GCGraph *runtimeRoot) {
     ASSERT(runtimeRoot != nullptr, "Runtime root graph is null.");
-    auto linked = compileAndLink(
-        context_,
-        runtimeRoot,
-        {
-            .enableTailCallDetection = true,
-            .enableInlineOperators   = true,
-            .optimizationStrategies  = OptimizationStrategyCode::All,
-        });
+    auto linked = compileAndLink(context_, runtimeRoot, kFastVmCompileStrategy);
     bytecodes_ = std::move(linked.codes);
+    bytecodes_.reserve(bytecodes_.size() + std::max(kLateBytecodeReserve, bytecodes_.size() * 4));
     offsetMap_ = std::move(linked.offsetMap);
     for (const auto &[offset, length, runtimeGraph] : linked.graphs) {
         if (!runtimeGraph) {
@@ -342,6 +331,29 @@ void FastVMSchedPass::precompile(camel::runtime::GCGraph *runtimeRoot) {
         }
         setFastVmEntryPcOf(runtimeGraph, offset);
         setFastVmGraphLengthOf(runtimeGraph, length);
+    }
+}
+
+void FastVMSchedPass::compileLate(camel::runtime::GCGraph *graph) {
+    auto linked =
+        compileAndLinkFrom(context_, graph, kFastVmCompileStrategy, offsetMap_, bytecodes_.size());
+    if (bytecodes_.size() + linked.codes.size() > bytecodes_.capacity()) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::format(
+                "FastVM: no room left to compile graph '{}' created at run time ({} bytecodes in "
+                "use)",
+                graph->name(),
+                bytecodes_.size()));
+    }
+    bytecodes_.insert(bytecodes_.end(), linked.codes.begin(), linked.codes.end());
+    for (const auto &[offset, length, runtimeGraph] : linked.graphs) {
+        offsetMap_[runtimeGraph] = offset;
+        setFastVmEntryPcOf(runtimeGraph, offset);
+        setFastVmGraphLengthOf(runtimeGraph, length);
+#if ENABLE_FASTVM_JIT
+        setJitCompileFailedOf(runtimeGraph, false, true);
+#endif
     }
 }
 
@@ -465,7 +477,7 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
     for (size_t i = 0; i < arrSize; ++i) {
         Array *arr                     = currFrame.get<Array *>(nargs[0]);
         Function *func                 = currFrame.get<Function *>(wargs[0]);
-        const HigherOrderCallSite site = makeHigherOrderCallSite(func);
+        const HigherOrderCallSite site = higherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
@@ -487,7 +499,7 @@ void FastVMSchedPass::evalMarkedOperator_apply_arr(
     for (size_t i = 0; i < arrSize; ++i) {
         Array *arr                     = currFrame.get<Array *>(nargs[0]);
         Function *func                 = currFrame.get<Function *>(wargs[0]);
-        const HigherOrderCallSite site = makeHigherOrderCallSite(func);
+        const HigherOrderCallSite site = higherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
@@ -514,7 +526,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
     for (size_t i = 0; i < arrSize; ++i) {
         Array *arr                     = currFrame.get<Array *>(nargs[0]);
         Function *func                 = currFrame.get<Function *>(wargs[0]);
-        const HigherOrderCallSite site = makeHigherOrderCallSite(func);
+        const HigherOrderCallSite site = higherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
@@ -551,7 +563,7 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     for (size_t i = 0; i < arrSize; ++i) {
         Array *arr                     = currFrame.get<Array *>(nargs[0]);
         Function *func                 = currFrame.get<Function *>(wargs[0]);
-        const HigherOrderCallSite site = makeHigherOrderCallSite(func);
+        const HigherOrderCallSite site = higherOrderCallSite(func);
         const slot_t args[]            = {currFrame.get<slot_t>(self), arr->data()[i]};
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(args, 2));
@@ -573,7 +585,7 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     for (size_t i = 0; i < arrSize; ++i) {
         Array *arr                     = currFrame.get<Array *>(nargs[0]);
         Function *func                 = currFrame.get<Function *>(wargs[0]);
-        const HigherOrderCallSite site = makeHigherOrderCallSite(func);
+        const HigherOrderCallSite site = higherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
@@ -769,12 +781,22 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
     return result.result;
 }
 
-size_t FastVMSchedPass::graphEntryPc(camel::runtime::GCGraph *graph) const {
+HigherOrderCallSite FastVMSchedPass::higherOrderCallSite(Function *func) {
+    ASSERT(func != nullptr, "Higher-order call target function is null.");
+    camel::runtime::GCGraph *runtimeGraph = func->graph();
+    ASSERT(
+        runtimeGraph != nullptr,
+        "FastVM higher-order runtime call requires a materialized runtime graph.");
+    return {.runtimeGraph = runtimeGraph, .entryPc = graphEntryPc(runtimeGraph)};
+}
+
+size_t FastVMSchedPass::graphEntryPc(camel::runtime::GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime graph is null.");
     auto pc = fastVmEntryPcOf(graph);
-    ASSERT(
-        pc.has_value(),
-        std::format("Runtime graph '{}' has no FastVM entry pc.", graph->name()));
+    if (!pc) [[unlikely]] {
+        compileLate(graph);
+        pc = fastVmEntryPcOf(graph);
+    }
     return *pc;
 }
 

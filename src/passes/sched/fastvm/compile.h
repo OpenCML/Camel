@@ -53,4 +53,15 @@ bytecode_vec_t compile(
 LinkedBytecodeResult
 compileAndLink(ctx::context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileStrategy &opt);
 
+/**
+ * Compiles the graphs reachable from `entry` that `known` (graph -> entry pc) does not hold yet,
+ * as bytecode placed at `baseOffset` onward, and links it: direct calls and tail calls reach both
+ * the new graphs and the known ones. The result's offsets are absolute; its offsetMap holds the
+ * new graphs only. This is how graphs created while the program runs (a gradient built at run
+ * time) join the bytecode compiled at startup.
+ */
+LinkedBytecodeResult compileAndLinkFrom(
+    ctx::context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileStrategy &opt,
+    const std::unordered_map<camel::runtime::GCGraph *, size_t> &known, size_t baseOffset);
+
 std::string opCodeToString(const Bytecode &bc, const ctx::context_ptr_t &context);

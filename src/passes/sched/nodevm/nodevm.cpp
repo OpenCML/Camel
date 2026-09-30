@@ -30,6 +30,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/error/runtime.h"
 
+#include <algorithm>
 #include <span>
 
 using namespace std;
@@ -233,6 +234,13 @@ NodeVMSchedPass::buildTopoNodes(camel::runtime::GCGraph *runtimeGraph) {
                               cache->topoNodeRefs,
                               cache->tailValueTopoIndex);
 
+    // A call whose result reaches the tail JOIN only through forwarding GATEs and nested
+    // JOINs is still in tail position.
+    const std::vector<gc_node_ref_t> tailJoinArmValues =
+        anchorOk && cache->tailValueIsJoin
+            ? camel::execute::collectRuntimeTailJoinArmValues(runtimeGraph, cache->tailValueRef)
+            : std::vector<gc_node_ref_t>{};
+
     for (size_t idx = 0; idx < cache->topoNodeRefs.size(); ++idx) {
         const gc_node_ref_t nodeRef = cache->topoNodeRefs[idx];
         const auto *node            = runtimeGraph->node(nodeRef);
@@ -254,12 +262,9 @@ NodeVMSchedPass::buildTopoNodes(camel::runtime::GCGraph *runtimeGraph) {
             cache->directCallArgSlots.push_back(dataIndexOf(runtimeGraph, argRef));
         }
         cache->directCallTailEligible[idx] = anchorOk && (nodeRef == cache->tailValueRef);
-        if (anchorOk && cache->tailValueIsJoin) {
-            cache->directCallFeedsTailJoin[idx] = camel::execute::runtimeNodeOutputsContain(
-                runtimeGraph,
-                nodeRef,
-                cache->tailValueRef);
-        }
+        cache->directCallFeedsTailJoin[idx] =
+            std::find(tailJoinArmValues.begin(), tailJoinArmValues.end(), nodeRef) !=
+            tailJoinArmValues.end();
     }
     cache->directCallArgOffsets[cache->topoNodeRefs.size()] =
         static_cast<uint32_t>(cache->directCallArgSlots.size());
