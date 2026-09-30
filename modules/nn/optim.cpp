@@ -305,7 +305,10 @@ slot_t adamKernel(ArgsView &, ArgsView &norm, Context &) {
         Type *type           = norm.type(0);
         auto *state          = norm.get<OptimizerStateObject *>(2);
         TupleType *treesType = momentsType(type);
-        if (!state->treesType()->equals(treesType)) {
+        // Passes may sharpen the model type (a static tensor shape) on one side only, so the
+        // two must be compatible, not identical.
+        if (!state->treesType()->assignableFrom(treesType) &&
+            !treesType->assignableFrom(state->treesType())) {
             throw std::invalid_argument("the state was created for a model of another shape");
         }
         const AdamConfig c{
