@@ -104,12 +104,8 @@ Shape resolveReshape(std::span<const int64_t> input, std::span<const int64_t> ta
 
 TensorObject *
 reshape(const TensorObject *input, std::span<const int64_t> target, mm::IAllocator &allocator) {
-    const Shape shape = resolveReshape(input->shapeSpan(), target);
-    TensorObject *out = TensorObject::create(input->dtype(), shape, allocator);
-    if (input->byteSize() > 0) {
-        std::memcpy(out->rawData(), input->rawData(), input->byteSize());
-    }
-    return out;
+    // Tensors are immutable, so the result shares the input's buffer.
+    return TensorObject::createView(input, resolveReshape(input->shapeSpan(), target), allocator);
 }
 
 Shape permuteShape(std::span<const int64_t> input, std::span<const int64_t> perm) {

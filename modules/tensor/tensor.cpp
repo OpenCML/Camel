@@ -23,6 +23,7 @@
 
 #include "tensor.h"
 
+#include "camel/core/mm.h"
 #include "camel/utils/assert.h"
 
 #include <cmath>
@@ -74,6 +75,39 @@ TensorObject *TensorObject::create(
         std::memset(tensor->data_, 0, static_cast<size_t>(dataBytes));
     }
     return tensor;
+}
+
+TensorObject *TensorObject::createView(
+    const TensorObject *source, std::span<const int64_t> shape, mm::IAllocator &allocator) {
+    if (numelOf(shape) != source->numel_) {
+        throw std::invalid_argument("Tensor view must keep the element count");
+    }
+    if (&allocator != &mm::autoSpace()) {
+        TensorObject *copy = create(source->dtype_, shape, allocator, false);
+        if (source->byteSize_ > 0) {
+            std::memcpy(copy->data_, source->data_, static_cast<size_t>(source->byteSize_));
+        }
+        return copy;
+    }
+    const TensorObject *owner = source->owner_ ? source->owner_ : source;
+    const size_t shapeBytes   = shape.size() * sizeof(int64_t);
+    void *memory = allocator.alloc(sizeof(TensorObject) + shapeBytes, alignof(TensorObject));
+    if (!memory) {
+        throw std::bad_alloc();
+    }
+    auto *view = new (memory) TensorObject(
+        source->dtype_,
+        static_cast<uint32_t>(shape.size()),
+        source->numel_,
+        source->byteSize_);
+    view->owner_           = const_cast<TensorObject *>(owner);
+    view->ownerDataOffset_ = static_cast<size_t>(
+        owner->data_ - reinterpret_cast<const std::byte *>(owner));
+    view->refreshPointers();
+    if (!shape.empty()) {
+        std::memcpy(view->shape_, shape.data(), shapeBytes);
+    }
+    return view;
 }
 
 int64_t TensorObject::dim(size_t index) const {
@@ -255,13 +289,24 @@ void TensorObject::onMoved() { refreshPointers(); }
 
 void TensorObject::updateRefs(
     const rtdata::Object::RefRelocator &relocate, const type::Type *typeInfo) {
-    (void)relocate;
-    (void)typeInfo;
+    if (!owner_) {
+        return;
+    }
+    const rtdata::RefTraceInfo info{
+        .owner     = this,
+        .ownerType = typeInfo,
+        .slotType  = typeInfo,
+        .ownerKind = "TensorObject",
+        .slotName  = "owner",
+    };
+    owner_ = static_cast<TensorObject *>(relocate(owner_, typeInfo, info));
+    refreshPointers();
 }
 
 void TensorObject::refreshPointers() {
     shape_ = reinterpret_cast<int64_t *>(storage_);
-    data_  = storage_ + rank_ * sizeof(int64_t);
+    data_  = owner_ ? reinterpret_cast<std::byte *>(owner_) + ownerDataOffset_
+                    : storage_ + rank_ * sizeof(int64_t);
 }
 
 void TensorObject::printRecursive(

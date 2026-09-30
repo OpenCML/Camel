@@ -21,8 +21,11 @@
  * The runtime tensor object.
  *
  * A TensorObject is a single GC allocation holding its header, its shape, and
- * a contiguous row-major element buffer. It holds no GC references, so the
- * collector can move it freely; `onMoved` re-derives the interior pointers.
+ * a contiguous row-major element buffer. A view (see createView) instead reads
+ * the buffer of another tensor, its owner, with a shape of its own; that is its
+ * only GC reference. Tensors are never written after they are built, so sharing
+ * a buffer is unobservable. The collector can move either object; `onMoved` and
+ * `updateRefs` re-derive the interior pointers.
  *
  * The per-element accessors (`getAsDouble`, ...) exist for printing and for
  * scalar reads. Kernels must use typed buffers through `dataAs<T>()`.
@@ -71,6 +74,17 @@ class TensorObject : public rtdata::Object {
         type::TypeCode dtype, std::span<const int64_t> shape, mm::IAllocator &allocator,
         bool zeroInit = false);
 
+    /**
+     * A tensor with `source`'s elements and dtype and the given shape (same element count),
+     * sharing `source`'s buffer instead of copying it. It keeps the buffer's owner alive. Only
+     * the collected heap (mm::autoSpace) can hold a view; for any other allocator this copies.
+     */
+    static TensorObject *
+    createView(const TensorObject *source, std::span<const int64_t> shape, mm::IAllocator &allocator);
+
+    /// True when this tensor reads another tensor's buffer.
+    bool isView() const { return owner_ != nullptr; }
+
     size_t rank() const { return rank_; }
     uint64_t numel() const { return numel_; }
     type::TypeCode dtype() const { return dtype_; }
@@ -114,6 +128,11 @@ class TensorObject : public rtdata::Object {
     uint64_t byteSize_;
     int64_t *shape_;
     std::byte *data_;
+    // A view: the tensor whose buffer it reads (never itself a view), and the buffer's offset
+    // from that tensor's address, so the pointer is re-derived by arithmetic alone when either
+    // object moves.
+    TensorObject *owner_ = nullptr;
+    size_t ownerDataOffset_ = 0;
     std::byte storage_[];
 };
 
