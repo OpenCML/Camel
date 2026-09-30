@@ -961,14 +961,21 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     for (gc_node_ref_t input : ctrlInputs) {
         removeUserRef(input, id, false, false, true);
     }
+    // User lists may still name users erased earlier (as replaceUsesInList also allows for).
     for (gc_node_ref_t userId : normUsers) {
-        (void)unlinkInput(DraftEdgeKind::Norm, userId, id);
+        if (alive(userId)) {
+            (void)unlinkInput(DraftEdgeKind::Norm, userId, id);
+        }
     }
     for (gc_node_ref_t userId : withUsers) {
-        (void)unlinkInput(DraftEdgeKind::With, userId, id);
+        if (alive(userId)) {
+            (void)unlinkInput(DraftEdgeKind::With, userId, id);
+        }
     }
     for (gc_node_ref_t userId : ctrlUsers) {
-        (void)unlinkInput(DraftEdgeKind::Ctrl, userId, id);
+        if (alive(userId)) {
+            (void)unlinkInput(DraftEdgeKind::Ctrl, userId, id);
+        }
     }
     for (gc_node_ref_t otherId = 0; otherId < nodeSlotCount(); ++otherId) {
         if (otherId == id || !alive(otherId)) {

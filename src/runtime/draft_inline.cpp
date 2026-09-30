@@ -749,6 +749,21 @@ gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id) 
     }
 }
 
+/// A CALL rewritten into a direct FUNC no longer reads its callee value. When that value carried
+/// ordering (in sync code the callee is gated after the previous statement), the FUNC keeps it
+/// as a control input, so the statements before still run first. A callee that waits on nothing
+/// (a constant, a closure built from values) carries no ordering.
+void keepCalleeOrdering(GraphDraft &draft, gc_node_ref_t funcNodeId, gc_node_ref_t callee) {
+    const DraftNodeHeader *header = draft.header(callee);
+    if (!header || draft.ctrlInputsOf(callee).empty()) {
+        return;
+    }
+    const auto existing = draft.ctrlInputsOf(funcNodeId);
+    if (callee != funcNodeId && std::find(existing.begin(), existing.end(), callee) == existing.end()) {
+        draft.appendInput(DraftEdgeKind::Ctrl, funcNodeId, callee);
+    }
+}
+
 namespace {
 
 /// `base` with its closure nodes turned into trailing norm ports, in closure order (lambda
@@ -848,7 +863,9 @@ bool devirtualizeClosureCallInDraft(
     init.payload    = std::span<const std::byte>(payload.data(), payload.size());
     init.normInputs = normInputs;
     init.withInputs = directWith;
+    const gc_node_ref_t calleeInput = withInputs.front();
     draft.rewriteNode(callNodeId, init);
+    keepCalleeOrdering(draft, callNodeId, calleeInput);
     CAMEL_LOG_INFO_S(
         "DraftOpt",
         "Devirtualized closure CALL node {} to direct FUNC '{}'.",
@@ -932,8 +949,11 @@ bool devirtualizeStaticCallInDraft(
     std::memcpy(newPayload.data(), &funcBody, sizeof(funcBody));
     init.kind       = GCNodeKind::Func;
     init.payload    = std::span<const std::byte>(newPayload.data(), newPayload.size());
-    init.withInputs = std::span<const gc_node_ref_t>(withInputs.begin() + 1, directWithCount);
+    const std::vector<gc_node_ref_t> directWith(withInputs.begin() + 1, withInputs.end());
+    const gc_node_ref_t calleeInput = withInputs.front();
+    init.withInputs                 = directWith;
     draft.rewriteNode(callNodeId, init);
+    keepCalleeOrdering(draft, callNodeId, calleeInput);
     CAMEL_LOG_INFO_S(
         "DraftOpt",
         "Devirtualized CALL node {} to direct FUNC '{}'.",
