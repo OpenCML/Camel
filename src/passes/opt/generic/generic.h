@@ -31,6 +31,8 @@
  *   std::opt::dce   removes pure operator (and value-only) nodes whose results
  *                   are unused, and SYNC control joins.
  *
+ * std::opt::simplify runs std::opt, fold and dce to a fixpoint.
+ *
  * Together with std::opt (devirtualization, which also turns calls of closures
  * built in the caller into direct calls of a lambda-lifted graph, and
  * inlining), they collapse the pullback closures of autodiff into straight-line
@@ -59,6 +61,19 @@ class CommonSubexpressionPass : public RuntimeGraphRewritePass {
 };
 
 class DeadCodePass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+};
+
+/**
+ * std::opt::simplify: std::opt, std::opt::fold and std::opt::dce repeated until the program stops
+ * changing. The passes feed each other (specializing a call makes a condition constant, folding
+ * prunes the branch, which exposes the next call to specialize and inline), so a recursion of
+ * static depth unrolls and a static program reduces to straight-line code. Rounds are bounded:
+ * a recursion whose depth is not static would otherwise specialize one level deeper each round.
+ */
+class SimplifyPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;

@@ -101,3 +101,114 @@ assert(count(':io/println') === 3, 'effects must be kept')
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "static_branches.reference"
+desc = "Static branches, a sync recursion and a call through a function value after an effect: reference output (no pass)."
+kind = "behavior"
+case = "../../../cases/opt/generic/static_branches.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'taken\nbig\ntick 3\ntick 2\ntick 1\nbefore call\ntwice=6 ticks=3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "static_branches.simplify"
+desc = "std::opt::simplify prunes the static branch (only the taken arm's effect runs), keeps every effect in order (including before a devirtualized call), and does not change results."
+kind = "behavior"
+case = "../../../cases/opt/generic/static_branches.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'taken\nbig\ntick 3\ntick 2\ntick 1\nbefore call\ntwice=6 ticks=3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "static_branches.simplify.rgir"
+desc = "After std::opt::simplify, main has no branch left."
+kind = "behavior"
+case = "../../../cases/opt/generic/static_branches.cml"
+args = ["${case}", "std::opt::simplify", "${run_rgir}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+// Nodes of graph `name` itself (nested graphs excluded), as [kind, label] pairs.
+const nodesOf = (text, name) => {
+  const stack = []; const own = []
+  for (const line of text.split('\n')) {
+    if (line.includes('subgraph')) { stack.push(null); continue }
+    const label = line.match(/label="([^"]*)";/)
+    if (label && stack.length && stack[stack.length - 1] === null) { stack[stack.length - 1] = label[1]; continue }
+    if (line.trim() === '}' && stack.length) { stack.pop(); continue }
+    const node = line.match(/^\s*[NO][0-9A-F]+ \[label="([^"]*)", type="([A-Z_]+)"\]/)
+    if (node && stack[stack.length - 1] === name) own.push([node[2], node[1]])
+  }
+  return own
+}
+const own = nodesOf(input.normalized.stdout, 'main')
+assert(own.length > 0, 'no main graph in the dump')
+assert(!own.some(([kind]) => kind === 'BRCH' || kind === 'JOIN'), `main still branches: ${JSON.stringify(own)}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "recursion_unroll.simplify"
+desc = "A recursion of constant depth computes the same value after std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/opt/generic/recursion_unroll.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'unroll=4.75', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "recursion_unroll.simplify.rgir"
+desc = "std::opt::simplify unrolls a recursion of constant depth: forward becomes straight-line code with no call or branch."
+kind = "behavior"
+case = "../../../cases/opt/generic/recursion_unroll.cml"
+args = ["${case}", "std::opt::simplify", "${run_rgir}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+// Nodes of graph `name` itself (nested graphs excluded), as [kind, label] pairs.
+const nodesOf = (text, name) => {
+  const stack = []; const own = []
+  for (const line of text.split('\n')) {
+    if (line.includes('subgraph')) { stack.push(null); continue }
+    const label = line.match(/label="([^"]*)";/)
+    if (label && stack.length && stack[stack.length - 1] === null) { stack[stack.length - 1] = label[1]; continue }
+    if (line.trim() === '}' && stack.length) { stack.pop(); continue }
+    const node = line.match(/^\s*[NO][0-9A-F]+ \[label="([^"]*)", type="([A-Z_]+)"\]/)
+    if (node && stack[stack.length - 1] === name) own.push([node[2], node[1]])
+  }
+  return own
+}
+const own = nodesOf(input.normalized.stdout, 'forward')
+assert(own.some(([kind]) => kind === 'OPER'), `forward has no operators: ${JSON.stringify(own)}`)
+for (const kind of ['FUNC', 'CALL', 'BRCH', 'JOIN']) {
+  assert(!own.some(([k]) => k === kind), `forward still has ${kind}: ${JSON.stringify(own)}`)
+}
+}
+"""
+timeout_ms = 4000
+

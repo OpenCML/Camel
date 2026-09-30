@@ -50,7 +50,7 @@ CAMEL_CONFIGS: Dict[str, Tuple[str, ...]] = {
     "camel_fvm": ("std::macro", "std::fvm"),
     "camel_fuse_nvm": ("std::macro", "tensor::fuse", "std::nvm"),
     # Generic simplification first: pullback closures collapse into straight-line code.
-    "camel_opt_nvm": ("std::macro", "std::opt", "std::opt::fold", "std::opt::dce", "std::nvm"),
+    "camel_opt_nvm": ("std::macro", "std::opt::simplify", "std::nvm"),
 }
 
 

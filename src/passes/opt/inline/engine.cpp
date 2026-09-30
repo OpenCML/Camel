@@ -557,7 +557,7 @@ bool applyRuntimeOptimizeRewrite(
 
 camel::runtime::GCGraph *applyOptimizeRewritePass(
     const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *graph,
-    std::ostream &os, const OptimizeRewriteConfig &config) {
+    std::ostream &os, const OptimizeRewriteConfig &config, bool *changedOut) {
     (void)os;
 
     if (!graph) {
@@ -577,6 +577,9 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
         }
         changed = true;
         graph   = context->runtimeRootGraph();
+    }
+    if (changedOut) {
+        *changedOut = changed;
     }
     return changed ? context->runtimeRootGraph() : graph;
 }

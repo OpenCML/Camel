@@ -1,0 +1,35 @@
+/**
+ * Inputs for static branch pruning and call devirtualization: a branch whose condition folds to a
+ * constant (both arms have effects; only the taken one may run, in order), a recursion whose depth
+ * is a constant, and a call through a function value that follows an effect (the call must still
+ * run after it once it becomes a direct call).
+ */
+module static_branches
+
+func countdown(n: int): int sync {
+    return if n == 0 then 0 else sync {
+        'tick {}'->format<n>->println
+        return 1 + countdown(n - 1)
+    }
+}
+
+func twice(v: int): int {
+    return v * 2
+}
+
+func main(): int sync {
+    let limit = 3
+    let label = if limit > 2 then sync {
+        println('taken')
+        return 'big'
+    } else sync {
+        println('not taken')
+        return 'small'
+    }
+    println(label)
+    let ticks = countdown(limit)
+    let f = twice
+    println('before call')
+    'twice={} ticks={}'->format<f(ticks), ticks>->println
+    return 0
+}

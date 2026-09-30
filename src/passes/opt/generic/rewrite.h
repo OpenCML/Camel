@@ -63,10 +63,12 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
 
 /**
  * Runs `rewrite` on the draft of every graph reachable from `graph` and commits when anything
- * changed. `rewrite` returns the number of rewrites it made. Returns the graph to continue with.
+ * changed. `rewrite` returns the number of rewrites it made (their total is stored in `rewrites`
+ * when given). Returns the graph to continue with.
  */
 camel::runtime::GCGraph *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *graph,
-    std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite);
+    std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite,
+    size_t *rewrites = nullptr);
 
 } // namespace camel::passes::generic

@@ -356,6 +356,7 @@ PassScopePtr initPassScope() {
                              {"fold", def(PASS(ConstantFoldPass))},
                              {"cse", def(PASS(CommonSubexpressionPass))},
                              {"dce", def(PASS(DeadCodePass))},
+                             {"simplify", def(PASS(SimplifyPass))},
                          })},
                     {"taskflow", def(PASS(TaskflowExecSchedPass))},
                     {"tfdump", def(PASS(TfDumpPass))},
