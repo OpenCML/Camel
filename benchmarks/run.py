@@ -39,6 +39,7 @@ BENCH_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(BENCH_ROOT))
 
 from common import configs as cfgs  # noqa: E402
+from common import envinfo  # noqa: E402
 from common import stats  # noqa: E402
 from common.models import MODELS  # noqa: E402
 from common.weights import generate  # noqa: E402
@@ -276,6 +277,13 @@ def main() -> int:
                 f"[{r['ci_low_ms']:.4g}, {r['ci_high_ms']:.4g}] n={r['trials']}{sp_txt}"
                 + (f"  ({r['notes']})" if r.get("notes") else "")
             )
+    meta = envinfo.write_meta(
+        out,
+        threads=args.threads,
+        extra={"workload": "inference", "trials": args.trials, "warmup": args.warmup, "reps": args.reps},
+    )
+    print(f"[done] wrote environment metadata to {meta}")
+    print(f"[note] {envinfo.NOTE}")
     bad = [r for r in rows if r.get("status") == "failed" or r.get("agree") == "NO"]
     return 1 if bad else 0
 

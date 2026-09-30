@@ -18,13 +18,16 @@ Camel's own execution (the loss it reports and ``w - lr * grad`` from the
 dumped gradients).
 
 Timing (``--time``): PyTorch eager versus the Camel configurations below, each
-run in ``--trials`` fresh processes, interleaved; the report gives the median
-step time and a bootstrap 95% CI over trial medians.
+run in ``--trials`` fresh processes, interleaved. Output has run.py's format:
+raw rows per trial (first step, warmup and steady-state step latencies, peak
+RSS of the process running the model) and a summary with the median step time,
+a bootstrap 95% CI over trial medians and the speedup over PyTorch, plus a
+``.meta.json`` with the environment (common/envinfo.py).
 
 Usage:
   .venv/bin/python train.py --check
   .venv/bin/python train.py --check-onnx
-  .venv/bin/python train.py --time --trials 5 --out results/train.json
+  .venv/bin/python train.py --time --trials 5 --out results/train.csv
 """
 
 from __future__ import annotations
@@ -44,9 +47,10 @@ import numpy as np
 BENCH_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(BENCH_ROOT))
 
-from common import stats  # noqa: E402
+from common import envinfo, stats  # noqa: E402
 from common.camel import _camel_env, parse_bench_lines  # noqa: E402
 from common.configs import camel_binary, camel_model  # noqa: E402
+from run import _write_csv  # noqa: E402
 from common.weights import load  # noqa: E402
 
 MODELS = ["mlp", "gru", "transformer"]
@@ -211,8 +215,39 @@ def check_onnx(models: List[str], rtol: float) -> bool:
 # ---------------------------------------------------------------- timing
 
 
-def torch_step_times(model: str, reps: int, warmup: int, threads: int) -> List[float]:
+COLUMNS = [
+    "model",
+    "config",
+    "trial",
+    "status",
+    "threads",
+    "warmup",
+    "reps",
+    "compile_s",
+    "warmup_s",
+    "latency_median_ms",
+    "latency_p10_ms",
+    "latency_p90_ms",
+    "latency_mean_ms",
+    "peak_rss_mb",
+    "notes",
+]
+
+
+def _latency_fields(times: List[float]) -> Dict[str, float]:
+    return {
+        "latency_median_ms": stats.median(times),
+        "latency_p10_ms": stats.percentile(times, 10),
+        "latency_p90_ms": stats.percentile(times, 90),
+        "latency_mean_ms": sum(times) / len(times),
+    }
+
+
+def torch_trial_row(model: str, reps: int, warmup: int, threads: int) -> dict:
+    """One PyTorch trial, run inside a fresh process (see torch_trial)."""
     import torch
+
+    from common.memory import peak_rss_self_kb
 
     torch.set_num_threads(threads)
     weights, x = load(model)
@@ -225,79 +260,100 @@ def torch_step_times(model: str, reps: int, warmup: int, threads: int) -> List[f
         torch_loss(net, xt).backward()
         opt.step()
 
-    for _ in range(warmup):
+    start = time.perf_counter()
+    step()
+    compile_s = time.perf_counter() - start
+    for _ in range(warmup - 1):
         step()
+    warmup_s = time.perf_counter() - start
     times = []
     for _ in range(reps):
-        start = time.perf_counter()
+        begin = time.perf_counter()
         step()
-        times.append((time.perf_counter() - start) * 1000.0)
-    return times
+        times.append((time.perf_counter() - begin) * 1000.0)
+    return {
+        "compile_s": compile_s,
+        "warmup_s": warmup_s,
+        **_latency_fields(times),
+        "peak_rss_mb": peak_rss_self_kb() / 1024.0,
+    }
 
 
-def torch_trial(model: str, reps: int, warmup: int, threads: int) -> List[float]:
-    """One trial in a fresh process, like the Camel trials."""
-    code = (
-        "import json, sys; sys.path.insert(0, %r); import train; "
-        "print(json.dumps(train.torch_step_times(%r, %d, %d, %d)))" % (str(BENCH_ROOT), model, reps, warmup, threads)
-    )
-    out = subprocess.run(
-        [sys.executable, "-c", code], cwd=BENCH_ROOT, capture_output=True, text=True, check=True
-    ).stdout
-    return json.loads(out.strip().splitlines()[-1])
+def camel_trial_row(model: str, passes: Tuple[str, ...], reps: int, warmup: int, threads: int) -> dict:
+    """One Camel trial; runs inside a fresh Python process that has no other child (see
+    camel_trial), so the kernel's children high-water mark is this run's peak RSS."""
+    from common.memory import run_with_peak_rss
 
-
-def camel_trial(model: str, passes: Tuple[str, ...], reps: int, warmup: int, threads: int) -> List[float]:
-    out = run_camel(
+    env = _camel_env(
         model,
-        passes,
-        {"CAMEL_BENCH_REPS": str(reps), "CAMEL_BENCH_WARMUP": str(warmup), "CAMEL_BENCH_THREADS": str(threads)},
+        {
+            "CAMEL_BENCH_WORKLOAD": "train",
+            "CAMEL_BENCH_REPS": str(reps),
+            "CAMEL_BENCH_WARMUP": str(warmup),
+            "CAMEL_BENCH_THREADS": str(threads),
+        },
     )
-    return parse_bench_lines(out).latencies_ms
+    cmd = [str(camel_binary()), str(camel_model(model)), *passes]
+    code, stdout, stderr, peak_kb = run_with_peak_rss(cmd, camel_model(model).parent, env)
+    if code != 0:
+        raise RuntimeError(f"{' '.join(cmd)} failed ({code}): {stderr.strip()[-400:]}")
+    res = parse_bench_lines(stdout)
+    return {
+        "compile_s": res.summary.get("compile_ms", float("nan")) / 1000.0,
+        "warmup_s": res.summary.get("warmup_ms", float("nan")) / 1000.0,
+        **_latency_fields(res.latencies_ms),
+        "peak_rss_mb": peak_kb / 1024.0 if peak_kb else None,
+    }
 
 
-def time_models(models: List[str], trials: int, reps: int, warmup: int, threads: int) -> dict:
+def _in_fresh_process(call: str) -> dict:
+    code = f"import json, sys; sys.path.insert(0, {str(BENCH_ROOT)!r}); import train; print(json.dumps(train.{call}))"
+    proc = subprocess.run([sys.executable, "-c", code], cwd=BENCH_ROOT, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip()[-400:])
+    return json.loads(proc.stdout.strip().splitlines()[-1])
+
+
+def time_models(models: List[str], trials: int, reps: int, warmup: int, threads: int) -> List[dict]:
+    """Raw rows, one per (model, config, trial), in run.py's format."""
     configs = ["torch_eager", *CAMEL_CONFIGS]
-    samples: Dict[str, Dict[str, List[float]]] = {m: {c: [] for c in configs} for m in models}
-    for trial in range(trials):
+    rows: List[dict] = []
+    for trial in range(1, trials + 1):
         for model in models:
             # Rotate the order per trial so no configuration always runs first.
-            order = configs[trial % len(configs) :] + configs[: trial % len(configs)]
-            for config in order:
-                if config == "torch_eager":
-                    times = torch_trial(model, reps, warmup, threads)
-                else:
-                    times = camel_trial(model, CAMEL_CONFIGS[config], reps, warmup, threads)
-                samples[model][config].append(stats.median(times))
-                print(f"trial {trial + 1}/{trials} {model:12s} {config:16s} {stats.median(times):8.3f} ms")
-    report = {"trials": trials, "reps": reps, "threads": threads, "models": {}}
-    for model in models:
-        rows = {}
-        base = stats.median(samples[model]["torch_eager"])
-        for config in configs:
-            meds = samples[model][config]
-            lo, hi = stats.bootstrap_ci(meds)
-            rows[config] = {
-                "median_ms": stats.median(meds),
-                "ci95_ms": [lo, hi],
-                "trial_medians_ms": meds,
-                "speedup_vs_torch": base / stats.median(meds),
-            }
-        report["models"][model] = rows
-    return report
+            k = (trial - 1) % len(configs)
+            for config in configs[k:] + configs[:k]:
+                base = {"model": model, "config": config, "trial": trial, "threads": threads, "warmup": warmup, "reps": reps}
+                try:
+                    if config == "torch_eager":
+                        res = _in_fresh_process(f"torch_trial_row({model!r}, {reps}, {warmup}, {threads})")
+                    else:
+                        passes = CAMEL_CONFIGS[config]
+                        res = _in_fresh_process(f"camel_trial_row({model!r}, {passes!r}, {reps}, {warmup}, {threads})")
+                    rows.append({**base, "status": "ok", **res})
+                    print(
+                        f"trial {trial}/{trials} {model:12s} {config:16s} {res['latency_median_ms']:8.3f} ms  "
+                        f"warmup {res['warmup_s']:.2f} s  rss {res['peak_rss_mb'] or 0:.0f} MB",
+                        flush=True,
+                    )
+                except Exception as exc:
+                    rows.append({**base, "status": "failed", "notes": str(exc)})
+                    print(f"trial {trial}/{trials} {model:12s} {config:16s} FAILED: {exc}", flush=True)
+    return rows
 
 
-def print_report(report: dict) -> None:
+def print_summary(summary: List[dict]) -> None:
     print()
-    print(f"training step (median of {report['trials']} trials x {report['reps']} steps, {report['threads']} threads)")
-    for model, rows in report["models"].items():
-        print(f"== {model}")
-        for config, row in rows.items():
-            lo, hi = row["ci95_ms"]
-            print(
-                f"  {config:16s} {row['median_ms']:8.3f} ms  [{lo:.3f}, {hi:.3f}]  "
-                f"x{row['speedup_vs_torch']:.2f} vs torch eager"
-            )
+    for r in summary:
+        if r.get("median_ms") is None:
+            print(f"  {r['model']:<12} {r['config']:<16} {r['status']}: {r.get('notes') or ''}")
+            continue
+        sp = r.get("speedup")
+        sp_txt = f"  x{sp:.2f} [{r['speedup_ci_low']:.2f}, {r['speedup_ci_high']:.2f}] vs {r['baseline']}" if sp else ""
+        print(
+            f"  {r['model']:<12} {r['config']:<16} {r['median_ms']:8.3f} ms [{r['ci_low_ms']:.3f}, {r['ci_high_ms']:.3f}]"
+            f" n={r['trials']}  warmup {r['warmup_s']:.2f} s  rss {r['peak_rss_mb'] or 0:.0f} MB{sp_txt}"
+        )
 
 
 def main() -> int:
@@ -327,11 +383,21 @@ def main() -> int:
         ok = check(models, args.rtol, [c for c in args.check_configs.split(",") if c])
         print("gradient check:", "PASS" if ok else "FAIL")
     if args.time:
-        report = time_models(models, args.trials, args.reps, args.warmup, args.threads)
-        print_report(report)
-        if args.out:
-            args.out.parent.mkdir(parents=True, exist_ok=True)
-            args.out.write_text(json.dumps(report, indent=2))
+        rows = time_models(models, args.trials, args.reps, args.warmup, args.threads)
+        summary = stats.summarize(rows, baseline="torch_eager")
+        print_summary(summary)
+        out = args.out or BENCH_ROOT / "results" / f"train-{time.strftime('%Y%m%d-%H%M%S')}.csv"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        _write_csv(out, COLUMNS, rows)
+        spath = out.with_name(f"{out.stem}_summary{out.suffix or '.csv'}")
+        _write_csv(spath, stats.SUMMARY_COLUMNS, summary)
+        meta = envinfo.write_meta(
+            out,
+            threads=args.threads,
+            extra={"workload": "training", "trials": args.trials, "warmup": args.warmup, "reps": args.reps},
+        )
+        print(f"[done] wrote {out}, {spath} and {meta}")
+        print(f"[note] {envinfo.NOTE}")
     return 0 if ok else 1
 
 

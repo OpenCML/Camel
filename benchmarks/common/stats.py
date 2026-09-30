@@ -41,6 +41,8 @@ SUMMARY_COLUMNS = [
     "ci_high_ms",
     "min_ms",
     "max_ms",
+    "compile_s",
+    "warmup_s",
     "peak_rss_mb",
     "export_s",
     "agree",
@@ -231,6 +233,10 @@ def summarize(
         row["min_ms"], row["max_ms"] = min(vals), max(vals)
         rss = [x for r in rs if r.get("status") == "ok" and (x := _float(r.get("peak_rss_mb"))) is not None]
         row["peak_rss_mb"] = sum(rss) / len(rss) if rss else None
+        # Start-up cost, reported apart from the steady state: first call and warmup, per trial.
+        for key in ("compile_s", "warmup_s"):
+            got = [x for r in rs if r.get("status") == "ok" and (x := _float(r.get(key))) is not None]
+            row[key] = median(got) if got else None
         row["agree"] = _agree(str(r.get("agree") or "") for r in rs if r.get("status") == "ok")
 
         base = medians.get((model, baseline), {})

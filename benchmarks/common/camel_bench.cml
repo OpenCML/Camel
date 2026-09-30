@@ -96,6 +96,7 @@ export func run_training(step: (x: Tensor) => float, dump: (x: Tensor, dir: stri
         let first = step(x)
         'CAMEL_BENCH compile_ms={}'->format<(now() - warmStart) * 1000.0>->println
         let warmed = warm_steps(step, x, int(get_env('CAMEL_BENCH_WARMUP')) - 1)
+        'CAMEL_BENCH warmup_ms={}'->format<(now() - warmStart) * 1000.0>->println
         return timed_steps(step, x, int(get_env('CAMEL_BENCH_REPS')))
     }
 }

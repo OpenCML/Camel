@@ -222,20 +222,22 @@ std::vector<std::string> resolvePassListWithRc(
         *outFallbackPasses =
             rc.fallback.empty() ? std::vector<std::string>{DEFAULT_FALLBACK_PASS} : rc.fallback;
 
-    // Pass list is always prefix + cliPassList + suffix; deduplicate by pass name (first occurrence
-    // wins).
+    // Pass list is always prefix + cliPassList + suffix. The command line is kept as written (a
+    // pass may run twice, e.g. `std::stats` before and after a rewrite); an rc prefix or suffix
+    // pass is skipped when the list already runs it.
     std::vector<std::string> out;
+    const std::unordered_set<std::string> cli(cliPassList.begin(), cliPassList.end());
     std::unordered_set<std::string> seen;
-    auto appendUnique = [&out, &seen](const std::string &p) {
+    for (const auto &p : rc.prefix)
+        if (!cli.contains(p) && seen.insert(p).second)
+            out.push_back(p);
+    for (const auto &p : cliPassList) {
+        seen.insert(p);
+        out.push_back(p);
+    }
+    for (const auto &p : rc.suffix)
         if (seen.insert(p).second)
             out.push_back(p);
-    };
-    for (const auto &p : rc.prefix)
-        appendUnique(p);
-    for (const auto &p : cliPassList)
-        appendUnique(p);
-    for (const auto &p : rc.suffix)
-        appendUnique(p);
     if (out.size() > MAX_TOTAL_PASSES)
         out.resize(MAX_TOTAL_PASSES);
     return out;

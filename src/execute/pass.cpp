@@ -39,6 +39,7 @@
 #include "passes/sched/taskflow/taskflow.h"
 #include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
+#include "passes/trans/stats/stats.h"
 #include "passes/trans/tns/topo_node_seq.h"
 
 #include "camel/utils/log.h"
@@ -284,6 +285,7 @@ PassScopePtr initPassScope() {
                     {"null", def(PASS(NullGraphIRPass))},
                     {"macro", def(PASS(MacroRewritePass))},
                     {"graphviz", def(PASS(GraphVizDumpPass))},
+                    {"stats", def(PASS(GraphStatsPass))},
                     {"readable_graphviz",
                      def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.readableOnly = true}))},
                     {"cpp",

@@ -326,6 +326,37 @@ own fresh process first. All times are wall clock (`time.perf_counter`).
 | `max_abs_err`, `agree` | first-call output vs the NumPy reference, `allclose(rtol=1e-4, atol=1e-5)` |
 | `notes` | skip/failure reason, or extra info (`process_wall_s` for Camel) |
 
+## Environment metadata
+
+Every result CSV (`run.py`, `train.py --time`) gets a `<name>.meta.json`
+sidecar (`common/envinfo.py`): CPU model, logical and usable CPUs, threads,
+load average, OS, Python and framework versions, the Camel commit (and whether
+the tree was dirty) and the binary's build time. Its `note` field, also
+printed at the end of every run, says that numbers measured on shared or
+virtual machines (such as a development container) only validate the tools;
+the paper's numbers come from runs on dedicated hardware.
+
+## Memory
+
+`peak_rss_mb` is the peak resident set size of the process that executes the
+model, runtime and libraries included, measured the same way for every
+framework: the Camel binary is a child of a Python process that runs nothing
+else, so the kernel's children high-water mark (`RUSAGE_CHILDREN`) is its
+peak; PyTorch and TensorFlow run inside a fresh worker process, whose own
+high-water mark (`RUSAGE_SELF`) is read after the last step (on Windows,
+psutil's `peak_wset`). Training trials (`train.py --time`) are measured the
+same way. The Python interpreter's own footprint is therefore part of the
+PyTorch and TensorFlow numbers and not of Camel's.
+
+## Training workload
+
+`train.py --time` times training steps (loss, gradient, SGD update) of PyTorch
+eager and the Camel configurations in interleaved fresh-process trials. Its
+CSV has run.py's columns: `compile_s` (first step), `warmup_s` (first step
+plus warmup, reported apart from the steady state), latency statistics of the
+timed steps and `peak_rss_mb`; the `_summary.csv` has the median step time, its
+bootstrap 95% CI and the speedup over PyTorch eager.
+
 ## Numerical agreement
 
 `common/check.py` runs every available configuration once and compares it with

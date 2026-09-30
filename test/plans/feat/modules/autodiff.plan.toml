@@ -362,3 +362,24 @@ assert(out.includes('collapse dh=22'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "collapse.stats"
+desc = "std::stats before and after std::opt::simplify: the gradient's calls (direct and through pullback closures) are gone, and the value is unchanged."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/collapse.cml"
+args = ["${case}", "std::macro", "std::stats", "std::opt::simplify", "std::stats", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const stats = [...out.matchAll(/GRAPH_STATS ([{].*[}])/g)].map((m) => JSON.parse(m[1]))
+assert(stats.length === 2, `expected two GRAPH_STATS lines: ${out}`)
+const [before, after] = stats
+assert(before.direct_calls + before.indirect_calls > 0, `nothing to collapse: ${JSON.stringify(before)}`)
+assert(after.direct_calls === 0 && after.indirect_calls === 0, `calls left: ${JSON.stringify(after)}`)
+assert(out.includes('collapse dh=22'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
