@@ -199,6 +199,9 @@ std::vector<int64_t> parseIntArray(const Array *array, const type::Type *arrayTy
         throw std::invalid_argument("Expected an integer array");
     }
     auto *typed = static_cast<const type::ArrayType *>(arrayType);
+    if (typed->elemTypeCode() == TypeCode::Void && array->size() == 0) {
+        return {}; // `[]`
+    }
     if (typed->elemTypeCode() != TypeCode::Int32 && typed->elemTypeCode() != TypeCode::Int64) {
         throw std::invalid_argument("Expected an integer array");
     }

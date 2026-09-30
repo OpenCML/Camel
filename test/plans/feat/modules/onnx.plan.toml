@@ -174,3 +174,35 @@ assert(!text.includes('unreachable'), 'export must fail before the next statemen
 }
 """
 timeout_ms = 6000
+
+[[tests]]
+name = "export_capability"
+desc = "Relu on int64 is valid ONNX but ONNX Runtime's CPU provider has no kernel for it at opset 17: the export fails at the relu call (capability data), while target 'none' writes the model."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_capability.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_capability.onnx", "ONNX_OUT_UNCHECKED=tmp/test/onnx/export_capability_unchecked.onnx"]
+expect_exit = 1
+expect_stdout_contains = ["written without the check"]
+expect_output_contains = ["(CPUExecutionProvider) has no kernel for Relu on int64 tensors at opset 17", "it has one at opset 18"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(/at [^ ]*export_capability[.]cml:15:12[)]/.test(input.normalized.output), 'missing source position of the relu call')
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "capability_vs_torch"
+desc = "Exemplar ORT_007: the same model is rejected by Camel at export time, while PyTorch exports it and ONNX Runtime fails only when loading it (benchmarks/capability_demo.py)."
+kind = "behavior"
+tool = "python"
+case = "../../../../benchmarks/capability_demo.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import torch, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["camel:  export rejected", "torch:  torch.onnx.export ok", "capability comparison: REPRODUCED"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000

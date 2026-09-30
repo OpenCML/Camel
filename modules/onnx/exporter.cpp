@@ -27,6 +27,7 @@
 #include "../tensor/interop.h"
 #include "../tensor/ops/registry.h"
 #include "../tensor/tensor.h"
+#include "capability.h"
 #include "emitter.h"
 #include "lowering.h"
 
@@ -697,7 +698,7 @@ class InputBinder {
                 (*inputInfo.shape)[a] =
                     Dim{a == 0 ? std::string("batch") : std::format("{}_dim{}", name, a)};
             }
-            emitter_.graph().inputs.push_back(std::move(inputInfo));
+            emitter_.addInput(std::move(inputInfo));
             return {input, tensor::TensorType::get(t->dtype(), shape)};
         }
         if (ty->code() == TypeCode::Struct) {
@@ -797,7 +798,21 @@ Model exportFunction(
             examples.size()));
     }
 
-    Emitter emitter(options.opset);
+    const CapabilityTable *capabilities = nullptr;
+    if (!options.target.empty() && options.target != "none") {
+        capabilities = CapabilityTable::forTarget(options.target);
+        if (!capabilities) {
+            std::string known;
+            for (const std::string &t : CapabilityTable::targets()) {
+                known += (known.empty() ? "" : ", ") + t;
+            }
+            throw ExportError(std::format(
+                "unknown export target '{}' (known: {}, or 'none')",
+                options.target,
+                known));
+        }
+    }
+    Emitter emitter(options.opset, capabilities);
     emitter.graph().name = options.graphName;
     InputBinder binder(emitter, options);
     std::vector<Value> inputs;

@@ -19,6 +19,7 @@ const IS_WINDOWS = process.platform === 'win32'
 const CAMEL_EXE = path.join(REPO_ROOT, 'out', 'latest', 'bin', IS_WINDOWS ? 'camel.exe' : 'camel')
 const TOOL_EXES = {
     camel: CAMEL_EXE,
+    python: null, // resolved on use (pythonExecutable)
     'camel-format': path.join(
         REPO_ROOT,
         'out',
@@ -76,14 +77,15 @@ function parseArgs(argv) {
     return options
 }
 
-/** The Python interpreter for test preconditions: the active virtual environment's, else PATH's. */
+/**
+ * The Python interpreter for test preconditions and `tool = "python"` tests: the active virtual
+ * environment's, else the benchmark environment's (benchmarks/.venv), else PATH's.
+ */
 function pythonExecutable() {
-    const venv = process.env.VIRTUAL_ENV
-    if (venv) {
-        const candidate = IS_WINDOWS
-            ? path.join(venv, 'Scripts', 'python.exe')
-            : path.join(venv, 'bin', 'python')
-        if (fs.existsSync(candidate)) return candidate
+    const venvPython = (venv) =>
+        IS_WINDOWS ? path.join(venv, 'Scripts', 'python.exe') : path.join(venv, 'bin', 'python')
+    for (const venv of [process.env.VIRTUAL_ENV, path.join(REPO_ROOT, 'benchmarks', '.venv')]) {
+        if (venv && fs.existsSync(venvPython(venv))) return venvPython(venv)
     }
     return IS_WINDOWS ? 'python' : 'python3'
 }
@@ -582,7 +584,7 @@ function validateTest(test, result, context) {
 function runOneTest(test, sharedVars, logContext) {
     const casePath = path.resolve(path.dirname(test.__planPath), test.case)
     const toolName = test.tool || 'camel'
-    const toolExe = TOOL_EXES[toolName]
+    const toolExe = toolName === 'python' ? pythonExecutable() : TOOL_EXES[toolName]
     if (!toolExe) {
         throw new Error(`unknown test tool: ${toolName}`)
     }

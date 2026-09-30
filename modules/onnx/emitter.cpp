@@ -23,6 +23,8 @@
 
 #include "emitter.h"
 
+#include "capability.h"
+
 #include "../tensor/dtype.h"
 #include "../tensor/interop.h"
 #include "../tensor/ops/support.h"
@@ -34,6 +36,7 @@
 
 #include <cstring>
 #include <format>
+#include <unordered_set>
 
 namespace camel::onnx {
 
@@ -191,7 +194,70 @@ std::optional<ConstArg> constArgOf(const Value &value) {
     return tensor::ops::constArgOf(value.slot, value.ty);
 }
 
-Emitter::Emitter(int64_t opset) : opset_(opset) { scopes_.emplace_back(); }
+Emitter::Emitter(int64_t opset, const CapabilityTable *capabilities)
+    : capabilities_(capabilities), opset_(opset) {
+    scopes_.emplace_back();
+}
+
+void Emitter::addInput(ValueInfo info) {
+    elemTypes_[info.name] = info.type;
+    graph().inputs.push_back(std::move(info));
+}
+
+std::optional<ElemType> Emitter::valueElemType(const std::string &name) const {
+    auto it = elemTypes_.find(name);
+    return it == elemTypes_.end() ? std::nullopt : std::optional(it->second);
+}
+
+std::optional<ElemType> Emitter::outputElemType(
+    const std::string &opType, const std::vector<std::string> &inputs,
+    const std::vector<Attribute> &attributes) const {
+    static const std::unordered_set<std::string> kBoolResults = {
+        "Equal", "Greater", "GreaterOrEqual", "Less", "LessOrEqual", "And", "Or", "Not"};
+    if (kBoolResults.contains(opType)) {
+        return ElemType::Bool;
+    }
+    if (opType == "Shape" || opType == "ArgMax") {
+        return ElemType::Int64;
+    }
+    if (opType == "Cast") {
+        for (const Attribute &a : attributes) {
+            if (a.name == "to") {
+                return static_cast<ElemType>(std::get<int64_t>(a.value));
+            }
+        }
+        return std::nullopt;
+    }
+    if (opType == "ConstantOfShape") {
+        for (const Attribute &a : attributes) {
+            if (a.name == "value") {
+                return std::get<TensorValue>(a.value).type;
+            }
+        }
+        return ElemType::Float;
+    }
+    if (opType == "If") {
+        return std::nullopt;
+    }
+    // Every other emitted operator keeps the element type of its data input.
+    const size_t data = opType == "Where" ? 1 : 0;
+    return data < inputs.size() ? valueElemType(inputs[data]) : std::nullopt;
+}
+
+void Emitter::checkCapability(
+    const std::string &opType, const std::vector<std::string> &inputs) const {
+    if (!capabilities_) {
+        return;
+    }
+    const size_t data = opType == "Where" ? 1 : 0;
+    const auto elem   = data < inputs.size() ? valueElemType(inputs[data]) : std::nullopt;
+    if (!elem) {
+        return;
+    }
+    if (auto reason = capabilities_->rejection(opType, *elem, opset_)) {
+        throw ExportError(*reason);
+    }
+}
 
 std::string Emitter::fresh(std::string_view hint) {
     const std::string base = sanitize(hint);
@@ -214,9 +280,13 @@ std::string Emitter::node(
             }
         }
     }
+    checkCapability(opType, inputs);
     std::string output = fresh(hint.empty() ? std::string_view(opType) : hint);
     if (key) {
         scopes_.back().nodes.emplace(*key, output);
+    }
+    if (auto elem = outputElemType(opType, inputs, attributes)) {
+        elemTypes_[output] = *elem;
     }
     Node n;
     n.opType     = std::move(opType);
@@ -322,7 +392,8 @@ std::string Emitter::int64s(std::span<const int64_t> values) {
 }
 
 std::string Emitter::addInitializer(TensorValue tensor, const std::string &key) {
-    std::string name = tensor.name;
+    std::string name  = tensor.name;
+    elemTypes_[name] = tensor.type;
     graph().initializers.push_back(std::move(tensor));
     initializerByKey_.emplace(key, name);
     return name;

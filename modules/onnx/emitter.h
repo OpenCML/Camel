@@ -78,9 +78,12 @@ type::Type *inferenceTypeOf(const Value &value);
 /// The value as a constant operator argument (scalars, strings, int arrays), when it is one.
 std::optional<tensor::ops::ConstArg> constArgOf(const Value &value);
 
+class CapabilityTable;
+
 class Emitter {
   public:
-    explicit Emitter(int64_t opset);
+    /// `capabilities` (optional) is the target runtime's: every node is checked against it.
+    explicit Emitter(int64_t opset, const CapabilityTable *capabilities = nullptr);
 
     int64_t opset() const { return opset_; }
 
@@ -103,6 +106,12 @@ class Emitter {
     /// Name of a constant 1-D int64 tensor (shapes, axes, slice bounds).
     std::string int64s(std::span<const int64_t> values);
 
+    /// Declares a graph input.
+    void addInput(ValueInfo info);
+
+    /// Element type of a value emitted so far, when known.
+    std::optional<ElemType> valueElemType(const std::string &name) const;
+
     /// Keeps a GC object produced during export alive until the export finishes.
     void retain(rtdata::Object *object, const type::Type *type);
 
@@ -112,6 +121,12 @@ class Emitter {
 
   private:
     std::string constantOperand(const Value &value, std::optional<type::TypeCode> dtype);
+    /// Element type of the output of `opType` applied to `inputs`, when the rules know it.
+    std::optional<ElemType> outputElemType(
+        const std::string &opType, const std::vector<std::string> &inputs,
+        const std::vector<Attribute> &attributes) const;
+    /// Throws ExportError when the target cannot run `opType` on `inputs`.
+    void checkCapability(const std::string &opType, const std::vector<std::string> &inputs) const;
     std::string addInitializer(TensorValue tensor, const std::string &key);
 
     struct Scope {
@@ -120,6 +135,8 @@ class Emitter {
         std::unordered_map<std::string, std::string> nodes; // structural key -> output name
     };
 
+    const CapabilityTable *capabilities_;
+    std::unordered_map<std::string, ElemType> elemTypes_;
     int64_t opset_;
     std::deque<Scope> scopes_;
     std::unordered_set<std::string> usedNames_;

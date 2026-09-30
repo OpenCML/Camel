@@ -50,7 +50,7 @@ using camel::core::error::throwRuntimeFault;
 
 namespace {
 
-// export_model(fn, example, path[, dynamic_axes: int[]]) => void
+// export_model(fn, example, path[, dynamic_axes: int[][, target: string]]) => void
 // `example` is the argument of a one-parameter `fn`, or a tuple with one example per parameter.
 slot_t exportKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     auto *fn   = norm.get<::Function *>(0);
@@ -58,6 +58,9 @@ slot_t exportKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     camel::onnx::ExportOptions options;
     if (norm.size() > 3) {
         options.dynamicAxes = camel::tensor::parseIntArray(norm.get<::Array *>(3), norm.type(3));
+    }
+    if (norm.size() > 4) {
+        options.target = norm.get<::String *>(4)->toString();
     }
     std::vector<camel::onnx::Example> examples;
     const size_t params = fn && fn->graph() ? fn->graph()->normPorts().size() : 0;
@@ -99,7 +102,9 @@ bool isIntArray(Type *type) {
         return false;
     }
     Type *elem = static_cast<ArrayType *>(type)->elemType();
-    return elem && (elem->code() == TypeCode::Int32 || elem->code() == TypeCode::Int64);
+    // `[]` has element type void.
+    return elem && (elem->code() == TypeCode::Int32 || elem->code() == TypeCode::Int64 ||
+                    elem->code() == TypeCode::Void);
 }
 
 class OnnxExecutor : public Executor {
@@ -121,10 +126,10 @@ OnnxModule::OnnxModule(context_ptr_t ctx) : BuiltinModule("onnx", ctx) {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {-1, {}}},
                   "(fn: (...) => any, example: Tensor | tuple | struct, path: string, "
-                  "dynamic_axes?: int[]) => void",
+                  "dynamic_axes?: int[], target?: string) => void",
                   [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                       -> std::optional<Type *> {
-                      if (norm.size() < 3 || norm.size() > 4 ||
+                      if (norm.size() < 3 || norm.size() > 5 ||
                           norm[0]->code() != TypeCode::Function ||
                           !(camel::tensor::asTensorType(norm[1]) ||
                             norm[1]->code() == TypeCode::Tuple ||
@@ -132,7 +137,10 @@ OnnxModule::OnnxModule(context_ptr_t ctx) : BuiltinModule("onnx", ctx) {
                           norm[2]->code() != TypeCode::String) {
                           return std::nullopt;
                       }
-                      if (norm.size() == 4 && !isIntArray(norm[3])) {
+                      if (norm.size() >= 4 && !isIntArray(norm[3])) {
+                          return std::nullopt;
+                      }
+                      if (norm.size() == 5 && norm[4]->code() != TypeCode::String) {
                           return std::nullopt;
                       }
                       return Type::Void();

@@ -62,6 +62,9 @@ struct ExportOptions {
     std::string inputName  = "input";
     std::string outputName = "output";
     std::string graphName  = "camel";
+    /// Runtime the model is for ("onnxruntime-cpu"); every node is checked against its
+    /// capability data (capability.h). "none" or empty skips the check.
+    std::string target = "onnxruntime-cpu";
     /// Axes of the tensor arguments left dynamic in the model (e.g. {0} for a variable batch
     /// size). The examples' extents on these axes are not baked into the graph.
     std::vector<int64_t> dynamicAxes;
