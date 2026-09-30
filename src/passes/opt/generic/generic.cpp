@@ -32,6 +32,9 @@
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/graph_runtime_support.h"
+#include "camel/core/rtdata/tuple.h"
+#include "camel/core/rtdata/struct.h"
 #include "camel/runtime/draft_inline.h"
 
 #include <deque>
@@ -382,6 +385,72 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     return true;
 }
 
+/// Replaces an element access on a constant tuple or struct by the element's value.
+bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id) {
+    const auto sources = draft.normInputsOf(id);
+    if (sources.size() != 1) {
+        return false;
+    }
+    const auto source = staticValueOf(draft, sources[0]);
+    type::Type *result = draft.header(id)->dataType;
+    if (!source || !source->second || !result || source->first == NullSlot) {
+        return false;
+    }
+    const auto *body = reinterpret_cast<const camel::runtime::GCAccsBody *>(draft.payloadOf(id).data());
+    slot_t value = NullSlot;
+    if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex &&
+        source->second->code() == type::TypeCode::Tuple) {
+        auto *tuple = camel::core::rtdata::fromSlot<::Tuple *>(source->first);
+        if (body->value >= tuple->size()) {
+            return false;
+        }
+        value = tuple->get<slot_t>(body->value);
+    } else if (
+        body->accsKind == camel::runtime::GCAccsKind::StructKey &&
+        source->second->code() == type::TypeCode::Struct) {
+        auto *object = camel::core::rtdata::fromSlot<::Struct *>(source->first);
+        value        = object->get<slot_t>(std::string(body->key()), source->second);
+    } else {
+        return false;
+    }
+    // The element is reachable from the constant it was read from, which the graph keeps.
+    replaceNode(draft, id, draft.materializeStaticValue(value, result));
+    return true;
+}
+
+/// Replaces a FILL whose template and values are all constants by the object it builds.
+bool foldStaticFill(
+    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots) {
+    const auto sources = draft.normInputsOf(id);
+    type::Type *result = draft.header(id)->dataType;
+    if (sources.size() != 1 || !result || !type::isGCTraced(result->code())) {
+        return false;
+    }
+    const auto *body = reinterpret_cast<const camel::runtime::GCFillBody *>(draft.payloadOf(id).data());
+    if (body->fillKind == camel::runtime::GCFillKind::FunctionClosure) {
+        return false; // closures stay calls std::opt can devirtualize
+    }
+    const auto source = staticValueOf(draft, sources[0]);
+    if (!source || source->first == NullSlot) {
+        return false;
+    }
+    std::vector<slot_t> slots;
+    for (gc_node_ref_t in : draft.withInputsOf(id)) {
+        const auto value = staticValueOf(draft, in);
+        if (!value) {
+            return false;
+        }
+        slots.push_back(value->first);
+    }
+    auto *object = camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(source->first)
+                       ->clone(camel::core::mm::autoSpace(), result, false);
+    // Keep the object alive until commit moves it into the graph's static area.
+    roots.emplace_back(camel::core::mm::autoSpace(), object, result, "std::opt::fold");
+    camel::execute::writeRuntimeFillSlots(object, result, body, slots);
+    replaceNode(draft, id, draft.materializeStaticValue(camel::core::rtdata::toSlot(object), result));
+    return true;
+}
+
 /// Replaces a pure operator by the constant its argument types fix, through the operator's
 /// registered type folder. Returns false when there is none or the types do not fix the result.
 bool foldFromTypes(
@@ -434,12 +503,25 @@ size_t foldDraft(
                 }
                 continue;
             }
-            // An element projected out of a tuple built in this graph is the value filled there.
+            // An element projected out of a tuple built in this graph is the value filled there;
+            // an element of a constant tuple or struct is a constant.
             if (const auto *h = draft.header(id);
                 h && h->kind == GCNodeKind::Accs && isReplaceable(draft, id)) {
                 const gc_node_ref_t value = camel::runtime::resolveTupleProjection(draft, id);
                 if (value != id) {
                     replaceNode(draft, id, value);
+                    ++folded;
+                    changed = true;
+                } else if (foldStaticAccess(draft, id)) {
+                    ++folded;
+                    changed = true;
+                }
+                continue;
+            }
+            // A tuple, struct or array built from constants is a constant.
+            if (const auto *h = draft.header(id);
+                h && h->kind == GCNodeKind::Fill && isReplaceable(draft, id)) {
+                if (foldStaticFill(draft, id, roots)) {
                     ++folded;
                     changed = true;
                 }
@@ -581,20 +663,22 @@ GCGraph *DeadCodePass::apply(GCGraph *graph, std::ostream &) {
     return rewriteReachableGraphs(context_, graph, "std::opt::dce", dceDraft);
 }
 
-GCGraph *SimplifyPass::apply(GCGraph *graph, std::ostream &os) {
+GCGraph *simplifyGraph(
+    const camel::core::context::context_ptr_t &context, GCGraph *graph,
+    const OptimizeRewriteConfig &config, std::ostream &os) {
     constexpr size_t kMaxRounds = 16;
     for (size_t round = 0; round < kMaxRounds; ++round) {
         bool optChanged = false;
-        graph = applyOptimizeRewritePass(context_, graph, os, OptimizeRewriteConfig{}, &optChanged);
+        graph = applyOptimizeRewritePass(context, graph, os, config, &optChanged);
         std::deque<camel::core::mm::RootHandle> roots;
         size_t folded = 0, removed = 0;
         graph = rewriteReachableGraphs(
-            context_,
+            context,
             graph,
             "std::opt::fold",
-            [&](GraphDraft &draft) { return foldDraft(draft, *context_, roots); },
+            [&](GraphDraft &draft) { return foldDraft(draft, *context, roots); },
             &folded);
-        graph = rewriteReachableGraphs(context_, graph, "std::opt::dce", dceDraft, &removed);
+        graph = rewriteReachableGraphs(context, graph, "std::opt::dce", dceDraft, &removed);
         if (!optChanged && folded == 0 && removed == 0) {
             CAMEL_LOG_INFO_S("Opt", "std::opt::simplify: fixpoint after {} round(s)", round + 1);
             return graph;
@@ -605,4 +689,8 @@ GCGraph *SimplifyPass::apply(GCGraph *graph, std::ostream &os) {
         "std::opt::simplify: still changing after {} rounds (a recursion of non-static depth?)",
         kMaxRounds);
     return graph;
+}
+
+GCGraph *SimplifyPass::apply(GCGraph *graph, std::ostream &os) {
+    return simplifyGraph(context_, graph, OptimizeRewriteConfig{}, os);
 }

@@ -209,8 +209,7 @@ GCGraph *rewriteReachableGraphs(
     if (total == 0) {
         return graph;
     }
-    session.commit();
-    return context->runtimeRootGraph();
+    return session.commit();
 }
 
 } // namespace camel::passes::generic

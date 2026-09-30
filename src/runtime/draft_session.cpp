@@ -675,7 +675,14 @@ GCGraph *RuntimeGraphDraftSession::commit() {
         validateRuntimeGraphPayload(rewritten[graph]);
     }
 
-    runtimeRoot_ = context_->installRuntimeRoot(rewritten.at(oldRuntimeRoot));
+    // A session over the program's root replaces it. A session over another root (a detached
+    // program, e.g. a function being exported) only returns the rewritten root: the running
+    // program is left as it is.
+    if (context_->currentRuntimeRoot() == oldRuntimeRoot) {
+        runtimeRoot_ = context_->installRuntimeRoot(rewritten.at(oldRuntimeRoot));
+    } else {
+        runtimeRoot_ = rewritten.at(oldRuntimeRoot);
+    }
     drafts_.clear();
     return runtimeRoot_;
 }

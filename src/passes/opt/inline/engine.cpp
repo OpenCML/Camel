@@ -325,7 +325,8 @@ bool shouldSkipRecursiveInline(
     return false;
 }
 
-bool applyRuntimeOptimizeRewrite(
+/// The rewritten root, or nullptr when nothing changed.
+GCGraph *applyRuntimeOptimizeRewrite(
     const camel::core::context::context_ptr_t &context, GCGraph *runtimeRoot,
     const OptimizeRewriteConfig &config) {
     camel::runtime::RuntimeGraphDraftSession session(context, runtimeRoot);
@@ -546,11 +547,9 @@ bool applyRuntimeOptimizeRewrite(
     }
 
     if (!changed) {
-        return false;
+        return nullptr;
     }
-
-    (void)session.commit();
-    return true;
+    return session.commit();
 }
 
 } // namespace
@@ -572,14 +571,15 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
     constexpr size_t kMaxSessions = 32;
     bool changed                  = false;
     for (size_t i = 0; i < kMaxSessions; ++i) {
-        if (!applyRuntimeOptimizeRewrite(context, graph, config)) {
+        GCGraph *rewritten = applyRuntimeOptimizeRewrite(context, graph, config);
+        if (!rewritten) {
             break;
         }
         changed = true;
-        graph   = context->runtimeRootGraph();
+        graph   = rewritten;
     }
     if (changedOut) {
         *changedOut = changed;
     }
-    return changed ? context->runtimeRootGraph() : graph;
+    return graph;
 }
