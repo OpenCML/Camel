@@ -335,8 +335,10 @@ void FastVMSchedPass::precompile(camel::runtime::GCGraph *runtimeRoot) {
 }
 
 void FastVMSchedPass::compileLate(camel::runtime::GCGraph *graph) {
-    auto linked =
-        compileAndLinkFrom(context_, graph, kFastVmCompileStrategy, offsetMap_, bytecodes_.size());
+    // What is compiled is read from the graphs themselves, not from a table keyed by address: a
+    // graph created at run time can be collected and its address reused by a new one.
+    auto linked = compileAndLinkFrom(
+        context_, graph, kFastVmCompileStrategy, fastVmEntryPcOf, bytecodes_.size());
     if (bytecodes_.size() + linked.codes.size() > bytecodes_.capacity()) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
@@ -348,7 +350,6 @@ void FastVMSchedPass::compileLate(camel::runtime::GCGraph *graph) {
     }
     bytecodes_.insert(bytecodes_.end(), linked.codes.begin(), linked.codes.end());
     for (const auto &[offset, length, runtimeGraph] : linked.graphs) {
-        offsetMap_[runtimeGraph] = offset;
         setFastVmEntryPcOf(runtimeGraph, offset);
         setFastVmGraphLengthOf(runtimeGraph, length);
 #if ENABLE_FASTVM_JIT
@@ -715,9 +716,11 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
             constexpr size_t bytesPerLine = 16;
             CAMEL_LOG_INFO_S(
                 "JIT",
-                "JIT executed code for graph '{}' ({} bytes):",
+                "JIT executed code for graph '{}' ({} bytes, pc {} length {}):",
                 graph->name(),
-                size);
+                size,
+                entryPc,
+                fastVmGraphLengthOf(graph).value_or(0));
             for (size_t i = 0; i < size; i += bytesPerLine) {
                 std::string line;
                 for (size_t j = 0; j < bytesPerLine && i + j < size; ++j) {

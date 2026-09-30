@@ -623,12 +623,17 @@ bytecode_vec_t compile(
 
 LinkedBytecodeResult
 compileAndLink(context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileStrategy &opt) {
-    return compileAndLinkFrom(std::move(ctx), entry, opt, {}, 0);
+    return compileAndLinkFrom(
+        std::move(ctx),
+        entry,
+        opt,
+        [](camel::runtime::GCGraph *) { return std::optional<size_t>{}; },
+        0);
 }
 
 LinkedBytecodeResult compileAndLinkFrom(
     context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileStrategy &opt,
-    const std::unordered_map<camel::runtime::GCGraph *, size_t> &known, size_t baseOffset) {
+    const KnownEntryPc &known, size_t baseOffset) {
     bytecode_vec_t linked;
     std::vector<BytecodeIndex> graphs;
     std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap;
@@ -639,7 +644,7 @@ LinkedBytecodeResult compileAndLinkFrom(
 
     for (auto *runtimeGraph : uniqueGraphs) {
         ASSERT(runtimeGraph != nullptr, "Reachable runtime graph set contains null.");
-        if (known.contains(runtimeGraph)) {
+        if (known(runtimeGraph)) {
             continue;
         }
         camel::runtime::validateRuntimeGraphPayload(runtimeGraph);
@@ -689,7 +694,7 @@ LinkedBytecodeResult compileAndLinkFrom(
                     "FastVM linker cannot resolve runtime graph for bytecode at pc {}.",
                     baseOffset + scanIndex));
             auto it = offsetMap.find(target);
-            setFuncExtraTargetPc(&bc, it != offsetMap.end() ? it->second : known.at(target));
+            setFuncExtraTargetPc(&bc, it != offsetMap.end() ? it->second : *known(target));
         } break;
         case OpCode::JUMP: {
             bc.fastop[0] += offsetMap.at(info.runtimeGraph);

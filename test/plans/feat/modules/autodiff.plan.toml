@@ -725,3 +725,152 @@ assert(out.includes('collapse dh=22'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "scalar_grad.runtime.jit"
+desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (grad built at run time, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/scalar_grad.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "control_flow_grad.runtime.jit"
+desc = "Differentiates through data-dependent branches, arms reading different values, and recursion. (grad built at run time, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tensor_grad_check.runtime.jit"
+desc = "Checks every tensor derivative rule against finite differences. (grad built at run time, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "nn_grad_check.runtime.jit"
+desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences. (grad built at run time, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/nn_grad_check.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 6, `expected 6 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "second_order.runtime.jit"
+desc = "grad of a function that calls grad: d2/dx2 x^3 at 2 is 12 (scalar), and grad(sum(grad(sum(x^3)))) is 6x (tensor); the inner gradient is built when the outer transformation meets it. (grad built at run time, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+[[tests]]
+name = "tensor_grad_check.simplify.jit"
+desc = "Checks every tensor derivative rule against finite differences. (simplified, then run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "tensor_grad_check.macro.jit"
+desc = "Checks every tensor derivative rule against finite differences. (grad built by std::macro, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
+args = ["${case}", "std::macro", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "nn_grad_check.macro.jit"
+desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences. (grad built by std::macro, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/nn_grad_check.cml"
+args = ["${case}", "std::macro", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 6, `expected 6 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "custom_rule.macro.jit"
+desc = "Uses @vjp custom derivative rules at call sites instead of differentiating the decorated body. (grad built by std::macro, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/custom_rule.cml"
+args = ["${case}", "std::macro", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('custom_rule value=8 cube=20 clip=4 mix=(3, 3)'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
