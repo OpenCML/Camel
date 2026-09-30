@@ -94,6 +94,16 @@ bool isSmallRuntimeSubgraphForInline(const GCGraph *bodyGraph, const InlineRewri
     return true;
 }
 
+/// Nodes of `graph` that inlining copies (all but constants and ports).
+size_t inlinedNodeCount(const GCGraph *graph) {
+    size_t count = 0;
+    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+        const auto *node = *it;
+        count += node && node->kind != GCNodeKind::Data && node->kind != GCNodeKind::Port ? 1 : 0;
+    }
+    return count;
+}
+
 /// True when values of `type` may hold a function: inlining a callee returning one exposes the
 /// closure it builds, so that calls of it can be devirtualized (autodiff's (value, pullback)).
 bool mayHoldFunction(const camel::core::type::Type *type) {
@@ -467,17 +477,21 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 }
 
                 // Beyond small graphs, inlining a callee that reaches no recursion pays when it
-                // cannot duplicate code (a graph with one call site) or when it exposes a
-                // closure the callee builds, so that calls of it can be devirtualized.
+                // cannot duplicate code (a graph with one call site) or duplicates little (see
+                // duplicationBudgetNodes), or when it exposes a closure the callee builds, so
+                // that calls of it can be devirtualized.
                 // Graphs created in this session (specializations, lifted closures) are not in
                 // the call-graph analysis yet; they qualify in the next session.
                 const bool acyclic = sccInfo.componentOf.contains(body->calleeGraph) &&
                                      !sccInfo.reachesRecursion.contains(body->calleeGraph);
+                const size_t calls =
+                    callCounts.contains(body->calleeGraph) ? callCounts.at(body->calleeGraph) : 0;
                 const bool isSmall =
                     isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig) ||
-                    (acyclic && callCounts.contains(body->calleeGraph) &&
-                     callCounts.at(body->calleeGraph) == 1) ||
-                    (acyclic && returnsClosure(body->calleeGraph));
+                    (acyclic && calls == 1) || (acyclic && returnsClosure(body->calleeGraph)) ||
+                    (acyclic && calls > 1 &&
+                     (calls - 1) * inlinedNodeCount(body->calleeGraph) <=
+                         config.inlineConfig.duplicationBudgetNodes);
                 CAMEL_LOG_INFO_S(
                     "OptimizePass",
                     "Inline probe '{}' -> '{}': small={} acyclic={} calls={} closure={}.",

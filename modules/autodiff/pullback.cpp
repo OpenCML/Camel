@@ -400,6 +400,9 @@ class ForwardRewrite {
     /// Calls of static function values: records custom-rule call sites, and turns calls of other
     /// capture-free functions into direct calls. Returns the direct call created, if any.
     std::optional<gc_node_ref_t> rewriteIndirectCall(gc_node_ref_t call);
+    /// The graph of grad(f) / value_and_grad(f) when `callee` computes one for a static
+    /// capture-free f, else nullptr.
+    GCGraph *nestedGradientGraph(gc_node_ref_t callee);
     /// Makes `node` return `plan`'s (value, pullback) and splits the pair for its users.
     void split(gc_node_ref_t node, const PullbackPlan &plan, std::vector<gc_node_ref_t> inputs);
     void retarget(gc_node_ref_t func, const PullbackPlan &plan);
@@ -501,9 +504,11 @@ class Backward final : public VjpBuilder {
 
 class Engine {
   public:
-    explicit Engine(const camel::core::context::context_ptr_t &context) : group_(context) {}
+    explicit Engine(const camel::core::context::context_ptr_t &context)
+        : context_(context), group_(context) {}
 
     GCGraph *gradient(GCGraph *function, bool withValue);
+    const camel::core::context::context_ptr_t &context() const { return context_; }
 
     /// The plan differentiating calls of `callee` (memoized; recursion reuses the plan).
     const PullbackPlan &planFor(GCGraph *callee);
@@ -520,6 +525,7 @@ class Engine {
     PullbackPlan reserve(const std::string &name, const PullbackPlan &types);
     void build(Pending &pending);
 
+    camel::core::context::context_ptr_t context_;
     rt::GraphDraftGroup group_;
     std::unordered_map<GCGraph *, PullbackPlan> plans_;
     std::deque<Pending> pending_;
@@ -608,27 +614,34 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     }
     const auto calleeValue = staticValue(draft_, withInputs.front());
     auto *function         = calleeValue ? fromSlot<::Function *>(*calleeValue) : nullptr;
-    if (function == nullptr || function->graph() == nullptr) {
-        return std::nullopt; // a function computed at run time
-    }
-    GCGraph *graph = function->graph();
-    std::vector<gc_node_ref_t> inputs(withInputs.begin() + 1, withInputs.end());
-    for (gc_node_ref_t input : draft_.normInputsOf(call)) {
-        inputs.push_back(input);
-    }
-    if (carriesRule(graph)) {
-        FunctionType *type = graph->funcType();
-        sites_.emplace(
-            call,
-            CallSite{
-                .inputs = std::move(inputs),
-                .plan   = makePlanTypes(portTypesOf(type), type->exitType()),
-                .rule   = ruleOf(function),
-            });
-        return std::nullopt;
-    }
-    if (function->tupleType()->size() != 0) {
-        return std::nullopt; // a closure: its graph cannot be called directly
+    GCGraph *graph         = nullptr;
+    if (function != nullptr && function->graph() != nullptr) {
+        graph = function->graph();
+        std::vector<gc_node_ref_t> inputs(withInputs.begin() + 1, withInputs.end());
+        for (gc_node_ref_t input : draft_.normInputsOf(call)) {
+            inputs.push_back(input);
+        }
+        if (carriesRule(graph)) {
+            FunctionType *type = graph->funcType();
+            sites_.emplace(
+                call,
+                CallSite{
+                    .inputs = std::move(inputs),
+                    .plan   = makePlanTypes(portTypesOf(type), type->exitType()),
+                    .rule   = ruleOf(function),
+                });
+            return std::nullopt;
+        }
+        if (function->tupleType()->size() != 0) {
+            return std::nullopt; // a closure: its graph cannot be called directly
+        }
+    } else {
+        // grad(f) or value_and_grad(f) of a static capture-free f that std::macro has not
+        // expanded (a gradient taken inside a function being differentiated): build it here.
+        graph = nestedGradientGraph(withInputs.front());
+        if (graph == nullptr) {
+            return std::nullopt; // a function computed at run time
+        }
     }
     // A static capture-free function: call its graph directly.
     const gc_node_ref_t direct = draft_.addFuncNode(graph, typeOf(draft_, call));
@@ -650,6 +663,31 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     }
     draft_.eraseNode(call);
     return direct;
+}
+
+GCGraph *ForwardRewrite::nestedGradientGraph(gc_node_ref_t callee) {
+    if (kindOf(draft_, callee) != GCNodeKind::Oper) {
+        return nullptr;
+    }
+    const auto *body = reinterpret_cast<const rt::GCOperBody *>(draft_.payloadOf(callee).data());
+    const std::string_view uri = body->uri();
+    if (uri != "autodiff:grad" && uri != "autodiff:value_and_grad") {
+        return nullptr;
+    }
+    const auto norm = draft_.normInputsOf(callee);
+    if (norm.size() != 1) {
+        return nullptr;
+    }
+    const auto value = staticValue(draft_, norm.front());
+    auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
+    if (function == nullptr || function->graph() == nullptr ||
+        function->tupleType()->size() != 0) {
+        return nullptr;
+    }
+    return buildGradientGraph(
+        engine_.context(),
+        function->graph(),
+        uri == "autodiff:value_and_grad");
 }
 
 void ForwardRewrite::rewriteCall(gc_node_ref_t call) {

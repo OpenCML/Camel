@@ -383,3 +383,33 @@ assert(out.includes('collapse dh=22'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "second_order.nvm"
+desc = "grad of a function that calls grad: d2/dx2 x^3 at 2 is 12 (scalar), and grad(sum(grad(sum(x^3)))) is 6x (tensor); the inner gradient is built when the outer transformation meets it."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+[[tests]]
+name = "second_order.simplified"
+desc = "The second-order gradient graphs simplify to straight-line code: no direct or indirect call is left, and the values are unchanged."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order.cml"
+args = ["${case}", "std::macro", "std::stats", "std::opt::simplify", "std::stats", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const stats = [...input.normalized.stdout.matchAll(/GRAPH_STATS ([{].*[}])/g)].map((m) => JSON.parse(m[1]))
+assert(stats.length === 2, 'expected two GRAPH_STATS lines')
+assert(stats[0].direct_calls + stats[0].indirect_calls > 0, 'nothing to simplify')
+assert(stats[1].direct_calls === 0 && stats[1].indirect_calls === 0, `calls left: ${JSON.stringify(stats[1])}`)
+}
+"""
+timeout_ms = 6000

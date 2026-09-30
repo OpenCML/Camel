@@ -250,6 +250,75 @@ Type *tensorTangentType(Type *primal) {
     return primal;
 }
 
+// ---------------------------------------------------------------- VJP rules
+// The gradient operators are differentiable too, so a gradient can be differentiated again.
+
+/// sum_to(g, like) reduces a broadcast; its gradient broadcasts back.
+void sumToVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(b, "tensor:broadcast_like", {*dy, call.inputs[0]}));
+    }
+}
+
+/// broadcast_like(g, like) spreads g; its gradient sums back to g's shape (a number for a number).
+void broadcastLikeVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        const vjp_node_t g = call.inputs[0];
+        if (isTensorNode(b, g)) {
+            b.accumulateGradient(g, addTensorOper(b, "tensor:sum_to", {*dy, g}));
+        } else if (isFloatNode(b, g)) {
+            b.accumulateGradient(g, addFloatOper(b, "tensor:sum", {*dy}));
+        }
+    }
+}
+
+/// expand_axis(g, like, axis, keepdims) spreads g over an axis; its gradient sums over it.
+void expandAxisVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 3, 4);
+    if (auto dy = b.gradientOf(call.output)) {
+        const vjp_node_t keepDims = call.inputs.size() > 3 ? call.inputs[3] : staticBool(b, true);
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(b, "tensor:sum_axis", {*dy, call.inputs[2], keepDims}));
+    }
+}
+
+void castLikeVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(b, "tensor:cast_like", {*dy, call.inputs[0]}));
+    }
+}
+
+void permuteInverseVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(b, "tensor:permute", {*dy, call.inputs[1]}));
+    }
+}
+
+/// slice_grad(dy, like, axis, start, end, step) pads dy into place; its gradient slices it out.
+void sliceGradVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 5, 6);
+    if (auto g = b.gradientOf(call.output)) {
+        const vjp_node_t step = call.inputs.size() > 5 ? call.inputs[5] : staticInt(b, 1);
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(
+                b,
+                "tensor:slice",
+                {*g, call.inputs[2], call.inputs[3], call.inputs[4], step}));
+    }
+}
+
 } // namespace
 
 std::vector<OpDef> gradientOps() {
@@ -382,6 +451,14 @@ std::vector<OpDef> gradientOps() {
         {{"g", ParamKind::Tensor}, {"perm", ParamKind::IntArray}},
         permuteInverseInfer,
         &permuteInverseKernel));
+    setVjp(defs, "sum_to", &sumToVjp);
+    setVjp(defs, "broadcast_like", &broadcastLikeVjp);
+    setVjp(defs, "expand_axis", &expandAxisVjp);
+    setVjp(defs, "cast_like", &castLikeVjp);
+    setVjp(defs, "permute_inverse", &permuteInverseVjp);
+    setVjp(defs, "slice_grad", &sliceGradVjp);
+    setVjp(defs, "zeros_like", &camel::core::noGradient);
+    setVjp(defs, "ones_like", &camel::core::noGradient);
     return defs;
 }
 

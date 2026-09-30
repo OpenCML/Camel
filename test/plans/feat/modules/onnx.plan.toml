@@ -206,3 +206,29 @@ expect_exit = 0
 expect_stdout_contains = ["camel:  export rejected", "torch:  torch.onnx.export ok", "capability comparison: REPRODUCED"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+
+[[tests]]
+name = "ort_branch"
+desc = "The If exported for an input-dependent branch runs on ONNX Runtime; inputs taking each arm match Camel's own output."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_run.py"
+args = ["${case}", "branch"]
+skip_unless = ["${python}", "-c", "import numpy, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["then arm: shape [4]", "else arm: shape [4]", "ort run: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "ort_dynamic_batch"
+desc = "One model exported with a dynamic batch axis runs on ONNX Runtime at batch sizes 1, 3 and 7 and matches Camel's own output at each."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_run.py"
+args = ["${case}", "dynamic"]
+skip_unless = ["${python}", "-c", "import numpy, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["input dims ['batch', 2]", "batch 1: shape [3]", "batch 7: shape [21]", "ort run: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
