@@ -30,6 +30,7 @@
 #include "emitter.h"
 #include "lowering.h"
 
+#include "camel/core/mm/root_handle.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
@@ -39,11 +40,17 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/runtime/draft_inline.h"
+#include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
+#include "passes/opt/generic/generic.h"
+#include "passes/opt/inline/config.h"
 
 #include <cstdlib>
 #include <format>
 #include <iostream>
+#include <limits>
+#include <sstream>
 #include <unordered_map>
 
 namespace camel::onnx {
@@ -55,33 +62,6 @@ using tensor::ops::TensorFacts;
 using type::TypeCode;
 
 namespace {
-
-/// Operator arguments backed by plain arrays (no VM frame).
-class ExportArgsView final : public ArgsView {
-  public:
-    ExportArgsView(std::vector<slot_t> slots, std::vector<type::Type *> types)
-        : slots_(std::move(slots)), types_(std::move(types)) {}
-
-    size_t size() const override { return slots_.size(); }
-    slot_t slot(size_t index) const override { return slots_[index]; }
-    void setSlot(size_t index, slot_t value) override { slots_[index] = value; }
-    TypeCode code(size_t index) const override { return types_[index]->code(); }
-    type::Type *type(size_t index) const override { return types_[index]; }
-
-  private:
-    std::vector<slot_t> slots_;
-    std::vector<type::Type *> types_;
-};
-
-ExportArgsView constantArgs(std::span<const Value> values) {
-    std::vector<slot_t> slots;
-    std::vector<type::Type *> types;
-    for (const Value &v : values) {
-        slots.push_back(v.slot);
-        types.push_back(v.ty);
-    }
-    return ExportArgsView(std::move(slots), std::move(types));
-}
 
 /// CAMEL_ONNX_TRACE=1 prints every lowered call with the facts of its arguments to stderr.
 bool traceEnabled() {
@@ -142,13 +122,13 @@ ValueInfo valueInfoOf(const std::string &name, const TensorFacts &facts) {
 
 class Evaluator {
   public:
-    Evaluator(core::context::Context &ctx, Emitter &emitter, const ExportOptions &options)
-        : ctx_(ctx), emitter_(emitter), options_(options) {}
+    Evaluator(
+        Emitter &emitter, const ExportOptions &options,
+        std::unordered_map<slot_t, std::string> names)
+        : emitter_(emitter), options_(options), names_(std::move(names)) {}
 
-    /// Evaluates `graph` with its ports bound to the given values and returns its result.
-    Value call(
-        GCGraph *graph, std::span<const Value> with, std::span<const Value> norm,
-        std::span<const Value> closure);
+    /// Translates `graph`, with its single parameter bound to `input`, and returns its result.
+    Value translate(GCGraph *graph, const Value &input);
 
   private:
     struct Activation {
@@ -169,58 +149,26 @@ class Evaluator {
     Value
     evalSymbolicBranch(Activation &act, const Value &cond, std::span<const gc_node_ref_t> arms);
     Value evalAccs(Activation &act, gc_node_ref_t ref);
-    Value
-    callFunctionValue(const Value &fn, std::span<const Value> with, std::span<const Value> norm);
 
     std::vector<Value> evalAll(Activation &act, std::span<const gc_node_ref_t> refs);
     Value keep(slot_t slot, type::Type *type);
     [[noreturn]] void unsupported(Activation &act, std::string_view what);
 
-    core::context::Context &ctx_;
     Emitter &emitter_;
     const ExportOptions &options_;
-    size_t depth_ = 0;
+    // Source names of constant objects (the fields of captured structs), to name initializers.
+    std::unordered_map<slot_t, std::string> names_;
 };
 
-Value Evaluator::call(
-    GCGraph *graph, std::span<const Value> with, std::span<const Value> norm,
-    std::span<const Value> closure) {
-    if (++depth_ > options_.maxCallDepth) {
-        throw ExportError(std::format(
-            "call depth exceeds {} while inlining '{}'; recursion whose termination depends on "
-            "the model input cannot be exported",
-            options_.maxCallDepth,
-            graph->name()));
-    }
-    const auto withPorts    = graph->withPorts();
-    const auto normPorts    = graph->normPorts();
-    const auto closureNodes = graph->closureNodes();
-    if (with.size() != withPorts.size() || norm.size() != normPorts.size() ||
-        closure.size() != closureNodes.size()) {
-        throw ExportError(std::format("argument count mismatch calling '{}'", graph->name()));
-    }
-
+Value Evaluator::translate(GCGraph *graph, const Value &input) {
     Activation act{.graph = graph, .ports = {}, .memo = {{}}};
-    for (size_t i = 0; i < with.size(); ++i) {
-        act.ports.emplace(withPorts[i], with[i]);
-    }
-    for (size_t i = 0; i < norm.size(); ++i) {
-        act.ports.emplace(normPorts[i], norm[i]);
-    }
-    for (size_t i = 0; i < closure.size(); ++i) {
-        act.ports.emplace(closureNodes[i], closure[i]);
-    }
-
-    Value result;
+    act.ports.emplace(graph->normPorts().front(), input);
     const auto *exitType = graph->funcType()->exitType();
     if (graph->returnKind() == camel::runtime::GCReturnKind::None ||
         (exitType && exitType->code() == TypeCode::Void)) {
-        result = Value::constant(NullSlot, type::Type::Void());
-    } else {
-        result = eval(act, execute::resolveRuntimeTailValueRef(graph));
+        return Value::constant(NullSlot, type::Type::Void());
     }
-    --depth_;
-    return result;
+    return eval(act, execute::resolveRuntimeTailValueRef(graph));
 }
 
 Value Evaluator::eval(Activation &act, gc_node_ref_t ref) {
@@ -265,7 +213,11 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         }
         const slot_t slot = g->staticArea()->get<slot_t>(static_cast<size_t>(-index));
         type::Type *ty    = g->staticDataType()->typeAt(static_cast<size_t>(-index));
-        return Value::constant(slot, ty ? ty : n->dataType);
+        Value v           = Value::constant(slot, ty ? ty : n->dataType);
+        if (auto it = names_.find(slot); it != names_.end()) {
+            v.label = it->second;
+        }
+        return v;
     }
     case GCNodeKind::Port: {
         auto it = act.ports.find(ref);
@@ -311,40 +263,23 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         return evalOper(act, ref);
     case GCNodeKind::Join:
         return evalJoin(act, ref);
-    case GCNodeKind::Func: {
-        auto with = evalAll(act, g->withInputsOf(ref));
-        auto norm = evalAll(act, g->normInputsOf(ref));
-        return call(g->directCalleeGraphOf(ref), with, norm, {});
-    }
-    case GCNodeKind::Call: {
-        const auto withRefs = g->withInputsOf(ref);
-        Value fn            = eval(act, withRefs.front());
-        auto with           = evalAll(act, withRefs.subspan(1));
-        auto norm           = evalAll(act, g->normInputsOf(ref));
-        return callFunctionValue(fn, with, norm);
-    }
+    case GCNodeKind::Func:
+        unsupported(
+            act,
+            std::format(
+                "the call to '{}' remains after simplification; recursion whose depth depends on "
+                "the model input cannot be exported",
+                g->directCalleeGraphOf(ref)->name()));
+    case GCNodeKind::Call:
+        unsupported(
+            act,
+            "an indirect call remains after simplification; its callee must be known at export "
+            "time");
     default:
         unsupported(
             act,
             std::format("graph node kind {} has no export semantics", static_cast<int>(n->kind)));
     }
-}
-
-Value Evaluator::callFunctionValue(
-    const Value &fn, std::span<const Value> with, std::span<const Value> norm) {
-    if (!fn.isConstant() || !fn.ty || fn.ty->code() != TypeCode::Function) {
-        throw ExportError("the callee of an indirect call must be known at export time");
-    }
-    auto *func     = rtdata::fromSlot<::Function *>(fn.slot);
-    GCGraph *graph = func->graph();
-    std::vector<Value> closure;
-    if (const ::Tuple *captured = func->tuple()) {
-        const auto *layout = func->tupleType();
-        for (size_t i = 0; i < captured->size(); ++i) {
-            closure.push_back(Value::constant(captured->get<slot_t>(i), layout->typeAt(i)));
-        }
-    }
-    return call(graph, with, norm, closure);
 }
 
 Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
@@ -355,35 +290,22 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     std::vector<Value> with = evalAll(act, g->withInputsOf(ref));
     const auto *def         = tensor::ops::OpRegistry::instance().find(uri);
 
-    if (allConstant(norm) && allConstant(with)) {
-        if (def && !def->traits.pure) {
-            unsupported(act, std::format("impure operator '{}' cannot be exported", uri));
-        }
-        operator_t op = body->op;
-        if (!op) {
-            auto found = ctx_.execMgr().find(uri);
-            if (!found) {
-                unsupported(
-                    act,
-                    std::format("operator '{}' cannot be evaluated at export time", uri));
-            }
-            op = *found;
-        }
-        ExportArgsView withView = constantArgs(with);
-        ExportArgsView normView = constantArgs(norm);
-        const slot_t result     = (*op)(withView, normView, ctx_);
-        return keep(result, g->node(ref)->dataType);
+    // Simplification has evaluated every pure operator whose arguments are constants; what is
+    // left is translated. Side effects have no ONNX counterpart.
+    if (!core::OperatorTraitsRegistry::instance().isPure(uri)) {
+        unsupported(act, std::format("impure operator '{}' cannot be exported", uri));
     }
-
     const Lowering *lowering = LoweringRegistry::instance().find(uri, emitter_.opset());
     if (!lowering || !with.empty()) {
         unsupported(
             act,
             std::format(
-                "operator '{}' has no ONNX lowering at opset {} but receives a value that depends "
-                "on the model input",
+                "operator '{}' has no ONNX lowering at opset {}{}",
                 uri,
-                emitter_.opset()));
+                emitter_.opset(),
+                allConstant(norm) && allConstant(with)
+                    ? " and was not folded"
+                    : " but receives a value that depends on the model input"));
     }
 
     TensorFacts facts;
@@ -546,19 +468,7 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
             "a value that depends on the model input is stored in a tuple, struct, array or "
             "closure; pass it as a function argument instead");
     }
-    auto *object = rtdata::fromSlot<rtdata::Object *>(source.slot)
-                       ->clone(core::mm::autoSpace(), targetType, false);
-    emitter_.retain(object, targetType);
-    std::vector<slot_t> slots;
-    for (const Value &v : values) {
-        slots.push_back(v.slot);
-    }
-    execute::writeRuntimeFillSlots(
-        object,
-        targetType,
-        g->nodeBodyAs<camel::runtime::GCFillBody>(ref),
-        slots);
-    return Value::constant(rtdata::toSlot(object), targetType);
+    unsupported(act, "a tuple, struct or array of constants was not folded");
 }
 
 /// An int[] literal with elements that depend on the input (e.g. [shape(x)[0], 128]) becomes a
@@ -617,6 +527,43 @@ Value Evaluator::evalAccs(Activation &act, gc_node_ref_t ref) {
     return v;
 }
 
+
+/// Names the objects reachable from `slot` through struct fields and tuple elements.
+void collectNames(
+    slot_t slot, type::Type *ty, const std::string &name,
+    std::unordered_map<slot_t, std::string> &names) {
+    if (!ty || !type::isGCTraced(ty->code()) || slot == NullSlot) {
+        return;
+    }
+    if (!name.empty()) {
+        names.try_emplace(slot, name);
+    }
+    if (ty->code() == TypeCode::Struct) {
+        auto *strct  = static_cast<type::StructType *>(ty);
+        auto *object = rtdata::fromSlot<::Struct *>(slot);
+        for (size_t i = 0; i < strct->size(); ++i) {
+            const std::string key(strct->fieldName(i));
+            collectNames(object->get<slot_t>(key, ty), strct->typeAt(i), key, names);
+        }
+    } else if (ty->code() == TypeCode::Tuple) {
+        auto *tuple  = static_cast<type::TupleType *>(ty);
+        auto *object = rtdata::fromSlot<::Tuple *>(slot);
+        for (size_t i = 0; i < tuple->size() && i < object->size(); ++i) {
+            collectNames(
+                object->get<slot_t>(i),
+                tuple->typeAt(i),
+                std::format("{}_{}", name.empty() ? "t" : name, i),
+                names);
+        }
+    }
+}
+
+/// Frees the graphs an export produced when it ends, however it ends.
+struct DetachedGraphsGuard {
+    core::context::Context &ctx;
+    ~DetachedGraphsGuard() { ctx.releaseDetachedRuntimeGraphs(); }
+};
+
 } // namespace
 
 Model exportFunction(
@@ -636,7 +583,6 @@ Model exportFunction(
             graph->withPorts().size() + graph->normPorts().size()));
     }
 
-    Emitter emitter(options.opset);
     tensor::StaticShape inputShape(example->shapeSpan().begin(), example->shapeSpan().end());
     const auto rank = static_cast<int64_t>(inputShape.size());
     std::vector<size_t> dynamic;
@@ -649,7 +595,40 @@ Model exportFunction(
         inputShape[static_cast<size_t>(a)] = tensor::kUnknownDim;
         dynamic.push_back(static_cast<size_t>(a));
     }
-    const Value input    = Value::symbolic(options.inputName, example->dtype(), inputShape);
+
+    // The function applied to an input of the example's type, with its captures bound, is a
+    // program of its own: simplification specializes it for the input's shape, inlines its
+    // calls, unrolls recursion of static depth and folds everything that does not depend on the
+    // input. The running program is left as it is.
+    // Simplification allocates and may collect: keep what is read afterwards rooted.
+    const auto dtype = example->dtype();
+    std::optional<core::mm::RootHandle> captures;
+    if (fn->tuple()) {
+        captures.emplace(
+            core::mm::autoSpace(),
+            const_cast<::Tuple *>(fn->tuple()),
+            fn->tupleType(),
+            "onnx::export");
+    }
+    DetachedGraphsGuard guard{ctx};
+    const auto context = ctx.shared_from_this();
+    GCGraph *root      = nullptr;
+    {
+        camel::runtime::RuntimeGraphDraftSession session(context, graph);
+        type::Type *inputType[] = {tensor::TensorType::get(dtype, inputShape)};
+        camel::runtime::bindFunctionCall(session.rootDraft(), fn, inputType);
+        root = session.commit();
+    }
+    OptimizeRewriteConfig config;
+    // Everything that is not recursive is inlined; ONNX has no calls.
+    config.inlineConfig.smallSubgraphMaxNonDataPortNodes = std::numeric_limits<size_t>::max();
+    std::ostringstream log;
+    // Recursion unrolls about one level per round; one of dynamic depth stops changing instead.
+    constexpr size_t kMaxRounds = 4096;
+    root                        = simplifyGraph(context, root, config, log, kMaxRounds);
+
+    Emitter emitter(options.opset);
+    const Value input    = Value::symbolic(options.inputName, dtype, inputShape);
     emitter.graph().name = options.graphName;
     ValueInfo inputInfo  = valueInfoOf(options.inputName, factsOf(input));
     for (size_t a : dynamic) {
@@ -657,16 +636,16 @@ Model exportFunction(
     }
     emitter.graph().inputs.push_back(std::move(inputInfo));
 
-    Evaluator evaluator(ctx, emitter, options);
-    std::vector<Value> closure;
-    if (const ::Tuple *captured = fn->tuple()) {
-        const auto *layout = fn->tupleType();
+    std::unordered_map<slot_t, std::string> names;
+    if (captures) {
+        const auto *captured = captures->getAs<::Tuple>();
+        const auto *layout   = static_cast<const type::TupleType *>(captures->type());
         for (size_t i = 0; i < captured->size(); ++i) {
-            closure.push_back(Value::constant(captured->get<slot_t>(i), layout->typeAt(i)));
+            collectNames(captured->get<slot_t>(i), layout->typeAt(i), "", names);
         }
     }
-    const Value inputs[] = {input};
-    const Value result   = evaluator.call(graph, {}, inputs, closure);
+    Evaluator evaluator(emitter, options, std::move(names));
+    const Value result = evaluator.translate(root, input);
 
     const TensorFacts facts = factsOf(result);
     if (!facts.dtype) {

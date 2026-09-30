@@ -1391,9 +1391,13 @@ void GCGraphManager::replaceRoot(GCGraph *rootGraph) {
 
     root_   = rootGraph;
     graphs_ = std::move(newGraphs);
+    rebuildGcRoots();
+}
+
+void GCGraphManager::rebuildGcRoots() {
     gcRoots_.clear();
     debugRecords_.clear();
-    gcRoots_.reserve(graphs_.size());
+    gcRoots_.reserve(graphs_.size() + detached_.size());
     for (GCGraph *graph : graphs_) {
         if (!graph) {
             continue;
@@ -1403,6 +1407,32 @@ void GCGraphManager::replaceRoot(GCGraph *rootGraph) {
             debugRecords_.push_back(graph->debug_);
         }
     }
+    for (GCGraph *graph : detached_) {
+        gcRoots_.push_back(graph);
+    }
+}
+
+void GCGraphManager::trackDetached(std::span<GCGraph *const> graphs) {
+    for (GCGraph *graph : graphs) {
+        if (graph && std::find(detached_.begin(), detached_.end(), graph) == detached_.end()) {
+            detached_.push_back(graph);
+            gcRoots_.push_back(graph);
+        }
+    }
+}
+
+void GCGraphManager::releaseDetached() {
+    const std::unordered_set<GCGraph *> owned(graphs_.begin(), graphs_.end());
+    for (GCGraph *graph : detached_) {
+        if (owned.contains(graph)) {
+            continue; // installed as part of the program since
+        }
+        delete graph->debug_;
+        graph->~GCGraph();
+        mm::graphSpace().free(graph);
+    }
+    detached_.clear();
+    rebuildGcRoots();
 }
 
 void GCGraphManager::adoptRoot(GCGraph *rootGraph) {
@@ -1417,19 +1447,13 @@ void GCGraphManager::adoptRoot(GCGraph *rootGraph) {
     }
 
     graphs_ = collectReachableGraphs(root_);
-    gcRoots_.reserve(graphs_.size());
-    for (GCGraph *graph : graphs_) {
-        if (!graph) {
-            continue;
-        }
-        gcRoots_.push_back(graph);
-        if (graph->debug_) {
-            debugRecords_.push_back(graph->debug_);
-        }
-    }
+    rebuildGcRoots();
 }
 
-GCGraphManager::~GCGraphManager() { clear(); }
+GCGraphManager::~GCGraphManager() {
+    releaseDetached();
+    clear();
+}
 
 std::vector<GCGraph *> GCGraphManager::roots() const {
     if (!root_) {

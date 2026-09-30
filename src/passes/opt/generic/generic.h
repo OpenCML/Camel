@@ -78,11 +78,12 @@ struct OptimizeRewriteConfig;
 /**
  * The std::opt::simplify fixpoint on the program rooted at `root`, with `config` for its std::opt
  * rounds. `root` may be detached from the running program (a function being exported); then the
- * program is left as it is. Returns the rewritten root.
+ * program is left as it is. Stops after `maxRounds` rounds (each unrolls about one more level of
+ * a recursion of static depth). Returns the rewritten root.
  */
 camel::runtime::GCGraph *simplifyGraph(
     const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *root,
-    const OptimizeRewriteConfig &config, std::ostream &os);
+    const OptimizeRewriteConfig &config, std::ostream &os, size_t maxRounds = 16);
 
 class SimplifyPass : public RuntimeGraphRewritePass {
   public:

@@ -36,6 +36,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/runtime/draft_inline.h"
+#include "camel/runtime/draft_types.h"
 
 #include <deque>
 #include <map>
@@ -570,6 +571,11 @@ size_t foldDraft(
             ++folded;
             changed = true;
         }
+        // Constants can sharpen the types downstream (a reshape to a now constant shape), which
+        // the type folders turn into further constants.
+        if (changed) {
+            (void)camel::runtime::reinferDraftTypes(draft);
+        }
     }
     return folded;
 }
@@ -633,9 +639,12 @@ size_t dceDraft(GraphDraft &draft) {
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
             // A SYNC only joins control; replaceNode hands its predecessors to its users, which
             // keeps every ordering it expressed.
+            // A GATE only forwards its value once its control inputs ran; unread, it is dead.
             const auto *h     = draft.header(id);
             const bool isJoin = h && h->kind == GCNodeKind::Sync;
-            if ((isValueOnly(draft, id) || isJoin) && draft.normUsersOf(id).empty() &&
+            const bool isDeadGate =
+                h && h->kind == GCNodeKind::Gate && draft.ctrlUsersOf(id).empty();
+            if ((isValueOnly(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);
                 ++removed;
@@ -665,9 +674,8 @@ GCGraph *DeadCodePass::apply(GCGraph *graph, std::ostream &) {
 
 GCGraph *simplifyGraph(
     const camel::core::context::context_ptr_t &context, GCGraph *graph,
-    const OptimizeRewriteConfig &config, std::ostream &os) {
-    constexpr size_t kMaxRounds = 16;
-    for (size_t round = 0; round < kMaxRounds; ++round) {
+    const OptimizeRewriteConfig &config, std::ostream &os, size_t maxRounds) {
+    for (size_t round = 0; round < maxRounds; ++round) {
         bool optChanged = false;
         graph = applyOptimizeRewritePass(context, graph, os, config, &optChanged);
         std::deque<camel::core::mm::RootHandle> roots;
@@ -687,7 +695,7 @@ GCGraph *simplifyGraph(
     CAMEL_LOG_WARN_S(
         "Opt",
         "std::opt::simplify: still changing after {} rounds (a recursion of non-static depth?)",
-        kMaxRounds);
+        maxRounds);
     return graph;
 }
 

@@ -27,9 +27,11 @@
 
 #include "camel/core/context/context.h"
 #include "camel/core/module/module.h"
+#include "camel/core/operator_traits.h"
 #include "camel/execute/executor.h"
 #include "ops/registry.h"
 #include "passes/fuse.h"
+#include "tensor.h"
 #include "type.h"
 
 using namespace camel::core::context;
@@ -68,6 +70,23 @@ bool TensorModule::load() {
     context_->registerExecutorFactory("tensor", [ctx = context_]() -> executor_ptr_t {
         return std::make_shared<TensorExecutor>(ctx, OpRegistry::instance().kernelMap("tensor"));
     });
+    // A tensor constant's exact type carries its dtype and shape.
+    static const bool refinerAdded = [] {
+        camel::core::ValueTypeRefinerRegistry::instance().add(
+            [](slot_t value, camel::core::type::Type *type) -> camel::core::type::Type * {
+                namespace tensor = camel::tensor;
+                if (!tensor::asTensorType(type) || value == NullSlot) {
+                    return nullptr;
+                }
+                const auto *t   = camel::core::rtdata::fromSlot<tensor::TensorObject *>(value);
+                const auto dims = t->shapeSpan();
+                return tensor::TensorType::get(
+                    t->dtype(),
+                    tensor::StaticShape(dims.begin(), dims.end()));
+            });
+        return true;
+    }();
+    (void)refinerAdded;
     loaded_ = true;
     return true;
 }

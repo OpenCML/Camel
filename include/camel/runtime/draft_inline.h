@@ -56,4 +56,11 @@ bool devirtualizeStaticCallInDraft(
 /// in the same graph (through any chain of such projections); `id` itself otherwise.
 gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id);
 
+/// Specializes `draft`, a copy of `function`'s graph, for one call: its captured values become
+/// constants and its norm ports take `normTypes` (entries may be null: the port keeps its type),
+/// and the node types are re-inferred from them.
+void bindFunctionCall(
+    GraphDraft &draft, const ::Function *function,
+    std::span<camel::core::type::Type *const> normTypes);
+
 } // namespace camel::runtime

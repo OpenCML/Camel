@@ -35,8 +35,9 @@ namespace camel::runtime {
 
 /**
  * Recomputes the types of `draft`'s nodes from its ports' types, in dependency order, and updates
- * the draft's function type to match its ports and result. A node whose type cannot be recomputed
- * keeps its type. Returns the number of nodes whose type changed.
+ * the draft's function type to match its ports and result. A node keeps its type when it cannot be
+ * recomputed or the recomputed type is not a refinement of it. Returns the number of nodes whose
+ * type changed.
  */
 size_t reinferDraftTypes(GraphDraft &draft);
 

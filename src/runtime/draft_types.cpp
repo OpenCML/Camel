@@ -144,6 +144,13 @@ std::optional<type::Type *> accsResultType(const GraphDraft &draft, gc_node_ref_
 std::optional<type::Type *> nodeResultType(const GraphDraft &draft, gc_node_ref_t id) {
     const auto *h = draft.header(id);
     switch (h->kind) {
+    case GCNodeKind::Data: {
+        const auto value = staticSlotOf(draft, id);
+        if (!value || !h->dataType) {
+            return std::nullopt;
+        }
+        return camel::core::ValueTypeRefinerRegistry::instance().refine(*value, h->dataType);
+    }
     case GCNodeKind::Oper:
         return operResultType(draft, id);
     case GCNodeKind::Gate: {
@@ -192,7 +199,9 @@ size_t reinferDraftTypes(GraphDraft &draft) {
             continue; // no value (control-only nodes)
         }
         const auto result = nodeResultType(draft, id);
-        if (result && *result && *result != h->dataType) {
+        // Only ever sharpen a type: a resolver may know less than compilation did.
+        if (result && *result && *result != h->dataType &&
+            (!h->dataType || h->dataType->assignableFrom(*result))) {
             draft.setNodeDataType(id, *result);
             ++changed;
         }

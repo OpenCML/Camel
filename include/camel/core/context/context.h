@@ -28,6 +28,7 @@
 #include <functional>
 #include <memory>
 #include <ostream>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
@@ -122,6 +123,9 @@ class Context : public std::enable_shared_from_this<Context> {
     camel::runtime::GCGraph *installRuntimeRoot(camel::runtime::GCGraph *runtimeRoot);
     camel::runtime::GCGraph *currentRuntimeRoot() const;
     void clearRuntimeGraphs();
+    /// See GCGraphManager::trackDetached / releaseDetached.
+    void trackDetachedRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs);
+    void releaseDetachedRuntimeGraphs();
     const ExecutorManager &execMgr() const { return *exeMgr_; }
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }

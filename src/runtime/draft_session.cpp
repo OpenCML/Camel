@@ -287,11 +287,10 @@ slot_t cloneStaticSlot(
         }
         return toSlot<Object *>(clonedStruct);
     }
-    default: {
-        Object *cloned = object->clone(mm::autoSpace(), type, false);
-        objectCache.emplace(object, cloned);
-        return toSlot<Object *>(cloned);
-    }
+    default:
+        // Other objects (strings, tensors, ...) refer to no graph: the rewritten graph shares
+        // them. Copying would duplicate every weight a program captures on every rewrite.
+        return slot;
     }
 }
 
@@ -682,6 +681,12 @@ GCGraph *RuntimeGraphDraftSession::commit() {
         runtimeRoot_ = context_->installRuntimeRoot(rewritten.at(oldRuntimeRoot));
     } else {
         runtimeRoot_ = rewritten.at(oldRuntimeRoot);
+        std::vector<GCGraph *> graphs;
+        graphs.reserve(rewritten.size());
+        for (const auto &[_, graph] : rewritten) {
+            graphs.push_back(graph);
+        }
+        context_->trackDetachedRuntimeGraphs(graphs);
     }
     drafts_.clear();
     return runtimeRoot_;

@@ -481,8 +481,17 @@ class GCGraphManager {
     std::vector<GCGraph *> reachableFromRoots() const;
     void clear();
 
+    /// Keeps graphs that rewrites of a detached root produced (a function being exported, see
+    /// RuntimeGraphDraftSession::commit) alive and traced until releaseDetached().
+    void trackDetached(std::span<GCGraph *const> graphs);
+    /// Frees the tracked detached graphs that the program does not reach.
+    void releaseDetached();
+
   private:
+    void rebuildGcRoots();
+
     std::vector<GCGraph *> graphs_;
+    std::vector<GCGraph *> detached_;
     std::vector<GCGraphDebugRecord *> debugRecords_;
     std::vector<camel::core::rtdata::Object *> gcRoots_;
     GCGraph *root_ = nullptr;

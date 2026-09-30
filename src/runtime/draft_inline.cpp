@@ -631,6 +631,41 @@ GCGraph *specializeGraphWithBindings(
     return specialized;
 }
 
+} // namespace
+
+void bindFunctionCall(
+    GraphDraft &draft, const Function *function,
+    std::span<camel::core::type::Type *const> normTypes) {
+    ASSERT(function != nullptr, "bindFunctionCall requires a function.");
+    if (const Tuple *closure = function->tuple()) {
+        const auto *tupleType = function->tupleType();
+        const std::vector<gc_node_ref_t> nodes(
+            draft.closureNodes().begin(),
+            draft.closureNodes().end());
+        ASSERT(
+            tupleType != nullptr && tupleType->size() == nodes.size(),
+            "Function closure size does not match its graph's closure layout.");
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            const gc_node_ref_t value = draft.materializeStaticValue(
+                closure->get<slot_t>(i),
+                tupleType->typeAt(i),
+                kGCNodeFlagConstant);
+            draft.replaceAllValueUses(nodes[i], value);
+            eraseFormalFromDraft(draft, FormalKind::Closure, nodes[i]);
+        }
+    }
+    const std::vector<gc_node_ref_t> ports(draft.normPorts().begin(), draft.normPorts().end());
+    ASSERT(ports.size() == normTypes.size(), "bindFunctionCall received the wrong argument count.");
+    for (size_t i = 0; i < ports.size(); ++i) {
+        if (normTypes[i]) {
+            draft.setNodeDataType(ports[i], normTypes[i]);
+        }
+    }
+    (void)reinferDraftTypes(draft);
+}
+
+namespace {
+
 GCGraph *specializeClosureBoundGraph(
     RuntimeGraphDraftSession &session, const Function *function, size_t nonce) {
     if (!function || !function->runtimeGraph()) {
