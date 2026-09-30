@@ -86,8 +86,12 @@ one definition.
 - Convolution is im2col + GEMM. Pooling, normalization, and reductions are
   typed loops over contiguous NCHW buffers.
 
-Tensors stay contiguous and row-major. Views (strided tensors) are out of scope;
-`transpose`/`permute` materialize.
+Tensors stay contiguous and row-major. `reshape` (and `flatten`, `unsqueeze`,
+`squeeze` through it) returns a view: a tensor with its own shape that reads
+another tensor's buffer and keeps that owner alive as its one GC reference.
+Tensors are never written after they are built, so the sharing is
+unobservable, and a view is still contiguous, so kernels need not know about
+it. Strided views are out of scope; `transpose`/`permute`/`slice` materialize.
 
 ### 3.2 Operator definitions (`modules/tensor/ops/`)
 

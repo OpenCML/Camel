@@ -26,9 +26,10 @@ Deviations from the proposal below:
   (shape arithmetic, integer comparisons) need no rule.
 - `grad` is not restricted by the core; rules and engines are package
   contributions, and `@vjp` is a decorator evaluated by `std::macro`.
-- Pullback closures are not yet collapsed by generic simplification passes,
-  and FastVM/JIT do not yet compile graphs created during macro evaluation;
-  both limit training-step performance today.
+- Generic simplification (`std::opt::simplify`) collapses pullback closures
+  into straight-line code, and FastVM/JIT compile graphs created at run time
+  (a gradient built while the program runs) on first call, so training steps
+  run under every execution pass.
 
 ## 1. Principles
 
