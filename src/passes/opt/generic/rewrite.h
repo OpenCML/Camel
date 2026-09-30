@@ -28,6 +28,7 @@
 #include "camel/runtime/draft.h"
 
 #include <functional>
+#include <vector>
 #include <string_view>
 
 namespace camel::passes::generic {
@@ -50,6 +51,15 @@ bool isReplaceable(const GraphDraft &draft, gc_node_ref_t id);
 
 /// True when `to` is reachable from `from` along value or control edges (to is downstream).
 bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to);
+
+/**
+ * The ordered nodes `id`'s value is computed from: walking up its value inputs, and the control
+ * inputs of pure nodes on the way, the first nodes that carry ordering (calls, branches,
+ * effects, gates that wait). Code reading `id` runs after them because of the data dependency
+ * alone, which replacing `id` by a constant, or inlining a call that ignores an argument,
+ * removes.
+ */
+std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t id);
 
 /**
  * Replaces node `id` by `replacement` (or just removes it when `replacement` is invalid, which

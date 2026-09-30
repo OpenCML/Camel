@@ -347,7 +347,30 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         after.push_back(pred);
     }
     after.insert(after.end(), brchPreds.begin(), brchPreds.end());
+    // Its value users ran after the whole branch too. When the result comes from outside the
+    // taken arm (a constant, an input), reading it no longer orders them after what the branch
+    // waited on, so they wait on it explicitly (as replaceNode does for a replaced value).
+    std::vector<gc_node_ref_t> joinValueUsers;
+    for (auto group : {draft.normUsersOf(join), draft.withUsersOf(join)}) {
+        for (gc_node_ref_t u : group) {
+            if (!dropped[u] && std::ranges::find(joinValueUsers, u) == joinValueUsers.end()) {
+                joinValueUsers.push_back(u);
+            }
+        }
+    }
+    const bool resultInArm = std::ranges::find(regions[*arm], result) != regions[*arm].end();
     draft.replaceAllValueUses(join, result);
+    if (!resultInArm) {
+        for (gc_node_ref_t user : joinValueUsers) {
+            for (gc_node_ref_t pred : after) {
+                const auto existing = draft.ctrlInputsOf(user);
+                if (pred != user && pred != result && !dropped[pred] &&
+                    std::ranges::find(existing, pred) == existing.end()) {
+                    draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
+                }
+            }
+        }
+    }
     for (gc_node_ref_t user : joinCtrlUsers) {
         draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, user, join);
         for (gc_node_ref_t pred : after) {
@@ -632,6 +655,32 @@ size_t cseDraft(GraphDraft &draft) {
 
 // ---------------------------------------------------------------- dce
 
+/**
+ * True when erasing the unread GATE `gate` loses no ordering: every node it waits on is a pure
+ * value, or has another user through which it still reaches the exit. An effect whose only
+ * successor is the gate (a println before a folded call) would otherwise be cut off and never
+ * run.
+ */
+bool gateInputsSurvive(const GraphDraft &draft, gc_node_ref_t gate) {
+    for (auto inputs : {draft.normInputsOf(gate), draft.withInputsOf(gate), draft.ctrlInputsOf(gate)}) {
+        for (gc_node_ref_t in : inputs) {
+            if (isValueOnly(draft, in)) {
+                continue;
+            }
+            size_t users = 0;
+            for (auto group : {draft.normUsersOf(in), draft.withUsersOf(in), draft.ctrlUsersOf(in)}) {
+                for (gc_node_ref_t user : group) {
+                    users += user != gate ? 1 : 0;
+                }
+            }
+            if (users == 0) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 size_t dceDraft(GraphDraft &draft) {
     size_t removed = 0;
     for (bool changed = true; changed;) {
@@ -639,11 +688,13 @@ size_t dceDraft(GraphDraft &draft) {
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
             // A SYNC only joins control; replaceNode hands its predecessors to its users, which
             // keeps every ordering it expressed.
-            // A GATE only forwards its value once its control inputs ran; unread, it is dead.
+            // A GATE only forwards its value once its control inputs ran; unread, it is dead
+            // unless it is the only way something it waits on reaches the exit.
             const auto *h     = draft.header(id);
             const bool isJoin = h && h->kind == GCNodeKind::Sync;
             const bool isDeadGate =
-                h && h->kind == GCNodeKind::Gate && draft.ctrlUsersOf(id).empty();
+                h && h->kind == GCNodeKind::Gate && draft.ctrlUsersOf(id).empty() &&
+                gateInputsSurvive(draft, id);
             if ((isValueOnly(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);

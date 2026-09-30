@@ -123,11 +123,8 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id) {
     }
 }
 
-/**
- * The ordered nodes `id`'s value is computed from: walking up its value inputs through
- * computation that is pure, the first nodes that carry ordering. Code reading `id` runs after
- * them because of the data dependency alone, which replacing `id` by a constant removes.
- */
+} // namespace
+
 std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t id) {
     std::vector<gc_node_ref_t> sources, work;
     std::vector<bool> seen(draft.nodeSlotCount(), false);
@@ -145,14 +142,14 @@ std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t
             sources.push_back(n);
             continue;
         }
-        for (auto inputs : {draft.normInputsOf(n), draft.withInputsOf(n)}) {
+        // A pure node on a control chain (a statement after an effect) runs after its control
+        // predecessors as well.
+        for (auto inputs : {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
             work.insert(work.end(), inputs.begin(), inputs.end());
         }
     }
     return sources;
 }
-
-} // namespace
 
 void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement) {
     const auto copy = [](std::span<const gc_node_ref_t> refs) {

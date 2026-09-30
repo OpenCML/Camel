@@ -32,6 +32,7 @@
 
 #include "engine.h"
 
+#include "../generic/rewrite.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/log.h"
@@ -158,6 +159,28 @@ std::unordered_map<const GCGraph *, size_t> directCallCounts(
         }
     }
     return counts;
+}
+
+/// The nodes `id` runs after other than through `skip` (its transitive inputs of every kind).
+std::vector<bool>
+upstreamOf(const camel::runtime::GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t skip) {
+    std::vector<bool> seen(draft.nodeSlotCount(), false);
+    std::vector<gc_node_ref_t> work;
+    for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+        work.insert(work.end(), inputs.begin(), inputs.end());
+    }
+    while (!work.empty()) {
+        const gc_node_ref_t n = work.back();
+        work.pop_back();
+        if (n >= seen.size() || seen[n] || n == skip) {
+            continue;
+        }
+        seen[n] = true;
+        for (auto inputs : {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
+            work.insert(work.end(), inputs.begin(), inputs.end());
+        }
+    }
+    return seen;
 }
 
 bool isDraftBranchArmHead(const camel::runtime::GraphDraft &draft, gc_node_ref_t nodeId) {
@@ -525,10 +548,48 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 if (!draft.alive(funcNodeId)) {
                     continue;
                 }
+                // The call's users ran after it, so after what its arguments were computed
+                // from (an effect before a statement feeding an argument). The inlined body may
+                // not read every argument, so they wait on those explicitly.
+                // Only sources a user reaches through the call alone need the explicit edge.
+                const auto argSources = camel::passes::generic::orderedSources(draft, funcNodeId);
+                std::vector<std::pair<gc_node_ref_t, std::vector<gc_node_ref_t>>> callUsers;
+                if (!argSources.empty()) {
+                    for (auto group : {draft.normUsersOf(funcNodeId),
+                                       draft.withUsersOf(funcNodeId),
+                                       draft.ctrlUsersOf(funcNodeId)}) {
+                        for (gc_node_ref_t user : group) {
+                            if (std::ranges::find(callUsers, user, &decltype(callUsers)::value_type::first) !=
+                                callUsers.end()) {
+                                continue;
+                            }
+                            const auto before = upstreamOf(draft, user, funcNodeId);
+                            std::vector<gc_node_ref_t> missing;
+                            for (gc_node_ref_t source : argSources) {
+                                if (source != user && !before[source]) {
+                                    missing.push_back(source);
+                                }
+                            }
+                            callUsers.emplace_back(user, std::move(missing));
+                        }
+                    }
+                }
                 const auto inlineResult =
                     camel::runtime::inlineCallableInDraft(session, draft, funcNodeId);
                 if (!inlineResult) {
                     continue;
+                }
+                for (const auto &[user, missing] : callUsers) {
+                    if (!draft.alive(user)) {
+                        continue;
+                    }
+                    for (gc_node_ref_t source : missing) {
+                        const auto existing = draft.ctrlInputsOf(user);
+                        if (draft.alive(source) &&
+                            std::ranges::find(existing, source) == existing.end()) {
+                            draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, source);
+                        }
+                    }
                 }
                 changed      = true;
                 roundChanged = true;
