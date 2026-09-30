@@ -861,9 +861,18 @@ desc = "Exercises Python-backed MNIST loading, training, and visualization throu
 kind = "behavior"
 case = "../../../cases/modules/nn/mnist_py.cml"
 args = ["${case}"]
+# The training set is downloaded once into tmp/; without network access the test is skipped.
+skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "tmp"]
 expect_exit = 0
-failure_note = "The MNIST helper path still has a Python integration regression."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const m = out.match(/Accuracy: ([0-9]+) [/] 256/)
+assert(m, `no accuracy line in: ${out}`)
+assert(Number(m[1]) >= 200, `training accuracy too low: ${m[0]}`)
+}
+"""
 timeout_ms = 4000
 
 [[tests]]

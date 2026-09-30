@@ -56,6 +56,14 @@ Every `[[tests]]` entry may use these common fields:
   test only.
 - `failure_note`
   Optional explanatory note printed only when the test fails.
+- `skip_unless`
+  Optional precondition command (same variable expansion as `args`, run from the repository root).
+  A non-zero exit skips the test and prints the command's output as the reason; skipped tests
+  count as neither passed nor failed. Use it only for conditions outside the code under test, such
+  as network access for a dataset download:
+  `skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "tmp"]`.
+- `skip_unless_timeout_ms`
+  Optional timeout for the precondition command. Default is `120000`.
 
 ## Supported Normalizers
 
@@ -237,6 +245,8 @@ The case must emit the expected JSON benchmark payload format used by the runner
 
 - `test/vars.toml`
 - the implicit `${case}` variable
+- the built-in `${python}` variable: the active virtual environment's interpreter, else `python`
+  on Windows and `python3` elsewhere (`test/vars.toml` may override it)
 
 Rules:
 
