@@ -413,3 +413,32 @@ assert(stats[1].direct_calls === 0 && stats[1].indirect_calls === 0, `calls left
 }
 """
 timeout_ms = 6000
+
+[[tests]]
+name = "fused_grad_check"
+desc = "After tensor::fuse (and without std::macro, so grad sees the fused graphs), the derivative rules of matmul_add and matmul_add_relu match finite differences in every operand."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/fused_grad_check.cml"
+args = ["${case}", "tensor::fuse", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["matmul_add.x ok", "matmul_add.w ok", "matmul_add.b ok", "matmul_add_relu.x ok", "matmul_add_relu.w ok", "matmul_add_relu.b ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+[[tests]]
+name = "fused_grad_check.fused"
+desc = "The functions checked by fused_grad_check are indeed fused: tensor::fuse leaves matmul_add and matmul_add_relu in them."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/fused_grad_check.cml"
+args = ["${case}", "tensor::fuse", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert((out.match(/tensor:matmul_add_relu/g) || []).length === 3, 'expected three matmul_add_relu nodes')
+assert((out.match(/tensor:matmul_add"/g) || []).length === 3, 'expected three matmul_add nodes')
+}
+"""
+timeout_ms = 6000
