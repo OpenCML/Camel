@@ -76,6 +76,19 @@ std::optional<Type *> shapeInfer(const InferContext &) {
     return intArray;
 }
 
+/// The shape as a constant when the type fixes every dimension.
+std::optional<slot_t> shapeFold(const InferContext &ctx, mm::IAllocator &allocator) {
+    const auto shape = ctx.facts(0).shape;
+    if (!shape || std::ranges::any_of(*shape, [](int64_t d) { return d == kUnknownDim; })) {
+        return std::nullopt;
+    }
+    ::Array *array = ::Array::create(allocator, shape->size());
+    for (size_t i = 0; i < shape->size(); ++i) {
+        array->set(i, static_cast<camel::core::rtdata::Int64>((*shape)[i]));
+    }
+    return camel::core::rtdata::toSlot(array);
+}
+
 // reshape(t | number[], shape: int[])
 slot_t reshapeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("reshape", [&] {
@@ -333,9 +346,10 @@ std::vector<OpDef> layoutOps() {
         .exports   = {"shape"},
         .params    = {{"t", ParamKind::Tensor}},
         .resultDoc = "int[]",
-        .infer     = shapeInfer,
-        .kernel    = &shapeKernel,
-        .traits    = {}});
+        .infer         = shapeInfer,
+        .kernel        = &shapeKernel,
+        .traits        = {},
+        .foldFromTypes = shapeFold});
     defs.push_back(OpDef{
         .name      = "reshape",
         .exports   = {"reshape"},

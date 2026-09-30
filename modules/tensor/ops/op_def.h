@@ -107,6 +107,12 @@ class InferContext {
 
 using InferFn = std::function<std::optional<type::Type *>(const InferContext &)>;
 
+/// The result as a constant when the argument types (and constant arguments) fix it, e.g. the
+/// shape of a tensor whose type carries its shape; nullopt otherwise. Mirrored into the core
+/// OperatorTypeFolderRegistry, which std::opt::fold consults.
+using FoldFn =
+    std::function<std::optional<slot_t>(const InferContext &, core::mm::IAllocator &)>;
+
 /// Semantic properties used by exporters and, mirrored into the core OperatorTraitsRegistry on
 /// registration, by generic graph passes. Operators are pure unless marked otherwise.
 struct OpTraits {
@@ -123,6 +129,7 @@ struct OpDef {
     operator_t kernel;
     OpTraits traits;
     VjpFn vjp = nullptr; // reverse-mode rule; nullptr when the operator is not differentiable
+    FoldFn foldFromTypes = nullptr; // constant result from argument types, when they fix it
 
     /// Human-readable signature, e.g. "(lhs: Tensor | number, rhs: Tensor | number) => Tensor".
     std::string signature() const;

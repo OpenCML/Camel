@@ -29,7 +29,13 @@
 
 #pragma once
 
+#include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/rtdata/base.h"
+#include "camel/core/type/resolver.h"
+
+#include <functional>
 #include <optional>
+#include <span>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
@@ -66,6 +72,63 @@ class OperatorTraitsRegistry {
 
     mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, OperatorTraits, StringHash, std::equal_to<>> traits_;
+};
+
+/**
+ * The type resolver of every operator overload, keyed by its URI. An OPER node records only the
+ * URI its call resolved to; passes that change what is known about the arguments (binding input
+ * shapes, folding a shape to a constant) re-run the overload's resolver through this registry.
+ * Operator groups register their overloads when they are created.
+ */
+class OperatorResolverRegistry {
+  public:
+    static OperatorResolverRegistry &instance();
+
+    /// Registers (or replaces) the resolver of `uri`.
+    void set(std::string_view uri, type::resolver_ptr_t resolver);
+
+    /// The resolver of `uri`, or nullptr.
+    type::resolver_ptr_t find(std::string_view uri) const;
+
+  private:
+    struct StringHash {
+        using is_transparent = void;
+        size_t operator()(std::string_view s) const { return std::hash<std::string_view>{}(s); }
+    };
+
+    mutable std::shared_mutex mutex_;
+    std::unordered_map<std::string, type::resolver_ptr_t, StringHash, std::equal_to<>> resolvers_;
+};
+
+/**
+ * The value an operator's result has whenever its arguments have the given types, for operators
+ * whose result a type can fix: the shape of a tensor whose type carries its shape, its element
+ * count, one of its dimensions. `statics` holds the arguments that are constants (aligned with
+ * `types`); `allocator` holds any object the value needs. Returns nullopt when the types do not
+ * fix the result. std::opt::fold uses these to turn such results into constants once shape
+ * specialization has put the facts into the types.
+ */
+using TypeFolder = std::function<std::optional<slot_t>(
+    std::span<type::Type *const> types, type::static_args_t statics, mm::IAllocator &allocator)>;
+
+class OperatorTypeFolderRegistry {
+  public:
+    static OperatorTypeFolderRegistry &instance();
+
+    /// Registers (or replaces) the folder of `uri`.
+    void set(std::string_view uri, TypeFolder folder);
+
+    /// The folder of `uri`, or nullptr.
+    const TypeFolder *find(std::string_view uri) const;
+
+  private:
+    struct StringHash {
+        using is_transparent = void;
+        size_t operator()(std::string_view s) const { return std::hash<std::string_view>{}(s); }
+    };
+
+    mutable std::shared_mutex mutex_;
+    std::unordered_map<std::string, TypeFolder, StringHash, std::equal_to<>> folders_;
 };
 
 } // namespace camel::core

@@ -191,6 +191,26 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
         if (def.vjp) {
             camel::core::DerivativeRegistry::instance().setRule(uri, def.vjp);
         }
+        if (def.foldFromTypes) {
+            camel::core::OperatorTypeFolderRegistry::instance().set(
+                uri,
+                [fold = def.foldFromTypes](
+                    std::span<Type *const> types,
+                    static_args_t statics,
+                    mm::IAllocator &allocator) -> std::optional<slot_t> {
+                    std::vector<std::optional<ConstArg>> constants(types.size());
+                    for (size_t i = 0; i < types.size() && i < statics.size(); ++i) {
+                        if (statics[i]) {
+                            constants[i] = constArgOf(*statics[i], types[i]);
+                        }
+                    }
+                    try {
+                        return fold(InferContext(types, constants), allocator);
+                    } catch (const std::exception &) {
+                        return std::nullopt; // left to the program to report when it runs
+                    }
+                });
+        }
         entries_.push_back(Entry{
             std::string(protocol),
             std::move(uri),

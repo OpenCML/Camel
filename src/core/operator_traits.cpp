@@ -51,4 +51,37 @@ bool OperatorTraitsRegistry::isPure(std::string_view uri) const {
     return traits && traits->pure;
 }
 
+OperatorResolverRegistry &OperatorResolverRegistry::instance() {
+    static OperatorResolverRegistry registry;
+    return registry;
+}
+
+void OperatorResolverRegistry::set(std::string_view uri, type::resolver_ptr_t resolver) {
+    std::unique_lock lock(mutex_);
+    resolvers_.insert_or_assign(std::string(uri), std::move(resolver));
+}
+
+type::resolver_ptr_t OperatorResolverRegistry::find(std::string_view uri) const {
+    std::shared_lock lock(mutex_);
+    auto it = resolvers_.find(uri);
+    return it == resolvers_.end() ? nullptr : it->second;
+}
+
+OperatorTypeFolderRegistry &OperatorTypeFolderRegistry::instance() {
+    static OperatorTypeFolderRegistry registry;
+    return registry;
+}
+
+void OperatorTypeFolderRegistry::set(std::string_view uri, TypeFolder folder) {
+    std::unique_lock lock(mutex_);
+    folders_.insert_or_assign(std::string(uri), std::move(folder));
+}
+
+const TypeFolder *OperatorTypeFolderRegistry::find(std::string_view uri) const {
+    std::shared_lock lock(mutex_);
+    auto it = folders_.find(uri);
+    // Entries are never removed, so the pointer stays valid after the lock is released.
+    return it == folders_.end() ? nullptr : &it->second;
+}
+
 } // namespace camel::core

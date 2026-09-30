@@ -256,21 +256,49 @@ std::vector<OpDef> gradientOps() {
         .kernel    = &onesLikeKernel,
         .traits    = {}});
     defs.push_back(OpDef{
-        .name      = "numel",
-        .exports   = {"numel"},
-        .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "int",
-        .infer     = intScalar,
-        .kernel    = &numelKernel,
-        .traits    = {}});
+        .name          = "numel",
+        .exports       = {"numel"},
+        .params        = {{"t", ParamKind::Tensor}},
+        .resultDoc     = "int",
+        .infer         = intScalar,
+        .kernel        = &numelKernel,
+        .traits        = {},
+        .foldFromTypes = [](const InferContext &ctx, mm::IAllocator &) -> std::optional<slot_t> {
+            const auto shape = ctx.facts(0).shape;
+            if (!shape) {
+                return std::nullopt;
+            }
+            int64_t count = 1;
+            for (int64_t d : *shape) {
+                if (d == kUnknownDim) {
+                    return std::nullopt;
+                }
+                count *= d;
+            }
+            return camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Int64>(count));
+        }});
     defs.push_back(OpDef{
-        .name      = "dim",
-        .exports   = {"dim"},
-        .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int}},
-        .resultDoc = "int",
-        .infer     = intScalar,
-        .kernel    = &dimKernel,
-        .traits    = {}});
+        .name          = "dim",
+        .exports       = {"dim"},
+        .params        = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int}},
+        .resultDoc     = "int",
+        .infer         = intScalar,
+        .kernel        = &dimKernel,
+        .traits        = {},
+        .foldFromTypes = [](const InferContext &ctx, mm::IAllocator &) -> std::optional<slot_t> {
+            const auto shape = ctx.facts(0).shape;
+            const auto axisArg = ctx.constInt(1);
+            if (!shape || !axisArg) {
+                return std::nullopt;
+            }
+            const auto rank = static_cast<int64_t>(shape->size());
+            const int64_t axis = *axisArg < 0 ? *axisArg + rank : *axisArg;
+            if (axis < 0 || axis >= rank || (*shape)[static_cast<size_t>(axis)] == kUnknownDim) {
+                return std::nullopt;
+            }
+            return camel::core::rtdata::toSlot(
+                static_cast<camel::core::rtdata::Int64>((*shape)[static_cast<size_t>(axis)]));
+        }});
 
     defs.push_back(internal(
         "sum_to",
