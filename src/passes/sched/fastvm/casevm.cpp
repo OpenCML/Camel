@@ -68,7 +68,6 @@ using namespace camel::jit;
 
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
     Frame *currFrame                = rootFrame;
-    uint32_t callSafepointCountdown = kFastVmCallsPerSafepointPoll;
     Frame *rootActiveFrame          = rootFrame;
     const size_t stackDepthBase     = stackDepth_;
 
@@ -223,7 +222,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             } break;
 
             case OpCode::CALL: {
-                fastVmCallBoundarySafepoint(callSafepointCountdown);
+                fastVmCallBoundarySafepoint();
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
                 auto function          = currFrame->get<Function *>(wargs[0]);
@@ -251,7 +250,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             } break;
 
             case OpCode::FUNC: {
-                fastVmCallBoundarySafepoint(callSafepointCountdown);
+                fastVmCallBoundarySafepoint();
                 const data_arr_t srcArgs  = bc.directCallSrcArgs();
                 const data_arr_t dstSlots = bc.directCallDstSlots();
 #if ENABLE_FASTVM_JIT
@@ -311,7 +310,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             } break;
 
             case OpCode::TAIL: {
-                fastVmCallBoundarySafepoint(callSafepointCountdown);
+                fastVmCallBoundarySafepoint();
                 const data_arr_t srcArgs  = bc.directCallSrcArgs();
                 const data_arr_t dstSlots = bc.directCallDstSlots();
 #if ENABLE_FASTVM_JIT

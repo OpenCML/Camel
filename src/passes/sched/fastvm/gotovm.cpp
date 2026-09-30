@@ -206,7 +206,6 @@ static void writeComputedGotoFillSlots(
 
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
     Frame *currFrame                = rootFrame;
-    uint32_t callSafepointCountdown = kFastVmCallsPerSafepointPoll;
     Frame *rootActiveFrame          = rootFrame;
     const Bytecode *base            = bytecodes_.data();
     const Bytecode *bc              = nullptr;
@@ -443,7 +442,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         EXEC_WHEN_DEBUG(
             CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
-        fastVmCallBoundarySafepoint(callSafepointCountdown);
+        fastVmCallBoundarySafepoint();
 
         const data_arr_t nargs = bc->nargs();
         const data_arr_t wargs = bc->wargs();
@@ -477,7 +476,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         EXEC_WHEN_DEBUG(
             CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
-        fastVmCallBoundarySafepoint(callSafepointCountdown);
+        fastVmCallBoundarySafepoint();
         const data_arr_t srcArgs  = bc->directCallSrcArgs();
         const data_arr_t dstSlots = bc->directCallDstSlots();
 
@@ -571,7 +570,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         EXEC_WHEN_DEBUG(
             CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
-        fastVmCallBoundarySafepoint(callSafepointCountdown);
+        fastVmCallBoundarySafepoint();
         const data_arr_t srcArgs  = bc->directCallSrcArgs();
         const data_arr_t dstSlots = bc->directCallDstSlots();
 
