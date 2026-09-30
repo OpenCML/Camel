@@ -153,6 +153,9 @@ Value Value::symbolicScalar(std::string name, type::Type *camelType) {
 }
 
 TensorFacts factsOf(const Value &value) {
+    if (value.isAggregate()) {
+        return {};
+    }
     if (value.isSymbolic()) {
         return {value.dtype, value.shape};
     }
@@ -166,7 +169,8 @@ TensorFacts factsOf(const Value &value) {
 }
 
 type::Type *inferenceTypeOf(const Value &value) {
-    if (value.isSymbolic() && value.form == Value::Form::Scalar) {
+    if (value.isSymbolic() &&
+        (value.form == Value::Form::Scalar || value.form == Value::Form::Aggregate)) {
         return value.camelType;
     }
     if (value.isSymbolic() && value.form == Value::Form::IntArray) {
@@ -227,6 +231,11 @@ std::string Emitter::node(
 std::string Emitter::operand(const Value &value, std::optional<TypeCode> dtype) {
     if (value.isConstant()) {
         return constantOperand(value, dtype);
+    }
+    if (value.isAggregate()) {
+        throw ExportError(std::format(
+            "a '{}' that depends on the model input is used where a tensor is expected",
+            value.camelType->toString()));
     }
     if (!dtype || !value.dtype || tensor::normalizeTensorDType(*dtype) == *value.dtype) {
         return value.name;

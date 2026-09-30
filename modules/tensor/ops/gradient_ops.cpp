@@ -205,8 +205,23 @@ std::optional<Type *> castLikeInfer(const InferContext &ctx) {
     return tensorOf(ctx.facts(1).dtype, ctx.facts(0).shape);
 }
 
-std::optional<Type *> floatUnknownShape(const InferContext &) {
-    return tensorOf(TypeCode::Float32, std::nullopt);
+/// permute_inverse(g, perm): g's axes put back where `perm` took them from.
+std::optional<Type *> permuteInverseInfer(const InferContext &ctx) {
+    const auto shape = ctx.facts(0).shape;
+    const auto perm  = ctx.constInts(1);
+    if (!shape || !perm || perm->size() != shape->size()) {
+        return tensorOf(TypeCode::Float32, std::nullopt);
+    }
+    StaticShape result(shape->size(), kUnknownDim);
+    const auto rank = static_cast<int64_t>(perm->size());
+    for (size_t i = 0; i < perm->size(); ++i) {
+        const int64_t p = (*perm)[i] < 0 ? (*perm)[i] + rank : (*perm)[i];
+        if (p < 0 || p >= rank) {
+            return tensorOf(TypeCode::Float32, std::nullopt);
+        }
+        result[static_cast<size_t>(p)] = (*shape)[i];
+    }
+    return tensorOf(TypeCode::Float32, result);
 }
 
 OpDef internal(
@@ -365,7 +380,7 @@ std::vector<OpDef> gradientOps() {
     defs.push_back(internal(
         "permute_inverse",
         {{"g", ParamKind::Tensor}, {"perm", ParamKind::IntArray}},
-        floatUnknownShape,
+        permuteInverseInfer,
         &permuteInverseKernel));
     return defs;
 }

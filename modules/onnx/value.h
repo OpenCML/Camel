@@ -31,7 +31,10 @@
  *                 is the Camel type, floats are carried as float32),
  *       IntArray  a Camel int[] such as shape(x) with a dynamic batch (a 1-D
  *                 int64 ONNX tensor; `elements` holds the entries known
- *                 statically, kUnknownDim for the others).
+ *                 statically, kUnknownDim for the others),
+ *       Aggregate a Camel tuple or struct (`camelType`) with some symbolic
+ *                 elements, e.g. a model's parameters or its gradients. It
+ *                 has no ONNX value of its own: `fields` holds its elements.
  */
 
 #pragma once
@@ -50,7 +53,7 @@ namespace rtdata = camel::core::rtdata;
 
 struct Value {
     enum class Kind { Constant, Symbolic };
-    enum class Form { Tensor, Scalar, IntArray };
+    enum class Form { Tensor, Scalar, IntArray, Aggregate };
 
     Kind kind = Kind::Constant;
     Form form = Form::Tensor; // symbolic values only
@@ -62,8 +65,9 @@ struct Value {
     std::string name;
     std::optional<type::TypeCode> dtype;
     std::optional<tensor::StaticShape> shape;
-    type::Type *camelType = nullptr; // Scalar: the Camel scalar type
+    type::Type *camelType = nullptr; // Scalar: the Camel scalar type; Aggregate: tuple/struct type
     std::vector<int64_t> elements;   // IntArray: known entries (kUnknownDim when dynamic)
+    std::vector<Value> fields;       // Aggregate: the elements, in the type's order
 
     static Value constant(slot_t slot, type::Type *ty) {
         Value v;
@@ -99,7 +103,18 @@ struct Value {
         return v;
     }
 
+    /// A tuple or struct of type `camelType` whose elements are `fields`.
+    static Value aggregate(type::Type *camelType, std::vector<Value> fields) {
+        Value v;
+        v.kind      = Kind::Symbolic;
+        v.form      = Form::Aggregate;
+        v.camelType = camelType;
+        v.fields    = std::move(fields);
+        return v;
+    }
+
     bool isConstant() const { return kind == Kind::Constant; }
+    bool isAggregate() const { return kind == Kind::Symbolic && form == Form::Aggregate; }
     bool isSymbolic() const { return kind == Kind::Symbolic; }
 };
 

@@ -17,6 +17,11 @@ import { get_env } from sys
 import { export_model } from onnx
 import { now } from time
 
+/// The benchmark input (CAMEL_BENCH_INPUT).
+export func bench_input(): Tensor {
+    return load_npy(get_env('CAMEL_BENCH_INPUT'))
+}
+
 /// Loads weight `name` from CAMEL_BENCH_WEIGHTS.
 export func weight(name: string): Tensor {
     return load_npy(get_env('CAMEL_BENCH_WEIGHTS') + '/' + name + '.npy')

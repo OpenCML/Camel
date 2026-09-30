@@ -198,6 +198,15 @@ and shape) instead of timing it, and prints `CAMEL_BENCH export_ms=<float>`,
 the time spent inside the exporter. `common/export.py --exporter camel` wraps
 this, so `run.py` records `export_s` for Camel as it does for torch and tf.
 
+The training models (`mlp`, `gru`, `transformer`) also export their training
+step: with `CAMEL_BENCH_WORKLOAD=train_export`, `model.cml` exports
+`step(m, x) = (loss, sgd(m, grad, 0.01))` to `CAMEL_BENCH_EXPORT`. The weights
+become graph inputs named after the weight files, the input is `input1`, and
+the outputs are `output_0` (the loss) and `output_1_<weight>` (the updated
+weights). `train.py --check-onnx` exports it for each model, runs
+`onnx.checker`, runs one step on ONNX Runtime, and compares the loss and the
+updated weights with one step of Camel's own execution.
+
 ## Running
 
 ```bash

@@ -10,12 +10,20 @@ weight by weight. Weights are matched to torch parameters by value (directly or
 transposed, as ``nn.Linear`` stores ``[out, in]``), so no per-model name mapping
 is needed.
 
+Training-step export (``--check-onnx``): the model's training step (loss,
+gradient, SGD update) is exported with ``onnx.export_model`` as a function of
+the parameters and the input, checked with ``onnx.checker``, and run once on
+ONNX Runtime; its loss and updated parameters are compared with one step of
+Camel's own execution (the loss it reports and ``w - lr * grad`` from the
+dumped gradients).
+
 Timing (``--time``): PyTorch eager versus the Camel configurations below, each
 run in ``--trials`` fresh processes, interleaved; the report gives the median
 step time and a bootstrap 95% CI over trial medians.
 
 Usage:
   .venv/bin/python train.py --check
+  .venv/bin/python train.py --check-onnx
   .venv/bin/python train.py --time --trials 5 --out results/train.json
 """
 
@@ -145,6 +153,61 @@ def check(models: List[str], rtol: float, configs: List[str]) -> bool:
     return ok
 
 
+# ---------------------------------------------------------------- onnx export
+
+
+def camel_loss(model: str) -> float:
+    """The loss of one native training step (every timed step starts from the same weights)."""
+    import re
+
+    out = run_camel(model, CAMEL_CONFIGS["camel_nvm"], {"CAMEL_BENCH_WARMUP": "1", "CAMEL_BENCH_REPS": "1"})
+    found = re.search(r"loss=([-+0-9.eE]+)", out)
+    if not found:
+        raise RuntimeError(f"no loss in Camel's output:\n{out}")
+    return float(found.group(1))
+
+
+def check_onnx(models: List[str], rtol: float) -> bool:
+    import onnx
+    import onnxruntime as ort
+
+    ok = True
+    for model in models:
+        print(f"== {model} (training step exported to ONNX)")
+        weights, x = load(model)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / f"{model}_step.onnx"
+            start = time.perf_counter()
+            run_camel(model, (), {"CAMEL_BENCH_WORKLOAD": "train_export", "CAMEL_BENCH_EXPORT": str(path)})
+            export_s = time.perf_counter() - start
+            proto = onnx.load(str(path))
+            onnx.checker.check_model(proto, full_check=True)
+            session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+            feeds = {i.name: (x if i.name == "input1" else weights[i.name]) for i in session.get_inputs()}
+            outputs = dict(zip([o.name for o in session.get_outputs()], session.run(None, feeds)))
+        print(f"  exported in {export_s:.2f} s: {len(proto.graph.node)} nodes, onnx.checker ok")
+        ref_loss = camel_loss(model)
+        got_loss = float(outputs["output_0"])
+        loss_err = abs(got_loss - ref_loss) / max(abs(ref_loss), 1e-12)
+        status = "ok" if loss_err <= rtol else "MISMATCH"
+        ok &= status == "ok"
+        print(f"  {'loss':12s} {status:8s} |diff|/|ref| = {loss_err:.2e}  (ORT {got_loss:.6g}, Camel {ref_loss:.6g})")
+        grads = camel_gradients(model)
+        for name in sorted(weights):
+            got = outputs.get(f"output_1_{name}")
+            if got is None:
+                print(f"  {name:12s} MISSING in the exported step's outputs")
+                ok = False
+                continue
+            ref = weights[name] - LR * grads[name]
+            scale = float(np.max(np.abs(weights[name]))) or 1.0
+            err = float(np.max(np.abs(got - ref))) / scale
+            status = "ok" if got.shape == ref.shape and err <= rtol else "MISMATCH"
+            ok &= status == "ok"
+            print(f"  {name:12s} {status:8s} max|diff|/max|w| = {err:.2e}")
+    return ok
+
+
 # ---------------------------------------------------------------- timing
 
 
@@ -245,6 +308,7 @@ def main() -> int:
         "--check-configs", default="camel_nvm,camel_opt_nvm", help="Camel configurations to check"
     )
     parser.add_argument("--rtol", type=float, default=1e-4, help="gradient tolerance relative to max |grad| (see check)")
+    parser.add_argument("--check-onnx", action="store_true", help="export the training step and run it on ORT")
     parser.add_argument("--time", action="store_true", help="time training steps")
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--reps", type=int, default=20)
@@ -256,7 +320,10 @@ def main() -> int:
     args = parser.parse_args()
     models = [m for m in args.models.split(",") if m]
     ok = True
-    if args.check or not args.time:
+    if args.check_onnx:
+        ok = check_onnx(models, args.rtol)
+        print("onnx training-step check:", "PASS" if ok else "FAIL")
+    if args.check or not (args.time or args.check_onnx):
         ok = check(models, args.rtol, [c for c in args.check_configs.split(",") if c])
         print("gradient check:", "PASS" if ok else "FAIL")
     if args.time:

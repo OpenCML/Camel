@@ -44,7 +44,9 @@
 #include "proto/onnx_writer.h"
 
 #include "camel/core/context/context.h"
+#include "camel/core/type/base.h"
 
+#include <span>
 #include <vector>
 
 class Function;
@@ -60,14 +62,27 @@ struct ExportOptions {
     std::string inputName  = "input";
     std::string outputName = "output";
     std::string graphName  = "camel";
-    /// Input axes left dynamic in the model (e.g. {0} for a variable batch size). The example
-    /// input's extents on these axes are not baked into the graph.
+    /// Axes of the tensor arguments left dynamic in the model (e.g. {0} for a variable batch
+    /// size). The examples' extents on these axes are not baked into the graph.
     std::vector<int64_t> dynamicAxes;
 };
 
-/// Builds the ONNX model of `fn` applied to a tensor like `example`. Throws ExportError.
+/// An example argument: a value whose types (dtypes and shapes) the graph inputs take.
+struct Example {
+    slot_t value;
+    core::type::Type *type;
+};
+
+/**
+ * Builds the ONNX model of `fn` applied to arguments like `examples` (one per parameter).
+ * Tensor arguments become graph inputs (`input`, or `input0`, `input1`, ... when there are
+ * several); tuple and struct arguments (a model's parameters) become one input per tensor,
+ * named by field (`fc1_w`) or path (`block_q_w`). The result becomes one output per tensor or
+ * number: `output`, or `output_0`, `output_1_fc1_w`, ... for tuples and structs. Throws
+ * ExportError.
+ */
 Model exportFunction(
-    core::context::Context &ctx, ::Function *fn, const tensor::TensorObject *example,
+    core::context::Context &ctx, ::Function *fn, std::span<const Example> examples,
     const ExportOptions &options = {});
 
 } // namespace camel::onnx

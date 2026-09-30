@@ -10,7 +10,8 @@ import { Tensor, sigmoid, tanh, slice, reshape, shape, zeros, mean } from tensor
 import { grad, value_and_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from sys
-import { weight, run_benchmark, run_training } from camel_bench
+import { export_model } from onnx
+import { weight, bench_input, run_benchmark, run_training } from camel_bench
 
 type Gru = {
     w_ir: Tensor, w_iz: Tensor, w_in: Tensor,
@@ -55,6 +56,18 @@ func train_step(m: Gru, x: Tensor): float sync {
     return vg.0
 }
 
+/// The training step as a function of the parameters: the loss and the updated parameters.
+func step(m: Gru, x: Tensor): (float, Gru) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+/// Exports `step` to ONNX: the parameters and the input become graph inputs.
+func export_step(m: Gru, path: string): int sync {
+    export_model(step, (m, bench_input()), path)
+    return 0
+}
+
 func dump_grads(m: Gru, x: Tensor, dir: string): int sync {
     save_params(grad(loss)<m>(x), dir)
     return 0
@@ -68,7 +81,8 @@ func main(): int sync {
         b_hr: weight('b_hr'), b_hz: weight('b_hz'), b_hn: weight('b_hn'),
         fc_w: weight('fc_w'), fc_b: weight('fc_b')
     }
-    return if get_env('CAMEL_BENCH_WORKLOAD') == 'train' then run_training(
+    let workload = get_env('CAMEL_BENCH_WORKLOAD')
+    return if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT')) else if workload == 'train' then run_training(
         (x: Tensor): float => { return train_step(m, x) },
         (x: Tensor, dir: string): int => { return dump_grads(m, x, dir) }
     ) else run_benchmark((x: Tensor): Tensor => forward<m>(x))

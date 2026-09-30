@@ -132,4 +132,7 @@ class LoweringRegistry {
     std::vector<std::pair<std::string, Lowering>> entries_;
 };
 
+/// Registers the lowerings of the gradient operators and optimizers (lowering_grad.cpp).
+void addGradientLowerings(const std::function<void(std::string, LowerFn, int64_t)> &add);
+
 } // namespace camel::onnx

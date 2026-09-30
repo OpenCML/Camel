@@ -125,3 +125,31 @@ expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "export_train_step"
+desc = "A training step (value_and_grad + sgd) exports with the parameter struct and the input as graph inputs and the loss and updated parameters as outputs; no call survives."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+// forward: 2 MatMul; backward: dW2, dH, dW1 (the input needs no gradient)
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000

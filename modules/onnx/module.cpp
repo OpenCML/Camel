@@ -36,6 +36,8 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
@@ -49,16 +51,27 @@ using camel::core::error::throwRuntimeFault;
 namespace {
 
 // export_model(fn, example, path[, dynamic_axes: int[]]) => void
+// `example` is the argument of a one-parameter `fn`, or a tuple with one example per parameter.
 slot_t exportKernel(ArgsView &, ArgsView &norm, Context &ctx) {
-    auto *fn      = norm.get<::Function *>(0);
-    auto *example = norm.get<camel::tensor::TensorObject *>(1);
-    auto *path    = norm.get<::String *>(2);
+    auto *fn   = norm.get<::Function *>(0);
+    auto *path = norm.get<::String *>(2);
     camel::onnx::ExportOptions options;
     if (norm.size() > 3) {
         options.dynamicAxes = camel::tensor::parseIntArray(norm.get<::Array *>(3), norm.type(3));
     }
+    std::vector<camel::onnx::Example> examples;
+    const size_t params = fn && fn->graph() ? fn->graph()->normPorts().size() : 0;
+    if (params == 1 || norm.type(1)->code() != TypeCode::Tuple) {
+        examples.push_back({norm.slot(1), norm.type(1)});
+    } else {
+        auto *tupleType = static_cast<TupleType *>(norm.type(1));
+        auto *tuple     = norm.get<::Tuple *>(1);
+        for (size_t i = 0; i < tupleType->size(); ++i) {
+            examples.push_back({tuple->get<slot_t>(i), tupleType->typeAt(i)});
+        }
+    }
     try {
-        const camel::onnx::Model model = camel::onnx::exportFunction(ctx, fn, example, options);
+        const camel::onnx::Model model = camel::onnx::exportFunction(ctx, fn, examples, options);
         camel::onnx::writeModelFile(model, path->toString());
     } catch (const camel::onnx::ExportError &e) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("onnx.export_model: ") + e.what());
@@ -104,13 +117,15 @@ OnnxModule::OnnxModule(context_ptr_t ctx) : BuiltinModule("onnx", ctx) {
             {{"onnx:export_model",
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {-1, {}}},
-                  "(fn: (x: Tensor) => Tensor, example: Tensor, path: string, "
+                  "(fn: (...) => any, example: Tensor | tuple | struct, path: string, "
                   "dynamic_axes?: int[]) => void",
                   [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                       -> std::optional<Type *> {
                       if (norm.size() < 3 || norm.size() > 4 ||
                           norm[0]->code() != TypeCode::Function ||
-                          !camel::tensor::asTensorType(norm[1]) ||
+                          !(camel::tensor::asTensorType(norm[1]) ||
+                            norm[1]->code() == TypeCode::Tuple ||
+                            norm[1]->code() == TypeCode::Struct) ||
                           norm[2]->code() != TypeCode::String) {
                           return std::nullopt;
                       }

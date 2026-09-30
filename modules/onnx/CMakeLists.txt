@@ -5,6 +5,7 @@ add_camel_module(
     emitter.cpp
     exporter.cpp
     lowering.cpp
+    lowering_grad.cpp
     module.cpp
     proto/onnx_writer.cpp
   EXTRA_INCLUDES

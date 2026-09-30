@@ -43,14 +43,17 @@
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
+#include "execute/macro/macro.h"
 #include "passes/opt/generic/generic.h"
 #include "passes/opt/inline/config.h"
+#include "passes/trans/dot/graphviz.h"
 
 #include <cstdlib>
 #include <format>
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <unordered_set>
 #include <unordered_map>
 
 namespace camel::onnx {
@@ -67,6 +70,15 @@ namespace {
 bool traceEnabled() {
     static const bool enabled = [] {
         const char *v = std::getenv("CAMEL_ONNX_TRACE");
+        return v && *v && std::string_view(v) != "0";
+    }();
+    return enabled;
+}
+
+/// CAMEL_ONNX_DUMP=1 prints the simplified graph that is translated (as std::rgir does).
+bool dumpEnabled() {
+    static const bool enabled = [] {
+        const char *v = std::getenv("CAMEL_ONNX_DUMP");
         return v && *v && std::string_view(v) != "0";
     }();
     return enabled;
@@ -120,6 +132,27 @@ ValueInfo valueInfoOf(const std::string &name, const TensorFacts &facts) {
     return info;
 }
 
+/// The elements of the constant tuple or struct `slot` of type `ty`.
+std::vector<Value> elementsOf(slot_t slot, type::Type *ty) {
+    std::vector<Value> fields;
+    if (ty->code() == TypeCode::Tuple) {
+        auto *tupleType = static_cast<type::TupleType *>(ty);
+        auto *tuple     = rtdata::fromSlot<::Tuple *>(slot);
+        for (size_t i = 0; i < tupleType->size(); ++i) {
+            fields.push_back(Value::constant(tuple->get<slot_t>(i), tupleType->typeAt(i)));
+        }
+    } else {
+        auto *structType = static_cast<type::StructType *>(ty);
+        auto *object     = rtdata::fromSlot<::Struct *>(slot);
+        for (size_t i = 0; i < structType->size(); ++i) {
+            Value v = Value::constant(object->get<slot_t>(i), structType->typeAt(i));
+            v.label = std::string(structType->fieldName(i));
+            fields.push_back(std::move(v));
+        }
+    }
+    return fields;
+}
+
 class Evaluator {
   public:
     Evaluator(
@@ -127,8 +160,8 @@ class Evaluator {
         std::unordered_map<slot_t, std::string> names)
         : emitter_(emitter), options_(options), names_(std::move(names)) {}
 
-    /// Translates `graph`, with its single parameter bound to `input`, and returns its result.
-    Value translate(GCGraph *graph, const Value &input);
+    /// Translates `graph`, with its parameters bound to `inputs`, and returns its result.
+    Value translate(GCGraph *graph, std::span<const Value> inputs);
 
   private:
     struct Activation {
@@ -160,9 +193,11 @@ class Evaluator {
     std::unordered_map<slot_t, std::string> names_;
 };
 
-Value Evaluator::translate(GCGraph *graph, const Value &input) {
+Value Evaluator::translate(GCGraph *graph, std::span<const Value> inputs) {
     Activation act{.graph = graph, .ports = {}, .memo = {{}}};
-    act.ports.emplace(graph->normPorts().front(), input);
+    for (size_t i = 0; i < inputs.size(); ++i) {
+        act.ports.emplace(graph->normPorts()[i], inputs[i]);
+    }
     const auto *exitType = graph->funcType()->exitType();
     if (graph->returnKind() == camel::runtime::GCReturnKind::None ||
         (exitType && exitType->code() == TypeCode::Void)) {
@@ -462,11 +497,22 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
     if (source.isConstant() && !allConstant(values) && isIntArrayType(targetType)) {
         return symbolicIntArray(act, ref, source, values);
     }
+    if (source.isConstant() && !allConstant(values) &&
+        (targetType->code() == TypeCode::Tuple || targetType->code() == TypeCode::Struct)) {
+        // A tuple or struct of input-dependent values (e.g. gradients) exists only at export
+        // time; its elements are read back by accesses or become graph outputs.
+        std::vector<Value> fields = elementsOf(source.slot, targetType);
+        const auto slots = g->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
+        for (size_t k = 0; k < slots.size(); ++k) {
+            fields[static_cast<size_t>(slots[k])] = values[k];
+        }
+        return Value::aggregate(targetType, std::move(fields));
+    }
     if (!source.isConstant() || !allConstant(values)) {
         unsupported(
             act,
-            "a value that depends on the model input is stored in a tuple, struct, array or "
-            "closure; pass it as a function argument instead");
+            "a value that depends on the model input is stored in an array or a closure; pass "
+            "it as a function argument instead");
     }
     unsupported(act, "a tuple, struct or array of constants was not folded");
 }
@@ -509,11 +555,22 @@ Value Evaluator::symbolicIntArray(
 Value Evaluator::evalAccs(Activation &act, gc_node_ref_t ref) {
     GCGraph *g         = act.graph;
     const Value source = eval(act, g->normInputsOf(ref).front());
+    const auto *body   = g->nodeBodyAs<camel::runtime::GCAccsBody>(ref);
+    type::Type *result = g->node(ref)->dataType;
+    if (source.isAggregate()) {
+        if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
+            return source.fields.at(body->value);
+        }
+        const auto field =
+            static_cast<type::StructType *>(source.camelType)->findField(body->key());
+        if (!field) {
+            unsupported(act, std::format("no field '{}'", body->key()));
+        }
+        return source.fields[*field];
+    }
     if (!source.isConstant()) {
         unsupported(act, "field access on a value that depends on the model input");
     }
-    const auto *body   = g->nodeBodyAs<camel::runtime::GCAccsBody>(ref);
-    type::Type *result = g->node(ref)->dataType;
     if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
         auto *tuple = rtdata::fromSlot<::Tuple *>(source.slot);
         Value v     = Value::constant(tuple->get<slot_t>(body->value), result);
@@ -564,44 +621,166 @@ struct DetachedGraphsGuard {
     ~DetachedGraphsGuard() { ctx.releaseDetachedRuntimeGraphs(); }
 };
 
+/// Binds the exported function's parameters to graph inputs shaped like the examples.
+class InputBinder {
+  public:
+    InputBinder(Emitter &emitter, const ExportOptions &options)
+        : emitter_(emitter), options_(options) {}
+
+    /// The input value of a parameter like `example`, and the exact type that goes with it.
+    std::pair<Value, type::Type *> bind(const Example &example, const std::string &name, bool top) {
+        type::Type *ty = example.type;
+        if (const auto *tensorType = tensor::asTensorType(ty); tensorType || isTensor(example)) {
+            const auto *t = rtdata::fromSlot<tensor::TensorObject *>(example.value);
+            tensor::StaticShape shape(t->shapeSpan().begin(), t->shapeSpan().end());
+            std::vector<size_t> dynamic;
+            if (top) {
+                // Dynamic axes apply to tensor arguments (data), not to parameter trees.
+                const auto rank = static_cast<int64_t>(shape.size());
+                for (int64_t axis : options_.dynamicAxes) {
+                    const int64_t a = axis < 0 ? axis + rank : axis;
+                    if (a < 0 || a >= rank) {
+                        throw ExportError(std::format(
+                            "dynamic axis {} is out of range for a rank-{} input",
+                            axis,
+                            rank));
+                    }
+                    shape[static_cast<size_t>(a)] = tensor::kUnknownDim;
+                    dynamic.push_back(static_cast<size_t>(a));
+                }
+            }
+            if (!names_.insert(name).second) {
+                throw ExportError(std::format("two inputs are named '{}'", name));
+            }
+            const Value input   = Value::symbolic(name, t->dtype(), shape);
+            ValueInfo inputInfo = valueInfoOf(name, factsOf(input));
+            for (size_t a : dynamic) {
+                (*inputInfo.shape)[a] =
+                    Dim{a == 0 ? std::string("batch") : std::format("{}_dim{}", name, a)};
+            }
+            emitter_.graph().inputs.push_back(std::move(inputInfo));
+            return {input, tensor::TensorType::get(t->dtype(), shape)};
+        }
+        if (ty->code() == TypeCode::Struct) {
+            auto *structType = static_cast<type::StructType *>(ty);
+            auto *object     = rtdata::fromSlot<::Struct *>(example.value);
+            type::StructTypeFactory factory;
+            std::vector<Value> fields;
+            for (size_t i = 0; i < structType->size(); ++i) {
+                const std::string key(structType->fieldName(i));
+                auto [field, fieldType] = bind(
+                    {object->get<slot_t>(i), structType->typeAt(i)},
+                    top ? key : name + "_" + key,
+                    false);
+                fields.push_back(std::move(field));
+                factory.add(key, fieldType);
+            }
+            type::Type *exact = factory.build();
+            return {Value::aggregate(exact, std::move(fields)), exact};
+        }
+        if (ty->code() == TypeCode::Tuple) {
+            auto *tupleType = static_cast<type::TupleType *>(ty);
+            auto *tuple     = rtdata::fromSlot<::Tuple *>(example.value);
+            std::vector<type::Type *> types;
+            std::vector<Value> fields;
+            for (size_t i = 0; i < tupleType->size(); ++i) {
+                auto [field, fieldType] = bind(
+                    {tuple->get<slot_t>(i), tupleType->typeAt(i)},
+                    std::format("{}_{}", name, i),
+                    false);
+                fields.push_back(std::move(field));
+                types.push_back(fieldType);
+            }
+            type::Type *exact = type::TupleType::create(std::move(types));
+            return {Value::aggregate(exact, std::move(fields)), exact};
+        }
+        throw ExportError(std::format(
+            "an exported function's arguments must be tensors or tuples/structs of tensors, not "
+            "'{}'",
+            ty->toString()));
+    }
+
+  private:
+    static bool isTensor(const Example &example) {
+        return example.type && example.type->code() == tensor::TensorType::typeCode();
+    }
+
+    Emitter &emitter_;
+    const ExportOptions &options_;
+    std::unordered_set<std::string> names_;
+};
+
+/// Makes the graph outputs of a result: one per tensor or scalar, named by its path in the
+/// result (`output`, `output_0`, `output_1_fc1_w`, ...).
+void emitOutputs(Emitter &emitter, const Value &result, const std::string &name) {
+    if (result.isAggregate()) {
+        const bool isStruct = result.camelType->code() == TypeCode::Struct;
+        for (size_t i = 0; i < result.fields.size(); ++i) {
+            const std::string key =
+                isStruct
+                    ? std::string(
+                          static_cast<type::StructType *>(result.camelType)->fieldName(i))
+                    : std::to_string(i);
+            emitOutputs(emitter, result.fields[i], name + "_" + key);
+        }
+        return;
+    }
+    if (result.isConstant() && result.ty &&
+        (result.ty->code() == TypeCode::Tuple || result.ty->code() == TypeCode::Struct)) {
+        emitOutputs(emitter, Value::aggregate(result.ty, elementsOf(result.slot, result.ty)), name);
+        return;
+    }
+    const TensorFacts facts = factsOf(result);
+    if (!facts.dtype) {
+        throw ExportError(std::format(
+            "output '{}' must be a tensor or a number, not '{}'",
+            name,
+            result.ty ? result.ty->toString() : "a value of unknown type"));
+    }
+    const std::string output = emitter.node("Identity", {emitter.operand(result)}, {}, name);
+    emitter.graph().outputs.push_back(valueInfoOf(output, facts));
+}
+
 } // namespace
 
 Model exportFunction(
-    core::context::Context &ctx, ::Function *fn, const tensor::TensorObject *example,
+    core::context::Context &ctx, ::Function *fn, std::span<const Example> examples,
     const ExportOptions &options) {
     if (!fn || !fn->graph()) {
         throw ExportError("expected a function value");
     }
-    if (!example) {
-        throw ExportError("expected an example tensor");
-    }
     GCGraph *graph = fn->graph();
-    if (graph->withPorts().size() != 0 || graph->normPorts().size() != 1) {
+    if (graph->withPorts().size() != 0 || graph->normPorts().size() != examples.size()) {
         throw ExportError(std::format(
-            "the exported function must take exactly one tensor argument; '{}' takes {}",
+            "'{}' takes {} arguments but {} examples were given",
             graph->name(),
-            graph->withPorts().size() + graph->normPorts().size()));
+            graph->withPorts().size() + graph->normPorts().size(),
+            examples.size()));
     }
 
-    tensor::StaticShape inputShape(example->shapeSpan().begin(), example->shapeSpan().end());
-    const auto rank = static_cast<int64_t>(inputShape.size());
-    std::vector<size_t> dynamic;
-    for (int64_t axis : options.dynamicAxes) {
-        const int64_t a = axis < 0 ? axis + rank : axis;
-        if (a < 0 || a >= rank) {
-            throw ExportError(
-                std::format("dynamic axis {} is out of range for a rank-{} input", axis, rank));
-        }
-        inputShape[static_cast<size_t>(a)] = tensor::kUnknownDim;
-        dynamic.push_back(static_cast<size_t>(a));
+    Emitter emitter(options.opset);
+    emitter.graph().name = options.graphName;
+    InputBinder binder(emitter, options);
+    std::vector<Value> inputs;
+    std::vector<type::Type *> inputTypes;
+    size_t tensorArgs = 0;
+    for (const Example &example : examples) {
+        tensorArgs += tensor::asTensorType(example.type) ? 1 : 0;
+    }
+    for (size_t i = 0; i < examples.size(); ++i) {
+        const std::string name = tensorArgs == 1 && examples.size() == 1
+                                     ? options.inputName
+                                     : std::format("{}{}", options.inputName, i);
+        auto [input, exactType] = binder.bind(examples[i], name, true);
+        inputs.push_back(std::move(input));
+        inputTypes.push_back(exactType);
     }
 
-    // The function applied to an input of the example's type, with its captures bound, is a
-    // program of its own: simplification specializes it for the input's shape, inlines its
+    // The function applied to inputs of the examples' types, with its captures bound, is a
+    // program of its own: simplification specializes it for the input shapes, inlines its
     // calls, unrolls recursion of static depth and folds everything that does not depend on the
-    // input. The running program is left as it is.
-    // Simplification allocates and may collect: keep what is read afterwards rooted.
-    const auto dtype = example->dtype();
+    // inputs. The running program is left as it is. Simplification allocates and may collect:
+    // what is read afterwards stays rooted.
     std::optional<core::mm::RootHandle> captures;
     if (fn->tuple()) {
         captures.emplace(
@@ -615,8 +794,7 @@ Model exportFunction(
     GCGraph *root      = nullptr;
     {
         camel::runtime::RuntimeGraphDraftSession session(context, graph);
-        type::Type *inputType[] = {tensor::TensorType::get(dtype, inputShape)};
-        camel::runtime::bindFunctionCall(session.rootDraft(), fn, inputType);
+        camel::runtime::bindFunctionCall(session.rootDraft(), fn, inputTypes);
         root = session.commit();
     }
     OptimizeRewriteConfig config;
@@ -625,16 +803,20 @@ Model exportFunction(
     std::ostringstream log;
     // Recursion unrolls about one level per round; one of dynamic depth stops changing instead.
     constexpr size_t kMaxRounds = 4096;
-    root                        = simplifyGraph(context, root, config, log, kMaxRounds);
-
-    Emitter emitter(options.opset);
-    const Value input    = Value::symbolic(options.inputName, dtype, inputShape);
-    emitter.graph().name = options.graphName;
-    ValueInfo inputInfo  = valueInfoOf(options.inputName, factsOf(input));
-    for (size_t a : dynamic) {
-        (*inputInfo.shape)[a] = Dim{a == 0 ? std::string("batch") : std::format("dim{}", a)};
+    // Macros (grad, value_and_grad) expand once their arguments are constants, which
+    // simplification may be what makes them.
+    root = MacroRewritePass(context).apply(root, log);
+    while (true) {
+        root                 = simplifyGraph(context, root, config, log, kMaxRounds);
+        GCGraph *expanded    = MacroRewritePass(context).apply(root, log);
+        if (expanded == root) {
+            break;
+        }
+        root = expanded;
     }
-    emitter.graph().inputs.push_back(std::move(inputInfo));
+    if (dumpEnabled()) {
+        GraphVizDumpPass(context, GraphVizDumpConfig{.readableOnly = true}).apply(root, std::cerr);
+    }
 
     std::unordered_map<slot_t, std::string> names;
     if (captures) {
@@ -645,15 +827,7 @@ Model exportFunction(
         }
     }
     Evaluator evaluator(emitter, options, std::move(names));
-    const Value result = evaluator.translate(root, input);
-
-    const TensorFacts facts = factsOf(result);
-    if (!facts.dtype) {
-        throw ExportError("the exported function must return a tensor");
-    }
-    const std::string output =
-        emitter.node("Identity", {emitter.operand(result)}, {}, options.outputName);
-    emitter.graph().outputs.push_back(valueInfoOf(output, facts));
+    emitOutputs(emitter, evaluator.translate(root, inputs), options.outputName);
 
     Model model;
     model.graph = std::move(emitter.graph());

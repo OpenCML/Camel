@@ -638,6 +638,7 @@ LoweringRegistry::LoweringRegistry() {
         }
     }
     add(":op/idx_arr", lowerArrayIndex);
+    addGradientLowerings(add);
     add("math:sqrt", scalarOp("Sqrt", 1));
 
     std::ranges::sort(entries_, {}, &std::pair<std::string, Lowering>::first);

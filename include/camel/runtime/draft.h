@@ -196,13 +196,15 @@ class GraphDraft {
     GraphDraft &operator=(const GraphDraft &) = delete;
 
     camel::core::type::FunctionType *funcType() const { return funcType_; }
-    camel::core::type::TupleType *runtimeDataType() const { return runtimeDataType_; }
+    camel::core::type::TupleType *runtimeDataType() const;
     camel::core::type::TupleType *closureType() const { return closureType_; }
     size_t frameSize() const {
         ASSERT(hasFrameLayout(), "Runtime draft frame layout is not available.");
-        return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeDataType_->size();
+        return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeDataType()->size();
     }
-    bool hasFrameLayout() const { return runtimeDataType_ != nullptr; }
+    bool hasFrameLayout() const {
+        return runtimeDataType_ != nullptr || !pendingRuntimeSlots_.empty();
+    }
     bool isMacroGraph() const { return funcType_ != nullptr && funcType_->modifiers().macro(); }
     gc_cnt_t nodeCount() const { return liveNodeCount_; }
     size_t nodeSlotCount() const { return nodesById_.size(); }
@@ -264,6 +266,7 @@ class GraphDraft {
     void setFuncType(camel::core::type::FunctionType *funcType) { funcType_ = funcType; }
     void setRuntimeDataType(camel::core::type::TupleType *runtimeDataType) {
         runtimeDataType_ = runtimeDataType;
+        pendingRuntimeSlots_.clear();
     }
     void setClosureType(camel::core::type::TupleType *closureType) { closureType_ = closureType; }
 
@@ -371,7 +374,10 @@ class GraphDraft {
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
 
     camel::core::type::FunctionType *funcType_     = nullptr;
-    camel::core::type::TupleType *runtimeDataType_ = nullptr;
+    // The frame layout. Slots allocated since it was last built are pending: building the tuple
+    // type once per allocation would cost memory quadratic in the slot count.
+    mutable camel::core::type::TupleType *runtimeDataType_ = nullptr;
+    mutable std::vector<camel::core::type::Type *> pendingRuntimeSlots_;
     camel::core::type::TupleType *closureType_     = nullptr;
     DraftNodePool pool_;
     std::vector<DraftNode *> nodesById_;

@@ -21,6 +21,7 @@
 
 #include "../tensor/ops/registry.h"
 #include "camel/core/context/context.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/module/module.h"
 #include "executor.h"
 #include "layers.h"
@@ -50,6 +51,10 @@ bool NnModule::load() {
         return true;
     }
     context_->registerExecutorFactory("nn", [ctx = context_]() { return createNnExecutor(ctx); });
+    // The optimizers are functions of their arguments: they return new trees and states.
+    for (const char *uri : {"nn:sgd", "nn:adam_state", "nn:adam"}) {
+        camel::core::OperatorTraitsRegistry::instance().set(uri, {.pure = true, .elementwise = false});
+    }
     loaded_ = true;
     return true;
 }
