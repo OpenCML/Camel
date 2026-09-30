@@ -98,11 +98,75 @@ bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
     return false;
 }
 
+namespace {
+
+/// True for nodes that run in order with effects: calls, branches, effectful operators, and gates
+/// or joins that wait on something.
+bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id) {
+    const auto *h = draft.header(id);
+    if (!h) {
+        return false;
+    }
+    switch (h->kind) {
+    case camel::runtime::GCNodeKind::Func:
+    case camel::runtime::GCNodeKind::Call:
+    case camel::runtime::GCNodeKind::Join:
+    case camel::runtime::GCNodeKind::Brch:
+    case camel::runtime::GCNodeKind::Sync:
+        return true;
+    case camel::runtime::GCNodeKind::Gate:
+        return !draft.ctrlInputsOf(id).empty();
+    case camel::runtime::GCNodeKind::Oper:
+        return !isPureOper(draft, id);
+    default:
+        return false;
+    }
+}
+
+/**
+ * The ordered nodes `id`'s value is computed from: walking up its value inputs through
+ * computation that is pure, the first nodes that carry ordering. Code reading `id` runs after
+ * them because of the data dependency alone, which replacing `id` by a constant removes.
+ */
+std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t id) {
+    std::vector<gc_node_ref_t> sources, work;
+    std::vector<bool> seen(draft.nodeSlotCount(), false);
+    for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id)}) {
+        work.insert(work.end(), inputs.begin(), inputs.end());
+    }
+    while (!work.empty()) {
+        const gc_node_ref_t n = work.back();
+        work.pop_back();
+        if (n >= seen.size() || seen[n] || !draft.header(n)) {
+            continue;
+        }
+        seen[n] = true;
+        if (carriesOrdering(draft, n)) {
+            sources.push_back(n);
+            continue;
+        }
+        for (auto inputs : {draft.normInputsOf(n), draft.withInputsOf(n)}) {
+            work.insert(work.end(), inputs.begin(), inputs.end());
+        }
+    }
+    return sources;
+}
+
+} // namespace
+
 void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement) {
     const auto copy = [](std::span<const gc_node_ref_t> refs) {
         return std::vector<gc_node_ref_t>(refs.begin(), refs.end());
     };
-    const auto preds = copy(draft.ctrlInputsOf(id));
+    // Users keep running after what `id` ran after: its control predecessors, and the ordered
+    // nodes its value came from (a use of a value implies its producer's ordering; a constant
+    // replacing it does not carry that).
+    auto preds = copy(draft.ctrlInputsOf(id));
+    for (gc_node_ref_t source : orderedSources(draft, id)) {
+        if (std::ranges::find(preds, source) == preds.end()) {
+            preds.push_back(source);
+        }
+    }
     std::vector<gc_node_ref_t> users;
     for (auto group : {draft.normUsersOf(id), draft.withUsersOf(id), draft.ctrlUsersOf(id)}) {
         for (gc_node_ref_t u : group) {
@@ -124,15 +188,6 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
             const auto existing = draft.ctrlInputsOf(user);
             if (pred != user && std::ranges::find(existing, pred) == existing.end()) {
                 draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
-            }
-        }
-    }
-    // A control user that waited only on `id` now waits on the value replacing it, so it keeps a
-    // control input (a GATE requires one) and still runs after that value exists.
-    if (replacement != kInvalidNodeRef) {
-        for (gc_node_ref_t user : ctrlUsers) {
-            if (user != replacement && draft.ctrlInputsOf(user).empty()) {
-                draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, replacement);
             }
         }
     }

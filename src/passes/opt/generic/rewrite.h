@@ -55,7 +55,9 @@ bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to);
  * Replaces node `id` by `replacement` (or just removes it when `replacement` is invalid, which
  * requires `id` to have no value users) and erases it. Ordering is preserved: every user of
  * `id`, value or control, inherits `id`'s control predecessors, because a pure node on a
- * control chain still orders its dependents after the effects before it. This cannot create a
+ * control chain still orders its dependents after the effects before it, and the ordered nodes
+ * `id`'s value was computed from (calls, effects, gates that wait), because reading a value
+ * orders code after its producer and a constant replacing it would not. This cannot create a
  * cycle (predecessors run before `id`, which runs before its users). The caller must ensure
  * `replacement` is not downstream of `id` (see reaches()).
  */

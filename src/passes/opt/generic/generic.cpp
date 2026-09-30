@@ -29,6 +29,7 @@
 #include "../inline/engine.h"
 
 #include "camel/core/mm/root_handle.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/execute/executor.h"
 #include "camel/runtime/draft_inline.h"
@@ -116,9 +117,17 @@ class StaticArgsView final : public ArgsView {
     std::vector<type::Type *> types_;
 };
 
-/// Static value of a DATA node with a static slot.
+/// Static value of a DATA node with a static slot, also seen through GATEs forwarding one (an
+/// inlined call gates its arguments; the value it forwards is the same).
 std::optional<std::pair<slot_t, type::Type *>>
 staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
+    for (size_t hops = 0; hops < draft.nodeSlotCount(); ++hops) {
+        const auto *gate = draft.header(id);
+        if (!gate || gate->kind != GCNodeKind::Gate || draft.normInputsOf(id).empty()) {
+            break;
+        }
+        id = draft.normInputsOf(id).back();
+    }
     const auto *h = draft.header(id);
     if (!h || h->kind != GCNodeKind::Data || h->dataIndex >= 0) {
         return std::nullopt;
@@ -280,11 +289,10 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     const std::vector<gc_node_ref_t> brchPreds(
         draft.ctrlInputsOf(brch).begin(),
         draft.ctrlInputsOf(brch).end());
-    const gc_node_ref_t cond = draft.normInputsOf(brch)[0];
 
     // What ran after the BRCH (the taken arm's head, and any other control user outside the
-    // removed arms) now runs after the BRCH's predecessors, or, with none, after the condition,
-    // so a GATE keeps a control input.
+    // removed arms) now runs after the BRCH's predecessors. With none, it waits on nothing; GATEs
+    // left waiting on nothing are dissolved below.
     std::vector<bool> dropped(draft.nodeSlotCount(), false);
     for (size_t i = 0; i < regions.size(); ++i) {
         for (gc_node_ref_t n : regions[i]) {
@@ -292,7 +300,21 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         }
     }
     const auto removed = [&](gc_node_ref_t n) { return static_cast<bool>(dropped[n]); };
-    const auto &preds = brchPreds.empty() ? std::vector<gc_node_ref_t>{cond} : brchPreds;
+    // A removed node must not anchor another branch that stays (inlining can make one value the
+    // result of two branches).
+    for (gc_node_ref_t other = 0; other < draft.nodeSlotCount(); ++other) {
+        const auto *h = draft.header(other);
+        if (other == brch || !h || h->kind != GCNodeKind::Brch || dropped[other]) {
+            continue;
+        }
+        for (const auto &a : draft.branchArmsOf(other)) {
+            if ((a.head != kInvalidNodeRef && a.head < dropped.size() && dropped[a.head]) ||
+                (a.tail != kInvalidNodeRef && a.tail < dropped.size() && dropped[a.tail])) {
+                return false;
+            }
+        }
+    }
+    const auto &preds = brchPreds;
     const std::vector<gc_node_ref_t> brchCtrlUsers(
         draft.ctrlUsersOf(brch).begin(),
         draft.ctrlUsersOf(brch).end());
@@ -341,18 +363,14 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         draft.setReturnNode(result, draft.returnKind());
     }
 
-    // Surviving nodes that waited on removed ones keep a control input where they need one.
-    std::vector<gc_node_ref_t> orphanCandidates;
-    for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
-        if (!dropped[n] || !draft.header(n)) {
-            continue;
-        }
-        for (gc_node_ref_t user : draft.ctrlUsersOf(n)) {
-            if (!dropped[user] && user != join) {
-                orphanCandidates.push_back(user);
-            }
-        }
-    }
+    // An enclosing branch may be anchored on this one: its arm starts at the BRCH or ends at the
+    // JOIN. It now starts where the taken arm starts and ends at the taken result.
+    const gc_node_ref_t takenHead = arms[*arm].head;
+    const gc_node_ref_t newHead =
+        takenHead != kInvalidNodeRef && draft.header(takenHead) && !dropped[takenHead] ? takenHead
+                                                                                          : result;
+    draft.retargetBranchArmAnchors(join, result, result);
+    draft.retargetBranchArmAnchors(brch, newHead, result);
     draft.eraseNode(join);
     draft.eraseNode(brch);
     for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
@@ -360,16 +378,44 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
             draft.eraseNode(n);
         }
     }
-    for (gc_node_ref_t user : orphanCandidates) {
-        const auto *h = draft.header(user);
-        if (h && h->kind == GCNodeKind::Gate && draft.ctrlInputsOf(user).empty()) {
-            for (gc_node_ref_t pred : preds) {
-                if (draft.header(pred)) {
-                    draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
-                }
-            }
-        }
+    // Gates that waited only on the branch now wait on nothing; commit dissolves them.
+    return true;
+}
+
+/// Replaces a pure operator by the constant its argument types fix, through the operator's
+/// registered type folder. Returns false when there is none or the types do not fix the result.
+bool foldFromTypes(
+    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots) {
+    const auto *folder =
+        camel::core::OperatorTypeFolderRegistry::instance().find(operUriOf(draft, id));
+    type::Type *resultType = draft.header(id)->dataType;
+    if (!folder || !resultType || !draft.withInputsOf(id).empty()) {
+        return false;
     }
+    std::vector<type::Type *> types;
+    std::vector<std::optional<slot_t>> statics;
+    for (gc_node_ref_t in : draft.normInputsOf(id)) {
+        const auto *h = draft.header(in);
+        if (!h || !h->dataType) {
+            return false;
+        }
+        types.push_back(h->dataType);
+        const auto value = staticValueOf(draft, in);
+        statics.push_back(value ? std::optional<slot_t>(value->first) : std::nullopt);
+    }
+    const auto result = (*folder)(types, statics, camel::core::mm::autoSpace());
+    if (!result) {
+        return false;
+    }
+    if (type::isGCTraced(resultType->code()) && *result != NullSlot) {
+        // Keep the value alive until commit moves it into the graph's static area.
+        roots.emplace_back(
+            camel::core::mm::autoSpace(),
+            camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(*result),
+            resultType,
+            "std::opt::fold");
+    }
+    replaceNode(draft, id, draft.materializeStaticValue(*result, resultType));
     return true;
 }
 
@@ -405,6 +451,12 @@ size_t foldDraft(
             auto with = staticArgs(draft, draft.withInputsOf(id));
             auto norm = staticArgs(draft, draft.normInputsOf(id));
             if (!with || !norm) {
+                // Not all arguments are constants, but their types may fix the result (e.g. the
+                // shape of a tensor whose type carries it).
+                if (foldFromTypes(draft, id, roots)) {
+                    ++folded;
+                    changed = true;
+                }
                 continue;
             }
             const auto *body = reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data());
@@ -501,19 +553,7 @@ size_t dceDraft(GraphDraft &draft) {
             // keeps every ordering it expressed.
             const auto *h     = draft.header(id);
             const bool isJoin = h && h->kind == GCNodeKind::Sync;
-            // A GATE must keep a control input: a node without predecessors of its own stays
-            // while it is some GATE's only one.
-            bool pinsGate = false;
-            if (h && draft.ctrlInputsOf(id).empty()) {
-                for (gc_node_ref_t user : draft.ctrlUsersOf(id)) {
-                    const auto *u = draft.header(user);
-                    if (u && u->kind == GCNodeKind::Gate && draft.ctrlInputsOf(user).size() == 1) {
-                        pinsGate = true;
-                        break;
-                    }
-                }
-            }
-            if ((isValueOnly(draft, id) || isJoin) && !pinsGate && draft.normUsersOf(id).empty() &&
+            if ((isValueOnly(draft, id) || isJoin) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);
                 ++removed;

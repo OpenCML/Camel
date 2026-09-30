@@ -317,6 +317,11 @@ class GraphDraft {
     void replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void
     retargetBranchArmAnchors(gc_node_ref_t oldId, gc_node_ref_t newHeadId, gc_node_ref_t newTailId);
+    /// Removes GATEs that wait on nothing (no control input): such a gate only forwards its value,
+    /// so its users read the value directly. Rewrites that remove what a gate waited on (a pruned
+    /// branch, a constant an inlined gate was ordered after) leave them behind. Returns the number
+    /// removed.
+    size_t dissolveUnorderedGates();
     void setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type);
     void setNodeDataIndex(gc_node_ref_t id, gc_slot_idx_t dataIndex);
     void setNodeRuntimeFlags(gc_node_ref_t id, uint8_t runtimeFlags);

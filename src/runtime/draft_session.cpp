@@ -647,7 +647,8 @@ GCGraph *RuntimeGraphDraftSession::commit() {
     const std::vector<GCGraph *> closure = collectCommitClosure();
     ASSERT(!closure.empty(), "Runtime draft commit received an empty closure.");
     for (GCGraph *graph : closure) {
-        (void)ensureDraft(graph);
+        // Rewrites may leave gates that wait on nothing; they are plain forwarding.
+        (void)ensureDraft(graph).dissolveUnorderedGates();
     }
 
     GCGraph *oldRuntimeRoot = runtimeRoot_;

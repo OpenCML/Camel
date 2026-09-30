@@ -1185,6 +1185,35 @@ void GraphDraft::retargetBranchArmAnchors(
     }
 }
 
+size_t GraphDraft::dissolveUnorderedGates() {
+    size_t removed = 0;
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (gc_node_ref_t id = 0; id < nodeSlotCount(); ++id) {
+            const DraftNodeHeader *h = header(id);
+            if (!h || h->kind != GCNodeKind::Gate || !ctrlInputsOf(id).empty() ||
+                normInputsOf(id).empty() || isBranchArmAnchor(id)) {
+                continue;
+            }
+            const gc_node_ref_t value = normInputsOf(id).back();
+            if (exit_ == id) {
+                exit_ = value;
+            }
+            if (output_ == id) {
+                output_ = value;
+            }
+            if (returnNode_ == id) {
+                returnNode_ = value;
+            }
+            replaceAllValueUses(id, value);
+            eraseNode(id); // its control users lose nothing: it waited on nothing
+            ++removed;
+            changed = true;
+        }
+    }
+    return removed;
+}
+
 gc_slot_idx_t GraphDraft::allocateRuntimeSlot(camel::core::type::Type *type) {
     ASSERT(type != nullptr, "Draft runtime slot allocation requires a non-null type.");
     CAMEL_LOG_INFO_S(

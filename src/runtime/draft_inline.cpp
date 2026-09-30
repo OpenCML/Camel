@@ -37,6 +37,7 @@
 
 #include "camel/core/rtdata/func.h"
 #include "camel/runtime/draft_clone.h"
+#include "camel/runtime/draft_types.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -69,7 +70,22 @@ struct DraftFormalBinding {
     size_t index               = 0;
     gc_node_ref_t formalNodeId = kInvalidNodeRef;
     DraftStaticValue staticValue{};
+    // Without a static value: the formal keeps its port, with this more precise type (the actual
+    // argument's), and the specialization re-infers its types from it.
+    camel::core::type::Type *refinedType = nullptr;
+
+    bool bindsValue() const { return staticValue.valid(); }
 };
+
+/// Marks a binding key as a type refinement (its value is unused).
+constexpr uint8_t kTypeBindingFlag = 0xFF;
+
+/// True when `actual` says strictly more than `formal` about the same values (e.g. a tensor type
+/// with a static shape against the plain tensor type).
+bool refinesType(camel::core::type::Type *actual, camel::core::type::Type *formal) {
+    return actual && formal && actual != formal && formal->assignableFrom(actual) &&
+           !actual->assignableFrom(formal);
+}
 
 gc_node_ref_t remapNodeRef(gc_node_ref_t sourceRef, const std::vector<gc_node_ref_t> &mapping) {
     if (sourceRef == kInvalidNodeRef) {
@@ -380,6 +396,61 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
     return resolved;
 }
 
+/// True when `graph` can call itself again through direct calls (it lies on a call cycle).
+bool onCallCycle(const GCGraph *graph) {
+    std::unordered_set<const GCGraph *> seen;
+    std::vector<const GCGraph *> work{graph};
+    while (!work.empty()) {
+        const GCGraph *g = work.back();
+        work.pop_back();
+        for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+            const GCGraph *callee = g->directCalleeGraphOf(it.ref());
+            if (!callee) {
+                continue;
+            }
+            if (callee == graph) {
+                return true;
+            }
+            if (seen.insert(callee).second) {
+                work.push_back(callee);
+            }
+        }
+    }
+    return false;
+}
+
+/// True when node `id` runs inside an arm of a branch of the draft (between a BRCH and its JOIN).
+bool insideBranchArm(const GraphDraft &draft, gc_node_ref_t id) {
+    for (gc_node_ref_t brch = 0; brch < draft.nodeSlotCount(); ++brch) {
+        const auto *h = draft.header(brch);
+        if (!h || h->kind != GCNodeKind::Brch) {
+            continue;
+        }
+        const gc_node_ref_t join =
+            reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(brch).data())->join;
+        std::vector<bool> seen(draft.nodeSlotCount(), false);
+        std::vector<gc_node_ref_t> work;
+        for (auto users : {draft.normUsersOf(brch), draft.withUsersOf(brch), draft.ctrlUsersOf(brch)}) {
+            work.insert(work.end(), users.begin(), users.end());
+        }
+        while (!work.empty()) {
+            const gc_node_ref_t n = work.back();
+            work.pop_back();
+            if (n == join || n >= seen.size() || seen[n] || !draft.header(n)) {
+                continue;
+            }
+            if (n == id) {
+                return true;
+            }
+            seen[n] = true;
+            for (auto users : {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
+                work.insert(work.end(), users.begin(), users.end());
+            }
+        }
+    }
+    return false;
+}
+
 std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
     const GraphDraft &draft, gc_node_ref_t funcNodeId, const GCGraph *calleeGraph) {
     std::vector<DraftFormalBinding> bindings;
@@ -402,10 +473,30 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
 
     for (size_t i = 0; i < formals.size(); ++i) {
         DraftStaticValue staticValue = tryResolveStaticValue(draft, actualInputs[i]);
+        // An argument whose value is not bound (dynamic, or an object, see below) may still have a
+        // type more precise than the parameter's (a tensor whose type carries its shape): then the
+        // callee's types are specialized to it.
+        const auto bindType = [&] {
+            const auto *actualHeader = draft.header(actualInputs[i]);
+            const auto *formalNode   = calleeGraph->node(formals[i].second);
+            if (actualHeader && formalNode &&
+                refinesType(actualHeader->dataType, formalNode->dataType)) {
+                bindings.push_back(
+                    DraftFormalBinding{
+                        .kind         = formals[i].first,
+                        .index        = i,
+                        .formalNodeId = formals[i].second,
+                        .staticValue  = {},
+                        .refinedType  = actualHeader->dataType,
+                    });
+            }
+        };
         if (!staticValue.valid()) {
+            bindType();
             continue;
         }
         if (staticValue.type->isGCTraced()) {
+            bindType();
             // Direct-call specialization bakes the bound value into the callee
             // as a new static carrier. That is correct for immutable primitive
             // values, but it breaks runtime object identity for GC values. A
@@ -426,6 +517,17 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
                 .formalNodeId = formals[i].second,
                 .staticValue  = staticValue,
             });
+    }
+
+    // Binding constants into a call of a recursive function unrolls one level. That only ends
+    // when the recursion's stop condition becomes constant, and then folding has already removed
+    // the branch guarding the call. A call still guarded by a branch whose condition is not
+    // constant would unroll forever: it gets type refinements only.
+    const bool bindsValues = std::ranges::any_of(bindings, [](const DraftFormalBinding &b) {
+        return b.bindsValue();
+    });
+    if (bindsValues && insideBranchArm(draft, funcNodeId) && onCallCycle(calleeGraph)) {
+        std::erase_if(bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); });
     }
     return bindings;
 }
@@ -464,13 +566,21 @@ RuntimeSpecializationKey makeRuntimeSpecializationKey(
     key.bindings.reserve(bindings.size());
     for (const DraftFormalBinding &binding : bindings) {
         key.bindings.push_back(
-            RuntimeSpecializationBindingKey{
-                .kind         = toRuntimeSpecializationBindingKind(binding.kind),
-                .index        = binding.index,
-                .value        = binding.staticValue.value,
-                .type         = binding.staticValue.type,
-                .runtimeFlags = binding.staticValue.runtimeFlags,
-            });
+            binding.bindsValue()
+                ? RuntimeSpecializationBindingKey{
+                      .kind         = toRuntimeSpecializationBindingKind(binding.kind),
+                      .index        = binding.index,
+                      .value        = binding.staticValue.value,
+                      .type         = binding.staticValue.type,
+                      .runtimeFlags = binding.staticValue.runtimeFlags,
+                  }
+                : RuntimeSpecializationBindingKey{
+                      .kind         = toRuntimeSpecializationBindingKind(binding.kind),
+                      .index        = binding.index,
+                      .value        = NullSlot,
+                      .type         = binding.refinedType,
+                      .runtimeFlags = kTypeBindingFlag,
+                  });
     }
     std::sort(
         key.bindings.begin(),
@@ -494,18 +604,27 @@ GCGraph *specializeGraphWithBindings(
         return cached;
     }
 
-    auto draft = GraphDraft::decode(baseGraph);
+    auto draft          = GraphDraft::decode(baseGraph);
+    bool refinesTypes   = false;
     for (const DraftFormalBinding &binding : bindings) {
         const gc_node_ref_t formalDraftId = draft->draftIdOfSourceRef(binding.formalNodeId);
         ASSERT(
             formalDraftId != kInvalidNodeRef,
             "Specialization lost the formal-node mapping while decoding the callee graph.");
+        if (!binding.bindsValue()) {
+            draft->setNodeDataType(formalDraftId, binding.refinedType);
+            refinesTypes = true;
+            continue;
+        }
         const gc_node_ref_t staticNodeId = draft->materializeStaticValue(
             binding.staticValue.value,
             binding.staticValue.type,
             binding.staticValue.runtimeFlags);
         draft->replaceAllValueUses(formalDraftId, staticNodeId);
         eraseFormalFromDraft(*draft, binding.kind, formalDraftId);
+    }
+    if (refinesTypes) {
+        (void)reinferDraftTypes(*draft);
     }
     GCGraph *specialized = encodeSpecializedGraph(*draft, baseGraph, tag, nonce);
     session.rememberSpecialization(std::move(cacheKey), specialized);
@@ -700,6 +819,9 @@ bool specializeDirectFuncInDraft(
 
     const size_t normCount = funcBody->calleeGraph->normPorts().size();
     for (auto it = bindings.rbegin(); it != bindings.rend(); ++it) {
+        if (!it->bindsValue()) {
+            continue; // the argument is still passed, to a parameter of a more precise type
+        }
         if (it->kind == FormalKind::Norm) {
             normInputs.erase(normInputs.begin() + static_cast<std::ptrdiff_t>(it->index));
             continue;
@@ -716,6 +838,9 @@ bool specializeDirectFuncInDraft(
     init.payload    = std::span<const std::byte>(newPayload.data(), newPayload.size());
     init.normInputs = normInputs;
     init.withInputs = withInputs;
+    if (const auto *type = specializedGraph->funcType(); type && type->hasExitType()) {
+        init.dataType = type->exitType();
+    }
     draft.rewriteNode(funcNodeId, init);
     return true;
 }
