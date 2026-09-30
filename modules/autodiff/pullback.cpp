@@ -28,6 +28,7 @@
 #include "camel/core/derivative.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
+#include "camel/core/mm/root_handle.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
@@ -400,9 +401,9 @@ class ForwardRewrite {
     /// Calls of static function values: records custom-rule call sites, and turns calls of other
     /// capture-free functions into direct calls. Returns the direct call created, if any.
     std::optional<gc_node_ref_t> rewriteIndirectCall(gc_node_ref_t call);
-    /// The graph of grad(f) / value_and_grad(f) when `callee` computes one for a static
-    /// capture-free f, else nullptr.
-    GCGraph *nestedGradientGraph(gc_node_ref_t callee);
+    /// The function `callee` computes when it applies one of autodiff's own macros (grad,
+    /// value_and_grad, vjp) to static functions, else nullptr.
+    ::Function *macroCallee(gc_node_ref_t callee);
     /// Makes `node` return `plan`'s (value, pullback) and splits the pair for its users.
     void split(gc_node_ref_t node, const PullbackPlan &plan, std::vector<gc_node_ref_t> inputs);
     void retarget(gc_node_ref_t func, const PullbackPlan &plan);
@@ -410,6 +411,7 @@ class ForwardRewrite {
     Engine &engine_;
     GraphDraft &draft_;
     std::unordered_map<gc_node_ref_t, CallSite> sites_;
+    std::deque<mm::RootHandle> roots_;
 };
 
 // ---------------------------------------------------------------- backward emission
@@ -613,8 +615,13 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
         return std::nullopt;
     }
     const auto calleeValue = staticValue(draft_, withInputs.front());
-    auto *function         = calleeValue ? fromSlot<::Function *>(*calleeValue) : nullptr;
-    GCGraph *graph         = nullptr;
+    auto *function = calleeValue ? fromSlot<::Function *>(*calleeValue) : nullptr;
+    if (function == nullptr) {
+        // grad(f), value_and_grad(f) or vjp<rule>(f) of static functions that std::macro has
+        // not expanded (autodiff applied inside a function being differentiated).
+        function = macroCallee(withInputs.front());
+    }
+    GCGraph *graph = nullptr;
     if (function != nullptr && function->graph() != nullptr) {
         graph = function->graph();
         std::vector<gc_node_ref_t> inputs(withInputs.begin() + 1, withInputs.end());
@@ -636,12 +643,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
             return std::nullopt; // a closure: its graph cannot be called directly
         }
     } else {
-        // grad(f) or value_and_grad(f) of a static capture-free f that std::macro has not
-        // expanded (a gradient taken inside a function being differentiated): build it here.
-        graph = nestedGradientGraph(withInputs.front());
-        if (graph == nullptr) {
-            return std::nullopt; // a function computed at run time
-        }
+        return std::nullopt; // a function computed at run time
     }
     // A static capture-free function: call its graph directly.
     const gc_node_ref_t direct = draft_.addFuncNode(graph, typeOf(draft_, call));
@@ -665,29 +667,48 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     return direct;
 }
 
-GCGraph *ForwardRewrite::nestedGradientGraph(gc_node_ref_t callee) {
+::Function *ForwardRewrite::macroCallee(gc_node_ref_t callee) {
     if (kindOf(draft_, callee) != GCNodeKind::Oper) {
         return nullptr;
     }
     const auto *body = reinterpret_cast<const rt::GCOperBody *>(draft_.payloadOf(callee).data());
     const std::string_view uri = body->uri();
-    if (uri != "autodiff:grad" && uri != "autodiff:value_and_grad") {
-        return nullptr;
-    }
+    const auto staticFunction  = [&](gc_node_ref_t node) -> ::Function * {
+        const auto value = staticValue(draft_, node);
+        auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
+        return function && function->graph() ? function : nullptr;
+    };
     const auto norm = draft_.normInputsOf(callee);
-    if (norm.size() != 1) {
+    ::Function *result = nullptr;
+    if ((uri == "autodiff:grad" || uri == "autodiff:value_and_grad") && norm.size() == 1) {
+        ::Function *function = staticFunction(norm.front());
+        if (function == nullptr) {
+            return nullptr;
+        }
+        GCGraph *graph = buildGradientGraph(
+            engine_.context(),
+            function->graph(),
+            uri == "autodiff:value_and_grad");
+        // The gradient reads the same captured values as f.
+        result = ::Function::create(graph, function->tupleType(), mm::autoSpace());
+        if (::Tuple *closure = function->tuple()) {
+            for (size_t i = 0; i < closure->size(); ++i) {
+                result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), function->tupleType());
+            }
+        }
+    } else if (uri == "autodiff:vjp" && norm.size() == 1 && draft_.withInputsOf(callee).size() == 1) {
+        ::Function *function = staticFunction(norm.front());
+        ::Function *rule     = staticFunction(draft_.withInputsOf(callee).front());
+        if (function == nullptr || rule == nullptr) {
+            return nullptr;
+        }
+        result = attachRule(engine_.context(), function, rule);
+    } else {
         return nullptr;
     }
-    const auto value = staticValue(draft_, norm.front());
-    auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
-    if (function == nullptr || function->graph() == nullptr ||
-        function->tupleType()->size() != 0) {
-        return nullptr;
-    }
-    return buildGradientGraph(
-        engine_.context(),
-        function->graph(),
-        uri == "autodiff:value_and_grad");
+    // Kept alive while the transformation runs; it may allocate.
+    roots_.emplace_back(mm::autoSpace(), result, result->graph()->funcType(), "autodiff.macro");
+    return result;
 }
 
 void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
