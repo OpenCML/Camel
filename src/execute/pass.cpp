@@ -288,6 +288,12 @@ PassScopePtr initPassScope() {
                     {"stats", def(PASS(GraphStatsPass))},
                     {"readable_graphviz",
                      def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.readableOnly = true}))},
+                    {"annotated_graphviz",
+                     def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.annotateRoles = true}))},
+                    {"readable_annotated_graphviz",
+                     def(PASS1(
+                         GraphVizDumpPass,
+                         (GraphVizDumpConfig{.readableOnly = true, .annotateRoles = true})))},
                     {"cpp",
                      def(PASS(CppDumpPass),
                          {
@@ -393,6 +399,8 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::gir", "std::graphviz"},
     {"std::rdot", "std::readable_graphviz"},
     {"std::rgir", "std::readable_graphviz"},
+    {"std::agir", "std::annotated_graphviz"},
+    {"std::argir", "std::readable_annotated_graphviz"},
     {"std::cxx", "std::cpp"},
     {"std::cppmod", "std::cpp::module"},
     {"std::cppinspect", "std::cpp::inspect"},

@@ -41,6 +41,9 @@
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
+#include "camel/runtime/node_roles.h"
+
+#include <format>
 
 using namespace camel::core::context;
 using namespace camel::core::module;
@@ -163,6 +166,20 @@ bool OnnxModule::load() {
     context_->registerExecutorFactory("onnx", [ctx = context_]() -> executor_ptr_t {
         return std::make_shared<OnnxExecutor>(ctx);
     });
+    // Where an export would stop: an operator the ONNX backend has no lowering for.
+    camel::runtime::NodeRoleRegistry::instance().add(
+        {"export-capability", "export capability (no ONNX lowering)", "#cfe2f3"},
+        [](const camel::runtime::GCGraph &graph,
+           camel::runtime::gc_node_ref_t ref) -> std::optional<std::string> {
+            if (graph.node(ref)->kind != camel::runtime::GCNodeKind::Oper) {
+                return std::nullopt;
+            }
+            const std::string uri(graph.nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri());
+            if (camel::onnx::LoweringRegistry::instance().find(uri, camel::onnx::kDefaultOpset)) {
+                return std::nullopt;
+            }
+            return std::format("'{}' has no ONNX lowering at opset {}", uri, camel::onnx::kDefaultOpset);
+        });
     loaded_ = true;
     return true;
 }

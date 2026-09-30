@@ -28,9 +28,11 @@
 #include "camel/core/context/context.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator_traits.h"
+#include "camel/runtime/node_roles.h"
 #include "camel/execute/executor.h"
 #include "ops/registry.h"
 #include "passes/fuse.h"
+#include "dtype.h"
 #include "tensor.h"
 #include "type.h"
 
@@ -87,6 +89,43 @@ bool TensorModule::load() {
         return true;
     }();
     (void)refinerAdded;
+    // Where a value crosses between tensors and host numbers: reading an element or a reduction
+    // back to the host, or a computed host number entering tensor math.
+    camel::runtime::NodeRoleRegistry::instance().add(
+        {"scalar-boundary", "scalar boundary (tensor <-> host number)", "#fff2cc"},
+        [](const camel::runtime::GCGraph &graph,
+           camel::runtime::gc_node_ref_t ref) -> std::optional<std::string> {
+            namespace rt = camel::runtime;
+            const rt::GCNode *node = graph.node(ref);
+            if (node->kind != rt::GCNodeKind::Oper || !node->dataType) {
+                return std::nullopt;
+            }
+            const auto isTensor = [](const camel::core::type::Type *t) {
+                return t && camel::tensor::asTensorType(t) != nullptr;
+            };
+            const auto isNumber = [](const camel::core::type::Type *t) {
+                return t && camel::tensor::isSupportedTensorScalar(t->code());
+            };
+            const auto inputs = graph.normInputsOf(ref);
+            if (isNumber(node->dataType)) {
+                for (rt::gc_node_ref_t in : inputs) {
+                    if (isTensor(graph.node(in)->dataType)) {
+                        return "tensor -> host " + node->dataType->toString();
+                    }
+                }
+                return std::nullopt;
+            }
+            if (!isTensor(node->dataType)) {
+                return std::nullopt;
+            }
+            for (rt::gc_node_ref_t in : inputs) {
+                const rt::GCNode *input = graph.node(in);
+                if (input->kind != rt::GCNodeKind::Data && isNumber(input->dataType)) {
+                    return "host " + input->dataType->toString() + " -> tensor";
+                }
+            }
+            return std::nullopt;
+        });
     loaded_ = true;
     return true;
 }
