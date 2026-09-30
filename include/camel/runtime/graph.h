@@ -309,6 +309,8 @@ class GCGraph : public camel::core::rtdata::Object {
     const std::string &stableId() const;
     const std::string &mangledName() const;
     const std::string &name() const;
+    /// Source origin (camel::source::origin_id_t) of node `ref`, 0 when unknown.
+    uint64_t nodeOrigin(gc_node_ref_t ref) const;
     camel::core::type::FunctionType *funcType() const;
     const camel::core::type::TupleType *runtimeDataType() const;
     const camel::core::type::TupleType *staticDataType() const;

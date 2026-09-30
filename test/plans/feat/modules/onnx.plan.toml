@@ -32,7 +32,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "export_unsupported_op"
-desc = "An input-dependent operator without an ONNX lowering (a training loss) is reported by URI."
+desc = "An input-dependent operator without an ONNX lowering (a training loss) is reported by URI, at its source position."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_unsupported.cml"
 args = ["${case}"]
@@ -43,6 +43,7 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes("operator 'nn:softmax_cross_entropy' has no ONNX lowering at opset 17"), 'missing unsupported-operator detail')
+assert(/at [^ ]*export_unsupported[.]cml:15:45[)]/.test(text), 'missing source position of the unsupported call')
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """
@@ -50,7 +51,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "export_impure_op"
-desc = "Impure operators inside the exported function are rejected."
+desc = "Impure operators inside the exported function are rejected at their source position."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_impure.cml"
 args = ["${case}"]
@@ -61,6 +62,7 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes("impure operator 'tensor:randn' cannot be exported"), 'missing impure-operator detail')
+assert(/at [^ ]*export_impure[.]cml:13:45[)]/.test(text), 'missing source position of the impure call')
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """
@@ -150,6 +152,25 @@ const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
 assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_dynamic_recursion"
+desc = "Recursion whose depth depends on the input cannot unroll; the call left after simplification is reported at its source position."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_dynamic_recursion.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_dynamic_recursion.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes('remains after simplification; recursion whose depth depends on the model input cannot be exported'), 'missing leftover-call detail')
+assert(/at [^ ]*export_dynamic_recursion[.]cml:12:33[)]/.test(text), 'missing source position of the recursive call')
+assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """
 timeout_ms = 6000

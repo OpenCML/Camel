@@ -117,6 +117,7 @@ DraftNodeInit makeInitFromNode(const DraftNode *node) {
     init.dataType     = node->header.dataType;
     init.kind         = node->header.kind;
     init.runtimeFlags = node->header.runtimeFlags;
+    init.origin       = node->header.origin;
     init.payload      = DraftNodeView::payload(node);
     init.normInputs   = DraftNodeView::normInputs(node);
     init.withInputs   = DraftNodeView::withInputs(node);
@@ -146,6 +147,7 @@ void initializeNodeStorage(
     draftNode->header.ctrlUserCount  = static_cast<gc_cnt_t>(init.ctrlUsers.size());
     draftNode->header.kind           = init.kind;
     draftNode->header.runtimeFlags   = init.runtimeFlags;
+    draftNode->header.origin         = init.origin;
     draftNode->header.storageCls     = storageClass;
 
     if (capacityBytes != 0) {
@@ -670,6 +672,7 @@ DraftNode *GraphDraft::createDecodedNode(
     draftNode->header.ctrlUserCount    = static_cast<gc_cnt_t>(ctrlUsers.size());
     draftNode->header.kind             = sourceNode->kind;
     draftNode->header.runtimeFlags     = sourceNode->flags;
+    draftNode->header.origin           = graph->nodeOrigin(sourceRef);
     draftNode->header.storageCls       = storageClass;
 
     if (sourceNode->kind == GCNodeKind::Brch) {
@@ -812,6 +815,7 @@ DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) 
             .dataType     = init.dataType,
             .kind         = init.kind,
             .runtimeFlags = init.runtimeFlags,
+            .origin       = init.origin,
             .payload      = payloadCopy,
             .normInputs   = normInputsCopy,
             .withInputs   = withInputsCopy,
@@ -906,6 +910,17 @@ void GraphDraft::appendUserRef(
     init.withUsers = withUsers;
     init.ctrlUsers = ctrlUsers;
     replaceNodeStorage(id, rebuildNode(id, init));
+}
+
+uint64_t GraphDraft::nodeOrigin(gc_node_ref_t id) const {
+    const DraftNodeHeader *h = header(id);
+    return h ? h->origin : 0;
+}
+
+void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {
+    DraftNode *draftNode = node(id);
+    ASSERT(draftNode != nullptr, "Cannot set the origin of a missing draft node.");
+    draftNode->header.origin = origin;
 }
 
 gc_node_ref_t GraphDraft::addNode(const DraftNodeInit &init) {
@@ -1295,6 +1310,7 @@ void GraphDraft::addStaticGraphRef(GCGraph *graph) {
 GCGraph *GraphDraft::encode(
     const std::string &stableId, const std::string &mangledName, const std::string &name) const {
     auto *debugRecord = createGraphDebugRecord(stableId, mangledName, name);
+    recordDraftNodeOrigins(debugRecord, *this);
     camel::core::type::TupleType *staticDataType = nullptr;
     if (!staticSlotTypes_.empty()) {
         staticDataType = camel::core::type::TupleType::create(staticSlotTypes_);

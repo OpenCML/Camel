@@ -496,6 +496,16 @@ function validateTest(test, result, context) {
             failures.push(`stderr does not contain '${needle}'`)
         }
     }
+    for (const needle of test.expect_output_contains || []) {
+        if (!result.normalized.output.includes(needle)) {
+            failures.push(`output does not contain '${needle}'`)
+        }
+    }
+    for (const needle of test.expect_output_not_contains || []) {
+        if (result.normalized.output.includes(needle)) {
+            failures.push(`output contains '${needle}'`)
+        }
+    }
     if (
         test.expect_diagnostic_name
         || test.expect_diagnostic_code

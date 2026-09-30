@@ -54,6 +54,14 @@ namespace camel::onnx {
 class ExportError : public std::runtime_error {
   public:
     using std::runtime_error::runtime_error;
+    ExportError(const std::string &what, std::string location)
+        : std::runtime_error(what), location_(std::move(location)) {}
+
+    /// Source position of the construct the export failed on ("file:line:col"), or empty.
+    const std::string &location() const { return location_; }
+
+  private:
+    std::string location_;
 };
 
 /// ONNX element type of a Camel tensor storage dtype.

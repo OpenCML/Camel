@@ -224,3 +224,30 @@ assert(!text.includes('unreachable'), 'nothing may run')
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "runtime_shape_column.nvm"
+desc = "A run-time shape conflict is reported at the failing expression (line and column of `c @ b`), with both extents."
+kind = "negative"
+case = "../../../cases/modules/tensor/runtime_shape_column.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 14
+expect_output_contains = ["matmul inner dimensions differ: 3 vs 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "runtime_shape_column.fvm"
+desc = "FastVM maps the failing bytecode back to the same expression."
+kind = "negative"
+case = "../../../cases/modules/tensor/runtime_shape_column.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 14
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

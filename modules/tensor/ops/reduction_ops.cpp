@@ -31,6 +31,7 @@
 #include "camel/core/type/composite/array.h"
 #include "catalog.h"
 #include "support.h"
+#include <format>
 #include <array>
 
 namespace camel::tensor::ops {
@@ -136,6 +137,47 @@ slot_t softmaxGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 std::optional<Type *> floatLikeFirst(const InferContext &ctx) {
     return tensorOf(TypeCode::Float32, ctx.facts(0).shape);
+}
+
+/// softmax(t, axis = -1), log_softmax: the axis must exist.
+std::optional<Type *> softmaxInfer(const InferContext &ctx) {
+    const auto shape = ctx.facts(0).shape;
+    const auto axis  = ctx.has(1) ? ctx.constInt(1) : std::optional<int64_t>(-1);
+    if (shape && axis) {
+        const auto rank = static_cast<int64_t>(shape->size());
+        if (*axis < -rank || *axis >= rank) {
+            throw ShapeError(std::format(
+                "axis {} is out of range for the rank-{} input {}",
+                *axis,
+                rank,
+                formatShape(*shape)));
+        }
+    }
+    return tensorOf(TypeCode::Float32, shape);
+}
+
+/// layer_norm(x, gamma, beta): gamma and beta cover the input's trailing dimensions.
+std::optional<Type *> layerNormInfer(const InferContext &ctx) {
+    const auto x = ctx.facts(0).shape;
+    for (size_t i : {size_t{1}, size_t{2}}) {
+        const auto p = ctx.facts(i).shape;
+        if (!x || !p) {
+            continue;
+        }
+        bool fits = p->size() <= x->size();
+        for (size_t d = 0; fits && d < p->size(); ++d) {
+            const int64_t want = (*x)[x->size() - p->size() + d], have = (*p)[d];
+            fits = want == kUnknownDim || have == kUnknownDim || want == have;
+        }
+        if (!fits) {
+            throw ShapeError(std::format(
+                "{} {} does not match the trailing dimensions of the input {}",
+                i == 1 ? "gamma" : "beta",
+                formatShape(*p),
+                formatShape(*x)));
+        }
+    }
+    return tensorOf(TypeCode::Float32, x);
 }
 
 slot_t layerNormKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -288,7 +330,7 @@ std::vector<OpDef> reductionOps() {
         .exports   = {"softmax"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
         .resultDoc = "Tensor",
-        .infer     = floatLikeFirst,
+        .infer     = softmaxInfer,
         .kernel    = &softmaxKernel,
         .traits    = {}});
     defs.push_back(OpDef{
@@ -296,7 +338,7 @@ std::vector<OpDef> reductionOps() {
         .exports   = {"log_softmax"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
         .resultDoc = "Tensor",
-        .infer     = floatLikeFirst,
+        .infer     = softmaxInfer,
         .kernel    = &logSoftmaxKernel,
         .traits    = {}});
     defs.push_back(OpDef{
@@ -317,7 +359,7 @@ std::vector<OpDef> reductionOps() {
              {"beta", ParamKind::Tensor},
              {"eps", ParamKind::Number, true}},
         .resultDoc = "Tensor",
-        .infer     = floatLikeFirst,
+        .infer     = layerNormInfer,
         .kernel    = &layerNormKernel,
         .traits    = {}});
     setVjp(defs, "sum", &sumVjp);

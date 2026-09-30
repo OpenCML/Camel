@@ -74,7 +74,10 @@ slot_t exportKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         const camel::onnx::Model model = camel::onnx::exportFunction(ctx, fn, examples, options);
         camel::onnx::writeModelFile(model, path->toString());
     } catch (const camel::onnx::ExportError &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("onnx.export_model: ") + e.what());
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("onnx.export_model: ") + e.what() +
+                (e.location().empty() ? "" : " (at " + e.location() + ")"));
     } catch (const std::runtime_error &e) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("onnx.export_model: ") + e.what());
     }

@@ -467,7 +467,12 @@ GCGraph *encodeDraftGraph(
     return GCGraphBuildAccess::constructInPlace(
         target,
         bytes,
-        createGraphDebugRecord(identity.stableId, identity.mangledName, identity.name),
+        [&] {
+            auto *record =
+                createGraphDebugRecord(identity.stableId, identity.mangledName, identity.name);
+            recordDraftNodeOrigins(record, draft);
+            return record;
+        }(),
         draft.funcType(),
         draft.runtimeDataType(),
         staticDataType,

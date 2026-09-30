@@ -392,6 +392,8 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
         // the large-object budget, run at the next graph boundary instead of never.
         mm::safepoint(reason);
     };
+    // The node being executed, so a fault points at its source expression.
+    gc_node_ref_t faultNodeRef = kInvalidNodeRef;
     try {
         if (currRecursionDepth_ > maxRecursionDepth_) {
             throwRuntimeFault(
@@ -418,6 +420,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
         size_t i = 0;
         for (; i < nodesSize; ++i) {
             const gc_node_ref_t nodeRef = currNodes[i];
+            faultNodeRef                = nodeRef;
             const GCNode *n             = currRuntimeGraph->node(nodeRef);
             ASSERT(n != nullptr, "NodeVM execution resolved to a null runtime node.");
 
@@ -753,15 +756,16 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
         }
         auto sourceContext      = context_ ? context_->sourceContext() : nullptr;
         auto *faultRuntimeGraph = currFrame ? currFrame->runtimeGraph() : currRuntimeGraph;
-        throw reportRuntimeFault(
-            *context_,
-            fault,
-            faultRuntimeGraph
-                ? makeGraphExecutionSite(sourceContext, faultRuntimeGraph, currRecursionDepth_)
-                : makeGraphExecutionSite(
-                      sourceContext,
-                      static_cast<camel::runtime::GCGraph *>(nullptr),
-                      currRecursionDepth_));
+        auto site               = makeGraphExecutionSite(
+            sourceContext,
+            faultRuntimeGraph ? faultRuntimeGraph : static_cast<camel::runtime::GCGraph *>(nullptr),
+            currRecursionDepth_);
+        if (currRuntimeGraph && faultNodeRef != kInvalidNodeRef) {
+            if (const uint64_t origin = currRuntimeGraph->nodeOrigin(faultNodeRef)) {
+                site.cachedOrigin = origin;
+            }
+        }
+        throw reportRuntimeFault(*context_, fault, site);
     } catch (Diagnostic &) {
         currRecursionDepth_--;
         releaseTailFrames(tailLow, tailHigh);

@@ -499,7 +499,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "softmax_axis_error"
-desc = "Rejects a softmax axis outside the input rank with a readable diagnostic."
+desc = "Rejects a softmax axis outside the input rank at compile time, naming the axis and the input shape."
 kind = "behavior"
 case = "../../../cases/modules/nn/softmax_axis_error.cml"
 args = ["${case}"]
@@ -509,8 +509,8 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(input.exit_code !== 0, 'softmax axis error case unexpectedly succeeded')
-assert(text.includes('softmax: axis 1 is out of range for a rank-1 tensor'), 'missing softmax axis diagnostic')
-assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic category')
+assert(text.includes('axis 1 is out of range for the rank-1 input'), 'missing softmax axis diagnostic')
+assert(text.includes('SemanticDiag::ArgumentsRejected'), 'the axis must be checked at compile time')
 }
 """
 timeout_ms = 4000

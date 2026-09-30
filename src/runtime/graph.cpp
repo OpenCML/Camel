@@ -844,6 +844,21 @@ createGraphDebugRecord(std::string stableId, std::string mangledName, std::strin
     return record;
 }
 
+void recordDraftNodeOrigins(GCGraphDebugRecord *record, const GraphDraft &draft) {
+    if (!record) {
+        return;
+    }
+    const DraftPayloadPlan plan = planDraftPayload(draft);
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id) || plan.runtimeRefsByDraftId[id] == kInvalidNodeRef) {
+            continue;
+        }
+        if (const uint64_t origin = draft.nodeOrigin(id)) {
+            record->nodeOrigins[plan.runtimeRefsByDraftId[id]] = origin;
+        }
+    }
+}
+
 GCGraphNativePayload
 allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shape) {
     GCGraphNativePayload payload{};
@@ -1095,6 +1110,14 @@ const std::string &GCGraph::mangledName() const {
 const std::string &GCGraph::name() const {
     static const std::string kEmpty;
     return debug_ ? debug_->name : kEmpty;
+}
+
+uint64_t GCGraph::nodeOrigin(gc_node_ref_t ref) const {
+    if (!debug_) {
+        return 0;
+    }
+    auto it = debug_->nodeOrigins.find(ref);
+    return it == debug_->nodeOrigins.end() ? 0 : it->second;
 }
 
 camel::core::type::FunctionType *GCGraph::funcType() const { return funcType_; }

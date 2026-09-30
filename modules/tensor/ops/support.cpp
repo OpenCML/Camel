@@ -177,7 +177,11 @@ reduceShape(const std::optional<StaticShape> &input, std::optional<int64_t> axis
     const auto rank = static_cast<int64_t>(input->size());
     int64_t a       = *axis < 0 ? *axis + rank : *axis;
     if (a < 0 || a >= rank) {
-        throw std::invalid_argument("axis out of range");
+        throw ShapeError(std::format(
+            "axis {} is out of range for the rank-{} input {}",
+            *axis,
+            rank,
+            formatShape(*input)));
     }
     StaticShape out;
     for (int64_t d = 0; d < rank; ++d) {
@@ -208,6 +212,15 @@ bool anyTensorLike(const InferContext &ctx, size_t count) {
         }
     }
     return false;
+}
+
+std::string formatShape(std::span<const int64_t> shape) {
+    std::string out = "[";
+    for (size_t i = 0; i < shape.size(); ++i) {
+        out += i ? ", " : "";
+        out += shape[i] == kUnknownDim ? std::string("?") : std::to_string(shape[i]);
+    }
+    return out + "]";
 }
 
 } // namespace camel::tensor::ops

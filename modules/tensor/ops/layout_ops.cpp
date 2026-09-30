@@ -32,6 +32,7 @@
 #include "catalog.h"
 #include "support.h"
 
+#include <format>
 #include <array>
 
 namespace camel::tensor::ops {
@@ -59,7 +60,8 @@ int64_t normalizeAxisOrThrow(int64_t axis, size_t rank) {
         axis += r;
     }
     if (axis < 0 || axis >= r) {
-        throw std::invalid_argument("axis out of range");
+        throw ShapeError(
+            std::format("axis {} is out of range for a rank-{} tensor", axis < 0 ? axis - r : axis, rank));
     }
     return axis;
 }
@@ -176,7 +178,9 @@ std::optional<Type *> transposeInfer(const InferContext &ctx) {
     TensorFacts in = ctx.facts(0);
     if (in.shape) {
         if (in.shape->size() < 2) {
-            return std::nullopt;
+            throw ShapeError(std::format(
+                "transpose swaps the last two axes and needs a rank >= 2 tensor, got {}",
+                formatShape(*in.shape)));
         }
         std::swap((*in.shape)[in.shape->size() - 1], (*in.shape)[in.shape->size() - 2]);
     }
@@ -220,7 +224,10 @@ std::optional<Type *> concatInfer(const InferContext &ctx) {
             a.shape ? std::optional(StaticShape(a.shape->size(), kUnknownDim)) : std::nullopt);
     }
     if (a.shape->size() != b.shape->size()) {
-        throw ShapeError("concat requires tensors with the same rank");
+        throw ShapeError(std::format(
+            "concat requires tensors of the same rank: {} and {}",
+            formatShape(*a.shape),
+            formatShape(*b.shape)));
     }
     const auto ax = static_cast<size_t>(normalizeAxisOrThrow(*axis, a.shape->size()));
     StaticShape out(a.shape->size());
@@ -229,7 +236,12 @@ std::optional<Type *> concatInfer(const InferContext &ctx) {
         if (d == ax) {
             out[d] = (x == kUnknownDim || y == kUnknownDim) ? kUnknownDim : x + y;
         } else if (x != kUnknownDim && y != kUnknownDim && x != y) {
-            throw ShapeError("concat requires equal non-axis dimensions");
+            throw ShapeError(std::format(
+                "concat along axis {}: {} and {} differ in dimension {}",
+                ax,
+                formatShape(*a.shape),
+                formatShape(*b.shape),
+                d));
         } else {
             out[d] = x != kUnknownDim ? x : y;
         }

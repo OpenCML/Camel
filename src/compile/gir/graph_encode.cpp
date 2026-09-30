@@ -435,6 +435,7 @@ class EncodeSession {
                 .dataType     = header->dataType,
                 .kind         = header->kind,
                 .runtimeFlags = header->runtimeFlags,
+                .origin       = header->origin,
             };
             std::vector<std::byte> payloadStorage;
 
@@ -798,6 +799,7 @@ class EncodeSession {
         }
         auto *debugRecord =
             createGraphDebugRecord(source->stableId(), source->name(), source->name());
+        recordDraftNodeOrigins(debugRecord, *prepared.draft);
 
         const auto &deps = source->dependencyGraphs();
         const auto &subs = source->subGraphs();

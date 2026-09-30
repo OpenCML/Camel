@@ -1,0 +1,13 @@
+/**
+ * Shape diagnostic of `slice`: statically known shapes conflict, so compilation fails at the
+ * call with both shapes in the reason.
+ */
+module shape_diag_slice
+
+import { zeros, slice } from tensor
+
+func main(): int sync {
+    let r = slice(zeros([2, 3]), 3, 0, 1)
+    println('unreachable')
+    return 0
+}

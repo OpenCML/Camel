@@ -80,7 +80,8 @@ Normalizers affect:
 
 - inline and path-based verification payloads under `input.normalized.*`
 - snapshot comparisons
-- `expect_stdout_contains` and `expect_stderr_contains`
+- `expect_stdout_contains`, `expect_stderr_contains`, `expect_output_contains` and
+  `expect_output_not_contains`
 - differential field comparisons that use normalized streams
 
 ## Behavior Assertions
@@ -90,6 +91,8 @@ Behavior-style tests may combine:
 - `expect_exit`
 - `expect_stdout_contains`
 - `expect_stderr_contains`
+- `expect_output_contains`
+- `expect_output_not_contains`
 - `expect_diagnostic_name`
 - `expect_diagnostic_code`
 - `expect_diagnostic_line`
@@ -101,6 +104,12 @@ Behavior-style tests may combine:
 ### `expect_stdout_contains` / `expect_stderr_contains`
 
 Use these for simple substring checks after normalizers are applied.
+
+### `expect_output_contains` / `expect_output_not_contains`
+
+The same substring checks on the merged output (stdout followed by stderr), for text whose
+stream does not matter, such as a diagnostic's detail. `expect_output_not_contains` fails when
+any of its strings appears (for example output that must not be reached).
 
 ### Diagnostic Expectations
 

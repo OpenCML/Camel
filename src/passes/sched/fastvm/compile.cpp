@@ -204,7 +204,7 @@ static bytecode_vec_t compileRuntimeGraph(
 
         size_t currIdx             = bytecodes.size();
         const size_t bytecodeStart = bytecodes.size();
-        const auto nodeOrigin      = camel::source::kInvalidOriginId;
+        const auto nodeOrigin      = graph->nodeOrigin(runtimeNodeIndex);
 
         if (auto it = brchTargetMap.find(runtimeNodeIndex); it != brchTargetMap.end()) {
             for (size_t jumpIndex : it->second) {

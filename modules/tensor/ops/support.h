@@ -79,6 +79,8 @@ template <typename Fn> slot_t runKernel(std::string_view op, Fn &&body) {
 
 /// Tensor type from facts.
 type::Type *tensorOf(const TensorFacts &facts);
+/// "[2, 3]", with "?" for unknown extents, for shape diagnostics.
+std::string formatShape(std::span<const int64_t> shape);
 type::Type *tensorOf(std::optional<type::TypeCode> dtype, std::optional<StaticShape> shape);
 
 /// Promotion that propagates unknown dtypes.

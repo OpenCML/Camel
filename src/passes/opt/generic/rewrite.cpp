@@ -179,6 +179,11 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
 
     if (replacement != kInvalidNodeRef) {
         draft.replaceAllValueUses(id, replacement);
+        // A value computed elsewhere (a constant, a forwarded input) now stands for this node's
+        // source: diagnostics on it point where the replaced node came from.
+        if (draft.nodeOrigin(replacement) == 0) {
+            draft.setNodeOrigin(replacement, draft.nodeOrigin(id));
+        }
     }
     for (gc_node_ref_t user : ctrlUsers) {
         draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, user, id);

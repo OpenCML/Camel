@@ -478,6 +478,8 @@ inline void registerNodeOrigin(
     auto origin =
         deriveGirOrigin(context, gct, camel::source::OriginKind::GirNode, label, mergedInputs);
     if (origin != camel::source::kInvalidOriginId) {
+        // The node carries its origin through encoding and runtime rewrites.
+        node->header.origin = origin;
         sourceContext->bindGirNodeDraftDebug(
             draftDebugKey(node),
             origin,
@@ -498,6 +500,9 @@ inline void bindGraphScopedFuncNodeDebug(
     camel::source::SourceContext *sc = sourceContext.get();
     if (!sc || graphOrigin == camel::source::kInvalidOriginId || node == nullptr) {
         return;
+    }
+    if (node->header.origin == 0) {
+        node->header.origin = graphOrigin;
     }
     if (const auto *graphSemantic = sc->girGraphSemantic(graph->stableId())) {
         sc->bindGirNodeDraftDebug(draftDebugKey(node), graphOrigin, *graphSemantic);

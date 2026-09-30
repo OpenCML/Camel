@@ -31,6 +31,7 @@
 #include "lowering.h"
 
 #include "camel/core/mm/root_handle.h"
+#include "camel/core/source/manager.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
@@ -157,8 +158,9 @@ class Evaluator {
   public:
     Evaluator(
         Emitter &emitter, const ExportOptions &options,
-        std::unordered_map<slot_t, std::string> names)
-        : emitter_(emitter), options_(options), names_(std::move(names)) {}
+        std::unordered_map<slot_t, std::string> names, camel::source::source_context_ptr_t source)
+        : emitter_(emitter), options_(options), names_(std::move(names)),
+          source_(std::move(source)) {}
 
     /// Translates `graph`, with its parameters bound to `inputs`, and returns its result.
     Value translate(GCGraph *graph, std::span<const Value> inputs);
@@ -186,11 +188,14 @@ class Evaluator {
     std::vector<Value> evalAll(Activation &act, std::span<const gc_node_ref_t> refs);
     Value keep(slot_t slot, type::Type *type);
     [[noreturn]] void unsupported(Activation &act, std::string_view what);
+    /// "file:line:col" of a source origin, or empty.
+    std::string locationOf(uint64_t origin) const;
 
     Emitter &emitter_;
     const ExportOptions &options_;
     // Source names of constant objects (the fields of captured structs), to name initializers.
     std::unordered_map<slot_t, std::string> names_;
+    camel::source::source_context_ptr_t source_;
 };
 
 Value Evaluator::translate(GCGraph *graph, std::span<const Value> inputs) {
@@ -212,9 +217,34 @@ Value Evaluator::eval(Activation &act, gc_node_ref_t ref) {
             return found->second;
         }
     }
-    Value v = evalNode(act, ref);
+    Value v;
+    try {
+        v = evalNode(act, ref);
+    } catch (const ExportError &e) {
+        // The innermost node with a known source position locates the failure.
+        if (!e.location().empty()) {
+            throw;
+        }
+        std::string location = locationOf(act.graph->nodeOrigin(ref));
+        if (location.empty()) {
+            throw;
+        }
+        throw ExportError(e.what(), std::move(location));
+    }
     act.memo.back().emplace(ref, v);
     return v;
+}
+
+std::string Evaluator::locationOf(uint64_t origin) const {
+    if (!source_ || origin == camel::source::kInvalidOriginId) {
+        return {};
+    }
+    const auto *file = source_->fileForOrigin(origin);
+    if (!file) {
+        return {};
+    }
+    const auto range = source_->resolveOrigin(origin);
+    return std::format("{}:{}:{}", file->path, range.start.line + 1, range.start.character + 1);
 }
 
 std::vector<Value> Evaluator::evalAll(Activation &act, std::span<const gc_node_ref_t> refs) {
@@ -233,8 +263,14 @@ Value Evaluator::keep(slot_t slot, type::Type *type) {
     return Value::constant(slot, type);
 }
 
+/// A graph or function name worth showing: compiler-generated ones (lambdas, branch arms,
+/// specializations of them) mean nothing in the source; the source position says more.
+bool isSourceName(std::string_view name) { return !name.empty() && !name.starts_with("__"); }
+
 void Evaluator::unsupported(Activation &act, std::string_view what) {
-    throw ExportError(std::format("in '{}': {}", act.graph->name(), what));
+    const std::string &graph = act.graph->name();
+    throw ExportError(
+        isSourceName(graph) ? std::format("in '{}': {}", graph, what) : std::string(what));
 }
 
 Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
@@ -298,13 +334,16 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         return evalOper(act, ref);
     case GCNodeKind::Join:
         return evalJoin(act, ref);
-    case GCNodeKind::Func:
+    case GCNodeKind::Func: {
+        const std::string &callee = g->directCalleeGraphOf(ref)->name();
         unsupported(
             act,
             std::format(
-                "the call to '{}' remains after simplification; recursion whose depth depends on "
-                "the model input cannot be exported",
-                g->directCalleeGraphOf(ref)->name()));
+                "a call{} remains after simplification; recursion whose depth depends on the "
+                "model input cannot be exported",
+                isSourceName(callee) ? std::format(" to '{}'", callee.substr(0, callee.find('$')))
+                                     : std::string()));
+    }
     case GCNodeKind::Call:
         unsupported(
             act,
@@ -826,7 +865,7 @@ Model exportFunction(
             collectNames(captured->get<slot_t>(i), layout->typeAt(i), "", names);
         }
     }
-    Evaluator evaluator(emitter, options, std::move(names));
+    Evaluator evaluator(emitter, options, std::move(names), ctx.sourceContext());
     emitOutputs(emitter, evaluator.translate(root, inputs), options.outputName);
 
     Model model;
