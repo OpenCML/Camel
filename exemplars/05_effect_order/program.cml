@@ -1,0 +1,24 @@
+/**
+ * Effect and callback order. `visit` calls a callback for each element; the
+ * callback prints. The prints are effects (role effect in the dump): they keep
+ * their order whatever the pass pipeline does, so the output is the same under
+ * NodeVM, FastVM and after std::opt::simplify has inlined the callback.
+ */
+module effect_order
+
+sync func visit(items: int[], i: int, cb: (x: int) => int): int {
+    return if i >= len(items) then 0 else sync {
+        let r = cb(items[i])
+        return visit(items, i + 1, cb) + r
+    }
+}
+
+func main(): int sync {
+    println('start')
+    let total = visit([3, 1, 2], 0, (x: int): int => sync {
+        println('visit {}'->format<x>)
+        return x * 10
+    })
+    println('total {}'->format<total>)
+    return 0
+}

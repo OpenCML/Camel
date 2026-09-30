@@ -1,0 +1,9 @@
+title = "Export capability"
+summary = "Relu on int64 is valid ONNX but ONNX Runtime's CPU provider has no kernel for it at opset 17; the export stops at the relu call. benchmarks/capability_demo.py shows PyTorch's path failing only when ONNX Runtime loads the model."
+
+[[runs]]
+name = "export"
+env = ["ONNX_OUT={tmp}/checked.onnx", "ONNX_OUT_UNCHECKED={tmp}/unchecked.onnx"]
+exit = 1
+diagnostic = "RuntimeDiag::RuntimeError"
+output_contains = ["written without the check", "(CPUExecutionProvider) has no kernel for Relu on int64 tensors at opset 17", "export_capability/program.cml:15:12)"]

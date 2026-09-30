@@ -1,0 +1,10 @@
+# Export capability
+# recorded by exemplars/check.mjs --update
+
+$ ONNX_OUT=<tmp>/checked.onnx ONNX_OUT_UNCHECKED=<tmp>/unchecked.onnx camel exemplars/03_export_capability/program.cml
+exit 1
+tensor([[      0,       0],
+        [      1,       2]], dtype=int64)
+written without the check
+(program)exemplars/03_export_capability/program.cml:23:5: [Error]: An error has occurred: onnx.export_model: in 'counts': onnxruntime 1.30.0 (CPUExecutionProvider) has no kernel for Relu on int64 tensors at opset 17: the model would be valid ONNX but fail to load; it has one at opset 18 (at exemplars/03_export_capability/program.cml:15:12). Check the runtime environment and input data for unexpected issues. (name=RuntimeDiag::RuntimeError, code=0x04000000)
+

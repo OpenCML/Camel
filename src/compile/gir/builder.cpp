@@ -1511,6 +1511,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
 
     ASSERT(targetFuncType != nullptr, "Target function type must be resolved.");
+    // A direct call is located at the call expression, not at the callee's definition.
+    if (targetGraph && targetNode && targetNode->header.kind == camel::runtime::GCNodeKind::Func) {
+        registerNodeOrigin(context_, targetNode, gct, "gir.link.func");
+    }
 
     std::string targetName = targetGraph
                                  ? targetGraph->name()

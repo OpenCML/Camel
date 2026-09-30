@@ -84,6 +84,12 @@ Normalizers affect:
   `expect_output_not_contains`
 - differential field comparisons that use normalized streams
 
+## Tools
+
+`tool` selects the program a test runs (default `camel`): `camel-format`, `python` (the active
+virtual environment's interpreter, else `benchmarks/.venv`'s, else PATH's; also `${python}`) and
+`node` (the interpreter running the test runner). `case` and `args` are passed to it as usual.
+
 ## Behavior Assertions
 
 Behavior-style tests may combine:

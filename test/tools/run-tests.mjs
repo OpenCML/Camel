@@ -20,6 +20,7 @@ const CAMEL_EXE = path.join(REPO_ROOT, 'out', 'latest', 'bin', IS_WINDOWS ? 'cam
 const TOOL_EXES = {
     camel: CAMEL_EXE,
     python: null, // resolved on use (pythonExecutable)
+    node: process.execPath,
     'camel-format': path.join(
         REPO_ROOT,
         'out',

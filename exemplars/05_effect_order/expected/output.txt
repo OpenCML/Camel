@@ -1,0 +1,5 @@
+start
+visit 3
+visit 1
+visit 2
+total 60

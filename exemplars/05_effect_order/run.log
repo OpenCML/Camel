@@ -1,0 +1,363 @@
+# Effect and callback order
+# recorded by exemplars/check.mjs --update
+
+$ camel exemplars/05_effect_order/program.cml std::nvm
+exit 0
+start
+visit 3
+visit 1
+visit 2
+total 60
+
+$ camel exemplars/05_effect_order/program.cml std::fvm
+exit 0
+start
+visit 3
+visit 1
+visit 2
+total 60
+
+$ camel exemplars/05_effect_order/program.cml std::macro std::opt::simplify std::nvm
+exit 0
+start
+visit 3
+visit 1
+visit 2
+total 60
+
+$ camel exemplars/05_effect_order/program.cml std::macro std::opt::simplify std::argir
+exit 0
+digraph GraphIR {
+    subgraph cluster_F01 {
+        label="main";
+        subgraph cluster_F02 {
+            label="__g_8__";
+            F02 [label="ARGS", type="ARGS"];
+            O02 [label="EXIT", type="EXIT"];
+            N00 [label="x", type="PORT"];
+            N01 [label="visit {}", type="DATA"];
+            N02 [label=":str/format", type="OPER"];
+            N03 [label=":io/println", type="OPER", role="effect"];
+            N04 [label="10", type="DATA"];
+            N05 [label=":op/mul_l", type="OPER"];
+            N06 [label="GATE", type="GATE"];
+            F02 -> N00 [label="0", type="NORM_PORT"];
+            N06 -> O02 [label="0", type="EXIT"];
+            N00 -> N02 [label="0|0", type="WITH"];
+            N01 -> N02 [label="0|0", type="NORM"];
+            N02 -> N03 [label="0|0", type="NORM"];
+            N00 -> N05 [label="0|0", type="NORM"];
+            N04 -> N05 [label="0|1", type="NORM"];
+            N03 -> N05 [label="0|0", type="CTRL"];
+            N05 -> N06 [label="0|0", type="NORM"];
+            N05 -> N06 [label="0|0", type="CTRL"];
+        }
+        subgraph cluster_F03 {
+            label="visit";
+            subgraph cluster_F04 {
+                label="__g_4__";
+                O04 [label="EXIT", type="EXIT"];
+                N07 [label="0", type="DATA"];
+                N07 -> O04 [label="0", type="EXIT"];
+            }
+            subgraph cluster_F05 {
+                label="__g_6__";
+                F05 [label="ARGS", type="ARGS"];
+                O05 [label="EXIT", type="EXIT"];
+                N08 [label="PORT", type="PORT"];
+                N09 [label="PORT", type="PORT"];
+                N0A [label="PORT", type="PORT"];
+                N0B [label=":op/idx_arr", type="OPER"];
+                N0C [label="CALL", type="CALL"];
+                N0D [label="1", type="DATA"];
+                N0E [label=":op/add_l", type="OPER"];
+                N0F [label="visit", type="FUNC"];
+                N10 [label=":op/add_l", type="OPER"];
+                N11 [label="GATE", type="GATE"];
+                F05 -> N08 [label="0", type="WITH_PORT"];
+                F05 -> N09 [label="1", type="WITH_PORT"];
+                F05 -> N0A [label="2", type="WITH_PORT"];
+                N11 -> O05 [label="0", type="EXIT"];
+                N09 -> N0B [label="0|0", type="NORM"];
+                N0A -> N0B [label="0|1", type="NORM"];
+                N08 -> N0C [label="0|0", type="WITH"];
+                N0B -> N0C [label="0|0", type="NORM"];
+                N0A -> N0E [label="1|0", type="NORM"];
+                N0D -> N0E [label="0|1", type="NORM"];
+                N0C -> N0E [label="0|0", type="CTRL"];
+                N09 -> N0F [label="1|0", type="NORM"];
+                N0E -> N0F [label="0|1", type="NORM"];
+                N08 -> N0F [label="0|2", type="NORM"];
+                N0F -> N10 [label="0|0", type="NORM"];
+                N0C -> N10 [label="0|1", type="NORM"];
+                N10 -> N11 [label="0|0", type="NORM"];
+                N10 -> N11 [label="0|0", type="CTRL"];
+            }
+            F03 [label="ARGS", type="ARGS"];
+            O03 [label="EXIT", type="EXIT"];
+            N12 [label="items", type="PORT"];
+            N13 [label="i", type="PORT"];
+            N14 [label="cb", type="PORT"];
+            N15 [label=":struct/len_arr", type="OPER"];
+            N16 [label=":op/ge_l", type="OPER"];
+            N17 [label="JOIN", type="JOIN", role="branch-contract"];
+            N18 [label="BRCH", type="BRCH"];
+            N19 [label="0", type="DATA"];
+            N1A [label="GATE", type="GATE"];
+            N1B [label=":op/idx_arr", type="OPER"];
+            N1C [label="CALL", type="CALL"];
+            N1D [label="1", type="DATA"];
+            N1E [label=":op/add_l", type="OPER"];
+            N1F [label="visit", type="FUNC"];
+            N20 [label=":op/add_l", type="OPER"];
+            N21 [label="GATE", type="GATE"];
+            N22 [label="GATE", type="GATE"];
+            N23 [label="GATE", type="GATE"];
+            N24 [label="GATE", type="GATE"];
+            N25 [label="GATE", type="GATE"];
+            F03 -> N12 [label="0", type="NORM_PORT"];
+            F03 -> N13 [label="1", type="NORM_PORT"];
+            F03 -> N14 [label="2", type="NORM_PORT"];
+            N17 -> O03 [label="0", type="EXIT"];
+            N12 -> N15 [label="0|0", type="NORM"];
+            N13 -> N16 [label="0|0", type="NORM"];
+            N15 -> N16 [label="0|1", type="NORM"];
+            N1A -> N17 [label="0|0", type="WITH"];
+            N25 -> N17 [label="0|1", type="WITH"];
+            N18 -> N17 [label="0|0", type="NORM"];
+            N16 -> N18 [label="0|0", type="NORM"];
+            N14 -> N18 [label="0|0", type="CTRL"];
+            N12 -> N18 [label="0|1", type="CTRL"];
+            N13 -> N18 [label="0|2", type="CTRL"];
+            N18 -> N19 [label="0|0", type="CTRL"];
+            N19 -> N1A [label="0|0", type="NORM"];
+            N18 -> N1A [label="1|0", type="CTRL"];
+            N19 -> N1A [label="0|1", type="CTRL"];
+            N23 -> N1B [label="0|0", type="NORM"];
+            N24 -> N1B [label="0|1", type="NORM"];
+            N18 -> N1B [label="2|0", type="CTRL"];
+            N22 -> N1C [label="0|0", type="WITH"];
+            N1B -> N1C [label="0|0", type="NORM"];
+            N24 -> N1E [label="1|0", type="NORM"];
+            N1D -> N1E [label="0|1", type="NORM"];
+            N1C -> N1E [label="0|0", type="CTRL"];
+            N23 -> N1F [label="1|0", type="NORM"];
+            N1E -> N1F [label="0|1", type="NORM"];
+            N22 -> N1F [label="0|2", type="NORM"];
+            N1F -> N20 [label="0|0", type="NORM"];
+            N1C -> N20 [label="0|1", type="NORM"];
+            N20 -> N21 [label="0|0", type="NORM"];
+            N20 -> N21 [label="0|0", type="CTRL"];
+            N14 -> N22 [label="0|0", type="NORM"];
+            N18 -> N22 [label="3|0", type="CTRL"];
+            N12 -> N23 [label="1|0", type="NORM"];
+            N18 -> N23 [label="4|0", type="CTRL"];
+            N13 -> N24 [label="1|0", type="NORM"];
+            N18 -> N24 [label="5|0", type="CTRL"];
+            N20 -> N25 [label="1|0", type="NORM"];
+            N21 -> N25 [label="0|0", type="CTRL"];
+        }
+        subgraph cluster_F06 {
+            label="visit$spec3";
+            O06 [label="EXIT", type="EXIT"];
+            N26 [label="items", type="PORT"];
+            N27 [label="i", type="PORT"];
+            N28 [label=":struct/len_arr", type="OPER"];
+            N29 [label=":op/ge_l", type="OPER"];
+            N2A [label="JOIN", type="JOIN", role="branch-contract"];
+            N2B [label="BRCH", type="BRCH"];
+            N2C [label="0", type="DATA"];
+            N2D [label="GATE", type="GATE"];
+            N2E [label=":op/idx_arr", type="OPER"];
+            N2F [label="CALL", type="CALL"];
+            N30 [label="visit", type="FUNC"];
+            N31 [label=":op/add_l", type="OPER"];
+            N32 [label="GATE", type="GATE"];
+            N33 [label="GATE", type="GATE"];
+            N34 [label="GATE", type="GATE"];
+            N35 [label="GATE", type="GATE"];
+            N36 [label="GATE", type="GATE"];
+            N37 [label="1", type="DATA"];
+            N38 [label="2", type="DATA"];
+            F06 -> N26 [label="0", type="NORM_PORT"];
+            F06 -> N27 [label="1", type="NORM_PORT"];
+            N2A -> O06 [label="0", type="EXIT"];
+            N26 -> N28 [label="0|0", type="NORM"];
+            N37 -> N29 [label="0|0", type="NORM"];
+            N28 -> N29 [label="0|1", type="NORM"];
+            N2D -> N2A [label="0|0", type="WITH"];
+            N36 -> N2A [label="0|1", type="WITH"];
+            N2B -> N2A [label="0|0", type="NORM"];
+            N29 -> N2B [label="0|0", type="NORM"];
+            N27 -> N2B [label="0|0", type="CTRL"];
+            N26 -> N2B [label="0|1", type="CTRL"];
+            N2B -> N2C [label="0|0", type="CTRL"];
+            N2C -> N2D [label="0|0", type="NORM"];
+            N2B -> N2D [label="1|0", type="CTRL"];
+            N2C -> N2D [label="0|1", type="CTRL"];
+            N34 -> N2E [label="0|0", type="NORM"];
+            N35 -> N2E [label="0|1", type="NORM"];
+            N2B -> N2E [label="2|0", type="CTRL"];
+            N33 -> N2F [label="0|0", type="WITH"];
+            N2E -> N2F [label="0|0", type="NORM"];
+            N34 -> N30 [label="1|0", type="NORM"];
+            N38 -> N30 [label="0|1", type="NORM"];
+            N33 -> N30 [label="0|2", type="NORM"];
+            N2F -> N30 [label="0|0", type="CTRL"];
+            N35 -> N30 [label="0|1", type="CTRL"];
+            N30 -> N31 [label="0|0", type="NORM"];
+            N2F -> N31 [label="0|1", type="NORM"];
+            N31 -> N32 [label="0|0", type="NORM"];
+            N31 -> N32 [label="0|0", type="CTRL"];
+            N27 -> N33 [label="0|0", type="NORM"];
+            N2B -> N33 [label="3|0", type="CTRL"];
+            N26 -> N34 [label="1|0", type="NORM"];
+            N2B -> N34 [label="4|0", type="CTRL"];
+            N37 -> N35 [label="1|0", type="NORM"];
+            N2B -> N35 [label="5|0", type="CTRL"];
+            N31 -> N36 [label="1|0", type="NORM"];
+            N32 -> N36 [label="0|0", type="CTRL"];
+        }
+        O01 [label="EXIT", type="EXIT"];
+        N39 [label="start", type="DATA"];
+        N3A [label=":io/println", type="OPER", role="effect"];
+        N3B [label="[3, 1, 2]", type="DATA"];
+        N3C [label="Function(graph=__g_8__, tupleSlots=0)", type="DATA"];
+        N3D [label="total {}", type="DATA"];
+        N3E [label=":str/format", type="OPER"];
+        N3F [label=":io/println", type="OPER", role="effect"];
+        N40 [label="0", type="DATA"];
+        N41 [label="GATE", type="GATE"];
+        N42 [label="GATE", type="GATE"];
+        N43 [label="GATE", type="GATE"];
+        N44 [label="visit$spec3", type="FUNC"];
+        N45 [label=":op/add_l", type="OPER"];
+        N46 [label="GATE", type="GATE"];
+        N47 [label="GATE", type="GATE"];
+        N48 [label="GATE", type="GATE"];
+        N49 [label="GATE", type="GATE"];
+        N4A [label=":io/println", type="OPER", role="effect"];
+        N4B [label="GATE", type="GATE"];
+        N4C [label="GATE", type="GATE"];
+        N4D [label="GATE", type="GATE"];
+        N4E [label="3", type="DATA"];
+        N4F [label="visit 3", type="DATA"];
+        N50 [label="30", type="DATA"];
+        N41 -> O01 [label="0", type="EXIT"];
+        N39 -> N3A [label="0|0", type="NORM"];
+        N49 -> N3E [label="0|0", type="WITH"];
+        N3D -> N3E [label="0|0", type="NORM"];
+        N3E -> N3F [label="0|0", type="NORM"];
+        N40 -> N41 [label="0|0", type="NORM"];
+        N3F -> N41 [label="0|0", type="CTRL"];
+        N3B -> N42 [label="0|0", type="NORM"];
+        N3A -> N42 [label="0|0", type="CTRL"];
+        N3C -> N43 [label="0|0", type="NORM"];
+        N3A -> N43 [label="1|0", type="CTRL"];
+        N48 -> N44 [label="0|0", type="NORM"];
+        N47 -> N44 [label="0|1", type="NORM"];
+        N4D -> N44 [label="0|0", type="CTRL"];
+        N44 -> N45 [label="0|0", type="NORM"];
+        N4D -> N45 [label="0|1", type="NORM"];
+        N45 -> N46 [label="0|0", type="NORM"];
+        N45 -> N46 [label="0|0", type="CTRL"];
+        N43 -> N47 [label="0|0", type="NORM"];
+        N3A -> N47 [label="2|0", type="CTRL"];
+        N42 -> N47 [label="0|1", type="CTRL"];
+        N42 -> N48 [label="0|0", type="NORM"];
+        N3A -> N48 [label="3|0", type="CTRL"];
+        N42 -> N48 [label="1|1", type="CTRL"];
+        N45 -> N49 [label="1|0", type="NORM"];
+        N46 -> N49 [label="0|0", type="CTRL"];
+        N4F -> N4A [label="0|0", type="NORM"];
+        N47 -> N4A [label="0|0", type="CTRL"];
+        N4C -> N4A [label="0|1", type="CTRL"];
+        N50 -> N4B [label="0|0", type="NORM"];
+        N4A -> N4B [label="0|0", type="CTRL"];
+        N4C -> N4B [label="1|1", type="CTRL"];
+        N4E -> N4C [label="0|0", type="NORM"];
+        N47 -> N4C [label="1|0", type="CTRL"];
+        N3A -> N4C [label="4|1", type="CTRL"];
+        N42 -> N4C [label="2|2", type="CTRL"];
+        N48 -> N4C [label="0|3", type="CTRL"];
+        N50 -> N4D [label="1|0", type="NORM"];
+        N4B -> N4D [label="0|0", type="CTRL"];
+        N4A -> N4D [label="1|1", type="CTRL"];
+        N4C -> N4D [label="2|2", type="CTRL"];
+    }
+    O00 [label="EXIT", type="EXIT"];
+    N51 [label="start", type="DATA"];
+    N52 [label=":io/println", type="OPER", role="effect"];
+    N53 [label="[3, 1, 2]", type="DATA"];
+    N54 [label="Function(graph=__g_8__, tupleSlots=0)", type="DATA"];
+    N55 [label="total {}", type="DATA"];
+    N56 [label=":str/format", type="OPER"];
+    N57 [label=":io/println", type="OPER", role="effect"];
+    N58 [label="0", type="DATA"];
+    N59 [label="GATE", type="GATE"];
+    N5A [label="GATE", type="GATE"];
+    N5B [label="GATE", type="GATE"];
+    N5C [label="GATE", type="GATE"];
+    N5D [label="visit$spec3", type="FUNC"];
+    N5E [label=":op/add_l", type="OPER"];
+    N5F [label="GATE", type="GATE"];
+    N60 [label="GATE", type="GATE"];
+    N61 [label="GATE", type="GATE"];
+    N62 [label="GATE", type="GATE"];
+    N63 [label=":io/println", type="OPER", role="effect"];
+    N64 [label="GATE", type="GATE"];
+    N65 [label="GATE", type="GATE"];
+    N66 [label="GATE", type="GATE"];
+    N67 [label="3", type="DATA"];
+    N68 [label="visit 3", type="DATA"];
+    N69 [label="30", type="DATA"];
+    N5C -> O00 [label="0", type="EXIT"];
+    N51 -> N52 [label="0|0", type="NORM"];
+    N62 -> N56 [label="0|0", type="WITH"];
+    N55 -> N56 [label="0|0", type="NORM"];
+    N56 -> N57 [label="0|0", type="NORM"];
+    N58 -> N59 [label="0|0", type="NORM"];
+    N57 -> N59 [label="0|0", type="CTRL"];
+    N53 -> N5A [label="0|0", type="NORM"];
+    N52 -> N5A [label="0|0", type="CTRL"];
+    N54 -> N5B [label="0|0", type="NORM"];
+    N52 -> N5B [label="1|0", type="CTRL"];
+    N58 -> N5C [label="1|0", type="NORM"];
+    N59 -> N5C [label="0|0", type="CTRL"];
+    N61 -> N5D [label="0|0", type="NORM"];
+    N60 -> N5D [label="0|1", type="NORM"];
+    N66 -> N5D [label="0|0", type="CTRL"];
+    N5D -> N5E [label="0|0", type="NORM"];
+    N66 -> N5E [label="0|1", type="NORM"];
+    N5E -> N5F [label="0|0", type="NORM"];
+    N5E -> N5F [label="0|0", type="CTRL"];
+    N5B -> N60 [label="0|0", type="NORM"];
+    N52 -> N60 [label="2|0", type="CTRL"];
+    N5A -> N60 [label="0|1", type="CTRL"];
+    N5A -> N61 [label="0|0", type="NORM"];
+    N52 -> N61 [label="3|0", type="CTRL"];
+    N5A -> N61 [label="1|1", type="CTRL"];
+    N5E -> N62 [label="1|0", type="NORM"];
+    N5F -> N62 [label="0|0", type="CTRL"];
+    N68 -> N63 [label="0|0", type="NORM"];
+    N60 -> N63 [label="0|0", type="CTRL"];
+    N65 -> N63 [label="0|1", type="CTRL"];
+    N69 -> N64 [label="0|0", type="NORM"];
+    N63 -> N64 [label="0|0", type="CTRL"];
+    N65 -> N64 [label="1|1", type="CTRL"];
+    N67 -> N65 [label="0|0", type="NORM"];
+    N60 -> N65 [label="1|0", type="CTRL"];
+    N52 -> N65 [label="4|1", type="CTRL"];
+    N5A -> N65 [label="2|2", type="CTRL"];
+    N61 -> N65 [label="0|3", type="CTRL"];
+    N69 -> N66 [label="1|0", type="NORM"];
+    N64 -> N66 [label="0|0", type="CTRL"];
+    N63 -> N66 [label="1|1", type="CTRL"];
+    N65 -> N66 [label="2|2", type="CTRL"];
+    subgraph cluster_legend {
+        label="roles";
+        "legend_effect" [label="effect (ordered, never folded or removed)", type="LEGEND", role="effect"];
+        "legend_branch-contract" [label="branch contract (arms agree on the result type)", type="LEGEND", role="branch-contract"];
+    }
+}
+

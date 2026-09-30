@@ -1,0 +1,26 @@
+/**
+ * Export-time capability check: `relu` of an int64 tensor is valid ONNX (Relu
+ * accepts integers since opset 14), but ONNX Runtime's CPU provider has no
+ * int64 Relu kernel at opset 17. The export fails at the call instead of
+ * producing a model that ONNX Runtime refuses to load. With the check
+ * disabled (target 'none') the same model is written.
+ */
+module export_capability_exemplar
+
+import { Tensor, reshape, relu, cast } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func counts(t: Tensor): Tensor {
+    return relu(cast(t, 'int64') - 2)
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    println(counts(x))
+    export_model(counts, x, get_env('ONNX_OUT_UNCHECKED'), [], 'none')
+    println('written without the check')
+    export_model(counts, x, get_env('ONNX_OUT'))
+    println('unreachable')
+    return 0
+}
