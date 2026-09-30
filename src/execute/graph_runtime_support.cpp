@@ -183,6 +183,45 @@ std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GC
         state[index] = 1;
         stack.push_back(index);
 
+        // Schedulers run a taken arm as the range from its head to its tail and skip everything
+        // else between the BRCH and the JOIN. A value an arm reads from outside the branch runs
+        // unconditionally, so it must come before the BRCH; left to the depth-first order, it
+        // could land between the BRCH and an arm's head (e.g. after a rewrite removed the branch
+        // that used to enclose it) and be skipped.
+        if (const auto *node = graph->node(index);
+            node && node->kind == camel::runtime::GCNodeKind::Join &&
+            !graph->normInputsOf(index).empty()) {
+            const gc_node_ref_t brch = graph->normInputsOf(index).front();
+            std::unordered_set<gc_node_ref_t> inBranch;
+            std::vector<gc_node_ref_t> work;
+            const auto pushUsers = [&](gc_node_ref_t n) {
+                for (auto users :
+                     {graph->ctrlOutputsOf(n), graph->normOutputsOf(n), graph->withOutputsOf(n)}) {
+                    work.insert(work.end(), users.begin(), users.end());
+                }
+            };
+            pushUsers(brch);
+            while (!work.empty()) {
+                const gc_node_ref_t n = work.back();
+                work.pop_back();
+                if (n == index || n == brch || !graph->containsNodeRef(n) ||
+                    !inBranch.insert(n).second) {
+                    continue;
+                }
+                pushUsers(n);
+            }
+            for (gc_node_ref_t n : inBranch) {
+                for (auto inputs :
+                     {graph->ctrlInputsOf(n), graph->normInputsOf(n), graph->withInputsOf(n)}) {
+                    for (gc_node_ref_t input : inputs) {
+                        if (input != brch && !inBranch.contains(input)) {
+                            visit(input);
+                        }
+                    }
+                }
+            }
+        }
+
         for (gc_node_ref_t input : graph->ctrlInputsOf(index)) {
             visit(input);
         }
