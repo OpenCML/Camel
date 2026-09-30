@@ -2024,7 +2024,7 @@ any Builder::visitCompExpr(OpenCMLParser::CompExprContext *context) {
 
 /*
 annoExpr
-    : accessExpr ({isAdjacent()}? (indices | parentArgues | angledValues | '!'))*
+    : accessExpr (({isAdjacent()}? (indices | parentArgues | angledValues | '!')) | memberAccess)*
     ;
 */
 any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
@@ -2084,6 +2084,9 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
                         "arg"));
                 }
                 registerAstSemanticBundle(exprNode, std::move(parts));
+            } else if (tt::is_instance_of<OpenCMLParser::MemberAccessContext>(child)) {
+                auto *access = tt::as_ptr<OpenCMLParser::MemberAccessContext>(child);
+                exprNode     = makeMemberAccess(lhsNode, access->children[0], access->children[1], access);
             } else if (tt::is_instance_of<OpenCMLParser::AngledValuesContext>(child)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
                 setNodeTokenRangeByContext(
@@ -2122,6 +2125,54 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
     return lhsNode;
 }
 
+node_ptr_t Builder::makeMemberAccess(
+    node_ptr_t lhs, antlr4::tree::ParseTree *dot, antlr4::tree::ParseTree *member,
+    antlr4::ParserRuleContext *range) {
+    node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Access);
+    setNodeTokenRangeByContext(dataNode, range);
+    Reference ref(member->getText());
+    node_ptr_t rhsNode = createNodeAs<RefDataLoad>(ref);
+    if (auto *memberToken = tokenFromTree(member)) {
+        setNodeTokenRange(
+            rhsNode,
+            static_cast<size_t>(memberToken->getTokenIndex()),
+            static_cast<size_t>(memberToken->getTokenIndex() + 1));
+        setNodeOriginByOffsets(
+            rhsNode,
+            static_cast<size_t>(memberToken->getStartIndex()),
+            static_cast<size_t>(memberToken->getStopIndex() + 1),
+            "ast.access.member");
+    }
+    *dataNode << lhs << rhsNode;
+    registerAstSemanticBundle(
+        dataNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::Operator,
+                deriveAstAnchorOrigin(
+                    dataNode,
+                    tokenFromTree(dot),
+                    "ast.access.dot"),
+                -1,
+                "."),
+            semanticPart(
+                camel::source::SemanticRole::Receiver,
+                nodeOrigin(lhs),
+                -1,
+                "target"),
+            semanticPart(
+                camel::source::SemanticRole::MemberName,
+                nodeOrigin(rhsNode),
+                -1,
+                ref.ident()),
+        });
+    return dataNode;
+}
+
+any Builder::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
+    throw std::runtime_error("memberAccess is built by visitAnnoExpr");
+}
+
 /*
 accessExpr
     : primaryData ('.' (IDENTIFIER | INTEGER))*
@@ -2132,49 +2183,10 @@ any Builder::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
     node_ptr_t lhsNode = any2node(visitPrimaryData(context->primaryData()));
     for (size_t i = 1; i < context->children.size(); i += 2) {
         string strOp = context->children[i]->getText();
-        if (strOp == ".") {
-            node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Access);
-            setNodeTokenRangeByContext(dataNode, context);
-            Reference ref(context->children[i + 1]->getText());
-            node_ptr_t rhsNode = createNodeAs<RefDataLoad>(ref);
-            if (auto *memberToken = tokenFromTree(context->children[i + 1])) {
-                setNodeTokenRange(
-                    rhsNode,
-                    static_cast<size_t>(memberToken->getTokenIndex()),
-                    static_cast<size_t>(memberToken->getTokenIndex() + 1));
-                setNodeOriginByOffsets(
-                    rhsNode,
-                    static_cast<size_t>(memberToken->getStartIndex()),
-                    static_cast<size_t>(memberToken->getStopIndex() + 1),
-                    "ast.access.member");
-            }
-            *dataNode << lhsNode << rhsNode;
-            registerAstSemanticBundle(
-                dataNode,
-                {
-                    semanticPart(
-                        camel::source::SemanticRole::Operator,
-                        deriveAstAnchorOrigin(
-                            dataNode,
-                            tokenFromTree(context->children[i]),
-                            "ast.access.dot"),
-                        -1,
-                        "."),
-                    semanticPart(
-                        camel::source::SemanticRole::Receiver,
-                        nodeOrigin(lhsNode),
-                        -1,
-                        "target"),
-                    semanticPart(
-                        camel::source::SemanticRole::MemberName,
-                        nodeOrigin(rhsNode),
-                        -1,
-                        ref.ident()),
-                });
-            lhsNode = dataNode;
-        } else {
+        if (strOp != ".") {
             throw std::runtime_error("Invalid access operator: " + strOp);
         }
+        lhsNode = makeMemberAccess(lhsNode, context->children[i], context->children[i + 1], context);
     }
     LEAVE("AccessExpr");
     return lhsNode;
