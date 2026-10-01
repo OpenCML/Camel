@@ -367,15 +367,12 @@ int main(int argc, char *argv[]) {
         }
 
         // ---- 文档同步 ----
+        // camel-ls 声明 diagnosticProvider，诊断统一走 pull（textDocument/diagnostic），
+        // 这里只维护文档缓存，不做 push，避免客户端侧重复。
         if (method == "textDocument/didOpen") {
             string uri         = params["textDocument"]["uri"];
             string content     = params["textDocument"]["text"];
             openDocuments[uri] = content;
-            json diags         = buildDiagnosticsArray(uri, content);
-            json outParams;
-            outParams["uri"]         = uri;
-            outParams["diagnostics"] = diags;
-            sendNotification(out, "textDocument/publishDiagnostics", outParams);
             continue;
         }
         if (method == "textDocument/didChange") {
@@ -383,21 +380,12 @@ int main(int argc, char *argv[]) {
             auto &changes = params["contentChanges"];
             if (!changes.empty() && changes[0].contains("text")) {
                 openDocuments[uri] = changes[0]["text"];
-                json diags         = buildDiagnosticsArray(uri, openDocuments[uri]);
-                json outParams;
-                outParams["uri"]         = uri;
-                outParams["diagnostics"] = diags;
-                sendNotification(out, "textDocument/publishDiagnostics", outParams);
             }
             continue;
         }
         if (method == "textDocument/didClose") {
             string uri = params["textDocument"]["uri"];
             openDocuments.erase(uri);
-            json paramsOut;
-            paramsOut["uri"]         = uri;
-            paramsOut["diagnostics"] = json::array();
-            sendNotification(out, "textDocument/publishDiagnostics", paramsOut);
             continue;
         }
 
