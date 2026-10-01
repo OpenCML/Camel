@@ -215,6 +215,19 @@ void collectCompileStaticGraphRefsRecursive(
     }
 }
 
+/// The graphs a compile graph refers to statically: its declared static refs plus the graphs of
+/// Function values held in its static slots. Sizing and emission must agree on this list.
+std::vector<graph_ptr_t> staticGraphRefsOf(const graph_ptr_t &source) {
+    std::vector<graph_ptr_t> refs = source->staticGraphRefs();
+    std::unordered_set<const Object *> visited;
+    const auto staticTypes = source->draft().staticSlotTypes();
+    const auto staticSlots = source->draft().staticSlots();
+    for (size_t i = 1; i < staticSlots.size() && i < staticTypes.size(); ++i) {
+        collectCompileStaticGraphRefsRecursive(refs, staticSlots[i], staticTypes[i], visited);
+    }
+    return refs;
+}
+
 struct PreparedGraph {
     graph_ptr_t source;
     std::unique_ptr<GraphDraft> draft;
@@ -422,6 +435,7 @@ class EncodeSession {
                 .dataType     = header->dataType,
                 .kind         = header->kind,
                 .runtimeFlags = header->runtimeFlags,
+                .origin       = header->origin,
             };
             std::vector<std::byte> payloadStorage;
 
@@ -583,17 +597,7 @@ class EncodeSession {
         for (auto &prepared : prepared_) {
             const auto &deps                    = prepared.source->dependencyGraphs();
             const auto &subs                    = prepared.source->subGraphs();
-            std::vector<graph_ptr_t> staticRefs = prepared.source->staticGraphRefs();
-            std::unordered_set<const Object *> visited;
-            const auto staticTypes = prepared.source->draft().staticSlotTypes();
-            const auto staticSlots = prepared.source->draft().staticSlots();
-            for (size_t i = 1; i < staticSlots.size() && i < staticTypes.size(); ++i) {
-                collectCompileStaticGraphRefsRecursive(
-                    staticRefs,
-                    staticSlots[i],
-                    staticTypes[i],
-                    visited);
-            }
+            const std::vector<graph_ptr_t> staticRefs = staticGraphRefsOf(prepared.source);
             std::vector<GCGraph *> depPtrs(deps.size(), nullptr);
             std::vector<GCGraph *> subPtrs(subs.size(), nullptr);
             std::vector<GCGraph *> staticGraphPtrs(staticRefs.size(), nullptr);
@@ -795,6 +799,7 @@ class EncodeSession {
         }
         auto *debugRecord =
             createGraphDebugRecord(source->stableId(), source->name(), source->name());
+        recordDraftNodeOrigins(debugRecord, *prepared.draft);
 
         const auto &deps = source->dependencyGraphs();
         const auto &subs = source->subGraphs();
@@ -870,7 +875,7 @@ class EncodeSession {
             "GIREncode",
             "Static-slot canonicalization finished for graph '{}'.",
             source->name());
-        std::vector<graph_ptr_t> compileStaticRefs = source->staticGraphRefs();
+        std::vector<graph_ptr_t> compileStaticRefs = staticGraphRefsOf(prepared.source);
         std::vector<GCGraph *> staticGraphRefs;
         staticGraphRefs.reserve(compileStaticRefs.size());
         CAMEL_LOG_INFO_S(

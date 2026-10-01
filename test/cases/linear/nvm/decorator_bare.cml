@@ -1,0 +1,20 @@
+/**
+ * Verifies a decorator applied without with-arguments (`@name`), with and without std::macro.
+ */
+module decorator_bare
+
+func twice(f: (x: float) => float): (x: float) => float {
+    return (x: float): float => {
+        return f(f(x))
+    }
+}
+
+@twice
+func sq(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    let v = sq(3.0)
+    return if v == 81.0 then 0 else 1
+}

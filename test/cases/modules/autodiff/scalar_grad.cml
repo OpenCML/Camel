@@ -1,0 +1,28 @@
+/**
+ * Verifies grad and value_and_grad on straight-line scalar code with helper calls: each
+ * operator's rule, accumulation over repeated uses, and float32/float64 conversions.
+ */
+module scalar_grad
+
+import { grad, value_and_grad, stop_gradient } from autodiff
+
+func sq(x: float): float {
+    return x * x
+}
+
+func f(x: float, y: float): float {
+    return sq(x) * y + x / y - y
+}
+
+func g(x: float): float {
+    // x used three times; the stopped branch contributes nothing.
+    return x * x * x + stop_gradient(x * 10.0)
+}
+
+func main(): int sync {
+    let df = grad(f)(3.0, 2.0)
+    let vg = value_and_grad(f)(3.0, 2.0)
+    let dg = grad(g)(2.0)
+    'scalar_grad df={} vg={} dg={}'->format<df, vg, dg>->println
+    return 0
+}

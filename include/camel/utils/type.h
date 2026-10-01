@@ -22,6 +22,7 @@
 #include "camel/utils/assert.h"
 #include "camel/utils/debug.h"
 
+#include <format>
 #include <memory>
 #include <type_traits>
 #include <typeinfo>

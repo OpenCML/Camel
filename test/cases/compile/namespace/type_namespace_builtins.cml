@@ -1,5 +1,5 @@
 /**
- * Checks built-in type-qualified constructor aliases for Tensor and Parameter.
+ * Checks built-in type-qualified constructor aliases for Tensor.
  */
 module type_namespace_builtins
 
@@ -7,15 +7,10 @@ import {
     Tensor
 } from tensor
 
-import {
-    Parameter
-} from nn
-
 func main(): int sync {
     let a = Tensor::ones([2, 2])
     let b = Tensor::new([[1.0, 2.0], [3.0, 4.0]])
-    let p = Parameter::new(Tensor::zeros([2, 2]))
-    let v = Parameter::value(p)
+    let v = Tensor::zeros([2, 2])
 
     let a0 = Tensor::shape(a)[0]
     let b1 = Tensor::shape(b)[1]

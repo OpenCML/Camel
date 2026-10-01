@@ -1,0 +1,24 @@
+/**
+ * A gradient through helper calls: the pullback form (a (value, pullback) pair per call, pullbacks
+ * as closures) collapses into straight-line code once the calls are inlined, the closure calls
+ * devirtualized and the tuples folded away. h'(x) = 2x + 6(x + 1).
+ */
+module collapse
+
+import { grad } from autodiff
+import { get_env } from sys
+
+func sq(x: float): float {
+    return x * x
+}
+
+func h(x: float): float {
+    return sq(x) + 3.0 * sq(x + 1.0)
+}
+
+func main(): int sync {
+    // Read at run time, so that the gradient graph stays general rather than folding to a constant.
+    let x = if get_env('CAMEL_COLLAPSE_X') == '' then 2.0 else 2.0
+    'collapse dh={}'->format<grad(h)(x)>->println
+    return 0
+}

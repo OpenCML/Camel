@@ -309,6 +309,8 @@ class GCGraph : public camel::core::rtdata::Object {
     const std::string &stableId() const;
     const std::string &mangledName() const;
     const std::string &name() const;
+    /// Source origin (camel::source::origin_id_t) of node `ref`, 0 when unknown.
+    uint64_t nodeOrigin(gc_node_ref_t ref) const;
     camel::core::type::FunctionType *funcType() const;
     const camel::core::type::TupleType *runtimeDataType() const;
     const camel::core::type::TupleType *staticDataType() const;
@@ -481,8 +483,17 @@ class GCGraphManager {
     std::vector<GCGraph *> reachableFromRoots() const;
     void clear();
 
+    /// Keeps graphs that rewrites of a detached root produced (a function being exported, see
+    /// RuntimeGraphDraftSession::commit) alive and traced until releaseDetached().
+    void trackDetached(std::span<GCGraph *const> graphs);
+    /// Frees the tracked detached graphs that the program does not reach.
+    void releaseDetached();
+
   private:
+    void rebuildGcRoots();
+
     std::vector<GCGraph *> graphs_;
+    std::vector<GCGraph *> detached_;
     std::vector<GCGraphDebugRecord *> debugRecords_;
     std::vector<camel::core::rtdata::Object *> gcRoots_;
     GCGraph *root_ = nullptr;

@@ -1,0 +1,19 @@
+/**
+ * A recursion whose depth is a constant: std::opt::simplify specializes each step on its constant
+ * arguments, folds the stop condition, prunes the branch and inlines the step, so `forward` becomes
+ * straight-line code. The value must not change.
+ */
+module recursion_unroll
+
+func run(t: int, steps: int, h: float): float {
+    return if t >= steps then h else run(t + 1, steps, h * 0.5 + float(t))
+}
+
+func forward(x: float): float {
+    return run(0, 4, x)
+}
+
+func main(): int sync {
+    'unroll={}'->format<forward(8.0)>->println
+    return 0
+}

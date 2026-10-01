@@ -449,7 +449,12 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
         removeUserRef(oldInput, id, false, false, true);
     }
 
+    // A rewritten node keeps its source origin unless the rewrite gives it another.
+    const uint64_t origin = draftNode->header.origin;
     replaceNodeStorage(id, rebuildNode(id, init));
+    if (init.origin == 0) {
+        node(id)->header.origin = origin;
+    }
 
     for (gc_node_ref_t input : init.normInputs) {
         appendUserRef(input, id, true, false, false);

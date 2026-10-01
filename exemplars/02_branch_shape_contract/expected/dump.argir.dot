@@ -1,0 +1,73 @@
+digraph GraphIR {
+    subgraph cluster_F01 {
+        label="main";
+        subgraph cluster_F02 {
+            label="pick";
+            subgraph cluster_F03 {
+                label="__g_4__";
+                O03 [label="EXIT", type="EXIT"];
+                N00 [label="[2, 3]", type="DATA"];
+                N01 [label="tensor:zeros", type="OPER"];
+                N01 -> O03 [label="0", type="EXIT"];
+                N00 -> N01 [label="0|0", type="NORM"];
+            }
+            subgraph cluster_F04 {
+                label="__g_6__";
+                O04 [label="EXIT", type="EXIT"];
+                N02 [label="[3, 2]", type="DATA"];
+                N03 [label="tensor:ones", type="OPER"];
+                N03 -> O04 [label="0", type="EXIT"];
+                N02 -> N03 [label="0|0", type="NORM"];
+            }
+            F02 [label="ARGS", type="ARGS"];
+            O02 [label="EXIT", type="EXIT"];
+            N04 [label="flag", type="PORT"];
+            N05 [label="JOIN", type="JOIN", role="branch-contract"];
+            N06 [label="BRCH", type="BRCH"];
+            N07 [label="__g_4__", type="FUNC"];
+            N08 [label="__g_6__", type="FUNC"];
+            F02 -> N04 [label="0", type="NORM_PORT"];
+            N05 -> O02 [label="0", type="EXIT"];
+            N07 -> N05 [label="0|0", type="WITH"];
+            N08 -> N05 [label="0|1", type="WITH"];
+            N06 -> N05 [label="0|0", type="NORM"];
+            N04 -> N06 [label="0|0", type="NORM"];
+            N06 -> N07 [label="0|0", type="CTRL"];
+            N06 -> N08 [label="1|0", type="CTRL"];
+        }
+        O01 [label="EXIT", type="EXIT"];
+        N09 [label="[3, 4]", type="DATA"];
+        N0A [label="tensor:ones", type="OPER"];
+        N0B [label="FLAG", type="DATA"];
+        N0C [label="sys:get_env", type="OPER", role="effect"];
+        N0D [label="true", type="DATA"];
+        N0E [label=":op/eq_s", type="OPER"];
+        N0F [label="pick", type="FUNC"];
+        N10 [label="tensor:matmul", type="OPER"];
+        N11 [label=":io/println", type="OPER", role="effect"];
+        N12 [label="0", type="DATA"];
+        N13 [label="GATE", type="GATE"];
+        N13 -> O01 [label="0", type="EXIT"];
+        N09 -> N0A [label="0|0", type="NORM"];
+        N0B -> N0C [label="0|0", type="NORM"];
+        N0A -> N0C [label="0|0", type="CTRL"];
+        N0C -> N0E [label="0|0", type="NORM"];
+        N0D -> N0E [label="0|1", type="NORM"];
+        N0E -> N0F [label="0|0", type="NORM"];
+        N0F -> N10 [label="0|0", type="NORM"];
+        N0A -> N10 [label="0|1", type="NORM"];
+        N10 -> N11 [label="0|0", type="NORM"];
+        N12 -> N13 [label="0|0", type="NORM"];
+        N11 -> N13 [label="0|0", type="CTRL"];
+    }
+    O00 [label="EXIT", type="EXIT"];
+    N14 [label="Function(graph=main, tupleSlots=0)", type="DATA"];
+    N15 [label="CALL", type="CALL"];
+    N15 -> O00 [label="0", type="EXIT"];
+    N14 -> N15 [label="0|0", type="WITH"];
+    subgraph cluster_legend {
+        label="roles";
+        "legend_branch-contract" [label="branch contract (arms agree on the result type)", type="LEGEND", role="branch-contract"];
+        "legend_effect" [label="effect (ordered, never folded or removed)", type="LEGEND", role="effect"];
+    }
+}

@@ -261,7 +261,18 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "EntryModuleMissingMain",
                 "Entry module '{0}' must define a resolvable 'main' on the module root (__root__).",
-                "Add a top-level main function or ensure it is registered as a direct root subgraph.",
+                "Add a top-level main function or ensure it is registered as a direct root "
+                "subgraph.",
+            },
+        },
+        {
+            SemanticDiag::ArgumentsRejected,
+            {
+                "ArgumentsRejected",
+                "Invalid call to '{0}' with argument types {1}: {2}.",
+                "The argument kinds match the operator's signature, but their statically known "
+                "properties (such as tensor shapes or dtypes) are incompatible. Fix the arguments "
+                "or relax their static types.",
             },
         },
 

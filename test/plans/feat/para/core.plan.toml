@@ -25,12 +25,18 @@ timeout_ms = 4000
 
 [[tests]]
 name = "monte_carlo_pi"
-desc = "Checks PRL can execute a parallel Monte Carlo map-reduce estimator and finish within a routine feature-test budget."
+desc = "Checks PRL can execute a parallel Monte Carlo map-reduce estimator (feature-sized workload; the full-size case is in the perf plan) and that the estimate is close to pi."
 kind = "behavior"
-case = "../../../cases/para/core/monte_carlo_pi.cml"
+case = "../../../cases/para/core/monte_carlo_pi_small.cml"
 args = ["${case}", "${run_prl}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('Estimated pi = 3.14'), `unexpected output: ${out}`)
+}
+"""
 timeout_ms = 4000
 
 [[tests]]

@@ -1,0 +1,289 @@
+id = "modules.tensor"
+order = 362
+tier = "feat"
+tags = ["feat", "modules", "tensor"]
+
+[[tests]]
+name = "broadcast_ops"
+desc = "NumPy-style broadcasting across arithmetic, comparison, where, cast, relu, and maximum."
+kind = "behavior"
+case = "../../../cases/modules/tensor/broadcast_ops.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, match }) => {
+const out = input.normalized.stdout
+const grid = match(/broadcast shape=\[3, 2\] sum=([0-9.]+)/, out)
+assert(Number(grid[1]) === 102, `expected grid sum 102, got ${grid[1]}`)
+const mask = match(/broadcast mask_sum=([0-9]+) clipped_sum=([0-9.]+)/, out)
+assert(Number(mask[1]) === 3 && Number(mask[2]) === 66, `unexpected mask/where results ${mask[0]}`)
+const act = match(/broadcast relu_sum=([0-9.]+) max_sum=([0-9.]+)/, out)
+assert(Number(act[1]) === 2 && Number(act[2]) === 2, `unexpected relu/maximum results ${act[0]}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "reductions"
+desc = "Axis reductions with keepdims, full reductions, and softmax/log_softmax along an axis."
+kind = "behavior"
+case = "../../../cases/modules/tensor/reductions.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+const out = input.normalized.stdout
+const a = match(/reduce rows=([0-9.]+) cols_shape=\[1, 3\] mean=([0-9.]+)/, out)
+assert(Number(a[1]) === 21 && Number(a[2]) === 3.5, `unexpected sum/mean ${a[0]}`)
+const b = match(/reduce colmax_sum=([0-9.]+) argmax_sum=([0-9]+) mean_axis_sum=([0-9.eE+-]+)/, out)
+assert(Number(b[1]) === 15 && Number(b[2]) === 3, `unexpected max/argmax ${b[0]}`)
+assert(approx(Number(b[3]), 7, 1e-5), `unexpected mean axis ${b[3]}`)
+const c = match(/reduce softmax0_sum=([0-9.eE+-]+) logsoftmax_expsum=([0-9.eE+-]+)/, out)
+assert(approx(Number(c[1]), 3, 1e-5) && approx(Number(c[2]), 2, 1e-5), `unexpected softmax sums ${c[0]}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "linalg_layout"
+desc = "Batched broadcasting matmul, matrix-vector matmul, linear, layer_norm, and layout operators."
+kind = "behavior"
+case = "../../../cases/modules/tensor/linalg_layout.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+const out = input.normalized.stdout
+const mm = match(/linalg matmul_shape=\[2, 3, 5\] matmul_sum=([0-9.]+) linear_shape=\[2, 3, 2\] linear_sum=([0-9.]+)/, out)
+assert(Number(mm[1]) === 1380 && Number(mm[2]) === 552, `unexpected matmul/linear ${mm[0]}`)
+const mv = match(/linalg matvec_shape=\[3\] matvec_sum=([0-9.]+)/, out)
+assert(Number(mv[1]) === 30, `unexpected matvec ${mv[0]}`)
+const ln = match(/linalg layernorm_sum=([0-9.eE+-]+)/, out)
+assert(approx(Number(ln[1]), 0, 1e-4), `layer_norm rows should be zero-mean, got ${ln[1]}`)
+assert(out.includes('layout permute=[4, 2, 3] slice=[2, 3, 2] slice_sum=144 flatten=[2, 12] unsqueeze=[1, 2, 4, 3]'), 'unexpected layout results')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "shape_error"
+desc = "Incompatible broadcasting reports TensorDimensionMismatch with both shapes."
+kind = "behavior"
+case = "../../../cases/modules/tensor/shape_error.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes("Tensor shape mismatch in 'add': cannot broadcast [2, 3] with [4, 3]"), 'missing shape mismatch detail')
+assert(text.includes('RuntimeDiag::TensorDimensionMismatch'), 'missing TensorDimensionMismatch category')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "static_types"
+desc = "Refined tensor types: var bindings widen, branch joins unify, seeded random is reproducible."
+kind = "behavior"
+case = "../../../cases/modules/tensor/static_types.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.normalized.stdout.includes('static_types w_sum=5 pick=[3, 2] same_seed=true'), 'unexpected static type results')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "gemm_consistency"
+desc = "Blocked GEMM (odd sizes, K beyond one cache block, edge tiles) agrees with broadcast multiply-and-reduce."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gemm_consistency.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, match }) => {
+const found = match(/gemm_consistency total_abs_err=([0-9.eE+-]+) backend_known=true/, input.normalized.stdout)
+assert(Number(found[1]) < 0.05, `GEMM deviates from the reference product: total abs error ${found[1]}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "gc_tail_chain"
+desc = "Tensors in the root frame survive GC stress across a chain of distinct NodeVM tail calls (else-if ladder)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gc_tail_chain.cml"
+args = ["${case}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_contains = ["gc_tail_chain sum=22"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "struct_covariance"
+desc = "Structs, tuples, and arrays of precisely typed tensors are accepted where plain Tensor aggregates are declared."
+kind = "behavior"
+case = "../../../cases/modules/tensor/struct_covariance.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["covariance struct=5 array=8 tuple=5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "transcendentals"
+desc = "Vectorized exp/tanh/sigmoid/gelu/softmax: accurate ordinary values and IEEE-like saturation at the float range ends."
+kind = "behavior"
+case = "../../../cases/modules/tensor/transcendentals.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+const out = input.normalized.stdout
+const e = match(/exp (\S+) (\S+) (\S+) (\S+) (\S+) (\S+)/, out)
+assert(Number(e[1]) === 1 && approx(e[2], Math.E, 1e-6) && approx(e[3], 1 / Math.E, 1e-7), `exp values ${e[0]}`)
+assert(e[4] === 'inf' && Number(e[5]) === 0 && e[6] === 'true', `exp saturation ${e[0]}`)
+const t = match(/tanh (\S+) (\S+) (\S+) (\S+)/, out)
+assert(Number(t[1]) === 0 && approx(t[2], Math.tanh(0.5), 1e-7) && Number(t[3]) === 1 && Number(t[4]) === -1, `tanh ${t[0]}`)
+const s = match(/sigmoid (\S+) (\S+) (\S+)/, out)
+assert(Number(s[1]) === 0.5 && Number(s[2]) === 1 && Number(s[3]) === 0, `sigmoid ${s[0]}`)
+const g = match(/gelu (\S+) (\S+) (\S+)/, out)
+assert(Number(g[1]) === 0 && approx(g[2], 0.8411920, 1e-6) && Number(g[3]) === 0, `gelu ${g[0]}`)
+const p = match(/softmax (\S+) (\S+) (\S+) (\S+)/, out)
+assert(Number(p[1]) === 0.5 && Number(p[2]) === 0.5 && Number(p[3]) === 0 && Number(p[4]) === 0, `softmax ${p[0]}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "fuse_linear_reference"
+desc = "Reference results of the tensor::fuse patterns without the pass."
+kind = "behavior"
+case = "../../../cases/modules/tensor/fuse_linear.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["fuse a=0 c=-12.825000286102295 chained=-12.825000286102295 product=-12.625 d=-12.825000286102295 e=-2.625"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "fuse_linear_pass"
+desc = "tensor::fuse leaves every result unchanged, including chained patterns, a product with a second user, and a non-row bias."
+kind = "behavior"
+case = "../../../cases/modules/tensor/fuse_linear.cml"
+args = ["${case}", "tensor::fuse"]
+expect_exit = 0
+expect_stdout_contains = ["fuse a=0 c=-12.825000286102295 chained=-12.825000286102295 product=-12.625 d=-12.825000286102295 e=-2.625"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "fuse_linear_graph"
+desc = "tensor::fuse rewrites four matmul+add patterns and one relu pattern, and keeps the shared product unfused."
+kind = "behavior"
+case = "../../../cases/modules/tensor/fuse_linear.cml"
+args = ["${case}", "tensor::fuse", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (uri) => (out.match(new RegExp(`label="${uri}"`, 'g')) || []).length
+assert(count('tensor:matmul_add') === 4, `expected 4 matmul_add, got ${count('tensor:matmul_add')}`)
+assert(count('tensor:matmul_add_relu') === 1, `expected 1 matmul_add_relu, got ${count('tensor:matmul_add_relu')}`)
+assert(count('tensor:matmul') === 1 && count('tensor:add') === 1, 'the shared product and its add must stay unfused')
+assert(count('tensor:relu') === 0, 'the relu must be fused')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "static_shape_error"
+desc = "Shapes known from literals make an incompatible matmul a compile-time ArgumentsRejected error naming the conflict."
+kind = "behavior"
+case = "../../../cases/modules/tensor/static_shape_error.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes("Invalid call to 'matmul' with argument types <> (Tensor<float32, [2, 3]>, Tensor<float32, [4, 5]>): matmul inner dimensions differ: 3 vs 4."), 'missing compile-time conflict detail')
+assert(text.includes('SemanticDiag::ArgumentsRejected'), 'expected a semantic (compile-time) diagnostic')
+assert(!text.includes('unreachable'), 'nothing may run')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "runtime_shape_column.nvm"
+desc = "A run-time shape conflict is reported at the failing expression (line and column of `c @ b`), with both extents."
+kind = "negative"
+case = "../../../cases/modules/tensor/runtime_shape_column.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 14
+expect_output_contains = ["matmul inner dimensions differ: 3 vs 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "runtime_shape_column.fvm"
+desc = "FastVM maps the failing bytecode back to the same expression."
+kind = "negative"
+case = "../../../cases/modules/tensor/runtime_shape_column.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 14
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "reshape_view_gc.nvm"
+desc = "reshape shares its input's buffer: views that outlive their owners read the right elements while the collector copies the young generation and marks the heap at every safepoint (NodeVM)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/reshape_view_gc.cml"
+args = ["${case}", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["total 16380", "[      2.,       4.,       6.,       8.,      10.,      12.]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "reshape_view_gc.fvm"
+desc = "reshape shares its input's buffer: views that outlive their owners read the right elements while the collector copies the young generation and marks the heap at every safepoint (FastVM)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/reshape_view_gc.cml"
+args = ["${case}", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["total 16380", "[      2.,       4.,       6.,       8.,      10.,      12.]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "reshape_view_gc.jit"
+desc = "reshape shares its input's buffer: views that outlive their owners read the right elements while the collector copies the young generation and marks the heap at every safepoint (the JIT)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/reshape_view_gc.cml"
+args = ["${case}", "${run_jit}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["total 16380", "[      2.,       4.,       6.,       8.,      10.,      12.]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

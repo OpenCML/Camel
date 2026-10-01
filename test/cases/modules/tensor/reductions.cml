@@ -1,0 +1,22 @@
+/**
+ * Axis reductions with keepdims, full reductions, and softmax/log_softmax along an axis.
+ */
+module reductions
+
+import {
+    reshape, sum, mean, max, argmax, softmax, log_softmax, exp, shape
+} from tensor
+
+func main(): int sync {
+    let t = reshape([1.0, 5.0, 2.0, 4.0, 3.0, 6.0], [2, 3])
+    let rows = sum(t, 1)
+    let cols = sum(t, 0, true)
+    let colMax = max(t, 0)
+    let best = argmax(t, -1)
+    'reduce rows={} cols_shape={} mean={}'->format<sum(rows), shape(cols), mean(t)>->println
+    'reduce colmax_sum={} argmax_sum={} mean_axis_sum={}'->format<sum(colMax), sum(best), sum(mean(t, 1))>->println
+    let p = softmax(t, 0)
+    let lp = log_softmax(t)
+    'reduce softmax0_sum={} logsoftmax_expsum={}'->format<sum(p), sum(exp(lp))>->println
+    return 0
+}

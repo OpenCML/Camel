@@ -280,6 +280,10 @@ class CSTDumpVisitor : public OpenCMLVisitor {
         return dumpNode(context, "AccessExpr");
     };
 
+    std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
+        return dumpNode(context, "MemberAccess");
+    };
+
     std::any visitStructData(OpenCMLParser::StructDataContext *context) {
         return dumpNode(context, "StructData");
     };

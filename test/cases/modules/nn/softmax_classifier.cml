@@ -1,21 +1,17 @@
 /**
- * Tiny helper-based classifier trained with fused softmax cross entropy.
+ * Tiny helper-based classifier trained with fused softmax cross entropy: value_and_grad of the
+ * loss differentiates through nested with-context helpers into a Classifier-shaped gradient,
+ * one sgd step lowers the loss, and a recursive train loop repeats the step.
  */
 module softmax_classifier
 
-import {
-    Tensor,
-    reshape
-} from tensor
-
-import {
-    Parameter,
-    apply_gradients, grad, parameter, softmax_cross_entropy, value
-} from nn
+import { grad, value_and_grad } from autodiff
+import { Tensor, reshape, zeros } from tensor
+import { sgd, softmax_cross_entropy } from nn
 
 type Linear = {
-    weight: Parameter,
-    bias: Parameter
+    weight: Tensor,
+    bias: Tensor
 }
 
 type Classifier = {
@@ -24,7 +20,7 @@ type Classifier = {
 
 with <layer: Linear>
 func linear(x: Tensor): Tensor {
-    return (x @ value(layer.weight)) + value(layer.bias)
+    return (x @ layer.weight) + layer.bias
 }
 
 with <model: Classifier>
@@ -32,44 +28,45 @@ func logits(x: Tensor): Tensor {
     return x->linear<model.head>
 }
 
-with <target: Tensor>
-func classifier_loss(logits_value: Tensor): float {
+func classifier_loss(logits_value: Tensor, target: Tensor): float {
     return softmax_cross_entropy(logits_value, target)
 }
 
-with <model: Classifier, target: Tensor>
-func model_loss(x: Tensor): float {
+with <model: Classifier>
+func model_loss(x: Tensor, target: Tensor): float {
     let pred = x->logits<model>
-    return pred->classifier_loss<target>
+    return classifier_loss(pred, target)
+}
+
+func init(): Classifier {
+    return {
+        head: {
+            weight: reshape([0.1, 0.1, 0.1, 0.1], [2, 2]),
+            bias: zeros([2])
+        }
+    }
+}
+
+func train(model: Classifier, x: Tensor, target: Tensor, steps: int): Classifier {
+    return if steps == 0 then model else train(sgd(model, grad(model_loss)<model>(x, target), 0.5), x, target, steps - 1)
 }
 
 func main(): int sync {
-    var model = {
-        head: {
-            weight: parameter(reshape([0.1, 0.1, 0.1, 0.1], [2, 2])),
-            bias: parameter(reshape([0.0, 0.0], [1, 2]))
-        }
-    }
+    let model = init()
     let x = reshape([1.0, 0.0, 0.0, 1.0], [2, 2])
     let target = reshape([1.0, 0.0, 0.0, 1.0], [2, 2])
 
-    let step = apply_gradients(<model: Classifier, target: Tensor> (x: Tensor): float => {
-        let pred = x->logits<model>
-        return pred->classifier_loss<target>
-    })
+    let before = model_loss<model>(x, target)
+    let vg = value_and_grad(model_loss)<model>(x, target)
+    let stepped = sgd(model, vg.1, 0.5)
+    let after = model_loss<stepped>(x, target)
+    let trained = train(model, x, target, 10)
+    let after_train = model_loss<trained>(x, target)
 
-    let before = x->model_loss<model, target>
-    let step_loss = wait step<model, target>(x, 0.5)
-    let after = x->model_loss<model, target>
-    let weight = value(model.head.weight)
-    let bias = value(model.head.bias)
-    let weight_grad = grad(model.head.weight)
-    let bias_grad = grad(model.head.bias)
-
-    'softmax_classifier metrics before={} step={} after={}'->format<before, step_loss, after>->println
-    'softmax_classifier weight={}'->format<weight>->println
-    'softmax_classifier bias={}'->format<bias>->println
-    'softmax_classifier weight_grad={}'->format<weight_grad>->println
-    'softmax_classifier bias_grad={}'->format<bias_grad>->println
+    'softmax_classifier metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
+    'softmax_classifier weight={}'->format<stepped.head.weight>->println
+    'softmax_classifier bias={}'->format<stepped.head.bias>->println
+    'softmax_classifier weight_grad={}'->format<vg.1.head.weight>->println
+    'softmax_classifier bias_grad={}'->format<vg.1.head.bias>->println
     return 0
 }

@@ -1,0 +1,13 @@
+/**
+ * Shape diagnostic of `mean_axis`: statically known shapes conflict, so compilation fails at the
+ * call with both shapes in the reason.
+ */
+module shape_diag_mean_axis
+
+import { zeros, mean } from tensor
+
+func main(): int sync {
+    let r = mean(zeros([2, 3]), -3)
+    println('unreachable')
+    return 0
+}

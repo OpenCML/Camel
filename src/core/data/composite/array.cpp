@@ -47,8 +47,14 @@ ArrayDataFactory &ArrayDataFactory::add(const data_ptr_t &e) {
     } else if (impl_->elemType->code() != TypeCode::Ref && e->type()->code() == TypeCode::Ref) {
         // Keep the known concrete element type and only mark this position as a deferred reference.
     } else if (!impl_->elemType->assignableFrom(e->type())) {
-        throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
-            .commit("Array", e->type()->toString(), impl_->elemType->toString());
+        // Widen to the least common element type when one exists (e.g. tensors whose static
+        // shapes differ); otherwise the elements are incompatible.
+        Type *joined = impl_->elemType->unify(e->type());
+        if (!joined) {
+            throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
+                .commit("Array", e->type()->toString(), impl_->elemType->toString());
+        }
+        impl_->elemType = joined;
     }
     if (e->type()->code() == TypeCode::Ref) {
         impl_->holeIndices.push_back(impl_->data.size());

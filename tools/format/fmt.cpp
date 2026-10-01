@@ -1028,7 +1028,7 @@ any Formatter::visitCompExpr(OpenCMLParser::CompExprContext *context) {
 
 /*
 annoExpr
-    : accessExpr ({isAdjacent()}? (indices | parentArgues | angledValues | '!'))*
+    : accessExpr (({isAdjacent()}? (indices | parentArgues | angledValues | '!')) | memberAccess)*
     ;
 */
 any Formatter::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
@@ -1064,6 +1064,15 @@ any Formatter::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
         }
     }
     return result;
+}
+
+/*
+memberAccess
+    : '.' (IDENTIFIER | INTEGER)
+    ;
+*/
+any Formatter::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
+    return "." + context->children[1]->getText();
 }
 
 /*

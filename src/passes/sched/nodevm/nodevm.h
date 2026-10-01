@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: May. 06, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,9 +58,14 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     std::vector<std::unique_ptr<NodeVMCallLayoutCache>> callLayoutCaches_;
     std::vector<runtime_data_idx_t> operIndices_;
     std::vector<slot_t> callArgScratch_;
-    bool gcSafepointsEnabled_ = false;
 
     slot_t call(camel::runtime::GCGraph *runtimeGraph, ctx::Frame *rootFrame);
+    // Tail-call frame management (see the comment above call() in nodevm.cpp).
+    ctx::Frame *tailCallFrame(
+        camel::runtime::GCGraph *target, ctx::Frame *rootFrame, ctx::Frame *source,
+        ctx::Frame *&tailLow, ctx::Frame *&tailHigh, const NodeVMCallLayoutCache *layout,
+        std::span<const runtime_data_idx_t> argSlots);
+    void releaseTailFrames(ctx::Frame *&tailLow, ctx::Frame *&tailHigh);
     std::span<const camel::runtime::gc_node_ref_t> buildTopoNodes(camel::runtime::GCGraph *graph);
     std::span<const camel::runtime::gc_node_ref_t> topoNodesFor(camel::runtime::GCGraph *graph);
 

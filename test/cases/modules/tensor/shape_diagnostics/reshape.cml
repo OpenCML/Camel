@@ -1,0 +1,13 @@
+/**
+ * Shape diagnostic of `reshape`: statically known shapes conflict, so compilation fails at the
+ * call with both shapes in the reason.
+ */
+module shape_diag_reshape
+
+import { zeros, reshape } from tensor
+
+func main(): int sync {
+    let r = reshape(zeros([2, 3]), [4, 2])
+    println('unreachable')
+    return 0
+}

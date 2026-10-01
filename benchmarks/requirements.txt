@@ -1,0 +1,9 @@
+# Reference-side dependencies of the benchmark harness (CPU inference only).
+# Versions are pinned so published measurements can be reproduced.
+numpy==2.4.6
+torch==2.14.0
+tensorflow-cpu==2.21.0
+onnx==1.23.0
+onnxruntime==1.30.0
+tf2onnx==1.17.0
+psutil==7.2.2

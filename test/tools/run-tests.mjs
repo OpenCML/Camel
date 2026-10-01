@@ -19,6 +19,8 @@ const IS_WINDOWS = process.platform === 'win32'
 const CAMEL_EXE = path.join(REPO_ROOT, 'out', 'latest', 'bin', IS_WINDOWS ? 'camel.exe' : 'camel')
 const TOOL_EXES = {
     camel: CAMEL_EXE,
+    python: null, // resolved on use (pythonExecutable)
+    node: process.execPath,
     'camel-format': path.join(
         REPO_ROOT,
         'out',
@@ -31,6 +33,7 @@ const COLORS = {
     green: '\x1b[32m',
     red: '\x1b[31m',
     cyan: '\x1b[36m',
+    yellow: '\x1b[33m',
     reset: '\x1b[0m',
 }
 
@@ -75,9 +78,24 @@ function parseArgs(argv) {
     return options
 }
 
+/**
+ * The Python interpreter for test preconditions and `tool = "python"` tests: the active virtual
+ * environment's, else the benchmark environment's (benchmarks/.venv), else PATH's.
+ */
+function pythonExecutable() {
+    const venvPython = (venv) =>
+        IS_WINDOWS ? path.join(venv, 'Scripts', 'python.exe') : path.join(venv, 'bin', 'python')
+    for (const venv of [process.env.VIRTUAL_ENV, path.join(REPO_ROOT, 'benchmarks', '.venv')]) {
+        if (venv && fs.existsSync(venvPython(venv))) return venvPython(venv)
+    }
+    return IS_WINDOWS ? 'python' : 'python3'
+}
+
 function loadVars() {
-    if (!fs.existsSync(VARS_PATH)) return {}
-    return parseTomlFile(VARS_PATH)
+    // Built-in variables; test/vars.toml may override them.
+    const builtins = { python: pythonExecutable() }
+    if (!fs.existsSync(VARS_PATH)) return builtins
+    return { ...builtins, ...parseTomlFile(VARS_PATH) }
 }
 
 function normalizePathText(text) {
@@ -192,7 +210,9 @@ function printPlanHeader(plan) {
 function printStatusLine(status, name, metric = '') {
     const label = status === 'pass'
         ? `${COLORS.green}[PASS]${COLORS.reset}`
-        : `${COLORS.red}[FAIL]${COLORS.reset}`
+        : status === 'skip'
+            ? `${COLORS.yellow}[SKIP]${COLORS.reset}`
+            : `${COLORS.red}[FAIL]${COLORS.reset}`
     const left = `${label} ${name}`
     if (!metric) {
         console.log(left)
@@ -215,9 +235,34 @@ function printDetailLines(lines) {
 }
 
 function printRunSummary(summary) {
-    const total = summary.pass + summary.fail
+    const total = summary.pass + summary.fail + summary.skip
+    const skipped = summary.skip > 0 ? `, skip: ${summary.skip}` : ''
     console.log('')
-    console.log(`${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}`)
+    console.log(`${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}${skipped}`)
+}
+
+/**
+ * A test's precondition: `skip_unless` is a command (same variable expansion as `args`) run from
+ * the repository root before the test. A non-zero exit skips the test, reporting the command's
+ * output as the reason; the test is then neither passed nor failed. Use it only for conditions
+ * outside the code under test, such as network access for a dataset download.
+ */
+function checkPrecondition(test, sharedVars) {
+    if (!test.skip_unless || test.skip_unless.length === 0) {
+        return null
+    }
+    const casePath = path.resolve(path.dirname(test.__planPath), test.case)
+    const [cmd, ...args] = expandArgs(test.skip_unless, { ...sharedVars, case: casePath })
+    const proc = spawnSync(cmd, args, {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+        timeout: test.skip_unless_timeout_ms || 120000,
+    })
+    if (proc.status === 0) {
+        return null
+    }
+    const detail = `${proc.stdout || ''}${proc.stderr || ''}`.trim() || proc.error?.message || `exit ${proc.status}`
+    return `precondition not met (${test.skip_unless.join(' ')}): ${detail}`
 }
 
 function sanitizeSegment(value) {
@@ -454,6 +499,16 @@ function validateTest(test, result, context) {
             failures.push(`stderr does not contain '${needle}'`)
         }
     }
+    for (const needle of test.expect_output_contains || []) {
+        if (!result.normalized.output.includes(needle)) {
+            failures.push(`output does not contain '${needle}'`)
+        }
+    }
+    for (const needle of test.expect_output_not_contains || []) {
+        if (result.normalized.output.includes(needle)) {
+            failures.push(`output contains '${needle}'`)
+        }
+    }
     if (
         test.expect_diagnostic_name
         || test.expect_diagnostic_code
@@ -530,7 +585,7 @@ function validateTest(test, result, context) {
 function runOneTest(test, sharedVars, logContext) {
     const casePath = path.resolve(path.dirname(test.__planPath), test.case)
     const toolName = test.tool || 'camel'
-    const toolExe = TOOL_EXES[toolName]
+    const toolExe = toolName === 'python' ? pythonExecutable() : TOOL_EXES[toolName]
     if (!toolExe) {
         throw new Error(`unknown test tool: ${toolName}`)
     }
@@ -681,12 +736,19 @@ function main() {
     console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable: ${CAMEL_EXE}`)
     console.log(`${COLORS.cyan}[INFO]${COLORS.reset} discovered plans: ${plans.length}`)
 
-    const summary = { pass: 0, fail: 0 }
+    const summary = { pass: 0, fail: 0, skip: 0 }
     const completed = new Map()
 
     for (const plan of plans) {
         printPlanHeader(plan)
         for (const test of plan.tests) {
+            const skipReason = checkPrecondition(test, sharedVars)
+            if (skipReason) {
+                summary.skip++
+                printStatusLine('skip', test.name)
+                printDetailLines([skipReason])
+                continue
+            }
             const result = runOneTest(test, sharedVars, { options, completed })
             completed.set(test.name, result)
             summary[result.status]++

@@ -28,6 +28,8 @@
 | [19_tail_call_optimization.md](19_tail_call_optimization.md) | 尾调用优化（TCO）：�?NodeVM 为主的机制说明（拓扑、判据、帧与尾调路径）；附录含 FastVM 对照 |
 | [20_macro_rewrite_refactor_plan.md](20_macro_rewrite_refactor_plan.md) | `std::macro` 系统性重构方案：重写工作区、共享执行语义与迁移顺序 |
 | [21_gcgraph_runtime_bridge.md](21_gcgraph_runtime_bridge.md) | `GCGraph` ����ʱ�ŽӲ㣺compile/runtime graph �ֲ㡢materialization ����������̬ |
+| [25_tensor_stack_and_onnx_export.md](25_tensor_stack_and_onnx_export.md) | Tensor stack design: typed kernels, single operator registry (OpDef), refined TensorType, graph optimization, ONNX export, benchmark harness |
+| [26_autodiff_as_graph_rewrite.md](26_autodiff_as_graph_rewrite.md) | Automatic differentiation as graph rewriting: pullback transform, derivative registry, tree models and optimizers |
 
 ## 相关文档（docs 目录�?
 

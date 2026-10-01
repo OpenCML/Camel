@@ -1,0 +1,33 @@
+/**
+ * onnx.export_model folds everything that does not depend on the model input:
+ * captured weights become initializers, shape arithmetic and the constant-driven
+ * recursion are evaluated at export time (three unrolled steps), and only the
+ * tensor computation on the input is emitted.
+ */
+module export_fold
+
+import { Tensor, reshape, relu, shape } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+type Layer = { w: Tensor, b: Tensor }
+
+/// Applies the layer `steps - t` times; the step count is known at export time.
+with <l: Layer>
+func unroll(t: int, steps: int, h: Tensor): Tensor {
+    return if t >= steps then h else unroll<l>(t + 1, steps, relu(h @ l.w + l.b) * 2)
+}
+
+with <l: Layer>
+func forward(x: Tensor): Tensor {
+    let dims = shape(x)
+    return reshape(unroll<l>(0, 3, x), [dims[0] * dims[1]])
+}
+
+func main(): int sync {
+    let l = { w: reshape([1.0, 0.0, 0.0, 1.0], [2, 2]), b: reshape([0.5, -0.5], [2]) }
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [3, 2])
+    export_model((x: Tensor): Tensor => forward<l>(x), x, get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

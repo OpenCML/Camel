@@ -25,6 +25,9 @@
 
 struct GraphVizDumpConfig {
     bool readableOnly = false;
+    /// Marks nodes with their boundary roles (camel/runtime/node_roles.h): a `role` attribute,
+    /// and in the styled dump a fill color per role and a legend.
+    bool annotateRoles = false;
 };
 
 class GraphVizDumpPass : public RuntimeGraphTranslatePass {
@@ -33,6 +36,8 @@ class GraphVizDumpPass : public RuntimeGraphTranslatePass {
     std::unordered_map<std::string, size_t> ptrCnt_;
     std::unordered_map<std::string, std::unordered_map<uintptr_t, size_t>> ptrsMap_;
     std::unordered_set<camel::runtime::GCGraph *> visitedGraphs_;
+    // Roles seen so far, in first-seen order, for the legend.
+    std::vector<std::pair<std::string, std::pair<std::string, std::string>>> rolesSeen_;
 
     size_t depth_ = 0;
     std::string baseIndent_;

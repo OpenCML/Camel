@@ -1,3 +1,12 @@
+[0.2.0]
+New Features:
+- 重构 Tensor 算子与内核，优化矩阵和向量计算。
+- 引入静态图自动求导、高阶梯度、自定义导数及参数树优化器。
+- 新增图优化、ONNX 函数与训练步导出。
+
+Technical Notes:
+- 完善运行时图编译、VM/JIT、诊断及验证工具。
+
 [0.1.23]
 New Features:
 - 新增 refinement 类型统一与拓宽接口。

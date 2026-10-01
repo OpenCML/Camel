@@ -1,0 +1,31 @@
+/**
+ * Strings created inside a module (sys.get_env) compare by content with string
+ * literals, and a branch on that comparison selects the right arm.
+ */
+module string_equality
+
+import { get_env } from sys
+
+func unsetArm(): int sync {
+    println('arm unset')
+    return 1
+}
+
+func setArm(): int sync {
+    println('arm set')
+    return 2
+}
+
+func pick(value: string): int {
+    return if value == '' then unsetArm() else setArm()
+}
+
+func main(): int sync {
+    let unset = get_env('CAMEL_TEST_SURELY_UNSET_VARIABLE')
+    let set = get_env('CAMEL_TEST_STRING_EQ')
+    'eq_empty={} ne_empty={} eq_value={}'->format<unset == '', unset != '', set == 'abc'>->println
+    let a = pick(unset)
+    let b = pick(set)
+    'picked={}{}'->format<a, b>->println
+    return 0
+}

@@ -1,0 +1,20 @@
+/**
+ * Recursion whose depth depends on the model input cannot be unrolled at
+ * export time; the leftover call is reported at its source position.
+ */
+module export_dynamic_recursion
+
+import { Tensor, reshape, sum } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func shrink(t: Tensor): Tensor {
+    return if sum(t) > 1.0 then shrink(t * 0.5) else t
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    export_model((t: Tensor): Tensor => shrink(t), x, get_env('ONNX_OUT'))
+    println('unreachable')
+    return 0
+}

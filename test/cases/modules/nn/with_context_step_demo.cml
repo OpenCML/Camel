@@ -1,56 +1,48 @@
 /**
- * Demonstrates a with-context model whose Parameter is updated in place by a macro-generated step.
+ * Demonstrates a with-context Linear model trained functionally: value_and_grad of a loss that
+ * calls a with-context helper yields the loss plus a Linear-shaped gradient, and one sgd step
+ * returns the updated Linear.
  */
 module with_context_step_demo
 
-import {
-    Tensor,
-    ones, shape, sum, zeros
-} from tensor
-
-import {
-    Parameter,
-    apply_gradients, grad, parameter, value
-} from nn
+import { value_and_grad } from autodiff
+import { Tensor, ones, shape, sum, zeros } from tensor
+import { sgd } from nn
 
 type Linear = {
-    weight: Parameter
+    weight: Tensor
 }
 
 with <layer: Linear>
 func linear(x: Tensor): Tensor {
-    return x @ value(layer.weight)
+    return x @ layer.weight
 }
 
-with <layer: Linear, y: Tensor>
-func mse_loss(x: Tensor): float {
+with <layer: Linear>
+func mse_loss(x: Tensor, y: Tensor): float {
     let pred = x->linear<layer>
     let errors = pred - y
     let squared = errors * errors
     return sum(squared) / float(shape(x)[0])
 }
 
+func init(): Linear {
+    return { weight: zeros([2, 1]) }
+}
+
 func main(): int sync {
-    var layer = {
-        weight: parameter(zeros([2, 1]))
-    }
+    let layer = init()
     let X = ones([4, 2])
     let y = ones([4, 1])
 
-    let step = apply_gradients(<layer: Linear, y: Tensor> (x: Tensor): float => {
-        let pred = x @ value(layer.weight)
-        let errors = pred - y
-        let squared = errors * errors
-        return sum(squared) / float(shape(x)[0])
-    })
-    let before = X->mse_loss<layer, y>
-    let step_loss = wait step<layer, y>(X, 0.01)
-    let after = X->mse_loss<layer, y>
-    let trained_weight = value(layer.weight)
-    let trained_grad = grad(layer.weight)
+    let before = mse_loss<layer>(X, y)
+    let vg = value_and_grad(mse_loss)<layer>(X, y)
+    let gradient = vg.1
+    let trained = sgd(layer, gradient, 0.01)
+    let after = mse_loss<trained>(X, y)
 
-    'with_context_step_demo metrics before={} step={} after={}'->format<before, step_loss, after>->println
-    'with_context_step_demo weight={}'->format<trained_weight>->println
-    'with_context_step_demo grad={}'->format<trained_grad>->println
+    'with_context_step_demo metrics before={} step={} after={}'->format<before, vg.0, after>->println
+    'with_context_step_demo weight={}'->format<trained.weight>->println
+    'with_context_step_demo grad={}'->format<gradient.weight>->println
     return 0
 }

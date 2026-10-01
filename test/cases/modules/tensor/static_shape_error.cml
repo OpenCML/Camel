@@ -1,0 +1,15 @@
+/**
+ * Both operand shapes are known statically, so the incompatible broadcast is
+ * rejected at compile time with the conflict as the reason.
+ */
+module static_shape_error
+
+import { Tensor, zeros, matmul } from tensor
+
+func main(): int sync {
+    let a = zeros([2, 3])
+    let b = zeros([4, 5])
+    let c = matmul(a, b)
+    println('unreachable')
+    return 0
+}

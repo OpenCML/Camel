@@ -1,100 +1,90 @@
 /**
- * GRU-lite fixed unroll trained through repeated helper calls.
+ * GRU-lite fixed unroll trained with autodiff through repeated with-context helper calls:
+ * value_and_grad of the sequence loss gives a GruLite-shaped gradient, one sgd step lowers the
+ * loss, and a recursive train loop repeats the step.
  */
 module gru_lite
 
-import {
-    Tensor,
-    full, ones, shape, sigmoid, sum, tanh, zeros
-} from tensor
-
-import {
-    Parameter,
-    apply_gradients, grad, parameter, value
-} from nn
+import { grad, value_and_grad } from autodiff
+import { Tensor, full, ones, shape, sigmoid, sum, tanh, zeros } from tensor
+import { sgd } from nn
 
 type GruLite = {
-    wxz: Parameter,
-    whz: Parameter,
-    bz: Parameter,
-    wxn: Parameter,
-    whn: Parameter,
-    bn: Parameter,
-    why: Parameter,
-    by: Parameter
+    wxz: Tensor,
+    whz: Tensor,
+    bz: Tensor,
+    wxn: Tensor,
+    whn: Tensor,
+    bn: Tensor,
+    why: Tensor,
+    by: Tensor
 }
 
 with <model: GruLite>
 func gru_cell(x: Tensor, h: Tensor): Tensor {
-    let z = sigmoid((x @ value(model.wxz)) + (h @ value(model.whz)) + value(model.bz))
-    let n = tanh((x @ value(model.wxn)) + (h @ value(model.whn)) + value(model.bn))
+    let z = sigmoid((x @ model.wxz) + (h @ model.whz) + model.bz)
+    let n = tanh((x @ model.wxn) + (h @ model.whn) + model.bn)
     return (z * n) + ((ones([1, 2]) - z) * h)
 }
 
 with <model: GruLite>
 func predict(h: Tensor): Tensor {
-    return (h @ value(model.why)) + value(model.by)
+    return (h @ model.why) + model.by
 }
 
-with <target: Tensor>
-func mse_loss(pred: Tensor): float {
+func mse_loss(pred: Tensor, target: Tensor): float {
     let diff = pred - target
     let squared = diff * diff
     return sum(squared) / float(shape(pred)[0])
 }
 
-with <model: GruLite, x1: Tensor, target: Tensor>
-func sequence_loss(x0: Tensor): float {
+with <model: GruLite>
+func sequence_loss(x0: Tensor, x1: Tensor, target: Tensor): float {
     let h0 = zeros([1, 2])
     let h1 = gru_cell<model>(x0, h0)
     let h2 = gru_cell<model>(x1, h1)
     let pred = predict<model>(h2)
-    return pred->mse_loss<target>
+    return mse_loss(pred, target)
+}
+
+func init(): GruLite {
+    return {
+        wxz: full([2, 2], 0.1),
+        whz: full([2, 2], 0.1),
+        bz: zeros([2]),
+        wxn: full([2, 2], 0.1),
+        whn: full([2, 2], 0.1),
+        bn: zeros([2]),
+        why: full([2, 1], 0.1),
+        by: zeros([1])
+    }
+}
+
+func train(model: GruLite, x0: Tensor, x1: Tensor, target: Tensor, steps: int): GruLite {
+    return if steps == 0 then model else train(sgd(model, grad(sequence_loss)<model>(x0, x1, target), 0.05), x0, x1, target, steps - 1)
 }
 
 func main(): int sync {
-    var model = {
-        wxz: parameter(full([2, 2], 0.1)),
-        whz: parameter(full([2, 2], 0.1)),
-        bz: parameter(zeros([1, 2])),
-        wxn: parameter(full([2, 2], 0.1)),
-        whn: parameter(full([2, 2], 0.1)),
-        bn: parameter(zeros([1, 2])),
-        why: parameter(full([2, 1], 0.1)),
-        by: parameter(zeros([1, 1]))
-    }
+    let model = init()
     let x0 = full([1, 2], 1.0)
     let x1 = full([1, 2], 0.5)
     let target = full([1, 1], 1.0)
 
-    let step = apply_gradients(<model: GruLite, x1: Tensor, target: Tensor> (x0: Tensor): float => {
-        let h0 = zeros([1, 2])
-        let h1 = gru_cell<model>(x0, h0)
-        let h2 = gru_cell<model>(x1, h1)
-        let pred = predict<model>(h2)
-        return pred->mse_loss<target>
-    })
+    let before = sequence_loss<model>(x0, x1, target)
+    let vg = value_and_grad(sequence_loss)<model>(x0, x1, target)
+    let stepped = sgd(model, vg.1, 0.05)
+    let after = sequence_loss<stepped>(x0, x1, target)
+    let trained = train(model, x0, x1, target, 10)
+    let after_train = sequence_loss<trained>(x0, x1, target)
 
-    let before = x0->sequence_loss<model, x1, target>
-    let step_loss = wait step<model, x1, target>(x0, 0.05)
-    let after = x0->sequence_loss<model, x1, target>
-    let wxz = value(model.wxz)
-    let whz = value(model.whz)
-    let wxn = value(model.wxn)
-    let whn = value(model.whn)
-    let wxz_grad = grad(model.wxz)
-    let whz_grad = grad(model.whz)
-    let wxn_grad = grad(model.wxn)
-    let whn_grad = grad(model.whn)
-
-    'gru_lite metrics before={} step={} after={}'->format<before, step_loss, after>->println
-    'gru_lite wxz={}'->format<wxz>->println
-    'gru_lite whz={}'->format<whz>->println
-    'gru_lite wxn={}'->format<wxn>->println
-    'gru_lite whn={}'->format<whn>->println
-    'gru_lite wxz_grad={}'->format<wxz_grad>->println
-    'gru_lite whz_grad={}'->format<whz_grad>->println
-    'gru_lite wxn_grad={}'->format<wxn_grad>->println
-    'gru_lite whn_grad={}'->format<whn_grad>->println
+    'gru_lite metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
+    'gru_lite wxz={}'->format<stepped.wxz>->println
+    'gru_lite whz={}'->format<stepped.whz>->println
+    'gru_lite wxn={}'->format<stepped.wxn>->println
+    'gru_lite whn={}'->format<stepped.whn>->println
+    'gru_lite wxz_grad={}'->format<vg.1.wxz>->println
+    'gru_lite whz_grad={}'->format<vg.1.whz>->println
+    'gru_lite wxn_grad={}'->format<vg.1.wxn>->println
+    'gru_lite whn_grad={}'->format<vg.1.whn>->println
     return 0
 }

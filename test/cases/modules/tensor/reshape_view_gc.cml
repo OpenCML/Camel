@@ -1,0 +1,31 @@
+/**
+ * reshape shares its input's buffer. The views here outlive every other
+ * reference to their owners, and the loop runs collections (young-generation
+ * copying and full marking) in between, so a view whose owner was freed or
+ * moved without it would print different sums.
+ */
+module reshape_view_gc
+
+import { Tensor, reshape, flatten, unsqueeze, new, sum, concat } from tensor
+
+// A fresh owner every call: only the returned view keeps it alive.
+func make_view(i: int): Tensor {
+    let base = new([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]) * float(i)
+    return unsqueeze(reshape(flatten(reshape(base, [3, 2])), [6]), 0)
+}
+
+sync func loop(i: int, n: int, acc: Tensor): Tensor {
+    return if i >= n then acc else sync {
+        let v = make_view(i)
+        // A view of a view reads the same owner.
+        let w = reshape(v, [2, 3])
+        return loop(i + 1, n, concat(acc, reshape(w, [1, 6]), 0))
+    }
+}
+
+func main(): int sync {
+    let rows = loop(1, 40, make_view(0))
+    println('rows {} total {}'->format<rows, sum(rows)>)
+    println('last {}'->format<reshape(rows, [240])>)
+    return 0
+}

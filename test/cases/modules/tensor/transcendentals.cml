@@ -1,0 +1,22 @@
+/**
+ * Vectorized exp/tanh/sigmoid/gelu/softmax kernels: accuracy on ordinary
+ * values and IEEE-like saturation at the ends of the float range.
+ */
+module transcendentals
+
+import { Tensor, reshape, exp, tanh, sigmoid, gelu, softmax } from tensor
+
+func main(): int sync {
+    let x = reshape([0.0, 1.0, -1.0, 0.5, 100.0, -100.0, 88.5, -87.0], [8])
+    let e = exp(x)
+    'exp {} {} {} {} {} {}'->format<e[0], e[1], e[2], e[4], e[5], e[6] > 1.0e38>->println
+    let t = tanh(x)
+    'tanh {} {} {} {}'->format<t[0], t[3], t[4], t[5]>->println
+    let s = sigmoid(x)
+    'sigmoid {} {} {}'->format<s[0], s[4], s[5]>->println
+    let g = gelu(x)
+    'gelu {} {} {}'->format<g[0], g[1], g[5]>->println
+    let p = softmax(reshape([1000.0, 1000.0, -1000.0, 0.0], [4]))
+    'softmax {} {} {} {}'->format<p[0], p[1], p[2], p[3]>->println
+    return 0
+}

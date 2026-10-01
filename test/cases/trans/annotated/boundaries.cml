@@ -1,0 +1,20 @@
+/**
+ * One of each boundary role for the annotated dump (std::agir, std::argir):
+ * `t[0]` and `t[1] * 2.0` cross between tensors and host numbers (scalar
+ * boundary), the if-then-else joins two arms of one type (branch contract),
+ * `println` is an effect, and `format` has no ONNX lowering (export capability).
+ */
+module boundaries
+
+import { Tensor, reshape, relu } from tensor
+import { export_model } from onnx
+
+func gate(t: Tensor): Tensor {
+    return if t[0] > 0.5 then relu(t) else t * (t[1] * 2.0)
+}
+
+func main(): int sync {
+    let y = gate(reshape([1.0, -2.0, 3.0, 0.5], [4]))
+    'gate={}'->format<y[0]>->println
+    return 0
+}

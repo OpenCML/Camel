@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: May. 24, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,6 +49,8 @@ GenerationalAllocatorWithGC::GenerationalAllocatorWithGC(const Config &config)
       elderGenSpace_(config.elderGenSize, "auto.elder"), largeObjSpace_("auto.large"),
       promotionAgeThreshold_(config.promotionAgeThreshold),
       largeObjThreshold_(config.largeObjThreshold),
+      largeObjMinBudget_(config.largeObjCollectionBudget),
+      largeObjBudget_(config.largeObjCollectionBudget),
       minorGCTriggerRatio_(config.minorGCTriggerRatio),
       majorGCTriggerRatio_(config.majorGCTriggerRatio),
       enableYoungGenCopying_(config.enableYoungGenCopying) {}
@@ -335,6 +337,12 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
         auto *header = headerOf(ptr);
         header->setRegion(AllocRegion::LargeObj);
         objectTypes_.erase(header);
+        // Large objects never exhaust a space, so pace their reclamation by volume:
+        // once the budget is spent, ask for a major collection at the next safepoint.
+        largeBytesSinceSweep_ += payloadSize;
+        if (largeBytesSinceSweep_ >= largeObjBudget_) {
+            requestCollectionAtSafepointUnlocked(CollectionKind::Major, "large object budget");
+        }
         return ptr;
     }
 
@@ -635,15 +643,14 @@ GenerationalAllocatorWithGC::collectYoungReferenceEdges(
             const type::Type *refType,
             const rtdata::RefTraceInfo &info) -> rtdata::Object * {
             if (ref && inYoungGenSpace(autoHeaderForPayload(ref))) {
-                edges.push_back(
-                    RememberedEdge{
-                        .ownerHeader = ownerHeader,
-                        .owner       = object,
-                        .ownerType   = objectType,
-                        .target      = ref,
-                        .slotType    = refType,
-                        .info        = info,
-                    });
+                edges.push_back(RememberedEdge{
+                    .ownerHeader = ownerHeader,
+                    .owner       = object,
+                    .ownerType   = objectType,
+                    .target      = ref,
+                    .slotType    = refType,
+                    .info        = info,
+                });
             }
             return ref;
         },
@@ -929,6 +936,14 @@ void GenerationalAllocatorWithGC::sweepLargeObjects() {
         objectTypes_.erase(header);
     }
     largeObjSpace_.freeBulk(unreachable);
+
+    // The next budget scales with the surviving large-object volume, so the
+    // amortized sweep cost stays proportional to allocation.
+    size_t liveBytes = 0;
+    largeObjSpace_.iterateAllocated(
+        [&liveBytes](ObjectHeader *header) { liveBytes += header->size(); });
+    largeBytesSinceSweep_ = 0;
+    largeObjBudget_       = std::max(largeObjMinBudget_, liveBytes);
 }
 
 } // namespace camel::core::mm

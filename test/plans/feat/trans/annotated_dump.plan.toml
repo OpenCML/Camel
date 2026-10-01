@@ -1,0 +1,30 @@
+id = "trans.annotated_dump"
+order = 250
+tier = "feat"
+tags = ["feat", "trans", "dump"]
+
+[[tests]]
+name = "boundaries.argir"
+desc = "std::argir marks each boundary role through the node-role registry: scalar boundaries, the branch contract, effects and operators without an ONNX lowering, plus a legend."
+kind = "snapshot"
+case = "../../../cases/trans/annotated/boundaries.cml"
+args = ["${case}", "std::argir"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/boundaries.argir.dot"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "boundaries.agir"
+desc = "std::agir fills role nodes with their role's color and lists the roles in tooltips and a legend."
+kind = "snapshot"
+case = "../../../cases/trans/annotated/boundaries.cml"
+args = ["${case}", "std::agir"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/boundaries.agir.dot"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

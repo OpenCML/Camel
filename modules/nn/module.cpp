@@ -13,31 +13,34 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 05, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "module.h"
 
+#include "../tensor/ops/registry.h"
 #include "camel/core/context/context.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/module/module.h"
 #include "executor.h"
-#include "operators.h"
-#include "type.h"
-#include "vjp_registry.h"
+#include "layers.h"
+#include "optim.h"
+#include "state.h"
 
 using namespace camel::core::context;
 using namespace camel::core::module;
 
 NnModule::NnModule(context_ptr_t ctx) : BuiltinModule("nn", ctx) {
-    exportType(Reference("Parameter"), camel::nn::ParameterType::Default());
-    for (const auto &group : getNnOperatorGroups()) {
+    // nn's operators rely on the tensor catalog (and its tangent space) being registered.
+    camel::tensor::ops::registerTensorOps();
+    camel::nn::registerNnTensorOps();
+    exportType(Reference("OptimizerState"), camel::nn::OptimizerStateType::Default());
+    for (const auto &group : camel::tensor::ops::OpRegistry::instance().operatorGroups("nn")) {
         exportEntity(group->name(), group);
-        if (group->name() == "parameter") {
-            exportEntity(Reference(std::vector<std::string>{"Parameter"}, "new"), group);
-        } else if (group->name() == "value" || group->name() == "grad") {
-            exportEntity(Reference(std::vector<std::string>{"Parameter"}, group->name()), group);
-        }
+    }
+    for (const auto &group : camel::nn::optimizerOperatorGroups()) {
+        exportEntity(group->name(), group);
     }
 }
 
@@ -47,8 +50,11 @@ bool NnModule::load() {
     if (loaded_) {
         return true;
     }
-    camel::nn::ensureBuiltinVjpRulesRegistered();
     context_->registerExecutorFactory("nn", [ctx = context_]() { return createNnExecutor(ctx); });
+    // The optimizers are functions of their arguments: they return new trees and states.
+    for (const char *uri : {"nn:sgd", "nn:adam_state", "nn:adam"}) {
+        camel::core::OperatorTraitsRegistry::instance().set(uri, {.pure = true, .elementwise = false});
+    }
     loaded_ = true;
     return true;
 }

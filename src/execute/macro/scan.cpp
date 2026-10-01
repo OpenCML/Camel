@@ -30,18 +30,9 @@ namespace camel::execute::macro_runtime {
 
 namespace {
 
-bool isNativeMacroOperUri(std::string_view uri) { return uri == "nn:apply_gradients"; }
-
 bool isMacroOper(camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t ref) {
     const auto *node = graph ? graph->node(ref) : nullptr;
-    if (!node || node->kind != camel::runtime::GCNodeKind::Oper) {
-        return false;
-    }
-    if (node->isMacro()) {
-        return true;
-    }
-    const auto *body = graph->nodeBodyAs<camel::runtime::GCOperBody>(ref);
-    return body != nullptr && isNativeMacroOperUri(body->uri());
+    return node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper && node->isMacro();
 }
 
 } // namespace

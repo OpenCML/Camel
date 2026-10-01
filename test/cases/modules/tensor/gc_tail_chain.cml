@@ -1,0 +1,32 @@
+/**
+ * Tensors held in the root frame stay alive across a chain of distinct tail
+ * calls (an else-if ladder compiles to nested branch-arm graphs). Under GC
+ * stress, a tail-call frame released out of stack order left live frames
+ * unscanned and let the next frame overwrite them.
+ */
+module gc_tail_chain
+
+import {
+    add, concat, eye, matmul, ones, shape, sum, transpose
+} from tensor
+
+func main(): int sync {
+    let a = ones([2, 2])
+    let b = eye(2)
+    let c = matmul(a, b)
+    let d = add(c, 2.0)
+    let e = concat([[1.0, 2.0]], [[3.0, 4.0]], 0)
+    let f = transpose(e)
+    'gc_tail_chain sum={}'->format<sum(d) + sum(f)>->println
+    if shape(d)[0] != 2 then {
+        return 1
+    } else if shape(d)[1] != 2 then {
+        return 2
+    } else if sum(d) <= 0.0 then {
+        return 3
+    } else if shape(f)[0] != 2 then {
+        return 4
+    } else {
+        return 0
+    }
+}

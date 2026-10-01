@@ -192,6 +192,12 @@ class Builder : public OpenCMLVisitor {
     std::any visitAnnoExpr(OpenCMLParser::AnnoExprContext *context);
 
     std::any visitAccessExpr(OpenCMLParser::AccessExprContext *context);
+    /// Built by visitAnnoExpr, which knows the value accessed.
+    std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context);
+    /// `lhs.member` (a field or tuple element), located by `range`.
+    node_ptr_t makeMemberAccess(
+        node_ptr_t lhs, antlr4::tree::ParseTree *dot, antlr4::tree::ParseTree *member,
+        antlr4::ParserRuleContext *range);
 
     std::any visitStructData(OpenCMLParser::StructDataContext *context);
 

@@ -1,0 +1,13 @@
+/**
+ * Shape diagnostic of `permute`: statically known shapes conflict, so compilation fails at the
+ * call with both shapes in the reason.
+ */
+module shape_diag_permute
+
+import { zeros, permute } from tensor
+
+func main(): int sync {
+    let r = permute(zeros([2, 3]), [0, 0])
+    println('unreachable')
+    return 0
+}

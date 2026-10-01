@@ -44,6 +44,14 @@ function(add_camel_module)
     PREFIX ""
   )
 
+  # A module that links another module (nn and onnx link tensor) must resolve it to the copy
+  # next to itself, the file the module loader opens. With only build-tree runpaths, importing
+  # such a module first loads a second tensor.cmo from the build tree, with its own operator
+  # registry and type codes. $ORIGIN comes first; the build-tree entries follow for libcamel.
+  if(UNIX AND NOT APPLE)
+    set_target_properties(${_target} PROPERTIES BUILD_RPATH "\$ORIGIN")
+  endif()
+
   if(WIN32)
     set_target_properties(${_target} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
   endif()
