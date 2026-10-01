@@ -13,16 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: May. 05, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "graphviz.h"
 
-#include "camel/runtime/node_roles.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/source/ids.h"
+#include "camel/core/source/manager.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/node_roles.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/type.h"
@@ -380,6 +382,34 @@ string GraphVizDumpPass::pointerToIdent(const void *ptr, const char *prefix) {
     return ss.str();
 }
 
+std::string GraphVizDumpPass::debugOriginAttr(
+    camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t ref) {
+    if (!graph) {
+        return "";
+    }
+    const uint64_t origin = graph->nodeOrigin(ref);
+    if (origin == 0) {
+        return "";
+    }
+    if (!context_ || !context_->sourceContext()) {
+        return std::format(", origin={}", origin);
+    }
+    auto *sc        = context_->sourceContext().get();
+    const auto *rec = sc->origin(origin);
+    if (!rec || rec->primarySpan == camel::source::kInvalidSpanId) {
+        return std::format(", origin={}", origin);
+    }
+    auto range = sc->resolveOrigin(origin);
+    return std::format(
+        ", origin={}, span=\"{}:{}-{}:{}\", srcfile=\"{}\"",
+        origin,
+        range.start.line,
+        range.start.character,
+        range.end.line,
+        range.end.character,
+        escape(sc->pathForOrigin(origin)));
+}
+
 void GraphVizDumpPass::pushIndent() {
     baseIndent_ += indent_;
     depth_++;
@@ -495,11 +525,12 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         string label = portLabel(graph, portIndex, *port);
         if (config_.readableOnly) {
             res += std::format(
-                "{}{}{} [label=\"{}\", type=\"PORT\"];\n",
+                "{}{}{} [label=\"{}\", type=\"PORT\"{}];\n",
                 baseIndent_,
                 indent_,
                 nodeIdent(port),
-                escape(label));
+                escape(label),
+                debugOriginAttr(graph, static_cast<camel::runtime::gc_node_ref_t>(portIndex)));
         } else {
             string tooltip = recordTooltip(graph, *port);
             res += std::format(
@@ -518,11 +549,12 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         string label = portLabel(graph, closureIndex, *port);
         if (config_.readableOnly) {
             res += std::format(
-                "{}{}{} [label=\"{}\", type=\"CLOSURE_PORT\"];\n",
+                "{}{}{} [label=\"{}\", type=\"CLOSURE_PORT\"{}];\n",
                 baseIndent_,
                 indent_,
                 nodeIdent(port),
-                escape(label));
+                escape(label),
+                debugOriginAttr(graph, static_cast<camel::runtime::gc_node_ref_t>(closureIndex)));
         } else {
             string tooltip = recordTooltip(graph, *port);
             res += std::format(
@@ -553,15 +585,17 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         // color and list every role in the tooltip.
         string roleAttr, roleFill, roleTooltip;
         if (config_.annotateRoles) {
-            for (const auto &match : camel::runtime::NodeRoleRegistry::instance().classify(*graph, nodeRef)) {
+            for (const auto &match :
+                 camel::runtime::NodeRoleRegistry::instance().classify(*graph, nodeRef)) {
                 roleAttr += (roleAttr.empty() ? "" : ";") + match.spec.name;
                 roleTooltip += std::format("\\nrole {}: {}", match.spec.name, escape(match.detail));
                 if (roleFill.empty()) {
                     roleFill = match.spec.color;
                 }
-                const bool seen = std::any_of(rolesSeen_.begin(), rolesSeen_.end(), [&](const auto &r) {
-                    return r.first == match.spec.name;
-                });
+                const bool seen =
+                    std::any_of(rolesSeen_.begin(), rolesSeen_.end(), [&](const auto &r) {
+                        return r.first == match.spec.name;
+                    });
                 if (!seen) {
                     rolesSeen_.push_back({match.spec.name, {match.spec.title, match.spec.color}});
                 }
@@ -569,13 +603,14 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         }
         if (config_.readableOnly) {
             res += std::format(
-                "{}{}{} [label=\"{}\", type=\"{}\"{}];\n",
+                "{}{}{} [label=\"{}\", type=\"{}\"{}{}];\n",
                 baseIndent_,
                 indent_,
                 nodeIdent(node),
                 escape(label),
                 type,
-                roleAttr.empty() ? "" : std::format(", role=\"{}\"", roleAttr));
+                roleAttr.empty() ? "" : std::format(", role=\"{}\"", roleAttr),
+                debugOriginAttr(graph, nodeRef));
         } else {
             string tooltip = recordTooltip(graph, *node);
             res += std::format(

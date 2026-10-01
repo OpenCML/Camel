@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: May. 05, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,6 +47,12 @@ class GraphVizDumpPass : public RuntimeGraphTranslatePass {
     void popIndent();
 
     std::string pointerToIdent(const void *ptr, const char *prefix = "N");
+
+    /// Debugger-facing origin attributes for the readable dump: `origin=<id>`, and when the
+    /// span resolves, `span="sl:sc-el:ec"` (0-based, LSP-style) plus `srcfile="..."`. Empty
+    /// when the node has no recorded origin. Lets the VSCode GIR panel match DOT nodes against
+    /// gir-json nodes and jump to source.
+    std::string debugOriginAttr(camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t ref);
 
     std::string dumpGraph(camel::runtime::GCGraph *graph);
 
