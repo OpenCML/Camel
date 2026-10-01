@@ -1,0 +1,13 @@
+/**
+ * Shape diagnostic of `op_plus`: statically known shapes conflict, so compilation fails at the
+ * call with both shapes in the reason.
+ */
+module shape_diag_op_plus
+
+import { zeros } from tensor
+
+func main(): int sync {
+    let r = zeros([2, 3]) + zeros([4, 3])
+    println('unreachable')
+    return 0
+}

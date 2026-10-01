@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 10, 2025
- * Updated: May. 24, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -90,6 +90,11 @@ GenerationalAllocatorWithGC::CollectionKind envCollectionKind() {
     return GenerationalAllocatorWithGC::CollectionKind::Major;
 }
 
+size_t largeObjectBudgetFromEnv() {
+    const size_t megabytes = envSize("CAMEL_GC_LARGE_BUDGET_MB");
+    return (megabytes != 0 ? megabytes : 4) * 1024 * 1024;
+}
+
 GenerationalAllocatorWithGC::DebugConfig debugConfigFromEnv() {
     GenerationalAllocatorWithGC::DebugConfig config{};
     config.stressEveryNAllocations = envSize("CAMEL_GC_STRESS_ALLOC");
@@ -131,8 +136,7 @@ void maybePrintDebugConfig(
     if (!envFlag("CAMEL_GC_PRINT_CONFIG")) {
         return;
     }
-    std::cerr << "[camel] GC config:"
-              << " youngCopying=" << (youngCopying ? "true" : "false")
+    std::cerr << "[camel] GC config:" << " youngCopying=" << (youngCopying ? "true" : "false")
               << " verifyBefore=" << (config.verifyBeforeGC ? "true" : "false")
               << " verifyAfter=" << (config.verifyAfterGC ? "true" : "false")
               << " stressAlloc=" << config.stressEveryNAllocations
@@ -148,20 +152,21 @@ GenerationalAllocatorWithGC &autoSpace() {
     static auto *allocator = [] {
         const bool youngCopying = envFlag("CAMEL_GC_ENABLE_YOUNG_COPYING");
         const auto debugConfig  = debugConfigFromEnv();
-        auto *instance          = new GenerationalAllocatorWithGC(
-            GenerationalAllocatorWithGC::Config{
-                // Keep the default process-start footprint modest. The current runtime disables
-                // young-generation copying, so large preallocated semispaces only add startup cost.
-                .birthSize             = 4 * MB,
-                .havenSize             = 1 * MB,
-                .elderGenSize          = 32 * MB,
-                .promotionAgeThreshold = 4,      // Promotion threshold.
-                .largeObjThreshold     = 4 * KB, // Large-object threshold.
-                .minorGCTriggerRatio   = 0.9f,   // Minor GC trigger ratio.
-                .majorGCTriggerRatio   = 0.8f,   // Major GC trigger ratio.
-                // Production remains address-stable by default; Phase 3 tests can opt into the
-                // copying path explicitly to exercise remembered-set behavior.
-                .enableYoungGenCopying = youngCopying});
+        auto *instance = new GenerationalAllocatorWithGC(GenerationalAllocatorWithGC::Config{
+            // Keep the default process-start footprint modest. The current runtime disables
+            // young-generation copying, so large preallocated semispaces only add startup cost.
+            .birthSize             = 4 * MB,
+            .havenSize             = 1 * MB,
+            .elderGenSize          = 32 * MB,
+            .promotionAgeThreshold = 4,      // Promotion threshold.
+            .largeObjThreshold     = 4 * KB, // Large-object threshold.
+            // Large-object bytes between collections (CAMEL_GC_LARGE_BUDGET_MB overrides).
+            .largeObjCollectionBudget = largeObjectBudgetFromEnv(),
+            .minorGCTriggerRatio      = 0.9f, // Minor GC trigger ratio.
+            .majorGCTriggerRatio      = 0.8f, // Major GC trigger ratio.
+            // Production remains address-stable by default; Phase 3 tests can opt into the
+            // copying path explicitly to exercise remembered-set behavior.
+            .enableYoungGenCopying = youngCopying});
         instance->configureDebug(debugConfig);
         maybePrintDebugConfig(youngCopying, debugConfig);
         return instance;

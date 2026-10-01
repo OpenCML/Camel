@@ -287,11 +287,10 @@ slot_t cloneStaticSlot(
         }
         return toSlot<Object *>(clonedStruct);
     }
-    default: {
-        Object *cloned = object->clone(mm::autoSpace(), type, false);
-        objectCache.emplace(object, cloned);
-        return toSlot<Object *>(cloned);
-    }
+    default:
+        // Other objects (strings, tensors, ...) refer to no graph: the rewritten graph shares
+        // them. Copying would duplicate every weight a program captures on every rewrite.
+        return slot;
     }
 }
 
@@ -391,15 +390,13 @@ std::vector<GCGraph *> collectDraftDependencyGraphs(const GraphDraft &draft) {
 }
 
 TupleType *draftStaticDataType(const GraphDraft &draft, const GCGraph *fallback) {
-    TupleType *staticDataType =
-        fallback ? const_cast<TupleType *>(fallback->staticDataType()) : nullptr;
     if (!draft.staticSlotTypes().empty()) {
         std::vector<camel::core::type::Type *> staticTypes(
             draft.staticSlotTypes().begin(),
             draft.staticSlotTypes().end());
-        staticDataType = TupleType::create(std::move(staticTypes));
+        return TupleType::create(std::move(staticTypes));
     }
-    return staticDataType;
+    return fallback ? const_cast<TupleType *>(fallback->staticDataType()) : nullptr;
 }
 
 std::vector<GCGraph *> collectDraftStaticGraphRefs(
@@ -418,9 +415,11 @@ std::vector<GCGraph *> collectDraftStaticGraphRefs(
     return staticGraphRefs;
 }
 
-GCGraph *encodeDraftClosureGraph(
+// Encodes `draft` into `target` (`bytes` reserved), rewriting every graph reference through
+// `rewritten`, which must cover all graphs the draft refers to.
+GCGraph *encodeDraftGraph(
     const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
-    const GraphDraft &draft, const GraphMap &rewritten, size_t bytes) {
+    const GraphDraft &draft, const GraphMap &rewritten, GCGraph *target, size_t bytes) {
     auto remapGraph = [&](GCGraph *graph) -> GCGraph * {
         if (!graph) {
             return nullptr;
@@ -466,9 +465,14 @@ GCGraph *encodeDraftClosureGraph(
 
     const auto payloadShape = describeDraftNativePayload(draft);
     return GCGraphBuildAccess::constructInPlace(
-        rewritten.at(identity.sourceGraph),
+        target,
         bytes,
-        createGraphDebugRecord(identity.stableId, identity.mangledName, identity.name),
+        [&] {
+            auto *record =
+                createGraphDebugRecord(identity.stableId, identity.mangledName, identity.name);
+            recordDraftNodeOrigins(record, draft);
+            return record;
+        }(),
         draft.funcType(),
         draft.runtimeDataType(),
         staticDataType,
@@ -480,6 +484,40 @@ GCGraph *encodeDraftClosureGraph(
         payloadShape,
         [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(draft, payload, remapGraph); },
         staticSlots);
+}
+
+size_t draftGraphBytes(
+    const camel::core::context::context_ptr_t &context, const GraphDraft &draft,
+    const GCGraph *fallback) {
+    TupleType *staticDataType = draftStaticDataType(draft, fallback);
+    std::vector<GCGraph *> dependencyPlaceholders(
+        collectDraftDependencyGraphs(draft).size(),
+        nullptr);
+    std::vector<GCGraph *> subGraphPlaceholders(draft.subGraphs().size(), nullptr);
+    std::vector<GCGraph *> staticRefPlaceholders(
+        collectDraftStaticGraphRefs(context, draft, staticDataType).size(),
+        nullptr);
+    std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
+    if (staticDataType && staticSlots.size() < staticDataType->size()) {
+        staticSlots.resize(staticDataType->size(), NullSlot);
+    }
+    return GCGraphBuildAccess::requiredBytes(
+        dependencyPlaceholders,
+        subGraphPlaceholders,
+        staticRefPlaceholders,
+        describeDraftNativePayload(draft),
+        staticSlots);
+}
+
+GCGraph *allocateGraph(size_t bytes, const std::string &name) {
+    void *mem = mm::graphSpace().alloc(bytes, alignof(GCGraph));
+    if (!mem) {
+        throw std::runtime_error(std::format(
+            "Runtime draft encoding failed to allocate {} bytes for graph '{}'.",
+            bytes,
+            name));
+    }
+    return reinterpret_cast<GCGraph *>(mem);
 }
 
 } // namespace
@@ -613,7 +651,8 @@ GCGraph *RuntimeGraphDraftSession::commit() {
     const std::vector<GCGraph *> closure = collectCommitClosure();
     ASSERT(!closure.empty(), "Runtime draft commit received an empty closure.");
     for (GCGraph *graph : closure) {
-        (void)ensureDraft(graph);
+        // Rewrites may leave gates that wait on nothing; they are plain forwarding.
+        (void)ensureDraft(graph).dissolveUnorderedGates();
     }
 
     GCGraph *oldRuntimeRoot = runtimeRoot_;
@@ -623,52 +662,121 @@ GCGraph *RuntimeGraphDraftSession::commit() {
     std::unordered_map<GCGraph *, size_t> allocatedBytes;
     allocatedBytes.reserve(closure.size());
     for (GCGraph *graph : closure) {
-        const DraftEntry &entry   = *drafts_.at(graph);
-        const GraphDraft &draft   = *entry.draft;
-        TupleType *staticDataType = draftStaticDataType(draft, graph);
-        std::vector<GCGraph *> dependencyPlaceholders(
-            collectDraftDependencyGraphs(draft).size(),
-            nullptr);
-        std::vector<GCGraph *> subGraphPlaceholders(draft.subGraphs().size(), nullptr);
-        std::vector<GCGraph *> staticRefPlaceholders(
-            collectDraftStaticGraphRefs(context_, draft, staticDataType).size(),
-            nullptr);
-        std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
-        if (staticDataType && staticSlots.size() < staticDataType->size()) {
-            staticSlots.resize(staticDataType->size(), NullSlot);
-        }
-        auto payloadShape = describeDraftNativePayload(draft);
-        size_t bytes      = GCGraphBuildAccess::requiredBytes(
-            dependencyPlaceholders,
-            subGraphPlaceholders,
-            staticRefPlaceholders,
-            payloadShape,
-            staticSlots);
-        void *mem = mm::graphSpace().alloc(bytes, alignof(GCGraph));
-        if (!mem) {
-            throw std::runtime_error(
-                std::format(
-                    "Runtime draft commit failed to allocate {} bytes for graph '{}'.",
-                    bytes,
-                    graph ? graph->name() : "<null>"));
-        }
-        rewritten.emplace(graph, reinterpret_cast<GCGraph *>(mem));
+        const DraftEntry &entry = *drafts_.at(graph);
+        const size_t bytes      = draftGraphBytes(context_, *entry.draft, graph);
+        rewritten.emplace(graph, allocateGraph(bytes, entry.identity.name));
         allocatedBytes.emplace(graph, bytes);
     }
     for (auto it = closure.rbegin(); it != closure.rend(); ++it) {
         GCGraph *graph   = *it;
-        rewritten[graph] = encodeDraftClosureGraph(
+        rewritten[graph] = encodeDraftGraph(
             context_,
             drafts_.at(graph)->identity,
             *drafts_.at(graph)->draft,
             rewritten,
+            rewritten.at(graph),
             allocatedBytes.at(graph));
         validateRuntimeGraphPayload(rewritten[graph]);
     }
 
-    runtimeRoot_ = context_->installRuntimeRoot(rewritten.at(oldRuntimeRoot));
+    // A session over the program's root replaces it. A session over another root (a detached
+    // program, e.g. a function being exported) only returns the rewritten root: the running
+    // program is left as it is.
+    if (context_->currentRuntimeRoot() == oldRuntimeRoot) {
+        runtimeRoot_ = context_->installRuntimeRoot(rewritten.at(oldRuntimeRoot));
+    } else {
+        runtimeRoot_ = rewritten.at(oldRuntimeRoot);
+        std::vector<GCGraph *> graphs;
+        graphs.reserve(rewritten.size());
+        for (const auto &[_, graph] : rewritten) {
+            graphs.push_back(graph);
+        }
+        context_->trackDetachedRuntimeGraphs(graphs);
+    }
     drafts_.clear();
     return runtimeRoot_;
+}
+
+GraphDraftGroup::GraphDraftGroup(const camel::core::context::context_ptr_t &context)
+    : context_(context) {
+    ASSERT(context_ != nullptr, "Graph draft group requires a valid context.");
+}
+
+GraphDraftGroup::~GraphDraftGroup() = default;
+
+GCGraph *GraphDraftGroup::reserve(std::string stableId, std::string mangledName, std::string name) {
+    auto member      = std::make_unique<Member>();
+    member->draft    = std::make_unique<GraphDraft>();
+    GCGraph *key     = reinterpret_cast<GCGraph *>(&member->keyStorage);
+    member->identity = RuntimeDraftIdentity{
+        .sourceGraph = nullptr,
+        .stableId    = std::move(stableId),
+        .mangledName = std::move(mangledName),
+        .name        = std::move(name),
+    };
+    members_.emplace(key, std::move(member));
+    order_.push_back(key);
+    return key;
+}
+
+GraphDraft &GraphDraftGroup::draft(GCGraph *key) { return *member(key).draft; }
+
+void GraphDraftGroup::define(GCGraph *key, std::unique_ptr<GraphDraft> draft) {
+    ASSERT(draft != nullptr, "Graph draft group member draft cannot be null.");
+    member(key).draft = std::move(draft);
+}
+
+void GraphDraftGroup::encode() {
+    ASSERT(!encoded_, "Graph draft group was already encoded.");
+    GraphMap rewritten;
+    std::unordered_map<GCGraph *, size_t> bytes;
+    for (GCGraph *key : order_) {
+        const Member &m = member(key);
+        bytes.emplace(key, draftGraphBytes(context_, *m.draft, nullptr));
+        rewritten.emplace(key, allocateGraph(bytes.at(key), m.identity.name));
+    }
+    // Graphs outside the group keep their identity.
+    for (GCGraph *key : order_) {
+        visitDraftGraphs(context_, *member(key).draft, [&](GCGraph *graph) {
+            if (graph) {
+                rewritten.try_emplace(graph, graph);
+            }
+        });
+    }
+    for (GCGraph *key : order_) {
+        const Member &m = member(key);
+        GCGraph *graph  = encodeDraftGraph(
+            context_,
+            m.identity,
+            *m.draft,
+            rewritten,
+            rewritten.at(key),
+            bytes.at(key));
+        validateRuntimeGraphPayload(graph);
+    }
+    for (GCGraph *key : order_) {
+        member(key).encoded = rewritten.at(key);
+    }
+    encoded_ = true;
+}
+
+GCGraph *GraphDraftGroup::encoded(GCGraph *key) const {
+    auto it = members_.find(key);
+    ASSERT(it != members_.end(), "Graph draft group does not contain the requested key.");
+    ASSERT(encoded_, "Graph draft group was not encoded yet.");
+    return it->second->encoded;
+}
+
+GraphDraftGroup::Member &GraphDraftGroup::member(GCGraph *key) {
+    auto it = members_.find(key);
+    ASSERT(it != members_.end(), "Graph draft group does not contain the requested key.");
+    return *it->second;
+}
+
+const GraphDraftGroup::Member &GraphDraftGroup::member(GCGraph *key) const {
+    auto it = members_.find(key);
+    ASSERT(it != members_.end(), "Graph draft group does not contain the requested key.");
+    return *it->second;
 }
 
 } // namespace camel::runtime

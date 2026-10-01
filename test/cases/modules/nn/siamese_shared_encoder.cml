@@ -1,21 +1,17 @@
 /**
- * Siamese shared encoder trained through two calls to the same helper graph.
+ * Siamese shared encoder trained with autodiff through two calls to the same helper graph:
+ * both branches read the same encoder, so its gradient accumulates contributions from each;
+ * one sgd step lowers the loss and a recursive train loop repeats the step.
  */
 module siamese_shared_encoder
 
-import {
-    Tensor,
-    full, sum, tanh, zeros
-} from tensor
-
-import {
-    Parameter,
-    apply_gradients, grad, parameter, value
-} from nn
+import { grad, value_and_grad } from autodiff
+import { Tensor, full, sum, tanh, zeros } from tensor
+import { sgd } from nn
 
 type Encoder = {
-    weight: Parameter,
-    bias: Parameter
+    weight: Tensor,
+    bias: Tensor
 }
 
 type Siamese = {
@@ -24,7 +20,7 @@ type Siamese = {
 
 with <encoder: Encoder>
 func linear(x: Tensor): Tensor {
-    return (x @ value(encoder.weight)) + value(encoder.bias)
+    return (x @ encoder.weight) + encoder.bias
 }
 
 with <encoder: Encoder>
@@ -37,41 +33,42 @@ func pair_loss(za: Tensor, zb: Tensor): float {
     return sum(diff * diff)
 }
 
-with <model: Siamese, xb: Tensor>
-func siamese_loss(xa: Tensor): float {
+with <model: Siamese>
+func siamese_loss(xa: Tensor, xb: Tensor): float {
     let za = xa->encode<model.encoder>
     let zb = xb->encode<model.encoder>
     return pair_loss(za, zb)
 }
 
-func main(): int sync {
-    var model = {
+func init(): Siamese {
+    return {
         encoder: {
-            weight: parameter(full([2, 2], 0.1)),
-            bias: parameter(zeros([1, 2]))
+            weight: full([2, 2], 0.1),
+            bias: zeros([2])
         }
     }
+}
+
+func train(model: Siamese, xa: Tensor, xb: Tensor, steps: int): Siamese {
+    return if steps == 0 then model else train(sgd(model, grad(siamese_loss)<model>(xa, xb), 0.2), xa, xb, steps - 1)
+}
+
+func main(): int sync {
+    let model = init()
     let xa = full([1, 2], 1.0)
     let xb = full([1, 2], 0.5)
 
-    let step = apply_gradients(<model: Siamese, xb: Tensor> (xa: Tensor): float => {
-        let za = xa->encode<model.encoder>
-        let zb = xb->encode<model.encoder>
-        return pair_loss(za, zb)
-    })
+    let before = siamese_loss<model>(xa, xb)
+    let vg = value_and_grad(siamese_loss)<model>(xa, xb)
+    let stepped = sgd(model, vg.1, 0.2)
+    let after = siamese_loss<stepped>(xa, xb)
+    let trained = train(model, xa, xb, 10)
+    let after_train = siamese_loss<trained>(xa, xb)
 
-    let before = xa->siamese_loss<model, xb>
-    let step_loss = wait step<model, xb>(xa, 0.2)
-    let after = xa->siamese_loss<model, xb>
-    let weight = value(model.encoder.weight)
-    let bias = value(model.encoder.bias)
-    let weight_grad = grad(model.encoder.weight)
-    let bias_grad = grad(model.encoder.bias)
-
-    'siamese_shared_encoder metrics before={} step={} after={}'->format<before, step_loss, after>->println
-    'siamese_shared_encoder weight={}'->format<weight>->println
-    'siamese_shared_encoder bias={}'->format<bias>->println
-    'siamese_shared_encoder weight_grad={}'->format<weight_grad>->println
-    'siamese_shared_encoder bias_grad={}'->format<bias_grad>->println
+    'siamese_shared_encoder metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
+    'siamese_shared_encoder weight={}'->format<stepped.encoder.weight>->println
+    'siamese_shared_encoder bias={}'->format<stepped.encoder.bias>->println
+    'siamese_shared_encoder weight_grad={}'->format<vg.1.encoder.weight>->println
+    'siamese_shared_encoder bias_grad={}'->format<vg.1.encoder.bias>->println
     return 0
 }

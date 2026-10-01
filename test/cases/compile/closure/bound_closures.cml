@@ -1,0 +1,21 @@
+/**
+ * Verifies function literals bound with `let` can be called directly, with and without captures,
+ * and that with-arguments given at a call `f<a>(x)` do not disturb a closure's captures.
+ */
+module bound_closures
+
+func main(): int sync {
+    let k = 3
+    let scale = 2.5
+    let plain = (x: int): int => { return x * 3 }
+    let captured = (x: int): int => { return x * k }
+    let captured_float = (x: float): float => { return x * scale }
+    let bound = <b: int> (x: int): int => { return x * k + b }
+    let a = plain(2)
+    let c = captured(2)
+    let f = captured_float(2.0)
+    let w = bound<1>(2)
+    'bound_closures plain={} captured={} float={}'->format<a, c, f>->println
+    'bound_closures with={}'->format<w>->println
+    return 0
+}

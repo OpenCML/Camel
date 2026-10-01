@@ -562,6 +562,16 @@ void Context::clearRuntimeGraphs() {
     runtimeGraphMgr_->clear();
 }
 
+void Context::trackDetachedRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs) {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->trackDetached(graphs);
+}
+
+void Context::releaseDetachedRuntimeGraphs() {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->releaseDetached();
+}
+
 void Context::registerExecutorFactory(std::string name, executor_factory_t fact) {
     exeMgr_->registerExecutorFactory(name, fact);
 }

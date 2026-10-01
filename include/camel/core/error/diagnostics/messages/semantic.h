@@ -55,7 +55,8 @@ enum class SemanticDiag : uint32_t {
     ModuleParseFailed            = 0x000018,
     InvalidOperatorURI           = 0x000019,
     UnrecognizedExecutorProtocol = 0x00001A,
-    EntryModuleMissingMain = 0x00001B,
+    EntryModuleMissingMain       = 0x00001B,
+    ArgumentsRejected            = 0x00001C,
 
     // Warnings
     FeatureNotSupported     = 0x100000,

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: May. 06, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -132,8 +132,7 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
     ASSERT(graph != nullptr, "Taskflow requires a non-null runtime root graph.");
 
     linearTopoCache_.clear();
-    gcSafepointsEnabled_ = camel::core::mm::autoSpaceSafepointSlowPathEnabled();
-    Frame *rootFrame     = framePool_.acquire(graph);
+    Frame *rootFrame = framePool_.acquire(graph);
     try {
         slot_t result = evalGraphTF(graph, rootFrame);
         context_->captureProcessExitCode(graph, result);
@@ -167,12 +166,9 @@ slot_t TaskflowExecSchedPass::evalGraphLinear(GCGraph *graph, Frame *frame) {
     auto *currRuntimeGraph = graph;
     auto currNodes         = topoNodesForLinear(currRuntimeGraph);
     auto gcSafepoint       = [&](std::string_view reason) {
-        // Taskflow's linear fallback uses coarse safepoints only when GC diagnostics or pending
-        // deferred collection make them necessary; the ordinary scheduler path stays branch-only.
-        if (gcSafepointsEnabled_) {
-            camel::core::mm::autoSpace().safepoint(reason);
-            gcSafepointsEnabled_ = camel::core::mm::autoSpaceSafepointSlowPathEnabled();
-        }
+        // Taskflow's linear fallback polls coarse safepoints; the check is one atomic load and
+        // only enters the allocator when GC diagnostics or a deferred collection are pending.
+        camel::core::mm::safepoint(reason);
     };
 
     gc_node_ref_t tillNode = kInvalidNodeRef;

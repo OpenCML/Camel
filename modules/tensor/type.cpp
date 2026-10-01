@@ -12,15 +12,23 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Mar. 10, 2026
- * Updated: May. 05, 2026
+ * Created: Jul. 29, 2025
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
+ */
+
+/*
+ * TensorType implementation: interning, printing, and the refinement lattice.
  */
 
 #include "type.h"
 
 #include "camel/core/mm.h"
 #include "camel/utils/assert.h"
+#include "dtype.h"
+
+#include <mutex>
+#include <unordered_map>
 
 namespace mm = camel::core::mm;
 
@@ -28,89 +36,116 @@ namespace camel::tensor {
 
 using namespace camel::core::type;
 
-TensorType::TensorType(const std::vector<size_t> &shape, Type *elementType)
-    : OtherType(typeCode()), shape_(shape),
-      elementType_(elementType ? elementType : Type::Float32()) {}
+namespace {
 
-TensorType::TensorType(TypeCode code, size_t paramCount, Type **params)
-    : OtherType(code, paramCount, params), shape_(), elementType_(Type::Float32()) {}
+std::string dimText(int64_t extent) { return extent == kUnknownDim ? "?" : std::to_string(extent); }
+
+std::string
+internKey(const std::optional<TypeCode> &dtype, const std::optional<StaticShape> &shape) {
+    std::string key = dtype ? std::string(dtypeName(*dtype)) : "?";
+    if (shape) {
+        key += "[";
+        for (int64_t extent : *shape) {
+            key += dimText(extent) + ",";
+        }
+        key += "]";
+    }
+    return key;
+}
+
+} // namespace
+
+TensorType::TensorType(std::optional<TypeCode> dtype, std::optional<StaticShape> shape)
+    : OtherType(typeCode()), dtype_(dtype), shape_(std::move(shape)) {}
 
 TypeCode TensorType::typeCode() {
-    static TypeCode code = registerOtherType("Tensor", TypeFlag::Composite | TypeFlag::GC_Traced);
+    static TypeCode code = registerOtherType("Tensor", TypeFlag::GC_Traced);
     return code;
 }
 
-TensorType *TensorType::create(Type *elementType, const std::vector<size_t> &shape) {
+TensorType *TensorType::get(std::optional<TypeCode> dtype, std::optional<StaticShape> shape) {
+    if (dtype) {
+        dtype = normalizeTensorDType(*dtype);
+    }
+    if (shape) {
+        for (int64_t &extent : *shape) {
+            if (extent < 0) {
+                extent = kUnknownDim;
+            }
+        }
+    }
+    static std::mutex mutex;
+    static std::unordered_map<std::string, TensorType *> interned;
+    const std::string key = internKey(dtype, shape);
+    std::lock_guard guard(mutex);
+    if (auto it = interned.find(key); it != interned.end()) {
+        return it->second;
+    }
     void *mem = mm::permSpace().alloc(sizeof(TensorType), alignof(TensorType));
     ASSERT(mem != nullptr, "Failed to allocate TensorType from permSpace");
-    return new (mem) TensorType(shape, elementType);
+    auto *created = new (mem) TensorType(dtype, std::move(shape));
+    interned.emplace(key, created);
+    return created;
 }
 
-TensorType *TensorType::Dynamic(Type *elementType) {
-    static TensorType *floatDynamic = TensorType::create(Type::Float32(), {});
-    if (!elementType || elementType->equals(Type::Float32())) {
-        return floatDynamic;
-    }
-    return TensorType::create(elementType, {});
+TensorType *TensorType::Default() {
+    static TensorType *instance = get(std::nullopt, std::nullopt);
+    return instance;
 }
 
-Type *TensorType::Default() { return Dynamic(Type::Float32()); }
-
-std::vector<size_t> TensorType::shape() const { return shape_; }
-
-Type *TensorType::dType() const { return elementType_ ? elementType_ : Type::Float32(); }
-
-std::string TensorType::toString() const {
-    if (shape_.empty()) {
-        return dType()->equals(Type::Float32()) ? "Tensor" : "Tensor<" + dType()->toString() + ">";
-    }
-    std::string result = "Tensor<[";
-    for (size_t i = 0; i < shape_.size(); ++i) {
-        if (i > 0) {
-            result += ", ";
-        }
-        result += std::to_string(shape_[i]);
-    }
-    result += "]";
-    if (!dType()->equals(Type::Float32())) {
-        result += ", " + dType()->toString();
-    }
-    result += ">";
-    return result;
-}
-
-std::string TensorType::mangle() const {
-    std::string result = "T";
-    if (shape_.empty()) {
-        result += "_";
-    } else {
-        for (size_t i = 0; i < shape_.size(); ++i) {
-            if (i > 0) {
-                result += ",";
-            }
-            result += std::to_string(shape_[i]);
-        }
-    }
-    result += ";";
-    result += dType()->mangle();
-    return result;
-}
-
-Type *TensorType::clone(bool deep) const {
-    Type *dtype = deep ? dType()->clone(true) : dType();
-    return TensorType::create(dtype, shape_);
-}
-
-bool TensorType::equals(Type *other) const {
-    if (this == other) {
-        return true;
-    }
-    auto *rhs = dynamic_cast<TensorType *>(other);
-    if (!rhs) {
+bool TensorType::isStaticShape() const {
+    if (!shape_) {
         return false;
     }
-    return shape_ == rhs->shape() && dType()->equals(rhs->dType());
+    for (int64_t extent : *shape_) {
+        if (extent == kUnknownDim) {
+            return false;
+        }
+    }
+    return true;
 }
+
+std::string TensorType::toString() const {
+    if (!dtype_ && !shape_) {
+        return "Tensor";
+    }
+    std::string result = "Tensor<" + (dtype_ ? std::string(dtypeName(*dtype_)) : std::string("?"));
+    if (shape_) {
+        result += ", [";
+        for (size_t i = 0; i < shape_->size(); ++i) {
+            result += (i ? ", " : "") + dimText((*shape_)[i]);
+        }
+        result += "]";
+    }
+    return result + ">";
+}
+
+std::string TensorType::mangle() const { return "T" + internKey(dtype_, shape_) + ";"; }
+
+Type *TensorType::clone(bool) const { return const_cast<TensorType *>(this); }
+
+bool TensorType::equals(Type *other) const {
+    // Interning makes structural equality pointer equality.
+    return this == other;
+}
+
+Type *TensorType::unify(Type *other) const {
+    const TensorType *rhs = asTensorType(other);
+    if (!rhs) {
+        return nullptr;
+    }
+    std::optional<TypeCode> dtype = dtype_ == rhs->dtype_ ? dtype_ : std::nullopt;
+    std::optional<StaticShape> shape;
+    if (shape_ && rhs->shape_ && shape_->size() == rhs->shape_->size()) {
+        shape = StaticShape(shape_->size());
+        for (size_t i = 0; i < shape->size(); ++i) {
+            (*shape)[i] = (*shape_)[i] == (*rhs->shape_)[i] ? (*shape_)[i] : kUnknownDim;
+        }
+    }
+    return get(dtype, std::move(shape));
+}
+
+Type *TensorType::widened() const { return Default(); }
 
 CastSafety TensorType::castSafetyFrom(Type *sourceType) const {
     if (auto r = Type::checkCastSafetyWithAny(code(), sourceType)) {
@@ -120,28 +155,40 @@ CastSafety TensorType::castSafetyFrom(Type *sourceType) const {
 }
 
 bool TensorType::assignableFrom(Type *sourceType) const {
-    auto *rhs = dynamic_cast<TensorType *>(sourceType);
+    const TensorType *rhs = asTensorType(sourceType);
     if (!rhs) {
         return false;
     }
-    bool dtypeCompat = dType()->equals(Type::Float32()) || dType()->equals(rhs->dType());
-    bool shapeCompat = shape_.empty() || rhs->shape().empty() || shape_ == rhs->shape();
-    return dtypeCompat && shapeCompat;
+    if (dtype_ && rhs->dtype_ != dtype_) {
+        return false;
+    }
+    if (!shape_) {
+        return true;
+    }
+    if (!rhs->shape_ || rhs->shape_->size() != shape_->size()) {
+        return false;
+    }
+    for (size_t i = 0; i < shape_->size(); ++i) {
+        if ((*shape_)[i] != kUnknownDim && (*shape_)[i] != (*rhs->shape_)[i]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 OtherType *TensorType::cloneWithParams(std::span<Type *const> params) const {
+    // `Tensor<dtype>`: the first parameter names the element type.
     if (params.empty()) {
-        return TensorType::Dynamic();
+        return Default();
     }
-    if (params.size() == 1) {
-        return TensorType::Dynamic(params[0]);
-    }
-    Type **p  = OtherType::copyParams(params);
-    void *mem = mm::permSpace().alloc(sizeof(TensorType), alignof(TensorType));
-    ASSERT(mem != nullptr, "Failed to allocate TensorType from permSpace");
-    return new (mem) TensorType(typeCode(), params.size(), p);
+    return get(params[0]->code(), std::nullopt);
 }
 
-TensorType *getTensorType(Type *dtype) { return TensorType::Dynamic(dtype); }
+const TensorType *asTensorType(const Type *type) {
+    if (!type || type->code() != TensorType::typeCode()) {
+        return nullptr;
+    }
+    return static_cast<const TensorType *>(type);
+}
 
 } // namespace camel::tensor

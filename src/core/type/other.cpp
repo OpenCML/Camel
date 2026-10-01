@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,6 +33,12 @@ std::unordered_map<TypeCode, std::string> OtherTypeRegistry::reverseRegistry;
 std::atomic<unsigned int> OtherTypeRegistry::counter{0};
 
 TypeCode registerOtherType(const std::string &typeName, TypeFlag flags) {
+    // Code that sees the Composite flag treats the type as a CompositeType
+    // object. Other types derive from OtherType instead, so they must not
+    // carry that flag.
+    ASSERT(
+        !hasFlag(static_cast<uint32_t>(flags), TypeFlag::Composite),
+        "Other types cannot be flagged Composite: " + typeName);
     return OtherTypeRegistry::registerType(typeName, flags);
 }
 

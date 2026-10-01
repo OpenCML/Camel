@@ -1,0 +1,14 @@
+title = "Loop-carried graph state"
+summary = "A training loop is a recursion carrying the parameter struct; value_and_grad and sgd produce the next state; the loss falls and simplification does not change it."
+
+[[runs]]
+name = "nvm"
+args = ["std::nvm"]
+exit = 0
+stdout = "expected/output.txt"
+
+[[runs]]
+name = "simplified"
+args = ["std::macro", "std::opt::simplify", "std::nvm"]
+exit = 0
+stdout = "expected/output.txt"

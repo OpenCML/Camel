@@ -1,0 +1,18 @@
+/**
+ * A training loss has no ONNX lowering; exporting a function that applies it
+ * to the model input reports the operator.
+ */
+module export_unsupported
+
+import { Tensor, reshape } from tensor
+import { softmax_cross_entropy } from nn
+import { export_model } from onnx
+import { get_env } from sys
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    let target = reshape([0.0, 1.0, 1.0, 0.0], [2, 2])
+    export_model((t: Tensor): Tensor => t * softmax_cross_entropy(t, target), x, get_env('ONNX_OUT'))
+    println('unreachable')
+    return 0
+}

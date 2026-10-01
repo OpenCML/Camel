@@ -192,10 +192,17 @@ bool X64Backend::compileBytecode(
         return fail("null runtime graph in JIT compilation unit");
     if (!unit.runtimeGraph->hasFrameLayout())
         return fail("incomplete frame layout for graph '" + unit.runtimeGraph->name() + "'");
+    // Graphs without constants are left to the interpreter.
+    if (!unit.runtimeGraph->staticArea())
+        return fail("graph '" + unit.runtimeGraph->name() + "' has no static area");
 
     const Bytecode *base = unit.bytecodes.data();
-    size_t pcEnd         = unit.bytecodes.size();
     size_t entryPc       = unit.entryPc;
+    // Only this graph's bytecode: what follows belongs to other graphs (among them graphs
+    // compiled at run time, whose code may use slots and opcodes this graph never does).
+    size_t pcEnd = unit.graphLength != 0
+                       ? std::min(unit.bytecodes.size(), entryPc + unit.graphLength)
+                       : unit.bytecodes.size();
 
     const slot_t *staticBase = unit.runtimeGraph->staticArea()->data();
     auto staticSlotAddr      = [&](data_idx_t idx) -> uint64_t {

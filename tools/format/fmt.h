@@ -512,6 +512,7 @@ class Formatter : public OpenCMLVisitor {
     std::any visitAnnoExpr(OpenCMLParser::AnnoExprContext *context);
 
     std::any visitAccessExpr(OpenCMLParser::AccessExprContext *context);
+    std::any visitMemberAccess(OpenCMLParser::MemberAccessContext *context);
 
     std::any visitStructData(OpenCMLParser::StructDataContext *context);
 

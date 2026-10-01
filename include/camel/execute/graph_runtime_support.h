@@ -53,6 +53,10 @@ camel::runtime::gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph
 bool runtimeNodeOutputsContain(
     const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
     camel::runtime::gc_node_ref_t targetRef);
+// The values a tail JOIN can yield, seen through forwarding GATEs: the arm values of the
+// JOIN and, recursively, of every JOIN among them (a nested branch in tail position).
+std::vector<camel::runtime::gc_node_ref_t> collectRuntimeTailJoinArmValues(
+    camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t tailJoinRef);
 bool hasOnlyTrivialRuntimeTailSuffixAfter(
     const camel::runtime::GCGraph *graph, std::span<const camel::runtime::gc_node_ref_t> topoOrder,
     size_t anchorIndex);

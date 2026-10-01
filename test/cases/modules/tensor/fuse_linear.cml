@@ -1,0 +1,26 @@
+/**
+ * Patterns for the tensor::fuse pass. Run with and without the pass: results
+ * must agree. Covers relu(x @ w + b), bias on the left, a chained add whose
+ * operand is itself a fused pattern (GRU style), a product with a second user
+ * (must not fuse), and a full-matrix "bias" (fused op falls back to the
+ * unfused broadcast semantics).
+ */
+module fuse_linear
+
+import { Tensor, reshape, relu, sum } from tensor
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5], [2, 3])
+    let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25], [3, 2])
+    let u = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
+    let b = reshape([0.1, -0.2], [2])
+    let full = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    let a = relu(x @ w + b)
+    let c = b + x @ w
+    let chained = x @ w + b + a @ u
+    let product = x @ w
+    let d = product + b
+    let e = x @ w + full
+    'fuse a={} c={} chained={} product={} d={} e={}'->format<sum(a), sum(c), sum(chained), sum(product), sum(d), sum(e)>->println
+    return 0
+}

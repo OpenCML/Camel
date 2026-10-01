@@ -1,0 +1,39 @@
+/**
+ * Spatial nn operators against PyTorch references (fixtures/spatial, see generate.py):
+ * strided/padded conv2d and its three gradients, max/avg pooling and their
+ * gradients, and inference batch_norm.
+ */
+module spatial_ops
+
+import { Tensor, load_npy, sum, abs } from tensor
+import {
+    conv2d, conv2d_input_grad, conv2d_kernel_grad, conv2d_bias_grad,
+    max_pool2d, max_pool2d_grad, avg_pool2d, avg_pool2d_grad, batch_norm
+} from nn
+
+func fixture(name: string): Tensor {
+    return load_npy('test/cases/modules/nn/fixtures/spatial/' + name + '.npy')
+}
+
+func err(actual: Tensor, name: string): float {
+    return sum(abs(actual - fixture('ref_' + name)))
+}
+
+func main(): int sync {
+    let x = fixture('x')
+    let w = fixture('w')
+    let b = fixture('b')
+    let dy = fixture('dy')
+    let conv = err(conv2d(x, w, b, 2, 1), 'y')
+    let dx = err(conv2d_input_grad(x, w, dy, 2, 1), 'dx')
+    let dw = err(conv2d_kernel_grad(x, w, dy, 2, 1), 'dw')
+    let db = err(conv2d_bias_grad(b, dy), 'db')
+    let mp = err(max_pool2d(x, 2), 'mp')
+    let dmp = err(max_pool2d_grad(x, fixture('gmp'), 2), 'dmp')
+    let ap = err(avg_pool2d(x, 3, 1, 1), 'ap')
+    let dap = err(avg_pool2d_grad(x, fixture('gap'), 3, 1, 1), 'dap')
+    let bn = err(batch_norm(x, fixture('m'), fixture('v'), fixture('gm'), fixture('bt')), 'bn')
+    'spatial conv={} dx={} dw={} db={}'->format<conv, dx, dw, db>->println
+    'spatial max_pool={} max_pool_grad={} avg_pool={} avg_pool_grad={} batch_norm={}'->format<mp, dmp, ap, dap, bn>->println
+    return 0
+}

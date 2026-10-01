@@ -1,0 +1,59 @@
+/**
+ * Verifies @vjp<rule> custom derivative rules: calls of a decorated function use the rule instead
+ * of differentiating its body, with one or several differentiable parameters, and the decorated
+ * function still computes its ordinary value.
+ */
+module custom_rule
+
+import { grad, vjp } from autodiff
+
+// A deliberately different rule, so the test can tell which derivative was used: 10 * dy.
+func cube_rule(x: float, dy: float): float {
+    return 10.0 * dy
+}
+
+@vjp<cube_rule>
+func cube(x: float): float {
+    return x * x * x
+}
+
+// Straight-through clipping: the value is clipped, the gradient passes unchanged.
+func clip_rule(x: float, dy: float): float {
+    return dy
+}
+
+@vjp<clip_rule>
+func clip(x: float): float {
+    return if x > 1.0 then 1.0 else x
+}
+
+// Two differentiable parameters: the rule returns a tuple of gradients.
+func mix_rule(a: float, b: float, n: int, dy: float): (float, float) {
+    return (dy * 2.0, dy * 3.0)
+}
+
+@vjp<mix_rule>
+func mix(a: float, b: float, n: int): float {
+    return a * b
+}
+
+func use_cube(x: float): float {
+    return cube(x) * 2.0
+}
+
+func use_clip(x: float): float {
+    return clip(x) * x
+}
+
+func use_mix(a: float, b: float): float {
+    return mix(a, b, 3) + a
+}
+
+func main(): int sync {
+    let v = cube(2.0)
+    let dc = grad(use_cube)(2.0)
+    let dk = grad(use_clip)(3.0)
+    let dm = grad(use_mix)(2.0, 5.0)
+    'custom_rule value={} cube={} clip={} mix={}'->format<v, dc, dk, dm>->println
+    return 0
+}

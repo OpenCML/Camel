@@ -1,0 +1,23 @@
+/**
+ * Shape specialization: `forward` is called with a tensor whose type carries its shape, so
+ * std::opt::simplify specializes it to that type, folds `shape(x)` to a constant, and unrolls the
+ * recursion over `shape(x)[1]` steps into straight-line code. The value must not change.
+ */
+module shape_unroll
+
+import { Tensor, ones, zeros, shape, reshape, slice } from tensor
+
+func run(t: int, steps: int, x: Tensor, h: Tensor): Tensor {
+    let batch = shape(x)[0]
+    let features = shape(x)[2]
+    return if t >= steps then h else run(t + 1, steps, x, h + reshape(slice(x, 1, t, t + 1), [batch, features]))
+}
+
+func forward(x: Tensor): Tensor {
+    return run(0, shape(x)[1], x, zeros([shape(x)[0], shape(x)[2]]))
+}
+
+func main(): int sync {
+    println(forward(ones([2, 3, 4])))
+    return 0
+}

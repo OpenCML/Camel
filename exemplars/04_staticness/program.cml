@@ -1,0 +1,42 @@
+/**
+ * Staticness. `run` recurses over the time axis of its input; its depth is
+ * `shape(x)[1]`, which shape specialization turns into a constant, so
+ * std::opt::simplify unrolls the recursion into straight-line code
+ * (std::stats: no calls left) and the model exports. `shrink` recurses until
+ * a value computed from the input is small: its depth is not static, and the
+ * export stops at the recursive call.
+ */
+module staticness
+
+import { Tensor, ones, zeros, shape, reshape, slice, sum } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func run(t: int, steps: int, x: Tensor, h: Tensor): Tensor {
+    let batch = shape(x)[0]
+    let features = shape(x)[2]
+    return if t >= steps then h else run(t + 1, steps, x, h + reshape(slice(x, 1, t, t + 1), [batch, features]))
+}
+
+func forward(x: Tensor): Tensor {
+    return run(0, shape(x)[1], x, zeros([shape(x)[0], shape(x)[2]]))
+}
+
+func shrink(t: Tensor): Tensor {
+    return if sum(t) > 1.0 then shrink(t * 0.5) else t
+}
+
+func main(): int sync {
+    let x = ones([2, 3, 4])
+    println(forward(x))
+    let mode = get_env('MODE')
+    return if mode == 'static' then sync {
+        export_model(forward, x, get_env('ONNX_OUT'))
+        println('exported forward')
+        return 0
+    } else if mode == 'dynamic' then sync {
+        export_model(shrink, x, get_env('ONNX_OUT'))
+        println('unreachable')
+        return 0
+    } else 0
+}

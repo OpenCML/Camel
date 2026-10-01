@@ -20,6 +20,7 @@
 #include "module.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
 #include "executor.h"
@@ -136,6 +137,12 @@ bool MathModule::load() {
         return true;
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("math", [ctx]() { return createMathExecutor(ctx); });
+    // Every math operator is a function of its arguments.
+    for (const auto &[name, op] : getMathOpsMap()) {
+        camel::core::OperatorTraitsRegistry::instance().set(
+            "math:" + name,
+            {.pure = true, .elementwise = false});
+    }
     loaded_ = true;
     return true;
 }

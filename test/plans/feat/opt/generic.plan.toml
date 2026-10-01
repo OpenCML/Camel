@@ -1,0 +1,372 @@
+id = "opt.generic"
+order = 321
+tier = "feat"
+tags = ["feat", "opt", "generic"]
+
+[[tests]]
+name = "results_reference"
+desc = "Results and print order of the generic-pass inputs are unchanged by: no pass."
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "results_fold"
+desc = "Results and print order of the generic-pass inputs are unchanged by: std::opt::fold."
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "results_cse"
+desc = "Results and print order of the generic-pass inputs are unchanged by: std::opt::cse."
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "std::opt::cse"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "results_dce"
+desc = "Results and print order of the generic-pass inputs are unchanged by: std::opt::dce."
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "results_all"
+desc = "Results and print order of the generic-pass inputs are unchanged by: std::opt::fold", "std::opt::cse", "std::opt::dce."
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "rewrites"
+desc = "fold evaluates 3 + 4 * 5, cse merges the second n * 7 + 1 (not the branch arms'), dce drops the unused product inside the sync chain."
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (uri) => (out.match(new RegExp(`label="${uri}"`, 'g')) || []).length
+assert(count(':op/mul_l') === 3, `expected 3 multiplications (p and one per branch arm), got ${count(':op/mul_l')}`)
+assert(count(':op/add_l') === 2, `expected 2 additions (p and the else arm), got ${count(':op/add_l')}`)
+assert(count(':io/println') === 3, 'effects must be kept')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "static_branches.reference"
+desc = "Static branches, a sync recursion and a call through a function value after an effect: reference output (no pass)."
+kind = "behavior"
+case = "../../../cases/opt/generic/static_branches.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'taken\nbig\ntick 3\ntick 2\ntick 1\nbefore call\ntwice=6 ticks=3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "static_branches.simplify"
+desc = "std::opt::simplify prunes the static branch (only the taken arm's effect runs), keeps every effect in order (including before a devirtualized call), and does not change results."
+kind = "behavior"
+case = "../../../cases/opt/generic/static_branches.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'taken\nbig\ntick 3\ntick 2\ntick 1\nbefore call\ntwice=6 ticks=3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "static_branches.simplify.rgir"
+desc = "After std::opt::simplify, main has no branch left."
+kind = "behavior"
+case = "../../../cases/opt/generic/static_branches.cml"
+args = ["${case}", "std::opt::simplify", "${run_rgir}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+// Nodes of graph `name` itself (nested graphs excluded), as [kind, label] pairs.
+const nodesOf = (text, name) => {
+  const stack = []; const own = []
+  for (const line of text.split('\n')) {
+    if (line.includes('subgraph')) { stack.push(null); continue }
+    const label = line.match(/label="([^"]*)";/)
+    if (label && stack.length && stack[stack.length - 1] === null) { stack[stack.length - 1] = label[1]; continue }
+    if (line.trim() === '}' && stack.length) { stack.pop(); continue }
+    const node = line.match(/^\s*[NO][0-9A-F]+ \[label="([^"]*)", type="([A-Z_]+)"\]/)
+    if (node && stack[stack.length - 1] === name) own.push([node[2], node[1]])
+  }
+  return own
+}
+const own = nodesOf(input.normalized.stdout, 'main')
+assert(own.length > 0, 'no main graph in the dump')
+assert(!own.some(([kind]) => kind === 'BRCH' || kind === 'JOIN'), `main still branches: ${JSON.stringify(own)}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "recursion_unroll.simplify"
+desc = "A recursion of constant depth computes the same value after std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/opt/generic/recursion_unroll.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'unroll=4.75', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "recursion_unroll.simplify.rgir"
+desc = "std::opt::simplify unrolls a recursion of constant depth: forward becomes straight-line code with no call or branch."
+kind = "behavior"
+case = "../../../cases/opt/generic/recursion_unroll.cml"
+args = ["${case}", "std::opt::simplify", "${run_rgir}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+// Nodes of graph `name` itself (nested graphs excluded), as [kind, label] pairs.
+const nodesOf = (text, name) => {
+  const stack = []; const own = []
+  for (const line of text.split('\n')) {
+    if (line.includes('subgraph')) { stack.push(null); continue }
+    const label = line.match(/label="([^"]*)";/)
+    if (label && stack.length && stack[stack.length - 1] === null) { stack[stack.length - 1] = label[1]; continue }
+    if (line.trim() === '}' && stack.length) { stack.pop(); continue }
+    const node = line.match(/^\s*[NO][0-9A-F]+ \[label="([^"]*)", type="([A-Z_]+)"\]/)
+    if (node && stack[stack.length - 1] === name) own.push([node[2], node[1]])
+  }
+  return own
+}
+const own = nodesOf(input.normalized.stdout, 'forward')
+assert(own.some(([kind]) => kind === 'OPER'), `forward has no operators: ${JSON.stringify(own)}`)
+for (const kind of ['FUNC', 'CALL', 'BRCH', 'JOIN']) {
+  assert(!own.some(([k]) => k === kind), `forward still has ${kind}: ${JSON.stringify(own)}`)
+}
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "shape_unroll.simplify"
+desc = "Shape specialization: the value of a recursion over shape(x)[1] is unchanged by std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/opt/generic/shape_unroll.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('[      3.,       3.,       3.,       3.]'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "shape_unroll.simplify.rgir"
+desc = "std::opt::simplify specializes forward to its argument's static shape, folds shape(x) and unrolls the recursion: the specialized forward and everything it calls are branch-free."
+kind = "behavior"
+case = "../../../cases/opt/generic/shape_unroll.cml"
+args = ["${case}", "std::opt::simplify", "${run_rgir}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+// Nodes of every graph, by graph name (nested graphs are separate entries).
+const graphs = {}
+const stack = []
+for (const line of input.normalized.stdout.split('\n')) {
+  if (line.includes('subgraph')) { stack.push(null); continue }
+  const label = line.match(/label="([^"]*)";/)
+  if (label && stack.length && stack[stack.length - 1] === null) { stack[stack.length - 1] = label[1]; graphs[label[1]] = []; continue }
+  if (line.trim() === '}' && stack.length) { stack.pop(); continue }
+  const node = line.match(/^\s*[NO][0-9A-F]+ \[label="([^"]*)", type="([A-Z_]+)"\]/)
+  if (node && stack.length && stack[stack.length - 1]) graphs[stack[stack.length - 1]].push([node[2], node[1]])
+}
+const specialized = Object.keys(graphs).filter((name) => name.startsWith('forward$'))
+assert(specialized.length === 1, `expected one specialized forward, got ${specialized}`)
+const forward = graphs[specialized[0]]
+assert(!forward.some(([k]) => k === 'BRCH'), `specialized forward branches: ${JSON.stringify(forward)}`)
+for (const [kind, callee] of forward.filter(([k]) => k === 'FUNC')) {
+  const body = graphs[callee]
+  assert(body, `callee ${callee} not in the dump`)
+  assert(body.some(([k]) => k === 'OPER'), `callee ${callee} has no operators`)
+  assert(!body.some(([k]) => ['BRCH', 'FUNC', 'CALL'].includes(k)), `callee ${callee} not straight-line: ${JSON.stringify(body)}`)
+}
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "effect_order_folded.nvm"
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (NodeVM)."
+kind = "behavior"
+case = "../../../cases/opt/generic/effect_order_folded.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
+assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
+assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "effect_order_folded.simplify.nvm"
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt::simplify, NodeVM)."
+kind = "behavior"
+case = "../../../cases/opt/generic/effect_order_folded.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
+assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
+assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "effect_order_folded.simplify.fvm"
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt::simplify, FastVM)."
+kind = "behavior"
+case = "../../../cases/opt/generic/effect_order_folded.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
+assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
+assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "effect_order_folded.simplify.jit"
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt::simplify, JIT)."
+kind = "behavior"
+case = "../../../cases/opt/generic/effect_order_folded.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
+assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
+assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "effect_order_folded.inline.fvm"
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::inline, FastVM)."
+kind = "behavior"
+case = "../../../cases/opt/generic/effect_order_folded.cml"
+args = ["${case}", "std::macro", "std::inline", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
+assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
+assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "effect_order_folded.inline.jit"
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::inline, JIT)."
+kind = "behavior"
+case = "../../../cases/opt/generic/effect_order_folded.cml"
+args = ["${case}", "std::macro", "std::inline", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
+assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
+assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+}
+"""
+timeout_ms = 8000

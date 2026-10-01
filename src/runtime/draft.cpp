@@ -117,6 +117,7 @@ DraftNodeInit makeInitFromNode(const DraftNode *node) {
     init.dataType     = node->header.dataType;
     init.kind         = node->header.kind;
     init.runtimeFlags = node->header.runtimeFlags;
+    init.origin       = node->header.origin;
     init.payload      = DraftNodeView::payload(node);
     init.normInputs   = DraftNodeView::normInputs(node);
     init.withInputs   = DraftNodeView::withInputs(node);
@@ -146,6 +147,7 @@ void initializeNodeStorage(
     draftNode->header.ctrlUserCount  = static_cast<gc_cnt_t>(init.ctrlUsers.size());
     draftNode->header.kind           = init.kind;
     draftNode->header.runtimeFlags   = init.runtimeFlags;
+    draftNode->header.origin         = init.origin;
     draftNode->header.storageCls     = storageClass;
 
     if (capacityBytes != 0) {
@@ -670,6 +672,7 @@ DraftNode *GraphDraft::createDecodedNode(
     draftNode->header.ctrlUserCount    = static_cast<gc_cnt_t>(ctrlUsers.size());
     draftNode->header.kind             = sourceNode->kind;
     draftNode->header.runtimeFlags     = sourceNode->flags;
+    draftNode->header.origin           = graph->nodeOrigin(sourceRef);
     draftNode->header.storageCls       = storageClass;
 
     if (sourceNode->kind == GCNodeKind::Brch) {
@@ -812,6 +815,7 @@ DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) 
             .dataType     = init.dataType,
             .kind         = init.kind,
             .runtimeFlags = init.runtimeFlags,
+            .origin       = init.origin,
             .payload      = payloadCopy,
             .normInputs   = normInputsCopy,
             .withInputs   = withInputsCopy,
@@ -908,6 +912,17 @@ void GraphDraft::appendUserRef(
     replaceNodeStorage(id, rebuildNode(id, init));
 }
 
+uint64_t GraphDraft::nodeOrigin(gc_node_ref_t id) const {
+    const DraftNodeHeader *h = header(id);
+    return h ? h->origin : 0;
+}
+
+void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {
+    DraftNode *draftNode = node(id);
+    ASSERT(draftNode != nullptr, "Cannot set the origin of a missing draft node.");
+    draftNode->header.origin = origin;
+}
+
 gc_node_ref_t GraphDraft::addNode(const DraftNodeInit &init) {
     ASSERT(
         nodesById_.size() < std::numeric_limits<gc_node_ref_t>::max(),
@@ -961,14 +976,21 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     for (gc_node_ref_t input : ctrlInputs) {
         removeUserRef(input, id, false, false, true);
     }
+    // User lists may still name users erased earlier (as replaceUsesInList also allows for).
     for (gc_node_ref_t userId : normUsers) {
-        (void)unlinkInput(DraftEdgeKind::Norm, userId, id);
+        if (alive(userId)) {
+            (void)unlinkInput(DraftEdgeKind::Norm, userId, id);
+        }
     }
     for (gc_node_ref_t userId : withUsers) {
-        (void)unlinkInput(DraftEdgeKind::With, userId, id);
+        if (alive(userId)) {
+            (void)unlinkInput(DraftEdgeKind::With, userId, id);
+        }
     }
     for (gc_node_ref_t userId : ctrlUsers) {
-        (void)unlinkInput(DraftEdgeKind::Ctrl, userId, id);
+        if (alive(userId)) {
+            (void)unlinkInput(DraftEdgeKind::Ctrl, userId, id);
+        }
     }
     for (gc_node_ref_t otherId = 0; otherId < nodeSlotCount(); ++otherId) {
         if (otherId == id || !alive(otherId)) {
@@ -1178,43 +1200,61 @@ void GraphDraft::retargetBranchArmAnchors(
     }
 }
 
+size_t GraphDraft::dissolveUnorderedGates() {
+    size_t removed = 0;
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (gc_node_ref_t id = 0; id < nodeSlotCount(); ++id) {
+            const DraftNodeHeader *h = header(id);
+            if (!h || h->kind != GCNodeKind::Gate || !ctrlInputsOf(id).empty() ||
+                normInputsOf(id).empty() || isBranchArmAnchor(id)) {
+                continue;
+            }
+            const gc_node_ref_t value = normInputsOf(id).back();
+            if (exit_ == id) {
+                exit_ = value;
+            }
+            if (output_ == id) {
+                output_ = value;
+            }
+            if (returnNode_ == id) {
+                returnNode_ = value;
+            }
+            replaceAllValueUses(id, value);
+            eraseNode(id); // its control users lose nothing: it waited on nothing
+            ++removed;
+            changed = true;
+        }
+    }
+    return removed;
+}
+
 gc_slot_idx_t GraphDraft::allocateRuntimeSlot(camel::core::type::Type *type) {
     ASSERT(type != nullptr, "Draft runtime slot allocation requires a non-null type.");
-    CAMEL_LOG_INFO_S(
-        "GraphDraft",
-        "Allocate runtime slot type={} currentRuntimeTuple={}.",
-        static_cast<const void *>(type),
-        static_cast<const void *>(runtimeDataType_));
-
-    std::vector<camel::core::type::Type *> slotTypes;
-    if (runtimeDataType_ != nullptr) {
-        const auto currentTypes = runtimeDataType_->types();
-        CAMEL_LOG_INFO_S(
-            "GraphDraft",
-            "Allocate runtime slot existing tuple size={}.",
-            currentTypes.size());
-        slotTypes.assign(currentTypes.begin(), currentTypes.end());
+    size_t built = runtimeDataType_ != nullptr ? runtimeDataType_->size() : 0;
+    if (built == 0 && pendingRuntimeSlots_.empty()) {
+        pendingRuntimeSlots_.push_back(camel::core::type::Type::Void()); // slot 0 is reserved
     }
-    if (slotTypes.empty()) {
-        slotTypes.push_back(camel::core::type::Type::Void());
-    }
-
+    const size_t slotIndex = built + pendingRuntimeSlots_.size();
     ASSERT(
-        slotTypes.size() < static_cast<size_t>(std::numeric_limits<gc_slot_idx_t>::max()),
+        slotIndex < static_cast<size_t>(std::numeric_limits<gc_slot_idx_t>::max()),
         "Draft runtime slot count exceeds 16-bit data-index capacity.");
-    const gc_slot_idx_t slotIndex = static_cast<gc_slot_idx_t>(slotTypes.size());
-    slotTypes.push_back(type);
-    CAMEL_LOG_INFO_S(
-        "GraphDraft",
-        "Allocate runtime slot rebuilding tuple newSize={}.",
-        slotTypes.size());
-    runtimeDataType_ = camel::core::type::TupleType::create(std::move(slotTypes));
-    CAMEL_LOG_INFO_S(
-        "GraphDraft",
-        "Allocate runtime slot finished index={} newRuntimeTuple={}.",
-        slotIndex,
-        static_cast<const void *>(runtimeDataType_));
-    return slotIndex;
+    pendingRuntimeSlots_.push_back(type);
+    return static_cast<gc_slot_idx_t>(slotIndex);
+}
+
+camel::core::type::TupleType *GraphDraft::runtimeDataType() const {
+    if (!pendingRuntimeSlots_.empty()) {
+        std::vector<camel::core::type::Type *> slotTypes;
+        if (runtimeDataType_ != nullptr) {
+            const auto current = runtimeDataType_->types();
+            slotTypes.assign(current.begin(), current.end());
+        }
+        slotTypes.insert(slotTypes.end(), pendingRuntimeSlots_.begin(), pendingRuntimeSlots_.end());
+        pendingRuntimeSlots_.clear();
+        runtimeDataType_ = camel::core::type::TupleType::create(std::move(slotTypes));
+    }
+    return runtimeDataType_;
 }
 
 size_t GraphDraft::appendStaticSlot(slot_t value, camel::core::type::Type *type) {
@@ -1270,6 +1310,7 @@ void GraphDraft::addStaticGraphRef(GCGraph *graph) {
 GCGraph *GraphDraft::encode(
     const std::string &stableId, const std::string &mangledName, const std::string &name) const {
     auto *debugRecord = createGraphDebugRecord(stableId, mangledName, name);
+    recordDraftNodeOrigins(debugRecord, *this);
     camel::core::type::TupleType *staticDataType = nullptr;
     if (!staticSlotTypes_.empty()) {
         staticDataType = camel::core::type::TupleType::create(staticSlotTypes_);
@@ -1279,7 +1320,7 @@ GCGraph *GraphDraft::encode(
     return GCGraphBuildAccess::create(
         debugRecord,
         funcType_,
-        runtimeDataType_,
+        runtimeDataType(),
         staticDataType,
         closureType_,
         nullptr,

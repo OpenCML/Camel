@@ -93,6 +93,9 @@ struct DraftNodeHeader {
     uint8_t runtimeFlags             = 0;
     DraftNodeStorageClass storageCls = DraftNodeStorageClass::Slab64;
     uint8_t reserved                 = 0;
+    // Source origin (camel::source::origin_id_t) of the node, 0 when unknown. Rewrites keep it:
+    // a node that replaces another inherits its origin, inlined nodes keep the callee's.
+    uint64_t origin = 0;
     constexpr size_t usedBytes() const {
         return static_cast<size_t>(payloadBytes) +
                (static_cast<size_t>(normInputCount) + static_cast<size_t>(withInputCount) +
@@ -112,6 +115,7 @@ struct DraftNodeInit {
     camel::core::type::Type *dataType = nullptr;
     GCNodeKind kind                   = GCNodeKind::Data;
     uint8_t runtimeFlags              = 0;
+    uint64_t origin                   = 0;
     std::span<const std::byte> payload{};
     std::span<const gc_node_ref_t> normInputs{};
     std::span<const gc_node_ref_t> withInputs{};
@@ -196,13 +200,15 @@ class GraphDraft {
     GraphDraft &operator=(const GraphDraft &) = delete;
 
     camel::core::type::FunctionType *funcType() const { return funcType_; }
-    camel::core::type::TupleType *runtimeDataType() const { return runtimeDataType_; }
+    camel::core::type::TupleType *runtimeDataType() const;
     camel::core::type::TupleType *closureType() const { return closureType_; }
     size_t frameSize() const {
         ASSERT(hasFrameLayout(), "Runtime draft frame layout is not available.");
-        return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeDataType_->size();
+        return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeDataType()->size();
     }
-    bool hasFrameLayout() const { return runtimeDataType_ != nullptr && !staticSlots_.empty(); }
+    bool hasFrameLayout() const {
+        return runtimeDataType_ != nullptr || !pendingRuntimeSlots_.empty();
+    }
     bool isMacroGraph() const { return funcType_ != nullptr && funcType_->modifiers().macro(); }
     gc_cnt_t nodeCount() const { return liveNodeCount_; }
     size_t nodeSlotCount() const { return nodesById_.size(); }
@@ -264,6 +270,7 @@ class GraphDraft {
     void setFuncType(camel::core::type::FunctionType *funcType) { funcType_ = funcType; }
     void setRuntimeDataType(camel::core::type::TupleType *runtimeDataType) {
         runtimeDataType_ = runtimeDataType;
+        pendingRuntimeSlots_.clear();
     }
     void setClosureType(camel::core::type::TupleType *closureType) { closureType_ = closureType; }
 
@@ -317,9 +324,17 @@ class GraphDraft {
     void replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void
     retargetBranchArmAnchors(gc_node_ref_t oldId, gc_node_ref_t newHeadId, gc_node_ref_t newTailId);
+    /// Removes GATEs that wait on nothing (no control input): such a gate only forwards its value,
+    /// so its users read the value directly. Rewrites that remove what a gate waited on (a pruned
+    /// branch, a constant an inlined gate was ordered after) leave them behind. Returns the number
+    /// removed.
+    size_t dissolveUnorderedGates();
     void setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type);
     void setNodeDataIndex(gc_node_ref_t id, gc_slot_idx_t dataIndex);
     void setNodeRuntimeFlags(gc_node_ref_t id, uint8_t runtimeFlags);
+    /// Source origin of node `id` (see DraftNodeHeader::origin).
+    uint64_t nodeOrigin(gc_node_ref_t id) const;
+    void setNodeOrigin(gc_node_ref_t id, uint64_t origin);
     void rewriteNode(gc_node_ref_t id, const DraftNodeInit &init);
     void appendNormPort(gc_node_ref_t id);
     void appendWithPort(gc_node_ref_t id);
@@ -366,7 +381,10 @@ class GraphDraft {
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
 
     camel::core::type::FunctionType *funcType_     = nullptr;
-    camel::core::type::TupleType *runtimeDataType_ = nullptr;
+    // The frame layout. Slots allocated since it was last built are pending: building the tuple
+    // type once per allocation would cost memory quadratic in the slot count.
+    mutable camel::core::type::TupleType *runtimeDataType_ = nullptr;
+    mutable std::vector<camel::core::type::Type *> pendingRuntimeSlots_;
     camel::core::type::TupleType *closureType_     = nullptr;
     DraftNodePool pool_;
     std::vector<DraftNode *> nodesById_;

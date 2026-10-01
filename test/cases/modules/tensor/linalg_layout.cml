@@ -1,0 +1,29 @@
+/**
+ * Batched matmul with broadcasting, linear, layer_norm, permute, slice, flatten, unsqueeze.
+ */
+module linalg_layout
+
+import {
+    reshape, range, cast, ones, zeros, matmul, linear, layer_norm,
+    permute, slice, flatten, unsqueeze, transpose, shape, sum
+} from tensor
+
+func main(): int sync {
+    let a = reshape(cast(range(0, 24), 'float32'), [2, 3, 4])
+    let b = ones([4, 5])
+    let c = a @ b
+    let w = ones([4, 2])
+    let bias = reshape([0.5, -0.5], [2])
+    let y = linear(a, w, bias)
+    'linalg matmul_shape={} matmul_sum={} linear_shape={} linear_sum={}'->format<shape(c), sum(c), shape(y), sum(y)>->println
+    let v = matmul(ones([3, 4]), reshape([1.0, 2.0, 3.0, 4.0], [4]))
+    'linalg matvec_shape={} matvec_sum={}'->format<shape(v), sum(v)>->println
+    let n = layer_norm(a, ones([4]), zeros([4]))
+    'linalg layernorm_sum={}'->format<sum(n)>->println
+    let p = permute(a, [2, 0, 1])
+    let s = slice(a, 2, 1, 4, 2)
+    let f = flatten(a)
+    let u = unsqueeze(transpose(a), 0)
+    'layout permute={} slice={} slice_sum={} flatten={} unsqueeze={}'->format<shape(p), shape(s), sum(s), shape(f), shape(u)>->println
+    return 0
+}
