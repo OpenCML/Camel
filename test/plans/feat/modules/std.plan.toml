@@ -187,6 +187,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
+name = "sys.string_equality"
+desc = "Strings created by a module compare by content with literals, and branches on the comparison pick the right arm."
+kind = "behavior"
+case = "../../../cases/modules/std/sys/string_equality.cml"
+args = ["${case}"]
+envs = ["CAMEL_TEST_STRING_EQ=abc"]
+expect_exit = 0
+expect_stdout_contains = ["eq_empty=true ne_empty=false eq_value=true", "arm unset", "arm set", "picked=12"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
 name = "this.basic"
 desc = "Exercises the this module as a lightweight builtin import and execution check."
 kind = "behavior"

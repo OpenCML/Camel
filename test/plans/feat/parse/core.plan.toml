@@ -56,3 +56,14 @@ expect_diagnostic_column = 21
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
+
+[[tests]]
+name = "syntax.postfix_access"
+desc = "Member access after a with-call, a call or an index (pair<3>(4).1, make().b, rows[1].name), comparisons around them, and a type-annotated struct binding."
+kind = "behavior"
+case = "../../../cases/parse/syntax/postfix_access.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["annotated 1 2", "with-call 7 13", "call 1.5", "index y 1", "compare true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

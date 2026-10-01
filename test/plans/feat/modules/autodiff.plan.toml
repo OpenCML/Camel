@@ -1,0 +1,876 @@
+id = "modules.autodiff"
+order = 362
+tier = "feat"
+tags = ["feat", "modules", "autodiff"]
+
+[[tests]]
+name = "scalar_grad.runtime.nvm"
+desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/scalar_grad.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "scalar_grad.macro.nvm"
+desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (grad built by std::macro)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/scalar_grad.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "scalar_grad.simplified.nvm"
+desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (pullbacks inlined and folded by std::opt)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/scalar_grad.cml"
+args = ["${case}", "std::macro", "std::opt", "std::opt::fold", "std::opt::dce", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "scalar_grad.macro.fvm"
+desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (grad built by std::macro)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/scalar_grad.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "scalar_grad.macro.jit"
+desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (grad built by std::macro)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/scalar_grad.cml"
+args = ["${case}", "std::macro", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "control_flow_grad.runtime.nvm"
+desc = "Differentiates through data-dependent branches, arms reading different values, and recursion. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "control_flow_grad.macro.nvm"
+desc = "Differentiates through data-dependent branches, arms reading different values, and recursion. (grad built by std::macro)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "control_flow_grad.simplified.nvm"
+desc = "Differentiates through data-dependent branches, arms reading different values, and recursion. (pullbacks inlined and folded by std::opt)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "std::macro", "std::opt", "std::opt::fold", "std::opt::dce", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "control_flow_grad.macro.fvm"
+desc = "Differentiates through data-dependent branches, arms reading different values, and recursion. (grad built by std::macro)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "control_flow_grad.macro.jit"
+desc = "Differentiates through data-dependent branches, arms reading different values, and recursion. (grad built by std::macro)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "std::macro", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tensor_grad_check.macro.nvm"
+desc = "Checks every tensor derivative rule against finite differences."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "tensor_grad_check.simplified.nvm"
+desc = "Checks every tensor derivative rule against finite differences."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
+args = ["${case}", "std::macro", "std::opt", "std::opt::fold", "std::opt::dce", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "tensor_grad_check.macro.fvm"
+desc = "Checks every tensor derivative rule against finite differences."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "nn_grad_check.macro.nvm"
+desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/nn_grad_check.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 6, `expected 6 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "nn_grad_check.simplified.nvm"
+desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/nn_grad_check.cml"
+args = ["${case}", "std::macro", "std::opt", "std::opt::fold", "std::opt::dce", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 6, `expected 6 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "nn_grad_check.macro.fvm"
+desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/nn_grad_check.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 6, `expected 6 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "custom_rule.macro.nvm"
+desc = "Uses @vjp custom derivative rules at call sites instead of differentiating the decorated body."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/custom_rule.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('custom_rule value=8 cube=20 clip=4 mix=(3, 3)'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "custom_rule.simplified.nvm"
+desc = "Uses @vjp custom derivative rules at call sites instead of differentiating the decorated body."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/custom_rule.cml"
+args = ["${case}", "std::macro", "std::opt", "std::opt::fold", "std::opt::dce", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('custom_rule value=8 cube=20 clip=4 mix=(3, 3)'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "custom_rule.macro.fvm"
+desc = "Uses @vjp custom derivative rules at call sites instead of differentiating the decorated body."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/custom_rule.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('custom_rule value=8 cube=20 clip=4 mix=(3, 3)'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "collapse.simplified.rgir"
+desc = "A gradient through helper calls collapses into straight-line code: after std::opt, fold and dce, the derivative graph has no calls, closures or tuples left."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/collapse.cml"
+args = ["${case}", "std::macro", "std::opt", "std::opt::fold", "std::opt::dce", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const start = out.indexOf('label="grad(h)";')
+assert(start >= 0, `no grad(h) graph in: ${out}`)
+// The graph's own nodes are indented one level below its label; nested clusters are deeper.
+const body = out.slice(start).split('\n').slice(1)
+const own = []
+for (const line of body) {
+  if (/^ {8}\}/.test(line)) break
+  if (/^ {12}[NO][0-9A-F]+ \[/.test(line)) own.push(line)
+}
+assert(own.length > 0, `empty grad(h) graph`)
+for (const kind of ['CALL', 'FUNC', 'FILL', 'ACCS']) {
+  assert(!own.some(l => l.includes(`type="${kind}"`)), `grad(h) still has ${kind}: ${own.join('\n')}`)
+}
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "collapse.simplified.nvm"
+desc = "The collapsed gradient computes the same value as the pullback form."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/collapse.cml"
+args = ["${case}", "std::macro", "std::opt", "std::opt::fold", "std::opt::dce", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('collapse dh=22'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "collapse.stats"
+desc = "std::stats before and after std::opt::simplify: the gradient's calls (direct and through pullback closures) are gone, and the value is unchanged."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/collapse.cml"
+args = ["${case}", "std::macro", "std::stats", "std::opt::simplify", "std::stats", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const stats = [...out.matchAll(/GRAPH_STATS ([{].*[}])/g)].map((m) => JSON.parse(m[1]))
+assert(stats.length === 2, `expected two GRAPH_STATS lines: ${out}`)
+const [before, after] = stats
+assert(before.direct_calls + before.indirect_calls > 0, `nothing to collapse: ${JSON.stringify(before)}`)
+assert(after.direct_calls === 0 && after.indirect_calls === 0, `calls left: ${JSON.stringify(after)}`)
+assert(out.includes('collapse dh=22'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "second_order.nvm"
+desc = "grad of a function that calls grad: d2/dx2 x^3 at 2 is 12 (scalar), and grad(sum(grad(sum(x^3)))) is 6x (tensor); the inner gradient is built when the outer transformation meets it."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+[[tests]]
+name = "second_order.simplified"
+desc = "The second-order gradient graphs simplify to straight-line code: no direct or indirect call is left, and the values are unchanged."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order.cml"
+args = ["${case}", "std::macro", "std::stats", "std::opt::simplify", "std::stats", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const stats = [...input.normalized.stdout.matchAll(/GRAPH_STATS ([{].*[}])/g)].map((m) => JSON.parse(m[1]))
+assert(stats.length === 2, 'expected two GRAPH_STATS lines')
+assert(stats[0].direct_calls + stats[0].indirect_calls > 0, 'nothing to simplify')
+assert(stats[1].direct_calls === 0 && stats[1].indirect_calls === 0, `calls left: ${JSON.stringify(stats[1])}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "fused_grad_check"
+desc = "After tensor::fuse (and without std::macro, so grad sees the fused graphs), the derivative rules of matmul_add and matmul_add_relu match finite differences in every operand."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/fused_grad_check.cml"
+args = ["${case}", "tensor::fuse", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["matmul_add.x ok", "matmul_add.w ok", "matmul_add.b ok", "matmul_add_relu.x ok", "matmul_add_relu.w ok", "matmul_add_relu.b ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+[[tests]]
+name = "fused_grad_check.fused"
+desc = "The functions checked by fused_grad_check are indeed fused: tensor::fuse leaves matmul_add and matmul_add_relu in them."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/fused_grad_check.cml"
+args = ["${case}", "tensor::fuse", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert((out.match(/tensor:matmul_add_relu/g) || []).length === 3, 'expected three matmul_add_relu nodes')
+assert((out.match(/tensor:matmul_add"/g) || []).length === 3, 'expected three matmul_add nodes')
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "scalar_grad.runtime.fvm"
+desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (grad built at run time, compiled by FastVM when first called)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/scalar_grad.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "control_flow_grad.runtime.fvm"
+desc = "Differentiates through data-dependent branches, arms reading different values, and recursion. (grad built at run time, compiled by FastVM when first called)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tensor_grad_check.runtime.fvm"
+desc = "Checks every tensor derivative rule against finite differences. (grad built at run time, compiled by FastVM when first called)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "nn_grad_check.runtime.fvm"
+desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences. (grad built at run time, compiled by FastVM when first called)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/nn_grad_check.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 6, `expected 6 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "second_order.runtime.fvm"
+desc = "grad of a function that calls grad: d2/dx2 x^3 at 2 is 12 (scalar), and grad(sum(grad(sum(x^3)))) is 6x (tensor); the inner gradient is built when the outer transformation meets it. (grad built at run time, compiled by FastVM when first called)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+[[tests]]
+name = "scalar_grad.simplify.fvm"
+desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (simplified, then run by FastVM)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/scalar_grad.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "scalar_grad.simplify.jit"
+desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (simplified, then run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/scalar_grad.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "control_flow_grad.simplify.fvm"
+desc = "Differentiates through data-dependent branches, arms reading different values, and recursion. (simplified, then run by FastVM)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "control_flow_grad.simplify.jit"
+desc = "Differentiates through data-dependent branches, arms reading different values, and recursion. (simplified, then run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tensor_grad_check.simplify.fvm"
+desc = "Checks every tensor derivative rule against finite differences. (simplified, then run by FastVM)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "nn_grad_check.simplify.fvm"
+desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences. (simplified, then run by FastVM)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/nn_grad_check.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 6, `expected 6 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "nn_grad_check.simplify.jit"
+desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences. (simplified, then run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/nn_grad_check.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 6, `expected 6 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "custom_rule.simplify.fvm"
+desc = "Uses @vjp custom derivative rules at call sites instead of differentiating the decorated body. (simplified, then run by FastVM)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/custom_rule.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('custom_rule value=8 cube=20 clip=4 mix=(3, 3)'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "custom_rule.simplify.jit"
+desc = "Uses @vjp custom derivative rules at call sites instead of differentiating the decorated body. (simplified, then run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/custom_rule.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('custom_rule value=8 cube=20 clip=4 mix=(3, 3)'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "second_order.simplify.fvm"
+desc = "grad of a function that calls grad: d2/dx2 x^3 at 2 is 12 (scalar), and grad(sum(grad(sum(x^3)))) is 6x (tensor); the inner gradient is built when the outer transformation meets it. (simplified, then run by FastVM)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+[[tests]]
+name = "second_order.simplify.jit"
+desc = "grad of a function that calls grad: d2/dx2 x^3 at 2 is 12 (scalar), and grad(sum(grad(sum(x^3)))) is 6x (tensor); the inner gradient is built when the outer transformation meets it. (simplified, then run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+expect_exit = 0
+expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+[[tests]]
+name = "collapse.simplify.fvm"
+desc = "The collapsed gradient computes the same value as the pullback form. (simplified, then run by FastVM)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/collapse.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('collapse dh=22'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "collapse.simplify.jit"
+desc = "The collapsed gradient computes the same value as the pullback form. (simplified, then run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/collapse.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('collapse dh=22'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "scalar_grad.runtime.jit"
+desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (grad built at run time, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/scalar_grad.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "control_flow_grad.runtime.jit"
+desc = "Differentiates through data-dependent branches, arms reading different values, and recursion. (grad built at run time, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tensor_grad_check.runtime.jit"
+desc = "Checks every tensor derivative rule against finite differences. (grad built at run time, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "nn_grad_check.runtime.jit"
+desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences. (grad built at run time, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/nn_grad_check.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 6, `expected 6 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "second_order.runtime.jit"
+desc = "grad of a function that calls grad: d2/dx2 x^3 at 2 is 12 (scalar), and grad(sum(grad(sum(x^3)))) is 6x (tensor); the inner gradient is built when the outer transformation meets it. (grad built at run time, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+[[tests]]
+name = "tensor_grad_check.simplify.jit"
+desc = "Checks every tensor derivative rule against finite differences. (simplified, then run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "tensor_grad_check.macro.jit"
+desc = "Checks every tensor derivative rule against finite differences. (grad built by std::macro, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
+args = ["${case}", "std::macro", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "nn_grad_check.macro.jit"
+desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences. (grad built by std::macro, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/nn_grad_check.cml"
+args = ["${case}", "std::macro", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes(' FAIL '), `gradient check failed: ${out}`)
+const passed = (out.match(/ ok /g) || []).length
+assert(passed === 6, `expected 6 passing checks, got ${passed}: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "custom_rule.macro.jit"
+desc = "Uses @vjp custom derivative rules at call sites instead of differentiating the decorated body. (grad built by std::macro, run by the JIT)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/custom_rule.cml"
+args = ["${case}", "std::macro", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('custom_rule value=8 cube=20 clip=4 mix=(3, 3)'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000

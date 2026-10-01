@@ -22,6 +22,10 @@
 #include "camel/core/context/context.h"
 #include "camel/runtime/graph.h"
 
+#include <functional>
+#include <memory>
+#include <string>
+
 class GraphIRPass {
   protected:
     camel::core::context::context_ptr_t context_;
@@ -42,6 +46,18 @@ class NullGraphIRPass : public GraphIRPass {
 
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 };
+
+using PassFactory =
+    std::function<std::unique_ptr<GraphIRPass>(const camel::core::context::context_ptr_t &ctx)>;
+
+/**
+ * Registers a pass contributed by a module under a scoped name such as "tensor::fuse".
+ *
+ * Modules register their passes when they are loaded (during compilation, before any pass
+ * runs). Lookup consults the built-in `std` scope first, so modules cannot shadow built-in
+ * passes. Registering the same name again replaces the earlier factory.
+ */
+void registerModulePass(const std::string &path, PassFactory factory);
 
 enum class PassApplyStatus {
     Transformed,

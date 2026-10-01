@@ -1,0 +1,20 @@
+# Staticness
+# recorded by exemplars/check.mjs --update
+
+$ camel exemplars/04_staticness/program.cml std::nvm
+exit 0
+tensor([[      3.,       3.,       3.,       3.],
+        [      3.,       3.,       3.,       3.]], dtype=float32)
+
+$ MODE=static ONNX_OUT=<tmp>/forward.onnx camel exemplars/04_staticness/program.cml
+exit 0
+tensor([[      3.,       3.,       3.,       3.],
+        [      3.,       3.,       3.,       3.]], dtype=float32)
+exported forward
+
+$ MODE=dynamic ONNX_OUT=<tmp>/shrink.onnx camel exemplars/04_staticness/program.cml
+exit 1
+tensor([[      3.,       3.,       3.,       3.],
+        [      3.,       3.,       3.,       3.]], dtype=float32)
+(program)exemplars/04_staticness/program.cml:38:9: [Error]: An error has occurred: onnx.export_model: in 'shrink': a call to 'shrink' remains after simplification; recursion whose depth depends on the model input cannot be exported (at exemplars/04_staticness/program.cml:26:33). Check the runtime environment and input data for unexpected issues. (name=RuntimeDiag::RuntimeError, code=0x04000000)
+

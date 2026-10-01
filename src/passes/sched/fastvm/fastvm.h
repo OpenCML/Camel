@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: May. 01, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,6 +40,26 @@ namespace jit = camel::jit;
 #endif
 
 namespace ctx = camel::core::context;
+
+/**
+ * GC safepoint for FVM call transitions (CALL / FUNC / TAIL). FVM does not poll
+ * per bytecode; at a call boundary every live value sits in a FramePool frame
+ * (a registered root), so a pending collection can run here. Every call checks
+ * the global slow-path flag (one load): tensor-heavy code allocates most of its
+ * memory in a few calls, and a collection delayed by even a handful of them lets
+ * the heap grow to several times what NodeVM needs for the same program.
+ */
+inline void fastVmCallBoundarySafepoint() {
+    if (camel::core::mm::autoSpaceSafepointSlowPathEnabled()) [[unlikely]] {
+        camel::core::mm::autoSpace().safepoint("fastvm call boundary");
+    }
+}
+
+/// The graph and entry pc a higher-order operator (map, foreach, ...) calls.
+struct HigherOrderCallSite {
+    camel::runtime::GCGraph *runtimeGraph = nullptr;
+    size_t entryPc                        = 0;
+};
 
 struct FastVMConfig {
     enum class JitMode {
@@ -116,6 +136,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     size_t stackDepth_ = 0;
 
     void precompile(camel::runtime::GCGraph *runtimeRoot);
+    /// Compiles and links a graph that has no bytecode yet (see graphEntryPc).
+    void compileLate(camel::runtime::GCGraph *graph);
+    HigherOrderCallSite higherOrderCallSite(Function *func);
 
     void push(size_t pc, ctx::Frame *frame);
     std::pair<size_t, ctx::Frame *> pop();
@@ -168,7 +191,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
 
     CallResult callBorrowed(size_t pc, ctx::Frame *rootFrame);
     slot_t call(size_t pc, ctx::Frame *rootFrame);
-    size_t graphEntryPc(camel::runtime::GCGraph *graph) const;
+    /// Entry pc of `graph`, compiling it (and what it reaches) first when it was created after
+    /// startup, e.g. a gradient built at run time.
+    size_t graphEntryPc(camel::runtime::GCGraph *graph);
     uint32_t noteIndirectCall(camel::runtime::GCGraph *graph) const;
 
 #if ENABLE_FASTVM_JIT

@@ -24,11 +24,17 @@
 
 #include <functional>
 #include <optional>
+#include <span>
+#include <string>
 
 namespace camel::core::type {
 
 using ResolverFunc = std::function<std::optional<Type *>(
     const type_vec_t &, const type_vec_t &, const ModifierSet &)>;
+
+/// Compile-time values of a call's norm arguments, aligned with their types: the slot of each
+/// argument that is a constant (a literal or other static data), nullopt otherwise.
+using static_args_t = std::span<const std::optional<slot_t>>;
 
 class FuncTypeResolver {
   public:
@@ -38,6 +44,33 @@ class FuncTypeResolver {
     resolve(const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const = 0;
 
     virtual std::string signature() const = 0;
+
+    /**
+     * Resolution that may also use the values of constant arguments, for operators whose result
+     * type depends on them (e.g. a tensor constructor whose shape is given by a shape literal).
+     * The default ignores the values.
+     */
+    virtual std::optional<FunctionType *> resolveWith(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &modifiers) const {
+        (void)normStatics;
+        return resolve(with, norm, modifiers);
+    }
+
+    /**
+     * Why resolveWith() rejects these arguments, when the resolver can tell something more
+     * precise than "no match": for example, the argument kinds fit but statically known tensor
+     * shapes conflict. Returns nullopt when the arguments simply do not fit this overload.
+     */
+    virtual std::optional<std::string> explainRejection(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &modifiers) const {
+        (void)with;
+        (void)norm;
+        (void)normStatics;
+        (void)modifiers;
+        return std::nullopt;
+    }
 };
 
 using resolver_ptr_t = std::shared_ptr<FuncTypeResolver>;

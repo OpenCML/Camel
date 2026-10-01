@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -101,7 +101,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             RuntimeDiag::TensorDimensionMismatch,
             {
                 "TensorDimensionMismatch",
-                "Tensor dimension mismatched: expected shape '{0}', got '{1}'.",
+                "Tensor shape mismatch in '{0}': {1}.",
                 "Check the shapes of all operands involved in the operation and ensure they are "
                 "compatible for broadcasting or direct computation.",
             },

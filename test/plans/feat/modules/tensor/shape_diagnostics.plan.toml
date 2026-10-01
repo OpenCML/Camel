@@ -1,0 +1,289 @@
+id = "modules.tensor.shape_diagnostics"
+order = 362
+tier = "feat"
+tags = ["feat", "modules", "tensor", "diagnostics"]
+
+[[tests]]
+name = "add"
+desc = "A static shape conflict in `add` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/add.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 16
+expect_output_contains = ["cannot broadcast extents 2 and 4"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "op_plus"
+desc = "A static shape conflict in `op_plus` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/op_plus.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 29
+expect_output_contains = ["cannot broadcast extents 2 and 4"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "multiply"
+desc = "A static shape conflict in `multiply` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/multiply.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 21
+expect_output_contains = ["cannot broadcast extents 3 and 4"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "maximum"
+desc = "A static shape conflict in `maximum` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/maximum.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 20
+expect_output_contains = ["cannot broadcast extents 3 and 5"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "lt"
+desc = "A static shape conflict in `lt` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/lt.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 29
+expect_output_contains = ["cannot broadcast extents 2 and 3"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "where"
+desc = "A static shape conflict in `where` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/where.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 18
+expect_output_contains = ["cannot broadcast extents 2 and 4"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "matmul"
+desc = "A static shape conflict in `matmul` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/matmul.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 29
+expect_output_contains = ["matmul inner dimensions differ: 3 vs 4"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "concat"
+desc = "A static shape conflict in `concat` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/concat.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 19
+expect_output_contains = ["concat along axis 0: [2, 3] and [2, 4] differ in dimension 1"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "concat_rank"
+desc = "A static shape conflict in `concat_rank` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/concat_rank.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 19
+expect_output_contains = ["concat requires tensors of the same rank: [2, 3] and [3]"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "reshape"
+desc = "A static shape conflict in `reshape` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/reshape.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 20
+expect_output_contains = ["reshape changes tensor element count: [2, 3] -> [4, 2]"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "transpose"
+desc = "A static shape conflict in `transpose` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/transpose.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 22
+expect_output_contains = ["needs a rank >= 2 tensor, got [3]"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "permute"
+desc = "A static shape conflict in `permute` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/permute.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 20
+expect_output_contains = ["invalid permutation [0, 0]"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "sum_axis"
+desc = "A static shape conflict in `sum_axis` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/sum_axis.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 16
+expect_output_contains = ["axis 5 is out of range for the rank-2 input [2, 3]"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "mean_axis"
+desc = "A static shape conflict in `mean_axis` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/mean_axis.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 17
+expect_output_contains = ["axis -3 is out of range for the rank-2 input [2, 3]"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "softmax"
+desc = "A static shape conflict in `softmax` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/softmax.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 20
+expect_output_contains = ["axis 4 is out of range for the rank-2 input [2, 3]"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "layer_norm"
+desc = "A static shape conflict in `layer_norm` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/layer_norm.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 23
+expect_output_contains = ["gamma [4] does not match the trailing dimensions of the input [2, 3]"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "slice"
+desc = "A static shape conflict in `slice` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/slice.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 18
+expect_output_contains = ["axis 3 is out of range for a rank-2 tensor"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "linear"
+desc = "A static shape conflict in `linear` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/linear.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 19
+expect_output_contains = ["linear input features vs weight rows: 3 vs 4"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "conv2d"
+desc = "A static shape conflict in `conv2d` fails compilation at the call, naming both shapes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_diagnostics/conv2d.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 19
+expect_output_contains = ["conv2d input channels 3 do not match"]
+expect_output_not_contains = ["unreachable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

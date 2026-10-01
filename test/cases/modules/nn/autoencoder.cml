@@ -1,63 +1,59 @@
 /**
- * Tiny sigmoid autoencoder trained by graph-based apply_gradients.
+ * Tiny sigmoid autoencoder trained with autodiff: value_and_grad of the reconstruction loss
+ * gives an AutoEncoder-shaped gradient, one sgd step lowers the loss, and a recursive train
+ * loop repeats the step.
  */
 module autoencoder
 
-import {
-    Tensor,
-    full, shape, sigmoid, sum, zeros
-} from tensor
-
-import {
-    Parameter,
-    apply_gradients, grad, parameter, value
-} from nn
+import { grad, value_and_grad } from autodiff
+import { Tensor, full, shape, sigmoid, sum, zeros } from tensor
+import { sgd } from nn
 
 type AutoEncoder = {
-    enc_w: Parameter,
-    enc_b: Parameter,
-    dec_w: Parameter,
-    dec_b: Parameter
+    enc_w: Tensor,
+    enc_b: Tensor,
+    dec_w: Tensor,
+    dec_b: Tensor
 }
 
-with <model: AutoEncoder, target: Tensor>
-func reconstruction_loss(x: Tensor): float {
-    let hidden = sigmoid((x @ value(model.enc_w)) + value(model.enc_b))
-    let recon = sigmoid((hidden @ value(model.dec_w)) + value(model.dec_b))
+with <model: AutoEncoder>
+func reconstruction_loss(x: Tensor, target: Tensor): float {
+    let hidden = sigmoid((x @ model.enc_w) + model.enc_b)
+    let recon = sigmoid((hidden @ model.dec_w) + model.dec_b)
     let errors = recon - target
     let squared = errors * errors
     return sum(squared) / float(shape(x)[0])
 }
 
-func main(): int sync {
-    var model = {
-        enc_w: parameter(full([2, 2], 0.1)),
-        enc_b: parameter(zeros([1, 2])),
-        dec_w: parameter(full([2, 2], 0.1)),
-        dec_b: parameter(zeros([1, 2]))
+func init(): AutoEncoder {
+    return {
+        enc_w: full([2, 2], 0.1),
+        enc_b: zeros([2]),
+        dec_w: full([2, 2], 0.1),
+        dec_b: zeros([2])
     }
+}
+
+func train(model: AutoEncoder, x: Tensor, steps: int): AutoEncoder {
+    return if steps == 0 then model else train(sgd(model, grad(reconstruction_loss)<model>(x, x), 0.1), x, steps - 1)
+}
+
+func main(): int sync {
+    let model = init()
     let x = full([4, 2], 1.0)
 
-    let step = apply_gradients(<model: AutoEncoder, target: Tensor> (x: Tensor): float => {
-        let hidden = sigmoid((x @ value(model.enc_w)) + value(model.enc_b))
-        let recon = sigmoid((hidden @ value(model.dec_w)) + value(model.dec_b))
-        let errors = recon - target
-        let squared = errors * errors
-        return sum(squared) / float(shape(x)[0])
-    })
+    let before = reconstruction_loss<model>(x, x)
+    let vg = value_and_grad(reconstruction_loss)<model>(x, x)
+    let stepped = sgd(model, vg.1, 0.1)
+    let after = reconstruction_loss<stepped>(x, x)
+    let trained = train(model, x, 10)
+    let after_train = reconstruction_loss<trained>(x, x)
 
-    let before = x->reconstruction_loss<model, x>
-    let step_loss = wait step<model, x>(x, 0.1)
-    let after = x->reconstruction_loss<model, x>
-    let enc_w = value(model.enc_w)
-    let dec_w = value(model.dec_w)
-    let enc_grad = grad(model.enc_w)
-    let dec_grad = grad(model.dec_w)
-
-    'autoencoder metrics before={} step={} after={}'->format<before, step_loss, after>->println
-    'autoencoder enc_w={}'->format<enc_w>->println
-    'autoencoder dec_w={}'->format<dec_w>->println
-    'autoencoder enc_grad={}'->format<enc_grad>->println
-    'autoencoder dec_grad={}'->format<dec_grad>->println
+    'autoencoder metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
+    'autoencoder enc_w={}'->format<stepped.enc_w>->println
+    'autoencoder dec_w={}'->format<stepped.dec_w>->println
+    'autoencoder enc_grad={}'->format<vg.1.enc_w>->println
+    'autoencoder dec_grad={}'->format<vg.1.dec_w>->println
+    'autoencoder dec_b_grad={}'->format<vg.1.dec_b>->println
     return 0
 }

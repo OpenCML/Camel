@@ -1,0 +1,50 @@
+/**
+ * Derivative rules of the fused operators tensor::fuse creates (matmul_add, matmul_add_relu),
+ * checked against finite differences. Run after tensor::fuse and without std::macro, grad
+ * transforms the fused graphs at run time, so it differentiates the fused operators themselves.
+ * For each function f and direction v, sum(grad(f)(x) * v) must match
+ * (f(x + h v) - f(x - h v)) / 2h; the weights and bias receive gradients through w_of and b_of.
+ */
+module fused_grad_check
+
+import { grad } from autodiff
+import { Tensor, new, sum, relu } from tensor
+
+func check(name: string, f: (x: Tensor) => float, df: (x: Tensor) => Tensor, x: Tensor, v: Tensor): int sync {
+    let h = 0.001
+    let analytic = sum(df(x) * v)
+    let numeric = (f(x + v * h) - f(x - v * h)) / (2.0 * h)
+    let err = analytic - numeric
+    let scale = if numeric > 1.0 then numeric else if numeric < -1.0 then 0.0 - numeric else 1.0
+    let rel = if err > 0.0 then err / scale else (0.0 - err) / scale
+    let status = if rel < 0.02 then "ok" else "FAIL"
+    '{} {} analytic={} numeric={}'->format<name, status, analytic, numeric>->println
+    return 0
+}
+
+func x23(): Tensor { return new([[0.3, -1.2, 0.5], [1.1, 0.4, -0.7]]) }
+func w34(): Tensor { return new([[0.3, -1.2, 0.5, 2.0], [1.1, 0.4, -0.7, 0.2], [-0.5, 0.9, 1.3, -0.1]]) }
+func b4(): Tensor { return new([0.7, -0.3, 1.5, 0.2]) }
+func out24(): Tensor { return new([[1.0, -2.0, 0.5, 0.3], [0.4, 1.2, -0.6, 0.9]]) }
+
+// matmul + bias (fused to matmul_add), in each operand
+func lin_x(x: Tensor): float { return sum((x @ w34() + b4()) * out24()) }
+func lin_w(w: Tensor): float { return sum((x23() @ w + b4()) * out24()) }
+func lin_b(b: Tensor): float { return sum((x23() @ w34() + b) * out24()) }
+// matmul + bias + relu (fused to matmul_add_relu)
+func mlp_x(x: Tensor): float { return sum(relu(x @ w34() + b4()) * out24()) }
+func mlp_w(w: Tensor): float { return sum(relu(x23() @ w + b4()) * out24()) }
+func mlp_b(b: Tensor): float { return sum(relu(x23() @ w34() + b) * out24()) }
+
+func main(): int sync {
+    let vx = new([[0.2, -0.4, 0.9], [-0.3, 0.8, 0.1]])
+    let vw = new([[0.5, 0.1, -0.2, 0.3], [-0.6, 0.4, 0.2, -0.1], [0.3, -0.5, 0.7, 0.2]])
+    let vb = new([0.3, -0.7, 0.2, 0.5])
+    check('matmul_add.x', lin_x, grad(lin_x), x23(), vx)
+    check('matmul_add.w', lin_w, grad(lin_w), w34(), vw)
+    check('matmul_add.b', lin_b, grad(lin_b), b4(), vb)
+    check('matmul_add_relu.x', mlp_x, grad(mlp_x), x23(), vx)
+    check('matmul_add_relu.w', mlp_w, grad(mlp_w), w34(), vw)
+    check('matmul_add_relu.b', mlp_b, grad(mlp_b), b4(), vb)
+    return 0
+}

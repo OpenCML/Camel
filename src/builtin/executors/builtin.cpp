@@ -34,6 +34,10 @@ using namespace camel::core::rtdata;
 #include "../operators/profiler.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
+#include "camel/core/operator_traits.h"
+
+#include <string_view>
+#include <unordered_set>
 
 const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     static const std::unordered_map<std::string, operator_t> map = {
@@ -259,6 +263,35 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"macro/cmp", __cmp__},
     };
     return map;
+}
+
+void registerBuiltinOperatorTraits() {
+    // Pure: conversions, arithmetic, comparisons, logic, and indexing (everything under op/
+    // except the in-place assignment family), plus the non-mutating string and array helpers.
+    // io/, profiler/, input, and the in-place array operations stay unregistered (effectful).
+    static const std::unordered_set<std::string_view> kPureHelpers = {
+        "str/format",
+        "str/join",
+        "struct/len_str",
+        "struct/len_arr",
+        "struct/zip",
+        "struct/head_arr",
+        "struct/tail_arr",
+        "struct/range",
+        "struct/slice_arr",
+        "struct/concat_arr",
+        "struct/contains_str",
+        "struct/contains_arr",
+    };
+    auto &registry = camel::core::OperatorTraitsRegistry::instance();
+    for (const auto &[name, op] : getOpsImplMap()) {
+        const std::string_view key(name);
+        const bool pure =
+            (key.starts_with("op/") && !key.starts_with("op/assn")) || kPureHelpers.contains(key);
+        if (pure) {
+            registry.set(":" + name, {.pure = true, .elementwise = false});
+        }
+    }
 }
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsImplMap()) {}

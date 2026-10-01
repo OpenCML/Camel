@@ -18,6 +18,12 @@
             "description": "Build python.cmo, pyplot.cmo, and py_bridge* (requires Python dev layout)",
             "default": "ON",
             "type": "bool"
+        },
+        {
+            "name": "CAMEL_TENSOR_BLAS",
+            "description": "Use a system CBLAS (find_package(BLAS)) for tensor GEMM instead of the builtin kernels",
+            "default": "OFF",
+            "type": "bool"
         }
     ]
 }

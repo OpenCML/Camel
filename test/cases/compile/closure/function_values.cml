@@ -1,0 +1,27 @@
+/**
+ * Verifies functions are first-class values: a named function passed as an argument, and branch
+ * arms whose value is a function literal (with and without captures).
+ */
+module function_values
+
+func square(x: float): float {
+    return x * x
+}
+
+func apply(f: (x: float) => float, x: float): float {
+    return f(x)
+}
+
+func scaler(x: float): (dy: float) => float {
+    return if x > 0.0 then (dy: float): float => { return dy * 2.0 * x } else (dy: float): float => { return dy * 0.5 }
+}
+
+func main(): int sync {
+    let named = apply(square, 3.0)
+    let positive = scaler(3.0)
+    let negative = scaler(-3.0)
+    let p = positive(1.0)
+    let n = negative(1.0)
+    'function_values named={} positive={} negative={}'->format<named, p, n>->println
+    return 0
+}

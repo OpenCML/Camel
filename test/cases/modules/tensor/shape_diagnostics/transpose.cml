@@ -1,0 +1,13 @@
+/**
+ * Shape diagnostic of `transpose`: statically known shapes conflict, so compilation fails at the
+ * call with both shapes in the reason.
+ */
+module shape_diag_transpose
+
+import { zeros, transpose } from tensor
+
+func main(): int sync {
+    let r = transpose(zeros([3]))
+    println('unreachable')
+    return 0
+}

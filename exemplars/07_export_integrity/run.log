@@ -1,0 +1,11 @@
+# Export graph integrity
+# recorded by exemplars/check.mjs --update
+
+$ MODE=step ONNX_OUT=<tmp>/step.onnx camel exemplars/07_export_integrity/program.cml
+exit 0
+exported step
+
+$ MODE=effect ONNX_OUT=<tmp>/noisy.onnx camel exemplars/07_export_integrity/program.cml
+exit 1
+(program)exemplars/07_export_integrity/program.cml:48:9: [Error]: An error has occurred: onnx.export_model: in 'noisy': impure operator 'tensor:randn' cannot be exported (at exemplars/07_export_integrity/program.cml:32:16). Check the runtime environment and input data for unexpected issues. (name=RuntimeDiag::RuntimeError, code=0x04000000)
+

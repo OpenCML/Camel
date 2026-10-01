@@ -1,0 +1,49 @@
+/**
+ * Checks the derivative rules of the nn operators against finite differences (see
+ * tensor_grad_check.cml for the method).
+ */
+module nn_grad_check
+
+import { grad } from autodiff
+import { Tensor, new, random, seed, sum, reshape, tanh, cast } from tensor
+import { conv2d, max_pool2d, avg_pool2d, embedding, softmax_cross_entropy } from nn
+
+func check(name: string, f: (x: Tensor) => float, df: (x: Tensor) => Tensor, x: Tensor, v: Tensor): int sync {
+    let h = 0.001
+    let analytic = sum(df(x) * v)
+    let numeric = (f(x + v * h) - f(x - v * h)) / (2.0 * h)
+    let err = analytic - numeric
+    let scale = if numeric > 1.0 then numeric else if numeric < -1.0 then 0.0 - numeric else 1.0
+    let rel = if err > 0.0 then err / scale else (0.0 - err) / scale
+    let status = if rel < 0.02 then "ok" else "FAIL"
+    '{} {} analytic={} numeric={}'->format<name, status, analytic, numeric>->println
+    return 0
+}
+
+func image(): Tensor {
+    return reshape(new([0.1, -0.4, 0.8, 0.3, -0.9, 0.5, 0.2, -0.1, 0.7, -0.3, 0.6, 0.4, -0.2, 0.9, -0.6, 0.1, 0.3, -0.8, 0.5, 0.2, -0.4, 0.6, 0.1, -0.7, 0.8, -0.5, 0.3, 0.9, -0.1, 0.2, 0.4, -0.6]), [1, 2, 4, 4])
+}
+func kernel(): Tensor {
+    return reshape(new([0.5, -0.3, 0.2, 0.7, -0.4, 0.1, 0.6, -0.2, 0.3, 0.8, -0.5, 0.4, 0.2, -0.6, 0.9, 0.1, -0.7, 0.3, 0.5, 0.2, -0.1, 0.4, -0.3, 0.6]), [3, 2, 2, 2])
+}
+func bias(): Tensor { return new([0.1, -0.2, 0.3]) }
+func weights(): Tensor { return reshape(new([0.3, -1.2, 0.5, 2.0, 1.1, 0.4, -0.7, 0.2, -0.5, 0.9, 1.3, -0.1, 0.8, -0.6, 0.2, 0.4, 1.0, -0.3, 0.6, 0.7, -0.9, 0.5, 0.1, -0.4, 0.3, 0.2, -0.8]), [1, 3, 3, 3]) }
+func labels(): Tensor { return new([[0.0, 0.0, 1.0, 0.0], [1.0, 0.0, 0.0, 0.0], [0.0, 0.5, 0.0, 0.5]]) }
+
+func conv_input(x: Tensor): float { return sum(tanh(conv2d(x, kernel(), bias())) * weights()) }
+func conv_kernel(k: Tensor): float { return sum(tanh(conv2d(image(), k, bias())) * weights()) }
+func conv_bias(b: Tensor): float { return sum(tanh(conv2d(image(), kernel(), b)) * weights()) }
+func pools(x: Tensor): float { return sum(tanh(max_pool2d(x, 2))) + sum(tanh(avg_pool2d(x, 2, 1))) }
+func embed(t: Tensor): float { return sum(tanh(embedding(t, cast(new([1, 3, 1, 0]), "int64")))) }
+func xent(z: Tensor): float { return softmax_cross_entropy(z, labels()) }
+
+func main(): int sync {
+    seed(9)
+    check("conv_input", conv_input, grad(conv_input), image(), random([1, 2, 4, 4], -1.0, 1.0))
+    check("conv_kernel", conv_kernel, grad(conv_kernel), kernel(), random([3, 2, 2, 2], -1.0, 1.0))
+    check("conv_bias", conv_bias, grad(conv_bias), bias(), random([3], -1.0, 1.0))
+    check("pools", pools, grad(pools), image(), random([1, 2, 4, 4], -1.0, 1.0))
+    check("embedding", embed, grad(embed), random([4, 3], -1.0, 1.0), random([4, 3], -1.0, 1.0))
+    check("cross_entropy", xent, grad(xent), random([3, 4], -1.0, 1.0), random([3, 4], -1.0, 1.0))
+    return 0
+}

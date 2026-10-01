@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: May. 06, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,6 +46,15 @@ using namespace camel::jit;
         currFrame->set(bc.result, res);                                                            \
     } break;
 
+// Comparisons produce a bool slot, whatever the operand type.
+#define DEF_CMP_OP_CASE(CODE, TYPE, OP)                                                            \
+    case OpCode::CODE: {                                                                           \
+        TYPE lhs = currFrame->get<TYPE>(bc.fastop[0]);                                             \
+        TYPE rhs = currFrame->get<TYPE>(bc.fastop[1]);                                             \
+        Bool res = lhs OP rhs;                                                                     \
+        currFrame->set(bc.result, res);                                                            \
+    } break;
+
 #define DEF_BIN_DIV_CASE(CODE, TYPE, ZERO_CHECK)                                                   \
     case OpCode::CODE: {                                                                           \
         TYPE lhs = currFrame->get<TYPE>(bc.fastop[0]);                                             \
@@ -58,15 +67,14 @@ using namespace camel::jit;
     } break;
 
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
-    Frame *currFrame            = rootFrame;
-    Frame *rootActiveFrame      = rootFrame;
-    const size_t stackDepthBase = stackDepth_;
+    Frame *currFrame                = rootFrame;
+    Frame *rootActiveFrame          = rootFrame;
+    const size_t stackDepthBase     = stackDepth_;
 
     try {
         while (true) {
-            // The switch interpreter follows the same policy as computed-goto FVM: no GC safepoint
-            // inside the bytecode loop. Pass-boundary safepoints keep diagnostics available without
-            // taxing every opcode dispatch.
+            // The switch interpreter follows the same policy as computed-goto FVM: no per-opcode
+            // GC safepoint; call transitions poll fastVmCallBoundarySafepoint().
             if (InternalGlobalConfig::IsInspectionMode() && context_) {
                 if (auto sourceContext = context_->sourceContext()) {
                     sourceContext->setCurrentRuntimeOrigin(sourceContext->debugMap().pcOrigin(pc));
@@ -214,6 +222,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             } break;
 
             case OpCode::CALL: {
+                fastVmCallBoundarySafepoint();
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
                 auto function          = currFrame->get<Function *>(wargs[0]);
@@ -241,6 +250,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             } break;
 
             case OpCode::FUNC: {
+                fastVmCallBoundarySafepoint();
                 const data_arr_t srcArgs  = bc.directCallSrcArgs();
                 const data_arr_t dstSlots = bc.directCallDstSlots();
 #if ENABLE_FASTVM_JIT
@@ -300,6 +310,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             } break;
 
             case OpCode::TAIL: {
+                fastVmCallBoundarySafepoint();
                 const data_arr_t srcArgs  = bc.directCallSrcArgs();
                 const data_arr_t dstSlots = bc.directCallDstSlots();
 #if ENABLE_FASTVM_JIT
@@ -402,35 +413,35 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 DEF_BIN_DIV_CASE(FDIV, Float, 0.0f);
                 DEF_BIN_DIV_CASE(DDIV, Double, 0.0);
 
-                DEF_BIN_OP_CASE(ILT, Int, <);
-                DEF_BIN_OP_CASE(LLT, Long, <);
-                DEF_BIN_OP_CASE(FLT, Float, <);
-                DEF_BIN_OP_CASE(DLT, Double, <);
+                DEF_CMP_OP_CASE(ILT, Int, <);
+                DEF_CMP_OP_CASE(LLT, Long, <);
+                DEF_CMP_OP_CASE(FLT, Float, <);
+                DEF_CMP_OP_CASE(DLT, Double, <);
 
-                DEF_BIN_OP_CASE(IGT, Int, >);
-                DEF_BIN_OP_CASE(LGT, Long, >);
-                DEF_BIN_OP_CASE(FGT, Float, >);
-                DEF_BIN_OP_CASE(DGT, Double, >);
+                DEF_CMP_OP_CASE(IGT, Int, >);
+                DEF_CMP_OP_CASE(LGT, Long, >);
+                DEF_CMP_OP_CASE(FGT, Float, >);
+                DEF_CMP_OP_CASE(DGT, Double, >);
 
-                DEF_BIN_OP_CASE(IEQ, Int, ==);
-                DEF_BIN_OP_CASE(LEQ, Int, ==);
-                DEF_BIN_OP_CASE(FEQ, Float, ==);
-                DEF_BIN_OP_CASE(DEQ, Double, ==);
+                DEF_CMP_OP_CASE(IEQ, Int, ==);
+                DEF_CMP_OP_CASE(LEQ, Long, ==);
+                DEF_CMP_OP_CASE(FEQ, Float, ==);
+                DEF_CMP_OP_CASE(DEQ, Double, ==);
 
-                DEF_BIN_OP_CASE(INE, Int, !=);
-                DEF_BIN_OP_CASE(LNE, Long, !=);
-                DEF_BIN_OP_CASE(FNE, Float, !=);
-                DEF_BIN_OP_CASE(DNE, Double, !=);
+                DEF_CMP_OP_CASE(INE, Int, !=);
+                DEF_CMP_OP_CASE(LNE, Long, !=);
+                DEF_CMP_OP_CASE(FNE, Float, !=);
+                DEF_CMP_OP_CASE(DNE, Double, !=);
 
-                DEF_BIN_OP_CASE(ILE, Int, <=);
-                DEF_BIN_OP_CASE(LLE, Long, <=);
-                DEF_BIN_OP_CASE(FLE, Float, <=);
-                DEF_BIN_OP_CASE(DLE, Double, <=);
+                DEF_CMP_OP_CASE(ILE, Int, <=);
+                DEF_CMP_OP_CASE(LLE, Long, <=);
+                DEF_CMP_OP_CASE(FLE, Float, <=);
+                DEF_CMP_OP_CASE(DLE, Double, <=);
 
-                DEF_BIN_OP_CASE(IGE, Int, >=);
-                DEF_BIN_OP_CASE(LGE, Long, >=);
-                DEF_BIN_OP_CASE(FGE, Float, >=);
-                DEF_BIN_OP_CASE(DGE, Double, >=);
+                DEF_CMP_OP_CASE(IGE, Int, >=);
+                DEF_CMP_OP_CASE(LGE, Long, >=);
+                DEF_CMP_OP_CASE(FGE, Float, >=);
+                DEF_CMP_OP_CASE(DGE, Double, >=);
 
             default: {
                 throwRuntimeFault(RuntimeDiag::UnsupportedBytecode, to_string(bc.opcode));

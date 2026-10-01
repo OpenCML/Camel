@@ -658,6 +658,20 @@ void emitDraftPayload(
         return slice;
     };
 
+    // A GATE forwards its (last) norm input: FastVM reads the producer, NodeVM reads the gate's
+    // slot, so the slot must be the input's. Rewrites that rebind a gate's input (inlining binds
+    // parameter gates to the caller's arguments) leave a stale slot, so it is derived here.
+    const auto slotOf = [&](gc_node_ref_t id) {
+        for (size_t hops = 0; hops < plan.nodes.size() + 1; ++hops) {
+            const DraftNodeHeader *h = draft.header(id);
+            if (!h || h->kind != GCNodeKind::Gate || draft.normInputsOf(id).empty()) {
+                return h ? h->dataIndex : static_cast<gc_slot_idx_t>(0);
+            }
+            id = draft.normInputsOf(id).back();
+        }
+        return static_cast<gc_slot_idx_t>(0);
+    };
+
     for (const PlannedDraftNode &planned : plan.nodes) {
         const DraftNodeHeader *draftHeader = draft.header(planned.draftId);
         ASSERT(draftHeader != nullptr, "Draft payload emission requires a non-null node header.");
@@ -671,7 +685,7 @@ void emitDraftPayload(
         auto *header =
             reinterpret_cast<GCNode *>(mutableNodeStorage(payload.nodeBlocks, planned.ref));
         *header = GCNode{
-            .dataIndex   = draftHeader->dataIndex,
+            .dataIndex   = slotOf(planned.draftId),
             .blockCount  = planned.blockCount,
             .normInputs  = appendSlice(draft.normInputsOf(planned.draftId)),
             .withInputs  = appendSlice(draft.withInputsOf(planned.draftId)),
@@ -830,6 +844,21 @@ createGraphDebugRecord(std::string stableId, std::string mangledName, std::strin
     return record;
 }
 
+void recordDraftNodeOrigins(GCGraphDebugRecord *record, const GraphDraft &draft) {
+    if (!record) {
+        return;
+    }
+    const DraftPayloadPlan plan = planDraftPayload(draft);
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id) || plan.runtimeRefsByDraftId[id] == kInvalidNodeRef) {
+            continue;
+        }
+        if (const uint64_t origin = draft.nodeOrigin(id)) {
+            record->nodeOrigins[plan.runtimeRefsByDraftId[id]] = origin;
+        }
+    }
+}
+
 GCGraphNativePayload
 allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shape) {
     GCGraphNativePayload payload{};
@@ -940,6 +969,8 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     const GCGraphPayloadShape &payloadShape,
     const std::function<void(GCGraphPayloadArena &)> &emitPayload,
     std::span<const slot_t> staticSlots) {
+    EXEC_WHEN_DEBUG(mm::graphSpace().validateFreeList(
+        std::format("before constructing graph '{}'", debugRecord ? debugRecord->name : "<null>")));
     ASSERT(memory != nullptr, "GCGraph in-place construction requires valid memory.");
     CAMEL_LOG_INFO_S(
         "GCGraphBuild",
@@ -1031,6 +1062,8 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
         ref = graph->nextNodeRef(ref);
     }
     ASSERT(arena.available() == 0, "Graph arena planning did not match graph emission.");
+    EXEC_WHEN_DEBUG(mm::graphSpace().validateFreeList(
+        std::format("constructing graph '{}'", debugRecord ? debugRecord->name : "<null>")));
     CAMEL_LOG_INFO_S(
         "GCGraphBuild",
         "constructInPlace finished: name='{}' graph={}.",
@@ -1079,6 +1112,14 @@ const std::string &GCGraph::name() const {
     return debug_ ? debug_->name : kEmpty;
 }
 
+uint64_t GCGraph::nodeOrigin(gc_node_ref_t ref) const {
+    if (!debug_) {
+        return 0;
+    }
+    auto it = debug_->nodeOrigins.find(ref);
+    return it == debug_->nodeOrigins.end() ? 0 : it->second;
+}
+
 camel::core::type::FunctionType *GCGraph::funcType() const { return funcType_; }
 
 const TupleType *GCGraph::runtimeDataType() const { return runtimeDataType_; }
@@ -1087,9 +1128,8 @@ const TupleType *GCGraph::staticDataType() const { return staticDataType_; }
 
 const TupleType *GCGraph::closureType() const { return closureType_; }
 
-bool GCGraph::hasFrameLayout() const {
-    return staticArea_ != nullptr && runtimeDataType() != nullptr;
-}
+// A graph without constants has no static area; its frame layout is the runtime data type.
+bool GCGraph::hasFrameLayout() const { return runtimeDataType() != nullptr; }
 
 size_t GCGraph::frameSize() const {
     ASSERT(hasFrameLayout(), "Runtime graph frame layout is not available.");
@@ -1374,9 +1414,13 @@ void GCGraphManager::replaceRoot(GCGraph *rootGraph) {
 
     root_   = rootGraph;
     graphs_ = std::move(newGraphs);
+    rebuildGcRoots();
+}
+
+void GCGraphManager::rebuildGcRoots() {
     gcRoots_.clear();
     debugRecords_.clear();
-    gcRoots_.reserve(graphs_.size());
+    gcRoots_.reserve(graphs_.size() + detached_.size());
     for (GCGraph *graph : graphs_) {
         if (!graph) {
             continue;
@@ -1386,6 +1430,32 @@ void GCGraphManager::replaceRoot(GCGraph *rootGraph) {
             debugRecords_.push_back(graph->debug_);
         }
     }
+    for (GCGraph *graph : detached_) {
+        gcRoots_.push_back(graph);
+    }
+}
+
+void GCGraphManager::trackDetached(std::span<GCGraph *const> graphs) {
+    for (GCGraph *graph : graphs) {
+        if (graph && std::find(detached_.begin(), detached_.end(), graph) == detached_.end()) {
+            detached_.push_back(graph);
+            gcRoots_.push_back(graph);
+        }
+    }
+}
+
+void GCGraphManager::releaseDetached() {
+    const std::unordered_set<GCGraph *> owned(graphs_.begin(), graphs_.end());
+    for (GCGraph *graph : detached_) {
+        if (owned.contains(graph)) {
+            continue; // installed as part of the program since
+        }
+        delete graph->debug_;
+        graph->~GCGraph();
+        mm::graphSpace().free(graph);
+    }
+    detached_.clear();
+    rebuildGcRoots();
 }
 
 void GCGraphManager::adoptRoot(GCGraph *rootGraph) {
@@ -1400,19 +1470,13 @@ void GCGraphManager::adoptRoot(GCGraph *rootGraph) {
     }
 
     graphs_ = collectReachableGraphs(root_);
-    gcRoots_.reserve(graphs_.size());
-    for (GCGraph *graph : graphs_) {
-        if (!graph) {
-            continue;
-        }
-        gcRoots_.push_back(graph);
-        if (graph->debug_) {
-            debugRecords_.push_back(graph->debug_);
-        }
-    }
+    rebuildGcRoots();
 }
 
-GCGraphManager::~GCGraphManager() { clear(); }
+GCGraphManager::~GCGraphManager() {
+    releaseDetached();
+    clear();
+}
 
 std::vector<GCGraph *> GCGraphManager::roots() const {
     if (!root_) {

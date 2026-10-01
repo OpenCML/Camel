@@ -199,11 +199,16 @@ compExpr
     ;
 
 annoExpr
-    : accessExpr ({isAdjacent()}? (indices | parentArgues | angledValues | '!'))*
+    : accessExpr (({isAdjacent()}? (indices | parentArgues | angledValues | '!')) | memberAccess)*
     ;
 
 accessExpr
     : primaryData ('.' (IDENTIFIER | INTEGER))*
+    ;
+
+// A member of the value a call, binding or index produced: f<m>(x).0, xs[i].name.
+memberAccess
+    : '.' (IDENTIFIER | INTEGER)
     ;
 
 structData

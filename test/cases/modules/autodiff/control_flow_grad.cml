@@ -1,0 +1,37 @@
+/**
+ * Verifies gradients through data-dependent branches, branch arms reading different values, and
+ * recursion (a pullback per call, chained by closures).
+ */
+module control_flow_grad
+
+import { grad } from autodiff
+
+func leaky(x: float): float {
+    return if x > 0.0 then x * x else 0.5 * x
+}
+
+func power(x: float, n: int): float {
+    return if n == 0 then 1.0 else x * power(x, n - 1)
+}
+
+func pick(a: float, b: float, c: bool): float {
+    let s = a * b
+    return if c then s * a else b + 1.0
+}
+
+// Nested branches inside recursion: sum of |x| * i for i in 1..n.
+func walk(x: float, n: int): float {
+    let step = if x > 0.0 then x * float(n) else 0.0 - x * float(n)
+    return if n == 0 then 0.0 else step + walk(x, n - 1)
+}
+
+func main(): int sync {
+    let a = grad(leaky)(3.0)
+    let b = grad(leaky)(-3.0)
+    let c = grad(power)(2.0, 5)
+    let d = grad(pick)(2.0, 3.0, true)
+    let e = grad(pick)(2.0, 3.0, false)
+    let w = grad(walk)(-1.5, 4)
+    'control_flow_grad a={} b={} c={} d={} e={} w={}'->format<a, b, c, d, e, w>->println
+    return 0
+}

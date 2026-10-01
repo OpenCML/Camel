@@ -1,0 +1,29 @@
+/**
+ * Member access after a call, a with-binding or an index: `pair<3>(4).1`, `make().b`,
+ * `rows[1].name`; `<` and `>` around them still read as comparisons when they are not a
+ * binding. Also a struct literal bound with a type annotation.
+ */
+module postfix_access
+
+type S = { a: int, b: float }
+type Row = { name: string, size: int }
+
+with <k: int>
+func pair(x: int): (int, int) {
+    return (x + k, x * k)
+}
+
+func make(): S { return { a: 5, b: 1.5 } }
+
+func main(): int sync {
+    let s: S = { a: 1, b: 2.0 }
+    let rows = [{ name: 'x', size: 1 }, { name: 'y', size: 2 }]
+    'annotated {} {}'->format<s.a, s.b>->println
+    let first = pair<3>(4).0
+    let second = pair<3>(4).1 + 1
+    'with-call {} {}'->format<first, second>->println
+    'call {}'->format<make().b>->println
+    'index {} {}'->format<rows[1].name, rows[0].size>->println
+    'compare {}'->format<3 < 4 && 5 > 4>->println
+    return 0
+}

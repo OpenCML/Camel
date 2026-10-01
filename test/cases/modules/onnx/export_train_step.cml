@@ -1,0 +1,40 @@
+/**
+ * A training step exports as one ONNX graph: the parameters (a struct) and
+ * the input become graph inputs, value_and_grad expands and simplifies into
+ * straight-line gradient code, and the loss and the SGD-updated parameters
+ * become graph outputs.
+ */
+module export_train_step
+
+import { Tensor, relu, mean, reshape } from tensor
+import { value_and_grad } from autodiff
+import { sgd } from nn
+import { export_model } from onnx
+import { get_env } from sys
+
+type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+
+with <m: Mlp>
+func loss(x: Tensor): float {
+    let h = relu(x @ m.w1 + m.b1)
+    let y = h @ m.w2 + m.b2
+    return mean(y * y)
+}
+
+func step(m: Mlp, x: Tensor): (float, Mlp) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func main(): int sync {
+    let m = {
+        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
+        b1: reshape([0.1, 0.0, -0.1], [3]),
+        w2: reshape([1.0, -1.0, 0.5], [3, 1]),
+        b2: reshape([0.2], [1])
+    }
+    let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
+    export_model(step, (m, x), get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

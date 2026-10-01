@@ -53,6 +53,7 @@ enum class RuntimeSpecializationBindingKind : uint8_t {
     Norm,
     With,
     Closure,
+    Lift, // closure nodes turned into norm ports (see devirtualizeStaticCallInDraft)
 };
 
 struct RuntimeSpecializationBindingKey {
@@ -110,6 +111,48 @@ class RuntimeGraphDraftSession {
     std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
     std::unordered_map<RuntimeSpecializationKey, GCGraph *, RuntimeSpecializationKeyHasher>
         specializationCache_;
+};
+
+/// Encodes new graphs that may refer to one another, such as the mutually recursive graphs a
+/// transform synthesizes. Each member is reserved first: the returned key stands for the graph
+/// wherever a GCGraph pointer goes in the drafts (FUNC callees, static Function values), and
+/// encode() replaces every such reference with the encoded graph. A key is never dereferenced
+/// and must not escape the drafts of its group.
+class GraphDraftGroup {
+  public:
+    explicit GraphDraftGroup(const camel::core::context::context_ptr_t &context);
+    ~GraphDraftGroup();
+
+    GraphDraftGroup(const GraphDraftGroup &)            = delete;
+    GraphDraftGroup &operator=(const GraphDraftGroup &) = delete;
+
+    /// Reserves a member with an empty draft and returns its key.
+    GCGraph *reserve(std::string stableId, std::string mangledName, std::string name);
+    /// The draft of a member.
+    GraphDraft &draft(GCGraph *key);
+    /// Replaces the draft of a member.
+    void define(GCGraph *key, std::unique_ptr<GraphDraft> draft);
+
+    /// Encodes all members.
+    void encode();
+    /// The graph encoded for `key`.
+    GCGraph *encoded(GCGraph *key) const;
+
+  private:
+    struct Member {
+        RuntimeDraftIdentity identity;
+        std::unique_ptr<GraphDraft> draft;
+        GCGraph *encoded = nullptr;
+        std::byte keyStorage{};
+    };
+
+    Member &member(GCGraph *key);
+    const Member &member(GCGraph *key) const;
+
+    camel::core::context::context_ptr_t context_;
+    std::unordered_map<GCGraph *, std::unique_ptr<Member>> members_;
+    std::vector<GCGraph *> order_;
+    bool encoded_ = false;
 };
 
 } // namespace camel::runtime

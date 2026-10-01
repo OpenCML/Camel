@@ -1,0 +1,2 @@
+tensor([      1.,       0.,       3.,     0.5], dtype=float32)
+tensor([     -1.,       8.,     -12.,      -2.], dtype=float32)

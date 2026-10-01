@@ -1,0 +1,89 @@
+/**
+ * Camel implementation of the `gru` benchmark model (benchmarks/README.md):
+ * single-layer GRU (H=128) over x[32,16,64] written as an explicit cell
+ * recurrence with PyTorch gate equations, h0 = 0, then Linear(128,10) on the
+ * final hidden state.
+ */
+module gru
+
+import { Tensor, sigmoid, tanh, slice, reshape, shape, zeros, mean } from tensor
+import { grad, value_and_grad } from autodiff
+import { sgd, save_params } from nn
+import { get_env } from sys
+import { export_model } from onnx
+import { weight, bench_input, run_benchmark, run_training } from camel_bench
+
+type Gru = {
+    w_ir: Tensor, w_iz: Tensor, w_in: Tensor,
+    w_hr: Tensor, w_hz: Tensor, w_hn: Tensor,
+    b_ir: Tensor, b_iz: Tensor, b_in: Tensor,
+    b_hr: Tensor, b_hz: Tensor, b_hn: Tensor,
+    fc_w: Tensor, fc_b: Tensor
+}
+
+with <m: Gru>
+func cell(xt: Tensor, h: Tensor): Tensor {
+    let r = sigmoid(xt @ m.w_ir + m.b_ir + h @ m.w_hr + m.b_hr)
+    let z = sigmoid(xt @ m.w_iz + m.b_iz + h @ m.w_hz + m.b_hz)
+    let n = tanh(xt @ m.w_in + m.b_in + r * (h @ m.w_hn + m.b_hn))
+    return (1.0 - z) * n + z * h
+}
+
+/// Runs the recurrence over time steps [t, steps).
+with <m: Gru, x: Tensor>
+func run(t: int, steps: int, h: Tensor): Tensor {
+    let batch = shape(x)[0]
+    let features = shape(x)[2]
+    return if t >= steps then h else run<m, x>(t + 1, steps, cell<m>(reshape(slice(x, 1, t, t + 1), [batch, features]), h))
+}
+
+with <m: Gru>
+func forward(x: Tensor): Tensor {
+    let h = run<m, x>(0, shape(x)[1], zeros([shape(x)[0], shape(m.w_hr)[0]]))
+    return h @ m.fc_w + m.fc_b
+}
+
+// Training workload (train.py): loss mean(y^2), one SGD step with lr 0.01.
+with <m: Gru>
+func loss(x: Tensor): float {
+    let y = forward<m>(x)
+    return mean(y * y)
+}
+
+func train_step(m: Gru, x: Tensor): float sync {
+    let vg = value_and_grad(loss)<m>(x)
+    let next = sgd(m, vg.1, 0.01)
+    return vg.0
+}
+
+/// The training step as a function of the parameters: the loss and the updated parameters.
+func step(m: Gru, x: Tensor): (float, Gru) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+/// Exports `step` to ONNX: the parameters and the input become graph inputs.
+func export_step(m: Gru, path: string): int sync {
+    export_model(step, (m, bench_input()), path)
+    return 0
+}
+
+func dump_grads(m: Gru, x: Tensor, dir: string): int sync {
+    save_params(grad(loss)<m>(x), dir)
+    return 0
+}
+
+func main(): int sync {
+    let m = {
+        w_ir: weight('w_ir'), w_iz: weight('w_iz'), w_in: weight('w_in'),
+        w_hr: weight('w_hr'), w_hz: weight('w_hz'), w_hn: weight('w_hn'),
+        b_ir: weight('b_ir'), b_iz: weight('b_iz'), b_in: weight('b_in'),
+        b_hr: weight('b_hr'), b_hz: weight('b_hz'), b_hn: weight('b_hn'),
+        fc_w: weight('fc_w'), fc_b: weight('fc_b')
+    }
+    let workload = get_env('CAMEL_BENCH_WORKLOAD')
+    return if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT')) else if workload == 'train' then run_training(
+        (x: Tensor): float => { return train_step(m, x) },
+        (x: Tensor, dir: string): int => { return dump_grads(m, x, dir) }
+    ) else run_benchmark((x: Tensor): Tensor => forward<m>(x))
+}

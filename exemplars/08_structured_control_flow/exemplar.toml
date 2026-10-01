@@ -1,0 +1,17 @@
+title = "Structured control flow"
+summary = "A branch on an input-dependent condition exports as an ONNX If with one subgraph per arm."
+
+[[runs]]
+name = "export"
+env = ["ONNX_OUT={tmp}/gate.onnx"]
+exit = 0
+output_contains = ["camel gate=2 0 6 1", "exported"]
+onnx = "{tmp}/gate.onnx"
+onnx_ops = "Gather,Greater,If,Identity"
+
+[[runs]]
+name = "dump"
+args = ["std::argir"]
+exit = 0
+stdout = "expected/dump.argir.dot"
+output_contains = ["role=\"branch-contract\""]

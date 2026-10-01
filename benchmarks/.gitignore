@@ -1,0 +1,10 @@
+# Local virtual environment (recreate with: python3 -m venv .venv; .venv/bin/pip install -r requirements.txt)
+.venv/
+# Generated weights, inputs and exported ONNX graphs (regenerate with common/weights.py)
+artifacts/
+# Benchmark outputs; only the committed smoke example is tracked
+results/*.csv
+results/*.log
+results/*/
+!results/smoke.csv
+__pycache__/

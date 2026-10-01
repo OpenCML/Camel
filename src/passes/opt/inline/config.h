@@ -40,6 +40,9 @@ enum class InlineTargetStrategy {
 struct InlineRewriteConfig {
     InlineTargetStrategy inlineStrategy     = InlineTargetStrategy::Hybrid;
     size_t smallSubgraphMaxNonDataPortNodes = 8;
+    /// An acyclic callee called from several places is inlined everywhere when the code this
+    /// duplicates, (call sites - 1) x its size in non-data nodes, stays within this budget.
+    size_t duplicationBudgetNodes = 256;
     bool blockCallsToSccEntryCallees        = true;
 };
 

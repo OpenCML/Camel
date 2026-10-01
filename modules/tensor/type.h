@@ -12,52 +12,84 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Mar. 10, 2026
- * Updated: Mar. 10, 2026
+ * Created: Jul. 29, 2025
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
+ */
+
+/*
+ * The static Tensor type.
+ *
+ * A TensorType refines "some tensor" with what is known at compile time:
+ *   - dtype: a storage dtype (float32 / int64 / bool), or unknown;
+ *   - shape: unknown rank (absent), or a list of extents where each extent is
+ *     known (>= 0) or unknown (kUnknownDim).
+ * The plain `Tensor` annotation is the fully unknown type and accepts every
+ * tensor. Types are interned, so equal types share one instance.
+ *
+ * Refinement order: a type with less information is assignable from one with
+ * more. `unify` computes the least common refinement (used at branch joins),
+ * keeping only the facts both sides agree on.
  */
 
 #pragma once
 
 #include "camel/core/type/other.h"
 
+#include <optional>
 #include <span>
-#include <unordered_map>
 #include <vector>
 
 namespace camel::tensor {
 
 namespace type = camel::core::type;
 
+/// Marker for an extent that is not known statically.
+inline constexpr int64_t kUnknownDim = -1;
+
+using StaticShape = std::vector<int64_t>;
+
 class TensorType : public type::OtherType {
   public:
-    TensorType(const std::vector<size_t> &shape, type::Type *elementType = nullptr);
-
-  protected:
-    TensorType(type::TypeCode code, size_t paramCount, type::Type **params);
-
-  public:
     static type::TypeCode typeCode();
-    static TensorType *create(type::Type *elementType, const std::vector<size_t> &shape);
-    static TensorType *Dynamic(type::Type *elementType = nullptr);
-    static type::Type *Default();
 
-    std::vector<size_t> shape() const;
-    type::Type *dType() const;
+    /**
+     * Interned constructor. `dtype` is any numeric scalar code (normalized to
+     * storage) or nullopt for unknown; `shape` is nullopt for unknown rank.
+     */
+    static TensorType *
+    get(std::optional<type::TypeCode> dtype, std::optional<StaticShape> shape = std::nullopt);
+
+    /// The fully unknown tensor type (`Tensor`).
+    static TensorType *Default();
+
+    std::optional<type::TypeCode> dtype() const { return dtype_; }
+    const std::optional<StaticShape> &shape() const { return shape_; }
+    std::optional<size_t> rank() const {
+        return shape_ ? std::optional<size_t>(shape_->size()) : std::nullopt;
+    }
+    /// True when rank and every extent are known.
+    bool isStaticShape() const;
 
     std::string toString() const override;
     std::string mangle() const override;
     type::Type *clone(bool deep = false) const override;
     bool equals(type::Type *type) const override;
+    type::Type *unify(type::Type *other) const override;
+    /// Mutable bindings hold any tensor: widening drops dtype and shape facts.
+    type::Type *widened() const override;
     type::CastSafety castSafetyFrom(type::Type *sourceType) const override;
     bool assignableFrom(type::Type *sourceType) const override;
     type::OtherType *cloneWithParams(std::span<type::Type *const> params) const override;
 
   private:
-    std::vector<size_t> shape_;
-    type::Type *elementType_;
+    TensorType(std::optional<type::TypeCode> dtype, std::optional<StaticShape> shape);
+
+    std::optional<type::TypeCode> dtype_;
+    std::optional<StaticShape> shape_;
 };
 
-TensorType *getTensorType(type::Type *dtype = nullptr);
+/// The TensorType of `type`, or nullptr when `type` is not a tensor.
+const TensorType *asTensorType(const type::Type *type);
 
 } // namespace camel::tensor

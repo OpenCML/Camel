@@ -1,0 +1,25 @@
+/**
+ * Verifies float comparisons drive branches correctly and 64-bit integer equality compares all
+ * 64 bits, on every execution engine.
+ */
+module float_compare_branch
+
+func pick(x: float, y: float): int {
+    let lt = if x < y then 1 else 0
+    let le = if x <= y then 1 else 0
+    let gt = if x > y then 1 else 0
+    let ge = if x >= y then 1 else 0
+    let eq = if x == y then 1 else 0
+    let ne = if x != y then 1 else 0
+    return lt * 100000 + le * 10000 + gt * 1000 + ge * 100 + eq * 10 + ne
+}
+
+func main(): int sync {
+    let a = pick(1.5, 2.5)
+    let b = pick(2.5, 1.5)
+    let c = pick(2.5, 2.5)
+    let big = 4294967296
+    let wide = if big == 0 then 1 else 0
+    'float_compare_branch a={} b={} c={} wide={}'->format<a, b, c, wide>->println
+    return 0
+}

@@ -1,0 +1,18 @@
+/**
+ * A shape conflict that only shows at run time (the extent comes from a variable) is reported at
+ * the expression that fails (`c @ b`, line 11), not at the start of the enclosing statement.
+ */
+module runtime_shape_column
+
+import { Tensor, ones, reshape } from tensor
+
+func f(a: Tensor, b: Tensor): Tensor {
+    let c = a + a
+    return c @ b
+}
+
+func main(): int sync {
+    let n = 3
+    println(f(ones([2, n]), ones([2, n])))
+    return 0
+}

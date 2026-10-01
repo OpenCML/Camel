@@ -1,0 +1,15 @@
+title = "Scalar boundary"
+summary = "Tensor elements read back to the host decide a branch; host numbers re-enter tensor math. The annotated dump marks every crossing."
+
+[[runs]]
+name = "run"
+args = ["std::nvm"]
+exit = 0
+stdout = "expected/run.txt"
+
+[[runs]]
+name = "dump"
+args = ["std::argir"]
+exit = 0
+stdout = "expected/dump.argir.dot"
+output_contains = ["role=\"scalar-boundary\"", "role=\"branch-contract\"", "role=\"effect\""]

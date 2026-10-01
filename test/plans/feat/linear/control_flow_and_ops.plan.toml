@@ -89,3 +89,51 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
+
+[[tests]]
+name = "float_compare_branch.nvm"
+desc = "Branches on every float comparison and compares 64-bit integers for equality."
+kind = "behavior"
+case = "../../../cases/linear/runtime/float_compare_branch.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout
+    assert(out.includes('float_compare_branch a=110001 b=1101 c=10110 wide=0'), `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "float_compare_branch.fvm"
+desc = "Branches on every float comparison and compares 64-bit integers for equality."
+kind = "behavior"
+case = "../../../cases/linear/runtime/float_compare_branch.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout
+    assert(out.includes('float_compare_branch a=110001 b=1101 c=10110 wide=0'), `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "float_compare_branch.jit"
+desc = "Branches on every float comparison and compares 64-bit integers for equality."
+kind = "behavior"
+case = "../../../cases/linear/runtime/float_compare_branch.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout
+    assert(out.includes('float_compare_branch a=110001 b=1101 c=10110 wide=0'), `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

@@ -74,6 +74,9 @@ class ArrayType : public CompositeType {
     virtual bool equals(Type *type) const override;
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
+    /// Widens every element type, so `var` bindings never hold refined aggregates (mutation
+    /// through `var` parameters would otherwise break covariant assignability).
+    virtual Type *widened() const override;
 
   private:
     // Private constructor: called by the factory or create.

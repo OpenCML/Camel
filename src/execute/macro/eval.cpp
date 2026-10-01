@@ -106,8 +106,6 @@ inline bool isMacroFunction(const ::Function *funcObj) {
     return funcObj != nullptr && funcObj->graph() != nullptr && funcObj->graph()->isMacro();
 }
 
-inline bool isNativeMacroOperUri(std::string_view uri) { return uri == "nn:apply_gradients"; }
-
 inline std::string macroFunctionName(const ::Function *funcObj) {
     ASSERT(funcObj != nullptr, "Macro function is null.");
     auto *runtimeGraph = funcObj->graph();
@@ -398,12 +396,10 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
         return std::nullopt;
     }
     const auto *body = ownerGraph->nodeBodyAs<GCOperBody>(nodeRef);
-    if (!body || (!node->isMacro() && !isNativeMacroOperUri(body->uri()))) {
+    if (!body || !node->isMacro()) {
         return std::nullopt;
     }
-    const bool nativeMacroOper = isNativeMacroOperUri(body->uri());
-    if ((!nativeMacroOper &&
-         !areStaticRuntimeDataInputs(ownerGraph, ownerGraph->withInputsOf(nodeRef))) ||
+    if (!areStaticRuntimeDataInputs(ownerGraph, ownerGraph->withInputsOf(nodeRef)) ||
         !areStaticRuntimeDataInputs(ownerGraph, ownerGraph->normInputsOf(nodeRef))) {
         return std::nullopt;
     }
@@ -423,8 +419,7 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
     Frame *frame                = framePool_.acquire(ownerGraph, staticAreaSnapshot);
     try {
         const auto normInputs = ownerGraph->normInputsOf(nodeRef);
-        const auto withInputs =
-            nativeMacroOper ? std::span<const gc_node_ref_t>{} : ownerGraph->withInputsOf(nodeRef);
+        const auto withInputs = ownerGraph->withInputsOf(nodeRef);
         std::vector<gc_data_idx_t> indices;
         indices.reserve(normInputs.size() + withInputs.size());
         for (gc_node_ref_t in : normInputs) {

@@ -13,8 +13,19 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
+ */
+
+/*
+ * Allocator for objects above the generational size threshold.
+ *
+ * Each object is a separate block. Freed blocks are kept in a size-class
+ * cache (four classes per power of two, so at most 25% slack) up to
+ * kMaxCachedBytes and reused by later allocations of the same class. Tensor
+ * workloads free and reallocate same-sized buffers continuously; returning
+ * them to the system allocator and faulting fresh pages back in dominated the
+ * cost of medium-sized allocations.
  */
 
 #pragma once
@@ -28,11 +39,14 @@
 #include "camel/core/mm/debug_hook.h"
 #endif
 
+#include <bit>
 #include <cstddef>
 #include <limits> // for std::numeric_limits
 #include <mutex>
 #include <new> // for ::operator new / ::operator delete
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace camel::core::mm {
 
@@ -43,9 +57,10 @@ class LargeObjectAllocator : public IAllocator {
     ~LargeObjectAllocator() override {
         std::lock_guard<std::mutex> lock(mutex_);
         for (auto *hdr : allocated_) {
-            ::operator delete(hdr, std::align_val_t(alignof(slot_t)));
+            releaseBlock(hdr);
         }
         allocated_.clear();
+        dropCachedBlocks();
     }
 
     void *alloc(size_t size, size_t align = alignof(slot_t)) override {
@@ -59,8 +74,7 @@ class LargeObjectAllocator : public IAllocator {
                 invokePreAllocHook(PreAllocEvent{total_size, debugRegion_});
             }
         });
-        std::byte *raw = reinterpret_cast<std::byte *>(
-            ::operator new(total_size, std::align_val_t(alignof(slot_t))));
+        std::byte *raw = static_cast<std::byte *>(acquireBlock(sizeClass(total_size)));
 
         // Install the object header and record the aligned total_size.
         installHeader(raw, total_size);
@@ -86,16 +100,17 @@ class LargeObjectAllocator : public IAllocator {
         auto it = allocated_.find(hdr);
         if (LIKELY(it != allocated_.end())) {
             allocated_.erase(it);
-            ::operator delete(hdr, std::align_val_t(alignof(slot_t)));
+            recycleBlock(hdr);
         }
     }
 
     void reset() override {
         std::lock_guard<std::mutex> lock(mutex_);
         for (auto *hdr : allocated_) {
-            ::operator delete(hdr, std::align_val_t(alignof(slot_t)));
+            releaseBlock(hdr);
         }
         allocated_.clear();
+        dropCachedBlocks();
     }
 
     size_t available() const override { return std::numeric_limits<size_t>::max(); }
@@ -116,7 +131,7 @@ class LargeObjectAllocator : public IAllocator {
             auto it = allocated_.find(hdr);
             if (it != allocated_.end()) {
                 allocated_.erase(it);
-                ::operator delete(hdr, std::align_val_t(alignof(slot_t)));
+                recycleBlock(hdr);
             }
         }
     }
@@ -133,8 +148,55 @@ class LargeObjectAllocator : public IAllocator {
     }
 
   private:
+    static constexpr size_t kMaxCachedBytes = 256u << 20;
+
+    /// Block capacity for a request of `bytes`: rounded up to a quarter of its power of two.
+    static size_t sizeClass(size_t bytes) {
+        const size_t octave = std::bit_floor(bytes);
+        const size_t step   = octave >= 4 ? octave / 4 : 1;
+        return (bytes + step - 1) / step * step;
+    }
+
+    void *acquireBlock(size_t capacity) {
+        auto it = cachedBlocks_.find(capacity);
+        if (it != cachedBlocks_.end() && !it->second.empty()) {
+            void *block = it->second.back();
+            it->second.pop_back();
+            cachedBytes_ -= capacity;
+            return block;
+        }
+        return ::operator new(capacity, std::align_val_t(alignof(slot_t)));
+    }
+
+    /// Returns a dead object's block to the cache, or to the system when the cache is full.
+    void recycleBlock(ObjectHeader *hdr) {
+        const size_t capacity = sizeClass(hdr->size());
+        if (cachedBytes_ + capacity <= kMaxCachedBytes) {
+            cachedBlocks_[capacity].push_back(hdr);
+            cachedBytes_ += capacity;
+            return;
+        }
+        releaseBlock(hdr);
+    }
+
+    static void releaseBlock(void *block) {
+        ::operator delete(block, std::align_val_t(alignof(slot_t)));
+    }
+
+    void dropCachedBlocks() {
+        for (auto &[capacity, blocks] : cachedBlocks_) {
+            for (void *block : blocks) {
+                releaseBlock(block);
+            }
+        }
+        cachedBlocks_.clear();
+        cachedBytes_ = 0;
+    }
+
     const char *debugRegion_{nullptr}; // Used for debug hooks.
     std::unordered_set<ObjectHeader *> allocated_;
+    std::unordered_map<size_t, std::vector<void *>> cachedBlocks_; // capacity -> free blocks
+    size_t cachedBytes_ = 0;
     mutable std::mutex mutex_;
 };
 

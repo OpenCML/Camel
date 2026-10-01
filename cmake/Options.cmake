@@ -71,4 +71,13 @@ if(DEFINED ENV{CAMEL_SKIP_PYTHON} AND "$ENV{CAMEL_SKIP_PYTHON}" MATCHES "^(1|ON|
 endif()
 message(STATUS "CAMEL_ENABLE_PYTHON=${CAMEL_ENABLE_PYTHON}")
 
+# ========== Tensor module ==========
+# Consumed by modules/tensor/CMakeLists.txt; OFF uses the builtin GEMM kernels.
+option(
+    CAMEL_TENSOR_BLAS
+    "Use a system CBLAS (find_package(BLAS)) for tensor GEMM instead of the builtin kernels"
+    OFF
+)
+message(STATUS "CAMEL_TENSOR_BLAS=${CAMEL_TENSOR_BLAS}")
+
 message(STATUS "========================================")

@@ -1,0 +1,23 @@
+/**
+ * Inputs for the generic optimization passes std::opt::{fold, cse, dce}.
+ * Results and the order of the two prints must be identical with and without
+ * the passes: `a` folds, `q` merges into `p`, `unused` is dead inside a sync
+ * chain, and the identical `n * 7` in the two branch arms must not be merged
+ * with each other or with the one outside the branch.
+ */
+module generic_passes
+
+import { get_env } from sys
+
+func main(): int sync {
+    let a = 3 + 4 * 5
+    let n = len(get_env('CAMEL_TEST_SURELY_UNSET_VARIABLE'))
+    let p = n * 7 + 1
+    let q = n * 7 + 1
+    println('before')
+    let unused = n * 100
+    println('after')
+    let r = if n > 0 then n * 7 else n * 7 + 2
+    'generic a={} p={} q={} r={}'->format<a, p, q, r>->println
+    return 0
+}

@@ -42,25 +42,20 @@ def _read_labels(path: str, limit: int | None = None) -> list:
     with gzip.open(path, "rb") as f:
         magic, size = struct.unpack(">II", f.read(8))
         assert magic == 2049
-        data = list(f.read(size))
-        if limit is not None:
-            data = data[:limit]
-        return data
+        count = size if limit is None else min(size, limit)
+        return list(f.read(count))
 
 
 def _read_images(path: str, limit: int | None = None) -> list:
+    # Reads only the requested images: decoding the whole training set dominates a small load.
     with gzip.open(path, "rb") as f:
         magic, size = struct.unpack(">II", f.read(8))
         assert magic == 2051
         nrows, ncols = struct.unpack(">II", f.read(8))
-        flat = f.read(size * nrows * ncols)
-        images = [
-            [b / 255.0 for b in flat[i : i + nrows * ncols]]
-            for i in range(0, len(flat), nrows * ncols)
-        ]
-        if limit is not None:
-            images = images[:limit]
-        return images
+        pixels = nrows * ncols
+        count = size if limit is None else min(size, limit)
+        flat = f.read(count * pixels)
+        return [[b / 255.0 for b in flat[i : i + pixels]] for i in range(0, len(flat), pixels)]
 
 
 def load_mnist(limit: int = 1000, train: bool = True, data_dir: str = "tmp") -> dict:
@@ -81,3 +76,27 @@ def load_mnist(limit: int = 1000, train: bool = True, data_dir: str = "tmp") -> 
     assert len(flat_images) == n * d, f"Size mismatch: {len(flat_images)} != {n}*{d}"
     print(f"Loaded {len(flat_images)} images, shape: {n}x{d}")
     return {"images": flat_images, "labels": [int(l) for l in labels], "shape": [int(n), int(d)]}
+
+
+def ensure(data_dir: str = "tmp") -> str | None:
+    """Downloads the training set into `data_dir` if needed. None on success, else why not."""
+    try:
+        for key in ("train_images", "train_labels"):
+            _maybe_download(FILES[key], data_dir)
+    except RuntimeError as e:
+        cause = f": {e.__cause__}" if e.__cause__ else ""
+        return f"{e}{cause}"
+    return None
+
+
+if __name__ == "__main__":
+    # Test precondition: `python mnist_loader.py --ensure [data_dir]` fetches the training set into
+    # the cache and exits 0, or exits 1 with the reason (e.g. no network).
+    import sys
+
+    if len(sys.argv) >= 2 and sys.argv[1] == "--ensure":
+        reason = ensure(sys.argv[2] if len(sys.argv) > 2 else "tmp")
+        if reason:
+            print(reason)
+        sys.exit(1 if reason else 0)
+    sys.exit(f"usage: {sys.argv[0]} --ensure [data_dir]")
