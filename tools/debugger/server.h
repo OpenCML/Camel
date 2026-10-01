@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 06, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -106,13 +106,21 @@ class DebuggerServer {
 
     void pauseAndWaitForContinue(const void *ptr, size_t size, const char *space); /// Worker-only.
     void pauseAndWaitForGirBreakpoint(
-        const std::string &nodeId,
-        const std::string &graphId);                        /// Worker-only.
+        const std::string &nodeId, const std::string &graphId, uint64_t origin,
+        uint64_t ref);                                      /// Worker-only.
     void pauseAndWaitForPipelineStage(const char *stageId); /// Worker-only.
     bool isPaused() const { return paused_.load(); }
     void requestContinue();  /// Worker-only.
     void requestRestart();   /// Worker-only.
     void requestTerminate(); /// Worker-only.
+
+    /// Arm single-step mode: the next GIR node to execute pauses. An empty graphId arms
+    /// "step in" (any graph); a non-empty graphId (the graph paused in) arms "step over",
+    /// stopping only at the next node of the same graph. Worker-only.
+    void requestGirStep(std::string graphId);
+    /// Called by the GIR node hook before each node: returns true (consuming the request) when
+    /// a step was armed and its graph constraint matches the node's graph.
+    bool consumeGirStepRequest(const std::string &currentGraphId);
 
     void enableAllocStep(bool enable) { allocStepEnabled_ = enable; }
     bool allocStepEnabled() const { return allocStepEnabled_; }
@@ -123,10 +131,15 @@ class DebuggerServer {
 
     void setGirBreakpointNodeIds(std::unordered_set<uintptr_t> ids);
     void setGirBreakpointNodeIdsFromStrings(const std::vector<std::string> &nodeIds);
+    /// Origin-based GIR breakpoints: the canonical ID space shared with gir-json's `originId`
+    /// and resolvable at runtime via GCGraph::nodeOrigin(). Full replacement, like node IDs.
+    void setGirBreakpointOrigins(std::vector<uint64_t> origins);
     bool isGirBreakpointNode(uintptr_t nodePtr) const;
     bool isGirBreakpointNodeStable(const std::string &stableId) const;
+    bool isGirBreakpointOrigin(uint64_t origin) const;
     std::unordered_set<uintptr_t> getGirBreakpointNodeIds() const;
     std::vector<std::string> getGirBreakpointNodeIdsForApi() const;
+    std::vector<uint64_t> getGirBreakpointOrigins() const;
 
     /// 父进程保留的断点类型列表（enabled）；Run/Restart 时推送给 worker。
     void setEnabledBreakpointTypes(std::vector<std::string> types);
@@ -183,7 +196,11 @@ class DebuggerServer {
     std::mutex allocBreakSpacesMutex_;
     std::unordered_set<uintptr_t> girBreakpointNodeIds_;
     std::unordered_set<std::string> girBreakpointStableIds_;
+    std::unordered_set<uint64_t> girBreakpointOrigins_;
     mutable std::mutex girBreakpointNodeIdsMutex_;
+    std::atomic<bool> girStepRequested_{false};
+    std::mutex girStepMutex_;
+    std::string girStepGraphId_;
     std::vector<std::string> enabledBreakpointTypes_;
     mutable std::mutex enabledBreakpointTypesMutex_;
     std::string lastRunBody_;
