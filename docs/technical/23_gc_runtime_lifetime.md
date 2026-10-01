@@ -116,6 +116,14 @@ resource clone/retain operation is requested. `dispose` immediately runs the des
 marks the resource disposed, and leaves the wrapper object alive; later access fails with a
 deterministic runtime error and a later GC finalizer only releases the control-block reference.
 
+Large-object pacing: objects above the generational threshold (4 KB) bypass the birth and elder
+spaces, so they never exhaust a space and never trigger a collection on their own. The allocator
+therefore counts large-object bytes since the last sweep and requests a major collection at the
+next safepoint once they exceed a budget (the larger of `CAMEL_GC_LARGE_BUDGET_MB`, default 4 MB,
+and the live large-object volume after the previous sweep). Freed large blocks are kept in a
+size-class cache (up to 256 MB) and reused, so steady-state tensor workloads recycle hot memory
+instead of faulting fresh pages in.
+
 GC finalization now runs before mark-sweep frees unreachable elder or large objects. In the
 young-copying path, dead nursery/from-space wrappers are finalized before the semispace reset, while
 forwarded source wrappers are not finalized because their live copy still owns the same control

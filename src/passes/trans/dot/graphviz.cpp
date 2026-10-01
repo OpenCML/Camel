@@ -18,6 +18,8 @@
  */
 
 #include "graphviz.h"
+
+#include "camel/runtime/node_roles.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/runtime/graph.h"
@@ -547,27 +549,49 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         string style   = recordStyle(*node);
         string size    = recordSize(*node);
         string type    = recordType(*node);
+        // Boundary roles: a role attribute; styled dumps also fill the node with its first role's
+        // color and list every role in the tooltip.
+        string roleAttr, roleFill, roleTooltip;
+        if (config_.annotateRoles) {
+            for (const auto &match : camel::runtime::NodeRoleRegistry::instance().classify(*graph, nodeRef)) {
+                roleAttr += (roleAttr.empty() ? "" : ";") + match.spec.name;
+                roleTooltip += std::format("\\nrole {}: {}", match.spec.name, escape(match.detail));
+                if (roleFill.empty()) {
+                    roleFill = match.spec.color;
+                }
+                const bool seen = std::any_of(rolesSeen_.begin(), rolesSeen_.end(), [&](const auto &r) {
+                    return r.first == match.spec.name;
+                });
+                if (!seen) {
+                    rolesSeen_.push_back({match.spec.name, {match.spec.title, match.spec.color}});
+                }
+            }
+        }
         if (config_.readableOnly) {
             res += std::format(
-                "{}{}{} [label=\"{}\", type=\"{}\"];\n",
+                "{}{}{} [label=\"{}\", type=\"{}\"{}];\n",
                 baseIndent_,
                 indent_,
                 nodeIdent(node),
                 escape(label),
-                type);
+                type,
+                roleAttr.empty() ? "" : std::format(", role=\"{}\"", roleAttr));
         } else {
             string tooltip = recordTooltip(graph, *node);
             res += std::format(
-                "{}{}{} [label=\"{}\", type=\"{}\", shape={}, style={}{}, tooltip=\"{}\"];\n",
+                "{}{}{} [label=\"{}\", type=\"{}\", shape={}, style={}{}{}, tooltip=\"{}\"];\n",
                 baseIndent_,
                 indent_,
                 nodeIdent(node),
                 escape(wrapText(label, 7, 2)),
                 type,
                 shape,
-                style,
+                roleFill.empty() ? style : std::format("\"filled,{}\"", style),
                 size.empty() ? "" : ", " + size,
-                std::format("{}\\n{}", escape(label), escape(tooltip)));
+                roleFill.empty()
+                    ? ""
+                    : std::format(", fillcolor=\"{}\", role=\"{}\"", roleFill, roleAttr),
+                std::format("{}\\n{}{}", escape(label), escape(tooltip), roleTooltip));
         }
     }
 
@@ -744,6 +768,32 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         }
     }
 
+    if (depth_ == 0 && config_.annotateRoles && !rolesSeen_.empty()) {
+        res += std::format("{}subgraph cluster_legend {{\n", indent_);
+        res += std::format("{}{}label=\"roles\";\n", indent_, indent_);
+        for (const auto &[name, spec] : rolesSeen_) {
+            if (config_.readableOnly) {
+                res += std::format(
+                    "{}{}\"legend_{}\" [label=\"{}\", type=\"LEGEND\", role=\"{}\"];\n",
+                    indent_,
+                    indent_,
+                    name,
+                    escape(spec.first),
+                    name);
+            } else {
+                res += std::format(
+                    "{}{}\"legend_{}\" [label=\"{}\", type=\"LEGEND\", role=\"{}\", shape=box, "
+                    "fixedsize=false, style=filled, fillcolor=\"{}\"];\n",
+                    indent_,
+                    indent_,
+                    name,
+                    escape(spec.first),
+                    name,
+                    spec.second);
+            }
+        }
+        res += indent_ + "}\n";
+    }
     res += baseIndent_ + "}\n";
     return res;
 }

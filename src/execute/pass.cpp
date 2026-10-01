@@ -26,6 +26,7 @@
 #include "camel/core/mm/profiler.h"
 #include "macro/macro.h"
 #include "passes/opt/devirtualize/devirtualize.h"
+#include "passes/opt/generic/generic.h"
 #include "passes/opt/inline/inline.h"
 #include "passes/opt/opt/opt.h"
 #include "passes/opt/specialize/specialize.h"
@@ -38,13 +39,16 @@
 #include "passes/sched/taskflow/taskflow.h"
 #include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
+#include "passes/trans/stats/stats.h"
 #include "passes/trans/tns/topo_node_seq.h"
 
 #include "camel/utils/log.h"
 
 #include <algorithm>
 #include <format>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 
@@ -58,7 +62,6 @@ GCGraph *NullGraphIRPass::apply(GCGraph *graph, std::ostream &os) {
     return nullptr;
 }
 
-using PassFactory  = std::function<std::unique_ptr<GraphIRPass>(const context_ptr_t &ctx)>;
 using PassScope    = Scope<std::string, PassFactory, std::string>;
 using PassScopePtr = scope_ptr_t<std::string, PassFactory, std::string>;
 
@@ -282,8 +285,15 @@ PassScopePtr initPassScope() {
                     {"null", def(PASS(NullGraphIRPass))},
                     {"macro", def(PASS(MacroRewritePass))},
                     {"graphviz", def(PASS(GraphVizDumpPass))},
+                    {"stats", def(PASS(GraphStatsPass))},
                     {"readable_graphviz",
                      def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.readableOnly = true}))},
+                    {"annotated_graphviz",
+                     def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.annotateRoles = true}))},
+                    {"readable_annotated_graphviz",
+                     def(PASS1(
+                         GraphVizDumpPass,
+                         (GraphVizDumpConfig{.readableOnly = true, .annotateRoles = true})))},
                     {"cpp",
                      def(PASS(CppDumpPass),
                          {
@@ -348,7 +358,14 @@ PassScopePtr initPassScope() {
                          })},
                     {"devirtualize", def(PASS(DevirtualizeRewritePass))},
                     {"specialize", def(PASS(SpecializeRewritePass))},
-                    {"opt", def(PASS(OptimizeRewritePass))},
+                    {"opt",
+                     def(PASS(OptimizeRewritePass),
+                         {
+                             {"fold", def(PASS(ConstantFoldPass))},
+                             {"cse", def(PASS(CommonSubexpressionPass))},
+                             {"dce", def(PASS(DeadCodePass))},
+                             {"simplify", def(PASS(SimplifyPass))},
+                         })},
                     {"taskflow", def(PASS(TaskflowExecSchedPass))},
                     {"tfdump", def(PASS(TfDumpPass))},
                 }),
@@ -382,6 +399,8 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::gir", "std::graphviz"},
     {"std::rdot", "std::readable_graphviz"},
     {"std::rgir", "std::readable_graphviz"},
+    {"std::agir", "std::annotated_graphviz"},
+    {"std::argir", "std::readable_annotated_graphviz"},
     {"std::cxx", "std::cpp"},
     {"std::cppmod", "std::cpp::module"},
     {"std::cppinspect", "std::cpp::inspect"},
@@ -404,7 +423,30 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::tfg", "std::tfdump"},
 };
 
+struct ModulePassRegistry {
+    std::mutex mutex;
+    std::map<std::string, PassFactory> factories; // ordered for the "available passes" listing
+};
+
+ModulePassRegistry &modulePasses() {
+    static ModulePassRegistry registry;
+    return registry;
+}
+
+PassFactory findModulePass(const std::string &path) {
+    auto &registry = modulePasses();
+    std::lock_guard lock(registry.mutex);
+    auto it = registry.factories.find(path);
+    return it == registry.factories.end() ? nullptr : it->second;
+}
+
 } // namespace
+
+void registerModulePass(const std::string &path, PassFactory factory) {
+    auto &registry = modulePasses();
+    std::lock_guard lock(registry.mutex);
+    registry.factories.insert_or_assign(path, std::move(factory));
+}
 
 PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     // 1. Resolve aliases
@@ -434,12 +476,27 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
             return factory;
     }
 
+    // 4. Passes contributed by loaded modules (full names such as "tensor::fuse")
+    if (auto factory = findModulePass(resolved)) {
+        return factory;
+    }
+
     // Not found; print the list of available passes
     os << std::format("Pass <{}> not found, available passes are:\n", name);
     std::vector<std::string> allPaths;
     collectPassPaths(passScope, "", allPaths);
     for (const auto &p : allPaths) {
         os << std::format("  {}\n", p);
+    }
+    {
+        auto &registry = modulePasses();
+        std::lock_guard lock(registry.mutex);
+        if (!registry.factories.empty()) {
+            os << std::format("Passes contributed by loaded modules:\n");
+            for (const auto &entry : registry.factories) {
+                os << std::format("  {}\n", entry.first);
+            }
+        }
     }
     os << std::format("Available aliases are:\n");
     for (const auto &[alias, target] : passAliases) {

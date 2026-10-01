@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: May. 05, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,9 +25,9 @@
  * softmax/log/gather stack before Camel has first-class axis semantics.
  */
 
-#include "operators.h"
+#include "layers.h"
 
-#include "../tensor/runtime.h"
+#include "../tensor/tensor.h"
 #include "../tensor/type.h"
 
 #include "camel/core/error/runtime.h"
@@ -44,22 +44,11 @@ using namespace camel::core::error;
 using namespace camel::core::rtdata;
 using namespace camel::core::type;
 
-namespace {
+namespace camel::nn {
 
 namespace tensor = camel::tensor;
 
-bool isTensorType(Type *type) { return type && type->code() == tensor::TensorType::typeCode(); }
-
-tensor::TensorObject *requireTensor(ArgsView &norm, size_t index, const char *what) {
-    if (!isTensorType(norm.type(index))) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "{} expects Tensor arguments", what);
-    }
-    auto *value = norm.get<tensor::TensorObject *>(index);
-    if (!value) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "{} received a null Tensor", what);
-    }
-    return value;
-}
+namespace {
 
 void requireRank2LogitsAndTarget(
     const tensor::TensorObject *logits, const tensor::TensorObject *target, const char *what) {
@@ -82,6 +71,8 @@ void requireRank2LogitsAndTarget(
             std::string(what) + " requires non-empty batch and class dimensions");
     }
 }
+
+} // namespace
 
 double softmaxCrossEntropy(const tensor::TensorObject *logits, const tensor::TensorObject *target) {
     constexpr const char *kWhat = "softmax_cross_entropy";
@@ -172,35 +163,4 @@ tensor::TensorObject *softmaxCrossEntropyGradLogits(
     return grad;
 }
 
-template <typename Fn> slot_t withLossErrors(Fn &&fn) {
-    try {
-        return fn();
-    } catch (const std::exception &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, e.what());
-    }
-}
-
-} // namespace
-
-slot_t __nn_softmax_cross_entropy__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    (void)with;
-    (void)ctx;
-    return withLossErrors([&]() -> slot_t {
-        return toSlot(softmaxCrossEntropy(
-            requireTensor(norm, 0, "softmax_cross_entropy"),
-            requireTensor(norm, 1, "softmax_cross_entropy")));
-    });
-}
-
-slot_t __nn_softmax_cross_entropy_grad__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    (void)with;
-    (void)ctx;
-    return withLossErrors([&]() -> slot_t {
-        tensor::TensorObject *grad = softmaxCrossEntropyGradLogits(
-            requireTensor(norm, 0, "softmax_cross_entropy_grad"),
-            requireTensor(norm, 1, "softmax_cross_entropy_grad"),
-            norm.get<Float64>(2),
-            mm::autoSpace());
-        return toSlot(static_cast<Object *>(grad));
-    });
-}
+} // namespace camel::nn

@@ -1,0 +1,26 @@
+title = "Branch shape contract"
+summary = "Arms of different static shapes join to Tensor<float32, [?, ?]>; the product that needs a specific shape fails at run time, at the operator, with both extents."
+
+[[runs]]
+name = "dump"
+args = ["std::argir"]
+exit = 0
+stdout = "expected/dump.argir.dot"
+output_contains = ["role=\"branch-contract\""]
+
+[[runs]]
+name = "true-arm"
+args = ["std::nvm"]
+env = ["FLAG=true"]
+exit = 0
+stdout = "expected/true-arm.txt"
+
+[[runs]]
+name = "false-arm"
+args = ["std::nvm"]
+env = ["FLAG=false"]
+exit = 1
+diagnostic = "RuntimeDiag::TensorDimensionMismatch"
+diagnostic_line = 19
+diagnostic_column = 45
+output_contains = ["matmul inner dimensions differ: 2 vs 3"]

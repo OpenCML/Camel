@@ -1,0 +1,13 @@
+/**
+ * Shape diagnostic of `where`: statically known shapes conflict, so compilation fails at the
+ * call with both shapes in the reason.
+ */
+module shape_diag_where
+
+import { zeros, ones, where } from tensor
+
+func main(): int sync {
+    let r = where(zeros([2, 3]) > 0.0, zeros([2, 3]), ones([4, 3]))
+    println('unreachable')
+    return 0
+}

@@ -1,0 +1,21 @@
+/**
+ * NumPy-style broadcasting for arithmetic, comparison, and where.
+ */
+module broadcast_ops
+
+import {
+    Tensor, reshape, range, cast, where, maximum, relu, sum, shape
+} from tensor
+
+func main(): int sync {
+    let col = reshape([1.0, 2.0, 3.0], [3, 1])
+    let row = reshape([10.0, 20.0], [2])
+    let grid = col + row
+    let mask = grid > 15.0
+    let clipped = where(mask, grid, 0.0)
+    let ints = cast(range(0, 4), 'float32') - 1.5
+    'broadcast shape={} sum={}'->format<shape(grid), sum(grid)>->println
+    'broadcast mask_sum={} clipped_sum={}'->format<sum(cast(mask, 'int64')), sum(clipped)>->println
+    'broadcast relu_sum={} max_sum={}'->format<sum(relu(ints)), sum(maximum(ints, 0.0))>->println
+    return 0
+}

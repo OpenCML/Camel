@@ -1,0 +1,13 @@
+/**
+ * Shape diagnostic of `softmax`: statically known shapes conflict, so compilation fails at the
+ * call with both shapes in the reason.
+ */
+module shape_diag_softmax
+
+import { zeros, softmax } from tensor
+
+func main(): int sync {
+    let r = softmax(zeros([2, 3]), 4)
+    println('unreachable')
+    return 0
+}

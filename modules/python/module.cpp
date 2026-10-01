@@ -35,6 +35,9 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#if !defined(_WIN32)
+#include <dlfcn.h>
+#endif
 #include <pybind11/embed.h>
 #include <pybind11/pybind11.h>
 #include <sstream>
@@ -190,6 +193,19 @@ bool isVenvVersionCompatible(const std::string &venvPath) {
 }
 
 } // namespace
+
+// Camel loads modules with RTLD_LOCAL, so libpython, pulled in as this module's dependency, is
+// not in the global namespace. Python's C extension modules (_ssl, _ctypes, numpy, ...) resolve
+// interpreter symbols such as PyExc_ValueError from there and fail to import without it, which
+// breaks https in urllib among others. Promote the already loaded libpython to global.
+static void promote_libpython_to_global() {
+#if !defined(_WIN32)
+    Dl_info info{};
+    if (dladdr(reinterpret_cast<void *>(&Py_IsInitialized), &info) != 0 && info.dli_fname) {
+        (void)dlopen(info.dli_fname, RTLD_NOW | RTLD_GLOBAL | RTLD_NOLOAD);
+    }
+#endif
+}
 
 // 在 Py_Initialize 之前设置 Python Home 为 venv 的 base Python（来自 pyvenv.cfg）。
 // 指向 venv 本身会触发 codec 错误，指向 base Python 可消除 "Could not find platform independent
@@ -614,6 +630,7 @@ bool PythonModule::load() {
         }
         if (!Py_IsInitialized()) {
             PythonInitEnvGuard envGuard;
+            promote_libpython_to_global();
             set_python_home_from_venv();
             py::initialize_interpreter();
             ensure_site_packages_in_path();

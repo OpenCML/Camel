@@ -1,0 +1,19 @@
+/**
+ * Scalar boundary. `t[0]` reads a tensor element back to the host, where it
+ * decides a branch; `t[1] * 2.0` computes a host number that re-enters tensor
+ * math. std::argir marks both crossings (role scalar-boundary), the branch's
+ * join (branch-contract) and the effect (println).
+ */
+module scalar_boundary
+
+import { Tensor, reshape, relu } from tensor
+
+func gate(t: Tensor): Tensor {
+    return if t[0] > 0.5 then relu(t) else t * (t[1] * 2.0)
+}
+
+func main(): int sync {
+    println(gate(reshape([1.0, -2.0, 3.0, 0.5], [4])))
+    println(gate(reshape([0.25, -2.0, 3.0, 0.5], [4])))
+    return 0
+}

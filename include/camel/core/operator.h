@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "camel/core/operator_traits.h"
 #include "camel/core/rtdata.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/resolver.h"
@@ -86,11 +87,15 @@ class OperatorGroup {
     OperatorGroup(
         const std::string &name,
         const std::vector<std::pair<std::string, type::resolver_ptr_t>> &resolvers)
-        : name_(name), resolvers_(resolvers) {}
+        : name_(name), resolvers_(resolvers) {
+        publishResolvers();
+    }
     OperatorGroup(
         const std::string &name,
         const std::vector<std::pair<std::string, type::resolver_ptr_t>> &&resolvers)
-        : name_(name), resolvers_(std::move(resolvers)) {}
+        : name_(name), resolvers_(std::move(resolvers)) {
+        publishResolvers();
+    }
 
     static oper_group_ptr_t create(
         const std::string &name,
@@ -117,5 +122,28 @@ class OperatorGroup {
             }
         }
         return std::nullopt;
+    }
+
+    /// Like resolve(), also passing the compile-time values of constant norm arguments.
+    std::optional<oper_idx_ptr_t> resolve(
+        const type::type_vec_t &with, const type::type_vec_t &norm, type::static_args_t normStatics,
+        const ModifierSet &modifiers) const {
+        for (const auto &[uri, resolver] : resolvers_) {
+            auto optType = resolver->resolveWith(with, norm, normStatics, modifiers);
+            if (optType) {
+                return std::make_shared<OperatorIndex>(name_, std::move(*optType), uri);
+            }
+        }
+        return std::nullopt;
+    }
+
+  private:
+    /// Makes each overload's resolver findable by its URI (see OperatorResolverRegistry).
+    void publishResolvers() const {
+        for (const auto &[uri, resolver] : resolvers_) {
+            if (!uri.empty() && resolver) {
+                camel::core::OperatorResolverRegistry::instance().set(uri, resolver);
+            }
+        }
     }
 };

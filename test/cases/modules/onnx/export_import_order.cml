@@ -1,0 +1,21 @@
+/**
+ * Importing onnx (which links the tensor module) before tensor must not load a
+ * second copy of the tensor module: operator inference has to see the same
+ * registry, so shapes stay known through layer_norm and matmul.
+ */
+module export_import_order
+
+import { export_model } from onnx
+import { Tensor, random, ones, zeros, layer_norm, reshape, shape } from tensor
+import { get_env } from sys
+
+func main(): int sync {
+    let w = random([8, 8], -1.0, 1.0)
+    let g = ones([8])
+    let b = zeros([8])
+    let x = random([2, 4, 8], -1.0, 1.0)
+    // reshape(.., shape(..)) needs the static rank of the layer_norm/matmul result.
+    export_model((t: Tensor): Tensor => reshape(t, shape(layer_norm(t, g, b) @ w)), x, get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

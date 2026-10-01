@@ -1,0 +1,52 @@
+/**
+ * Export graph integrity. An exported model stands for the whole function or
+ * the export fails: the training step (loss, gradients, SGD update) becomes
+ * one ONNX graph whose inputs are the parameters and the data and whose
+ * outputs are the loss and every updated parameter; a function with an effect
+ * (drawing random numbers) cannot be represented and is rejected at the effect
+ * instead of being exported without it.
+ */
+module export_integrity
+
+import { Tensor, reshape, relu, mean, randn } from tensor
+import { value_and_grad } from autodiff
+import { sgd } from nn
+import { export_model } from onnx
+import { get_env } from sys
+
+type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+
+with <m: Mlp>
+func loss(x: Tensor): float {
+    let h = relu(x @ m.w1 + m.b1)
+    let y = h @ m.w2 + m.b2
+    return mean(y * y)
+}
+
+func step(m: Mlp, x: Tensor): (float, Mlp) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.1))
+}
+
+func noisy(x: Tensor): Tensor {
+    return x + randn([2, 2])
+}
+
+func main(): int sync {
+    let m = {
+        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
+        b1: reshape([0.1, 0.0, -0.1], [3]),
+        w2: reshape([1.0, -1.0, 0.5], [3, 1]),
+        b2: reshape([0.2], [1])
+    }
+    let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
+    return if get_env('MODE') == 'step' then sync {
+        export_model(step, (m, x), get_env('ONNX_OUT'))
+        println('exported step')
+        return 0
+    } else sync {
+        export_model(noisy, x, get_env('ONNX_OUT'))
+        println('unreachable')
+        return 0
+    }
+}

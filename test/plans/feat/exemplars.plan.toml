@@ -1,0 +1,100 @@
+id = "exemplars"
+order = 900
+tier = "feat"
+tags = ["feat", "exemplars"]
+
+[[tests]]
+name = "01_scalar_boundary"
+desc = "Exemplar: Scalar boundary. exemplars/check.mjs re-runs it and checks its outputs, diagnostics and exported models."
+kind = "behavior"
+tool = "node"
+case = "../../../exemplars/check.mjs"
+args = ["${case}", "01_scalar_boundary"]
+expect_exit = 0
+expect_stdout_contains = ["exemplars: all checks passed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "02_branch_shape_contract"
+desc = "Exemplar: Branch shape contract. exemplars/check.mjs re-runs it and checks its outputs, diagnostics and exported models."
+kind = "behavior"
+tool = "node"
+case = "../../../exemplars/check.mjs"
+args = ["${case}", "02_branch_shape_contract"]
+expect_exit = 0
+expect_stdout_contains = ["exemplars: all checks passed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "03_export_capability"
+desc = "Exemplar: Export capability. exemplars/check.mjs re-runs it and checks its outputs, diagnostics and exported models."
+kind = "behavior"
+tool = "node"
+case = "../../../exemplars/check.mjs"
+args = ["${case}", "03_export_capability"]
+expect_exit = 0
+expect_stdout_contains = ["exemplars: all checks passed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "04_staticness"
+desc = "Exemplar: Staticness. exemplars/check.mjs re-runs it and checks its outputs, diagnostics and exported models."
+kind = "behavior"
+tool = "node"
+case = "../../../exemplars/check.mjs"
+args = ["${case}", "04_staticness"]
+expect_exit = 0
+expect_stdout_contains = ["exemplars: all checks passed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "05_effect_order"
+desc = "Exemplar: Effect and callback order. exemplars/check.mjs re-runs it and checks its outputs, diagnostics and exported models."
+kind = "behavior"
+tool = "node"
+case = "../../../exemplars/check.mjs"
+args = ["${case}", "05_effect_order"]
+expect_exit = 0
+expect_stdout_contains = ["exemplars: all checks passed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "06_loop_carried_state"
+desc = "Exemplar: Loop-carried graph state. exemplars/check.mjs re-runs it and checks its outputs, diagnostics and exported models."
+kind = "behavior"
+tool = "node"
+case = "../../../exemplars/check.mjs"
+args = ["${case}", "06_loop_carried_state"]
+expect_exit = 0
+expect_stdout_contains = ["exemplars: all checks passed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "07_export_integrity"
+desc = "Exemplar: Export graph integrity. exemplars/check.mjs re-runs it and checks its outputs, diagnostics and exported models."
+kind = "behavior"
+tool = "node"
+case = "../../../exemplars/check.mjs"
+args = ["${case}", "07_export_integrity"]
+expect_exit = 0
+expect_stdout_contains = ["exemplars: all checks passed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "08_structured_control_flow"
+desc = "Exemplar: Structured control flow. exemplars/check.mjs re-runs it and checks its outputs, diagnostics and exported models."
+kind = "behavior"
+tool = "node"
+case = "../../../exemplars/check.mjs"
+args = ["${case}", "08_structured_control_flow"]
+expect_exit = 0
+expect_stdout_contains = ["exemplars: all checks passed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000

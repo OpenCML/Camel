@@ -1,0 +1,21 @@
+/**
+ * Cross-checks blocked GEMM (odd sizes, K beyond one cache block, edge tiles)
+ * against a broadcast-multiply-and-reduce formulation of the same product.
+ */
+module gemm_consistency
+
+import {
+    random, seed, unsqueeze, sum, abs, gemm_backend
+} from tensor
+
+func main(): int sync {
+    seed(11)
+    let a = random([70, 300], -1.0, 1.0)
+    let b = random([300, 37], -1.0, 1.0)
+    let fast = a @ b
+    let slow = sum(unsqueeze(a, 2) * unsqueeze(b, 0), 1)
+    let err = sum(abs(fast - slow))
+    let backend = gemm_backend()
+    'gemm_consistency total_abs_err={} backend_known={}'->format<err, backend != ''>->println
+    return 0
+}

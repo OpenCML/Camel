@@ -73,3 +73,23 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
+
+[[tests]]
+name = "decorator_bare.nvm"
+desc = "Checks a decorator applied without with-arguments (@name) wraps the function."
+kind = "behavior"
+case = "../../../cases/linear/nvm/decorator_bare.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "decorator_bare.macro"
+desc = "Checks a decorator applied without with-arguments (@name) wraps the function."
+kind = "behavior"
+case = "../../../cases/linear/nvm/decorator_bare.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

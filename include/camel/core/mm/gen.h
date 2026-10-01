@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: May. 24, 2026
+ * Updated: Sep. 28, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -216,6 +216,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
         size_t elderGenSize;
         size_t promotionAgeThreshold;
         size_t largeObjThreshold;
+        // Minimum bytes of large-object allocation between collections. Large
+        // objects bypass the generational spaces, so without this budget they
+        // would only be reclaimed when small-object pressure forces a major GC.
+        size_t largeObjCollectionBudget;
         float minorGCTriggerRatio;
         float majorGCTriggerRatio;
         bool enableYoungGenCopying;
@@ -378,11 +382,14 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // ============================================================================
     // GC tuning parameters
     // ============================================================================
-    size_t promotionAgeThreshold_; // Promote after this many minor GC survivals
-    size_t largeObjThreshold_;     // Objects larger than this go to large-object space
-    float minorGCTriggerRatio_;    // Reserved: minor GC trigger ratio (e.g. when birth is full)
-    float majorGCTriggerRatio_;    // Major GC trigger ratio (old-gen utilization)
-    bool enableYoungGenCopying_;   // The runtime currently assumes stable raw object pointers.
+    size_t promotionAgeThreshold_;    // Promote after this many minor GC survivals
+    size_t largeObjThreshold_;        // Objects larger than this go to large-object space
+    size_t largeObjMinBudget_;        // Floor of the large-object allocation budget
+    size_t largeObjBudget_;           // Large-object bytes allowed before requesting a major GC
+    size_t largeBytesSinceSweep_ = 0; // Large-object bytes allocated since the last sweep
+    float minorGCTriggerRatio_;       // Reserved: minor GC trigger ratio (e.g. when birth is full)
+    float majorGCTriggerRatio_;       // Major GC trigger ratio (old-gen utilization)
+    bool enableYoungGenCopying_;      // The runtime currently assumes stable raw object pointers.
 
     // ============================================================================
     // GC state and roots

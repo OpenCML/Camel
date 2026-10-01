@@ -312,6 +312,7 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGrap
             .dataType     = sourceDataType,
             .kind         = sourceNode->kind,
             .runtimeFlags = sourceNode->flags,
+            .origin       = sourceGraph->nodeOrigin(sourceRef),
             .payload      = payload,
         };
         CAMEL_LOG_INFO_S("DraftClone", "Clone addNode for sourceRef={}.", sourceRef);
@@ -447,6 +448,7 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDra
             .dataType     = sourceDataType,
             .kind         = sourceNode->kind,
             .runtimeFlags = sourceNode->runtimeFlags,
+            .origin       = sourceNode->origin,
             .payload      = payload,
         };
         const gc_node_ref_t clonedId = owner.addNode(init);

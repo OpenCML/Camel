@@ -1,0 +1,111 @@
+/**
+ * Checks the derivative rules of tensor operators against finite differences: for each function
+ * f and a random direction v, sum(grad(f)(x) * v) must match (f(x + h v) - f(x - h v)) / 2h.
+ * Each function reduces to a float through fixed, non-uniform weights so that every element of
+ * the gradient matters.
+ */
+module tensor_grad_check
+
+import { grad } from autodiff
+import {
+    Tensor,
+    new, random, seed, sum, mean, max, min, exp, log, sqrt, rsqrt, sigmoid, tanh, relu, gelu,
+    erf, abs, neg, maximum, minimum, where, softmax, log_softmax, layer_norm, matmul, linear,
+    transpose, reshape, flatten, unsqueeze, permute, concat, slice, pow
+} from tensor
+
+func check(name: string, f: (x: Tensor) => float, df: (x: Tensor) => Tensor, x: Tensor, v: Tensor): int sync {
+    let h = 0.001
+    let analytic = sum(df(x) * v)
+    let numeric = (f(x + v * h) - f(x - v * h)) / (2.0 * h)
+    let err = analytic - numeric
+    let scale = if numeric > 1.0 then numeric else if numeric < -1.0 then 0.0 - numeric else 1.0
+    let rel = if err > 0.0 then err / scale else (0.0 - err) / scale
+    let status = if rel < 0.02 then "ok" else "FAIL"
+    '{} {} analytic={} numeric={}'->format<name, status, analytic, numeric>->println
+    return 0
+}
+
+// ---- weights
+func w34(): Tensor { return new([[0.3, -1.2, 0.5, 2.0], [1.1, 0.4, -0.7, 0.2], [-0.5, 0.9, 1.3, -0.1]]) }
+func w4(): Tensor { return new([0.7, -0.3, 1.5, 0.2]) }
+func w3(): Tensor { return new([1.0, -2.0, 0.5]) }
+func w31(): Tensor { return new([[2.0], [3.0], [1.5]]) }
+func w5(): Tensor { return new([0.4, -0.8, 1.2, 0.3, -0.6]) }
+func w5b(): Tensor { return new([-0.2, 0.5, 0.9, -1.1, 0.7]) }
+func w45(): Tensor { return new([[0.2, -0.1, 0.4, 0.3, -0.5], [0.6, 0.1, -0.2, 0.8, 0.3], [-0.3, 0.5, 0.2, -0.4, 0.9], [0.1, 0.7, -0.6, 0.2, 0.4]]) }
+
+// ---- elementwise
+func arith(x: Tensor): float { return sum((x * x * 3.0 + x * w4() - x / w31() + 2.0 / (x * x + 1.0) - x) * w34()) }
+func bcast_rhs(x: Tensor): float { return sum(w34() * x + w34() / (x * x + 1.0) - x) }
+func powers(x: Tensor): float { return sum(pow(exp(x), 2.5) * w34() + pow(2.0, x)) }
+func unary(x: Tensor): float { return sum((sigmoid(x) + tanh(x) * relu(x) + exp(x) / 4.0 + neg(x) * abs(x)) * w34()) }
+func roots(x: Tensor): float { return sum((sqrt(exp(x)) + rsqrt(exp(x)) + log(exp(x) + 1.0)) * w34()) }
+func smooth(x: Tensor): float { return sum((gelu(x) + erf(x)) * w34()) }
+func select(x: Tensor): float { return sum((maximum(x, x * 0.2) + minimum(x, w4()) + where(x > 0.0, x * x, x * 3.0)) * w34()) }
+
+// ---- reductions
+func reduce_axes(x: Tensor): float { return sum(sum(x, 1) * w3()) + sum(sum(x, 0, true) * w4()) + mean(x) * 3.0 + sum(mean(x, 1) * w3()) }
+func extrema(x: Tensor): float { return sum(max(x, 1) * w3()) + sum(min(x, 0, true) * w4()) }
+func soft(x: Tensor): float { return sum(softmax(x) * w34()) + sum(softmax(x, 0) * w34()) + sum(log_softmax(x) * w34()) }
+func norm_x(x: Tensor): float { return sum(layer_norm(x, w4() + 1.0, w4()) * w34()) }
+func norm_gamma(g: Tensor): float { return sum(layer_norm(w34(), g, w4()) * w34()) }
+func norm_beta(b: Tensor): float { return sum(layer_norm(w34(), w4() + 1.0, b) * w34()) }
+
+// ---- linear algebra
+func mm_lhs(x: Tensor): float { return sum(matmul(x, w45()) * w5()) }
+func mm_rhs(w: Tensor): float { return sum(matmul(w34(), w) * matmul(w34(), w45())) }
+func mm_batch_rhs(w: Tensor): float { return sum(matmul(reshape(concat(w34(), w34() * 2.0, 0), [2, 3, 4]), w)) }
+func mm_vec(x: Tensor): float { return sum(matmul(x, w45()) * w5b()) + sum(matmul(w34(), x) * w3()) }
+func lin(x: Tensor): float { return sum(linear(x, w45(), w5()) * matmul(w34(), w45())) }
+func lin_bias(b: Tensor): float { return sum(tanh(linear(w34(), w45(), b)) * matmul(w34(), w45())) }
+
+// ---- layout
+func layout(x: Tensor): float {
+    let t = transpose(x) * transpose(w34())
+    let r = reshape(x, [2, 6]) * reshape(w34(), [2, 6])
+    let u = unsqueeze(x, 0) * 2.0
+    let p = permute(reshape(x, [3, 2, 2]), [2, 0, 1]) * permute(reshape(w34(), [3, 2, 2]), [2, 0, 1])
+    return sum(t) + sum(r) + sum(flatten(u) * reshape(w34(), [1, 12])) + sum(p)
+}
+func pieces(x: Tensor): float {
+    let c = concat(x, x * x, 0) * concat(w34(), w34(), 0)
+    let d = concat(x, w34(), 1)
+    let s = slice(x, 1, 1, 4) * slice(w34(), 1, 0, 3)
+    let e = slice(x, 0, 0, 3, 2)
+    return sum(c) + sum(d * d) + sum(s) + sum(e * e)
+}
+
+func main(): int sync {
+    seed(5)
+    let x = random([3, 4], -1.0, 1.0)
+    let v = random([3, 4], -1.0, 1.0)
+    let x4 = random([4], -1.0, 1.0)
+    let v4 = random([4], -1.0, 1.0)
+    let x45 = random([4, 5], -1.0, 1.0)
+    let v45 = random([4, 5], -1.0, 1.0)
+    let x5 = random([5], -1.0, 1.0)
+    let v5 = random([5], -1.0, 1.0)
+    check("arith", arith, grad(arith), x, v)
+    check("bcast_rhs", bcast_rhs, grad(bcast_rhs), x4, v4)
+    check("powers", powers, grad(powers), x, v)
+    check("unary", unary, grad(unary), x, v)
+    check("roots", roots, grad(roots), x, v)
+    check("smooth", smooth, grad(smooth), x, v)
+    check("select", select, grad(select), x, v)
+    check("reduce_axes", reduce_axes, grad(reduce_axes), x, v)
+    check("extrema", extrema, grad(extrema), x, v)
+    check("soft", soft, grad(soft), x, v)
+    check("norm_x", norm_x, grad(norm_x), x, v)
+    check("norm_gamma", norm_gamma, grad(norm_gamma), x4, v4)
+    check("norm_beta", norm_beta, grad(norm_beta), x4, v4)
+    check("mm_lhs", mm_lhs, grad(mm_lhs), x, v)
+    check("mm_rhs", mm_rhs, grad(mm_rhs), x45, v45)
+    check("mm_batch_rhs", mm_batch_rhs, grad(mm_batch_rhs), x45, v45)
+    check("mm_vec", mm_vec, grad(mm_vec), x4, v4)
+    check("lin", lin, grad(lin), x, v)
+    check("lin_bias", lin_bias, grad(lin_bias), x5, v5)
+    check("layout", layout, grad(layout), x, v)
+    check("pieces", pieces, grad(pieces), x, v)
+    return 0
+}

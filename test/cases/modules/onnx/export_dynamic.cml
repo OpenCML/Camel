@@ -1,0 +1,26 @@
+/**
+ * Dynamic batch: with dynamic_axes = [0] the batch extent is not baked in.
+ * shape(x)[0] becomes Shape + Gather, the shape literals become Concat, and
+ * zeros(shape) becomes ConstantOfShape; the static extent (3) still folds.
+ * Also prints the backend's capability list size.
+ */
+module export_dynamic
+
+import { Tensor, reshape, zeros, shape } from tensor
+import { export_model, supported_operators } from onnx
+import { get_env } from sys
+
+func forward(x: Tensor, w: Tensor): Tensor {
+    let n = shape(x)[0]
+    let h = zeros([n, shape(w)[1]]) + x @ w
+    return reshape(h, [n * shape(w)[1]])
+}
+
+func main(): int sync {
+    let w = reshape([1.0, 0.0, 2.0, 0.0, 1.0, -1.0], [2, 3])
+    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    export_model((t: Tensor): Tensor => forward(t, w), x, get_env('ONNX_OUT'), [0])
+    let ops = supported_operators()
+    'exported supported={}'->format<len(ops)>->println
+    return 0
+}

@@ -1,0 +1,31 @@
+/**
+ * Aggregates of precisely typed tensors are accepted where the declared type
+ * uses plain `Tensor`: struct fields, tuple elements, and array elements are
+ * checked covariantly (they are immutable).
+ */
+module struct_covariance
+
+import { Tensor, reshape, sum } from tensor
+
+type Layer = { w: Tensor, b: Tensor }
+
+with <l: Layer>
+func apply(x: Tensor): Tensor {
+    return x @ l.w + l.b
+}
+
+func total(ts: Tensor[]): float {
+    return sum(ts[0]) + sum(ts[1])
+}
+
+func first(pair: (Tensor, Tensor)): Tensor {
+    return pair.0
+}
+
+func main(): int sync {
+    let l = { w: reshape([1.0, 0.0, 0.0, 1.0], [2, 2]), b: reshape([1.0, 1.0], [2]) }
+    let x = reshape([1.0, 2.0], [1, 2])
+    let y = apply<l>(x)
+    'covariance struct={} array={} tuple={}'->format<sum(y), total([x, y]), sum(first((y, x)))>->println
+    return 0
+}

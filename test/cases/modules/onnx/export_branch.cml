@@ -1,0 +1,23 @@
+/**
+ * A branch whose condition is computed from the model input (an element read
+ * compared with a threshold) exports as an ONNX If with one subgraph per arm;
+ * a scalar derived from the input (t[1] * 2.0) is used inside tensor math.
+ */
+module export_branch
+
+import { Tensor, reshape, relu } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func gate(t: Tensor): Tensor {
+    return if t[0] > 0.5 then relu(t) * 2.0 else t * (t[1] * 2.0) - 1.0
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, 0.5], [4])
+    let y = gate(x)
+    'camel gate={} {} {} {}'->format<y[0], y[1], y[2], y[3]>->println
+    export_model((t: Tensor): Tensor => gate(t), x, get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

@@ -40,6 +40,8 @@ struct GCGraphDebugRecord {
     std::string stableId;
     std::string mangledName;
     std::string name;
+    // Source origin of each node that has one, by runtime node ref.
+    std::unordered_map<gc_node_ref_t, uint64_t> nodeOrigins;
 };
 
 struct GCGraphPayloadShape {
@@ -77,6 +79,10 @@ struct GCGraphPayloadArena {
 
 GCGraphDebugRecord *
 createGraphDebugRecord(std::string stableId, std::string mangledName, std::string name);
+
+/// Records the source origins of `draft`'s nodes in `record`, keyed by the runtime node refs
+/// the draft encodes to.
+void recordDraftNodeOrigins(GCGraphDebugRecord *record, const GraphDraft &draft);
 
 struct GCGraphBuildAccess {
     static size_t requiredBytes(

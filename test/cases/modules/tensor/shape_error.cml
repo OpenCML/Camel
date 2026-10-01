@@ -1,0 +1,20 @@
+/**
+ * Negative case: incompatible broadcast reports TensorDimensionMismatch.
+ */
+module shape_error
+
+import {
+    Tensor, ones, sum
+} from tensor
+
+/// Plain Tensor parameters hide the static shapes, so the conflict surfaces at runtime.
+func add(a: Tensor, b: Tensor): Tensor {
+    return a + b
+}
+
+func main(): int sync {
+    let a = ones([2, 3])
+    let b = ones([4, 3])
+    'shape_error sum={}'->format<sum(add(a, b))>->println
+    return 0
+}

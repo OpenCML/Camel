@@ -1,0 +1,18 @@
+/**
+ * Prints the operator URIs the ONNX backend can lower, one per line
+ * (used by capabilities.py for the capability table).
+ */
+module onnx_capabilities
+
+import { supported_operators } from onnx
+
+func show(ops: string[], i: int): int sync {
+    return if i >= len(ops) then 0 else sync {
+        'CAPABILITY {}'->format<ops[i]>->println
+        return show(ops, i + 1)
+    }
+}
+
+func main(): int sync {
+    return show(supported_operators(), 0)
+}

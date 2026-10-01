@@ -1,0 +1,29 @@
+/**
+ * Refined tensor types: var bindings widen, branch joins unify, and seeded
+ * random generation is reproducible.
+ */
+module static_types
+
+import {
+    Tensor, zeros, ones, random, seed, sum, shape
+} from tensor
+
+func grow(t: Tensor): Tensor {
+    return t + 1.0
+}
+
+func pick(flag: bool): Tensor {
+    return if flag then zeros([2, 2]) else ones([3, 2])
+}
+
+func main(): int sync {
+    var w = zeros([2, 1])
+    wait w = grow(w)
+    wait w = ones([5])
+    seed(7)
+    let r1 = random([4], 0.0, 1.0)
+    seed(7)
+    let r2 = random([4], 0.0, 1.0)
+    'static_types w_sum={} pick={} same_seed={}'->format<sum(w), shape(pick(false)), sum(r1) == sum(r2)>->println
+    return 0
+}

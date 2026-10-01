@@ -19,8 +19,10 @@
 /*
  * Native nn module.
  *
- * The module currently provides a compile-time graph-generation demo for
- * automatic differentiation over a small tensor training pattern.
+ * Neural-network building blocks on top of the tensor module: convolution,
+ * pooling, embedding, batch norm and loss operators with their derivative
+ * rules, and optimizers over parameter trees (see optim.h). Gradients come
+ * from the autodiff module.
  */
 
 #pragma once

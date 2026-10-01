@@ -76,6 +76,8 @@ node test\tools\run-tests.mjs --update-golden test\plans\smoke\core.plan.toml
 |------|-------------|
 | `std::gir` | Translation pass: prints the current GIR and returns an empty graph |
 | `std::rgir` | Translation pass: prints an AI-readable GIR DOT with only `label` and `type` attributes, then returns an empty graph |
+| `std::agir` / `std::argir` | Translation passes: `std::gir` / `std::rgir` with boundary roles (scalar boundary, branch contract, effect, export capability) from the node-role registry: fill colors and a legend, or a `role` attribute |
+| `std::stats` | Prints `GRAPH_STATS {json}` (graphs, nodes, edges, operators, calls, closures, branches) and passes the graph on unchanged |
 | `std::nvm` | Scheduling pass: executes on the node VM linearly, then returns an empty graph |
 | `std::fvm` | Scheduling pass: high-performance bytecode VM, returns an empty graph |
 | `std::jit` | Scheduling pass: JIT-enabled bytecode VM, returns an empty graph |

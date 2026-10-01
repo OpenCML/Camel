@@ -1,0 +1,13 @@
+/**
+ * Shape diagnostic of `multiply`: statically known shapes conflict, so compilation fails at the
+ * call with both shapes in the reason.
+ */
+module shape_diag_multiply
+
+import { zeros, multiply } from tensor
+
+func main(): int sync {
+    let r = multiply(zeros([2, 3]), zeros([2, 4]))
+    println('unreachable')
+    return 0
+}
