@@ -152,7 +152,7 @@ const nodesOf = (text, name) => {
     const label = line.match(/label="([^"]*)";/)
     if (label && stack.length && stack[stack.length - 1] === null) { stack[stack.length - 1] = label[1]; continue }
     if (line.trim() === '}' && stack.length) { stack.pop(); continue }
-    const node = line.match(/^\s*[NO][0-9A-F]+ \[label="([^"]*)", type="([A-Z_]+)"\]/)
+    const node = line.match(/^\s*[NO][0-9A-F]+ \[label="([^"]*)", type="([A-Z_]+)"/)
     if (node && stack[stack.length - 1] === name) own.push([node[2], node[1]])
   }
   return own
@@ -198,7 +198,7 @@ const nodesOf = (text, name) => {
     const label = line.match(/label="([^"]*)";/)
     if (label && stack.length && stack[stack.length - 1] === null) { stack[stack.length - 1] = label[1]; continue }
     if (line.trim() === '}' && stack.length) { stack.pop(); continue }
-    const node = line.match(/^\s*[NO][0-9A-F]+ \[label="([^"]*)", type="([A-Z_]+)"\]/)
+    const node = line.match(/^\s*[NO][0-9A-F]+ \[label="([^"]*)", type="([A-Z_]+)"/)
     if (node && stack[stack.length - 1] === name) own.push([node[2], node[1]])
   }
   return own
@@ -246,7 +246,7 @@ for (const line of input.normalized.stdout.split('\n')) {
   const label = line.match(/label="([^"]*)";/)
   if (label && stack.length && stack[stack.length - 1] === null) { stack[stack.length - 1] = label[1]; graphs[label[1]] = []; continue }
   if (line.trim() === '}' && stack.length) { stack.pop(); continue }
-  const node = line.match(/^\s*[NO][0-9A-F]+ \[label="([^"]*)", type="([A-Z_]+)"\]/)
+  const node = line.match(/^\s*[NO][0-9A-F]+ \[label="([^"]*)", type="([A-Z_]+)"/)
   if (node && stack.length && stack[stack.length - 1]) graphs[stack[stack.length - 1]].push([node[2], node[1]])
 }
 const specialized = Object.keys(graphs).filter((name) => name.startsWith('forward$'))
