@@ -203,8 +203,19 @@ int runWorkerMode(int argc, char *argv[]) {
         const std::string graphId = graph ? graph->stableId() : "";
         const uint64_t origin =
             graph ? graph->nodeOrigin(static_cast<camel::runtime::gc_node_ref_t>(ref)) : 0;
-        // A consumed step request always pauses; otherwise pause only on breakpoint origins.
-        if (!srv.consumeGirStepRequest(graphId) && !srv.isGirBreakpointOrigin(origin))
+        // Step mode takes precedence: a consumed step request pauses exactly once at the
+        // step target. While a step is pending (e.g. crossing other graphs on the way to a
+        // step-over target), breakpoints are deferred — an intermediate bp hit must not
+        // produce a pause the client could mistake for the completed step.
+        if (srv.consumeGirStepRequest(graphId)) {
+            std::string nodeId =
+                graph ? std::format("{}:{}", graphId, ref) : std::format("{}", ref);
+            srv.pauseAndWaitForGirBreakpoint(nodeId, graphId, origin, ref);
+            return;
+        }
+        if (srv.isGirStepPending())
+            return;
+        if (!srv.isGirBreakpointOrigin(origin))
             return;
         std::string nodeId = graph ? std::format("{}:{}", graphId, ref) : std::format("{}", ref);
         srv.pauseAndWaitForGirBreakpoint(nodeId, graphId, origin, ref);

@@ -118,6 +118,8 @@ class DebuggerServer {
     /// "step in" (any graph); a non-empty graphId (the graph paused in) arms "step over",
     /// stopping only at the next node of the same graph. Worker-only.
     void requestGirStep(std::string graphId);
+    /// True while a step request is armed but not yet consumed (step target not reached).
+    bool isGirStepPending() const { return girStepRequested_.load(std::memory_order_acquire); }
     /// Called by the GIR node hook before each node: returns true (consuming the request) when
     /// a step was armed and its graph constraint matches the node's graph.
     bool consumeGirStepRequest(const std::string &currentGraphId);
@@ -179,7 +181,11 @@ class DebuggerServer {
     std::atomic<bool> memoryScanRunning_{false};
     std::atomic<bool> allocStepEnabled_{false};
     std::atomic<bool> paused_{false};
-    std::atomic<bool> continueRequested_{false};
+    /// Monotonic counter bumped by requestContinue() under continueMutex_. Pause waits
+    /// snapshot the epoch on entry and block until it changes, so a continue is never
+    /// lost (no flag to wipe) and a stale continue from an earlier wake can never
+    /// dismiss a pause that started after it.
+    std::atomic<uint64_t> continueEpoch_{0};
     std::atomic<bool> restartRequested_{false};
     std::atomic<bool> terminateRequested_{false};
     std::mutex continueMutex_;
