@@ -157,6 +157,64 @@ assert(model.initializers.length <= 8, `weights must be inputs, not initializers
 timeout_ms = 6000
 
 [[tests]]
+name = "export_train_step_conv"
+desc = "A conv net training step exports with conv2d gradients as ConvTranspose (input) / Conv (kernel) / ReduceSum (bias) and the max_pool2d gradient as MaxPool indices + MaxUnpool — standard opset-17 inference operators only."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_conv.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_conv.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_conv.onnx'))
+assert(model.inputs.join() === 'conv1_w,conv1_b,conv2_w,conv2_b,fc_w,fc_b,input1', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_conv1_w,output_1_conv1_b,output_1_conv2_w,output_1_conv2_b,output_1_fc_w,output_1_fc_b', `unexpected outputs ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+// forward: 2 Conv; backward: dW of each conv as Conv with batch/channel swapped
+assert(count('Conv') === 4, `expected 4 Conv, got ${model.ops}`)
+// dX of the second conv is a ConvTranspose (the first conv's input needs no gradient)
+assert(count('ConvTranspose') === 1, `expected 1 ConvTranspose, got ${model.ops}`)
+// pool backward: one MaxPool recompute for indices, one MaxUnpool scatter
+assert(count('MaxUnpool') === 1, `expected 1 MaxUnpool, got ${model.ops}`)
+assert(count('Sub') >= 6, `expected an SGD update per parameter, got ${model.ops}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_frozen"
+desc = "M2: stop_gradient freezes a parameter through export — the graph carries no gradient product for it (4 MatMul vs 5 in export_train_step) yet the frozen weight stays a graph input with an (identity-updated) output."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_frozen.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_frozen.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_frozen.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+// frozen w1: the dW1 MatMul of export_train_step (5) is gone
+assert(count('MatMul') === 4, `expected 4 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
 name = "export_dynamic_recursion"
 desc = "Recursion whose depth depends on the input cannot unroll; the call left after simplification is reported at its source position."
 kind = "behavior"

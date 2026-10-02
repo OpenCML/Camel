@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -99,6 +99,12 @@ class Emitter {
     std::string node(
         std::string opType, std::vector<std::string> inputs, std::vector<Attribute> attributes = {},
         std::string_view hint = {});
+
+    /// Appends a two-output node (e.g. MaxPool with its indices output) and returns both output
+    /// names. Not memoized: multi-output nodes are emitted once per call site.
+    std::pair<std::string, std::string> node2(
+        std::string opType, std::vector<std::string> inputs, std::vector<Attribute> attributes,
+        ElemType secondElem, std::string_view hint = {});
 
     /// Operand name for `value`, converted to `dtype` when given.
     std::string operand(const Value &value, std::optional<type::TypeCode> dtype = std::nullopt);

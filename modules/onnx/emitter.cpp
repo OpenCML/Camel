@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -212,8 +212,8 @@ std::optional<ElemType> Emitter::valueElemType(const std::string &name) const {
 std::optional<ElemType> Emitter::outputElemType(
     const std::string &opType, const std::vector<std::string> &inputs,
     const std::vector<Attribute> &attributes) const {
-    static const std::unordered_set<std::string> kBoolResults = {
-        "Equal", "Greater", "GreaterOrEqual", "Less", "LessOrEqual", "And", "Or", "Not"};
+    static const std::unordered_set<std::string> kBoolResults =
+        {"Equal", "Greater", "GreaterOrEqual", "Less", "LessOrEqual", "And", "Or", "Not"};
     if (kBoolResults.contains(opType)) {
         return ElemType::Bool;
     }
@@ -298,14 +298,35 @@ std::string Emitter::node(
     return output;
 }
 
+std::pair<std::string, std::string> Emitter::node2(
+    std::string opType, std::vector<std::string> inputs, std::vector<Attribute> attributes,
+    ElemType secondElem, std::string_view hint) {
+    checkCapability(opType, inputs);
+    const std::string first  = fresh(hint.empty() ? std::string_view(opType) : hint);
+    const std::string second = fresh(first + "_1");
+    if (auto elem = outputElemType(opType, inputs, attributes)) {
+        elemTypes_[first] = *elem;
+    }
+    elemTypes_[second] = secondElem;
+    Node n;
+    n.opType     = std::move(opType);
+    n.name       = "n_" + first;
+    n.inputs     = std::move(inputs);
+    n.outputs    = {first, second};
+    n.attributes = std::move(attributes);
+    scopes_.back().graph.nodes.push_back(std::move(n));
+    return {first, second};
+}
+
 std::string Emitter::operand(const Value &value, std::optional<TypeCode> dtype) {
     if (value.isConstant()) {
         return constantOperand(value, dtype);
     }
     if (value.isAggregate()) {
-        throw ExportError(std::format(
-            "a '{}' that depends on the model input is used where a tensor is expected",
-            value.camelType->toString()));
+        throw ExportError(
+            std::format(
+                "a '{}' that depends on the model input is used where a tensor is expected",
+                value.camelType->toString()));
     }
     if (!dtype || !value.dtype || tensor::normalizeTensorDType(*dtype) == *value.dtype) {
         return value.name;
@@ -329,9 +350,10 @@ std::string Emitter::operand(const Value &value, std::optional<TypeCode> dtype) 
 std::string Emitter::constantOperand(const Value &value, std::optional<TypeCode> dtype) {
     const TensorFacts facts = factsOf(value);
     if (!facts.dtype || !facts.shape) {
-        throw ExportError(std::format(
-            "constant of type '{}' cannot be used as a tensor operand",
-            value.ty ? value.ty->toString() : "?"));
+        throw ExportError(
+            std::format(
+                "constant of type '{}' cannot be used as a tensor operand",
+                value.ty ? value.ty->toString() : "?"));
     }
     const TypeCode target  = dtype ? tensor::normalizeTensorDType(*dtype) : *facts.dtype;
     const std::string hint = value.label.empty() ? "const" : value.label;
@@ -392,7 +414,7 @@ std::string Emitter::int64s(std::span<const int64_t> values) {
 }
 
 std::string Emitter::addInitializer(TensorValue tensor, const std::string &key) {
-    std::string name  = tensor.name;
+    std::string name = tensor.name;
     elemTypes_[name] = tensor.type;
     graph().initializers.push_back(std::move(tensor));
     initializerByKey_.emplace(key, name);

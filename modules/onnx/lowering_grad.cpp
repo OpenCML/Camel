@@ -13,13 +13,13 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 30, 2026
- * Updated: Sep. 30, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
  * Lowerings of the operators that reverse-mode differentiation emits
- * (tensor:sum_to, tensor:matmul_grad_lhs, tensor:layer_norm_grad, ...) and of
+ * (tensor:sum_to, tensor:matmul_grad_lhs, nn:conv2d_kernel_grad, ...) and of
  * the tree optimizer nn:sgd, so that a training step exports as one ONNX
  * graph. Most of them decompose into several ONNX nodes. They need the static
  * ranks of their operands, which shape specialization provides.
@@ -83,12 +83,13 @@ std::string shapeOperand(const LowerContext &ctx, size_t index) {
 }
 
 /// `g` summed down to `like`'s shape (the reverse of broadcasting).
-std::string sumTo(
-    const LowerContext &ctx, const std::string &g, const TensorFacts &gFacts, size_t likeIndex) {
-    const auto gShape     = staticShape(gFacts, ctx.uri());
-    const auto likeShape  = staticShape(ctx.facts(likeIndex), ctx.uri());
+std::string
+sumTo(const LowerContext &ctx, const std::string &g, const TensorFacts &gFacts, size_t likeIndex) {
+    const auto gShape    = staticShape(gFacts, ctx.uri());
+    const auto likeShape = staticShape(ctx.facts(likeIndex), ctx.uri());
     if (likeShape.size() > gShape.size()) {
-        throw ExportError(std::format("{}: the gradient has a lower rank than its target", ctx.uri()));
+        throw ExportError(
+            std::format("{}: the gradient has a lower rank than its target", ctx.uri()));
     }
     const size_t lead = gShape.size() - likeShape.size();
     std::vector<int64_t> axes;
@@ -159,8 +160,9 @@ Value lowerGeluGrad(const LowerContext &ctx) {
         "Mul",
         {e.node("Add", {x, e.node("Mul", {e.node("Mul", {x2, x}), floatConst(e, kCubic)})}),
          floatConst(e, kScale)});
-    const std::string t     = e.node("Tanh", {inner});
-    const std::string left  = e.node("Mul", {e.node("Add", {t, floatConst(e, 1.0)}), floatConst(e, 0.5)});
+    const std::string t = e.node("Tanh", {inner});
+    const std::string left =
+        e.node("Mul", {e.node("Add", {t, floatConst(e, 1.0)}), floatConst(e, 0.5)});
     const std::string sech2 = e.node("Sub", {floatConst(e, 1.0), e.node("Mul", {t, t})});
     const std::string poly  = e.node(
         "Mul",
@@ -182,10 +184,10 @@ Value lowerErfGrad(const LowerContext &ctx) {
 // layer_norm_grad(x, gamma, dy, which, eps): normalization over the last axis; which 0 = input,
 // 1 = gamma, 2 = beta.
 Value lowerLayerNormGrad(const LowerContext &ctx) {
-    Emitter &e              = ctx.emitter();
-    const int64_t which     = ctx.constInt(3);
-    const auto rank         = static_cast<int64_t>(ctx.rank(0));
-    const std::string dy    = ctx.input(2, TypeCode::Float32);
+    Emitter &e           = ctx.emitter();
+    const int64_t which  = ctx.constInt(3);
+    const auto rank      = static_cast<int64_t>(ctx.rank(0));
+    const std::string dy = ctx.input(2, TypeCode::Float32);
     std::vector<int64_t> lead;
     for (int64_t i = 0; i + 1 < rank; ++i) {
         lead.push_back(i);
@@ -193,10 +195,10 @@ Value lowerLayerNormGrad(const LowerContext &ctx) {
     if (which == 2) {
         return ctx.result(lead.empty() ? dy : reduce(e, "ReduceSum", dy, lead, false));
     }
-    const std::string x    = ctx.input(0, TypeCode::Float32);
-    const std::string xc   = e.node("Sub", {x, reduce(e, "ReduceMean", x, {-1}, true)});
-    const std::string var  = reduce(e, "ReduceMean", e.node("Mul", {xc, xc}), {-1}, true);
-    const std::string inv  = e.node(
+    const std::string x   = ctx.input(0, TypeCode::Float32);
+    const std::string xc  = e.node("Sub", {x, reduce(e, "ReduceMean", x, {-1}, true)});
+    const std::string var = reduce(e, "ReduceMean", e.node("Mul", {xc, xc}), {-1}, true);
+    const std::string inv = e.node(
         "Reciprocal",
         {e.node("Sqrt", {e.node("Add", {var, floatConst(e, ctx.constNumber(4, 1e-5))})})});
     const std::string xhat = e.node("Mul", {xc, inv});
@@ -218,20 +220,20 @@ Value lowerLayerNormGrad(const LowerContext &ctx) {
 
 // softmax_grad(y, dy, axis = -1) = y * (dy - sum(y * dy, axis))
 Value lowerSoftmaxGrad(const LowerContext &ctx) {
-    Emitter &e           = ctx.emitter();
-    const std::string y  = ctx.input(0, TypeCode::Float32);
-    const std::string dy = ctx.input(1, TypeCode::Float32);
-    const int64_t axis   = ctx.constInt(2, -1);
+    Emitter &e            = ctx.emitter();
+    const std::string y   = ctx.input(0, TypeCode::Float32);
+    const std::string dy  = ctx.input(1, TypeCode::Float32);
+    const int64_t axis    = ctx.constInt(2, -1);
     const std::string dot = reduce(e, "ReduceSum", e.node("Mul", {y, dy}), {axis}, true);
     return ctx.emit("Mul", {y, e.node("Sub", {dy, dot})});
 }
 
 // slice_grad(dy, like, axis, start, end, step = 1): dy padded with zeros back to like's shape.
 Value lowerSliceGrad(const LowerContext &ctx) {
-    const auto likeShape  = staticShape(ctx.facts(1), ctx.uri());
-    const auto rank       = static_cast<int64_t>(likeShape.size());
-    int64_t axis          = ctx.constInt(2);
-    axis                  = axis < 0 ? axis + rank : axis;
+    const auto likeShape = staticShape(ctx.facts(1), ctx.uri());
+    const auto rank      = static_cast<int64_t>(likeShape.size());
+    int64_t axis         = ctx.constInt(2);
+    axis                 = axis < 0 ? axis + rank : axis;
     if (ctx.constInt(5, 1) != 1) {
         throw ExportError("tensor:slice_grad: only unit steps can be exported");
     }
@@ -263,15 +265,15 @@ std::string swapLast(Emitter &e, const std::string &x, size_t rank) {
 // matmul_grad_lhs(dy, lhs, rhs) = sum_to(dy @ rhs^T, lhs);
 // matmul_grad_rhs(dy, lhs, rhs) = sum_to(lhs^T @ dy, rhs).
 template <bool Lhs> Value lowerMatmulGrad(const LowerContext &ctx) {
-    Emitter &e              = ctx.emitter();
-    const auto dyShape      = staticShape(ctx.facts(0), ctx.uri());
-    const auto lhsShape     = staticShape(ctx.facts(1), ctx.uri());
-    const auto rhsShape     = staticShape(ctx.facts(2), ctx.uri());
+    Emitter &e          = ctx.emitter();
+    const auto dyShape  = staticShape(ctx.facts(0), ctx.uri());
+    const auto lhsShape = staticShape(ctx.facts(1), ctx.uri());
+    const auto rhsShape = staticShape(ctx.facts(2), ctx.uri());
     if (lhsShape.size() < 2 || rhsShape.size() < 2) {
         throw ExportError(std::format("{}: vector operands cannot be exported", ctx.uri()));
     }
-    const auto dtype        = ctx.result().dtype;
-    const std::string dy    = ctx.input(0, dtype);
+    const auto dtype     = ctx.result().dtype;
+    const std::string dy = ctx.input(0, dtype);
     std::string product;
     tensor::StaticShape productShape = dyShape;
     if (Lhs) {
@@ -296,10 +298,7 @@ Value lowerPermuteInverse(const LowerContext &ctx) {
         const int64_t p = perm[i] < 0 ? perm[i] + static_cast<int64_t>(perm.size()) : perm[i];
         inverse.at(static_cast<size_t>(p)) = static_cast<int64_t>(i);
     }
-    return ctx.emit(
-        "Transpose",
-        {ctx.input(0)},
-        {Attribute::makeInts("perm", std::move(inverse))});
+    return ctx.emit("Transpose", {ctx.input(0)}, {Attribute::makeInts("perm", std::move(inverse))});
 }
 
 /// sgd on one parameter tree: every tensor p becomes p - lr * g; other leaves are kept.
@@ -315,7 +314,8 @@ Value sgdTree(Emitter &e, const Value &p, const Value &g, const std::string &lr)
         }
         return Value::aggregate(p.camelType, std::move(fields));
     }
-    const bool scalar = p.isConstant() ? !tensor::asTensorType(p.ty) : p.form == Value::Form::Scalar;
+    const bool scalar =
+        p.isConstant() ? !tensor::asTensorType(p.ty) : p.form == Value::Form::Scalar;
     if (scalar) {
         // A number in the tree (e.g. a learned scale) is updated the same way.
         type::Type *ty = p.isConstant() ? p.ty : p.camelType;
@@ -341,6 +341,137 @@ Value lowerSgd(const LowerContext &ctx) {
     return sgdTree(e, ctx.arg(0), ctx.arg(1), lr);
 }
 
+/// The static extent of a spatial axis, or an export error naming the operator.
+int64_t staticExtent(
+    const tensor::StaticShape &shape, size_t axis, std::string_view uri, std::string_view what) {
+    const int64_t d = shape[axis];
+    if (d == tensor::kUnknownDim) {
+        throw ExportError(std::format("{}: the {} must be known statically", uri, what));
+    }
+    return d;
+}
+
+/// (input, kernel) shapes shared by the three conv2d gradient operators.
+std::pair<tensor::StaticShape, tensor::StaticShape> convShapes(const LowerContext &ctx) {
+    auto x = staticShape(ctx.facts(0), ctx.uri());
+    auto w = staticShape(ctx.facts(1), ctx.uri());
+    if (x.size() != 4 || w.size() != 4) {
+        throw ExportError(std::format("{}: expects NCHW input and OCHW kernel", ctx.uri()));
+    }
+    return {std::move(x), std::move(w)};
+}
+
+// conv2d_input_grad(x, w, dy, stride = 1, padding = 0): dL/dx is the adjoint of the forward
+// cross-correlation, which is exactly what ConvTranspose computes (its weight layout [O, C, KH,
+// KW] matches Camel's kernel). The forward stride drops a remainder r = (H + 2p - KH) mod s per
+// axis; ConvTranspose's output_padding puts it back: s * (OH - 1) + r + KH - 2p = H.
+Value lowerConv2dInputGrad(const LowerContext &ctx) {
+    const auto [x, w]     = convShapes(ctx);
+    const int64_t stride  = ctx.constInt(3, 1);
+    const int64_t padding = ctx.constInt(4, 0);
+    const int64_t rH      = (staticExtent(x, 2, ctx.uri(), "input height") + 2 * padding -
+                             staticExtent(w, 2, ctx.uri(), "kernel height")) %
+                            stride;
+    const int64_t rW      = (staticExtent(x, 3, ctx.uri(), "input width") + 2 * padding -
+                             staticExtent(w, 3, ctx.uri(), "kernel width")) %
+                            stride;
+    return ctx.emit(
+        "ConvTranspose",
+        {ctx.input(2, TypeCode::Float32), ctx.input(1, TypeCode::Float32)},
+        {Attribute::makeInts("strides", {stride, stride}),
+         Attribute::makeInts("pads", {padding, padding, padding, padding}),
+         Attribute::makeInts("output_padding", {rH, rW})});
+}
+
+// conv2d_kernel_grad(x, w, dy, stride = 1, padding = 0):
+// dW[o,c,kh,kw] = sum_{n,oh,ow} dy[n,o,oh,ow] * x[n,c,oh*s+kh-p, ow*s+kw-p].
+// That is a correlation of x with dy, which a Conv computes when batch and channel swap roles:
+// input x^T [C,N,H,W], kernel dy^T [O,N,OH,OW], unit stride, the forward stride becoming the
+// dilation, and the forward padding kept. The output [C,O,KH',KW'] has KH' = H + 2p - (OH-1)*s
+// in [KH, KH+s); a Slice crops the s-1 surplus rows/columns a strided forward leaves over.
+Value lowerConv2dKernelGrad(const LowerContext &ctx) {
+    Emitter &e            = ctx.emitter();
+    const auto [x, w]     = convShapes(ctx);
+    const int64_t stride  = ctx.constInt(3, 1);
+    const int64_t padding = ctx.constInt(4, 0);
+    const int64_t perm[]  = {1, 0, 2, 3};
+    const std::string xt  = e.node(
+        "Transpose",
+        {ctx.input(0, TypeCode::Float32)},
+        {Attribute::makeInts("perm", std::vector<int64_t>(perm, perm + 4))});
+    const std::string dt = e.node(
+        "Transpose",
+        {ctx.input(2, TypeCode::Float32)},
+        {Attribute::makeInts("perm", std::vector<int64_t>(perm, perm + 4))});
+    std::string dw = e.node(
+        "Conv",
+        {xt, dt},
+        {Attribute::makeInts("strides", {1, 1}),
+         Attribute::makeInts("dilations", {stride, stride}),
+         Attribute::makeInts("pads", {padding, padding, padding, padding})});
+    dw = e.node(
+        "Transpose",
+        {dw},
+        {Attribute::makeInts("perm", std::vector<int64_t>(perm, perm + 4))});
+    const int64_t KH = staticExtent(w, 2, ctx.uri(), "kernel height");
+    const int64_t KW = staticExtent(w, 3, ctx.uri(), "kernel width");
+    // The crop is a no-op when the extents work out exactly (e.g. stride 1); emit it only when
+    // static shapes cannot prove that, or prove a surplus.
+    bool exact = false;
+    if (x[2] != tensor::kUnknownDim && x[3] != tensor::kUnknownDim) {
+        const int64_t OH = (x[2] + 2 * padding - KH) / stride + 1;
+        const int64_t OW = (x[3] + 2 * padding - KW) / stride + 1;
+        exact            = x[2] + 2 * padding - (OH - 1) * stride == KH &&
+                           x[3] + 2 * padding - (OW - 1) * stride == KW;
+    }
+    if (!exact) {
+        const int64_t starts[] = {0, 0}, ends[] = {KH, KW}, axes[] = {2, 3};
+        dw = e.node("Slice", {dw, e.int64s(starts), e.int64s(ends), e.int64s(axes)});
+    }
+    return ctx.result(dw);
+}
+
+// conv2d_bias_grad(bias, dy): dL/db sums dy over the batch and both spatial axes.
+Value lowerConv2dBiasGrad(const LowerContext &ctx) {
+    if (ctx.rank(1) != 4) {
+        throw ExportError(std::format("{}: expects a rank-4 dy", ctx.uri()));
+    }
+    const std::string dy = ctx.input(1, TypeCode::Float32);
+    return ctx.result(reduce(ctx.emitter(), "ReduceSum", dy, {0, 2, 3}, false));
+}
+
+// max_pool2d_grad(x, dy, kernel, stride = kernel, padding = 0): each pooled gradient goes to
+// the argmax of its window. MaxPool's indices output holds those argmax positions (flat over
+// the whole unpadded input, first maximum on ties — the runtime kernel's rule) and MaxUnpool
+// scatters dy at them, with output_size restoring the input shape. MaxUnpool assigns rather
+// than accumulates, so windows must be disjoint (kernel <= stride) for the exported graph to
+// match: with overlapping windows a cell shared by two windows would keep only one gradient.
+Value lowerMaxPool2dGrad(const LowerContext &ctx) {
+    Emitter &e            = ctx.emitter();
+    const int64_t kernel  = ctx.constInt(2);
+    const int64_t stride  = ctx.constInt(3, kernel);
+    const int64_t padding = ctx.constInt(4, 0);
+    if (kernel > stride) {
+        throw ExportError(
+            std::format(
+                "{}: overlapping windows (kernel {} > stride {}) cannot be exported exactly",
+                ctx.uri(),
+                kernel,
+                stride));
+    }
+    const std::vector<Attribute> window{
+        Attribute::makeInts("kernel_shape", {kernel, kernel}),
+        Attribute::makeInts("strides", {stride, stride}),
+        Attribute::makeInts("pads", {padding, padding, padding, padding})};
+    const auto [pooled, indices] =
+        e.node2("MaxPool", {ctx.input(0, TypeCode::Float32)}, window, ElemType::Int64);
+    (void)pooled; // only the indices feed MaxUnpool
+    return ctx.emit(
+        "MaxUnpool",
+        {ctx.input(1, TypeCode::Float32), indices, shapeOperand(ctx, 0)},
+        window);
+}
+
 } // namespace
 
 void addGradientLowerings(const std::function<void(std::string, LowerFn, int64_t)> &add) {
@@ -359,6 +490,13 @@ void addGradientLowerings(const std::function<void(std::string, LowerFn, int64_t
     add("tensor:cast_like", lowerCastLike, 1);
     add("tensor:permute_inverse", lowerPermuteInverse, 1);
     add("nn:sgd", lowerSgd, 1);
+    add("nn:conv2d_input_grad", lowerConv2dInputGrad, 1);
+    add("nn:conv2d_kernel_grad", lowerConv2dKernelGrad, 10);
+    add("nn:conv2d_bias_grad", lowerConv2dBiasGrad, 1);
+    add("nn:max_pool2d_grad", lowerMaxPool2dGrad, 11);
+    // stop_gradient is the identity at run time; its meaning lives in differentiation, which
+    // the export has already resolved by the time the operator is seen.
+    add("autodiff:stop_gradient", [](const LowerContext &ctx) { return ctx.arg(0); }, 1);
 }
 
 } // namespace camel::onnx
