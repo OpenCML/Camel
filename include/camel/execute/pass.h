@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,4 +24,5 @@
 #include "pass/runtime_sched.h"
 #include "pass/runtime_trans.h"
 #include "pass/sched.h"
+#include "pass/snapshot.h"
 #include "pass/trans.h"

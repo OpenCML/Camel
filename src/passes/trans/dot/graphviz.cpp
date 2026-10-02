@@ -839,6 +839,20 @@ GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context)
 GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context, GraphVizDumpConfig config)
     : RuntimeGraphTranslatePass(context), config_(std::move(config)) {}
 
+std::string GraphVizDumpPass::dumpReadable(camel::runtime::GCGraph *graph) {
+    return dumpGraph(graph);
+}
+
+std::string dumpReadableRuntimeGraph(camel::runtime::GCGraph *graph, const context_ptr_t &ctx) {
+    if (!graph || !graph->hasNodePayload()) {
+        return {};
+    }
+    GraphVizDumpConfig config;
+    config.readableOnly = true;
+    GraphVizDumpPass pass(ctx, std::move(config));
+    return pass.dumpReadable(graph);
+}
+
 camel::runtime::GCGraph *GraphVizDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     os << dumpGraph(graph);
     return nullptr;
