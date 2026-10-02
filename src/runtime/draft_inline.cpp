@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 05, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,8 +44,10 @@
 #include <array>
 #include <cstring>
 #include <format>
+#include <map>
 #include <tuple>
 #include <unordered_set>
+#include <vector>
 
 namespace camel::runtime {
 
@@ -430,7 +432,8 @@ bool insideBranchArm(const GraphDraft &draft, gc_node_ref_t id) {
             reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(brch).data())->join;
         std::vector<bool> seen(draft.nodeSlotCount(), false);
         std::vector<gc_node_ref_t> work;
-        for (auto users : {draft.normUsersOf(brch), draft.withUsersOf(brch), draft.ctrlUsersOf(brch)}) {
+        for (auto users :
+             {draft.normUsersOf(brch), draft.withUsersOf(brch), draft.ctrlUsersOf(brch)}) {
             work.insert(work.end(), users.begin(), users.end());
         }
         while (!work.empty()) {
@@ -523,9 +526,8 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
     // when the recursion's stop condition becomes constant, and then folding has already removed
     // the branch guarding the call. A call still guarded by a branch whose condition is not
     // constant would unroll forever: it gets type refinements only.
-    const bool bindsValues = std::ranges::any_of(bindings, [](const DraftFormalBinding &b) {
-        return b.bindsValue();
-    });
+    const bool bindsValues =
+        std::ranges::any_of(bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); });
     if (bindsValues && insideBranchArm(draft, funcNodeId) && onCallCycle(calleeGraph)) {
         std::erase_if(bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); });
     }
@@ -604,8 +606,8 @@ GCGraph *specializeGraphWithBindings(
         return cached;
     }
 
-    auto draft          = GraphDraft::decode(baseGraph);
-    bool refinesTypes   = false;
+    auto draft        = GraphDraft::decode(baseGraph);
+    bool refinesTypes = false;
     for (const DraftFormalBinding &binding : bindings) {
         const gc_node_ref_t formalDraftId = draft->draftIdOfSourceRef(binding.formalNodeId);
         ASSERT(
@@ -886,7 +888,7 @@ gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id) 
         if (!header || header->kind != GCNodeKind::Accs) {
             return id;
         }
-        const auto *accs = reinterpret_cast<const GCAccsBody *>(draft.payloadOf(id).data());
+        const auto *accs   = reinterpret_cast<const GCAccsBody *>(draft.payloadOf(id).data());
         const auto sources = draft.normInputsOf(id);
         if (accs->accsKind != GCAccsKind::TupleIndex || sources.size() != 1) {
             return id;
@@ -901,7 +903,8 @@ gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id) 
         }
         const auto slots  = fill->slots();
         const auto values = draft.withInputsOf(sources[0]);
-        const auto it     = std::find(slots.begin(), slots.end(), static_cast<gc_slot_idx_t>(accs->value));
+        const auto it =
+            std::find(slots.begin(), slots.end(), static_cast<gc_slot_idx_t>(accs->value));
         if (it == slots.end() || static_cast<size_t>(it - slots.begin()) >= values.size()) {
             return id; // the element comes from the template
         }
@@ -919,7 +922,8 @@ void keepCalleeOrdering(GraphDraft &draft, gc_node_ref_t funcNodeId, gc_node_ref
         return;
     }
     const auto existing = draft.ctrlInputsOf(funcNodeId);
-    if (callee != funcNodeId && std::find(existing.begin(), existing.end(), callee) == existing.end()) {
+    if (callee != funcNodeId &&
+        std::find(existing.begin(), existing.end(), callee) == existing.end()) {
         draft.appendInput(DraftEdgeKind::Ctrl, funcNodeId, callee);
     }
 }
@@ -931,7 +935,8 @@ namespace {
 GCGraph *liftClosureGraph(RuntimeGraphDraftSession &session, GCGraph *base, size_t nonce) {
     RuntimeSpecializationKey key{
         .baseGraph = base,
-        .bindings  = {RuntimeSpecializationBindingKey{.kind = RuntimeSpecializationBindingKind::Lift}},
+        .bindings  = {RuntimeSpecializationBindingKey{
+            .kind = RuntimeSpecializationBindingKind::Lift}},
     };
     if (GCGraph *cached = session.findSpecialization(key)) {
         return cached;
@@ -956,11 +961,12 @@ GCGraph *liftClosureGraph(RuntimeGraphDraftSession &session, GCGraph *base, size
         draft->appendNormPort(capture);
         normTypes.emplace_back(draft->header(capture)->dataType, false);
     }
-    draft->setFuncType(camel::core::type::FunctionType::create(
-        withTypes,
-        normTypes,
-        type->exitType(),
-        type->modifiers()));
+    draft->setFuncType(
+        camel::core::type::FunctionType::create(
+            withTypes,
+            normTypes,
+            type->exitType(),
+            type->modifiers()));
     draft->setClosureType(nullptr);
     GCGraph *lifted = encodeSpecializedGraph(*draft, base, "lift", nonce);
     session.rememberSpecialization(std::move(key), lifted);
@@ -973,7 +979,8 @@ bool devirtualizeClosureCallInDraft(
     gc_node_ref_t fillNodeId) {
     static size_t liftNonce = 0;
     const auto *fill = reinterpret_cast<const GCFillBody *>(draft.payloadOf(fillNodeId).data());
-    if (fill->fillKind != GCFillKind::FunctionClosure || draft.normInputsOf(fillNodeId).size() != 1) {
+    if (fill->fillKind != GCFillKind::FunctionClosure ||
+        draft.normInputsOf(fillNodeId).size() != 1) {
         return false;
     }
     DraftStaticValue source = tryResolveStaticValue(draft, draft.normInputsOf(fillNodeId)[0]);
@@ -1019,10 +1026,10 @@ bool devirtualizeClosureCallInDraft(
     GCFuncBody funcBody{.calleeGraph = lifted};
     std::array<std::byte, sizeof(GCFuncBody)> payload{};
     std::memcpy(payload.data(), &funcBody, sizeof(funcBody));
-    init.kind       = GCNodeKind::Func;
-    init.payload    = std::span<const std::byte>(payload.data(), payload.size());
-    init.normInputs = normInputs;
-    init.withInputs = directWith;
+    init.kind                       = GCNodeKind::Func;
+    init.payload                    = std::span<const std::byte>(payload.data(), payload.size());
+    init.normInputs                 = normInputs;
+    init.withInputs                 = directWith;
     const gc_node_ref_t calleeInput = withInputs.front();
     draft.rewriteNode(callNodeId, init);
     keepCalleeOrdering(draft, callNodeId, calleeInput);
@@ -1107,8 +1114,8 @@ bool devirtualizeStaticCallInDraft(
     GCFuncBody funcBody{.calleeGraph = targetGraph};
     std::array<std::byte, sizeof(GCFuncBody)> newPayload{};
     std::memcpy(newPayload.data(), &funcBody, sizeof(funcBody));
-    init.kind       = GCNodeKind::Func;
-    init.payload    = std::span<const std::byte>(newPayload.data(), newPayload.size());
+    init.kind    = GCNodeKind::Func;
+    init.payload = std::span<const std::byte>(newPayload.data(), newPayload.size());
     const std::vector<gc_node_ref_t> directWith(withInputs.begin() + 1, withInputs.end());
     const gc_node_ref_t calleeInput = withInputs.front();
     init.withInputs                 = directWith;
@@ -1119,6 +1126,429 @@ bool devirtualizeStaticCallInDraft(
         "Devirtualized CALL node {} to direct FUNC '{}'.",
         callNodeId,
         targetGraph->name());
+    return true;
+}
+
+namespace {
+
+/// True when `to` is reachable from `from` along value or control edges (to runs no earlier).
+/// Local mirror of the generic passes' reaches(); the runtime layer cannot pull in passes helpers.
+bool draftReaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
+    std::vector<bool> seen(draft.nodeSlotCount(), false);
+    std::vector<gc_node_ref_t> work{from};
+    while (!work.empty()) {
+        const gc_node_ref_t n = work.back();
+        work.pop_back();
+        if (n == to) {
+            return true;
+        }
+        if (n >= seen.size() || seen[n] || !draft.header(n)) {
+            continue;
+        }
+        seen[n] = true;
+        for (auto users : {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
+            work.insert(work.end(), users.begin(), users.end());
+        }
+    }
+    return false;
+}
+
+/// The graph a per-arm call of `elem` runs when the arm tuple's callee element is statically
+/// known: a closure FILL in this graph (every capture filled here), or a static Function
+/// carrier. nullptr otherwise.
+GCGraph *resolveBranchedArmCalleeGraph(const GraphDraft &draft, gc_node_ref_t elem) {
+    const DraftNodeHeader *header = draft.header(elem);
+    if (!header) {
+        return nullptr;
+    }
+    gc_node_ref_t carrier = elem;
+    if (header->kind == GCNodeKind::Fill) {
+        const auto *fill = reinterpret_cast<const GCFillBody *>(draft.payloadOf(elem).data());
+        const auto norm  = draft.normInputsOf(elem);
+        if (fill->fillKind != GCFillKind::FunctionClosure || norm.size() != 1) {
+            return nullptr;
+        }
+        carrier = norm.front();
+    }
+    DraftStaticValue fn = tryResolveStaticValue(draft, carrier);
+    if (!fn.valid() || !fn.type || fn.type->code() != camel::core::type::TypeCode::Function) {
+        return nullptr;
+    }
+    ::Function *function = camel::core::rtdata::fromSlot<::Function *>(fn.value);
+    GCGraph *base        = function ? function->runtimeGraph() : nullptr;
+    if (!base) {
+        return nullptr;
+    }
+    if (carrier != elem) {
+        // devirtualizeClosureCallInDraft requires all captures filled here (none in the template).
+        const auto *fill = reinterpret_cast<const GCFillBody *>(draft.payloadOf(elem).data());
+        if (base->closureNodes().size() != draft.withInputsOf(elem).size() ||
+            fill->slots().size() != draft.withInputsOf(elem).size()) {
+            return nullptr;
+        }
+    }
+    return base;
+}
+
+/// The element of the arm tuple FILL `fillId` written to tuple slot `slot`, or kInvalidNodeRef
+/// when the fill leaves that slot to the template.
+gc_node_ref_t armFillElement(const GraphDraft &draft, gc_node_ref_t fillId, size_t slot) {
+    const auto *fill  = reinterpret_cast<const GCFillBody *>(draft.payloadOf(fillId).data());
+    const auto slots  = fill->slots();
+    const auto values = draft.withInputsOf(fillId);
+    for (size_t k = 0; k < slots.size() && k < values.size(); ++k) {
+        if (static_cast<size_t>(slots[k]) == slot) {
+            return values[k];
+        }
+    }
+    return kInvalidNodeRef;
+}
+
+} // namespace
+
+/// A CALL whose callee is projected out of a branch JOIN (the value_and_grad pullback shape:
+/// each arm packs (value, pullback closure) into a tuple, the JOIN selects, and the pullback is
+/// called indirectly) is split across the branch. For every arm a new CALL invokes that arm's
+/// closure with the original arguments; the call's result projections and the JOIN's other
+/// projections each get a JOIN of their own over the per-arm values. The arm fills, the old
+/// tuple JOIN, and the original CALL die (dce reclaims the fills). The new per-arm calls are
+/// ordinary indirect calls: the rewrite loop's own devirtualization and inlining absorb them.
+///
+/// Placement discipline (the VMs execute an arm as the topo range head..tail): each per-arm
+/// chain ends at the projection feeding the main new JOIN, which becomes the arm's tail anchor
+/// and ctrl-waits on the arm's other new nodes and the arm's head, so the whole chain stays
+/// inside the arm. The extra JOINs ctrl-wait on the main one so the topo builder places them
+/// after it (they read values already computed inside the arms).
+///
+/// EXPORT-ONLY: the result has several sibling JOINs reading the same BRCH whose users merge
+/// downstream. That is a valid graph for a value-DAG consumer (the ONNX exporter) but breaks
+/// the scheduler invariant that a JOIN cuts its BRCH off from everything downstream — the
+/// execution-topo builder reports a cycle. Gate on OptimizeRewriteConfig::enableBranchedCallSplit.
+bool devirtualizeBranchedCallInDraft(
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId) {
+    (void)session;
+
+    const DraftNodeHeader *callHeader = draft.header(callNodeId);
+    if (!callHeader || callHeader->kind != GCNodeKind::Call) {
+        return false;
+    }
+    if (callNodeId == draft.exitNode() || callNodeId == draft.outputNode() ||
+        callNodeId == draft.returnNode()) {
+        return false;
+    }
+    const auto callWith = draft.withInputsOf(callNodeId);
+    if (callWith.empty()) {
+        return false;
+    }
+    const gc_node_ref_t calleeAccs    = callWith.front();
+    const DraftNodeHeader *accsHeader = draft.header(calleeAccs);
+    if (!accsHeader || accsHeader->kind != GCNodeKind::Accs ||
+        draft.normInputsOf(calleeAccs).size() != 1 || !draft.ctrlInputsOf(calleeAccs).empty() ||
+        !draft.ctrlUsersOf(calleeAccs).empty()) {
+        return false;
+    }
+    const auto *accsBody = reinterpret_cast<const GCAccsBody *>(draft.payloadOf(calleeAccs).data());
+    if (accsBody->accsKind != GCAccsKind::TupleIndex) {
+        return false;
+    }
+    const size_t calleeSlot           = accsBody->value;
+    const gc_node_ref_t join          = draft.normInputsOf(calleeAccs).front();
+    const DraftNodeHeader *joinHeader = draft.header(join);
+    if (!joinHeader || joinHeader->kind != GCNodeKind::Join ||
+        draft.normInputsOf(join).size() != 1 || join == draft.exitNode() ||
+        join == draft.outputNode() || join == draft.returnNode() ||
+        !draft.ctrlInputsOf(join).empty()) {
+        return false;
+    }
+    // The callee projection feeds this call alone.
+    for (auto users : {draft.normUsersOf(calleeAccs), draft.withUsersOf(calleeAccs)}) {
+        for (gc_node_ref_t user : users) {
+            if (user != callNodeId) {
+                return false;
+            }
+        }
+    }
+    const gc_node_ref_t brch          = draft.normInputsOf(join).front();
+    const DraftNodeHeader *brchHeader = draft.header(brch);
+    if (!brchHeader || brchHeader->kind != GCNodeKind::Brch) {
+        return false;
+    }
+    const auto *brchPayload =
+        reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(brch).data());
+    if (brchPayload->join != join) {
+        return false;
+    }
+    const auto arms       = draft.withInputsOf(join);
+    const auto armAnchors = draft.branchArmsOf(brch);
+    if (arms.empty() || armAnchors.size() != arms.size()) {
+        return false;
+    }
+
+    // Every value user of the JOIN projects one of its slots; collect them by slot. A
+    // projection that another call uses as its callee would be turned into a value JOIN here,
+    // stranding that call, so that shape is left alone. Nodes an outer branch anchors on are
+    // left alone too: erasing them would dangle that branch's arms.
+    std::map<size_t, std::vector<gc_node_ref_t>> joinProjections;
+    for (auto users : {draft.normUsersOf(join), draft.withUsersOf(join)}) {
+        for (gc_node_ref_t user : users) {
+            const DraftNodeHeader *userHeader = draft.header(user);
+            if (!userHeader || userHeader->kind != GCNodeKind::Accs ||
+                draft.normInputsOf(user).size() != 1 || draft.normInputsOf(user).front() != join ||
+                !draft.ctrlInputsOf(user).empty() || !draft.ctrlUsersOf(user).empty() ||
+                draft.isBranchArmAnchor(user) || user == draft.exitNode() ||
+                user == draft.outputNode() || user == draft.returnNode()) {
+                return false;
+            }
+            const auto *body = reinterpret_cast<const GCAccsBody *>(draft.payloadOf(user).data());
+            if (body->accsKind != GCAccsKind::TupleIndex) {
+                return false;
+            }
+            if (user != calleeAccs) {
+                for (gc_node_ref_t withUser : draft.withUsersOf(user)) {
+                    const DraftNodeHeader *withUserHeader = draft.header(withUser);
+                    if (withUserHeader && withUserHeader->kind == GCNodeKind::Call &&
+                        !draft.withInputsOf(withUser).empty() &&
+                        draft.withInputsOf(withUser).front() == user) {
+                        return false;
+                    }
+                }
+            }
+            joinProjections[body->value].push_back(user);
+        }
+    }
+    const auto calleeProjIt = joinProjections.find(calleeSlot);
+    if (calleeProjIt == joinProjections.end() || calleeProjIt->second.size() != 1) {
+        return false;
+    }
+    // Every value user of the CALL projects one of its result slots.
+    std::map<size_t, std::vector<gc_node_ref_t>> callProjections;
+    for (auto users : {draft.normUsersOf(callNodeId), draft.withUsersOf(callNodeId)}) {
+        for (gc_node_ref_t user : users) {
+            const DraftNodeHeader *userHeader = draft.header(user);
+            if (!userHeader || userHeader->kind != GCNodeKind::Accs ||
+                draft.normInputsOf(user).size() != 1 ||
+                draft.normInputsOf(user).front() != callNodeId ||
+                !draft.ctrlInputsOf(user).empty() || !draft.ctrlUsersOf(user).empty()) {
+                return false;
+            }
+            const auto *body = reinterpret_cast<const GCAccsBody *>(draft.payloadOf(user).data());
+            if (body->accsKind != GCAccsKind::TupleIndex) {
+                return false;
+            }
+            callProjections[body->value].push_back(user);
+        }
+    }
+    if (callProjections.empty()) {
+        return false;
+    }
+
+    // Arms are tuple FILLs read only by the JOIN, anchored as the arm tails; the callee slot
+    // and every projected slot must be filled explicitly in every arm.
+    const size_t armCount = arms.size();
+    std::vector<gc_node_ref_t> armCallees(armCount, kInvalidNodeRef);
+    std::map<size_t, std::vector<gc_node_ref_t>> armValues; // slot -> per-arm element
+    for (size_t i = 0; i < armCount; ++i) {
+        const gc_node_ref_t armFill       = arms[i];
+        const DraftNodeHeader *fillHeader = draft.header(armFill);
+        if (!fillHeader || fillHeader->kind != GCNodeKind::Fill || armAnchors[i].tail != armFill ||
+            !draft.ctrlUsersOf(armFill).empty()) {
+            return false;
+        }
+        const auto *fill = reinterpret_cast<const GCFillBody *>(draft.payloadOf(armFill).data());
+        if (fill->fillKind != GCFillKind::Tuple) {
+            return false;
+        }
+        for (auto users : {draft.normUsersOf(armFill), draft.withUsersOf(armFill)}) {
+            for (gc_node_ref_t user : users) {
+                if (user != join) {
+                    return false;
+                }
+            }
+        }
+        armCallees[i] = armFillElement(draft, armFill, calleeSlot);
+        if (armCallees[i] == kInvalidNodeRef) {
+            return false;
+        }
+        for (const auto &[slot, users] : joinProjections) {
+            if (slot == calleeSlot) {
+                continue;
+            }
+            const gc_node_ref_t elem = armFillElement(draft, armFill, slot);
+            if (elem == kInvalidNodeRef) {
+                return false;
+            }
+            armValues[slot].push_back(elem);
+        }
+    }
+    // Each arm's callee must devirtualize: a static Function, or a closure FILL of one, with a
+    // matching call arity (the same checks devirtualizeStaticCallInDraft performs).
+    const auto callNorm = draft.normInputsOf(callNodeId);
+    for (gc_node_ref_t callee : armCallees) {
+        GCGraph *target = resolveBranchedArmCalleeGraph(draft, callee);
+        if (!target || target->withPorts().size() != callWith.size() - 1 ||
+            target->normPorts().size() != callNorm.size()) {
+            return false;
+        }
+    }
+
+    // Nodes running inside the branch (arms and everything after). Arguments and control
+    // predecessors of the CALL must live outside it: a per-arm call reading an in-branch value
+    // would execute in every arm that value does not belong to.
+    std::vector<bool> inBranch(draft.nodeSlotCount(), false);
+    {
+        std::vector<gc_node_ref_t> work;
+        for (auto users :
+             {draft.normUsersOf(brch), draft.withUsersOf(brch), draft.ctrlUsersOf(brch)}) {
+            work.insert(work.end(), users.begin(), users.end());
+        }
+        while (!work.empty()) {
+            const gc_node_ref_t n = work.back();
+            work.pop_back();
+            if (n >= inBranch.size() || inBranch[n] || !draft.header(n)) {
+                continue;
+            }
+            inBranch[n] = true;
+            for (auto users : {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
+                work.insert(work.end(), users.begin(), users.end());
+            }
+        }
+    }
+    const auto outsideBranch = [&](gc_node_ref_t id) {
+        return id < inBranch.size() && !inBranch[id] && draft.header(id);
+    };
+    for (gc_node_ref_t arg : callNorm) {
+        if (!outsideBranch(arg)) {
+            return false;
+        }
+    }
+    for (size_t i = 1; i < callWith.size(); ++i) {
+        if (!outsideBranch(callWith[i])) {
+            return false;
+        }
+    }
+    std::vector<gc_node_ref_t> keptCtrl;
+    for (gc_node_ref_t pred : draft.ctrlInputsOf(callNodeId)) {
+        if (outsideBranch(pred) &&
+            std::find(keptCtrl.begin(), keptCtrl.end(), pred) == keptCtrl.end()) {
+            keptCtrl.push_back(pred);
+        }
+    }
+
+    // ---- rewrite ----
+
+    const uint64_t origin  = draft.nodeOrigin(callNodeId);
+    const auto callPayload = draft.payloadOf(callNodeId);
+    GCCallBody callBody{};
+    if (callPayload.size_bytes() >= sizeof(GCCallBody)) {
+        std::memcpy(&callBody, callPayload.data(), sizeof(GCCallBody));
+    }
+    const size_t mainSlot = callProjections.begin()->first;
+
+    // Per arm: a call of the arm's callee, then one projection per used result slot. The
+    // projection feeding the main JOIN closes the arm (tail anchor, ctrl-waiting on the arm's
+    // other new nodes, the arm's other projected values, and the arm's head).
+    std::vector<gc_node_ref_t> mainArms(armCount, kInvalidNodeRef);
+    std::map<size_t, std::vector<gc_node_ref_t>> callProjArms; // result slot -> per-arm ACCS
+    for (size_t i = 0; i < armCount; ++i) {
+        const gc_node_ref_t armCall = draft.addCallNode(callHeader->dataType, callBody);
+        std::vector<gc_node_ref_t> withInputs{armCallees[i]};
+        withInputs.insert(withInputs.end(), callWith.begin() + 1, callWith.end());
+        draft.setNormInputs(armCall, callNorm);
+        draft.setWithInputs(armCall, withInputs);
+        draft.setCtrlInputs(armCall, keptCtrl);
+        draft.setNodeOrigin(armCall, origin);
+        for (const auto &[slot, users] : callProjections) {
+            camel::core::type::Type *projType = draft.header(users.front())->dataType;
+            const gc_node_ref_t proj = draft.addAccsNode(projType, static_cast<uint32_t>(slot));
+            draft.setNormInputs(proj, std::span<const gc_node_ref_t>(&armCall, 1));
+            draft.setNodeOrigin(proj, origin);
+            callProjArms[slot].push_back(proj);
+        }
+        std::vector<gc_node_ref_t> armCtrl;
+        const gc_node_ref_t armTail = callProjArms[mainSlot].back();
+        for (const auto &[slot, projs] : callProjArms) {
+            if (slot != mainSlot) {
+                armCtrl.push_back(projs.back());
+            }
+        }
+        for (const auto &[slot, elems] : armValues) {
+            if (elems[i] != armTail &&
+                std::find(armCtrl.begin(), armCtrl.end(), elems[i]) == armCtrl.end()) {
+                armCtrl.push_back(elems[i]);
+            }
+        }
+        const gc_node_ref_t head = armAnchors[i].head;
+        if (head != kInvalidNodeRef && head != armTail &&
+            std::find(armCtrl.begin(), armCtrl.end(), head) == armCtrl.end() &&
+            !draftReaches(draft, armTail, head)) {
+            armCtrl.push_back(head);
+        }
+        draft.setCtrlInputs(armTail, armCtrl);
+        mainArms[i] = armTail;
+    }
+
+    camel::core::type::Type *mainType = draft.header(callProjections[mainSlot].front())->dataType;
+    const gc_node_ref_t mainJoin =
+        draft.addJoinNode(mainType, brch, static_cast<gc_cnt_t>(armCount));
+    draft.setNormInputs(mainJoin, std::span<const gc_node_ref_t>(&brch, 1));
+    draft.setWithInputs(mainJoin, mainArms);
+    draft.setNodeOrigin(mainJoin, origin);
+
+    // The remaining projections each get a JOIN over their per-arm values. They ctrl-wait on
+    // the main JOIN so the topo builder places them after it: their arm values are computed
+    // inside the arms, and only the main JOIN closes the branch for the schedulers.
+    const auto replaceProjectionUsers = [&](std::span<const gc_node_ref_t> users,
+                                            gc_node_ref_t replacement) {
+        for (gc_node_ref_t user : users) {
+            draft.replaceAllValueUses(user, replacement);
+            draft.eraseNode(user);
+        }
+    };
+    for (const auto &[slot, users] : callProjections) {
+        if (slot == mainSlot) {
+            continue;
+        }
+        camel::core::type::Type *projType = draft.header(users.front())->dataType;
+        const gc_node_ref_t projJoin =
+            draft.addJoinNode(projType, brch, static_cast<gc_cnt_t>(armCount));
+        draft.setNormInputs(projJoin, std::span<const gc_node_ref_t>(&brch, 1));
+        draft.setWithInputs(projJoin, callProjArms[slot]);
+        draft.setCtrlInputs(projJoin, std::span<const gc_node_ref_t>(&mainJoin, 1));
+        draft.setNodeOrigin(projJoin, origin);
+        replaceProjectionUsers(users, projJoin);
+    }
+    for (const auto &[slot, users] : joinProjections) {
+        if (slot == calleeSlot) {
+            continue;
+        }
+        camel::core::type::Type *projType = draft.header(users.front())->dataType;
+        const gc_node_ref_t projJoin =
+            draft.addJoinNode(projType, brch, static_cast<gc_cnt_t>(armCount));
+        draft.setNormInputs(projJoin, std::span<const gc_node_ref_t>(&brch, 1));
+        draft.setWithInputs(projJoin, armValues[slot]);
+        draft.setCtrlInputs(projJoin, std::span<const gc_node_ref_t>(&mainJoin, 1));
+        draft.setNodeOrigin(projJoin, origin);
+        replaceProjectionUsers(users, projJoin);
+    }
+    replaceProjectionUsers(callProjections[mainSlot], mainJoin);
+
+    // The old call is gone; its control users (and the old JOIN's) now wait on the main JOIN,
+    // which completes after the taken arm's call. This also retargets the BRCH's join payload.
+    draft.replaceAllCtrlUses(callNodeId, mainJoin);
+    draft.eraseNode(callNodeId);
+    draft.eraseNode(calleeAccs);
+    draft.replaceAllCtrlUses(join, mainJoin);
+    draft.eraseNode(join);
+    for (size_t i = 0; i < armCount; ++i) {
+        draft.retargetBranchArmAnchors(arms[i], mainArms[i], mainArms[i]);
+    }
+    CAMEL_LOG_INFO_S(
+        "DraftOpt",
+        "Devirtualized branched CALL node {}: {} arm call(s) under BRCH {}, main JOIN {}.",
+        callNodeId,
+        armCount,
+        brch,
+        mainJoin);
     return true;
 }
 

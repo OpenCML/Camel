@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,11 +32,11 @@
 #include "lowering.h"
 
 #include "camel/core/mm/root_handle.h"
-#include "camel/core/source/manager.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/source/manager.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -55,8 +55,8 @@
 #include <iostream>
 #include <limits>
 #include <sstream>
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace camel::onnx {
 
@@ -542,7 +542,7 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
         // A tuple or struct of input-dependent values (e.g. gradients) exists only at export
         // time; its elements are read back by accesses or become graph outputs.
         std::vector<Value> fields = elementsOf(source.slot, targetType);
-        const auto slots = g->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
+        const auto slots          = g->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
         for (size_t k = 0; k < slots.size(); ++k) {
             fields[static_cast<size_t>(slots[k])] = values[k];
         }
@@ -624,7 +624,6 @@ Value Evaluator::evalAccs(Activation &act, gc_node_ref_t ref) {
     return v;
 }
 
-
 /// Names the objects reachable from `slot` through struct fields and tuple elements.
 void collectNames(
     slot_t slot, type::Type *ty, const std::string &name,
@@ -680,10 +679,11 @@ class InputBinder {
                 for (int64_t axis : options_.dynamicAxes) {
                     const int64_t a = axis < 0 ? axis + rank : axis;
                     if (a < 0 || a >= rank) {
-                        throw ExportError(std::format(
-                            "dynamic axis {} is out of range for a rank-{} input",
-                            axis,
-                            rank));
+                        throw ExportError(
+                            std::format(
+                                "dynamic axis {} is out of range for a rank-{} input",
+                                axis,
+                                rank));
                     }
                     shape[static_cast<size_t>(a)] = tensor::kUnknownDim;
                     dynamic.push_back(static_cast<size_t>(a));
@@ -734,10 +734,12 @@ class InputBinder {
             type::Type *exact = type::TupleType::create(std::move(types));
             return {Value::aggregate(exact, std::move(fields)), exact};
         }
-        throw ExportError(std::format(
-            "an exported function's arguments must be tensors or tuples/structs of tensors, not "
-            "'{}'",
-            ty->toString()));
+        throw ExportError(
+            std::format(
+                "an exported function's arguments must be tensors or tuples/structs of tensors, "
+                "not "
+                "'{}'",
+                ty->toString()));
     }
 
   private:
@@ -758,8 +760,7 @@ void emitOutputs(Emitter &emitter, const Value &result, const std::string &name)
         for (size_t i = 0; i < result.fields.size(); ++i) {
             const std::string key =
                 isStruct
-                    ? std::string(
-                          static_cast<type::StructType *>(result.camelType)->fieldName(i))
+                    ? std::string(static_cast<type::StructType *>(result.camelType)->fieldName(i))
                     : std::to_string(i);
             emitOutputs(emitter, result.fields[i], name + "_" + key);
         }
@@ -772,10 +773,11 @@ void emitOutputs(Emitter &emitter, const Value &result, const std::string &name)
     }
     const TensorFacts facts = factsOf(result);
     if (!facts.dtype) {
-        throw ExportError(std::format(
-            "output '{}' must be a tensor or a number, not '{}'",
-            name,
-            result.ty ? result.ty->toString() : "a value of unknown type"));
+        throw ExportError(
+            std::format(
+                "output '{}' must be a tensor or a number, not '{}'",
+                name,
+                result.ty ? result.ty->toString() : "a value of unknown type"));
     }
     const std::string output = emitter.node("Identity", {emitter.operand(result)}, {}, name);
     emitter.graph().outputs.push_back(valueInfoOf(output, facts));
@@ -791,11 +793,12 @@ Model exportFunction(
     }
     GCGraph *graph = fn->graph();
     if (graph->withPorts().size() != 0 || graph->normPorts().size() != examples.size()) {
-        throw ExportError(std::format(
-            "'{}' takes {} arguments but {} examples were given",
-            graph->name(),
-            graph->withPorts().size() + graph->normPorts().size(),
-            examples.size()));
+        throw ExportError(
+            std::format(
+                "'{}' takes {} arguments but {} examples were given",
+                graph->name(),
+                graph->withPorts().size() + graph->normPorts().size(),
+                examples.size()));
     }
 
     const CapabilityTable *capabilities = nullptr;
@@ -806,10 +809,11 @@ Model exportFunction(
             for (const std::string &t : CapabilityTable::targets()) {
                 known += (known.empty() ? "" : ", ") + t;
             }
-            throw ExportError(std::format(
-                "unknown export target '{}' (known: {}, or 'none')",
-                options.target,
-                known));
+            throw ExportError(
+                std::format(
+                    "unknown export target '{}' (known: {}, or 'none')",
+                    options.target,
+                    known));
         }
     }
     Emitter emitter(options.opset, capabilities);
@@ -822,9 +826,9 @@ Model exportFunction(
         tensorArgs += tensor::asTensorType(example.type) ? 1 : 0;
     }
     for (size_t i = 0; i < examples.size(); ++i) {
-        const std::string name = tensorArgs == 1 && examples.size() == 1
-                                     ? options.inputName
-                                     : std::format("{}{}", options.inputName, i);
+        const std::string name  = tensorArgs == 1 && examples.size() == 1
+                                      ? options.inputName
+                                      : std::format("{}{}", options.inputName, i);
         auto [input, exactType] = binder.bind(examples[i], name, true);
         inputs.push_back(std::move(input));
         inputTypes.push_back(exactType);
@@ -854,6 +858,11 @@ Model exportFunction(
     OptimizeRewriteConfig config;
     // Everything that is not recursive is inlined; ONNX has no calls.
     config.inlineConfig.smallSubgraphMaxNonDataPortNodes = std::numeric_limits<size_t>::max();
+    // The pullback of a data-dependent branch is an indirect call of a closure projected out
+    // of the branch's JOIN; split it into per-arm calls with one JOIN per value. The graph is
+    // only walked as a value DAG from here on (no execution topo is built), so the sibling
+    // JOINs this creates are valid.
+    config.enableBranchedCallSplit = true;
     std::ostringstream log;
     // Recursion unrolls about one level per round; one of dynamic depth stops changing instead.
     constexpr size_t kMaxRounds = 4096;
@@ -861,8 +870,8 @@ Model exportFunction(
     // simplification may be what makes them.
     root = MacroRewritePass(context).apply(root, log);
     while (true) {
-        root                 = simplifyGraph(context, root, config, log, kMaxRounds);
-        GCGraph *expanded    = MacroRewritePass(context).apply(root, log);
+        root              = simplifyGraph(context, root, config, log, kMaxRounds);
+        GCGraph *expanded = MacroRewritePass(context).apply(root, log);
         if (expanded == root) {
             break;
         }

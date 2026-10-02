@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 04, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -133,7 +133,8 @@ bool returnsClosure(const GCGraph *graph) {
 /// Number of direct calls of each graph in `closure`, read from the session's drafts where a
 /// graph is being edited (calls of graphs created in this session exist only there).
 std::unordered_map<const GCGraph *, size_t> directCallCounts(
-    const camel::runtime::RuntimeGraphDraftSession &session, const std::vector<GCGraph *> &closure) {
+    const camel::runtime::RuntimeGraphDraftSession &session,
+    const std::vector<GCGraph *> &closure) {
     std::unordered_map<const GCGraph *, size_t> counts;
     for (GCGraph *graph : closure) {
         if (const auto *draft = session.tryDraft(graph)) {
@@ -461,7 +462,16 @@ GCGraph *applyRuntimeOptimizeRewrite(
                     if (!draft.alive(callNodeId)) {
                         continue;
                     }
-                    if (camel::runtime::devirtualizeStaticCallInDraft(session, draft, callNodeId)) {
+                    // A callee projected out of a branch JOIN needs the branch split first;
+                    // the plain static devirtualization handles the rest. The split shape is
+                    // export-only (see config), so it is attempted before, not instead of, the
+                    // VM-safe static path only when explicitly enabled.
+                    if ((config.enableBranchedCallSplit &&
+                         camel::runtime::devirtualizeBranchedCallInDraft(
+                             session,
+                             draft,
+                             callNodeId)) ||
+                        camel::runtime::devirtualizeStaticCallInDraft(session, draft, callNodeId)) {
                         changed      = true;
                         roundChanged = true;
                     }
@@ -555,12 +565,15 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 const auto argSources = camel::passes::generic::orderedSources(draft, funcNodeId);
                 std::vector<std::pair<gc_node_ref_t, std::vector<gc_node_ref_t>>> callUsers;
                 if (!argSources.empty()) {
-                    for (auto group : {draft.normUsersOf(funcNodeId),
-                                       draft.withUsersOf(funcNodeId),
-                                       draft.ctrlUsersOf(funcNodeId)}) {
+                    for (auto group :
+                         {draft.normUsersOf(funcNodeId),
+                          draft.withUsersOf(funcNodeId),
+                          draft.ctrlUsersOf(funcNodeId)}) {
                         for (gc_node_ref_t user : group) {
-                            if (std::ranges::find(callUsers, user, &decltype(callUsers)::value_type::first) !=
-                                callUsers.end()) {
+                            if (std::ranges::find(
+                                    callUsers,
+                                    user,
+                                    &decltype(callUsers)::value_type::first) != callUsers.end()) {
                                 continue;
                             }
                             const auto before = upstreamOf(draft, user, funcNodeId);
