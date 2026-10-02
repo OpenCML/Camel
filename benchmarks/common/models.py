@@ -155,6 +155,49 @@ RESNET = ModelSpec(
     weights=_resnet_weights(),
 )
 
+
+def _resnetbn_weights() -> List[WeightSpec]:
+    """T4: the literal ResNet-18 — RESNET's conv/linear tensors (same seed and draw order,
+    hence the same values) plus a batch_norm per conv: affine gamma/beta and the running
+    mean/variance buffers (nn:batch_norm_train's I/O). BN names derive from their conv's."""
+    convs = [("stem", 64)]
+    blocks = [
+        ("b11", 64, 64, 1),
+        ("b12", 64, 64, 1),
+        ("b21", 64, 128, 2),
+        ("b22", 128, 128, 1),
+        ("b31", 128, 256, 2),
+        ("b32", 256, 256, 1),
+        ("b41", 256, 512, 2),
+        ("b42", 512, 512, 1),
+    ]
+    for name, c_in, c_out, stride in blocks:
+        convs.append((f"{name}_c1", c_out))
+        convs.append((f"{name}_c2", c_out))
+        if stride == 2:
+            convs.append((f"{name}_ds", c_out))
+    specs = _resnet_weights()
+    for name, c_out in convs:
+        specs += [
+            WeightSpec(f"{name}_bn_g", (c_out,), "gamma"),
+            WeightSpec(f"{name}_bn_b", (c_out,), "beta"),
+            WeightSpec(f"{name}_bn_rm", (c_out,), "beta"),
+            WeightSpec(f"{name}_bn_rv", (c_out,), "gamma"),
+        ]
+    return specs
+
+
+# T4: the literal ResNet-18 (training-mode batch_norm after every conv, including the 1x1
+# shortcuts — torchvision's layout). The running statistics are benchmark weights so that one
+# training step is a pure function of (parameters, stats, input) on every framework.
+RESNETBN = ModelSpec(
+    name="resnetbn",
+    seed=1005,
+    input_shape=(16, 3, 32, 32),
+    output_shape=(16, 10),
+    weights=_resnetbn_weights(),
+)
+
 def _tf_block_weights(prefix: str) -> List[WeightSpec]:
     """One pre-LN encoder block (same layout as TRANSFORMER) under ``<prefix>.`` —
     dotted so Camel's nested-struct gradient dump names match the harness names."""
@@ -239,6 +282,6 @@ TRANSFORMER_BIG = ModelSpec(
     ),
 )
 
-MODELS = {m.name: m for m in (MLP, LENET, GRU, TRANSFORMER, RESNET, TRANSFORMER4, MLP_BIG, LENET_BIG, GRU_BIG, TRANSFORMER_BIG)}
+MODELS = {m.name: m for m in (MLP, LENET, GRU, TRANSFORMER, RESNET, RESNETBN, TRANSFORMER4, MLP_BIG, LENET_BIG, GRU_BIG, TRANSFORMER_BIG)}
 
 LN_EPS = 1e-5

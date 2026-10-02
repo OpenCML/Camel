@@ -179,12 +179,81 @@ def resnet(w: W, x: np.ndarray) -> np.ndarray:
     return _linear(g, w, "fc").astype(np.float32)
 
 
+BN_MOMENTUM = 0.1
+BN_EPS = 1e-5
+
+
+def _bn_train(x: np.ndarray, w: W, nm: str) -> np.ndarray:
+    """Training-mode batch_norm (PyTorch semantics): the normalize uses the BIASED batch
+    variance; the running variance blends in the UNBIASED one (see tools/bn_semantics.py)."""
+    mu = x.mean(axis=(0, 2, 3))
+    var = x.var(axis=(0, 2, 3))  # biased (divide by M)
+    xhat = (x - mu[None, :, None, None]) / np.sqrt(var[None, :, None, None] + BN_EPS)
+    return w[f"{nm}_bn_g"][None, :, None, None] * xhat + w[f"{nm}_bn_b"][None, :, None, None]
+
+
+def resnetbn_stats(w: W, x: np.ndarray) -> Dict[str, np.ndarray]:
+    """The running statistics after one training-mode forward (T4): rm <- .9 rm + .1 batch mean,
+    rv <- .9 rv + .1 UNBIASED batch variance. Used to check the exported step's stats outputs."""
+    w, x = _f64(w), x.astype(np.float64)
+    stats: Dict[str, np.ndarray] = {}
+
+    def bn(t: np.ndarray, nm: str) -> np.ndarray:
+        mu = t.mean(axis=(0, 2, 3))
+        var = t.var(axis=(0, 2, 3))
+        m = t.size // t.shape[1]
+        stats[f"{nm}_bn_rm"] = (1 - BN_MOMENTUM) * w[f"{nm}_bn_rm"] + BN_MOMENTUM * mu
+        stats[f"{nm}_bn_rv"] = (1 - BN_MOMENTUM) * w[f"{nm}_bn_rv"] + BN_MOMENTUM * var * (m / (m - 1))
+        return _bn_train(t, w, nm)
+
+    def block(h: np.ndarray, nm: str) -> np.ndarray:
+        a = _relu(bn(_conv2d_nchw(h, w[f"{nm}_c1_w"], w[f"{nm}_c1_b"], pad=1), f"{nm}_c1"))
+        return _relu(bn(_conv2d_nchw(a, w[f"{nm}_c2_w"], w[f"{nm}_c2_b"], pad=1), f"{nm}_c2") + h)
+
+    def block_ds(h: np.ndarray, nm: str) -> np.ndarray:
+        a = _relu(bn(_conv2d_nchw(h, w[f"{nm}_c1_w"], w[f"{nm}_c1_b"], pad=1, stride=2), f"{nm}_c1"))
+        b = bn(_conv2d_nchw(a, w[f"{nm}_c2_w"], w[f"{nm}_c2_b"], pad=1), f"{nm}_c2")
+        s = bn(_conv2d_nchw(h, w[f"{nm}_ds_w"], w[f"{nm}_ds_b"], pad=0, stride=2), f"{nm}_ds")
+        return _relu(b + s)
+
+    h = _relu(bn(_conv2d_nchw(x, w["stem_w"], w["stem_b"], pad=1), "stem"))
+    h = block(block(h, "b11"), "b12")
+    h = block(block_ds(h, "b21"), "b22")
+    h = block(block_ds(h, "b31"), "b32")
+    h = block(block_ds(h, "b41"), "b42")
+    return stats
+
+
+def resnetbn(w: W, x: np.ndarray) -> np.ndarray:
+    """T4 literal ResNet-18: RESNET with training-mode batch_norm after every conv."""
+    w, x = _f64(w), x.astype(np.float64)
+
+    def block(h: np.ndarray, nm: str) -> np.ndarray:
+        a = _relu(_bn_train(_conv2d_nchw(h, w[f"{nm}_c1_w"], w[f"{nm}_c1_b"], pad=1), w, f"{nm}_c1"))
+        return _relu(_bn_train(_conv2d_nchw(a, w[f"{nm}_c2_w"], w[f"{nm}_c2_b"], pad=1), w, f"{nm}_c2") + h)
+
+    def block_ds(h: np.ndarray, nm: str) -> np.ndarray:
+        a = _relu(_bn_train(_conv2d_nchw(h, w[f"{nm}_c1_w"], w[f"{nm}_c1_b"], pad=1, stride=2), w, f"{nm}_c1"))
+        b = _bn_train(_conv2d_nchw(a, w[f"{nm}_c2_w"], w[f"{nm}_c2_b"], pad=1), w, f"{nm}_c2")
+        s = _bn_train(_conv2d_nchw(h, w[f"{nm}_ds_w"], w[f"{nm}_ds_b"], pad=0, stride=2), w, f"{nm}_ds")
+        return _relu(b + s)
+
+    h = _relu(_bn_train(_conv2d_nchw(x, w["stem_w"], w["stem_b"], pad=1), w, "stem"))
+    h = block(block(h, "b11"), "b12")
+    h = block(block_ds(h, "b21"), "b22")
+    h = block(block_ds(h, "b31"), "b32")
+    h = block(block_ds(h, "b41"), "b42")
+    g = h.mean(axis=(2, 3))  # global average pool -> [N,512]
+    return _linear(g, w, "fc").astype(np.float32)
+
+
 FORWARD: Dict[str, Callable[[W, np.ndarray], np.ndarray]] = {
     "mlp": mlp,
     "lenet": lenet,
     "gru": gru,
     "transformer": transformer,
     "resnet": resnet,
+    "resnetbn": resnetbn,
     "transformer4": transformer4,
     "mlp_big": mlp,
     "lenet_big": lenet,

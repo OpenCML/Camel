@@ -209,16 +209,24 @@ def check_onnx(models: List[str], rtol: float) -> bool:
             got = outputs.get(f"output_1_{name}")
             if got is None:  # exporter flattens '.' to '_' in output names (nested params)
                 got = outputs.get(f"output_1_{name.replace('.', '_', 1)}")
-            if got is None:
-                print(f"  {name:12s} MISSING in the exported step's outputs")
-                ok = False
-                continue
-            ref = weights[name] - LR * grads[name]
+            if got is not None:
+                ref = weights[name] - LR * grads[name]
+                what = "max|diff|/max|w|"
+            else:
+                # Not an updated parameter: a carried state (e.g. resnetbn's running
+                # statistics), an output_2_<name> compared with the native dump.
+                got = outputs.get(f"output_2_{name}")
+                if got is None:
+                    print(f"  {name:12s} MISSING in the exported step's outputs")
+                    ok = False
+                    continue
+                ref = grads[name]
+                what = "max|diff|/max|s|"
             scale = float(np.max(np.abs(weights[name]))) or 1.0
             err = float(np.max(np.abs(got - ref))) / scale
             status = "ok" if got.shape == ref.shape and err <= rtol else "MISMATCH"
             ok &= status == "ok"
-            print(f"  {name:12s} {status:8s} max|diff|/max|w| = {err:.2e}")
+            print(f"  {name:12s} {status:8s} {what} = {err:.2e}")
     return ok
 
 
