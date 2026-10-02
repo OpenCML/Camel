@@ -1,0 +1,91 @@
+/**
+ * Sanity check for nn:batch_norm_train (forward + running-statistics update) and its VJP
+ * (nn:batch_norm_train_grad), against a manual decomposition into primitive tensor ops and
+ * finite differences. x [2,2,2,2] (8 values per channel), momentum 0.1, eps 1e-5.
+ */
+module bn_train_grad_sanity
+
+import { Tensor, reshape, mean, sum, abs, sqrt } from tensor
+import { grad } from autodiff
+import { batch_norm_train, batch_norm_train_grad } from nn
+
+// The fixed loss weights: loss = sum(y * w), so dL/dy = w.
+func w(): Tensor {
+    return reshape([
+        0.5, -1.0, 0.25, 2.0, -0.75, 1.5, 0.125, -0.5, 1.0, 0.0, -2.0, 0.75, 0.5, 0.5, -0.25, 1.25
+    ], [2, 2, 2, 2])
+}
+
+func x(): Tensor {
+    return reshape([
+        1.0, 0.5, -0.5, 2.0, 0.0, 1.5, -1.0, 0.25, 0.75, -0.25, 1.25, 0.5, -0.75, 0.0, 2.0, -0.5
+    ], [2, 2, 2, 2])
+}
+
+// Per-channel mean over (batch, spatial) of a rank-4 NCHW tensor: [N,C,H,W] -> [C].
+func bmean(t: Tensor): Tensor {
+    return mean(mean(mean(t, 0), 1), 1)
+}
+
+// The manual decomposition: biased batch variance for the normalize, UNBIASED (M/(M-1))
+// variance for the running variance, running <- (1-m)*running + m*batch_stat.
+func reference(t: Tensor, g: Tensor, b: Tensor, rm: Tensor, rv: Tensor, m: float, eps: float): (Tensor, Tensor, Tensor) {
+    let mu = bmean(t)
+    let xc = t - reshape(mu, [1, 2, 1, 1])
+    let va = bmean(xc * xc)
+    let xhat = xc / reshape(sqrt(va + eps), [1, 2, 1, 1])
+    let y = xhat * reshape(g, [1, 2, 1, 1]) + reshape(b, [1, 2, 1, 1])
+    let new_rm = (1.0 - m) * rm + m * mu
+    let new_rv = (1.0 - m) * rv + m * va * (8.0 / 7.0)
+    return (y, new_rm, new_rv)
+}
+
+func loss(t: Tensor, g: Tensor, b: Tensor, rm: Tensor, rv: Tensor): float {
+    let r = batch_norm_train(t, g, b, rm, rv, 0.1, 0.00001)
+    return sum(r.0 * w())
+}
+
+func main(): int sync {
+    let g = reshape([1.2, 0.8], [2])
+    let b = reshape([0.3, -0.2], [2])
+    let rm = reshape([0.1, -0.4], [2])
+    let rv = reshape([1.5, 0.9], [2])
+
+    let got = batch_norm_train(x(), g, b, rm, rv, 0.1, 0.00001)
+    let ref = reference(x(), g, b, rm, rv, 0.1, 0.00001)
+    let dY = sum(abs(got.0 - ref.0))
+    let dRm = sum(abs(got.1 - ref.1))
+    let dRv = sum(abs(got.2 - ref.2))
+
+    // Autodiff through the op vs the gradient operator applied to dL/dy = w; the running
+    // statistics must see exactly ZERO gradient (the update is not differentiated).
+    let grads = grad(loss)(x(), g, b, rm, rv)
+    let manual = batch_norm_train_grad(x(), g, w(), 0.00001)
+    let dX = sum(abs(grads.0 - manual.0))
+    let dG = sum(abs(grads.1 - manual.1))
+    let dB = sum(abs(grads.2 - manual.2))
+    let dRmGrad = sum(abs(grads.3))
+    let dRvGrad = sum(abs(grads.4))
+
+    // Finite differences: gamma[0], beta[0], x[0,0,0,0] (h = 0.001).
+    let fdG0 = (loss(x(), reshape([1.201, 0.8], [2]), b, rm, rv) - loss(x(), reshape([1.199, 0.8], [2]), b, rm, rv)) / 0.002
+    let fdB0 = (loss(x(), g, reshape([0.301, -0.2], [2]), rm, rv) - loss(x(), g, reshape([0.299, -0.2], [2]), rm, rv)) / 0.002
+    let xp = reshape([
+        1.001, 0.5, -0.5, 2.0, 0.0, 1.5, -1.0, 0.25, 0.75, -0.25, 1.25, 0.5, -0.75, 0.0, 2.0, -0.5
+    ], [2, 2, 2, 2])
+    let xm = reshape([
+        0.999, 0.5, -0.5, 2.0, 0.0, 1.5, -1.0, 0.25, 0.75, -0.25, 1.25, 0.5, -0.75, 0.0, 2.0, -0.5
+    ], [2, 2, 2, 2])
+    let fdX0 = (loss(xp, g, b, rm, rv) - loss(xm, g, b, rm, rv)) / 0.002
+
+    let g0 = sum(grads.1 * reshape([1.0, 0.0], [2]))
+    let b0 = sum(grads.2 * reshape([1.0, 0.0], [2]))
+    let x0 = sum(grads.0 * reshape([
+        1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    ], [2, 2, 2, 2]))
+
+    'bn_train_sanity fwd={} rm={} rv={}'->format<dY, dRm, dRv>->println
+    'bn_train_sanity dx={} dg={} db={} rm_grad={} rv_grad={}'->format<dX, dG, dB, dRmGrad, dRvGrad>->println
+    'bn_train_sanity fd_g0={} g0={} fd_b0={} b0={} fd_x0={} x0={}'->format<fdG0, g0, fdB0, b0, fdX0, x0>->println
+    return 0
+}

@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 30, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -600,6 +600,65 @@ Value lowerConv2dBiasGrad(const LowerContext &ctx) {
     return ctx.result(reduce(ctx.emitter(), "ReduceSum", dy, {0, 2, 3}, false));
 }
 
+// batch_norm_train_grad(x, gamma, dy, eps = 1e-5) -> (dx, dgamma, dbeta): the reverse of
+// nn:batch_norm_train (see lowering.cpp for the forward decomposition), with the biased batch
+// statistics recomputed from x: dbeta = sum(dy), dgamma = sum(dy*xhat),
+// dx = gamma*inv * (dy - mean(dy) - xhat*mean(dy*xhat)) per channel.
+Value lowerBatchNormTrainGrad(const LowerContext &ctx) {
+    Emitter &e        = ctx.emitter();
+    const auto f      = TypeCode::Float32;
+    const size_t rank = ctx.rank(0);
+    if (rank < 2) {
+        throw ExportError(std::format("{}: expects input of rank >= 2", ctx.uri()));
+    }
+    std::vector<int64_t> axes{0};
+    for (size_t i = 2; i < rank; ++i) {
+        axes.push_back(static_cast<int64_t>(i));
+    }
+    const auto gammaFacts = ctx.facts(1);
+    if (!gammaFacts.shape || gammaFacts.shape->size() != 1 ||
+        (*gammaFacts.shape)[0] == tensor::kUnknownDim) {
+        throw ExportError(
+            std::format(
+                "{}: the channel count (gamma's extent) must be known statically",
+                ctx.uri()));
+    }
+    const int64_t C      = (*gammaFacts.shape)[0];
+    const double eps     = ctx.constNumber(3, 1e-5);
+    const std::string x  = ctx.input(0, f);
+    const std::string dy = ctx.input(2, f);
+
+    const std::string mu1  = reduce(e, "ReduceMean", x, axes, true);
+    const std::string xc   = e.node("Sub", {x, mu1});
+    const std::string var1 = reduce(e, "ReduceMean", e.node("Mul", {xc, xc}), axes, true);
+    const std::string inv1 =
+        e.node("Reciprocal", {e.node("Sqrt", {e.node("Add", {var1, floatConst(e, eps)})})});
+    const std::string xhat    = e.node("Mul", {xc, inv1});
+    const std::string dyXh    = e.node("Mul", {dy, xhat});
+    const std::string dbeta   = reduce(e, "ReduceSum", dy, axes, false);
+    const std::string dgamma  = reduce(e, "ReduceSum", dyXh, axes, false);
+    const std::string meanDy  = reduce(e, "ReduceMean", dy, axes, true);
+    const std::string meanDyX = reduce(e, "ReduceMean", dyXh, axes, true);
+    std::vector<int64_t> cShape(rank, 1);
+    cShape[1]            = C;
+    const std::string g4 = e.node("Reshape", {ctx.input(1, f), e.int64s(cShape)});
+    const std::string dx = e.node(
+        "Mul",
+        {e.node("Mul", {g4, inv1}),
+         e.node("Sub", {e.node("Sub", {dy, meanDy}), e.node("Mul", {xhat, meanDyX})})});
+
+    const tensor::StaticShape statShape{C};
+    Value dxV              = Value::symbolic(dx, f, ctx.facts(0).shape);
+    Value dgV              = Value::symbolic(dgamma, f, statShape);
+    Value dbV              = Value::symbolic(dbeta, f, std::move(statShape));
+    type::Type *resultType = ctx.resultType();
+    if (!resultType || resultType->code() != TypeCode::Tuple) {
+        resultType = type::TupleType::create(
+            {tensor::TensorType::get(f), tensor::TensorType::get(f), tensor::TensorType::get(f)});
+    }
+    return Value::aggregate(resultType, {std::move(dxV), std::move(dgV), std::move(dbV)});
+}
+
 // max_pool2d_grad(x, dy, kernel, stride = kernel, padding = 0): each pooled gradient goes to
 // the argmax of its window. MaxPool's indices output holds those argmax positions (flat over
 // the whole unpadded input, first maximum on ties — the runtime kernel's rule) and MaxUnpool
@@ -655,6 +714,7 @@ void addGradientLowerings(const std::function<void(std::string, LowerFn, int64_t
     add("nn:conv2d_input_grad", lowerConv2dInputGrad, 1);
     add("nn:conv2d_kernel_grad", lowerConv2dKernelGrad, 10);
     add("nn:conv2d_bias_grad", lowerConv2dBiasGrad, 1);
+    add("nn:batch_norm_train_grad", lowerBatchNormTrainGrad, 13);
     add("nn:max_pool2d_grad", lowerMaxPool2dGrad, 11);
     // stop_gradient is the identity at run time; its meaning lives in differentiation, which
     // the export has already resolved by the time the operator is seen.

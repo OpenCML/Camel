@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,6 +33,9 @@
 #include "../tensor/ops/registry.h"
 #include "../tensor/ops/support.h"
 
+#include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/tuple.h"
+
 #include <mutex>
 
 namespace camel::nn {
@@ -45,6 +48,7 @@ namespace k      = camel::tensor::kernels;
 using TensorType = camel::tensor::TensorType;
 using camel::tensor::kUnknownDim;
 using camel::tensor::StaticShape;
+using camel::tensor::TensorObject;
 
 int64_t optInt(ArgsView &norm, size_t index, int64_t fallback) {
     return hasArg(norm, index) ? intArg(norm, index) : fallback;
@@ -70,13 +74,14 @@ bool known(const std::optional<StaticShape> &shape) {
 
 slot_t conv2dKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d", [&] {
-        return wrap(k::conv2d(
-            tensorArg(norm, 0),
-            tensorArg(norm, 1),
-            tensorArg(norm, 2),
-            optInt(norm, 3, 1),
-            optInt(norm, 4, 0),
-            resultAllocator()));
+        return wrap(
+            k::conv2d(
+                tensorArg(norm, 0),
+                tensorArg(norm, 1),
+                tensorArg(norm, 2),
+                optInt(norm, 3, 1),
+                optInt(norm, 4, 0),
+                resultAllocator()));
     });
 }
 
@@ -101,25 +106,27 @@ std::optional<Type *> conv2dInfer(const InferContext &ctx) {
 
 slot_t conv2dInputGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d_input_grad", [&] {
-        return wrap(k::conv2dInputGrad(
-            tensorArg(norm, 0),
-            tensorArg(norm, 1),
-            tensorArg(norm, 2),
-            optInt(norm, 3, 1),
-            optInt(norm, 4, 0),
-            resultAllocator()));
+        return wrap(
+            k::conv2dInputGrad(
+                tensorArg(norm, 0),
+                tensorArg(norm, 1),
+                tensorArg(norm, 2),
+                optInt(norm, 3, 1),
+                optInt(norm, 4, 0),
+                resultAllocator()));
     });
 }
 
 slot_t conv2dKernelGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d_kernel_grad", [&] {
-        return wrap(k::conv2dKernelGrad(
-            tensorArg(norm, 0),
-            tensorArg(norm, 1),
-            tensorArg(norm, 2),
-            optInt(norm, 3, 1),
-            optInt(norm, 4, 0),
-            resultAllocator()));
+        return wrap(
+            k::conv2dKernelGrad(
+                tensorArg(norm, 0),
+                tensorArg(norm, 1),
+                tensorArg(norm, 2),
+                optInt(norm, 3, 1),
+                optInt(norm, 4, 0),
+                resultAllocator()));
     });
 }
 
@@ -153,12 +160,13 @@ template <k::PoolKind Kind> slot_t poolKernel(ArgsView &, ArgsView &norm, contex
 
 template <k::PoolKind Kind> slot_t poolGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(Kind == k::PoolKind::Max ? "max_pool2d_grad" : "avg_pool2d_grad", [&] {
-        return wrap(k::pool2dGrad(
-            Kind,
-            tensorArg(norm, 0),
-            tensorArg(norm, 1),
-            windowArg(norm, 2),
-            resultAllocator()));
+        return wrap(
+            k::pool2dGrad(
+                Kind,
+                tensorArg(norm, 0),
+                tensorArg(norm, 1),
+                windowArg(norm, 2),
+                resultAllocator()));
     });
 }
 
@@ -187,15 +195,91 @@ std::optional<Type *> poolInfer(const InferContext &ctx) {
 slot_t batchNormKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("batch_norm", [&] {
         const double eps = hasArg(norm, 5) ? numberArg(norm, 5) : 1e-5;
-        return wrap(k::batchNorm(
+        return wrap(
+            k::batchNorm(
+                tensorArg(norm, 0),
+                tensorArg(norm, 1),
+                tensorArg(norm, 2),
+                tensorArg(norm, 3),
+                tensorArg(norm, 4),
+                eps,
+                resultAllocator()));
+    });
+}
+
+/// A (y, running_mean, running_var)-shaped triple holding `tensors`.
+slot_t tripleOf(TensorObject *first, TensorObject *second, TensorObject *third) {
+    namespace mm          = camel::core::mm;
+    const auto tensorType = [](const TensorObject *t) -> Type * {
+        StaticShape shape(t->shapeSpan().begin(), t->shapeSpan().end());
+        return TensorType::get(t->dtype(), std::move(shape));
+    };
+    TupleType *type = TupleType::create({tensorType(first), tensorType(second), tensorType(third)});
+    auto *tuple     = ::Tuple::create(3, mm::autoSpace());
+    tuple->set<slot_t>(0, camel::core::rtdata::toSlot<TensorObject *>(first), type);
+    tuple->set<slot_t>(1, camel::core::rtdata::toSlot<TensorObject *>(second), type);
+    tuple->set<slot_t>(2, camel::core::rtdata::toSlot<TensorObject *>(third), type);
+    return camel::core::rtdata::toSlot<::Tuple *>(tuple);
+}
+
+slot_t batchNormTrainKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("batch_norm_train", [&] {
+        const double momentum = hasArg(norm, 5) ? numberArg(norm, 5) : 0.1;
+        const double eps      = hasArg(norm, 6) ? numberArg(norm, 6) : 1e-5;
+        TensorObject *y, *mean, *var;
+        k::batchNormTrain(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
             tensorArg(norm, 2),
             tensorArg(norm, 3),
             tensorArg(norm, 4),
+            momentum,
             eps,
-            resultAllocator()));
+            &y,
+            &mean,
+            &var,
+            resultAllocator());
+        return tripleOf(y, mean, var);
     });
+}
+
+/// batch_norm_train(x, ...): (y like x, running stats like running_mean/running_var).
+std::optional<Type *> batchNormTrainInfer(const InferContext &ctx) {
+    const TensorFacts x = ctx.facts(0);
+    if (x.shape && x.shape->size() < 2) {
+        return std::nullopt;
+    }
+    return TupleType::create(
+        std::vector<Type *>{
+            tensorOf(TypeCode::Float32, x.shape),
+            tensorOf(TypeCode::Float32, ctx.facts(3).shape),
+            tensorOf(TypeCode::Float32, ctx.facts(4).shape)});
+}
+
+slot_t batchNormTrainGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("batch_norm_train_grad", [&] {
+        const double eps = hasArg(norm, 3) ? numberArg(norm, 3) : 1e-5;
+        TensorObject *dx, *dgamma, *dbeta;
+        k::batchNormTrainGrad(
+            tensorArg(norm, 0),
+            tensorArg(norm, 1),
+            tensorArg(norm, 2),
+            eps,
+            &dx,
+            &dgamma,
+            &dbeta,
+            resultAllocator());
+        return tripleOf(dx, dgamma, dbeta);
+    });
+}
+
+/// batch_norm_train_grad(x, gamma, dy): (dx like x, dgamma/dbeta like gamma).
+std::optional<Type *> batchNormTrainGradInfer(const InferContext &ctx) {
+    return TupleType::create(
+        std::vector<Type *>{
+            tensorOf(TypeCode::Float32, ctx.facts(0).shape),
+            tensorOf(TypeCode::Float32, ctx.facts(1).shape),
+            tensorOf(TypeCode::Float32, ctx.facts(1).shape)});
 }
 
 // ------------------------------------------------------------------ embedding / loss
@@ -312,6 +396,30 @@ void conv2dVjp(VjpBuilder &b, const VjpCall &call) {
         addTensorOper(b, "nn:conv2d_bias_grad", {call.inputs[2], *dy}));
 }
 
+/// batch_norm_train(x, gamma, beta, running_mean, running_var, momentum?, eps?)
+///   -> (y, new_running_mean, new_running_var)
+/// Only y carries gradient: the running-statistics blend is a function of the batch and the old
+/// statistics (framework semantics: not differentiated), so the rule reads the gradient of
+/// result element 0 only. eps (not momentum) is forwarded to the gradient operator; the running
+/// statistics take no gradient.
+void batchNormTrainVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 5, 7);
+    auto dyAll = b.gradientOf(call.output);
+    if (!dyAll) {
+        return;
+    }
+    const vjp_node_t dy = b.addAccess(*dyAll, 0);
+    std::vector<vjp_node_t> gradInputs{call.inputs[0], call.inputs[1], dy};
+    if (call.inputs.size() > 6) {
+        gradInputs.push_back(call.inputs[6]);
+    }
+    Type *gradType         = TupleType::create({vjpTensorType(), vjpTensorType(), vjpTensorType()});
+    const vjp_node_t grads = b.addOper(gradType, "nn:batch_norm_train_grad", gradInputs);
+    b.accumulateGradient(call.inputs[0], b.addAccess(grads, 0));
+    b.accumulateGradient(call.inputs[1], b.addAccess(grads, 1));
+    b.accumulateGradient(call.inputs[2], b.addAccess(grads, 2));
+}
+
 constexpr char kMaxPoolGradUri[] = "nn:max_pool2d_grad";
 constexpr char kAvgPoolGradUri[] = "nn:avg_pool2d_grad";
 
@@ -329,123 +437,166 @@ template <const char *GradUri> void pool2dVjp(VjpBuilder &b, const VjpCall &call
 
 std::vector<OpDef> nnTensorOps() {
     std::vector<OpDef> defs;
-    defs.push_back(OpDef{
-        .name      = "conv2d",
-        .exports   = {"conv2d"},
-        .params    = convParams("bias"),
-        .resultDoc = "Tensor",
-        .infer     = conv2dInfer,
-        .kernel    = &conv2dKernel,
-        .traits    = kPure});
-    defs.push_back(OpDef{
-        .name      = "conv2d_input_grad",
-        .exports   = {"conv2d_input_grad"},
-        .params    = convParams("dy"),
-        .resultDoc = "Tensor",
-        .infer     = shapedLike(0),
-        .kernel    = &conv2dInputGradKernel,
-        .traits    = kPure});
-    defs.push_back(OpDef{
-        .name      = "conv2d_kernel_grad",
-        .exports   = {"conv2d_kernel_grad"},
-        .params    = convParams("dy"),
-        .resultDoc = "Tensor",
-        .infer     = shapedLike(1),
-        .kernel    = &conv2dKernelGradKernel,
-        .traits    = kPure});
-    defs.push_back(OpDef{
-        .name      = "conv2d_bias_grad",
-        .exports   = {"conv2d_bias_grad"},
-        .params    = {{"bias", ParamKind::Tensor}, {"dy", ParamKind::Tensor}},
-        .resultDoc = "Tensor",
-        .infer     = shapedLike(0),
-        .kernel    = &conv2dBiasGradKernel,
-        .traits    = kPure});
-    defs.push_back(OpDef{
-        .name      = "max_pool2d",
-        .exports   = {"max_pool2d"},
-        .params    = poolParams(false),
-        .resultDoc = "Tensor",
-        .infer     = poolInfer,
-        .kernel    = &poolKernel<k::PoolKind::Max>,
-        .traits    = kPure});
-    defs.push_back(OpDef{
-        .name      = "avg_pool2d",
-        .exports   = {"avg_pool2d"},
-        .params    = poolParams(false),
-        .resultDoc = "Tensor",
-        .infer     = poolInfer,
-        .kernel    = &poolKernel<k::PoolKind::Average>,
-        .traits    = kPure});
-    defs.push_back(OpDef{
-        .name      = "max_pool2d_grad",
-        .exports   = {"max_pool2d_grad"},
-        .params    = poolParams(true),
-        .resultDoc = "Tensor",
-        .infer     = shapedLike(0),
-        .kernel    = &poolGradKernel<k::PoolKind::Max>,
-        .traits    = kPure});
-    defs.push_back(OpDef{
-        .name      = "avg_pool2d_grad",
-        .exports   = {"avg_pool2d_grad"},
-        .params    = poolParams(true),
-        .resultDoc = "Tensor",
-        .infer     = shapedLike(0),
-        .kernel    = &poolGradKernel<k::PoolKind::Average>,
-        .traits    = kPure});
-    defs.push_back(OpDef{
-        .name    = "batch_norm",
-        .exports = {"batch_norm"},
-        .params =
-            {{"input", ParamKind::Tensor},
-             {"mean", ParamKind::Tensor},
-             {"var", ParamKind::Tensor},
-             {"gamma", ParamKind::Tensor},
-             {"beta", ParamKind::Tensor},
-             {"eps", ParamKind::Number, true}},
-        .resultDoc = "Tensor",
-        .infer     = shapedLike(0),
-        .kernel    = &batchNormKernel,
-        .traits    = kPure});
-    defs.push_back(OpDef{
-        .name      = "embedding",
-        .exports   = {"embedding"},
-        .params    = {{"table", ParamKind::Tensor}, {"indices", ParamKind::Tensor}},
-        .resultDoc = "Tensor",
-        .infer     = embeddingInfer,
-        .kernel    = &embeddingKernel,
-        .traits    = kPure});
-    defs.push_back(OpDef{
-        .name    = "embedding_table_grad",
-        .exports = {"embedding_table_grad"},
-        .params =
-            {{"table", ParamKind::Tensor},
-             {"indices", ParamKind::Tensor},
-             {"dy", ParamKind::Tensor}},
-        .resultDoc = "Tensor",
-        .infer     = shapedLike(0),
-        .kernel    = &embeddingTableGradKernel,
-        .traits    = kPure});
-    defs.push_back(OpDef{
-        .name      = "softmax_cross_entropy",
-        .exports   = {"softmax_cross_entropy"},
-        .params    = {{"logits", ParamKind::Tensor}, {"target", ParamKind::Tensor}},
-        .resultDoc = "float",
-        .infer     = [](const InferContext &) -> std::optional<Type *> { return Type::Float64(); },
-        .kernel    = &softmaxCrossEntropyKernel,
-        .traits    = kPure});
-    defs.push_back(OpDef{
-        .name    = "softmax_cross_entropy_grad",
-        .exports = {"softmax_cross_entropy_grad"},
-        .params =
-            {{"logits", ParamKind::Tensor},
-             {"target", ParamKind::Tensor},
-             {"dy", ParamKind::Number}},
-        .resultDoc = "Tensor",
-        .infer     = shapedLike(0),
-        .kernel    = &softmaxCrossEntropyGradKernel,
-        .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "conv2d",
+            .exports   = {"conv2d"},
+            .params    = convParams("bias"),
+            .resultDoc = "Tensor",
+            .infer     = conv2dInfer,
+            .kernel    = &conv2dKernel,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "conv2d_input_grad",
+            .exports   = {"conv2d_input_grad"},
+            .params    = convParams("dy"),
+            .resultDoc = "Tensor",
+            .infer     = shapedLike(0),
+            .kernel    = &conv2dInputGradKernel,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "conv2d_kernel_grad",
+            .exports   = {"conv2d_kernel_grad"},
+            .params    = convParams("dy"),
+            .resultDoc = "Tensor",
+            .infer     = shapedLike(1),
+            .kernel    = &conv2dKernelGradKernel,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "conv2d_bias_grad",
+            .exports   = {"conv2d_bias_grad"},
+            .params    = {{"bias", ParamKind::Tensor}, {"dy", ParamKind::Tensor}},
+            .resultDoc = "Tensor",
+            .infer     = shapedLike(0),
+            .kernel    = &conv2dBiasGradKernel,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "max_pool2d",
+            .exports   = {"max_pool2d"},
+            .params    = poolParams(false),
+            .resultDoc = "Tensor",
+            .infer     = poolInfer,
+            .kernel    = &poolKernel<k::PoolKind::Max>,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "avg_pool2d",
+            .exports   = {"avg_pool2d"},
+            .params    = poolParams(false),
+            .resultDoc = "Tensor",
+            .infer     = poolInfer,
+            .kernel    = &poolKernel<k::PoolKind::Average>,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "max_pool2d_grad",
+            .exports   = {"max_pool2d_grad"},
+            .params    = poolParams(true),
+            .resultDoc = "Tensor",
+            .infer     = shapedLike(0),
+            .kernel    = &poolGradKernel<k::PoolKind::Max>,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "avg_pool2d_grad",
+            .exports   = {"avg_pool2d_grad"},
+            .params    = poolParams(true),
+            .resultDoc = "Tensor",
+            .infer     = shapedLike(0),
+            .kernel    = &poolGradKernel<k::PoolKind::Average>,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name    = "batch_norm",
+            .exports = {"batch_norm"},
+            .params =
+                {{"input", ParamKind::Tensor},
+                 {"mean", ParamKind::Tensor},
+                 {"var", ParamKind::Tensor},
+                 {"gamma", ParamKind::Tensor},
+                 {"beta", ParamKind::Tensor},
+                 {"eps", ParamKind::Number, true}},
+            .resultDoc = "Tensor",
+            .infer     = shapedLike(0),
+            .kernel    = &batchNormKernel,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name    = "batch_norm_train",
+            .exports = {"batch_norm_train"},
+            .params =
+                {{"input", ParamKind::Tensor},
+                 {"gamma", ParamKind::Tensor},
+                 {"beta", ParamKind::Tensor},
+                 {"running_mean", ParamKind::Tensor},
+                 {"running_var", ParamKind::Tensor},
+                 {"momentum", ParamKind::Number, true},
+                 {"eps", ParamKind::Number, true}},
+            .resultDoc = "(Tensor, Tensor, Tensor)",
+            .infer     = batchNormTrainInfer,
+            .kernel    = &batchNormTrainKernel,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name    = "batch_norm_train_grad",
+            .exports = {"batch_norm_train_grad"},
+            .params =
+                {{"input", ParamKind::Tensor},
+                 {"gamma", ParamKind::Tensor},
+                 {"dy", ParamKind::Tensor},
+                 {"eps", ParamKind::Number, true}},
+            .resultDoc = "(Tensor, Tensor, Tensor)",
+            .infer     = batchNormTrainGradInfer,
+            .kernel    = &batchNormTrainGradKernel,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "embedding",
+            .exports   = {"embedding"},
+            .params    = {{"table", ParamKind::Tensor}, {"indices", ParamKind::Tensor}},
+            .resultDoc = "Tensor",
+            .infer     = embeddingInfer,
+            .kernel    = &embeddingKernel,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name    = "embedding_table_grad",
+            .exports = {"embedding_table_grad"},
+            .params =
+                {{"table", ParamKind::Tensor},
+                 {"indices", ParamKind::Tensor},
+                 {"dy", ParamKind::Tensor}},
+            .resultDoc = "Tensor",
+            .infer     = shapedLike(0),
+            .kernel    = &embeddingTableGradKernel,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "softmax_cross_entropy",
+            .exports   = {"softmax_cross_entropy"},
+            .params    = {{"logits", ParamKind::Tensor}, {"target", ParamKind::Tensor}},
+            .resultDoc = "float",
+            .infer  = [](const InferContext &) -> std::optional<Type *> { return Type::Float64(); },
+            .kernel = &softmaxCrossEntropyKernel,
+            .traits = kPure});
+    defs.push_back(
+        OpDef{
+            .name    = "softmax_cross_entropy_grad",
+            .exports = {"softmax_cross_entropy_grad"},
+            .params =
+                {{"logits", ParamKind::Tensor},
+                 {"target", ParamKind::Tensor},
+                 {"dy", ParamKind::Number}},
+            .resultDoc = "Tensor",
+            .infer     = shapedLike(0),
+            .kernel    = &softmaxCrossEntropyGradKernel,
+            .traits    = kPure});
     setVjp(defs, "conv2d", &conv2dVjp);
+    setVjp(defs, "batch_norm_train", &batchNormTrainVjp);
     setVjp(defs, "max_pool2d", &pool2dVjp<kMaxPoolGradUri>);
     setVjp(defs, "avg_pool2d", &pool2dVjp<kAvgPoolGradUri>);
     setVjp(defs, "embedding", &embeddingVjp);

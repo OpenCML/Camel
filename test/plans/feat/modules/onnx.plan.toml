@@ -250,6 +250,42 @@ assert(model.initializers.length <= 16, `weights and state must be inputs, not i
 timeout_ms = 6000
 
 [[tests]]
+name = "export_train_step_bn"
+desc = "T4: a conv+batch_norm (training mode) training step exports with the running statistics as extra graph inputs/outputs (the T3 single-step pattern); the BN forward and its gradient decompose to ReduceMean/Mul/Sqrt/Reciprocal/Sub — no BatchNormalization or training-domain operator survives."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_bn.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_bn.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_bn.onnx'))
+assert(model.inputs.join() === 'conv1_w,conv1_b,bn1_g,bn1_b,conv2_w,conv2_b,bn2_g,bn2_b,fc_w,fc_b,bn1_rm,bn1_rv,bn2_rm,bn2_rv,input2', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_conv1_w,output_1_conv1_b,output_1_bn1_g,output_1_bn1_b,output_1_conv2_w,output_1_conv2_b,output_1_bn2_g,output_1_bn2_b,output_1_fc_w,output_1_fc_b,output_2_bn1_rm,output_2_bn1_rv,output_2_bn2_rm,output_2_bn2_rv', `unexpected outputs ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+// the two forwards are structurally identical (loss's and the statistics'), so the exporter
+// shares them: 2 forward Convs + 2 kernel-gradient Convs, 1 input-gradient ConvTranspose
+assert(count('Conv') === 4, `expected 4 Conv, got ${model.ops}`)
+assert(count('ConvTranspose') === 1, `expected 1 ConvTranspose, got ${model.ops}`)
+// BN decomposition only: batch statistics and normalize, no dedicated normalization op
+assert(count('BatchNormalization') === 0, `no BatchNormalization may survive, got ${model.ops}`)
+assert(count('ReduceMean') >= 8, `batch statistics must be ReduceMean decompositions, got ${model.ops}`)
+assert(count('Reciprocal') === 2 && count('Sqrt') === 2, `one reciprocal-sqrt per BN, got ${model.ops}`)
+const standard = new Set(['Add', 'Cast', 'Conv', 'ConvTranspose', 'Div', 'Expand', 'Flatten', 'Greater', 'Identity', 'MatMul', 'Mul', 'Reciprocal', 'ReduceMean', 'ReduceSum', 'Relu', 'Reshape', 'Sqrt', 'Sub', 'Transpose', 'Unsqueeze'])
+assert(model.ops.every((o) => standard.has(o)), `non-standard op in ${model.ops}`)
+const params = ['conv1_w','conv1_b','bn1_g','bn1_b','conv2_w','conv2_b','bn2_g','bn2_b','fc_w','fc_b','bn1_rm','bn1_rv','bn2_rm','bn2_rv']
+assert(!model.initializers.some((i) => params.includes(i)), `weights and statistics must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
 name = "export_train_step_branch"
 desc = "A training step whose loss takes a data-dependent branch (if s > 1.0) exports as one standard graph: value_and_grad differentiates through the branch and each branch arm (loss value and pullback result) becomes a standard If."
 kind = "behavior"

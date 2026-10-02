@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -84,5 +84,25 @@ TensorObject *pool2dGrad(
 TensorObject *batchNorm(
     const TensorObject *input, const TensorObject *mean, const TensorObject *var,
     const TensorObject *gamma, const TensorObject *beta, double eps, mm::IAllocator &allocator);
+
+/// Training-mode batch normalization: the batch statistics are computed per channel over the
+/// batch and the trailing (spatial) axes. The normalize uses the BIASED batch variance; the
+/// running statistics move toward the batch statistics by `momentum`, the variance toward the
+/// UNBIASED batch variance (M/(M-1) correction) — PyTorch's training-mode semantics. Writes y,
+/// the new running mean and the new running variance (all freshly allocated).
+void batchNormTrain(
+    const TensorObject *input, const TensorObject *gamma, const TensorObject *beta,
+    const TensorObject *runningMean, const TensorObject *runningVar, double momentum, double eps,
+    TensorObject **outY, TensorObject **outRunningMean, TensorObject **outRunningVar,
+    mm::IAllocator &allocator);
+
+/// Gradients of batchNormTrain wrt the input and the affine parameters:
+/// dbeta = sum(dy), dgamma = sum(dy*xhat), dx = gamma*inv*(dy - mean(dy) - xhat*mean(dy*xhat))
+/// per channel over the batch and spatial axes (xhat the normalized input, inv = 1/sqrt(var+eps)
+/// with the biased batch variance). Writes dx, dgamma, dbeta (freshly allocated).
+void batchNormTrainGrad(
+    const TensorObject *input, const TensorObject *gamma, const TensorObject *dy, double eps,
+    TensorObject **outDx, TensorObject **outDgamma, TensorObject **outDbeta,
+    mm::IAllocator &allocator);
 
 } // namespace camel::tensor::kernels
