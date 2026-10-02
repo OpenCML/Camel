@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,6 +47,7 @@ namespace mm = camel::core::mm;
 #include <cstdlib>
 #include <deque>
 #include <filesystem>
+#include <format>
 #include <httplib.h>
 #include <iostream>
 #include <mutex>
@@ -242,6 +243,30 @@ void DebuggerServer::requestContinue() {
     continueCond_.notify_one();
 }
 
+void DebuggerServer::requestGirStep(std::string graphId) {
+    {
+        std::lock_guard<std::mutex> lock(girStepMutex_);
+        girStepGraphId_ = std::move(graphId);
+    }
+    girStepRequested_.store(true, std::memory_order_release);
+}
+
+bool DebuggerServer::consumeGirStepRequest(const std::string &currentGraphId) {
+    if (!girStepRequested_.load(std::memory_order_acquire))
+        return false;
+    {
+        std::lock_guard<std::mutex> lock(girStepMutex_);
+        if (!girStepRequested_.load(std::memory_order_acquire))
+            return false;
+        // Empty constraint = step in (any graph); otherwise only the paused-in graph.
+        if (!girStepGraphId_.empty() && girStepGraphId_ != currentGraphId)
+            return false;
+        girStepGraphId_.clear();
+    }
+    girStepRequested_.store(false, std::memory_order_release);
+    return true;
+}
+
 void DebuggerServer::requestRestart() {
     paused_.store(false);
     restartRequested_.store(true);
@@ -273,7 +298,7 @@ std::unordered_set<std::string> DebuggerServer::getAllocBreakSpaces() {
 }
 
 void DebuggerServer::pauseAndWaitForGirBreakpoint(
-    const std::string &nodeId, const std::string &graphId) {
+    const std::string &nodeId, const std::string &graphId, uint64_t origin, uint64_t ref) {
     assert(isWorkerProcess() && "pauseAndWaitForGirBreakpoint() called in non-worker process");
     if (!running_)
         return;
@@ -282,6 +307,8 @@ void DebuggerServer::pauseAndWaitForGirBreakpoint(
         j["phase"]   = "gir_node";
         j["nodeId"]  = nodeId;
         j["graphId"] = graphId;
+        j["origin"]  = origin;
+        j["ref"]     = ref;
         {
             std::lock_guard<std::mutex> lock(jsonMutex_);
             lastAllocJson_ = j.dump();
@@ -340,7 +367,8 @@ void DebuggerServer::setGirBreakpointNodeIds(std::unordered_set<uintptr_t> ids) 
     std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
     girBreakpointNodeIds_ = std::move(ids);
     EXEC_WHEN_DEBUG({
-        if (girBreakpointNodeIds_.empty() && girBreakpointStableIds_.empty())
+        if (girBreakpointNodeIds_.empty() && girBreakpointStableIds_.empty() &&
+            girBreakpointOrigins_.empty())
             camel::DebugBreakpoint::DisableType("gir_node");
         else
             camel::DebugBreakpoint::EnableType("gir_node");
@@ -370,7 +398,8 @@ void DebuggerServer::setGirBreakpointNodeIdsFromStrings(const std::vector<std::s
             girBreakpointStableIds_.insert(s);
     }
     EXEC_WHEN_DEBUG({
-        if (girBreakpointNodeIds_.empty() && girBreakpointStableIds_.empty())
+        if (girBreakpointNodeIds_.empty() && girBreakpointStableIds_.empty() &&
+            girBreakpointOrigins_.empty())
             camel::DebugBreakpoint::DisableType("gir_node");
         else
             camel::DebugBreakpoint::EnableType("gir_node");
@@ -387,6 +416,31 @@ bool DebuggerServer::isGirBreakpointNodeStable(const std::string &stableId) cons
         return false;
     std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
     return girBreakpointStableIds_.count(stableId) != 0;
+}
+
+void DebuggerServer::setGirBreakpointOrigins(std::vector<uint64_t> origins) {
+    std::unordered_set<uint64_t> set(origins.begin(), origins.end());
+    std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
+    girBreakpointOrigins_ = std::move(set);
+    EXEC_WHEN_DEBUG({
+        if (girBreakpointNodeIds_.empty() && girBreakpointStableIds_.empty() &&
+            girBreakpointOrigins_.empty())
+            camel::DebugBreakpoint::DisableType("gir_node");
+        else
+            camel::DebugBreakpoint::EnableType("gir_node");
+    });
+}
+
+bool DebuggerServer::isGirBreakpointOrigin(uint64_t origin) const {
+    if (origin == 0)
+        return false;
+    std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
+    return girBreakpointOrigins_.count(origin) != 0;
+}
+
+std::vector<uint64_t> DebuggerServer::getGirBreakpointOrigins() const {
+    std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
+    return std::vector<uint64_t>(girBreakpointOrigins_.begin(), girBreakpointOrigins_.end());
 }
 
 std::unordered_set<uintptr_t> DebuggerServer::getGirBreakpointNodeIds() const {
@@ -720,7 +774,26 @@ void DebuggerServer::httpServerLoop() {
                                         pr["space"] = sp["space"];
                                     if (sp.contains("ptr"))
                                         pr["ptr"] = sp["ptr"];
+                                    if (sp.contains("nodeId"))
+                                        pr["nodeId"] = sp["nodeId"];
+                                    if (sp.contains("graphId"))
+                                        pr["graphId"] = sp["graphId"];
+                                    if (sp.contains("origin"))
+                                        pr["origin"] = sp["origin"];
+                                    if (sp.contains("ref"))
+                                        pr["ref"] = sp["ref"];
                                     task["pauseReason"] = pr;
+                                    // Explicit paused-node payload for debugger clients (e.g. the
+                                    // VSCode GIR panel): unambiguous identity in both id spaces,
+                                    // independent of pause kind.
+                                    if (sp.value("paused", false) && sp.contains("nodeId")) {
+                                        json pn;
+                                        pn["nodeId"]       = sp["nodeId"];
+                                        pn["graphId"]      = sp.value("graphId", "");
+                                        pn["origin"]       = sp.value("origin", 0);
+                                        pn["ref"]          = sp.value("ref", 0);
+                                        task["pausedNode"] = pn;
+                                    }
                                 }
                             } catch (...) { /* ignore parse error */
                             }
@@ -738,6 +811,16 @@ void DebuggerServer::httpServerLoop() {
                         if (rSt && rSt->status == 200 && !rSt->body.empty()) {
                             try {
                                 json ws = json::parse(rSt->body);
+                                // Workers keep serving after a run finishes, so the parent-side
+                                // taskState would stay "running" unless we adopt the
+                                // worker-reported state (completed/terminated/paused/...). Sync
+                                // it into the parent task table too, so commands like launch
+                                // (which consult the table, not the aggregated JSON) see the
+                                // real state and completed tasks become re-runnable.
+                                if (ws.contains("taskState") && ws["taskState"].is_string()) {
+                                    task["taskState"] = ws["taskState"];
+                                    setTaskState(port, ws["taskState"].get<std::string>());
+                                }
                                 if (ws.contains("assertionError") && !ws["assertionError"].empty())
                                     task["assertionError"] = ws["assertionError"];
                                 if (ws.contains("assertionExpression"))
@@ -832,6 +915,68 @@ void DebuggerServer::httpServerLoop() {
                 j["error"] = e.what();
                 res.set_content(j.dump(), "application/json");
             }
+        });
+
+    svr.Get(
+        "/api/pass-graphs",
+        [tryForwardToTarget,
+         requireNoTasksForLocal,
+         requireWorkerForLocal](const httplib::Request &req, httplib::Response &res) {
+            if (tryForwardToTarget(req, res) != 0)
+                return;
+            if (requireNoTasksForLocal(res))
+                return;
+            if (requireWorkerForLocal(res))
+                return;
+            auto &store = getPassGraphStore();
+            json j;
+            j["graphs"] = json::array();
+            std::lock_guard<std::mutex> lock(store.mutex);
+            for (const auto &entry : store.entries) {
+                json g;
+                g["index"]    = entry.index;
+                g["pass"]     = entry.pass.empty() ? json(nullptr) : json(entry.pass);
+                g["consumed"] = entry.consumed;
+                j["graphs"].push_back(std::move(g));
+            }
+            res.set_content(j.dump(), "application/json");
+        });
+
+    svr.Get(
+        "/api/pass-graph",
+        [tryForwardToTarget,
+         requireNoTasksForLocal,
+         requireWorkerForLocal](const httplib::Request &req, httplib::Response &res) {
+            if (tryForwardToTarget(req, res) != 0)
+                return;
+            if (requireNoTasksForLocal(res))
+                return;
+            if (requireWorkerForLocal(res))
+                return;
+            std::string indexParam = req.get_param_value("index");
+            if (indexParam.empty()) {
+                res.status = 400;
+                res.set_content("{\"error\":\"Missing index. Use ?index=N.\"}", "application/json");
+                return;
+            }
+            const size_t index = std::strtoull(indexParam.c_str(), nullptr, 10);
+            auto &store        = getPassGraphStore();
+            std::lock_guard<std::mutex> lock(store.mutex);
+            for (const auto &entry : store.entries) {
+                if (entry.index != index)
+                    continue;
+                json j;
+                j["index"]    = entry.index;
+                j["pass"]     = entry.pass.empty() ? json(nullptr) : json(entry.pass);
+                j["consumed"] = entry.consumed;
+                j["dot"]      = entry.dot;
+                res.set_content(j.dump(), "application/json");
+                return;
+            }
+            res.status = 400;
+            res.set_content(
+                std::format("{{\"error\":\"No pass graph snapshot at index {}.\"}}", index),
+                "application/json");
         });
 
     svr.Get(
@@ -996,8 +1141,12 @@ void DebuggerServer::httpServerLoop() {
             json j                       = json::array();
             for (const auto &s : ids)
                 j.push_back(s);
+            json o = json::array();
+            for (uint64_t origin : getGirBreakpointOrigins())
+                o.push_back(origin);
             json out;
-            out["nodeIds"] = j;
+            out["nodeIds"]   = j;
+            out["originIds"] = o;
             res.set_content(out.dump(), "application/json");
         });
 
@@ -1008,14 +1157,21 @@ void DebuggerServer::httpServerLoop() {
             const httplib::Request &req,
             httplib::Response &res) {
             std::vector<std::string> ids;
+            std::vector<uint64_t> origins;
             try {
                 json body = json::parse(req.body.empty() ? "{}" : req.body);
                 if (body.contains("nodeIds") && body["nodeIds"].is_array()) {
                     for (const auto &v : body["nodeIds"])
                         ids.push_back(v.get<std::string>());
                 }
-                if (!isWorkerProcess())
+                if (body.contains("originIds") && body["originIds"].is_array()) {
+                    for (const auto &v : body["originIds"])
+                        origins.push_back(v.get<uint64_t>());
+                }
+                if (!isWorkerProcess()) {
                     setGirBreakpointNodeIdsFromStrings(ids);
+                    setGirBreakpointOrigins(origins);
+                }
             } catch (const std::exception &e) {
                 json j;
                 j["ok"]    = false;
@@ -1031,6 +1187,7 @@ void DebuggerServer::httpServerLoop() {
                 return;
             try {
                 setGirBreakpointNodeIdsFromStrings(ids);
+                setGirBreakpointOrigins(origins);
                 res.set_content("{\"ok\":true}", "application/json");
             } catch (const std::exception &e) {
                 json j;
@@ -1187,6 +1344,11 @@ void DebuggerServer::httpServerLoop() {
     // 写操作一律经父进程命令执行并回显，命令内部再按 target 调用 forwardPostToPort 通知子进程。
     svr.Post("/api/continue", [](const httplib::Request &req, httplib::Response &res) {
         dispatchAndRespond("continue", req, res);
+    });
+
+    // 节点级单步：body 可含 graphId（空/absent = step in，任意图；否则仅同步该图内下一节点）。
+    svr.Post("/api/step", [](const httplib::Request &req, httplib::Response &res) {
+        dispatchAndRespond("step", req, res);
     });
 
     svr.Post("/api/restart", [](const httplib::Request &req, httplib::Response &res) {

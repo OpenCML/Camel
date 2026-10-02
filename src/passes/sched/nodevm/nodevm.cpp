@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -461,6 +461,12 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 skipNode = kInvalidNodeRef;
                 tillNode = joinNode;
             }
+
+            // Node-level debugger hook (camel-db): unlike Hit(), this stays live in release
+            // builds and costs one atomic load when no handler is installed. It fires after
+            // branch-skip resolution and before the node executes, so breakpoints/stepping stop
+            // at the node that is about to run.
+            camel::DebugBreakpoint::HitGirNode(currRuntimeGraph, static_cast<uint64_t>(nodeRef));
 
             EXEC_WHEN_DEBUG({
                 CAMEL_LOG_DEBUG_S(

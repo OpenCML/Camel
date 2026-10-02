@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 25, 2026
- * Updated: Mar. 12, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -54,12 +54,16 @@ using json = nlohmann::json;
 /// 后继承；统一断点模型下各类型断点均需在 spawn/run 后同步。
 static void pushGirBreakpointsToPort(DebuggerServer &srv, int port) {
     std::vector<std::string> girIds = srv.getGirBreakpointNodeIdsForApi();
-    if (girIds.empty())
+    std::vector<uint64_t> origins   = srv.getGirBreakpointOrigins();
+    if (girIds.empty() && origins.empty())
         return;
     json girBody;
     girBody["nodeIds"] = json::array();
     for (const std::string &id : girIds)
         girBody["nodeIds"].push_back(id);
+    girBody["originIds"] = json::array();
+    for (uint64_t origin : origins)
+        girBody["originIds"].push_back(origin);
     srv.forwardPostToPort(port, "/api/gir-breakpoints", girBody.dump());
 }
 
@@ -146,7 +150,8 @@ class LaunchCommand final : public Command {
             auto it    = std::find_if(tasks.begin(), tasks.end(), [port](const TaskInfo &t) {
                 return t.port == port;
             });
-            if (it != tasks.end() && it->taskState == "loaded") {
+            if (it != tasks.end() && (it->taskState == "loaded" || it->taskState == "completed" ||
+                                      it->taskState == "terminated")) {
                 std::string runBody = argsJson.empty() ? "{}" : argsJson;
                 if (!getServer().isWorkerProcess())
                     getServer().setLastRunBody(runBody);
@@ -253,6 +258,43 @@ class ContinueCommand final : public Command {
                 "continue",
                 "Target unreachable (connection failed or timeout).");
         return CommandResult::ok("continue", "Continue (task " + std::to_string(port) + ").");
+    }
+};
+
+// ---------------------------------------------------------------------------
+// step — node-level single-step: pause at the next GIR node
+// ---------------------------------------------------------------------------
+class StepCommand final : public Command {
+  public:
+    const char *name() const override { return "step"; }
+    const char *description() const override {
+        return "Single-step to the next GIR node (empty graphId = step in)";
+    }
+
+    CommandResult execute(const std::string &argsJson) override {
+        auto &srv = getServer();
+        if (srv.isWorkerProcess()) {
+            json args = json::parse(argsJson, nullptr, false);
+            // Arm step mode before resuming so the very next node fire consumes it; the
+            // execution thread is blocked in the pause condvar, so it must be woken explicitly.
+            srv.requestGirStep(args.value("graphId", ""));
+            srv.requestContinue();
+            return CommandResult::ok("step", "Step.");
+        }
+        json args          = json::parse(argsJson, nullptr, false);
+        std::string target = args.value("target", "");
+        int port           = resolveTargetToPort(target);
+        if (port <= 0)
+            port = srv.getChildPort();
+        if (port <= 0)
+            return CommandResult::error(
+                "step",
+                "No task selected or target invalid. Select a task or pass target.");
+        if (!srv.forwardPostToPort(port, "/api/step", argsJson.empty() ? "{}" : argsJson))
+            return CommandResult::error(
+                "step",
+                "Target unreachable (connection failed or timeout).");
+        return CommandResult::ok("step", "Step (task " + std::to_string(port) + ").");
     }
 };
 
@@ -611,6 +653,7 @@ void registerAllCommands(CommandDispatcher &dispatcher) {
     dispatcher.registerCommand(std::make_shared<LaunchCommand>());
     dispatcher.registerCommand(std::make_shared<StartServerCommand>());
     dispatcher.registerCommand(std::make_shared<ContinueCommand>());
+    dispatcher.registerCommand(std::make_shared<StepCommand>());
     dispatcher.registerCommand(std::make_shared<RestartCommand>());
     dispatcher.registerCommand(std::make_shared<TerminateCommand>());
     dispatcher.registerCommand(std::make_shared<ConfigureCommand>());

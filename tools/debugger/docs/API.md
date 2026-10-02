@@ -87,7 +87,7 @@
 - **target**：必选（Web UI 必须显式传）；CLI 可省略则解析为前台任务。Run 只需指明任务 id，path 为任务状态的一部分、不参与区分任务。
 - **请求**：`{ "target": "<任务id>" }`（target 可选，供 Web UI 指定任务）。run 不接收 memoryMonitor/allocStep；内存扫描与断点按统一断点模型处理，新 worker 或转发 run 后父进程会推送当前断点状态（breakpoint-spaces、gir-breakpoints 等）。
 - **响应**：由 launch 命令或 workerRunHandler 返回的 JSON。
-- **错误**：由命令或 handler 返回。若指定任务存在且为 `loaded` 则转发 /api/run；否则 fallback 或报错。
+- **错误**：由命令或 handler 返回。若指定任务存在且为 `loaded`/`completed`/`terminated` 则转发 /api/run（worker 在脚本结束后继续服务，可直接复跑）；否则 fallback 或报错。
 
 ---
 
@@ -216,7 +216,7 @@
 
 - **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
 - **请求**：可选 `?target=`，`?path=`，`?graphId=`。无 `graphId` 时返回根图摘要（id、name、children、dependencies）；有 `graphId` 时返回该图的 nodes、edges 及 children/dependencies 摘要。
-- **响应**：`{ "ok": true, "graph": { ... } }` 或 `{ "ok": false, "error": "..." }`。graph 的节点/边 id 为指针地址字符串（如 `"0x1a2b3c4d"`）。
+- **响应**：`{ "ok": true, "graph": { ... } }` 或 `{ "ok": false, "error": "..." }`。节点字段：`id`（图内整数 draft ref）、`graphId`（图 stableId）、`stableId`（`"{graphId}:{id}"` 会话内稳定复合 id）、`type`、`dataType`、`portName?/accsKey?/funcGraphId?/operName?`、`originId`、`span?`。`span` 为 `{ "file", "startLine", "startCharacter", "endLine", "endCharacter" }`，**0 基**（LSP 约定；DAP 客户端自行 +1）。`originId` 是统一的调试节点 id：与 `POST /api/gir-breakpoints` 的 `originIds`、暂停 payload 的 `origin` 同空间，运行时可经 runtime 图的节点 origin 解析。
 - **错误**：400（多任务且未指定 target）；未配置或 getGirJson 失败时 ok false；graphId 无效时 error "graph not found"。
 
 ---
@@ -225,16 +225,47 @@
 
 - **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
 - **请求**：可选 `?target=`。
-- **响应**：`{ "nodeIds": ["0x...", ...] }`，当前断点配置（节点型）id 列表。
+- **响应**：`{ "nodeIds": string[], "originIds": number[] }`，当前断点配置（节点型）。`originIds` 为 canonical 断点 id 空间（见 3.20），`nodeIds` 保留兼容（`0x...` 运行时指针或 stableId 字符串）。
 
 ---
 
 ### 3.22 POST /api/gir-breakpoints
 
 - **target**：可选。Body 中 `"target": "<任务id>"` 可选。父进程收到请求时保留一份，Run/Restart 时按统一断点模型推送给 worker。
-- **请求**：Body `{ "nodeIds": ["0x...", ...] }`，全量替换当前断点（节点型）列表。
+- **请求**：Body `{ "nodeIds"?: string[], "originIds"?: number[] }`，两类分别全量替换。推荐只传 `originIds`（与 gir-json 的节点 `originId` 一致）；`nodeIds` 中的 `0x...` 形式在 runtime 图节点无对应指针后已不再命中。
 - **响应**：`{ "ok": true }` 或 `{ "ok": false, "error": "..." }`。
-- **说明**：执行到所列节点时（需使用 NodeVM 调度器）会暂停，GET /api/state 聚合的 pauseReason 含 `phase: "gir_node"`、`nodeId`、`graphId`。
+- **说明**：执行到 origin 匹配节点时（NodeVM 调度器）会暂停，GET /api/state 聚合的 pauseReason 含 `phase: "gir_node"`、`nodeId`（`"{graphId}:{ref}"`）、`graphId`、`origin`、`ref`。
+
+---
+
+### 3.23 POST /api/step
+
+- **target**：可选（Body）。父进程转发到子进程；仅当任务暂停时调用。
+- **请求**：`{ "target"?: "<id>", "graphId"?: string }`。`graphId` 缺省/空 = step in（下一节点任意图都停）；传当前暂停的 `graphId` = step over（仅同图下一节点停）。
+- **响应**：`{ "ok": true }` 或 `{ "ok": false, "error": "..." }`。
+- **说明**：worker 在本次继续执行后、第一个满足条件的 GIR 节点执行前暂停，暂停 payload 与断点一致（pauseReason/pausedNode）。
+
+---
+
+### 3.24 GET /api/pass-graphs
+
+- **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
+- **请求**：可选 `?target=`。无需其他参数。
+- **响应**：`{ "graphs": [ { "index": 0, "pass": null, "consumed": false }, { "index": 1, "pass": "std::inline", "consumed": false }, ... ] }`。
+  - `index` 为快照序号：`0` 是 pass 管线执行前的入口图（`pass` 为 `null`）；`index >= 1` 按执行顺序对应各 pass 的输出图（`pass` 为请求管线中的 pass 名，如 `"std::inline"`）。
+  - `consumed` 为 `true` 表示该快照的图被下一个 pass 消费（即管线在该 pass 终止，其后无更多快照）。消费图的 pass 本身不再有快照条目。
+  - 消费型 pass（如 `std::nodevm`/`std::default`）执行后不产生快照条目；`std::default` fallback 管线产生非空输出的 pass 也会按序编号（编号跨主/fallback 管线单调递增，不重置）。
+  - 该任务尚未 run 过（或入口图无物化节点）时返回 `{ "graphs": [] }`。
+- **错误**：400（多任务且未指定 target）。
+
+---
+
+### 3.25 GET /api/pass-graph
+
+- **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
+- **请求**：必选 `?index=N`（与 3.24 的 `index` 对应）。
+- **响应**：`{ "index": N, "pass": "std::inline" | null, "consumed": false, "dot": "digraph GraphIR {...}" }`。`dot` 为 rgir 风格可读 DOT（仅 `label`/`type` 属性，节点行带 `origin=<id>`、`span="sl:sc-el:ec"`、`srcfile="..."`，同 `std::rgir` 输出），供 Graphviz 渲染或与 gir-json 的 `originId` 对照。
+- **错误**：400（缺 `index` 或该序号无快照，body 含 `error`）。
 
 ---
 
@@ -243,7 +274,9 @@
 当客户端请求 **GET /api/state** 时，父进程在返回前会对 `tasks[]` 中每个 **taskState !== "exited"** 的任务，向该任务端口请求 GET /api/step-paused、GET /api/last-alloc 与 GET /api/state，并将结果合并进对应 task 对象：
 
 - **paused** (boolean)：该任务是否当前停在断点。
-- **pauseReason** (object | 无)：当 paused 为 true 时，包含 `phase`、`size`、`space`、`ptr` 等（与 step-paused 响应一致）；若为 GIR 节点断点则 `phase` 为 `"gir_node"`，并含 `nodeId`、`graphId`。
+- **pauseReason** (object | 无)：当 paused 为 true 时，包含 `phase`、`size`、`space`、`ptr` 等（与 step-paused 响应一致）；若为 GIR 节点断点/单步则 `phase` 为 `"gir_node"`，并含 `nodeId`（`"{graphId}:{ref}"`）、`graphId`、`origin`、`ref`。
+- **pausedNode** (object | 无)：GIR 暂停时显式给出的节点身份 `{ "nodeId", "graphId", "origin", "ref" }`，供调试客户端（如 VSCode GIR 面板）直接定位节点，无需解析 pauseReason。
+- **taskState**：由该任务 GET /api/state 的顶层 `taskState` 合并（worker 在脚本结束后继续服务，父进程侧状态需以此为准，否则永远停留在 "running"）。
 - **lastAlloc** (object | 无)：最近一次分配断点信息，用于 UI 展示。
 - **assertionError**、**assertionExpression**、**assertionFile**、**assertionLine**（来自该任务 GET /api/state 的顶层字段）：若该任务发生断言失败则合并进 task，供 UI 展示。
 

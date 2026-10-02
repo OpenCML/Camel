@@ -1,6 +1,6 @@
 /**
  * 将 build/debug/profile 构建产物收集到 out/latest/{bin,include,libs,stdlib}
- * 所有 tools 下的 exe 放到 bin/，libcamel.dll 放在 libs/（exe 会从 ./libs 查找）
+ * 所有 tools 下的可执行文件放到 bin/，libcamel 共享库放到 libs/（exe 会从 ./libs 查找）
  *
  * 输出策略：始终写入 out/latest/（保证为本次编译产物）。若当前 HEAD 带有 git tag，
  * 则在完成后将整棵 out/latest/ 再镜像一份到 out/<每个 tag>/（与 latest 内容相同）。
@@ -15,6 +15,7 @@ import path from 'path'
 import {
     BASEDIR,
     libName,
+    findBuiltLibcamel,
     getGitTagsAtHead,
     logStep,
     logDone,
@@ -202,8 +203,6 @@ function collect(config) {
     ensureDir(stdlibDir)
 
     const toolsBuildDir = path.join(BASEDIR, 'build', 'tools')
-    const libSrcDir = path.join(BASEDIR, 'build', config)
-    const libsBuildDir = path.join(BASEDIR, 'build', 'libs')
     const includeSrc = path.join(BASEDIR, 'include')
     const stdlibSrc = path.join(BASEDIR, 'stdlib')
 
@@ -230,14 +229,14 @@ function collect(config) {
         }
     }
 
-    const libPath = path.join(libSrcDir, libName)
+    const libPath = findBuiltLibcamel(config)
     if (fs.existsSync(libPath)) {
         fs.copyFileSync(libPath, path.join(libsDir, libName))
         if (isWindows && config === 'Debug') {
             fs.copyFileSync(libPath.replace('.dll', '.pdb'), path.join(libsDir, libName.replace('.dll', '.pdb')))
         }
     } else {
-        logWarn(`Library not found: ${libPath}`)
+        logWarn(`Library not found for ${libName} under build/ (expected a built shared library for ${config})`)
     }
 
     // Python runtime DLLs: modules/python/sdks/python3xx/ (sync-python-sdks); else venv / conda / python on PATH.

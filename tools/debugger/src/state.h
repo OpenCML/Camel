@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -34,6 +34,7 @@
 #include "server.h"
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -72,6 +73,25 @@ struct DebuggerState {
 
     bool hasFile() const { return !targetFile.empty(); }
 };
+
+/// 逐 pass GIR 快照条目：index 0 为 pass 管线之前的入口图（pass 为空串），index >= 1 为
+/// 各 pass 的输出图；consumed 表示该快照的图被下一个 pass 消费（管线在该 pass 终止）。
+struct PassGraphEntry {
+    size_t index = 0;
+    std::string pass;
+    bool consumed = false;
+    std::string dot;
+};
+
+/// 逐 pass GIR 快照存储：runScriptOnce 执行线程经 pass 快照钩子写入，HTTP 请求线程读取。
+/// DOT 在钩子回调内立即序列化为 std::string，不持有 GCGraph 指针（GC 会移动/回收）。
+struct PassGraphStore {
+    std::mutex mutex;
+    std::vector<PassGraphEntry> entries;
+};
+
+/// 进程内单例（父/子进程各一份）。父进程不跑脚本，始终为空。
+PassGraphStore &getPassGraphStore();
 
 StartupOptions &getStartupOptions();
 DebuggerState &getState();

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: May. 01, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,7 +34,9 @@
 
 #include "nlohmann/json.hpp"
 
+#include "camel/core/debug_breakpoint.h"
 #include "camel/init.h"
+#include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "command/commands.h"
 #include "command/dispatcher.h"
@@ -45,7 +47,6 @@
 #include "worker.h"
 
 #ifndef NDEBUG
-#include "camel/core/debug_breakpoint.h"
 #include "camel/core/mm/debug_hook.h"
 #include "camel/utils/assert.h"
 #endif
@@ -188,19 +189,25 @@ int runWorkerMode(int argc, char *argv[]) {
                     getServer().pauseAndWaitForContinue(evt->ptr, evt->size, evt->space);
                 return;
             }
-            if (std::strcmp(type, "gir_node") == 0 && ctx != nullptr) {
-                uintptr_t ptr        = reinterpret_cast<uintptr_t>(ctx);
-                std::string stableId = getDebugNodeIdFromCompileNode(ctx);
-                if (getServer().isGirBreakpointNode(ptr) ||
-                    getServer().isGirBreakpointNodeStable(stableId)) {
-                    std::string nodeId  = std::format("0x{:x}", ptr);
-                    std::string graphId = getDebugGraphIdFromCompileNode(ctx);
-                    getServer().pauseAndWaitForGirBreakpoint(nodeId, graphId);
-                }
-                return;
-            }
             getServer().pauseAndWaitForPipelineStage(type);
         });
+    });
+
+    // GIR node hook: registered unconditionally (release included) so node breakpoints and
+    // single-stepping work on release builds. The NodeVM fires HitGirNode() before each node;
+    // identity is resolved through the runtime graph's recorded draft origins, which is the same
+    // originId space that gir-json exposes to clients.
+    camel::DebugBreakpoint::SetGirNodeHandler([](const void *graphPtr, uint64_t ref) {
+        auto *graph               = static_cast<const camel::runtime::GCGraph *>(graphPtr);
+        auto &srv                 = getServer();
+        const std::string graphId = graph ? graph->stableId() : "";
+        const uint64_t origin =
+            graph ? graph->nodeOrigin(static_cast<camel::runtime::gc_node_ref_t>(ref)) : 0;
+        // A consumed step request always pauses; otherwise pause only on breakpoint origins.
+        if (!srv.consumeGirStepRequest(graphId) && !srv.isGirBreakpointOrigin(origin))
+            return;
+        std::string nodeId = graph ? std::format("{}:{}", graphId, ref) : std::format("{}", ref);
+        srv.pauseAndWaitForGirBreakpoint(nodeId, graphId, origin, ref);
     });
 
     getServer().setWorkerRunHandler([](const std::string &body, std::string &responseBody) {
