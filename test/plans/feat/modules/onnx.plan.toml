@@ -215,6 +215,41 @@ assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops
 timeout_ms = 6000
 
 [[tests]]
+name = "export_train_step_adam"
+desc = "T3: an Adam training step exports with the optimizer state (moment trees adam_m_*/adam_v_* and the step adam_t) as extra graph inputs and outputs; the bias-corrected update uses standard inference operators only (t+1 via Add, corrections via Pow/Sub, per-leaf Mul/Div/Sqrt)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_adam.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_adam.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_adam.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,adam_m_w1,adam_m_b1,adam_m_w2,adam_m_b2,adam_v_w1,adam_v_b1,adam_v_w2,adam_v_b2,adam_t,input2', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2,output_2_m_w1,output_2_m_b1,output_2_m_w2,output_2_m_b2,output_2_v_w1,output_2_v_b1,output_2_v_w2,output_2_v_b2,output_2_t', `unexpected outputs ${model.outputs}`)
+assert(model.inputDims[model.inputs.indexOf('adam_t')].join() === '', `adam_t must be a rank-0 step counter, got ${JSON.stringify(model.inputDims)}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+// forward/backward as in export_train_step (5 MatMul); one bias correction per beta, one Sqrt and
+// three Div per parameter, one Sub per parameter plus the two corrections
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Pow') === 2, `expected a Pow per bias correction, got ${model.ops}`)
+assert(count('Sqrt') === 4 && count('Div') === 12, `expected one Sqrt and three Div per parameter, got ${model.ops}`)
+assert(count('Sub') === 6, `expected one update Sub per parameter plus two corrections, got ${model.ops}`)
+// standard opset-17 inference operators only (no training-domain ops)
+const standard = new Set(['MatMul', 'Add', 'Relu', 'Mul', 'ReduceMean', 'Expand', 'Transpose', 'Greater', 'Cast', 'ReduceSum', 'Reshape', 'Pow', 'Sub', 'Div', 'Sqrt', 'Identity'])
+assert(model.ops.every((o) => standard.has(o)), `non-standard op in ${model.ops}`)
+assert(model.initializers.length <= 16, `weights and state must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
 name = "export_train_step_branch"
 desc = "A training step whose loss takes a data-dependent branch (if s > 1.0) exports as one standard graph: value_and_grad differentiates through the branch and each branch arm (loss value and pullback result) becomes a standard If."
 kind = "behavior"
@@ -305,6 +340,19 @@ expect_exit = 0
 expect_stdout_contains = ["then arm: shape [4]", "else arm: shape [4]", "ort run: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+[[tests]]
+name = "ort_train_step_adam"
+desc = "T3: the exported Adam step runs on ONNX Runtime with the optimizer state fed back; five steps match torch.optim.Adam and Camel's native nn:adam on the loss and every updated parameter (<= 1e-5)."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_adam.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnxruntime, torch"]
+expect_exit = 0
+expect_stdout_contains = ["ort adam: worst", "PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
 
 [[tests]]
 name = "ort_dynamic_batch"
