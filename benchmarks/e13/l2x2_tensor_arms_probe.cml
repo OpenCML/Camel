@@ -1,0 +1,41 @@
+/**
+ * E13/T5 dissection X2: tensor-typed branch arms in a training step.
+ * Same MLP and weights as the known-good scalar-arm e9 case; the only
+ * difference is that the branch selects between tensors (y*2.0 vs y).
+ */
+module e13_l2x2_tensor_arms
+
+import { Tensor, relu, mean, reshape } from tensor
+import { value_and_grad } from autodiff
+import { sgd } from nn
+import { get_env } from sys
+import { export_model } from onnx
+
+type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+
+with <m: Mlp>
+func loss(x: Tensor): float {
+    let h = relu(x @ m.w1 + m.b1)
+    let y = h @ m.w2 + m.b2
+    let s = mean(y * y)
+    let z = if s > 1.0 then y * 2.0 else y
+    return mean(z * z)
+}
+
+func step(m: Mlp, x: Tensor): (float, Mlp) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func main(): int sync {
+    let m = {
+        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
+        b1: reshape([0.1, 0.0, -0.1], [3]),
+        w2: reshape([1.0, -1.0, 0.5], [3, 1]),
+        b2: reshape([0.2], [1])
+    }
+    let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
+    export_model(step, (m, x), get_env('ONNX_OUT'))
+    println('exported step')
+    return 0
+}
