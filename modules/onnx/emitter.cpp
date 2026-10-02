@@ -33,6 +33,7 @@
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/struct.h"
 
 #include <cstring>
 #include <format>
@@ -59,16 +60,30 @@ const TensorObject *constantTensor(const Value &value) {
     return rtdata::fromSlot<TensorObject *>(value.slot);
 }
 
+/// The ONNX element dtype an operand of Camel dtype `dtype` takes: float64 survives (a
+/// scalar-only dtype in Camel but a real ONNX tensor dtype); the rest normalizes to the
+/// tensor storage dtypes (float32, int64, bool).
+TypeCode operandTarget(TypeCode dtype) {
+    return dtype == TypeCode::Float64 ? TypeCode::Float64 : tensor::normalizeTensorDType(dtype);
+}
+
 /// Encodes `count` elements read through `read(i)` into raw little-endian bytes of `dtype`.
 template <typename Read>
 std::vector<std::byte> encodeElements(TypeCode dtype, uint64_t count, Read &&read) {
-    std::vector<std::byte> raw(count * tensor::elementSize(dtype));
+    // float64 is not a Camel tensor storage dtype (elementSize dispatches storage dtypes),
+    // but ONNX initializers may hold it.
+    const size_t elemSize =
+        dtype == TypeCode::Float64 ? sizeof(double) : tensor::elementSize(dtype);
+    std::vector<std::byte> raw(count * elemSize);
     for (uint64_t i = 0; i < count; ++i) {
         const double v = read(i);
         switch (dtype) {
         case TypeCode::Float32: {
             const float f = static_cast<float>(v);
             std::memcpy(raw.data() + i * sizeof(float), &f, sizeof(float));
+        } break;
+        case TypeCode::Float64: {
+            std::memcpy(raw.data() + i * sizeof(double), &v, sizeof(double));
         } break;
         case TypeCode::Int64: {
             const int64_t n = static_cast<int64_t>(v);
@@ -132,6 +147,12 @@ std::optional<std::string> structuralKey(
 } // namespace
 
 ElemType elemTypeOf(TypeCode dtype) {
+    if (dtype == TypeCode::Float64) {
+        // A scalar-only dtype in Camel (tensors store float32), but a first-class ONNX tensor
+        // dtype: the Adam lowering computes the bias-corrected update in float64, exactly like
+        // the runtime kernel.
+        return ElemType::Double;
+    }
     switch (tensor::normalizeTensorDType(dtype)) {
     case TypeCode::Float32:
         return ElemType::Float;
@@ -192,6 +213,30 @@ std::optional<ConstArg> constArgOf(const Value &value) {
         return std::nullopt;
     }
     return tensor::ops::constArgOf(value.slot, value.ty);
+}
+
+Value optimizerStateValue(Value m, Value v, Value t) {
+    type::StructTypeFactory factory;
+    factory.add("m", inferenceTypeOf(m));
+    factory.add("v", inferenceTypeOf(v));
+    factory.add("t", inferenceTypeOf(t));
+    std::vector<Value> fields;
+    fields.reserve(3);
+    fields.push_back(std::move(m));
+    fields.push_back(std::move(v));
+    fields.push_back(std::move(t));
+    return Value::aggregate(factory.build(), std::move(fields));
+}
+
+std::array<Value, 3> optimizerStateParts(const Value &state) {
+    if (!state.isAggregate() || state.fields.size() != 3) {
+        throw ExportError(
+            std::format(
+                "an optimizer state of type '{}' cannot be exported; pass it as an argument of the "
+                "exported function or as the state an nn:adam call returns",
+                !state.isAggregate() && state.ty ? state.ty->toString() : "?"));
+    }
+    return {state.fields[0], state.fields[1], state.fields[2]};
 }
 
 Emitter::Emitter(int64_t opset, const CapabilityTable *capabilities)
@@ -328,10 +373,10 @@ std::string Emitter::operand(const Value &value, std::optional<TypeCode> dtype) 
                 "a '{}' that depends on the model input is used where a tensor is expected",
                 value.camelType->toString()));
     }
-    if (!dtype || !value.dtype || tensor::normalizeTensorDType(*dtype) == *value.dtype) {
+    if (!dtype || !value.dtype || operandTarget(*dtype) == *value.dtype) {
         return value.name;
     }
-    const TypeCode target = tensor::normalizeTensorDType(*dtype);
+    const TypeCode target = operandTarget(*dtype);
     // A cast is valid in the scope that emitted it and in scopes nested inside it.
     for (auto it = scopes_.rbegin(); it != scopes_.rend(); ++it) {
         if (auto found = it->casts.find({value.name, target}); found != it->casts.end()) {
@@ -355,7 +400,7 @@ std::string Emitter::constantOperand(const Value &value, std::optional<TypeCode>
                 "constant of type '{}' cannot be used as a tensor operand",
                 value.ty ? value.ty->toString() : "?"));
     }
-    const TypeCode target  = dtype ? tensor::normalizeTensorDType(*dtype) : *facts.dtype;
+    const TypeCode target  = dtype ? operandTarget(*dtype) : *facts.dtype;
     const std::string hint = value.label.empty() ? "const" : value.label;
 
     if (const TensorObject *t = constantTensor(value)) {

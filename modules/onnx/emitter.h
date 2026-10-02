@@ -38,6 +38,7 @@
 
 #include "camel/core/mm/root_handle.h"
 
+#include <array>
 #include <deque>
 #include <map>
 #include <optional>
@@ -77,6 +78,15 @@ type::Type *inferenceTypeOf(const Value &value);
 
 /// The value as a constant operator argument (scalars, strings, int arrays), when it is one.
 std::optional<tensor::ops::ConstArg> constArgOf(const Value &value);
+
+/// The export-time view of an nn OptimizerState (first and second moment trees plus the step
+/// count) as one aggregate value, so it can flow between graph inputs, the nn:adam lowering,
+/// and graph outputs. The struct type is fabricated for naming (fields m, v, t); the runtime
+/// state object itself is opaque.
+Value optimizerStateValue(Value m, Value v, Value t);
+
+/// The (m, v, t) parts of a value built by optimizerStateValue.
+std::array<Value, 3> optimizerStateParts(const Value &state);
 
 class CapabilityTable;
 

@@ -22,5 +22,6 @@ add_camel_module(
     ${CMAKE_CURRENT_BINARY_DIR}/generated
   EXTRA_LIBS
     tensor_cmo
+    nn_cmo
     nlohmann_json::nlohmann_json
 )

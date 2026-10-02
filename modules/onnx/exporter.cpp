@@ -23,6 +23,7 @@
 
 #include "exporter.h"
 
+#include "../nn/state.h"
 #include "../tensor/dtype.h"
 #include "../tensor/interop.h"
 #include "../tensor/ops/registry.h"
@@ -700,6 +701,26 @@ class InputBinder {
             }
             emitter_.addInput(std::move(inputInfo));
             return {input, tensor::TensorType::get(t->dtype(), shape)};
+        }
+        if (ty->code() == camel::nn::OptimizerStateType::typeCode()) {
+            // An optimizer state flattens to its two moment trees (one input per leaf, named
+            // adam_m_<path> / adam_v_<path> like a parameter tree) plus the step count as a
+            // rank-0 int64 input adam_t.
+            auto *state    = rtdata::fromSlot<camel::nn::OptimizerStateObject *>(example.value);
+            ::Tuple *trees = state->trees();
+            type::TupleType *treesType = state->treesType();
+            auto [m, mType] = bind({trees->get<slot_t>(0), treesType->typeAt(0)}, "adam_m", false);
+            auto [v, vType] = bind({trees->get<slot_t>(1), treesType->typeAt(1)}, "adam_v", false);
+            (void)mType;
+            (void)vType;
+            Value t = Value::symbolicScalar("adam_t", type::Type::Int64());
+            if (!names_.insert("adam_t").second) {
+                throw ExportError(std::string("two inputs are named 'adam_t'"));
+            }
+            emitter_.addInput(valueInfoOf("adam_t", factsOf(t)));
+            return {
+                optimizerStateValue(std::move(m), std::move(v), std::move(t)),
+                camel::nn::OptimizerStateType::Default()};
         }
         if (ty->code() == TypeCode::Struct) {
             auto *structType = static_cast<type::StructType *>(ty);

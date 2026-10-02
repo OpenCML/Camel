@@ -20,9 +20,9 @@
 /*
  * Lowerings of the operators that reverse-mode differentiation emits
  * (tensor:sum_to, tensor:matmul_grad_lhs, nn:conv2d_kernel_grad, ...) and of
- * the tree optimizer nn:sgd, so that a training step exports as one ONNX
- * graph. Most of them decompose into several ONNX nodes. They need the static
- * ranks of their operands, which shape specialization provides.
+ * the tree optimizers nn:sgd and nn:adam, so that a training step exports as
+ * one ONNX graph. Most of them decompose into several ONNX nodes. They need
+ * the static ranks of their operands, which shape specialization provides.
  */
 
 #include "lowering.h"
@@ -341,6 +341,166 @@ Value lowerSgd(const LowerContext &ctx) {
     return sgdTree(e, ctx.arg(0), ctx.arg(1), lr);
 }
 
+std::string int64Const(Emitter &e, int64_t v) {
+    return e.operand(
+        Value::constant(rtdata::toSlot(static_cast<rtdata::Int64>(v)), type::Type::Int64()));
+}
+
+/// A float64 constant operand (the Adam update computes in float64, like the runtime kernel).
+std::string doubleConst(Emitter &e, double v) {
+    return e.operand(
+        Value::constant(rtdata::toSlot(static_cast<rtdata::Float64>(v)), type::Type::Float64()),
+        TypeCode::Float64);
+}
+
+/// The graph values one Adam step applies at every leaf: the hyper-parameters and the bias
+/// corrections 1 - beta^t' (rank-0 float64 tensors broadcast against every leaf shape).
+struct AdamScalars {
+    std::string lr, beta1, beta2, oneMinusBeta1, oneMinusBeta2, eps;
+    std::string correct1, correct2;
+};
+
+/// One leaf triple of an Adam step: the updated parameter and the two carried moments.
+struct AdamUpdate {
+    Value p, m, v;
+};
+
+/// Casts the float64 node `name` (shape `shape`) back to float32, the dtype the parameters,
+/// gradients and moments are carried in.
+Value castToF32(Emitter &e, const std::string &name, const tensor::StaticShape &shape) {
+    const Value f64 = Value::symbolic(name, TypeCode::Float64, shape);
+    return Value::symbolic(e.operand(f64, TypeCode::Float32), TypeCode::Float32, shape);
+}
+
+/// adam on one parameter tree: every tensor p becomes
+/// p - lr * (m'/correct1) / (sqrt(v'/correct2) + eps) with m' = beta1*m + (1-beta1)*g and
+/// v' = beta2*v + (1-beta2)*g^2. The runtime kernel computes each leaf in float64 and casts the
+/// results to float32; the graph mirrors it (f32 Pow would misround the bias corrections —
+/// 1 - beta2^t amplifies the beta2 rounding by the exponent).
+AdamUpdate adamTree(
+    Emitter &e, const Value &p, const Value &g, const Value &m, const Value &v,
+    const AdamScalars &s) {
+    const bool mismatched = p.isAggregate() != g.isAggregate() ||
+                            p.isAggregate() != m.isAggregate() ||
+                            p.isAggregate() != v.isAggregate() ||
+                            (p.isAggregate() && (p.fields.size() != g.fields.size() ||
+                                                 p.fields.size() != m.fields.size() ||
+                                                 p.fields.size() != v.fields.size()));
+    if (mismatched) {
+        throw ExportError("nn:adam: the parameters, gradients and moments differ in structure");
+    }
+    if (p.isAggregate()) {
+        std::vector<Value> ps, ms, vs;
+        ps.reserve(p.fields.size());
+        ms.reserve(p.fields.size());
+        vs.reserve(p.fields.size());
+        for (size_t i = 0; i < p.fields.size(); ++i) {
+            AdamUpdate u = adamTree(e, p.fields[i], g.fields[i], m.fields[i], v.fields[i], s);
+            ps.push_back(std::move(u.p));
+            ms.push_back(std::move(u.m));
+            vs.push_back(std::move(u.v));
+        }
+        return {
+            Value::aggregate(p.camelType, std::move(ps)),
+            Value::aggregate(m.camelType, std::move(ms)),
+            Value::aggregate(v.camelType, std::move(vs))};
+    }
+    const bool scalar =
+        p.isConstant() ? !tensor::asTensorType(p.ty) : p.form == Value::Form::Scalar;
+    if (scalar) {
+        throw ExportError("nn:adam: a non-tensor leaf of the parameters cannot be exported");
+    }
+    const std::string pp = e.operand(p, TypeCode::Float64);
+    const std::string gg = e.operand(g, TypeCode::Float64);
+    const std::string mm = e.operand(m, TypeCode::Float64);
+    const std::string vv = e.operand(v, TypeCode::Float64);
+    const std::string nm =
+        e.node("Add", {e.node("Mul", {s.beta1, mm}), e.node("Mul", {s.oneMinusBeta1, gg})});
+    const std::string nv = e.node(
+        "Add",
+        {e.node("Mul", {s.beta2, vv}), e.node("Mul", {s.oneMinusBeta2, e.node("Mul", {gg, gg})})});
+    const std::string denom =
+        e.node("Add", {e.node("Sqrt", {e.node("Div", {nv, s.correct2})}), s.eps});
+    const std::string np = e.node(
+        "Sub",
+        {pp, e.node("Mul", {s.lr, e.node("Div", {e.node("Div", {nm, s.correct1}), denom})})});
+    const TensorFacts facts = factsOf(p);
+    if (!facts.shape) {
+        throw ExportError("nn:adam: the shape of a parameter leaf is not known statically");
+    }
+    return {
+        castToF32(e, np, *facts.shape),
+        castToF32(e, nm, *facts.shape),
+        castToF32(e, nv, *facts.shape)};
+}
+
+// adam(params, grads, state, lr, beta1 = 0.9, beta2 = 0.999, eps = 1e-8): the optimizer state
+// (m, v, step t) travels as extra graph inputs and outputs; t' = t + 1 is computed in the graph
+// (Add) and the bias corrections as Pow/Sub on it — the same pure single-step pattern as nn:sgd.
+Value lowerAdam(const LowerContext &ctx) {
+    Emitter &e         = ctx.emitter();
+    const double beta1 = ctx.constNumber(4, 0.9);
+    const double beta2 = ctx.constNumber(5, 0.999);
+    AdamScalars s{
+        .lr            = doubleConst(e, ctx.constNumber(3, 0.0)),
+        .beta1         = doubleConst(e, beta1),
+        .beta2         = doubleConst(e, beta2),
+        .oneMinusBeta1 = doubleConst(e, 1.0 - beta1),
+        .oneMinusBeta2 = doubleConst(e, 1.0 - beta2),
+        .eps           = doubleConst(e, ctx.constNumber(6, 1e-8))};
+    const auto [m, v, t] = optimizerStateParts(ctx.arg(2));
+    Value tNext          = Value::symbolicScalar(
+        e.node("Add", {e.operand(t, TypeCode::Int64), int64Const(e, 1)}),
+        type::Type::Int64());
+    const std::string tf   = e.operand(tNext, TypeCode::Float64);
+    s.correct1             = e.node("Sub", {doubleConst(e, 1.0), e.node("Pow", {s.beta1, tf})});
+    s.correct2             = e.node("Sub", {doubleConst(e, 1.0), e.node("Pow", {s.beta2, tf})});
+    AdamUpdate u           = adamTree(e, ctx.arg(0), ctx.arg(1), m, v, s);
+    Value state            = optimizerStateValue(std::move(u.m), std::move(u.v), std::move(tNext));
+    type::Type *resultType = ctx.resultType();
+    if (!resultType || resultType->code() != TypeCode::Tuple) {
+        resultType = type::TupleType::create({inferenceTypeOf(u.p), state.camelType});
+    }
+    return Value::aggregate(resultType, {std::move(u.p), std::move(state)});
+}
+
+/// A zero tree shaped like `p`: the moments of a fresh Adam state.
+Value zeroTree(Emitter &e, const Value &p) {
+    if (p.isAggregate()) {
+        std::vector<Value> fields;
+        fields.reserve(p.fields.size());
+        for (const Value &field : p.fields) {
+            fields.push_back(zeroTree(e, field));
+        }
+        return Value::aggregate(p.camelType, std::move(fields));
+    }
+    const bool scalar =
+        p.isConstant() ? !tensor::asTensorType(p.ty) : p.form == Value::Form::Scalar;
+    if (scalar) {
+        type::Type *ty = p.isConstant() ? p.ty : p.camelType;
+        return Value::constant(
+            ty->code() == TypeCode::Float32 ? rtdata::toSlot(static_cast<float>(0))
+                                            : rtdata::toSlot(static_cast<rtdata::Float64>(0)),
+            ty);
+    }
+    const TensorFacts facts = factsOf(p);
+    const std::string zero  = e.operand(
+        Value::constant(rtdata::toSlot(static_cast<rtdata::Float64>(0)), type::Type::Float64()),
+        facts.dtype);
+    const std::string shape = facts.shape && fullyKnown(*facts.shape)
+                                  ? e.int64s(*facts.shape)
+                                  : e.node("Shape", {e.operand(p)});
+    return Value::symbolic(e.node("Expand", {zero, shape}), facts.dtype, facts.shape);
+}
+
+// adam_state(params): a state of zero moments and step 0, built in the graph. (With constant
+// parameters the state folds away at simplification instead of reaching this lowering.)
+Value lowerAdamState(const LowerContext &ctx) {
+    Emitter &e = ctx.emitter();
+    Value t = Value::constant(rtdata::toSlot(static_cast<rtdata::Int64>(0)), type::Type::Int64());
+    return optimizerStateValue(zeroTree(e, ctx.arg(0)), zeroTree(e, ctx.arg(0)), std::move(t));
+}
+
 /// The static extent of a spatial axis, or an export error naming the operator.
 int64_t staticExtent(
     const tensor::StaticShape &shape, size_t axis, std::string_view uri, std::string_view what) {
@@ -490,6 +650,8 @@ void addGradientLowerings(const std::function<void(std::string, LowerFn, int64_t
     add("tensor:cast_like", lowerCastLike, 1);
     add("tensor:permute_inverse", lowerPermuteInverse, 1);
     add("nn:sgd", lowerSgd, 1);
+    add("nn:adam", lowerAdam, 7);
+    add("nn:adam_state", lowerAdamState, 8);
     add("nn:conv2d_input_grad", lowerConv2dInputGrad, 1);
     add("nn:conv2d_kernel_grad", lowerConv2dKernelGrad, 10);
     add("nn:conv2d_bias_grad", lowerConv2dBiasGrad, 1);
