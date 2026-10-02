@@ -391,6 +391,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 
 [[tests]]
+name = "resnetbn_train_step_export"
+desc = "T4: the literal ResNet-18 training step (20 training-mode batch_norms, running statistics as graph I/O) exports, passes onnx.checker(full_check), and matches Camel native execution on every one of the 123 outputs on ONNX Runtime (benchmarks/train.py --check-onnx)."
+kind = "behavior"
+tool = "python"
+case = "../../../../benchmarks/train.py"
+args = ["${case}", "--check-onnx", "--models", "resnetbn"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime, torch"]
+expect_exit = 0
+expect_stdout_contains = ["onnx.checker ok", "onnx training-step check: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+
+[[tests]]
 name = "ort_dynamic_batch"
 desc = "One model exported with a dynamic batch axis runs on ONNX Runtime at batch sizes 1, 3 and 7 and matches Camel's own output at each."
 kind = "behavior"
