@@ -7,4 +7,11 @@ results/*.csv
 results/*.log
 results/*/
 !results/smoke.csv
+# Environment sidecars, generated reports and one-off measurement scripts
+results/*.meta.json
+results/report_*.md
+results/report_*.tex
+results/measure_export.py
+results/make_train_export_tables.py
+with_msvc.bat
 __pycache__/
