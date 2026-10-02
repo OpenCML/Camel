@@ -215,6 +215,34 @@ assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops
 timeout_ms = 6000
 
 [[tests]]
+name = "export_train_step_branch"
+desc = "A training step whose loss takes a data-dependent branch (if s > 1.0) exports as one standard graph: value_and_grad differentiates through the branch and each branch arm (loss value and pullback result) becomes a standard If."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_branch.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inputs: ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
 name = "export_dynamic_recursion"
 desc = "Recursion whose depth depends on the input cannot unroll; the call left after simplification is reported at its source position."
 kind = "behavior"
