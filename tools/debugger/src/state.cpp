@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Apr. 01, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -62,6 +62,9 @@ static std::mutex g_tasksMutex;
 static std::string g_foregroundTaskId;
 static std::mutex g_foregroundMutex;
 
+/// 逐 pass GIR 快照（仅 worker 跑脚本期间写入；父进程恒为空）。
+static PassGraphStore g_passGraphStore;
+
 /// 父进程按任务端口缓冲子进程管道输出，与父进程自身 Logger 分离，供 GET /api/log?target= 使用。
 static constexpr size_t kTaskLogMaxLines = 2000;
 static std::unordered_map<int, std::deque<std::string>> g_taskLogBuffers;
@@ -75,6 +78,7 @@ void setVerbose(bool v) { g_verbose = v; }
 std::string &getExePath() { return g_exePath; }
 void setExePath(const std::string &path) { g_exePath = path; }
 DebuggerServer &getServer() { return g_server; }
+PassGraphStore &getPassGraphStore() { return g_passGraphStore; }
 
 void setLogFilePath(const std::string &path) {
     // 先移除已有文件流，再按新 path 注册，避免重复注册或泄漏 handle。

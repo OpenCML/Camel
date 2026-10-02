@@ -47,6 +47,7 @@ namespace mm = camel::core::mm;
 #include <cstdlib>
 #include <deque>
 #include <filesystem>
+#include <format>
 #include <httplib.h>
 #include <iostream>
 #include <mutex>
@@ -914,6 +915,68 @@ void DebuggerServer::httpServerLoop() {
                 j["error"] = e.what();
                 res.set_content(j.dump(), "application/json");
             }
+        });
+
+    svr.Get(
+        "/api/pass-graphs",
+        [tryForwardToTarget,
+         requireNoTasksForLocal,
+         requireWorkerForLocal](const httplib::Request &req, httplib::Response &res) {
+            if (tryForwardToTarget(req, res) != 0)
+                return;
+            if (requireNoTasksForLocal(res))
+                return;
+            if (requireWorkerForLocal(res))
+                return;
+            auto &store = getPassGraphStore();
+            json j;
+            j["graphs"] = json::array();
+            std::lock_guard<std::mutex> lock(store.mutex);
+            for (const auto &entry : store.entries) {
+                json g;
+                g["index"]    = entry.index;
+                g["pass"]     = entry.pass.empty() ? json(nullptr) : json(entry.pass);
+                g["consumed"] = entry.consumed;
+                j["graphs"].push_back(std::move(g));
+            }
+            res.set_content(j.dump(), "application/json");
+        });
+
+    svr.Get(
+        "/api/pass-graph",
+        [tryForwardToTarget,
+         requireNoTasksForLocal,
+         requireWorkerForLocal](const httplib::Request &req, httplib::Response &res) {
+            if (tryForwardToTarget(req, res) != 0)
+                return;
+            if (requireNoTasksForLocal(res))
+                return;
+            if (requireWorkerForLocal(res))
+                return;
+            std::string indexParam = req.get_param_value("index");
+            if (indexParam.empty()) {
+                res.status = 400;
+                res.set_content("{\"error\":\"Missing index. Use ?index=N.\"}", "application/json");
+                return;
+            }
+            const size_t index = std::strtoull(indexParam.c_str(), nullptr, 10);
+            auto &store        = getPassGraphStore();
+            std::lock_guard<std::mutex> lock(store.mutex);
+            for (const auto &entry : store.entries) {
+                if (entry.index != index)
+                    continue;
+                json j;
+                j["index"]    = entry.index;
+                j["pass"]     = entry.pass.empty() ? json(nullptr) : json(entry.pass);
+                j["consumed"] = entry.consumed;
+                j["dot"]      = entry.dot;
+                res.set_content(j.dump(), "application/json");
+                return;
+            }
+            res.status = 400;
+            res.set_content(
+                std::format("{{\"error\":\"No pass graph snapshot at index {}.\"}}", index),
+                "application/json");
         });
 
     svr.Get(

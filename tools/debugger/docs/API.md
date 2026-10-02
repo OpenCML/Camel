@@ -247,6 +247,28 @@
 
 ---
 
+### 3.24 GET /api/pass-graphs
+
+- **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
+- **请求**：可选 `?target=`。无需其他参数。
+- **响应**：`{ "graphs": [ { "index": 0, "pass": null, "consumed": false }, { "index": 1, "pass": "std::inline", "consumed": false }, ... ] }`。
+  - `index` 为快照序号：`0` 是 pass 管线执行前的入口图（`pass` 为 `null`）；`index >= 1` 按执行顺序对应各 pass 的输出图（`pass` 为请求管线中的 pass 名，如 `"std::inline"`）。
+  - `consumed` 为 `true` 表示该快照的图被下一个 pass 消费（即管线在该 pass 终止，其后无更多快照）。消费图的 pass 本身不再有快照条目。
+  - 消费型 pass（如 `std::nodevm`/`std::default`）执行后不产生快照条目；`std::default` fallback 管线产生非空输出的 pass 也会按序编号（编号跨主/fallback 管线单调递增，不重置）。
+  - 该任务尚未 run 过（或入口图无物化节点）时返回 `{ "graphs": [] }`。
+- **错误**：400（多任务且未指定 target）。
+
+---
+
+### 3.25 GET /api/pass-graph
+
+- **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
+- **请求**：必选 `?index=N`（与 3.24 的 `index` 对应）。
+- **响应**：`{ "index": N, "pass": "std::inline" | null, "consumed": false, "dot": "digraph GraphIR {...}" }`。`dot` 为 rgir 风格可读 DOT（仅 `label`/`type` 属性，节点行带 `origin=<id>`、`span="sl:sc-el:ec"`、`srcfile="..."`，同 `std::rgir` 输出），供 Graphviz 渲染或与 gir-json 的 `originId` 对照。
+- **错误**：400（缺 `index` 或该序号无快照，body 含 `error`）。
+
+---
+
 ## 4. 状态聚合
 
 当客户端请求 **GET /api/state** 时，父进程在返回前会对 `tasks[]` 中每个 **taskState !== "exited"** 的任务，向该任务端口请求 GET /api/step-paused、GET /api/last-alloc 与 GET /api/state，并将结果合并进对应 task 对象：
