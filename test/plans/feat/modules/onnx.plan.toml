@@ -314,6 +314,83 @@ assert(model.initializers.length <= 8, `weights must be inputs, not initializers
 timeout_ms = 6000
 
 [[tests]]
+name = "export_train_step_branch_scalar"
+desc = "E13/T5: a branched training step whose predicate is a dead intermediate (mean(abs(h)), used only as the condition) exports like the known-good case — scalar branch arms are the exportable region of the Level-2 map."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_branch_scalar.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_scalar.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch_scalar.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inputs: ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_branch_tensor"
+desc = "E13/T5: a branched training step with TENSOR arms is the current Level-2 boundary — the differentiated branch captures the input-dependent predicate in a closure and the exporter reports the fold failure at the branch statement."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_branch_tensor.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_tensor.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes('a value that depends on the model input is stored in an array or a closure'), 'missing closure-capture detail')
+assert(/at [^ ]*export_train_step_branch_tensor[.]cml:25:11[)]/.test(text), 'missing source position of the branch')
+assert(!text.includes('unreachable'), 'export must fail before the next statement')
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_gated_gru_forward"
+desc = "E13/T5: a data-dependent branch inside a statically unrolled recurrence (GRU cell update gated on mean(|x_t|), T = 3) exports as a binary decision tree of standard If operators (2^3 - 1 = 7 counting nested subgraphs)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_gated_gru_forward.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_gated_gru_forward.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const fs = await import('fs')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const file = path.join(input.repo_root, 'tmp/test/onnx/export_gated_gru_forward.onnx')
+const model = readOnnxModel(file)
+assert(model.ops.join() === 'Slice,Reshape,Abs,ReduceMean,Greater,If,MatMul,Add,Mul,ReduceMean,Identity', `unexpected top-level ops ${model.ops}`)
+assert(model.inputs.join() === 'w_ir,w_iz,w_in,w_hr,w_hz,w_hn,b_ir,b_iz,b_in,b_hr,b_hz,b_hn,fc_w,fc_b,input1', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output', `unexpected outputs ${model.outputs}`)
+// nested decision tree: count every NodeProto op_type (field 4 -> key 0x22, length 2) equal to "If"
+const buf = fs.readFileSync(file)
+const mark = Buffer.from([0x22, 0x02, 0x49, 0x66])
+let ifs = 0, at = 0
+while ((at = buf.indexOf(mark, at)) !== -1) { ifs += 1; at += 1 }
+assert(ifs === 7, `expected 2^3 - 1 = 7 If nodes in the decision tree, got ${ifs}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
 name = "export_dynamic_recursion"
 desc = "Recursion whose depth depends on the input cannot unroll; the call left after simplification is reported at its source position."
 kind = "behavior"
