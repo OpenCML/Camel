@@ -1,0 +1,101 @@
+/**
+ * Camel implementation of the `resnet` benchmark (E6 scale probe, benchmarks/README.md):
+ * ResNet-18-depth residual CNN without batch_norm — conv3x3(3->64) stem, eight basic
+ * blocks 64->128->256->512 (stride-2 first convs with 1x1 shortcuts), global average
+ * pool (two chained axis means), linear 512->10. x[16,3,32,32].
+ */
+module resnet
+
+import { Tensor, relu, mean, flatten } from tensor
+import { grad, value_and_grad } from autodiff
+import { conv2d, sgd, save_params } from nn
+import { get_env } from sys
+import { export_model } from onnx
+import { weight, bench_input, run_benchmark, run_training } from camel_bench
+
+type Resnet = {
+    stem_w: Tensor, stem_b: Tensor,
+    b11_c1_w: Tensor, b11_c1_b: Tensor, b11_c2_w: Tensor, b11_c2_b: Tensor,
+    b12_c1_w: Tensor, b12_c1_b: Tensor, b12_c2_w: Tensor, b12_c2_b: Tensor,
+    b21_c1_w: Tensor, b21_c1_b: Tensor, b21_c2_w: Tensor, b21_c2_b: Tensor, b21_ds_w: Tensor, b21_ds_b: Tensor,
+    b22_c1_w: Tensor, b22_c1_b: Tensor, b22_c2_w: Tensor, b22_c2_b: Tensor,
+    b31_c1_w: Tensor, b31_c1_b: Tensor, b31_c2_w: Tensor, b31_c2_b: Tensor, b31_ds_w: Tensor, b31_ds_b: Tensor,
+    b32_c1_w: Tensor, b32_c1_b: Tensor, b32_c2_w: Tensor, b32_c2_b: Tensor,
+    b41_c1_w: Tensor, b41_c1_b: Tensor, b41_c2_w: Tensor, b41_c2_b: Tensor, b41_ds_w: Tensor, b41_ds_b: Tensor,
+    b42_c1_w: Tensor, b42_c1_b: Tensor, b42_c2_w: Tensor, b42_c2_b: Tensor,
+    fc_w: Tensor, fc_b: Tensor
+}
+
+func block(x: Tensor, c1w: Tensor, c1b: Tensor, c2w: Tensor, c2b: Tensor): Tensor {
+    let h = relu(conv2d(x, c1w, c1b, 1, 1))
+    return relu(conv2d(h, c2w, c2b, 1, 1) + x)
+}
+
+func block_ds(x: Tensor, c1w: Tensor, c1b: Tensor, c2w: Tensor, c2b: Tensor, dsw: Tensor, dsb: Tensor): Tensor {
+    let h = relu(conv2d(x, c1w, c1b, 2, 1))
+    return relu(conv2d(h, c2w, c2b, 1, 1) + conv2d(x, dsw, dsb, 2, 0))
+}
+
+with <m: Resnet>
+func forward(x: Tensor): Tensor {
+    let h0 = relu(conv2d(x, m.stem_w, m.stem_b, 1, 1))
+    let h1 = block(block(h0, m.b11_c1_w, m.b11_c1_b, m.b11_c2_w, m.b11_c2_b), m.b12_c1_w, m.b12_c1_b, m.b12_c2_w, m.b12_c2_b)
+    let h2 = block(block_ds(h1, m.b21_c1_w, m.b21_c1_b, m.b21_c2_w, m.b21_c2_b, m.b21_ds_w, m.b21_ds_b), m.b22_c1_w, m.b22_c1_b, m.b22_c2_w, m.b22_c2_b)
+    let h3 = block(block_ds(h2, m.b31_c1_w, m.b31_c1_b, m.b31_c2_w, m.b31_c2_b, m.b31_ds_w, m.b31_ds_b), m.b32_c1_w, m.b32_c1_b, m.b32_c2_w, m.b32_c2_b)
+    let h4 = block(block_ds(h3, m.b41_c1_w, m.b41_c1_b, m.b41_c2_w, m.b41_c2_b, m.b41_ds_w, m.b41_ds_b), m.b42_c1_w, m.b42_c1_b, m.b42_c2_w, m.b42_c2_b)
+    let g = flatten(mean(mean(h4, 2), 2))
+    return g @ m.fc_w + m.fc_b
+}
+
+// Training workload (train.py): loss mean(y^2), one SGD step with lr 0.01.
+with <m: Resnet>
+func loss(x: Tensor): float {
+    let y = forward<m>(x)
+    return mean(y * y)
+}
+
+func train_step(m: Resnet, x: Tensor): float sync {
+    let vg = value_and_grad(loss)<m>(x)
+    let next = sgd(m, vg.1, 0.01)
+    return vg.0
+}
+
+/// The training step as a function of the parameters: the loss and the updated parameters.
+func step(m: Resnet, x: Tensor): (float, Resnet) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+/// Exports `step` to ONNX: the parameters and the input become graph inputs.
+func export_step(m: Resnet, path: string): int sync {
+    export_model(step, (m, bench_input()), path)
+    return 0
+}
+
+func dump_grads(m: Resnet, x: Tensor, dir: string): int sync {
+    save_params(grad(loss)<m>(x), dir)
+    return 0
+}
+
+func main(): int sync {
+    let m = {
+        stem_w: weight('stem_w'), stem_b: weight('stem_b'),
+        b11_c1_w: weight('b11_c1_w'), b11_c1_b: weight('b11_c1_b'), b11_c2_w: weight('b11_c2_w'), b11_c2_b: weight('b11_c2_b'),
+        b12_c1_w: weight('b12_c1_w'), b12_c1_b: weight('b12_c1_b'), b12_c2_w: weight('b12_c2_w'), b12_c2_b: weight('b12_c2_b'),
+        b21_c1_w: weight('b21_c1_w'), b21_c1_b: weight('b21_c1_b'), b21_c2_w: weight('b21_c2_w'), b21_c2_b: weight('b21_c2_b'),
+        b21_ds_w: weight('b21_ds_w'), b21_ds_b: weight('b21_ds_b'),
+        b22_c1_w: weight('b22_c1_w'), b22_c1_b: weight('b22_c1_b'), b22_c2_w: weight('b22_c2_w'), b22_c2_b: weight('b22_c2_b'),
+        b31_c1_w: weight('b31_c1_w'), b31_c1_b: weight('b31_c1_b'), b31_c2_w: weight('b31_c2_w'), b31_c2_b: weight('b31_c2_b'),
+        b31_ds_w: weight('b31_ds_w'), b31_ds_b: weight('b31_ds_b'),
+        b32_c1_w: weight('b32_c1_w'), b32_c1_b: weight('b32_c1_b'), b32_c2_w: weight('b32_c2_w'), b32_c2_b: weight('b32_c2_b'),
+        b41_c1_w: weight('b41_c1_w'), b41_c1_b: weight('b41_c1_b'), b41_c2_w: weight('b41_c2_w'), b41_c2_b: weight('b41_c2_b'),
+        b41_ds_w: weight('b41_ds_w'), b41_ds_b: weight('b41_ds_b'),
+        b42_c1_w: weight('b42_c1_w'), b42_c1_b: weight('b42_c1_b'), b42_c2_w: weight('b42_c2_w'), b42_c2_b: weight('b42_c2_b'),
+        fc_w: weight('fc_w'), fc_b: weight('fc_b')
+    }
+    let workload = get_env('CAMEL_BENCH_WORKLOAD')
+    return if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT')) else if workload == 'train' then run_training(
+        (x: Tensor): float => { return train_step(m, x) },
+        (x: Tensor, dir: string): int => { return dump_grads(m, x, dir) }
+    ) else run_benchmark((x: Tensor): Tensor => forward<m>(x))
+}

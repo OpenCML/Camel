@@ -1,0 +1,75 @@
+/**
+ * Camel implementation of the `lenet` benchmark model (benchmarks/README.md):
+ * Conv(1->6,k5,pad2) -> ReLU -> MaxPool(2) -> Conv(6->16,k5) -> ReLU -> MaxPool(2)
+ * -> Flatten -> Linear(400,120) -> ReLU -> Linear(120,84) -> ReLU -> Linear(84,10).
+ */
+module lenet_big
+
+import { Tensor, relu, flatten, mean } from tensor
+import { grad, value_and_grad } from autodiff
+import { conv2d, max_pool2d, sgd, save_params } from nn
+import { get_env } from sys
+import { export_model } from onnx
+import { weight, bench_input, run_benchmark, run_training } from camel_bench
+
+type LeNet = {
+    conv1_w: Tensor, conv1_b: Tensor,
+    conv2_w: Tensor, conv2_b: Tensor,
+    fc1_w: Tensor, fc1_b: Tensor,
+    fc2_w: Tensor, fc2_b: Tensor,
+    fc3_w: Tensor, fc3_b: Tensor
+}
+
+with <m: LeNet>
+func forward(x: Tensor): Tensor {
+    let c1 = max_pool2d(relu(conv2d(x, m.conv1_w, m.conv1_b, 1, 2)), 2)
+    let c2 = max_pool2d(relu(conv2d(c1, m.conv2_w, m.conv2_b)), 2)
+    let f1 = relu(flatten(c2) @ m.fc1_w + m.fc1_b)
+    let f2 = relu(f1 @ m.fc2_w + m.fc2_b)
+    return f2 @ m.fc3_w + m.fc3_b
+}
+
+// Training workload (train.py): loss mean(y^2), one SGD step with lr 0.01.
+with <m: LeNet>
+func loss(x: Tensor): float {
+    let y = forward<m>(x)
+    return mean(y * y)
+}
+
+func train_step(m: LeNet, x: Tensor): float sync {
+    let vg = value_and_grad(loss)<m>(x)
+    let next = sgd(m, vg.1, 0.01)
+    return vg.0
+}
+
+/// The training step as a function of the parameters: the loss and the updated parameters.
+func step(m: LeNet, x: Tensor): (float, LeNet) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+/// Exports `step` to ONNX: the parameters and the input become graph inputs.
+func export_step(m: LeNet, path: string): int sync {
+    export_model(step, (m, bench_input()), path)
+    return 0
+}
+
+func dump_grads(m: LeNet, x: Tensor, dir: string): int sync {
+    save_params(grad(loss)<m>(x), dir)
+    return 0
+}
+
+func main(): int sync {
+    let m = {
+        conv1_w: weight('conv1_w'), conv1_b: weight('conv1_b'),
+        conv2_w: weight('conv2_w'), conv2_b: weight('conv2_b'),
+        fc1_w: weight('fc1_w'), fc1_b: weight('fc1_b'),
+        fc2_w: weight('fc2_w'), fc2_b: weight('fc2_b'),
+        fc3_w: weight('fc3_w'), fc3_b: weight('fc3_b')
+    }
+    let workload = get_env('CAMEL_BENCH_WORKLOAD')
+    return if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT')) else if workload == 'train' then run_training(
+        (x: Tensor): float => { return train_step(m, x) },
+        (x: Tensor, dir: string): int => { return dump_grads(m, x, dir) }
+    ) else run_benchmark((x: Tensor): Tensor => forward<m>(x))
+}

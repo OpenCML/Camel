@@ -53,7 +53,7 @@ from common.configs import camel_binary, camel_model  # noqa: E402
 from run import _write_csv  # noqa: E402
 from common.weights import load  # noqa: E402
 
-MODELS = ["mlp", "gru", "transformer"]
+MODELS = ["mlp", "gru", "transformer", "lenet"]
 LR = 0.01
 
 # Camel configurations of the training workload: passes after `camel <model.cml>`.
@@ -175,6 +175,14 @@ def check_onnx(models: List[str], rtol: float) -> bool:
     import onnx
     import onnxruntime as ort
 
+    def _harness_key(weights: dict, graph_name: str) -> str:
+        """Graph input/output names flatten nested parameter paths with '_' while the
+        harness and Camel's gradient dump use '.' — map back (e.g. transformer4)."""
+        if graph_name in weights:
+            return graph_name
+        alt = graph_name.replace("_", ".", 1)
+        return alt if alt in weights else graph_name
+
     ok = True
     for model in models:
         print(f"== {model} (training step exported to ONNX)")
@@ -187,7 +195,7 @@ def check_onnx(models: List[str], rtol: float) -> bool:
             proto = onnx.load(str(path))
             onnx.checker.check_model(proto, full_check=True)
             session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
-            feeds = {i.name: (x if i.name == "input1" else weights[i.name]) for i in session.get_inputs()}
+            feeds = {i.name: (x if i.name == "input1" else weights[_harness_key(weights, i.name)]) for i in session.get_inputs()}
             outputs = dict(zip([o.name for o in session.get_outputs()], session.run(None, feeds)))
         print(f"  exported in {export_s:.2f} s: {len(proto.graph.node)} nodes, onnx.checker ok")
         ref_loss = camel_loss(model)
@@ -199,6 +207,8 @@ def check_onnx(models: List[str], rtol: float) -> bool:
         grads = camel_gradients(model)
         for name in sorted(weights):
             got = outputs.get(f"output_1_{name}")
+            if got is None:  # exporter flattens '.' to '_' in output names (nested params)
+                got = outputs.get(f"output_1_{name.replace('.', '_', 1)}")
             if got is None:
                 print(f"  {name:12s} MISSING in the exported step's outputs")
                 ok = False
