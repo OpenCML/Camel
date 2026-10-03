@@ -341,18 +341,72 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_train_step_branch_tensor"
-desc = "E13/T5: a branched training step with TENSOR arms is the current Level-2 boundary — the differentiated branch captures the input-dependent predicate in a closure and the exporter reports the fold failure at the branch statement."
+desc = "E13/T5 (fixed): a branched training step with TENSOR arms exports — the branched-call split calls each arm's pullback with the original arguments (the cotangent may be computed after the branch JOIN), the captures are lambda-lifted to trailing parameters, and the graph gets one If for the branch value and one for the pullback result."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_branch_tensor.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_tensor.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch_tensor.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inputs: ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+assert(!model.initializers.some((n) => /^(w1|b1|w2|b2)$/.test(n)), `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_branch_disjoint"
+desc = "E13/T5 (fixed): a branched training step whose arms use DISJOINT parameter subsets exports. Every arm pullback yields a full gradient struct, so the branch JOIN is aggregate-typed and the exporter emits one multi-output If for it (plus one If for the branch value)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_branch_disjoint.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_disjoint.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch_disjoint.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,w3,b3,wo,bo,we,be,input1', `weights must be graph inputs: ${model.inputs}`)
+assert(model.outputs.length === 11, `loss and 10 updated weights must be outputs: ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('If') === 3, `expected an If per branched value (loss, pullback pieces), got ${model.ops}`)
+assert(!model.initializers.some((n) => /^(w1|b1|w2|b2|w3|b3|wo|bo|we|be)$/.test(n)), `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_gated_gru_step"
+desc = "E13/T5 boundary: a branched training step of a recurrent network (gated GRU) still cannot be exported — inside the differentiated decision tree the loop counter loses its staticness and the recursion cannot be unrolled. Locks the current boundary of the Level-2 map."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_gated_gru_step.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_gated_gru_step.onnx"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('a value that depends on the model input is stored in an array or a closure'), 'missing closure-capture detail')
-assert(/at [^ ]*export_train_step_branch_tensor[.]cml:25:11[)]/.test(text), 'missing source position of the branch')
+assert(text.includes('recursion whose depth depends on the model input cannot be exported'), 'missing recursion detail')
+assert(/at [^ ]*export_gated_gru_step[.]cml:42:38[)]/.test(text), 'missing source position of the recursive call')
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """

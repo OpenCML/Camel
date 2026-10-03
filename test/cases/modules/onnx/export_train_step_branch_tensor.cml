@@ -1,11 +1,11 @@
 /**
- * Level-2 boundary (E13/T5): a training step whose loss takes a data-dependent
- * branch with TENSOR arms currently cannot be exported. Differentiating the
- * branch captures the input-dependent predicate in a pullback closure, and the
- * exporter folds input-dependent values only out of tuples/structs, not
- * closures — the fold failure is reported at the predicate's source position.
- * This case locks the boundary: when the gap is fixed, flip it to a positive
- * export case.
+ * Level-2 (E13/T5, fixed): a training step whose loss takes a data-dependent
+ * branch with TENSOR arms exports. Differentiating the branch captures the
+ * input-dependent arm value in a pullback closure, and the pullback is called
+ * with a cotangent computed after the branch JOIN; the branched-call split
+ * (export-only) calls each arm's closure with the original arguments and
+ * lifts the captures to trailing parameters, producing one If for the branch
+ * value and one for the pullback result.
  */
 module export_train_step_branch_tensor
 
@@ -40,6 +40,6 @@ func main(): int sync {
     }
     let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
     export_model(step, (m, x), get_env('ONNX_OUT'))
-    println('unreachable')
+    println('exported')
     return 0
 }
