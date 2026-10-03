@@ -1,0 +1,44 @@
+/**
+ * E10 follow-up: differentiating a named function whose body CALLS grad —
+ * the statically-resolvable form of second-order differentiation.
+ */
+module e10_wrap
+
+import { grad } from autodiff
+import { Tensor, relu, mean, reshape } from tensor
+
+func branchy(x: float): float {
+    return if x > 0.0 then x * x * x else x * x
+}
+
+func df(x: float): float {
+    return grad(branchy)(x)
+}
+
+func fwd(w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor, x: Tensor): Tensor {
+    let h = relu(x @ w1 + b1)
+    return h @ w2 + b2
+}
+
+with <t: float>
+func loss_s(): float {
+    let w1 = reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3])
+    let b1 = reshape([0.1, 0.0, -0.1], [3])
+    let w2 = reshape([1.0, -1.0, 0.5], [3, 1])
+    let b2 = reshape([0.2], [1])
+    let x = reshape([1.0, 2.0], [1, 2])
+    let y = fwd(w1, b1, w2, b2, x * t)
+    return mean(y * y)
+}
+
+with <t: float>
+func dloss_s(): float {
+    return grad(loss_s)<t>()
+}
+
+func main(): int sync {
+    let d2_branch = grad(df)(2.0)
+    let d2_mlp = grad(dloss_s)<1.0>()
+    'd2_branch={} d2_mlp={}'->format<d2_branch, d2_mlp>->println
+    return 0
+}

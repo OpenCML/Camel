@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,6 +33,7 @@
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/struct.h"
 
 #include <cstring>
 #include <format>
@@ -59,16 +60,30 @@ const TensorObject *constantTensor(const Value &value) {
     return rtdata::fromSlot<TensorObject *>(value.slot);
 }
 
+/// The ONNX element dtype an operand of Camel dtype `dtype` takes: float64 survives (a
+/// scalar-only dtype in Camel but a real ONNX tensor dtype); the rest normalizes to the
+/// tensor storage dtypes (float32, int64, bool).
+TypeCode operandTarget(TypeCode dtype) {
+    return dtype == TypeCode::Float64 ? TypeCode::Float64 : tensor::normalizeTensorDType(dtype);
+}
+
 /// Encodes `count` elements read through `read(i)` into raw little-endian bytes of `dtype`.
 template <typename Read>
 std::vector<std::byte> encodeElements(TypeCode dtype, uint64_t count, Read &&read) {
-    std::vector<std::byte> raw(count * tensor::elementSize(dtype));
+    // float64 is not a Camel tensor storage dtype (elementSize dispatches storage dtypes),
+    // but ONNX initializers may hold it.
+    const size_t elemSize =
+        dtype == TypeCode::Float64 ? sizeof(double) : tensor::elementSize(dtype);
+    std::vector<std::byte> raw(count * elemSize);
     for (uint64_t i = 0; i < count; ++i) {
         const double v = read(i);
         switch (dtype) {
         case TypeCode::Float32: {
             const float f = static_cast<float>(v);
             std::memcpy(raw.data() + i * sizeof(float), &f, sizeof(float));
+        } break;
+        case TypeCode::Float64: {
+            std::memcpy(raw.data() + i * sizeof(double), &v, sizeof(double));
         } break;
         case TypeCode::Int64: {
             const int64_t n = static_cast<int64_t>(v);
@@ -132,6 +147,12 @@ std::optional<std::string> structuralKey(
 } // namespace
 
 ElemType elemTypeOf(TypeCode dtype) {
+    if (dtype == TypeCode::Float64) {
+        // A scalar-only dtype in Camel (tensors store float32), but a first-class ONNX tensor
+        // dtype: the Adam lowering computes the bias-corrected update in float64, exactly like
+        // the runtime kernel.
+        return ElemType::Double;
+    }
     switch (tensor::normalizeTensorDType(dtype)) {
     case TypeCode::Float32:
         return ElemType::Float;
@@ -194,6 +215,30 @@ std::optional<ConstArg> constArgOf(const Value &value) {
     return tensor::ops::constArgOf(value.slot, value.ty);
 }
 
+Value optimizerStateValue(Value m, Value v, Value t) {
+    type::StructTypeFactory factory;
+    factory.add("m", inferenceTypeOf(m));
+    factory.add("v", inferenceTypeOf(v));
+    factory.add("t", inferenceTypeOf(t));
+    std::vector<Value> fields;
+    fields.reserve(3);
+    fields.push_back(std::move(m));
+    fields.push_back(std::move(v));
+    fields.push_back(std::move(t));
+    return Value::aggregate(factory.build(), std::move(fields));
+}
+
+std::array<Value, 3> optimizerStateParts(const Value &state) {
+    if (!state.isAggregate() || state.fields.size() != 3) {
+        throw ExportError(
+            std::format(
+                "an optimizer state of type '{}' cannot be exported; pass it as an argument of the "
+                "exported function or as the state an nn:adam call returns",
+                !state.isAggregate() && state.ty ? state.ty->toString() : "?"));
+    }
+    return {state.fields[0], state.fields[1], state.fields[2]};
+}
+
 Emitter::Emitter(int64_t opset, const CapabilityTable *capabilities)
     : capabilities_(capabilities), opset_(opset) {
     scopes_.emplace_back();
@@ -212,8 +257,8 @@ std::optional<ElemType> Emitter::valueElemType(const std::string &name) const {
 std::optional<ElemType> Emitter::outputElemType(
     const std::string &opType, const std::vector<std::string> &inputs,
     const std::vector<Attribute> &attributes) const {
-    static const std::unordered_set<std::string> kBoolResults = {
-        "Equal", "Greater", "GreaterOrEqual", "Less", "LessOrEqual", "And", "Or", "Not"};
+    static const std::unordered_set<std::string> kBoolResults =
+        {"Equal", "Greater", "GreaterOrEqual", "Less", "LessOrEqual", "And", "Or", "Not"};
     if (kBoolResults.contains(opType)) {
         return ElemType::Bool;
     }
@@ -298,19 +343,72 @@ std::string Emitter::node(
     return output;
 }
 
+std::pair<std::string, std::string> Emitter::node2(
+    std::string opType, std::vector<std::string> inputs, std::vector<Attribute> attributes,
+    ElemType secondElem, std::string_view hint) {
+    checkCapability(opType, inputs);
+    const std::string first  = fresh(hint.empty() ? std::string_view(opType) : hint);
+    const std::string second = fresh(first + "_1");
+    if (auto elem = outputElemType(opType, inputs, attributes)) {
+        elemTypes_[first] = *elem;
+    }
+    elemTypes_[second] = secondElem;
+    Node n;
+    n.opType     = std::move(opType);
+    n.name       = "n_" + first;
+    n.inputs     = std::move(inputs);
+    n.outputs    = {first, second};
+    n.attributes = std::move(attributes);
+    scopes_.back().graph.nodes.push_back(std::move(n));
+    return {first, second};
+}
+
+std::vector<std::string> Emitter::nodeN(
+    std::string opType, std::vector<std::string> inputs, std::vector<Attribute> attributes,
+    size_t outputCount, std::string_view hint) {
+    checkCapability(opType, inputs);
+    std::vector<std::string> outputs;
+    outputs.reserve(outputCount);
+    const std::string base = fresh(hint.empty() ? std::string_view(opType) : hint);
+    outputs.push_back(base);
+    for (size_t i = 1; i < outputCount; ++i) {
+        outputs.push_back(fresh(std::format("{}_{}", base, i)));
+    }
+    Node n;
+    n.opType     = std::move(opType);
+    n.name       = "n_" + base;
+    n.inputs     = std::move(inputs);
+    n.outputs    = outputs;
+    n.attributes = std::move(attributes);
+    scopes_.back().graph.nodes.push_back(std::move(n));
+    return outputs;
+}
+
+std::string Emitter::appendIdentity(Graph &body, const std::string &input, std::string_view hint) {
+    const std::string output = fresh(hint);
+    Node n;
+    n.opType  = "Identity";
+    n.name    = "n_" + output;
+    n.inputs  = {input};
+    n.outputs = {output};
+    body.nodes.push_back(std::move(n));
+    return output;
+}
+
 std::string Emitter::operand(const Value &value, std::optional<TypeCode> dtype) {
     if (value.isConstant()) {
         return constantOperand(value, dtype);
     }
     if (value.isAggregate()) {
-        throw ExportError(std::format(
-            "a '{}' that depends on the model input is used where a tensor is expected",
-            value.camelType->toString()));
+        throw ExportError(
+            std::format(
+                "a '{}' that depends on the model input is used where a tensor is expected",
+                value.camelType->toString()));
     }
-    if (!dtype || !value.dtype || tensor::normalizeTensorDType(*dtype) == *value.dtype) {
+    if (!dtype || !value.dtype || operandTarget(*dtype) == *value.dtype) {
         return value.name;
     }
-    const TypeCode target = tensor::normalizeTensorDType(*dtype);
+    const TypeCode target = operandTarget(*dtype);
     // A cast is valid in the scope that emitted it and in scopes nested inside it.
     for (auto it = scopes_.rbegin(); it != scopes_.rend(); ++it) {
         if (auto found = it->casts.find({value.name, target}); found != it->casts.end()) {
@@ -329,11 +427,12 @@ std::string Emitter::operand(const Value &value, std::optional<TypeCode> dtype) 
 std::string Emitter::constantOperand(const Value &value, std::optional<TypeCode> dtype) {
     const TensorFacts facts = factsOf(value);
     if (!facts.dtype || !facts.shape) {
-        throw ExportError(std::format(
-            "constant of type '{}' cannot be used as a tensor operand",
-            value.ty ? value.ty->toString() : "?"));
+        throw ExportError(
+            std::format(
+                "constant of type '{}' cannot be used as a tensor operand",
+                value.ty ? value.ty->toString() : "?"));
     }
-    const TypeCode target  = dtype ? tensor::normalizeTensorDType(*dtype) : *facts.dtype;
+    const TypeCode target  = dtype ? operandTarget(*dtype) : *facts.dtype;
     const std::string hint = value.label.empty() ? "const" : value.label;
 
     if (const TensorObject *t = constantTensor(value)) {
@@ -392,7 +491,7 @@ std::string Emitter::int64s(std::span<const int64_t> values) {
 }
 
 std::string Emitter::addInitializer(TensorValue tensor, const std::string &key) {
-    std::string name  = tensor.name;
+    std::string name = tensor.name;
     elemTypes_[name] = tensor.type;
     graph().initializers.push_back(std::move(tensor));
     initializerByKey_.emplace(key, name);

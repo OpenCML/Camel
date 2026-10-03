@@ -1,0 +1,96 @@
+/**
+ * E13/T5 Level-2 probe L2b: data-dependent iteration count.
+ *
+ * Adaptive Newton iteration for u = sqrt(w * x): starting from v = 1, the
+ * loop refines v <- 0.5 * (v + (w*x) / v) while the residual |v^2 - w*x|
+ * exceeds tol = 1e-3. The iteration count depends on the input value (and on
+ * the parameter), and the parameter w sits inside the iterated map, so the
+ * gradient flows through every iteration actually taken. Loss mean((u-1)^2),
+ * one SGD step at lr 0.01.
+ *
+ *   arm a: x = 4.0   -> w*x = 2.0  -> 3 iterations
+ *   arm b: x = 100.0 -> w*x = 50.0 -> 6 iterations
+ *   arm 0: x = 2.0   -> w*x = 1.0  -> residual |1-1| = 0 <= tol at v0:
+ *          the loop body never runs (depth 0), the tangent of w is exactly 0.
+ *
+ * MODE=run    : native run; dumps init params, inputs, losses, updated params
+ * MODE=export : WHAT=fwd exports the loss, WHAT=step exports the training step
+ */
+module e13_l2b_adaptive_iter
+
+import { Tensor, mean, abs, reshape, ones, save_npy } from tensor
+import { value_and_grad } from autodiff
+import { sgd, save_params } from nn
+import { get_env } from sys
+import { export_model } from onnx
+
+type Sc = { w: Tensor }
+
+/// Newton refinement of sqrt(m.w * x) while the residual exceeds 1e-3.
+with <m: Sc, x: Tensor>
+func newton(v: Tensor): Tensor {
+    return if mean(abs(v * v - m.w * x)) > 0.001 then newton<m, x>(0.5 * (v + m.w * x / v)) else v
+}
+
+with <m: Sc>
+func loss(x: Tensor): float {
+    let d = newton<m, x>(ones([1])) - 1.0
+    return mean(d * d)
+}
+
+func fwd(m: Sc, x: Tensor): float {
+    return loss<m>(x)
+}
+
+func step(m: Sc, x: Tensor): (float, Sc) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func load(): Sc {
+    return { w: reshape([0.5], [1]) }
+}
+
+func input_a(): Tensor {
+    return reshape([4.0], [1])
+}
+
+func do_run(m: Sc): int sync {
+    let dump = get_env('DUMP')
+    let xa = input_a()
+    let xb = reshape([100.0], [1])
+    let x0 = reshape([2.0], [1])
+    save_params(m, dump + '/init')
+    save_npy(xa, dump + '/xa.npy')
+    save_npy(xb, dump + '/xb.npy')
+    save_npy(x0, dump + '/x0.npy')
+    let la = step(m, xa)
+    let lb = step(m, xb)
+    let l0 = step(m, x0)
+    save_npy(reshape([la.0], [1]), dump + '/loss_a.npy')
+    save_npy(reshape([lb.0], [1]), dump + '/loss_b.npy')
+    save_npy(reshape([l0.0], [1]), dump + '/loss_0.npy')
+    save_params(la.1, dump + '/arm_a')
+    save_params(lb.1, dump + '/arm_b')
+    save_params(l0.1, dump + '/arm_0')
+    'loss_a={} loss_b={} loss_0={}'->format<la.0, lb.0, l0.0>->println
+    return 0
+}
+
+func do_export(m: Sc): int sync {
+    let out = get_env('ONNX_OUT')
+    return if get_env('WHAT') == 'fwd' then sync {
+        export_model(fwd, (m, input_a()), out)
+        println('exported fwd')
+        return 0
+    } else sync {
+        export_model(step, (m, input_a()), out)
+        println('exported step')
+        return 0
+    }
+}
+
+func main(): int sync {
+    let m = load()
+    return if get_env('MODE') == 'export' then do_export(m) else do_run(m)
+}

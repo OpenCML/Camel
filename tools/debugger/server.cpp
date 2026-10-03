@@ -183,7 +183,7 @@ void DebuggerServer::stopMemoryScan() {
         return;
     scanStop_          = true;
     memoryScanRunning_ = false;
-    continueRequested_ = true;
+    continueEpoch_.fetch_add(1, std::memory_order_release);
     continueCond_.notify_all();
     if (scanThread_.joinable())
         scanThread_.join();
@@ -223,12 +223,13 @@ void DebuggerServer::pauseAndWaitForContinue(const void *ptr, size_t size, const
         std::cerr << "[debugger] Snapshot exception: " << e.what() << std::endl;
     }
     paused_.store(true);
-    continueRequested_.store(false);
     {
         std::unique_lock<std::mutex> lock(continueMutex_);
-        continueCond_.wait(lock, [this] {
-            return continueRequested_.load() || restartRequested_.load() ||
-                   terminateRequested_.load() || !running_ || !allocStepEnabled_;
+        const uint64_t epochAtEntry = continueEpoch_.load(std::memory_order_acquire);
+        continueCond_.wait(lock, [this, epochAtEntry] {
+            return continueEpoch_.load(std::memory_order_acquire) != epochAtEntry ||
+                   restartRequested_.load() || terminateRequested_.load() || !running_ ||
+                   !allocStepEnabled_;
         });
     }
     paused_.store(false);
@@ -239,8 +240,14 @@ void DebuggerServer::pauseAndWaitForContinue(const void *ptr, size_t size, const
 }
 
 void DebuggerServer::requestContinue() {
-    continueRequested_.store(true);
-    continueCond_.notify_one();
+    // Bump the epoch and notify while holding the mutex: pause waits snapshot the
+    // epoch under the same lock, so a continue can never land in the lost-wakeup
+    // window between the predicate check and the actual sleep.
+    {
+        std::lock_guard<std::mutex> lock(continueMutex_);
+        continueEpoch_.fetch_add(1, std::memory_order_release);
+        continueCond_.notify_one();
+    }
 }
 
 void DebuggerServer::requestGirStep(std::string graphId) {
@@ -269,14 +276,20 @@ bool DebuggerServer::consumeGirStepRequest(const std::string &currentGraphId) {
 
 void DebuggerServer::requestRestart() {
     paused_.store(false);
-    restartRequested_.store(true);
-    continueCond_.notify_one();
+    {
+        std::lock_guard<std::mutex> lock(continueMutex_);
+        restartRequested_.store(true);
+        continueCond_.notify_one();
+    }
 }
 
 void DebuggerServer::requestTerminate() {
     paused_.store(false);
-    terminateRequested_.store(true);
-    continueCond_.notify_one();
+    {
+        std::lock_guard<std::mutex> lock(continueMutex_);
+        terminateRequested_.store(true);
+        continueCond_.notify_one();
+    }
 }
 
 void DebuggerServer::clearLastRunError() {
@@ -317,12 +330,12 @@ void DebuggerServer::pauseAndWaitForGirBreakpoint(
         std::cerr << "[debugger] GIR pause exception: " << e.what() << std::endl;
     }
     paused_.store(true);
-    continueRequested_.store(false);
     {
         std::unique_lock<std::mutex> lock(continueMutex_);
-        continueCond_.wait(lock, [this] {
-            return continueRequested_.load() || restartRequested_.load() ||
-                   terminateRequested_.load() || !running_;
+        const uint64_t epochAtEntry = continueEpoch_.load(std::memory_order_acquire);
+        continueCond_.wait(lock, [this, epochAtEntry] {
+            return continueEpoch_.load(std::memory_order_acquire) != epochAtEntry ||
+                   restartRequested_.load() || terminateRequested_.load() || !running_;
         });
     }
     paused_.store(false);
@@ -348,12 +361,12 @@ void DebuggerServer::pauseAndWaitForPipelineStage(const char *stageId) {
         std::cerr << "[debugger] Pipeline pause exception: " << e.what() << std::endl;
     }
     paused_.store(true);
-    continueRequested_.store(false);
     {
         std::unique_lock<std::mutex> lock(continueMutex_);
-        continueCond_.wait(lock, [this] {
-            return continueRequested_.load() || restartRequested_.load() ||
-                   terminateRequested_.load() || !running_;
+        const uint64_t epochAtEntry = continueEpoch_.load(std::memory_order_acquire);
+        continueCond_.wait(lock, [this, epochAtEntry] {
+            return continueEpoch_.load(std::memory_order_acquire) != epochAtEntry ||
+                   restartRequested_.load() || terminateRequested_.load() || !running_;
         });
     }
     paused_.store(false);
@@ -507,12 +520,12 @@ bool DebuggerServer::forwardPostToPort(
 void DebuggerServer::stop() {
     if (!running_)
         return;
-    running_            = false;
-    scanStop_           = true;
-    httpStop_           = true;
-    memoryScanRunning_  = false;
-    allocStepEnabled_   = false;
-    continueRequested_  = true;
+    running_           = false;
+    scanStop_          = true;
+    httpStop_          = true;
+    memoryScanRunning_ = false;
+    allocStepEnabled_  = false;
+    continueEpoch_.fetch_add(1, std::memory_order_release);
     terminateRequested_ = false;
     continueCond_.notify_all();
     if (logStreamHandle_ != 0) {

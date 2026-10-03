@@ -1,0 +1,58 @@
+/**
+ * A conv net training step exports as one ONNX graph: conv2d gradients become
+ * ConvTranspose (input), Conv with swapped batch/channel roles (kernel) and
+ * ReduceSum (bias), and max_pool2d's gradient becomes MaxPool-with-indices
+ * feeding MaxUnpool — all standard opset-17 inference operators.
+ */
+module export_train_step_conv
+
+import { Tensor, relu, mean, reshape, flatten, new } from tensor
+import { value_and_grad } from autodiff
+import { conv2d, max_pool2d, sgd } from nn
+import { export_model } from onnx
+import { get_env } from sys
+
+type Cnn = {
+    conv1_w: Tensor, conv1_b: Tensor,
+    conv2_w: Tensor, conv2_b: Tensor,
+    fc_w: Tensor, fc_b: Tensor
+}
+
+with <m: Cnn>
+func loss(x: Tensor): float {
+    let c1 = relu(conv2d(x, m.conv1_w, m.conv1_b, 1, 1))
+    let c2 = max_pool2d(relu(conv2d(c1, m.conv2_w, m.conv2_b)), 2)
+    let y = flatten(c2) @ m.fc_w + m.fc_b
+    return mean(y * y)
+}
+
+func step(m: Cnn, x: Tensor): (float, Cnn) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func main(): int sync {
+    let m = {
+        conv1_w: reshape(new([
+            0.3, -0.2, 0.1, 0.4, -0.5, 0.2, 0.1, 0.6, -0.3,
+            -0.1, 0.2, 0.5, -0.4, 0.3, -0.2, 0.2, -0.6, 0.4]), [2, 1, 3, 3]),
+        conv1_b: new([0.1, -0.1]),
+        conv2_w: reshape(new([
+            0.2, 0.1, -0.3, 0.5, -0.1, 0.4, -0.2, 0.3, 0.1,
+            -0.4, 0.2, 0.6, 0.1, -0.5, 0.3, 0.2, -0.1, -0.2,
+            0.1, -0.3, 0.2, -0.2, 0.4, -0.6, 0.5, 0.1, 0.3,
+            -0.1, 0.5, -0.4, 0.2, 0.3, -0.2, 0.6, -0.3, 0.1]), [2, 2, 3, 3]),
+        conv2_b: new([0.2, 0.0]),
+        fc_w: reshape(new([0.5, -0.5, 0.25, -0.75]), [2, 2]),
+        fc_b: new([0.1, -0.2])
+    }
+    let x = reshape(new([
+        0.5, -0.3, 0.2, 0.7, -0.1,
+        0.4, 0.1, -0.6, 0.3, 0.2,
+        -0.2, 0.6, 0.5, -0.4, 0.1,
+        0.3, -0.5, 0.4, 0.2, -0.7,
+        0.1, 0.2, -0.1, 0.6, 0.4]), [1, 1, 5, 5])
+    export_model(step, (m, x), get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

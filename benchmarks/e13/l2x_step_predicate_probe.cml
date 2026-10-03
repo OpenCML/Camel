@@ -1,0 +1,63 @@
+/**
+ * E13/T5 dissection (companion to the L2a/L2c/L2d step-export failure): is the
+ * trigger the fact that the branch predicate is a dead intermediate?
+ *
+ * Identical network, weights, and arm shape (scalar arms s*2.0 vs s) to the
+ * known-good e9 case (test/cases/modules/onnx/export_train_step_branch.cml);
+ * the only difference is that the predicate is mean(abs(h)) — a value used
+ * nowhere except as the branch condition — instead of the loss value s
+ * itself, which in e9 also flows to the graph output.
+ *
+ * MODE=export WHAT=step : export the training step (the dissected case)
+ * MODE=export WHAT=fwd  : export the loss (expected good, like all forwards)
+ */
+module e13_l2x_predicate_probe
+
+import { Tensor, relu, mean, abs, reshape } from tensor
+import { value_and_grad } from autodiff
+import { sgd } from nn
+import { get_env } from sys
+import { export_model } from onnx
+
+type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+
+with <m: Mlp>
+func loss(x: Tensor): float {
+    let h = relu(x @ m.w1 + m.b1)
+    let y = h @ m.w2 + m.b2
+    let s = mean(y * y)
+    let c = mean(abs(h))
+    return if c > 0.5 then s * 2.0 else s
+}
+
+func fwd(m: Mlp, x: Tensor): float {
+    return loss<m>(x)
+}
+
+func step(m: Mlp, x: Tensor): (float, Mlp) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func load(): Mlp {
+    return {
+        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
+        b1: reshape([0.1, 0.0, -0.1], [3]),
+        w2: reshape([1.0, -1.0, 0.5], [3, 1]),
+        b2: reshape([0.2], [1])
+    }
+}
+
+func main(): int sync {
+    let m = load()
+    let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
+    return if get_env('WHAT') == 'fwd' then sync {
+        export_model(fwd, (m, x), get_env('ONNX_OUT'))
+        println('exported fwd')
+        return 0
+    } else sync {
+        export_model(step, (m, x), get_env('ONNX_OUT'))
+        println('exported step')
+        return 0
+    }
+}

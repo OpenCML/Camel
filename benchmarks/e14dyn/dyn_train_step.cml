@@ -1,0 +1,76 @@
+/**
+ * E14/T7 probe: the export_train_step.cml 2-layer MLP training step
+ * (value_and_grad + sgd) exported with dynamic_axes = [0].
+ * One graph must serve any batch; per-batch specialized exports and Camel
+ * native runs are the numeric references.
+ *
+ * LOSS selects the reduction:
+ *   mean     mean(y * y) — the canonical form; its VJP emits tensor:numel,
+ *            which has no ONNX lowering once the batch is symbolic (gap probe)
+ *   summean  sum(y*y) / float(shape(y)[0]*shape(y)[1]) — the same batch mean
+ *            written through shape arithmetic (Shape/Gather lowerings exist)
+ *
+ * Env: X (input npy [B,2]), ONNX_OUT (export path, '' = no export),
+ *      DYN ('1' = export with dynamic axis 0), DUMP (dir for updated params),
+ *      LOSS ('mean' | 'summean', default 'summean').
+ */
+module dyn_train_step
+
+import { Tensor, relu, mean, sum, reshape, shape, load_npy } from tensor
+import { value_and_grad } from autodiff
+import { sgd, save_params } from nn
+import { export_model } from onnx
+import { get_env } from sys
+
+type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+
+with <m: Mlp>
+func fwd(x: Tensor): Tensor {
+    let h = relu(x @ m.w1 + m.b1)
+    return h @ m.w2 + m.b2
+}
+
+with <m: Mlp>
+func loss_mean(x: Tensor): float {
+    let y = fwd<m>(x)
+    return mean(y * y)
+}
+
+with <m: Mlp>
+func loss_summean(x: Tensor): float {
+    let y = fwd<m>(x)
+    return sum(y * y) / float(shape(y)[0] * shape(y)[1])
+}
+
+func step_mean(m: Mlp, x: Tensor): (float, Mlp) {
+    let vg = value_and_grad(loss_mean)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func step_summean(m: Mlp, x: Tensor): (float, Mlp) {
+    let vg = value_and_grad(loss_summean)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func main(): int sync {
+    let m = {
+        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
+        b1: reshape([0.1, 0.0, -0.1], [3]),
+        w2: reshape([1.0, -1.0, 0.5], [3, 1]),
+        b2: reshape([0.2], [1])
+    }
+    let x = load_npy(get_env('X'))
+    let useMean = get_env('LOSS') == 'mean'
+    let vg = if useMean then step_mean(m, x) else step_summean(m, x)
+    'CAMEL loss={}'->format<vg.0>->println
+    save_params(vg.1, get_env('DUMP'))
+    let out = get_env('ONNX_OUT')
+    if out != '' then
+        if get_env('DYN') == '1' then
+            (if useMean then export_model(step_mean, (m, x), out, [0])
+            else export_model(step_summean, (m, x), out, [0]))
+        else
+            (if useMean then export_model(step_mean, (m, x), out)
+            else export_model(step_summean, (m, x), out))
+    return 0
+}

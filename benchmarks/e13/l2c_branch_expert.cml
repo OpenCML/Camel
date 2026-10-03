@@ -1,0 +1,95 @@
+/**
+ * E13/T5 Level-2 probe L2c: branch experts (input-routed subnetworks).
+ *
+ * A Mixture-of-Experts-style router: the sign of mean(x) routes the whole
+ * batch to one of two structurally different subnetworks with disjoint
+ * weights — expert A is a two-layer ReLU MLP, expert B is a single linear
+ * layer. Loss mean(y*y), one SGD step at lr 0.01.
+ *
+ *   arm a: mean(x) =  0.75   > 0 -> expert A
+ *   arm b: mean(x) = -0.5833 < 0 -> expert B
+ *   arm 0: mean(x) =  0 exactly (dyadic literals sum to zero) -> expert B,
+ *          locking the strict-> boundary semantics.
+ *
+ * MODE=run    : native run; dumps init params, inputs, losses, updated params
+ * MODE=export : WHAT=fwd exports the loss, WHAT=step exports the training step
+ */
+module e13_l2c_branch_expert
+
+import { Tensor, relu, mean, reshape, save_npy } from tensor
+import { value_and_grad } from autodiff
+import { sgd, save_params } from nn
+import { get_env } from sys
+import { export_model } from onnx
+
+type Moe = { wa1: Tensor, ba1: Tensor, wa2: Tensor, ba2: Tensor, wb: Tensor, bb: Tensor }
+
+with <m: Moe>
+func loss(x: Tensor): float {
+    let y = if mean(x) > 0.0 then relu(x @ m.wa1 + m.ba1) @ m.wa2 + m.ba2 else x @ m.wb + m.bb
+    return mean(y * y)
+}
+
+func fwd(m: Moe, x: Tensor): float {
+    return loss<m>(x)
+}
+
+func step(m: Moe, x: Tensor): (float, Moe) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func load(): Moe {
+    return {
+        wa1: reshape([0.5, 1.0, -0.5, 0.25, -0.75, 0.5, 1.0, -0.5, 0.25, -1.0, 0.5, 0.75], [3, 4]),
+        ba1: reshape([0.1, 0.0, -0.1, 0.2], [4]),
+        wa2: reshape([0.5, -1.0, 1.0, 0.5, -0.5, 0.75, 0.25, -0.25], [4, 2]),
+        ba2: reshape([0.0, 0.1], [2]),
+        wb: reshape([1.0, -0.5, 0.5, 1.0, -0.25, 0.75], [3, 2]),
+        bb: reshape([-0.1, 0.2], [2])
+    }
+}
+
+func input_a(): Tensor {
+    return reshape([1.0, 2.0, -0.5, 0.5, 1.5, 0.0], [2, 3])
+}
+
+func do_run(m: Moe): int sync {
+    let dump = get_env('DUMP')
+    let xa = input_a()
+    let xb = reshape([-1.0, 0.5, -2.0, -0.5, 1.0, -1.5], [2, 3])
+    let x0 = reshape([1.0, -1.0, 0.5, -0.5, 0.25, -0.25], [2, 3])
+    save_params(m, dump + '/init')
+    save_npy(xa, dump + '/xa.npy')
+    save_npy(xb, dump + '/xb.npy')
+    save_npy(x0, dump + '/x0.npy')
+    let la = step(m, xa)
+    let lb = step(m, xb)
+    let l0 = step(m, x0)
+    save_npy(reshape([la.0], [1]), dump + '/loss_a.npy')
+    save_npy(reshape([lb.0], [1]), dump + '/loss_b.npy')
+    save_npy(reshape([l0.0], [1]), dump + '/loss_0.npy')
+    save_params(la.1, dump + '/arm_a')
+    save_params(lb.1, dump + '/arm_b')
+    save_params(l0.1, dump + '/arm_0')
+    'loss_a={} loss_b={} loss_0={}'->format<la.0, lb.0, l0.0>->println
+    return 0
+}
+
+func do_export(m: Moe): int sync {
+    let out = get_env('ONNX_OUT')
+    return if get_env('WHAT') == 'fwd' then sync {
+        export_model(fwd, (m, input_a()), out)
+        println('exported fwd')
+        return 0
+    } else sync {
+        export_model(step, (m, input_a()), out)
+        println('exported step')
+        return 0
+    }
+}
+
+func main(): int sync {
+    let m = load()
+    return if get_env('MODE') == 'export' then do_export(m) else do_run(m)
+}

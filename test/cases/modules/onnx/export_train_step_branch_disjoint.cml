@@ -1,0 +1,52 @@
+/**
+ * Level-2 (E13/T5, fixed): a training step whose data-dependent branch uses
+ * DISJOINT parameter subsets per arm exports. Differentiating the branch makes
+ * every arm pullback produce a full gradient struct, so the joined value is an
+ * aggregate: the exporter emits one multi-output If for the gradient struct
+ * (plus one If for the branch value). Loss mean(y*y), one SGD step at lr 0.01.
+ */
+module export_train_step_branch_disjoint
+
+import { Tensor, relu, mean, abs, reshape, zeros } from tensor
+import { value_and_grad } from autodiff
+import { sgd } from nn
+import { export_model } from onnx
+import { get_env } from sys
+
+type Mlp = {
+    w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor,
+    w3: Tensor, b3: Tensor, wo: Tensor, bo: Tensor,
+    we: Tensor, be: Tensor
+}
+
+with <m: Mlp>
+func loss(x: Tensor): float {
+    let h1 = relu(x @ m.w1 + m.b1)
+    let h2 = relu(h1 @ m.w2 + m.b2)
+    let y = if mean(abs(h2)) > 0.5 then h2 @ m.we + m.be else relu(h2 @ m.w3 + m.b3) @ m.wo + m.bo
+    return mean(y * y)
+}
+
+func step(m: Mlp, x: Tensor): (float, Mlp) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func main(): int sync {
+    let m = {
+        w1: reshape([0.5, -0.25, 0.75, -1.0, -0.5, 0.25, 0.5, -0.75, 1.0, 0.5, -0.25, -0.25], [3, 4]),
+        b1: zeros([4]),
+        w2: reshape([0.4, -0.3, 0.2, 0.1, -0.2, 0.5, -0.4, 0.3, 0.3, 0.1, -0.1, 0.6, -0.5, -0.4, -0.3, -0.2], [4, 4]),
+        b2: reshape([0.5, 0.5, 0.5, 0.5], [4]),
+        w3: reshape([0.3, -0.2, 0.1, 0.4, 0.2, 0.5, -0.3, -0.1, -0.4, 0.1, 0.6, 0.2, 0.1, -0.5, 0.3, -0.3], [4, 4]),
+        b3: reshape([0.1, -0.1, 0.2, 0.0], [4]),
+        wo: reshape([0.5, -0.5, 1.0, 0.25, -0.75, 0.5, 0.25, -1.0], [4, 2]),
+        bo: reshape([0.2, -0.1], [2]),
+        we: reshape([1.0, 0.5, -0.5, 1.0, 0.75, -0.25, 0.0, 0.5], [4, 2]),
+        be: reshape([0.1, 0.2], [2])
+    }
+    let x = reshape([1.0, 2.0, -1.0, 0.5, -1.5, 2.0], [2, 3])
+    export_model(step, (m, x), get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

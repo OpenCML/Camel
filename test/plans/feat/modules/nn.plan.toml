@@ -538,6 +538,33 @@ assert(approx(biasSum, 4.0, 1e-6), `bias gradient sum should be 4, got ${biasSum
 timeout_ms = 4000
 
 [[tests]]
+name = "bn_train_grad_sanity"
+desc = "T4: batch_norm_train forward/running-stats match a manual decomposition (biased normalize, UNBIASED running variance); autodiff grads match finite differences; running stats see exactly zero gradient."
+kind = "behavior"
+case = "../../../cases/modules/nn/bn_train_grad_sanity.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const out = input.normalized.stdout
+const fwd = match(/bn_train_sanity fwd=([0-9.eE+-]+) rm=([0-9.eE+-]+) rv=([0-9.eE+-]+)/, out)
+assert(Number(fwd[1]) < 1e-4, `forward differs from the manual decomposition: ${fwd[1]}`)
+assert(Number(fwd[2]) < 1e-9, `running mean differs: ${fwd[2]}`)
+assert(Number(fwd[3]) < 1e-6, `running variance differs (UNBIASED correction?): ${fwd[3]}`)
+const grads = match(/bn_train_sanity dx=([0-9.eE+-]+) dg=([0-9.eE+-]+) db=([0-9.eE+-]+) rm_grad=([0-9.eE+-]+) rv_grad=([0-9.eE+-]+)/, out)
+assert(Number(grads[1]) === 0 && Number(grads[2]) === 0 && Number(grads[3]) === 0, `autodiff must emit the gradient operator verbatim: ${grads[0]}`)
+assert(Number(grads[4]) === 0 && Number(grads[5]) === 0, `running stats must take exactly zero gradient: rm=${grads[4]} rv=${grads[5]}`)
+const fd = match(/bn_train_sanity fd_g0=([0-9.eE+-]+) g0=([0-9.eE+-]+) fd_b0=([0-9.eE+-]+) b0=([0-9.eE+-]+) fd_x0=([0-9.eE+-]+) x0=([0-9.eE+-]+)/, out)
+assert(approx(Number(fd[1]), Number(fd[2]), 1e-3), `dgamma ${fd[2]} should match finite difference ${fd[1]}`)
+assert(approx(Number(fd[3]), Number(fd[4]), 1e-3), `dbeta ${fd[4]} should match finite difference ${fd[3]}`)
+assert(approx(Number(fd[5]), Number(fd[6]), 1e-3), `dx ${fd[6]} should match finite difference ${fd[5]}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
 name = "tiny_cnn"
 desc = "Trains a tiny valid-convolution CNN through the conv2d pullback (kernel, bias and head gradients)."
 kind = "behavior"

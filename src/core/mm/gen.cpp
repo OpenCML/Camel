@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -643,14 +643,15 @@ GenerationalAllocatorWithGC::collectYoungReferenceEdges(
             const type::Type *refType,
             const rtdata::RefTraceInfo &info) -> rtdata::Object * {
             if (ref && inYoungGenSpace(autoHeaderForPayload(ref))) {
-                edges.push_back(RememberedEdge{
-                    .ownerHeader = ownerHeader,
-                    .owner       = object,
-                    .ownerType   = objectType,
-                    .target      = ref,
-                    .slotType    = refType,
-                    .info        = info,
-                });
+                edges.push_back(
+                    RememberedEdge{
+                        .ownerHeader = ownerHeader,
+                        .owner       = object,
+                        .ownerType   = objectType,
+                        .target      = ref,
+                        .slotType    = refType,
+                        .info        = info,
+                    });
             }
             return ref;
         },
@@ -849,6 +850,12 @@ void GenerationalAllocatorWithGC::clearMarks() {
 
     elderGenSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
     largeObjSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
+
+    // Graph carriers are also traced through Function values (Function::updateRefs traces the
+    // runtime graph so runtime-created graphs keep their static constants alive). Those graphs
+    // are not necessarily in rootObjectSet_, so unmark the whole graph space instead of only
+    // the registered roots, or a later collection would skip them and miss their edges.
+    graphSpace().iterateAllocated([](ObjectHeader *header) { header->unmark(); });
 
     if (rootObjectSet_) {
         for (rtdata::Object *root : *rootObjectSet_) {

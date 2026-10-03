@@ -1,0 +1,95 @@
+/**
+ * E13/T5 dissection X2: tensor-typed branch arms in a training step.
+ * Same MLP and weights as the known-good scalar-arm e9 case; the only
+ * difference is that the branch selects between tensors (y*2.0 vs y).
+ *
+ *   arm a: s = 5.740... > 1.0 -> z = y * 2.0 (the arm whose pullback captures y)
+ *   arm b: s = 0.086... < 1.0 -> z = y
+ *   arm 0: x = 0 quiets every relu, s = 0.04 < 1.0 -> z = y (an all-quiet else
+ *          point, not an exact-equality boundary; strict-> semantics is locked
+ *          by the exact boundaries of l2a/l2c)
+ *
+ * MODE=run    : native run; dumps init params, inputs, losses, updated params
+ * MODE=export : WHAT=step exports the training step (the dissected case),
+ *               WHAT=fwd exports the loss
+ */
+module e13_l2x2_tensor_arms
+
+import { Tensor, relu, mean, reshape, zeros, save_npy } from tensor
+import { value_and_grad } from autodiff
+import { sgd, save_params } from nn
+import { get_env } from sys
+import { export_model } from onnx
+
+type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+
+with <m: Mlp>
+func loss(x: Tensor): float {
+    let h = relu(x @ m.w1 + m.b1)
+    let y = h @ m.w2 + m.b2
+    let s = mean(y * y)
+    let z = if s > 1.0 then y * 2.0 else y
+    return mean(z * z)
+}
+
+func fwd(m: Mlp, x: Tensor): float {
+    return loss<m>(x)
+}
+
+func step(m: Mlp, x: Tensor): (float, Mlp) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func load(): Mlp {
+    return {
+        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
+        b1: reshape([0.1, 0.0, -0.1], [3]),
+        w2: reshape([1.0, -1.0, 0.5], [3, 1]),
+        b2: reshape([0.2], [1])
+    }
+}
+
+func input_a(): Tensor {
+    return reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
+}
+
+func do_run(m: Mlp): int sync {
+    let dump = get_env('DUMP')
+    let xa = input_a()
+    let xb = reshape([0.1, -0.1, 0.05, 0.0], [2, 2])
+    let x0 = zeros([2, 2])
+    save_params(m, dump + '/init')
+    save_npy(xa, dump + '/xa.npy')
+    save_npy(xb, dump + '/xb.npy')
+    save_npy(x0, dump + '/x0.npy')
+    let la = step(m, xa)
+    let lb = step(m, xb)
+    let l0 = step(m, x0)
+    save_npy(reshape([la.0], [1]), dump + '/loss_a.npy')
+    save_npy(reshape([lb.0], [1]), dump + '/loss_b.npy')
+    save_npy(reshape([l0.0], [1]), dump + '/loss_0.npy')
+    save_params(la.1, dump + '/arm_a')
+    save_params(lb.1, dump + '/arm_b')
+    save_params(l0.1, dump + '/arm_0')
+    'loss_a={} loss_b={} loss_0={}'->format<la.0, lb.0, l0.0>->println
+    return 0
+}
+
+func do_export(m: Mlp): int sync {
+    let out = get_env('ONNX_OUT')
+    return if get_env('WHAT') == 'fwd' then sync {
+        export_model(fwd, (m, input_a()), out)
+        println('exported fwd')
+        return 0
+    } else sync {
+        export_model(step, (m, input_a()), out)
+        println('exported step')
+        return 0
+    }
+}
+
+func main(): int sync {
+    let m = load()
+    return if get_env('MODE') == 'export' then do_export(m) else do_run(m)
+}

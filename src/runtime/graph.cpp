@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: May. 05, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -969,8 +969,11 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     const GCGraphPayloadShape &payloadShape,
     const std::function<void(GCGraphPayloadArena &)> &emitPayload,
     std::span<const slot_t> staticSlots) {
-    EXEC_WHEN_DEBUG(mm::graphSpace().validateFreeList(
-        std::format("before constructing graph '{}'", debugRecord ? debugRecord->name : "<null>")));
+    EXEC_WHEN_DEBUG(
+        mm::graphSpace().validateFreeList(
+            std::format(
+                "before constructing graph '{}'",
+                debugRecord ? debugRecord->name : "<null>")));
     ASSERT(memory != nullptr, "GCGraph in-place construction requires valid memory.");
     CAMEL_LOG_INFO_S(
         "GCGraphBuild",
@@ -1062,8 +1065,9 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
         ref = graph->nextNodeRef(ref);
     }
     ASSERT(arena.available() == 0, "Graph arena planning did not match graph emission.");
-    EXEC_WHEN_DEBUG(mm::graphSpace().validateFreeList(
-        std::format("constructing graph '{}'", debugRecord ? debugRecord->name : "<null>")));
+    EXEC_WHEN_DEBUG(
+        mm::graphSpace().validateFreeList(
+            std::format("constructing graph '{}'", debugRecord ? debugRecord->name : "<null>")));
     CAMEL_LOG_INFO_S(
         "GCGraphBuild",
         "constructInPlace finished: name='{}' graph={}.",
@@ -1395,6 +1399,35 @@ void GCGraph::updateRefs(
     (void)type;
     if (staticArea_ && staticDataType()) {
         staticArea_->updateRefs(relocate, staticDataType());
+    }
+    // Root carriers are registered with the GC individually, but a graph kept alive only
+    // through a Function value (a runtime-created graph such as an autodiff gradient) must
+    // keep its whole closure alive: trace the same edges the closure walk (traceGraphs) uses
+    // so referenced graphs and their static constants survive as long as this graph does.
+    const auto traceEdge = [&relocate, this](GCGraph *&edge) {
+        if (!edge) {
+            return;
+        }
+        edge = static_cast<GCGraph *>(relocate(
+            static_cast<camel::core::rtdata::Object *>(edge),
+            nullptr,
+            camel::core::rtdata::RefTraceInfo{
+                .owner     = this,
+                .ownerType = nullptr,
+                .slotType  = nullptr,
+                .ownerKind = "GCGraph",
+                .slotName  = "graph-edge",
+                .slotIndex = camel::core::rtdata::RefTraceInfo::npos,
+            }));
+    };
+    for (gc_cnt_t i = 0; i < dependencyCount_; ++i) {
+        traceEdge(dependencies_[i]);
+    }
+    for (gc_cnt_t i = 0; i < subGraphCount_; ++i) {
+        traceEdge(subGraphs_[i]);
+    }
+    for (gc_cnt_t i = 0; i < staticGraphRefCount_; ++i) {
+        traceEdge(staticGraphRefs_[i]);
     }
 }
 
