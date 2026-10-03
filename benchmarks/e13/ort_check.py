@@ -70,7 +70,20 @@ def check_one(art: Path, probe: str, what: str, report: dict) -> bool:
         d = abs(got_loss - native_loss)
         ok &= d <= GATE
         arms_out[arm] = {"ort_loss": got_loss, "native_loss": native_loss, "|d|": d}
-        print(f"  arm {arm}: ort={got_loss:.9g} native={native_loss:.9g} |d|={d:.2e} {'ok' if d <= GATE else 'FAIL'}")
+        line = f"  arm {arm}: ort={got_loss:.9g} native={native_loss:.9g} |d|={d:.2e}"
+        if what == "step":
+            # A training step also yields the updated parameters, one output per leaf; each
+            # must match the native post-step dump as well (same gate).
+            worst = 0.0
+            for i, out in enumerate(session.get_outputs()):
+                if not out.name.startswith("output_1_"):
+                    continue
+                native_w = np.load(raw / f"arm_{arm}" / f"{out.name[len('output_1_'):]}.npy")
+                dw = float(np.max(np.abs(np.asarray(got[i]) - native_w)))
+                worst = max(worst, dw)
+            ok &= worst <= GATE
+            line += f" weights|d|={worst:.2e}"
+        print(f"{line} {'ok' if d <= GATE else 'FAIL'}")
     report[f"{probe}_{what}"] = {
         "status": "checked",
         "nodes": sum(ops.values()),
@@ -92,7 +105,8 @@ def main() -> int:
     report = {"gate": GATE}
     ok_all = True
     for probe in args.probes:
-        for what in ("fwd", "step"):
+        whats = ("step",) if probe == "l2x2" else ("fwd", "step")
+        for what in whats:
             ok_all &= check_one(args.artifacts, probe, what, report)
     out = args.artifacts / "raw" / "ort_vs_native.json"
     out.write_text(json.dumps(report, indent=2))

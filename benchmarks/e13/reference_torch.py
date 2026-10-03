@@ -115,8 +115,7 @@ def l2c_pieces(p, x):
 
 
 # ---------------------------------------------------------------- L2d: branch inside the loop (gated GRU)
-L2D = {
-    "w_ir": np.array([[0.5, -0.25, 0.75], [1.0, -0.5, 0.25]], dtype=np.float32),
+L2D = {    "w_ir": np.array([[0.5, -0.25, 0.75], [1.0, -0.5, 0.25]], dtype=np.float32),
     "w_iz": np.array([[0.25, 0.5, -0.75], [-0.5, 1.0, 0.5]], dtype=np.float32),
     "w_in": np.array([[0.75, -0.5, 0.5], [0.25, -1.0, 0.5]], dtype=np.float32),
     "w_hr": np.array([[0.5, 0.25, -0.25], [-0.5, 0.75, 0.5], [0.25, -0.75, 1.0]], dtype=np.float32),
@@ -167,9 +166,33 @@ def l2d_pieces(p, x):
     return h @ p["fc_w"] + p["fc_b"], gates
 
 
+# ---------------------------------------------------------------- L2x2: dissection, tensor-arm branch
+L2X2 = {
+    "w1": np.array([[0.5, -0.25, 0.75], [1.0, -0.5, 0.25]], dtype=np.float32),
+    "b1": np.array([0.1, 0.0, -0.1], dtype=np.float32),
+    "w2": np.array([[1.0], [-1.0], [0.5]], dtype=np.float32),
+    "b2": np.array([0.2], dtype=np.float32),
+}
+L2X2_X = {
+    "a": np.array([[1.0, 2.0], [-1.0, 0.5]], dtype=np.float32),
+    "b": np.array([[0.1, -0.1], [0.05, 0.0]], dtype=np.float32),
+    "0": np.zeros((2, 2), dtype=np.float32),
+}
+
+
+def l2x2_pieces(p, x):
+    import torch
+
+    h = torch.relu(x @ p["w1"] + p["b1"])
+    y = h @ p["w2"] + p["b2"]
+    s = float((y * y).mean().detach())
+    z = y * 2.0 if s > 1.0 else y
+    return z, s, "scale2" if s > 1.0 else "identity"
+
+
 # ---------------------------------------------------------------- generic driver
-PARAMS = {"l2a": L2A, "l2b": L2B, "l2c": L2C, "l2d": L2D}
-INPUTS = {"l2a": L2A_X, "l2b": L2B_X, "l2c": L2C_X, "l2d": L2D_X}
+PARAMS = {"l2a": L2A, "l2b": L2B, "l2c": L2C, "l2d": L2D, "l2x2": L2X2}
+INPUTS = {"l2a": L2A_X, "l2b": L2B_X, "l2c": L2C_X, "l2d": L2D_X, "l2x2": L2X2_X}
 
 
 def torch_step(probe: str, arm: str):
@@ -196,6 +219,9 @@ def torch_step(probe: str, arm: str):
     elif probe == "l2d":
         y, gates = l2d_pieces(params, x)
         info = {"gates": gates}
+    elif probe == "l2x2":
+        y, s, armname = l2x2_pieces(params, x)
+        info = {"s": s, "arm": armname}
     else:
         raise SystemExit(f"unknown probe {probe}")
     loss = (y * y).mean()
