@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 17, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,42 @@
 void Function::setRuntimeGraph(camel::runtime::GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime Function graph cannot be null.");
     runtimeGraph_ = graph;
+}
+
+void Function::updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) {
+    (void)type;
+    if (runtimeGraph_) {
+        // A runtime-created graph (e.g. an autodiff gradient graph built while the program
+        // runs) is no graph-carrier root: it is only reachable through this Function. Trace it
+        // so its static constants live exactly as long as the Function does. Program graphs
+        // are carrier roots already; re-tracing them is a no-op via their mark bit. Graph
+        // carriers live in graphSpace and never move, so the assignment is stable.
+        runtimeGraph_ = static_cast<camel::runtime::GCGraph *>(relocate(
+            static_cast<rtdata::Object *>(runtimeGraph_),
+            nullptr,
+            rtdata::RefTraceInfo{
+                .owner     = this,
+                .ownerType = type,
+                .slotType  = nullptr,
+                .ownerKind = "Function",
+                .slotName  = "graph",
+                .slotIndex = rtdata::RefTraceInfo::npos,
+            }));
+    }
+    if (closure_) {
+        const type::TupleType *tupleTypePtr = tupleType();
+        closure_                            = static_cast<Tuple *>(relocate(
+            closure_,
+            tupleTypePtr,
+            rtdata::RefTraceInfo{
+                .owner     = this,
+                .ownerType = type,
+                .slotType  = tupleTypePtr,
+                .ownerKind = "Function",
+                .slotName  = "closure",
+                .slotIndex = rtdata::RefTraceInfo::npos,
+            }));
+    }
 }
 
 const type::TupleType *Function::tupleType() const {
