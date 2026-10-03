@@ -157,6 +157,347 @@ assert(model.initializers.length <= 8, `weights must be inputs, not initializers
 timeout_ms = 6000
 
 [[tests]]
+name = "export_train_step_conv"
+desc = "A conv net training step exports with conv2d gradients as ConvTranspose (input) / Conv (kernel) / ReduceSum (bias) and the max_pool2d gradient as MaxPool indices + MaxUnpool — standard opset-17 inference operators only."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_conv.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_conv.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_conv.onnx'))
+assert(model.inputs.join() === 'conv1_w,conv1_b,conv2_w,conv2_b,fc_w,fc_b,input1', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_conv1_w,output_1_conv1_b,output_1_conv2_w,output_1_conv2_b,output_1_fc_w,output_1_fc_b', `unexpected outputs ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+// forward: 2 Conv; backward: dW of each conv as Conv with batch/channel swapped
+assert(count('Conv') === 4, `expected 4 Conv, got ${model.ops}`)
+// dX of the second conv is a ConvTranspose (the first conv's input needs no gradient)
+assert(count('ConvTranspose') === 1, `expected 1 ConvTranspose, got ${model.ops}`)
+// pool backward: one MaxPool recompute for indices, one MaxUnpool scatter
+assert(count('MaxUnpool') === 1, `expected 1 MaxUnpool, got ${model.ops}`)
+assert(count('Sub') >= 6, `expected an SGD update per parameter, got ${model.ops}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_frozen"
+desc = "M2: stop_gradient freezes a parameter through export — the graph carries no gradient product for it (4 MatMul vs 5 in export_train_step) yet the frozen weight stays a graph input with an (identity-updated) output."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_frozen.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_frozen.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_frozen.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+// frozen w1: the dW1 MatMul of export_train_step (5) is gone
+assert(count('MatMul') === 4, `expected 4 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_adam"
+desc = "T3: an Adam training step exports with the optimizer state (moment trees adam_m_*/adam_v_* and the step adam_t) as extra graph inputs and outputs; the bias-corrected update uses standard inference operators only (t+1 via Add, corrections via Pow/Sub, per-leaf Mul/Div/Sqrt)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_adam.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_adam.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_adam.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,adam_m_w1,adam_m_b1,adam_m_w2,adam_m_b2,adam_v_w1,adam_v_b1,adam_v_w2,adam_v_b2,adam_t,input2', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2,output_2_m_w1,output_2_m_b1,output_2_m_w2,output_2_m_b2,output_2_v_w1,output_2_v_b1,output_2_v_w2,output_2_v_b2,output_2_t', `unexpected outputs ${model.outputs}`)
+assert(model.inputDims[model.inputs.indexOf('adam_t')].join() === '', `adam_t must be a rank-0 step counter, got ${JSON.stringify(model.inputDims)}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+// forward/backward as in export_train_step (5 MatMul); one bias correction per beta, one Sqrt and
+// three Div per parameter, one Sub per parameter plus the two corrections
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Pow') === 2, `expected a Pow per bias correction, got ${model.ops}`)
+assert(count('Sqrt') === 4 && count('Div') === 12, `expected one Sqrt and three Div per parameter, got ${model.ops}`)
+assert(count('Sub') === 6, `expected one update Sub per parameter plus two corrections, got ${model.ops}`)
+// standard opset-17 inference operators only (no training-domain ops)
+const standard = new Set(['MatMul', 'Add', 'Relu', 'Mul', 'ReduceMean', 'Expand', 'Transpose', 'Greater', 'Cast', 'ReduceSum', 'Reshape', 'Pow', 'Sub', 'Div', 'Sqrt', 'Identity'])
+assert(model.ops.every((o) => standard.has(o)), `non-standard op in ${model.ops}`)
+assert(model.initializers.length <= 16, `weights and state must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_bn"
+desc = "T4: a conv+batch_norm (training mode) training step exports with the running statistics as extra graph inputs/outputs (the T3 single-step pattern); the BN forward and its gradient decompose to ReduceMean/Mul/Sqrt/Reciprocal/Sub — no BatchNormalization or training-domain operator survives."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_bn.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_bn.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_bn.onnx'))
+assert(model.inputs.join() === 'conv1_w,conv1_b,bn1_g,bn1_b,conv2_w,conv2_b,bn2_g,bn2_b,fc_w,fc_b,bn1_rm,bn1_rv,bn2_rm,bn2_rv,input2', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_conv1_w,output_1_conv1_b,output_1_bn1_g,output_1_bn1_b,output_1_conv2_w,output_1_conv2_b,output_1_bn2_g,output_1_bn2_b,output_1_fc_w,output_1_fc_b,output_2_bn1_rm,output_2_bn1_rv,output_2_bn2_rm,output_2_bn2_rv', `unexpected outputs ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+// the two forwards are structurally identical (loss's and the statistics'), so the exporter
+// shares them: 2 forward Convs + 2 kernel-gradient Convs, 1 input-gradient ConvTranspose
+assert(count('Conv') === 4, `expected 4 Conv, got ${model.ops}`)
+assert(count('ConvTranspose') === 1, `expected 1 ConvTranspose, got ${model.ops}`)
+// BN decomposition only: batch statistics and normalize, no dedicated normalization op
+assert(count('BatchNormalization') === 0, `no BatchNormalization may survive, got ${model.ops}`)
+assert(count('ReduceMean') >= 8, `batch statistics must be ReduceMean decompositions, got ${model.ops}`)
+assert(count('Reciprocal') === 2 && count('Sqrt') === 2, `one reciprocal-sqrt per BN, got ${model.ops}`)
+const standard = new Set(['Add', 'Cast', 'Conv', 'ConvTranspose', 'Div', 'Expand', 'Flatten', 'Greater', 'Identity', 'MatMul', 'Mul', 'Reciprocal', 'ReduceMean', 'ReduceSum', 'Relu', 'Reshape', 'Sqrt', 'Sub', 'Transpose', 'Unsqueeze'])
+assert(model.ops.every((o) => standard.has(o)), `non-standard op in ${model.ops}`)
+const params = ['conv1_w','conv1_b','bn1_g','bn1_b','conv2_w','conv2_b','bn2_g','bn2_b','fc_w','fc_b','bn1_rm','bn1_rv','bn2_rm','bn2_rv']
+assert(!model.initializers.some((i) => params.includes(i)), `weights and statistics must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_branch"
+desc = "A training step whose loss takes a data-dependent branch (if s > 1.0) exports as one standard graph: value_and_grad differentiates through the branch and each branch arm (loss value and pullback result) becomes a standard If."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_branch.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inputs: ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_branch_scalar"
+desc = "E13/T5: a branched training step whose predicate is a dead intermediate (mean(abs(h)), used only as the condition) exports like the known-good case — scalar branch arms are the exportable region of the Level-2 map."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_branch_scalar.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_scalar.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch_scalar.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inputs: ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_branch_tensor"
+desc = "E13/T5 (fixed): a branched training step with TENSOR arms exports — the branched-call split calls each arm's pullback with the original arguments (the cotangent may be computed after the branch JOIN), the captures are lambda-lifted to trailing parameters, and the graph gets one If for the branch value and one for the pullback result."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_branch_tensor.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_tensor.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch_tensor.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inputs: ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+assert(!model.initializers.some((n) => /^(w1|b1|w2|b2)$/.test(n)), `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_branch_disjoint"
+desc = "E13/T5 (fixed): a branched training step whose arms use DISJOINT parameter subsets exports. Every arm pullback yields a full gradient struct, so the branch JOIN is aggregate-typed and the exporter emits one multi-output If for it (plus one If for the branch value)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_branch_disjoint.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_disjoint.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch_disjoint.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,w3,b3,wo,bo,we,be,input1', `weights must be graph inputs: ${model.inputs}`)
+assert(model.outputs.length === 11, `loss and 10 updated weights must be outputs: ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('If') === 3, `expected an If per branched value (loss, pullback pieces), got ${model.ops}`)
+assert(!model.initializers.some((n) => /^(w1|b1|w2|b2|w3|b3|wo|bo|we|be)$/.test(n)), `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_gated_gru_step"
+desc = "E13/T5 boundary: a branched training step of a recurrent network (gated GRU) still cannot be exported — inside the differentiated decision tree the loop counter loses its staticness and the recursion cannot be unrolled. Locks the current boundary of the Level-2 map."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_gated_gru_step.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_gated_gru_step.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes('recursion whose depth depends on the model input cannot be exported'), 'missing recursion detail')
+assert(/at [^ ]*export_gated_gru_step[.]cml:42:38[)]/.test(text), 'missing source position of the recursive call')
+assert(!text.includes('unreachable'), 'export must fail before the next statement')
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_dynamic"
+desc = "E14/T7: a training step (value_and_grad + sgd) exports with a dynamic batch axis. The batch mean written as sum / shape arithmetic keeps the divisor input-dependent (Shape + Gather + Div instead of a folded constant) and the gradient's broadcast becomes an Expand on a Shape."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_dynamic.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_dynamic.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_dynamic.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
+assert(JSON.stringify(model.inputDims[model.inputs.indexOf('input1')]) === '["batch",2]', `data input must keep a symbolic batch, got ${JSON.stringify(model.inputDims)}`)
+assert(model.inputDims[0].join() === '2,3', `weights must stay static, got ${JSON.stringify(model.inputDims)}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+for (const op of ['Shape', 'Gather', 'Div', 'Expand']) {
+    assert(model.ops.includes(op), `dynamic batch count/broadcast must lower via ${op}, got ${model.ops}`)
+}
+const standard = new Set(['MatMul', 'Add', 'Relu', 'Mul', 'ReduceSum', 'Shape', 'Gather', 'Cast', 'Div', 'Expand', 'Transpose', 'Greater', 'Reshape', 'Sub', 'Identity'])
+assert(model.ops.every((o) => standard.has(o)), `non-standard op in ${model.ops}`)
+assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_dynamic_mean"
+desc = "E14/T7 boundary: the canonical mean(y*y) batch mean cannot export with a dynamic batch axis — its VJP divides by tensor:numel, which folds for a static batch but is input-dependent once the batch is symbolic, and tensor:numel has no ONNX lowering; the exporter reports it at the mean call."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_dynamic_mean.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_dynamic_mean.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes("operator 'tensor:numel' has no ONNX lowering at opset 17"), 'missing unsupported-operator detail')
+assert(/at [^ ]*export_train_step_dynamic_mean[.]cml:28:22[)]/.test(text), 'missing source position of the mean call')
+assert(!text.includes('unreachable'), 'export must fail before the next statement')
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_gated_gru_forward"
+desc = "E13/T5: a data-dependent branch inside a statically unrolled recurrence (GRU cell update gated on mean(|x_t|), T = 3) exports as a binary decision tree of standard If operators (2^3 - 1 = 7 counting nested subgraphs)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_gated_gru_forward.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_gated_gru_forward.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const fs = await import('fs')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const file = path.join(input.repo_root, 'tmp/test/onnx/export_gated_gru_forward.onnx')
+const model = readOnnxModel(file)
+assert(model.ops.join() === 'Slice,Reshape,Abs,ReduceMean,Greater,If,MatMul,Add,Mul,ReduceMean,Identity', `unexpected top-level ops ${model.ops}`)
+assert(model.inputs.join() === 'w_ir,w_iz,w_in,w_hr,w_hz,w_hn,b_ir,b_iz,b_in,b_hr,b_hz,b_hn,fc_w,fc_b,input1', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output', `unexpected outputs ${model.outputs}`)
+// nested decision tree: count every NodeProto op_type (field 4 -> key 0x22, length 2) equal to "If"
+const buf = fs.readFileSync(file)
+const mark = Buffer.from([0x22, 0x02, 0x49, 0x66])
+let ifs = 0, at = 0
+while ((at = buf.indexOf(mark, at)) !== -1) { ifs += 1; at += 1 }
+assert(ifs === 7, `expected 2^3 - 1 = 7 If nodes in the decision tree, got ${ifs}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
 name = "export_dynamic_recursion"
 desc = "Recursion whose depth depends on the input cannot unroll; the call left after simplification is reported at its source position."
 kind = "behavior"
@@ -221,6 +562,32 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
 [[tests]]
+name = "ort_train_step_adam"
+desc = "T3: the exported Adam step runs on ONNX Runtime with the optimizer state fed back; five steps match torch.optim.Adam and Camel's native nn:adam on the loss and every updated parameter (<= 1e-5)."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_adam.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnxruntime, torch"]
+expect_exit = 0
+expect_stdout_contains = ["ort adam: worst", "PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "resnetbn_train_step_export"
+desc = "T4: the literal ResNet-18 training step (20 training-mode batch_norms, running statistics as graph I/O) exports, passes onnx.checker(full_check), and matches Camel native execution on every one of the 123 outputs on ONNX Runtime (benchmarks/train.py --check-onnx)."
+kind = "behavior"
+tool = "python"
+case = "../../../../benchmarks/train.py"
+args = ["${case}", "--check-onnx", "--models", "resnetbn"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime, torch"]
+expect_exit = 0
+expect_stdout_contains = ["onnx.checker ok", "onnx training-step check: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+
+[[tests]]
 name = "ort_dynamic_batch"
 desc = "One model exported with a dynamic batch axis runs on ONNX Runtime at batch sizes 1, 3 and 7 and matches Camel's own output at each."
 kind = "behavior"
@@ -232,3 +599,16 @@ expect_exit = 0
 expect_stdout_contains = ["input dims ['batch', 2]", "batch 1: shape [3]", "batch 7: shape [21]", "ort run: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+[[tests]]
+name = "ort_train_step_dynamic"
+desc = "E14/T7: one training-step graph (value_and_grad + sgd) exported with a dynamic batch axis runs on ONNX Runtime at batch sizes 1, 16 and 64 and matches the per-batch specialized exports and Camel's native run of the same step at each (<= 1e-6)."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_train_dynamic.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["input dims ['batch', 2]", "ort train dynamic: worst", "PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000

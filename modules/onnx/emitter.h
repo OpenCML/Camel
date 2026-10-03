@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,6 +38,7 @@
 
 #include "camel/core/mm/root_handle.h"
 
+#include <array>
 #include <deque>
 #include <map>
 #include <optional>
@@ -78,6 +79,15 @@ type::Type *inferenceTypeOf(const Value &value);
 /// The value as a constant operator argument (scalars, strings, int arrays), when it is one.
 std::optional<tensor::ops::ConstArg> constArgOf(const Value &value);
 
+/// The export-time view of an nn OptimizerState (first and second moment trees plus the step
+/// count) as one aggregate value, so it can flow between graph inputs, the nn:adam lowering,
+/// and graph outputs. The struct type is fabricated for naming (fields m, v, t); the runtime
+/// state object itself is opaque.
+Value optimizerStateValue(Value m, Value v, Value t);
+
+/// The (m, v, t) parts of a value built by optimizerStateValue.
+std::array<Value, 3> optimizerStateParts(const Value &state);
+
 class CapabilityTable;
 
 class Emitter {
@@ -99,6 +109,23 @@ class Emitter {
     std::string node(
         std::string opType, std::vector<std::string> inputs, std::vector<Attribute> attributes = {},
         std::string_view hint = {});
+
+    /// Appends a two-output node (e.g. MaxPool with its indices output) and returns both output
+    /// names. Not memoized: multi-output nodes are emitted once per call site.
+    std::pair<std::string, std::string> node2(
+        std::string opType, std::vector<std::string> inputs, std::vector<Attribute> attributes,
+        ElemType secondElem, std::string_view hint = {});
+
+    /// Appends a node with `outputCount` outputs (e.g. an If whose arms yield a tuple) and
+    /// returns the output names. Not memoized: multi-output nodes are emitted once per call site.
+    std::vector<std::string> nodeN(
+        std::string opType, std::vector<std::string> inputs, std::vector<Attribute> attributes,
+        size_t outputCount, std::string_view hint = {});
+
+    /// Appends an Identity node to an already popped subgraph and returns its output name. Used
+    /// for the outputs of a branch arm that yields several values: the arm subgraph is complete
+    /// before the leaf count is known, so the output Identities are added afterwards.
+    std::string appendIdentity(Graph &body, const std::string &input, std::string_view hint);
 
     /// Operand name for `value`, converted to `dtype` when given.
     std::string operand(const Value &value, std::optional<type::TypeCode> dtype = std::nullopt);

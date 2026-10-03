@@ -1,0 +1,31 @@
+/**
+ * E10 first-order baseline for the graph-stats comparison: same MLP and loss as
+ * e10_second.cml, but only the first derivative is materialized.
+ * The differentiated quantity (input scale t) is the with-parameter.
+ */
+module e10_first
+
+import { grad } from autodiff
+import { Tensor, relu, mean, reshape } from tensor
+
+func fwd(w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor, x: Tensor): Tensor {
+    let h = relu(x @ w1 + b1)
+    return h @ w2 + b2
+}
+
+with <t: float>
+func loss_s(): float {
+    let w1 = reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3])
+    let b1 = reshape([0.1, 0.0, -0.1], [3])
+    let w2 = reshape([1.0, -1.0, 0.5], [3, 1])
+    let b2 = reshape([0.2], [1])
+    let x = reshape([1.0, 2.0], [1, 2])
+    let y = fwd(w1, b1, w2, b2, x * t)
+    return mean(y * y)
+}
+
+func main(): int sync {
+    let d1 = grad(loss_s)<1.0>()
+    'd1={}'->format<d1>->println
+    return 0
+}

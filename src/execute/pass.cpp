@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: May. 24, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,6 +45,7 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <atomic>
 #include <format>
 #include <map>
 #include <memory>
@@ -442,6 +443,37 @@ PassFactory findModulePass(const std::string &path) {
 
 } // namespace
 
+// -----------------------------------------------------------------------------
+// Pass snapshot hook — unconditional (release included). See snapshot.h for the
+// contract; modeled on DebugBreakpoint's GIR node slot.
+// -----------------------------------------------------------------------------
+namespace {
+
+std::atomic<PassSnapshotHandler> &passSnapshotHandlerSlot() {
+    static std::atomic<PassSnapshotHandler> slot{nullptr};
+    return slot;
+}
+
+std::atomic<void *> &passSnapshotUserDataSlot() {
+    static std::atomic<void *> slot{nullptr};
+    return slot;
+}
+
+} // namespace
+
+void setPassSnapshotHandler(PassSnapshotHandler handler, void *userData) {
+    if (handler) {
+        // Publish userData before the handler so an acquire-load of the handler
+        // guarantees the matching userData store is visible.
+        passSnapshotUserDataSlot().store(userData, std::memory_order_release);
+        passSnapshotHandlerSlot().store(handler, std::memory_order_release);
+    } else {
+        // Clearing: drop the handler first so no new call observes a half-cleared pair.
+        passSnapshotHandlerSlot().store(nullptr, std::memory_order_release);
+        passSnapshotUserDataSlot().store(nullptr, std::memory_order_release);
+    }
+}
+
 void registerModulePass(const std::string &path, PassFactory factory) {
     auto &registry = modulePasses();
     std::lock_guard lock(registry.mutex);
@@ -522,6 +554,7 @@ PassApplyResult applyPassesDetailed(
             "Pass",
             std::format("run | passes | plan ({}): {}", passes.size(), seq.str()));
     }
+    size_t passOutputIndex = 0;
     for (const auto &p : passes) {
         if (graph == nullptr) {
             return {nullptr, PassApplyStatus::Consumed};
@@ -541,6 +574,14 @@ PassApplyResult applyPassesDetailed(
             if (!graph) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> consumed", p);
                 return {nullptr, PassApplyStatus::Consumed};
+            }
+            if (PassSnapshotHandler snapshotHandler =
+                    passSnapshotHandlerSlot().load(std::memory_order_acquire)) {
+                snapshotHandler(
+                    p.c_str(),
+                    ++passOutputIndex,
+                    graph,
+                    passSnapshotUserDataSlot().load(std::memory_order_acquire));
             }
             CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> next graph '{}'", p, graph->name());
         } else {

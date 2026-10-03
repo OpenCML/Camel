@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -438,6 +438,198 @@ TensorObject *batchNorm(
             }
         });
     return out;
+}
+
+namespace {
+
+/// The shared geometry of the training-mode batch-norm kernels: channel count, inner (spatial)
+/// extent per image, and values per channel M. The kernels parallelize their reductions over
+/// channels; every channel reduces N * inner values serially.
+struct BnTrainGeometry {
+    int64_t N, C, inner;
+    int64_t perChannel() const { return N * inner; }
+};
+
+BnTrainGeometry bnTrainGeometry(
+    const TensorObject *input, std::initializer_list<const TensorObject *> params, const char *op) {
+    if (input->rank() < 2) {
+        throw ShapeError(
+            std::string(op) + " expects input of rank >= 2 with channels on axis 1, got " +
+            dims(input->shapeSpan()));
+    }
+    BnTrainGeometry g{.N = input->dim(0), .C = input->dim(1), .inner = 1};
+    for (size_t d = 2; d < input->rank(); ++d) {
+        g.inner *= input->dim(d);
+    }
+    for (const TensorObject *p : params) {
+        if (p->rank() != 1 || p->dim(0) != g.C) {
+            throw ShapeError(
+                std::string(op) + " parameters must have shape [" + std::to_string(g.C) +
+                "], got " + dims(p->shapeSpan()));
+        }
+    }
+    if (g.perChannel() < 2) {
+        throw ShapeError(
+            std::string(op) + " expects more than 1 value per channel when training, got " +
+            dims(input->shapeSpan()));
+    }
+    return g;
+}
+
+/// Per-channel batch statistics of `x` (double accumulators): the mean, the biased variance,
+/// and 1/sqrt(var + eps).
+struct BnTrainStats {
+    std::vector<double> mean, var, invStd;
+};
+
+BnTrainStats bnTrainStats(const float *x, const BnTrainGeometry &g, double eps) {
+    BnTrainStats stats;
+    const size_t C = static_cast<size_t>(g.C);
+    stats.mean.assign(C, 0.0);
+    stats.var.assign(C, 0.0);
+    stats.invStd.assign(C, 0.0);
+    parallelFor(g.C, 1, [&](int64_t begin, int64_t end) {
+        for (int64_t c = begin; c < end; ++c) {
+            double sum = 0.0;
+            for (int64_t n = 0; n < g.N; ++n) {
+                const float *plane = x + (n * g.C + c) * g.inner;
+                for (int64_t i = 0; i < g.inner; ++i) {
+                    sum += plane[i];
+                }
+            }
+            const double mu = sum / static_cast<double>(g.perChannel());
+            double sq       = 0.0;
+            for (int64_t n = 0; n < g.N; ++n) {
+                const float *plane = x + (n * g.C + c) * g.inner;
+                for (int64_t i = 0; i < g.inner; ++i) {
+                    const double d = plane[i] - mu;
+                    sq += d * d;
+                }
+            }
+            const size_t u  = static_cast<size_t>(c);
+            stats.mean[u]   = mu;
+            stats.var[u]    = sq / static_cast<double>(g.perChannel());
+            stats.invStd[u] = 1.0 / std::sqrt(stats.var[u] + eps);
+        }
+    });
+    return stats;
+}
+
+} // namespace
+
+void batchNormTrain(
+    const TensorObject *input, const TensorObject *gamma, const TensorObject *beta,
+    const TensorObject *runningMean, const TensorObject *runningVar, double momentum, double eps,
+    TensorObject **outY, TensorObject **outRunningMean, TensorObject **outRunningVar,
+    mm::IAllocator &allocator) {
+    const BnTrainGeometry g =
+        bnTrainGeometry(input, {gamma, beta, runningMean, runningVar}, "batch_norm_train");
+    const TensorObject *x  = asFloat(input, allocator);
+    const TensorObject *gm = asFloat(gamma, allocator), *bt = asFloat(beta, allocator);
+    const TensorObject *rm = asFloat(runningMean, allocator), *rv = asFloat(runningVar, allocator);
+    const Shape statShape{g.C};
+    TensorObject *y   = TensorObject::create(TypeCode::Float32, input->shapeSpan(), allocator);
+    TensorObject *nrm = TensorObject::create(TypeCode::Float32, statShape, allocator);
+    TensorObject *nrv = TensorObject::create(TypeCode::Float32, statShape, allocator);
+
+    const BnTrainStats stats = bnTrainStats(x->dataAs<float>(), g, eps);
+
+    const float keep = static_cast<float>(1.0 - momentum), mix = static_cast<float>(momentum);
+    const double unbiased =
+        static_cast<double>(g.perChannel()) / static_cast<double>(g.perChannel() - 1);
+    float *prm = nrm->dataAs<float>(), *prv = nrv->dataAs<float>();
+    for (int64_t c = 0; c < g.C; ++c) {
+        const size_t u = static_cast<size_t>(c);
+        prm[c]         = keep * rm->dataAs<float>()[c] + mix * static_cast<float>(stats.mean[u]);
+        prv[c] = keep * rv->dataAs<float>()[c] + mix * static_cast<float>(stats.var[u] * unbiased);
+    }
+    parallelFor(
+        g.N * g.C,
+        std::max<int64_t>(1, 16384 / std::max<int64_t>(g.inner, 1)),
+        [&](int64_t begin, int64_t end) {
+            for (int64_t plane = begin; plane < end; ++plane) {
+                const int64_t c   = plane % g.C;
+                const size_t u    = static_cast<size_t>(c);
+                const float scale = gm->dataAs<float>()[c] * static_cast<float>(stats.invStd[u]);
+                const float shift =
+                    bt->dataAs<float>()[c] - static_cast<float>(stats.mean[u]) * scale;
+                const float *src = x->dataAs<float>() + plane * g.inner;
+                float *dst       = y->dataAs<float>() + plane * g.inner;
+                for (int64_t i = 0; i < g.inner; ++i) {
+                    dst[i] = src[i] * scale + shift;
+                }
+            }
+        });
+    *outY           = y;
+    *outRunningMean = nrm;
+    *outRunningVar  = nrv;
+}
+
+void batchNormTrainGrad(
+    const TensorObject *input, const TensorObject *gamma, const TensorObject *dy, double eps,
+    TensorObject **outDx, TensorObject **outDgamma, TensorObject **outDbeta,
+    mm::IAllocator &allocator) {
+    const BnTrainGeometry g = bnTrainGeometry(input, {gamma}, "batch_norm_train_grad");
+    if (!dy->sameShape(input)) {
+        throw ShapeError(
+            "batch_norm_train_grad expects dy shaped like the input, got " + dims(dy->shapeSpan()) +
+            " vs " + dims(input->shapeSpan()));
+    }
+    const TensorObject *x  = asFloat(input, allocator);
+    const TensorObject *gm = asFloat(gamma, allocator);
+    const TensorObject *d  = asFloat(dy, allocator);
+    const Shape statShape{g.C};
+    TensorObject *dx = TensorObject::create(TypeCode::Float32, input->shapeSpan(), allocator);
+    TensorObject *dg = TensorObject::create(TypeCode::Float32, statShape, allocator);
+    TensorObject *db = TensorObject::create(TypeCode::Float32, statShape, allocator);
+
+    const BnTrainStats stats = bnTrainStats(x->dataAs<float>(), g, eps);
+    const double M           = static_cast<double>(g.perChannel());
+    float *pdg = dg->dataAs<float>(), *pdb = db->dataAs<float>();
+    // Per-channel sums of dy and dy*xhat (double accumulators).
+    parallelFor(g.C, 1, [&](int64_t begin, int64_t end) {
+        for (int64_t c = begin; c < end; ++c) {
+            const size_t u  = static_cast<size_t>(c);
+            const double mu = stats.mean[u], inv = stats.invStd[u];
+            double sumDy = 0.0, sumDyXhat = 0.0;
+            for (int64_t n = 0; n < g.N; ++n) {
+                const float *xplane = x->dataAs<float>() + (n * g.C + c) * g.inner;
+                const float *dplane = d->dataAs<float>() + (n * g.C + c) * g.inner;
+                for (int64_t i = 0; i < g.inner; ++i) {
+                    const double xhat = (xplane[i] - mu) * inv;
+                    sumDy += dplane[i];
+                    sumDyXhat += dplane[i] * xhat;
+                }
+            }
+            pdb[c] = static_cast<float>(sumDy);
+            pdg[c] = static_cast<float>(sumDyXhat);
+        }
+    });
+    // dx = gamma*inv * (dy - sum(dy)/M - xhat*sum(dy*xhat)/M)
+    parallelFor(
+        g.N * g.C,
+        std::max<int64_t>(1, 16384 / std::max<int64_t>(g.inner, 1)),
+        [&](int64_t begin, int64_t end) {
+            for (int64_t plane = begin; plane < end; ++plane) {
+                const int64_t c = plane % g.C;
+                const size_t u  = static_cast<size_t>(c);
+                const double mu = stats.mean[u], inv = stats.invStd[u];
+                const float ginv    = gm->dataAs<float>()[c] * static_cast<float>(inv);
+                const float meanDy  = pdb[c] / static_cast<float>(M);
+                const float meanDxh = pdg[c] / static_cast<float>(M);
+                const float *xplane = x->dataAs<float>() + plane * g.inner;
+                const float *dplane = d->dataAs<float>() + plane * g.inner;
+                float *dst          = dx->dataAs<float>() + plane * g.inner;
+                for (int64_t i = 0; i < g.inner; ++i) {
+                    const float xhat =
+                        (xplane[i] - static_cast<float>(mu)) * static_cast<float>(inv);
+                    dst[i] = ginv * (dplane[i] - meanDy - xhat * meanDxh);
+                }
+            }
+        });
+    *outDx     = dx;
+    *outDgamma = dg;
+    *outDbeta  = db;
 }
 
 } // namespace camel::tensor::kernels

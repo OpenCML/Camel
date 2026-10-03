@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,6 +36,7 @@
 
 #include "camel/core/rtdata/array.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/tuple.h"
 
 #include <algorithm>
 #include <format>
@@ -66,11 +67,12 @@ std::optional<ConstArg> LowerContext::constArg(size_t index) const {
 }
 
 void LowerContext::fail(size_t index, std::string_view expected) const {
-    throw ExportError(std::format(
-        "'{}': argument {} must be an export-time constant {} (it depends on the model input)",
-        uri_,
-        index,
-        expected));
+    throw ExportError(
+        std::format(
+            "'{}': argument {} must be an export-time constant {} (it depends on the model input)",
+            uri_,
+            index,
+            expected));
 }
 
 int64_t LowerContext::constInt(size_t index) const {
@@ -533,6 +535,151 @@ Value lowerBatchNorm(const LowerContext &ctx) {
         {Attribute::makeFloat("epsilon", static_cast<float>(ctx.constNumber(5, 1e-5)))});
 }
 
+/// A float32 scalar constant operand.
+std::string f32Const(Emitter &e, double v) {
+    return e.operand(
+        Value::constant(rtdata::toSlot(static_cast<rtdata::Float64>(v)), type::Type::Float64()),
+        TypeCode::Float32);
+}
+
+/// ReduceSum/ReduceMean of `x` over `axes`, in the form the opset takes.
+std::string reduceAxes(
+    Emitter &e, const std::string &op, const std::string &x, std::vector<int64_t> axes,
+    bool keepDims) {
+    const bool axesInput = op == "ReduceSum" ? e.opset() >= 13 : e.opset() >= 18;
+    const Attribute keep = Attribute::makeInt("keepdims", keepDims ? 1 : 0);
+    if (axesInput) {
+        return e.node(op, {x, e.int64s(axes)}, {keep});
+    }
+    return e.node(op, {x}, {Attribute::makeInts("axes", std::move(axes)), keep});
+}
+
+/// The axes batch-norm statistics reduce: every axis but the channel axis 1.
+std::vector<int64_t> bnStatAxes(size_t rank) {
+    std::vector<int64_t> axes{0};
+    for (size_t i = 2; i < rank; ++i) {
+        axes.push_back(static_cast<int64_t>(i));
+    }
+    return axes;
+}
+
+/// [1, C, 1, ...]: the channel count spread over `rank` axes for broadcasting.
+std::vector<int64_t> bnChannelShape(size_t rank, int64_t channels) {
+    std::vector<int64_t> shape(rank, 1);
+    shape[1] = channels;
+    return shape;
+}
+
+/// The channel count (gamma's extent); batch_norm parameters are rank-1 [C].
+int64_t bnChannelCount(const LowerContext &ctx, size_t index) {
+    const auto facts = ctx.facts(index);
+    if (!facts.shape || facts.shape->size() != 1 || (*facts.shape)[0] == tensor::kUnknownDim) {
+        throw ExportError(
+            std::format(
+                "'{}': the channel count (parameter {}'s extent) must be known statically",
+                ctx.uri(),
+                index));
+    }
+    return (*facts.shape)[0];
+}
+
+/// momentum * M/(M-1), the running variance's batch-variance factor (the UNBIASED correction):
+/// a constant when the input shape is static, a Shape -> Gather -> Cast -> ReduceProd chain
+/// otherwise. A static M < 2 is rejected like PyTorch's "more than 1 value per channel".
+std::string bnUnbiasedVarFactor(
+    Emitter &e, const LowerContext &ctx, const std::string &x, size_t rank, double momentum) {
+    const auto facts = ctx.facts(0);
+    double count     = 1.0;
+    bool known       = facts.shape.has_value();
+    if (known) {
+        for (size_t i = 0; i < rank; ++i) {
+            if (i == 1) {
+                continue;
+            }
+            if ((*facts.shape)[i] == tensor::kUnknownDim) {
+                known = false;
+                break;
+            }
+            count *= static_cast<double>((*facts.shape)[i]);
+        }
+    }
+    if (known) {
+        if (count < 2.0) {
+            throw ExportError(
+                std::format(
+                    "'{}': expects more than 1 value per channel when training",
+                    ctx.uri()));
+        }
+        return f32Const(e, momentum * count / (count - 1.0));
+    }
+    const std::string dims =
+        e.node("Gather", {e.node("Shape", {x}), e.int64s(bnStatAxes(rank))}, {intAttr("axis", 0)});
+    const bool axesInput = e.opset() >= 18;
+    const std::string total =
+        axesInput ? e.node(
+                        "ReduceProd",
+                        {dims, e.int64s(std::vector<int64_t>{0})},
+                        {intAttr("keepdims", 0)})
+                  : e.node("ReduceProd", {dims}, {ints("axes", {0}), intAttr("keepdims", 0)});
+    const std::string m =
+        e.node("Cast", {total}, {intAttr("to", static_cast<int64_t>(ElemType::Float))});
+    const std::string ratio = e.node("Div", {m, e.node("Sub", {m, f32Const(e, 1.0)})});
+    return e.node("Mul", {f32Const(e, momentum), ratio});
+}
+
+// batch_norm_train(x, gamma, beta, running_mean, running_var, momentum = 0.1, eps = 1e-5)
+//   -> (y, new_running_mean, new_running_var)
+// PyTorch's training-mode batch_norm, decomposed to standard inference operators: per-channel
+// batch statistics over every axis but 1, the BIASED variance for the normalize, the UNBIASED
+// (M/(M-1)) variance blended into the running variance.
+Value lowerBatchNormTrain(const LowerContext &ctx) {
+    Emitter &e        = ctx.emitter();
+    const auto f      = TypeCode::Float32;
+    const size_t rank = ctx.rank(0);
+    if (rank < 2) {
+        throw ExportError(std::format("'{}': expects input of rank >= 2", ctx.uri()));
+    }
+    const std::vector<int64_t> axes = bnStatAxes(rank);
+    const int64_t C                 = bnChannelCount(ctx, 1);
+    const double momentum           = ctx.constNumber(5, 0.1);
+    const double eps                = ctx.constNumber(6, 1e-5);
+    const std::string x             = ctx.input(0, f);
+
+    // The normalize path keeps the reduced axes (broadcast against x).
+    const std::string mu1  = reduceAxes(e, "ReduceMean", x, axes, true);
+    const std::string xc   = e.node("Sub", {x, mu1});
+    const std::string xc2  = e.node("Mul", {xc, xc});
+    const std::string var1 = reduceAxes(e, "ReduceMean", xc2, axes, true);
+    const std::string inv1 =
+        e.node("Reciprocal", {e.node("Sqrt", {e.node("Add", {var1, f32Const(e, eps)})})});
+    const std::string xhat            = e.node("Mul", {xc, inv1});
+    const std::vector<int64_t> cShape = bnChannelShape(rank, C);
+    const std::string g4              = e.node("Reshape", {ctx.input(1, f), e.int64s(cShape)});
+    const std::string b4              = e.node("Reshape", {ctx.input(2, f), e.int64s(cShape)});
+    const std::string y               = e.node("Add", {e.node("Mul", {xhat, g4}), b4});
+
+    // The running statistics are [C] vectors: biased mean, UNBIASED variance, momentum blend.
+    const std::string muC  = reduceAxes(e, "ReduceMean", x, axes, false);
+    const std::string varC = reduceAxes(e, "ReduceMean", xc2, axes, false);
+    const std::string keep = f32Const(e, 1.0 - momentum), mix = f32Const(e, momentum);
+    const std::string newRm =
+        e.node("Add", {e.node("Mul", {ctx.input(3, f), keep}), e.node("Mul", {muC, mix})});
+    const std::string varFactor = bnUnbiasedVarFactor(e, ctx, x, rank, momentum);
+    const std::string newRv =
+        e.node("Add", {e.node("Mul", {ctx.input(4, f), keep}), e.node("Mul", {varC, varFactor})});
+
+    const tensor::StaticShape statShape{C};
+    Value yV               = Value::symbolic(y, f, ctx.facts(0).shape);
+    Value rmV              = Value::symbolic(newRm, f, statShape);
+    Value rvV              = Value::symbolic(newRv, f, std::move(statShape));
+    type::Type *resultType = ctx.resultType();
+    if (!resultType || resultType->code() != TypeCode::Tuple) {
+        resultType = type::TupleType::create(
+            {tensor::TensorType::get(f), tensor::TensorType::get(f), tensor::TensorType::get(f)});
+    }
+    return Value::aggregate(resultType, {std::move(yV), std::move(rmV), std::move(rvV)});
+}
+
 Value lowerEmbedding(const LowerContext &ctx) {
     return ctx.emit("Gather", {ctx.input(0), ctx.input(1, TypeCode::Int64)}, {intAttr("axis", 0)});
 }
@@ -612,6 +759,7 @@ LoweringRegistry::LoweringRegistry() {
     add("nn:max_pool2d", poolOp("MaxPool"));
     add("nn:avg_pool2d", poolOp("AveragePool"));
     add("nn:batch_norm", lowerBatchNorm, 15);
+    add("nn:batch_norm_train", lowerBatchNormTrain, 13);
     add("nn:embedding", lowerEmbedding);
 
     // Builtin scalar operators (only reached when an operand depends on the model input).

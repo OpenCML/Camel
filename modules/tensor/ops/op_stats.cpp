@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 29, 2026
- * Updated: Sep. 29, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,9 +52,9 @@ std::array<Slot, kSlots> &slots() {
 std::atomic<size_t> used{0};
 
 template <size_t I> slot_t trampoline(ArgsView &with, ArgsView &norm, context::Context &ctx) {
-    Slot &slot = slots()[I];
-    const auto start = std::chrono::steady_clock::now();
-    slot_t result = slot.kernel(with, norm, ctx);
+    Slot &slot         = slots()[I];
+    const auto start   = std::chrono::steady_clock::now();
+    slot_t result      = slot.kernel(with, norm, ctx);
     const auto elapsed = std::chrono::steady_clock::now() - start;
     slot.calls.fetch_add(1, std::memory_order_relaxed);
     slot.nanos.fetch_add(
@@ -63,11 +63,13 @@ template <size_t I> slot_t trampoline(ArgsView &with, ArgsView &norm, context::C
     return result;
 }
 
-template <size_t... I> constexpr std::array<operator_t, kSlots> makeTrampolines(std::index_sequence<I...>) {
+template <size_t... I>
+constexpr std::array<operator_t, kSlots> makeTrampolines(std::index_sequence<I...>) {
     return {&trampoline<I>...};
 }
 
-constexpr std::array<operator_t, kSlots> kTrampolines = makeTrampolines(std::make_index_sequence<kSlots>{});
+constexpr std::array<operator_t, kSlots> kTrampolines =
+    makeTrampolines(std::make_index_sequence<kSlots>{});
 
 void report() {
     const size_t count = std::min(used.load(), kSlots);
@@ -83,14 +85,25 @@ void report() {
         return a->nanos.load() > b->nanos.load();
     });
     std::fprintf(stderr, "tensor op stats: %.3f ms in kernels\n", total / 1e6);
-    std::fprintf(stderr, "  %-24s %10s %12s %10s %6s\n", "operator", "calls", "total ms", "us/call", "%");
+    std::fprintf(
+        stderr,
+        "  %-24s %10s %12s %10s %6s\n",
+        "operator",
+        "calls",
+        "total ms",
+        "us/call",
+        "%");
     for (const Slot *row : rows) {
         const double ms = row->nanos.load() / 1e6;
         std::fprintf(
-            stderr, "  %-24s %10llu %12.3f %10.2f %6.1f\n", row->name.c_str(),
-            static_cast<unsigned long long>(row->calls.load()), ms,
+            stderr,
+            "  %-24s %10llu %12.3f %10.2f %6.1f\n",
+            row->name.c_str(),
+            static_cast<unsigned long long>(row->calls.load()),
+            ms,
             ms * 1000.0 / static_cast<double>(row->calls.load()),
-            total ? 100.0 * static_cast<double>(row->nanos.load()) / static_cast<double>(total) : 0.0);
+            total ? 100.0 * static_cast<double>(row->nanos.load()) / static_cast<double>(total)
+                  : 0.0);
     }
 }
 
@@ -103,12 +116,15 @@ bool opStatsEnabled() {
 
 operator_t timedKernel(const std::string &name, operator_t kernel) {
     static std::once_flag registered;
+    // Construct the slot table before registering report: teardown runs in reverse order, so
+    // report must be registered after slots() to still see the names when it fires.
+    (void)slots();
     std::call_once(registered, [] { std::atexit(report); });
     const size_t index = used.fetch_add(1);
     if (index >= kSlots) {
         return kernel;
     }
-    slots()[index].name = name;
+    slots()[index].name   = name;
     slots()[index].kernel = kernel;
     return kTrampolines[index];
 }

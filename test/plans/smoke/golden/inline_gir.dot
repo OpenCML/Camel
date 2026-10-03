@@ -96,7 +96,7 @@ digraph GraphIR {
         N21 [label=":str/\nformat", type="OPER", shape=diamond, style=solid, tooltip=":str/format\nmain::node#7"];
         N22 [label=":io/p\nrintln", type="OPER", shape=diamond, style=solid, tooltip=":io/println\nmain::node#8"];
         N23 [label="0", type="DATA", shape=circle, style=solid, tooltip="0\nmain::node#-4"];
-        N24 [label="GATE", type="GATE", shape=diamond, style=dashed, tooltip="GATE\nmain::node#9"];
+        N24 [label="GATE", type="GATE", shape=diamond, style=dashed, tooltip="GATE\nmain::node#-4"];
         N24 -> O01 [label="0", type="EXIT", style=solid];
         N18 -> N1A [label="0|0", type="WITH", style=dashed];
         N19 -> N1A [label="0|0", type="NORM"];

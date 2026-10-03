@@ -1,0 +1,42 @@
+/**
+ * Native dumper for the ort_adam.py three-way check: runs five in-graph Adam
+ * steps of the export_train_step_adam MLP, printing the loss and saving the
+ * updated parameters per step.
+ */
+module export_train_step_adam_dump
+
+import { Tensor, relu, mean, reshape } from tensor
+import { value_and_grad } from autodiff
+import { OptimizerState, adam, adam_state, save_params } from nn
+import { get_env } from sys
+
+type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+
+with <m: Mlp>
+func loss(x: Tensor): float {
+    let h = relu(x @ m.w1 + m.b1)
+    let y = h @ m.w2 + m.b2
+    return mean(y * y)
+}
+
+sync func loop(m: Mlp, st: OptimizerState, x: Tensor, i: int, steps: int, dir: string): Mlp {
+    return if i >= steps then m else sync {
+        let vg = value_and_grad(loss)<m>(x)
+        let next = adam(m, vg.1, st, 0.001)
+        'step={} loss={}'->format<i, vg.0>->println
+        save_params(next.0, dir + '/step_' + '{}'->format<i>)
+        return loop(next.0, next.1, x, i + 1, steps, dir)
+    }
+}
+
+func main(): int sync {
+    let m = {
+        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
+        b1: reshape([0.1, 0.0, -0.1], [3]),
+        w2: reshape([1.0, -1.0, 0.5], [3, 1]),
+        b2: reshape([0.2], [1])
+    }
+    let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
+    loop(m, adam_state(m), x, 0, int(get_env('STEPS')), get_env('DUMP_DIR'))
+    return 0
+}

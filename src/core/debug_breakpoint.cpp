@@ -13,15 +13,28 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 24, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/debug_breakpoint.h"
 
+#include <atomic>
+
+namespace {
+
+// The GIR node handler slot lives outside the NDEBUG guards: node-level debugging must work on
+// release builds, where camel-db is routinely deployed. Function-local static in an anonymous
+// namespace keeps lazy init and avoids static-init order issues.
+std::atomic<camel::DebugBreakpoint::GirNodeHandlerFn> &girNodeHandlerSlot() {
+    static std::atomic<camel::DebugBreakpoint::GirNodeHandlerFn> slot{nullptr};
+    return slot;
+}
+
+} // namespace
+
 #ifndef NDEBUG
 
-#include <atomic>
 #include <mutex>
 #include <unordered_set>
 
@@ -120,3 +133,18 @@ std::vector<std::string> DebugBreakpoint::GetKnownTypes() { return {}; }
 } // namespace camel
 
 #endif
+
+// GIR node hook — unconditional (release included), see header for rationale.
+namespace camel {
+
+void DebugBreakpoint::SetGirNodeHandler(GirNodeHandlerFn fn) {
+    girNodeHandlerSlot().store(fn, std::memory_order_release);
+}
+
+void DebugBreakpoint::HitGirNode(const void *runtimeGraph, uint64_t nodeRef) {
+    GirNodeHandlerFn h = girNodeHandlerSlot().load(std::memory_order_acquire);
+    if (h)
+        h(runtimeGraph, nodeRef);
+}
+
+} // namespace camel

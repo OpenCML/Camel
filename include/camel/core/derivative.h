@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 29, 2026
- * Updated: Sep. 29, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -72,6 +72,10 @@ class VjpBuilder {
     /// graph runs.
     virtual vjp_node_t
     addOper(type::Type *type, std::string_view uri, std::span<const vjp_node_t> normInputs) = 0;
+    /// Element `index` of an aggregate (tuple or struct) node. Rules for operators returning
+    /// several values use it to read the gradient of one result and to hand one gradient of a
+    /// multi-result gradient operator to each input.
+    virtual vjp_node_t addAccess(vjp_node_t aggregate, size_t index);
     /// Gradient accumulated so far for a node, if any.
     virtual std::optional<vjp_node_t> gradientOf(vjp_node_t primal) const = 0;
     /// Adds `gradient` to the gradient of `primal`. Ignored for values without a tangent space.

@@ -1,3 +1,14 @@
+[0.2.1]
+New Features:
+- 新增节点断点、单步和逐 pass 图查询。
+- 完善 ONNX 分支、动态 batch、Adam 状态和训练态 BatchNorm 导出。
+
+Bug Fixes:
+- 修复语言服务器诊断与格式化。
+
+Technical Notes:
+- 补齐部署、跨框架对齐和性能归因工具。
+
 [0.2.0]
 New Features:
 - 重构 Tensor 算子与内核，优化矩阵和向量计算。

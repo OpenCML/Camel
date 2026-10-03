@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,21 @@ class DebugBreakpoint {
     /// is set, invoke handler(type, context). In NDEBUG this is a no-op with
     /// zero cost.
     static void Hit(const char *type, const void *context);
+
+    // ------------------------------------------------------------------
+    // GIR node hook — always compiled, even in NDEBUG, so the debugger
+    // (camel-db) keeps full node-level breakpoints/stepping on release
+    // builds. Cost is one atomic load per node when no handler is set.
+    // ------------------------------------------------------------------
+
+    /// Context: the runtime GCGraph being executed and the node ref about to run.
+    using GirNodeHandlerFn = void (*)(const void *runtimeGraph, uint64_t nodeRef);
+
+    /// Install (or clear, with nullptr) the GIR node handler. Live in all build modes.
+    static void SetGirNodeHandler(GirNodeHandlerFn fn);
+
+    /// Fire before a GIR node executes. No-op unless a handler is installed.
+    static void HitGirNode(const void *runtimeGraph, uint64_t nodeRef);
 };
 
 } // namespace camel

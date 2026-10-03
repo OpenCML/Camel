@@ -1,0 +1,78 @@
+/**
+ * E9 branch-probe dissection: which layer breaks export?
+ *   WHAT=fwd   : export the branched forward loss only (no differentiation)
+ *   WHAT=nobranch : export the training step with the branch removed (baseline)
+ *   WHAT=step  : export the full branched training step (the failing case)
+ */
+module e9_branch_probe
+
+import { Tensor, relu, mean, reshape } from tensor
+import { value_and_grad } from autodiff
+import { sgd } from nn
+import { get_env } from sys
+import { export_model } from onnx
+
+type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+
+with <m: Mlp>
+func loss_b(x: Tensor): float {
+    let h = relu(x @ m.w1 + m.b1)
+    let y = h @ m.w2 + m.b2
+    let s = mean(y * y)
+    return if s > 1.0 then s * 2.0 else s
+}
+
+with <m: Mlp>
+func loss_n(x: Tensor): float {
+    let h = relu(x @ m.w1 + m.b1)
+    let y = h @ m.w2 + m.b2
+    return mean(y * y)
+}
+
+func step_b(m: Mlp, x: Tensor): (float, Mlp) {
+    let vg = value_and_grad(loss_b)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func step_n(m: Mlp, x: Tensor): (float, Mlp) {
+    let vg = value_and_grad(loss_n)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func fwd_b(m: Mlp, x: Tensor): float {
+    return loss_b<m>(x)
+}
+
+func load(): Mlp {
+    return {
+        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
+        b1: reshape([0.1, 0.0, -0.1], [3]),
+        w2: reshape([1.0, -1.0, 0.5], [3, 1]),
+        b2: reshape([0.2], [1])
+    }
+}
+
+func do_fwd(m: Mlp, x: Tensor): int sync {
+    export_model(fwd_b, (m, x), get_env('ONNX_OUT'))
+    println('exported fwd_b')
+    return 0
+}
+
+func do_nobranch(m: Mlp, x: Tensor): int sync {
+    export_model(step_n, (m, x), get_env('ONNX_OUT'))
+    println('exported step_n')
+    return 0
+}
+
+func do_step(m: Mlp, x: Tensor): int sync {
+    export_model(step_b, (m, x), get_env('ONNX_OUT'))
+    println('exported step_b')
+    return 0
+}
+
+func main(): int sync {
+    let m = load()
+    let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
+    let what = get_env('WHAT')
+    return if what == 'fwd' then do_fwd(m, x) else if what == 'nobranch' then do_nobranch(m, x) else do_step(m, x)
+}

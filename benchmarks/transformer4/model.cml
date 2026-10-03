@@ -1,0 +1,112 @@
+/**
+ * Camel implementation of the `transformer4` benchmark (E6 scale probe): four
+ * stacked pre-LN encoder blocks over x[8,64,128], each identical to the
+ * `transformer` benchmark's single block (4-head self-attention, GELU(tanh)
+ * FFN of width 512). Parameters of block i live under prefix b<i>_.
+ */
+module transformer4
+
+import {
+    Tensor, layer_norm, softmax, gelu, reshape, permute, transpose, shape, mean
+} from tensor
+import { sqrt } from math
+import { grad, value_and_grad } from autodiff
+import { sgd, save_params } from nn
+import { get_env } from sys
+import { export_model } from onnx
+import { weight, bench_input, run_benchmark, run_training } from camel_bench
+
+type Block = {
+    ln1_gamma: Tensor, ln1_beta: Tensor,
+    q_w: Tensor, q_b: Tensor, k_w: Tensor, k_b: Tensor,
+    v_w: Tensor, v_b: Tensor, o_w: Tensor, o_b: Tensor,
+    ln2_gamma: Tensor, ln2_beta: Tensor,
+    ffn1_w: Tensor, ffn1_b: Tensor, ffn2_w: Tensor, ffn2_b: Tensor
+}
+
+type Tf4 = { b1: Block, b2: Block, b3: Block, b4: Block }
+
+/// [B, S, D] -> [B, H, S, D / H]
+func split_heads(t: Tensor, heads: int): Tensor {
+    let dims = shape(t)
+    return permute(reshape(t, [dims[0], dims[1], heads, dims[2] / heads]), [0, 2, 1, 3])
+}
+
+/// [B, H, S, Dh] -> [B, S, H * Dh]
+func merge_heads(t: Tensor): Tensor {
+    let dims = shape(t)
+    return reshape(permute(t, [0, 2, 1, 3]), [dims[0], dims[2], dims[1] * dims[3]])
+}
+
+with <m: Block>
+func attention(x: Tensor): Tensor {
+    let heads = 4
+    let q = split_heads(x @ m.q_w + m.q_b, heads)
+    let k = split_heads(x @ m.k_w + m.k_b, heads)
+    let v = split_heads(x @ m.v_w + m.v_b, heads)
+    let scale = 1.0 / sqrt(float(shape(q)[3]))
+    let weights = softmax((q @ transpose(k)) * scale)
+    return merge_heads(weights @ v) @ m.o_w + m.o_b
+}
+
+with <m: Block>
+func block(x: Tensor): Tensor {
+    let h = x + attention<m>(layer_norm(x, m.ln1_gamma, m.ln1_beta))
+    let f = gelu(layer_norm(h, m.ln2_gamma, m.ln2_beta) @ m.ffn1_w + m.ffn1_b)
+    return h + (f @ m.ffn2_w + m.ffn2_b)
+}
+
+with <m: Tf4>
+func forward(x: Tensor): Tensor {
+    return block<m.b4>(block<m.b3>(block<m.b2>(block<m.b1>(x))))
+}
+
+// Training workload (train.py): loss mean(y^2), one SGD step with lr 0.01.
+with <m: Tf4>
+func loss(x: Tensor): float {
+    let y = forward<m>(x)
+    return mean(y * y)
+}
+
+func train_step(m: Tf4, x: Tensor): float sync {
+    let vg = value_and_grad(loss)<m>(x)
+    let next = sgd(m, vg.1, 0.01)
+    return vg.0
+}
+
+/// The training step as a function of the parameters: the loss and the updated parameters.
+func step(m: Tf4, x: Tensor): (float, Tf4) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+/// Exports `step` to ONNX: the parameters and the input become graph inputs.
+func export_step(m: Tf4, path: string): int sync {
+    export_model(step, (m, bench_input()), path)
+    return 0
+}
+
+func dump_grads(m: Tf4, x: Tensor, dir: string): int sync {
+    save_params(grad(loss)<m>(x), dir)
+    return 0
+}
+
+func blk(p: string): Block {
+    return {
+        ln1_gamma: weight(p + 'ln1_gamma'), ln1_beta: weight(p + 'ln1_beta'),
+        q_w: weight(p + 'q_w'), q_b: weight(p + 'q_b'), k_w: weight(p + 'k_w'), k_b: weight(p + 'k_b'),
+        v_w: weight(p + 'v_w'), v_b: weight(p + 'v_b'), o_w: weight(p + 'o_w'), o_b: weight(p + 'o_b'),
+        ln2_gamma: weight(p + 'ln2_gamma'), ln2_beta: weight(p + 'ln2_beta'),
+        ffn1_w: weight(p + 'ffn1_w'), ffn1_b: weight(p + 'ffn1_b'),
+        ffn2_w: weight(p + 'ffn2_w'), ffn2_b: weight(p + 'ffn2_b')
+    }
+}
+
+func main(): int sync {
+    let m = { b1: blk('b1.'), b2: blk('b2.'), b3: blk('b3.'), b4: blk('b4.') }
+    let workload = get_env('CAMEL_BENCH_WORKLOAD')
+    return if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT')) else if workload == 'train' then run_training(
+        (x: Tensor): float => { return train_step(m, x) },
+        (x: Tensor, dir: string): int => { return dump_grads(m, x, dir) }
+    ) else run_benchmark((x: Tensor): Tensor => forward<m>(x))
+}

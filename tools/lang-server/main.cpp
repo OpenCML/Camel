@@ -2,19 +2,18 @@
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
  * You may use this software according to the terms and
- * conditions of the MIT license. You may obtain a copy of
- * the MIT license at: [https://opensource.org/license/mit]
+ * conditions of the MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
  *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT
- * WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 29, 2026
+ * Updated: Oct. 01, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
@@ -25,21 +24,35 @@
 #include "nlohmann/json.hpp"
 #include <cstdio>
 
+#include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/range.h"
 #include "camel/core/mm.h"
+#include "camel/core/module/userdef.h"
 #include "camel/init.h"
 #include "camel/parse/parse.h"
+#include "camel/utils/install_layout.h"
+
+#include "../format/fmt.h"
+
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 #include <filesystem>
 #include <iostream>
 #include <map>
+#include <optional>
+#include <set>
 #include <sstream>
 #include <string>
 
 using namespace std;
 using json   = nlohmann::json;
 namespace mm = camel::core::mm;
+using namespace camel::core::context;
+using namespace camel::core::module;
 using namespace camel::core::error;
 using namespace camel::parse;
 
@@ -61,11 +74,30 @@ static int severityToLsp(Severity s) {
     }
 }
 
+static json positionJson(size_t line, size_t character) {
+    json pos         = json::object();
+    pos["line"]      = line;
+    pos["character"] = character;
+    return pos;
+}
+
+static json rangeJson(const json &start, const json &end) {
+    json r     = json::object();
+    r["start"] = start;
+    r["end"]   = end;
+    return r;
+}
+
 // 读取 Content-Length 协议的消息
 static bool readLspMessage(istream &in, string &out) {
     string header;
     int contentLength = -1;
-    while (getline(in, header) && !header.empty()) {
+    while (getline(in, header)) {
+        // binary mode keeps the CR of CRLF line endings; strip it
+        if (!header.empty() && header.back() == '\r')
+            header.pop_back();
+        if (header.empty())
+            break;
         if (header.compare(0, 16, "Content-Length: ") == 0) {
             contentLength = stoi(header.substr(16));
         }
@@ -121,65 +153,158 @@ static string uriToPath(const string &uri) {
     return path;
 }
 
-// 解析 Camel 源码并发布诊断
-static void parseAndPublishDiagnostics(ostream &out, const string &uri, const string &content) {
+// 解析并编译 Camel 源码（与 `camel check` 相同的管线），返回 parser 与所有
+// 用户模块的 LSP 诊断数组（语法 + 语义：未解析引用、类型错误等）。
+static json buildDiagnosticsArray(const string &uri, const string &content) {
     string path      = uriToPath(uri);
     auto diagnostics = make_shared<Diagnostics>("lsp", path);
     diagnostics->setConfig(DiagsConfig{.total_limit = -1});
 
+    // 语义诊断所需的编译上下文（与 camel-cli check 分支一致）
+    std::string entryDir = fs::absolute(fs::path(path)).parent_path().string();
+    auto searchPaths     = camel::utils::buildModuleSearchPaths(
+        entryDir,
+        camel::utils::ModuleSearchPathOptions{.stdlibOverride = ""});
+    auto ctx = Context::create(
+        EntryConfig{
+            .entryDir    = entryDir,
+            .entryFile   = path,
+            .searchPaths = std::move(searchPaths),
+        },
+        DiagsConfig{
+            .total_limit         = -1,
+            .per_severity_limits = {{Severity::Error, 0}},
+        });
+
     istringstream iss(content);
-    auto parser = make_shared<CamelParser>(diagnostics);
+    auto parser     = make_shared<CamelParser>(diagnostics);
+    auto mainModule = make_shared<UserDefinedModule>("main", path, ctx, parser);
+    ctx->setMainModule(mainModule);
     try {
         parser->parse(iss);
     } catch (...) {
         // 解析失败时 diagnostics 已包含错误
     }
-
-    // 将 TokenRange 转为 CharRange
-    RangeConverter conv(parser->getTokens());
-    diagnostics->fetchAll(parser->getTokens());
+    try {
+        mainModule->compile(CompileStage::Done);
+    } catch (...) {
+        // 编译失败时模块 diagnostics 已包含错误
+    }
 
     json lspDiags = json::array();
-    auto addDiag  = [&](const Diagnostic &d) {
-        json diag;
+    std::set<std::string> seen;
+    auto addDiag = [&](const Diagnostic &d) {
+        json diag = json::object();
         if (holds_alternative<CharRange>(d.range)) {
             CharRange r   = get<CharRange>(d.range);
-            diag["range"] = {
-                {"start", {{"line", r.start.line}, {"character", r.start.character}}},
-                {"end", {{"line", r.end.line}, {"character", r.end.character}}}};
+            diag["range"] = rangeJson(
+                positionJson(r.start.line, r.start.character),
+                positionJson(r.end.line, r.end.character));
         } else {
-            diag["range"] = {
-                {"start", {{"line", 0}, {"character", 0}}},
-                {"end", {{"line", 0}, {"character", 0}}}};
+            diag["range"] = rangeJson(positionJson(0, 0), positionJson(0, 0));
         }
         diag["severity"] = severityToLsp(d.severity);
         diag["source"]   = "Camel";
         diag["message"]  = d.message;
         if (!d.suggestion.empty())
             diag["code"] = d.suggestion;
-        lspDiags.push_back(diag);
+        // parser 与模块诊断可能重复（共享编译产物），按键去重
+        const json &r   = diag["range"];
+        std::string key = std::to_string(r["start"]["line"].get<int>()) + ":" +
+                          std::to_string(r["start"]["character"].get<int>()) + "-" +
+                          std::to_string(r["end"]["line"].get<int>()) + ":" +
+                          std::to_string(r["end"]["character"].get<int>()) + "|" +
+                          std::to_string(diag["severity"].get<int>()) + "|" + d.message;
+        if (seen.insert(key).second)
+            lspDiags.push_back(diag);
     };
-    for (const Diagnostic *d : diagnostics->errors())
-        addDiag(*d);
-    for (const Diagnostic *d : diagnostics->warnings())
-        addDiag(*d);
-    for (const Diagnostic *d : diagnostics->infos())
-        addDiag(*d);
-    for (const Diagnostic *d : diagnostics->hints())
-        addDiag(*d);
+    auto collectFrom = [&](const Diagnostics &diags) {
+        for (const Diagnostic *d : diags.errors())
+            addDiag(*d);
+        for (const Diagnostic *d : diags.warnings())
+            addDiag(*d);
+        for (const Diagnostic *d : diags.infos())
+            addDiag(*d);
+        for (const Diagnostic *d : diags.hints())
+            addDiag(*d);
+    };
 
-    json params;
-    params["uri"]         = uri;
-    params["diagnostics"] = lspDiags;
-    sendNotification(out, "textDocument/publishDiagnostics", params);
+    // parser 诊断：TokenRange -> CharRange
+    RangeConverter conv(parser->getTokens());
+    diagnostics->fetchAll(parser->getTokens());
+    collectFrom(*diagnostics);
+
+    // 各模块（含 main）的语义诊断
+    for (const auto &mod : ctx->allUserModules()) {
+        auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
+        if (!ud || !ud->diagnostics())
+            continue;
+        ud->diagnostics()->fetchAll(ud->parser()->getTokens());
+        collectFrom(*ud->diagnostics());
+    }
+
+    return lspDiags;
+}
+
+// 用 Formatter 格式化源码；解析失败时返回空 optional。
+static std::optional<std::string>
+formatSource(const std::string &path, const std::string &content) {
+    auto diagnostics = std::make_shared<Diagnostics>("lsp-format", path);
+    auto parser      = std::make_shared<CamelParser>(diagnostics);
+    istringstream iss(content);
+    try {
+        if (!parser->parseCST(iss)) {
+            return std::nullopt;
+        }
+    } catch (...) {
+        return std::nullopt;
+    }
+
+    Formatter::Options options;
+    Formatter formatter(parser->getTokens(), options);
+    try {
+        return std::any_cast<std::string>(formatter.visit(parser->cst()));
+    } catch (const std::exception &) {
+        return std::nullopt;
+    }
+}
+
+// 计算文档末位位置（全量替换 edit 的 range 终点）
+static json documentEndPosition(const string &content) {
+    size_t line   = 0;
+    size_t lastNl = string::npos;
+    for (size_t i = 0; i < content.size(); ++i) {
+        if (content[i] == '\n') {
+            ++line;
+            lastNl = i;
+        }
+    }
+    size_t character = content.size() - (lastNl == string::npos ? 0 : lastNl + 1);
+    return positionJson(line, character);
 }
 
 int main(int argc, char *argv[]) {
     camel::ScopedRuntime camelRuntime;
 
+#ifdef _WIN32
+    // LSP framing requires exact CRLF bytes; Windows text mode would translate
+    // them and corrupt the protocol on both directions.
+    _setmode(_fileno(stdin), _O_BINARY);
+    _setmode(_fileno(stdout), _O_BINARY);
+#endif
+
     (void)mm::autoSpace();
     (void)mm::metaSpace();
     (void)mm::permSpace();
+
+    // 目前唯一传输方式是 stdio；显式接受 --stdio 以便调用方稳定 spawn。
+    for (int i = 1; i < argc; ++i) {
+        string arg = argv[i];
+        if (arg == "--stdio") {
+            continue;
+        }
+        cerr << "camel-ls: ignoring unknown argument: " << arg << "\n";
+    }
 
     bool shutdownReceived = false;
     map<string, string> openDocuments;
@@ -200,18 +325,32 @@ int main(int argc, char *argv[]) {
         }
 
         string method = msg.value("method", "");
-        json id       = msg.value("id", nullptr);
-        json params   = msg.value("params", json::object());
+        json id       = msg.contains("id") ? msg["id"] : json(nullptr);
+        json params   = msg.contains("params") ? msg["params"] : json::object();
 
         // ---- 生命周期 ----
         if (method == "initialize") {
-            json result;
-            result["capabilities"] = {
-                {"textDocumentSync",
-                 {{"openClose", true}, {"change", 1}, {"save", json::object()}}},
-                {"diagnosticProvider",
-                 {{"interFileDependencies", false}, {"workspaceDiagnostics", false}}}};
-            result["serverInfo"] = {{"name", "camel-ls"}, {"version", "0.1.0"}};
+            json textDocumentSync         = json::object();
+            textDocumentSync["openClose"] = true;
+            textDocumentSync["change"]    = 1;
+            textDocumentSync["save"]      = json::object();
+
+            json diagnosticProvider                     = json::object();
+            diagnosticProvider["interFileDependencies"] = false;
+            diagnosticProvider["workspaceDiagnostics"]  = false;
+
+            json capabilities                          = json::object();
+            capabilities["textDocumentSync"]           = textDocumentSync;
+            capabilities["documentFormattingProvider"] = true;
+            capabilities["diagnosticProvider"]         = diagnosticProvider;
+
+            json serverInfo       = json::object();
+            serverInfo["name"]    = "camel-ls";
+            serverInfo["version"] = "0.2.0";
+
+            json result            = json::object();
+            result["capabilities"] = capabilities;
+            result["serverInfo"]   = serverInfo;
             sendResponse(out, id, result, nullptr);
             continue;
         }
@@ -228,11 +367,12 @@ int main(int argc, char *argv[]) {
         }
 
         // ---- 文档同步 ----
+        // camel-ls 声明 diagnosticProvider，诊断统一走 pull（textDocument/diagnostic），
+        // 这里只维护文档缓存，不做 push，避免客户端侧重复。
         if (method == "textDocument/didOpen") {
             string uri         = params["textDocument"]["uri"];
             string content     = params["textDocument"]["text"];
             openDocuments[uri] = content;
-            parseAndPublishDiagnostics(out, uri, content);
             continue;
         }
         if (method == "textDocument/didChange") {
@@ -240,17 +380,47 @@ int main(int argc, char *argv[]) {
             auto &changes = params["contentChanges"];
             if (!changes.empty() && changes[0].contains("text")) {
                 openDocuments[uri] = changes[0]["text"];
-                parseAndPublishDiagnostics(out, uri, openDocuments[uri]);
             }
             continue;
         }
         if (method == "textDocument/didClose") {
             string uri = params["textDocument"]["uri"];
             openDocuments.erase(uri);
-            json paramsOut;
-            paramsOut["uri"]         = uri;
-            paramsOut["diagnostics"] = json::array();
-            sendNotification(out, "textDocument/publishDiagnostics", paramsOut);
+            continue;
+        }
+
+        // ---- Pull 诊断 ----
+        if (method == "textDocument/diagnostic") {
+            string uri = params["textDocument"]["uri"];
+            json items;
+            auto it = openDocuments.find(uri);
+            if (it != openDocuments.end()) {
+                items = buildDiagnosticsArray(uri, it->second);
+            } else {
+                items = json::array();
+            }
+            json report;
+            report["kind"]  = "full";
+            report["items"] = items;
+            sendResponse(out, id, report, nullptr);
+            continue;
+        }
+
+        // ---- 格式化 ----
+        if (method == "textDocument/formatting") {
+            string uri = params["textDocument"]["uri"];
+            json edits = json::array();
+            auto it    = openDocuments.find(uri);
+            if (it != openDocuments.end()) {
+                auto formatted = formatSource(uriToPath(uri), it->second);
+                if (formatted.has_value()) {
+                    json edit     = json::object();
+                    edit["range"] = rangeJson(positionJson(0, 0), documentEndPosition(it->second));
+                    edit["newText"] = *formatted;
+                    edits.push_back(edit);
+                }
+            }
+            sendResponse(out, id, edits, nullptr);
             continue;
         }
 

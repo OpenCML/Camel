@@ -13,14 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Feb. 28, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "spawn.h"
 #include "state.h"
 
+#include <httplib.h>
+
+#include <chrono>
 #include <filesystem>
+#include <iostream>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
@@ -208,6 +212,25 @@ std::pair<bool, int> spawnWorker(const std::string &path, bool sendRun, int desi
     }).detach();
     if (sendRun)
         getTaskState() = "running";
+    // 等待 worker 的 HTTP 端口真正可连接再返回：否则调用方（file/run/restart）随后立即转发
+    // 会失败，父进程把刚创建的任务误标为 exited，后续带 target 的请求全部 400。
+    {
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        bool ready    = false;
+        while (std::chrono::steady_clock::now() < deadline) {
+            httplib::Client cli("127.0.0.1", workerPort);
+            cli.set_connection_timeout(0, 100000);
+            if (cli.Get("/api/state")) {
+                ready = true;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        if (!ready) {
+            std::cerr << "[debugger] worker on port " << workerPort
+                      << " did not become ready within 10s" << std::endl;
+        }
+    }
     return {true, workerPort};
 #else
     (void)path;
