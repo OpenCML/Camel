@@ -386,8 +386,10 @@ def main() -> int:
     parser.add_argument("--time", action="store_true", help="time training steps")
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--reps", type=int, default=20)
-    # FastVM's heap grows to its steady-state size over the first few dozen steps (it keeps
-    # more intermediates alive than NodeVM); time the steady state, as for PyTorch.
+    # Time the steady state, as for PyTorch. (FastVM once retained intermediates longer than
+    # NodeVM and needed many steps to reach steady state; since ec34de33 it polls the GC
+    # slow-path flag at every call boundary and matches NodeVM's peak RSS, but warmup=40
+    # keeps the measurement on the same footing as the torch baseline.)
     parser.add_argument("--warmup", type=int, default=40)
     parser.add_argument("--threads", type=int, default=os.cpu_count() or 1)
     parser.add_argument("--out", type=Path)
