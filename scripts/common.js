@@ -93,6 +93,70 @@ export function copyDir(src, dest) {
     })
 }
 
+function walkForFile(rootDir, fileName, maxDepth, matches, depth = 0) {
+    if (depth > maxDepth || !fs.existsSync(rootDir)) {
+        return
+    }
+    for (const ent of fs.readdirSync(rootDir, { withFileTypes: true })) {
+        const fullPath = path.join(rootDir, ent.name)
+        if (ent.isFile()) {
+            if (ent.name === fileName) {
+                matches.push(fullPath)
+            }
+            continue
+        }
+        if (ent.isDirectory()) {
+            // Object and dependency directories cannot contain the final shared library artifact.
+            if (ent.name === 'CMakeFiles' || ent.name.endsWith('.dir')) {
+                continue
+            }
+            walkForFile(fullPath, fileName, maxDepth, matches, depth + 1)
+        }
+    }
+}
+
+/**
+ * Resolve the built libcamel shared library across generator/platform-specific output layouts.
+ * Multi-config generators do not guarantee the top-level target lands under build/<Config>/.
+ *
+ * @param {'Release'|'Debug'|'RelWithDebInfo'} config
+ * @returns {string}
+ */
+export function findBuiltLibcamel(config) {
+    const buildRoot = path.join(BASEDIR, 'build')
+    const candidates = [
+        path.join(buildRoot, config, libName),
+        path.join(buildRoot, libName),
+        path.join(buildRoot, 'src', config, libName),
+        path.join(buildRoot, 'src', libName)
+    ]
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+            return candidate
+        }
+    }
+
+    const matches = []
+    walkForFile(buildRoot, libName, 4, matches)
+    if (matches.length === 0) {
+        return ''
+    }
+
+    const scored = matches
+        .map((fullPath) => {
+            const rel = path.relative(buildRoot, fullPath)
+            const parts = rel.split(path.sep)
+            const hasConfigDir = parts.includes(config)
+            return {
+                fullPath,
+                score: (hasConfigDir ? 0 : 100) + parts.length
+            }
+        })
+        .sort((a, b) => a.score - b.score || a.fullPath.localeCompare(b.fullPath))
+
+    return scored[0].fullPath
+}
+
 /**
  * collect-out 主写入 `out/latest/`；若有 tag 则另镜像 `out/<tag>/`。与 pypi-rollup 读取路径须一致。
  * @param {string} tag - 通常为 "latest"（collect-out 主输出）或 CAMEL_PYPI_TAG 指定的镜像目录名
@@ -201,13 +265,13 @@ export function runCmakeBuild(config, cmakeOptionFlags) {
  */
 export function copyBuildArtifacts(config) {
     const exeSrcDir = path.join(BASEDIR, 'build', 'tools', 'camel-cli', config)
-    const libSrcDir = path.join(BASEDIR, 'build', config)
     const libsBuildDir = path.join(BASEDIR, 'build', 'libs')
     const modulesBuildDir = path.join(BASEDIR, 'build', 'modules')
     const stdlibDir = path.join(BASEDIR, 'stdlib')
 
-    const libSrc = path.join(libSrcDir, libName)
+    const libSrc = findBuiltLibcamel(config)
     if (fs.existsSync(libSrc)) {
+        const libSrcDir = path.dirname(libSrc)
         // 把exe复制到libSrc的同级目录以便调试
         copyFile(path.join(exeSrcDir, executableName), path.join(libSrcDir, executableName))
         // debug模式下额外复制.pdb文件
@@ -218,6 +282,8 @@ export function copyBuildArtifacts(config) {
                 copyFile(pdbSrc, path.join(libSrcDir, pdbName))
             }
         }
+    } else {
+        logWarn(`Built ${libName} not found under build/ for ${config}`)
     }
 
     const cmoDirs = [libsBuildDir, modulesBuildDir]

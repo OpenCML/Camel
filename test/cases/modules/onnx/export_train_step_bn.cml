@@ -1,0 +1,79 @@
+/**
+ * A conv+batch_norm training step (training-mode BN) exports as one ONNX graph: the BN
+ * forward decomposes to batch statistics (ReduceMean/Mul/Sqrt/Reciprocal) and the running
+ * statistics travel as extra graph inputs and outputs (the T3 single-step pattern); the BN
+ * gradient decomposes to the same standard operators. No BatchNormalization or training-domain
+ * operator survives.
+ */
+module export_train_step_bn
+
+import { Tensor, relu, mean, reshape, flatten, new } from tensor
+import { value_and_grad } from autodiff
+import { conv2d, batch_norm_train, sgd } from nn
+import { export_model } from onnx
+import { get_env } from sys
+
+type CnnBn = {
+    conv1_w: Tensor, conv1_b: Tensor, bn1_g: Tensor, bn1_b: Tensor,
+    conv2_w: Tensor, conv2_b: Tensor, bn2_g: Tensor, bn2_b: Tensor,
+    fc_w: Tensor, fc_b: Tensor
+}
+
+type BnStats = { bn1_rm: Tensor, bn1_rv: Tensor, bn2_rm: Tensor, bn2_rv: Tensor }
+
+with <m: CnnBn>
+func forward(x: Tensor, s: BnStats): (Tensor, BnStats) {
+    let r1 = batch_norm_train(conv2d(x, m.conv1_w, m.conv1_b, 1, 1), m.bn1_g, m.bn1_b, s.bn1_rm, s.bn1_rv, 0.1, 0.00001)
+    let h1 = relu(r1.0)
+    let r2 = batch_norm_train(conv2d(h1, m.conv2_w, m.conv2_b, 1, 1), m.bn2_g, m.bn2_b, s.bn2_rm, s.bn2_rv, 0.1, 0.00001)
+    let g = mean(mean(relu(r2.0), 2), 2)
+    return (flatten(g) @ m.fc_w + m.fc_b, {bn1_rm: r1.1, bn1_rv: r1.2, bn2_rm: r2.1, bn2_rv: r2.2})
+}
+
+with <m: CnnBn>
+func loss(x: Tensor, s: BnStats): float {
+    let r = forward<m>(x, s)
+    return mean(r.0 * r.0)
+}
+
+func step(m: CnnBn, s: BnStats, x: Tensor): (float, CnnBn, BnStats) {
+    let vg = value_and_grad(loss)<m>(x, s)
+    let r = forward<m>(x, s)
+    return (vg.0, sgd(m, vg.1, 0.01), r.1)
+}
+
+func main(): int sync {
+    let m = {
+        conv1_w: reshape(new([
+            0.3, -0.2, 0.1, 0.4, -0.5, 0.2, 0.1, 0.6, -0.3,
+            -0.1, 0.2, 0.5, -0.4, 0.3, -0.2, 0.2, -0.6, 0.4]), [2, 1, 3, 3]),
+        conv1_b: new([0.1, -0.1]),
+        bn1_g: new([1.1, 0.9]),
+        bn1_b: new([0.05, -0.1]),
+        conv2_w: reshape(new([
+            0.2, 0.1, -0.3, 0.5, -0.1, 0.4, -0.2, 0.3, 0.1,
+            -0.4, 0.2, 0.6, 0.1, -0.5, 0.3, 0.2, -0.1, -0.2,
+            0.1, -0.3, 0.2, -0.2, 0.4, -0.6, 0.5, 0.1, 0.3,
+            -0.1, 0.5, -0.4, 0.2, 0.3, -0.2, 0.6, -0.3, 0.1]), [2, 2, 3, 3]),
+        conv2_b: new([0.2, 0.0]),
+        bn2_g: new([0.8, 1.2]),
+        bn2_b: new([-0.15, 0.1]),
+        fc_w: reshape(new([0.5, -0.5, 0.25, -0.75]), [2, 2]),
+        fc_b: new([0.1, -0.2])
+    }
+    let s = {
+        bn1_rm: new([0.2, -0.3]),
+        bn1_rv: new([1.4, 0.8]),
+        bn2_rm: new([-0.1, 0.15]),
+        bn2_rv: new([0.9, 1.1])
+    }
+    let x = reshape(new([
+        0.5, -0.3, 0.2, 0.7, -0.1,
+        0.4, 0.1, -0.6, 0.3, 0.2,
+        -0.2, 0.6, 0.5, -0.4, 0.1,
+        0.3, -0.5, 0.4, 0.2, -0.7,
+        0.1, 0.2, -0.1, 0.6, 0.4]), [1, 1, 5, 5])
+    export_model(step, (m, s, x), get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

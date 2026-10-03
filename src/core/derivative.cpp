@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 29, 2026
- * Updated: Sep. 29, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,7 @@
 #include "camel/utils/type.h"
 
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,12 @@ namespace camel::core {
 
 vjp_node_t VjpBuilder::addStaticFloat(double value) {
     return addStatic(rtdata::toSlot<rtdata::Float64>(value), type::Type::Float64());
+}
+
+vjp_node_t VjpBuilder::addAccess(vjp_node_t aggregate, size_t index) {
+    (void)aggregate;
+    (void)index;
+    throw std::logic_error("VjpBuilder::addAccess is not implemented by this builder");
 }
 
 void noGradient(VjpBuilder &builder, const VjpCall &call) {

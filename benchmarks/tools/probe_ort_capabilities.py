@@ -1,7 +1,7 @@
 """Probe which ONNX operators ONNX Runtime can run, per opset and element type.
 
 For every operator the Camel ONNX backend can emit, every element type a Camel
-tensor can have (float32, int64, bool) and every opset in the range, the probe
+tensor can have (float32, float64, int64, bool) and every opset in the range, the probe
 builds a one-node model, validates it against the ONNX schema
 (``onnx.checker``), creates an ONNX Runtime session on the chosen execution
 provider and runs it. The outcome is one of:
@@ -37,7 +37,12 @@ from onnx import TensorProto, helper, numpy_helper
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUT = REPO_ROOT / "modules" / "onnx" / "capabilities" / "onnxruntime-cpu.json"
 
-DTYPES = {"float32": (TensorProto.FLOAT, np.float32), "int64": (TensorProto.INT64, np.int64), "bool": (TensorProto.BOOL, np.bool_)}
+DTYPES = {
+    "float32": (TensorProto.FLOAT, np.float32),
+    "float64": (TensorProto.DOUBLE, np.float64),
+    "int64": (TensorProto.INT64, np.int64),
+    "bool": (TensorProto.BOOL, np.bool_),
+}
 
 # A template builds (inputs: [(name, shape)], initializers, node, outputs dtype-agnostic) for element type T.
 Template = Callable[[int, int], Tuple[List[Tuple[str, List[int]]], List[onnx.TensorProto], onnx.NodeProto]]
@@ -129,6 +134,8 @@ def feeds_for(model: onnx.ModelProto) -> Dict[str, np.ndarray]:
             feeds[inp.name] = rng.random(shape) > 0.5
         elif elem == TensorProto.INT64:
             feeds[inp.name] = rng.integers(1, 3, shape).astype(np.int64)
+        elif elem == TensorProto.DOUBLE:
+            feeds[inp.name] = (rng.random(shape) + 0.5).astype(np.float64)
         else:
             feeds[inp.name] = (rng.random(shape) + 0.5).astype(np.float32)
     return feeds

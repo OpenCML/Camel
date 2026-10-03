@@ -1,0 +1,106 @@
+/**
+ * E15/T11: the E9 LoRA-MLP cross-entropy training step with the SGD learning
+ * rate taken from CAMEL_FT_LR (default 0.05), for the continual-learning demo.
+ *
+ * The E9 single-user recipe (lr 0.1, hardcoded in lora_mlp.cml's step_ce)
+ * diverges explosively for ALL THREE parties at the fifth user's distribution
+ * switch (loss 4 -> 5e2 -> NaN within 4 steps; evidence archived in
+ * artifacts/e15-continual/lr01_failure/), so the continual run exports its own
+ * step graph at a stable lr. Everything else — architecture, LoRA rank/scale,
+ * CE composition, batch protocol — is identical to lora_mlp.cml.
+ *
+ * Workloads (CAMEL_BENCH_WORKLOAD):
+ *   export_ce  export the CE SGD step to CAMEL_BENCH_EXPORT
+ *   train_ce   run the fine-tune loop (CAMEL_FT_* protocol of lora_mlp.cml)
+ */
+module lora_ce_step_lr
+
+import { Tensor, relu, mean, sum, neg, log_softmax, load_npy } from tensor
+import { value_and_grad, stop_gradient } from autodiff
+import { sgd, save_params } from nn
+import { get_env } from sys
+import { export_model } from onnx
+import { weight } from camel_bench
+
+type LoraMlp = {
+    fc1_w: Tensor, fc1_b: Tensor, fc1_lora_a: Tensor, fc1_lora_b: Tensor,
+    fc2_w: Tensor, fc2_b: Tensor, fc2_lora_a: Tensor, fc2_lora_b: Tensor,
+    fc3_w: Tensor, fc3_b: Tensor, fc3_lora_a: Tensor, fc3_lora_b: Tensor
+}
+
+with <m: LoraMlp>
+func forward(x: Tensor): Tensor {
+    let scale = 2.0
+    let h1 = relu(x @ stop_gradient(m.fc1_w) + ((x @ m.fc1_lora_b) @ m.fc1_lora_a) * scale + stop_gradient(m.fc1_b))
+    let h2 = relu(h1 @ stop_gradient(m.fc2_w) + ((h1 @ m.fc2_lora_b) @ m.fc2_lora_a) * scale + stop_gradient(m.fc2_b))
+    return h2 @ stop_gradient(m.fc3_w) + ((h2 @ m.fc3_lora_b) @ m.fc3_lora_a) * scale + stop_gradient(m.fc3_b)
+}
+
+/// Cross-entropy against one-hot targets, composed from primitive tensor ops
+/// (same as lora_mlp.cml's loss_ce).
+with <m: LoraMlp>
+func loss_ce(x: Tensor, target: Tensor): float {
+    let y = forward<m>(x)
+    return mean(sum(target * neg(log_softmax(y, 1)), 1))
+}
+
+/// The SGD learning rate, CAMEL_FT_LR or 0.05; shared by the export and the native loop.
+func ce_lr(): float sync {
+    let v = get_env('CAMEL_FT_LR')
+    return if v == '' then 0.05 else float(v)
+}
+
+func step_ce(m: LoraMlp, x: Tensor, target: Tensor, lr: float): (float, LoraMlp) {
+    let vg = value_and_grad(loss_ce)<m>(x, target)
+    return (vg.0, sgd(m, vg.1, lr))
+}
+
+sync func loop_ce(m: LoraMlp, i: int, steps: int, nb: int, lr: float): LoraMlp {
+    return if i >= steps then m else sync {
+        let bi = '{}'->format<i % nb>
+        let dir = get_env('CAMEL_FT_BATCHES')
+        let x = load_npy(dir + '/batch_' + bi + '.npy')
+        let t = load_npy(dir + '/target_' + bi + '.npy')
+        let vg = step_ce(m, x, t, lr)
+        'CAMEL_BENCH step={} loss={}'->format<i, vg.0>->println
+        return loop_ce(vg.1, i + 1, steps, nb, lr)
+    }
+}
+
+func load(): LoraMlp {
+    return {
+        fc1_w: weight('fc1_w'), fc1_b: weight('fc1_b'),
+        fc1_lora_a: weight('fc1_lora_a'), fc1_lora_b: weight('fc1_lora_b'),
+        fc2_w: weight('fc2_w'), fc2_b: weight('fc2_b'),
+        fc2_lora_a: weight('fc2_lora_a'), fc2_lora_b: weight('fc2_lora_b'),
+        fc3_w: weight('fc3_w'), fc3_b: weight('fc3_b'),
+        fc3_lora_a: weight('fc3_lora_a'), fc3_lora_b: weight('fc3_lora_b')
+    }
+}
+
+func do_export_ce(m: LoraMlp): int sync {
+    let dir = get_env('CAMEL_FT_BATCHES')
+    let x = load_npy(dir + '/batch_0.npy')
+    let t = load_npy(dir + '/target_0.npy')
+    let lr = ce_lr()
+    export_model(
+        (mm: LoraMlp, xx: Tensor, tt: Tensor): (float, LoraMlp) => step_ce(mm, xx, tt, lr),
+        (m, x, t),
+        get_env('CAMEL_BENCH_EXPORT')
+    )
+    return 0
+}
+
+func do_train_ce(m: LoraMlp): int sync {
+    let steps = int(get_env('CAMEL_FT_STEPS'))
+    let nb = int(get_env('CAMEL_FT_NBATCHES'))
+    let final = loop_ce(m, 0, steps, nb, ce_lr())
+    let dump = get_env('CAMEL_FT_DUMP')
+    if dump != '' then save_params(final, dump)
+    return 0
+}
+
+func main(): int sync {
+    let m = load()
+    return if get_env('CAMEL_BENCH_WORKLOAD') == 'export_ce' then do_export_ce(m) else do_train_ce(m)
+}

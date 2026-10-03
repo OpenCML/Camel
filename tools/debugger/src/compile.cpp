@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: May. 01, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -106,13 +106,18 @@ getGirJsonByPath(const std::string &path, const std::string &graphId) {
 
 std::pair<std::string, std::string>
 getGirJson(const std::string &path, const std::string &graphId) {
+    // Prefer the run's own compile: graph stableIds and originIds only make sense within the
+    // SourceContext of the compilation that produced the executed runtime graphs. A fresh
+    // compile (byPath) would assign different ids on every call, breaking debugger matching.
+    auto fromState = getGirJsonFromCurrentState(graphId);
+    if (fromState.second.empty())
+        return fromState;
+    if (fromState.second != "run first")
+        return fromState; // Run state exists but the graph lookup failed; surface the error.
+    if (getState().hasFile())
+        return getGirJsonByPath(getState().targetFile, graphId);
     if (!path.empty())
         return getGirJsonByPath(path, graphId);
-    auto fromState = getGirJsonFromCurrentState(graphId);
-    if (!fromState.second.empty() && fromState.second != "run first")
-        return fromState;
-    if (fromState.second == "run first" && getState().hasFile())
-        return getGirJsonByPath(getState().targetFile, graphId);
     return fromState;
 }
 

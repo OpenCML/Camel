@@ -1,0 +1,64 @@
+/**
+ * E9 optional expressiveness probe (second review): a training program whose
+ * loss takes a data-dependent branch (the arm is chosen by a runtime value
+ * computed from the data). Camel differentiates through the branch and the
+ * whole training step exports as one standard ONNX graph — no torch.cond-style
+ * rewriting of the program was needed.
+ *
+ * MODE=run    : native check of loss and updated weights for both branch arms
+ * MODE=export : export the training step to ONNX
+ */
+module e9_branch_step
+
+import { Tensor, relu, mean, reshape, new } from tensor
+import { value_and_grad } from autodiff
+import { sgd, save_params } from nn
+import { get_env } from sys
+import { export_model } from onnx
+
+type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+
+with <m: Mlp>
+func loss(x: Tensor): float {
+    let h = relu(x @ m.w1 + m.b1)
+    let y = h @ m.w2 + m.b2
+    let s = mean(y * y)
+    return if s > 1.0 then s * 2.0 else s
+}
+
+func step(m: Mlp, x: Tensor): (float, Mlp) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func load(): Mlp {
+    return {
+        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
+        b1: reshape([0.1, 0.0, -0.1], [3]),
+        w2: reshape([1.0, -1.0, 0.5], [3, 1]),
+        b2: reshape([0.2], [1])
+    }
+}
+
+func do_export(m: Mlp): int sync {
+    export_model(step, (m, reshape([1.0, 2.0, -1.0, 0.5], [2, 2])), get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}
+
+func do_run(m: Mlp): int sync {
+    // arm A (large loss, s>1) and arm B (small loss, s<=1) — same weights, two inputs.
+    let xa = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
+    let xb = reshape([0.01, 0.02, -0.01, 0.03], [2, 2])
+    let la = step(m, xa)
+    let lb = step(m, xb)
+    'loss_a={} loss_b={}'->format<la.0, lb.0>->println
+    save_params(la.1, get_env('DUMP') + '/arm_a')
+    save_params(lb.1, get_env('DUMP') + '/arm_b')
+    return 0
+}
+
+func main(): int sync {
+    let m = load()
+    return if get_env('MODE') == 'export' then do_export(m) else do_run(m)
+}

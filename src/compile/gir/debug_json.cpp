@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: May. 01, 2026
+ * Updated: Oct. 02, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -116,8 +116,15 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
     j["id"]            = nodeId;
     j["graphId"]       = graph->stableId();
     j["type"]          = header ? nodeKindName(header->kind) : "DEAD";
-    j["stableId"] =
+    // Entity IDs are only assigned by the (currently unwired) sealing pass, so synthesize a
+    // session-stable composite id: graph stableId + per-graph draft ref. This is the id the
+    // debugger UI shows and can reference back via /api/gir-breakpoints stable-id matching.
+    std::string stableId =
         header ? graph->nodeDebugEntityId(node) : std::format("dead:{}", static_cast<int>(nodeId));
+    if (stableId.empty() && header) {
+        stableId = std::format("{}:{}", graph->stableId(), static_cast<uint64_t>(nodeId));
+    }
+    j["stableId"] = stableId;
     j["dataType"] = header && header->dataType ? header->dataType->toString() : "";
     if (header && header->kind == GCNodeKind::Port) {
         j["portName"] = graph->nodePortName(node);
@@ -141,6 +148,21 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
             draftDebugKey(nodeId),
             graph->nodeDebugEntityId(node));
         j["originId"] = origin;
+        // Resolve the origin to a source span so debugger clients can map nodes to editor
+        // locations. Lines/characters are 0-based (LSP convention); DAP adapters convert.
+        if (origin != camel::source::kInvalidOriginId) {
+            const auto *rec = sourceContext->origin(origin);
+            if (rec && rec->primarySpan != camel::source::kInvalidSpanId) {
+                auto range = sourceContext->resolveOrigin(origin);
+                json span;
+                span["file"]           = sourceContext->pathForOrigin(origin);
+                span["startLine"]      = range.start.line;
+                span["startCharacter"] = range.start.character;
+                span["endLine"]        = range.end.line;
+                span["endCharacter"]   = range.end.character;
+                j["span"]              = span;
+            }
+        }
     }
     return j;
 }

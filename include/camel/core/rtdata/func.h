@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,23 +98,7 @@ class Function : public rtdata::Object {
     }
 
     virtual void
-    updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override {
-        (void)type;
-        if (closure_) {
-            const type::TupleType *tupleTypePtr = tupleType();
-            closure_                            = static_cast<Tuple *>(relocate(
-                closure_,
-                tupleTypePtr,
-                rtdata::RefTraceInfo{
-                    .owner     = this,
-                    .ownerType = type,
-                    .slotType  = tupleTypePtr,
-                    .ownerKind = "Function",
-                    .slotName  = "closure",
-                    .slotIndex = rtdata::RefTraceInfo::npos,
-                }));
-        }
-    }
+    updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override;
 
   private:
     explicit Function(camel::runtime::GCGraph *runtimeGraph, const type::TupleType *tupleType)

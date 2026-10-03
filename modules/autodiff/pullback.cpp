@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 29, 2026
- * Updated: Sep. 29, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -449,7 +449,12 @@ class Backward final : public VjpBuilder {
     /// Target-graph node holding the primal value `primal`.
     gc_node_ref_t ref(gc_node_ref_t primal);
 
-    void seed(gc_node_ref_t primal, gc_node_ref_t gradient) { gradients_[primal].value = gradient; }
+    /// The gradient of the differentiated result. Aggregate results are split element-wise, as
+    /// accumulateInto does for every other whole-value gradient — otherwise visitFill, which
+    /// distributes elements, would find none and the seed would stop at the result node.
+    void seed(gc_node_ref_t primal, gc_node_ref_t gradient) {
+        accumulateInto(gradients_[primal], typeOf(forward_, primal), gradient);
+    }
     /// Propagates gradients through the forward nodes `order` (inputs before users).
     void run(const std::vector<gc_node_ref_t> &order);
     /// Full gradient of a primal value; zero when none reached it.
@@ -469,6 +474,9 @@ class Backward final : public VjpBuilder {
     vjp_node_t
     addOper(Type *type, std::string_view uri, std::span<const vjp_node_t> normInputs) override {
         return autodiff::addOper(target_, type, uri, normInputs);
+    }
+    vjp_node_t addAccess(vjp_node_t aggregate, size_t index) override {
+        return autodiff::addField(target_, typeOf(target_, aggregate), aggregate, index);
     }
     std::optional<vjp_node_t> gradientOf(vjp_node_t node) const override;
     void accumulateGradient(vjp_node_t node, vjp_node_t gradient) override;
@@ -615,7 +623,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
         return std::nullopt;
     }
     const auto calleeValue = staticValue(draft_, withInputs.front());
-    auto *function = calleeValue ? fromSlot<::Function *>(*calleeValue) : nullptr;
+    auto *function         = calleeValue ? fromSlot<::Function *>(*calleeValue) : nullptr;
     if (function == nullptr) {
         // grad(f), value_and_grad(f) or vjp<rule>(f) of static functions that std::macro has
         // not expanded (autodiff applied inside a function being differentiated).
@@ -673,12 +681,12 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     }
     const auto *body = reinterpret_cast<const rt::GCOperBody *>(draft_.payloadOf(callee).data());
     const std::string_view uri = body->uri();
-    const auto staticFunction  = [&](gc_node_ref_t node) -> ::Function * {
+    const auto staticFunction  = [&](gc_node_ref_t node) -> ::Function  *{
         const auto value = staticValue(draft_, node);
         auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
         return function && function->graph() ? function : nullptr;
     };
-    const auto norm = draft_.normInputsOf(callee);
+    const auto norm    = draft_.normInputsOf(callee);
     ::Function *result = nullptr;
     if ((uri == "autodiff:grad" || uri == "autodiff:value_and_grad") && norm.size() == 1) {
         ::Function *function = staticFunction(norm.front());
@@ -696,7 +704,8 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
                 result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), function->tupleType());
             }
         }
-    } else if (uri == "autodiff:vjp" && norm.size() == 1 && draft_.withInputsOf(callee).size() == 1) {
+    } else if (
+        uri == "autodiff:vjp" && norm.size() == 1 && draft_.withInputsOf(callee).size() == 1) {
         ::Function *function = staticFunction(norm.front());
         ::Function *rule     = staticFunction(draft_.withInputsOf(callee).front());
         if (function == nullptr || rule == nullptr) {
@@ -957,7 +966,9 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
     // Activity analysis: a value is active when it has a tangent and depends on a parameter that
     // has one. Gradients only flow between active values, so values derived from constants or
     // integers (e.g. a scale computed from a shape) need no rule and cost nothing.
-    std::unordered_set<gc_node_ref_t> ports(forward_.withPorts().begin(), forward_.withPorts().end());
+    std::unordered_set<gc_node_ref_t> ports(
+        forward_.withPorts().begin(),
+        forward_.withPorts().end());
     ports.insert(forward_.normPorts().begin(), forward_.normPorts().end());
     for (gc_node_ref_t node : order) {
         if (tangentTypeOf(typeOf(forward_, node)) == nullptr) {
@@ -1012,12 +1023,14 @@ void Backward::visit(gc_node_ref_t node) {
         // Calls the forward rewrite left alone take no differentiable input: constants.
         return;
     case GCNodeKind::Call:
-        fail("cannot differentiate through a call of a function value; the callee must be known "
-             "statically");
+        fail(
+            "cannot differentiate through a call of a function value; the callee must be known "
+            "statically");
     default:
-        fail(std::format(
-            "cannot differentiate through node kind {}",
-            static_cast<int>(kindOf(forward_, node))));
+        fail(
+            std::format(
+                "cannot differentiate through node kind {}",
+                static_cast<int>(kindOf(forward_, node))));
     }
 }
 
@@ -1157,7 +1170,7 @@ std::vector<gc_node_ref_t> Backward::finishCaptures() {
     std::vector<gc_node_ref_t> kept;
     for (gc_node_ref_t primal : captures_) {
         const gc_node_ref_t node = toTarget_.at(primal);
-        const bool used          = !target_.normUsersOf(node).empty() ||
+        const bool used = !target_.normUsersOf(node).empty() ||
                           !target_.withUsersOf(node).empty() || target_.outputNode() == node;
         if (used) {
             kept.push_back(primal);
@@ -1251,11 +1264,12 @@ void Engine::build(Pending &pending) {
     for (size_t i = 0; i < sourceType->normTypesCount(); ++i) {
         normParams.emplace_back(sourceType->normTypeAt(i), sourceType->normIsVarAt(i));
     }
-    forward.setFuncType(FunctionType::create(
-        withParams,
-        normParams,
-        plan.forwardValueType,
-        sourceType->modifiers()));
+    forward.setFuncType(
+        FunctionType::create(
+            withParams,
+            normParams,
+            plan.forwardValueType,
+            sourceType->modifiers()));
 
     group_.define(plan.forward, std::move(pending.source));
     group_.define(plan.pullback, std::move(pullback));
@@ -1265,11 +1279,12 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     FunctionType *type   = function->funcType();
     const auto signature = gradientSignature(type, withValue);
     if (!signature) {
-        fail(std::format(
-            "cannot differentiate '{}' of type {}: it must return a float and take a "
-            "differentiable parameter",
-            function->name(),
-            type->toString()));
+        fail(
+            std::format(
+                "cannot differentiate '{}' of type {}: it must return a float and take a "
+                "differentiable parameter",
+                function->name(),
+                type->toString()));
     }
 
     auto draft = GraphDraft::decode(function);

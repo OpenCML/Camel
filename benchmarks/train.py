@@ -53,7 +53,7 @@ from common.configs import camel_binary, camel_model  # noqa: E402
 from run import _write_csv  # noqa: E402
 from common.weights import load  # noqa: E402
 
-MODELS = ["mlp", "gru", "transformer"]
+MODELS = ["mlp", "gru", "transformer", "lenet"]
 LR = 0.01
 
 # Camel configurations of the training workload: passes after `camel <model.cml>`.
@@ -175,6 +175,14 @@ def check_onnx(models: List[str], rtol: float) -> bool:
     import onnx
     import onnxruntime as ort
 
+    def _harness_key(weights: dict, graph_name: str) -> str:
+        """Graph input/output names flatten nested parameter paths with '_' while the
+        harness and Camel's gradient dump use '.' — map back (e.g. transformer4)."""
+        if graph_name in weights:
+            return graph_name
+        alt = graph_name.replace("_", ".", 1)
+        return alt if alt in weights else graph_name
+
     ok = True
     for model in models:
         print(f"== {model} (training step exported to ONNX)")
@@ -187,7 +195,7 @@ def check_onnx(models: List[str], rtol: float) -> bool:
             proto = onnx.load(str(path))
             onnx.checker.check_model(proto, full_check=True)
             session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
-            feeds = {i.name: (x if i.name == "input1" else weights[i.name]) for i in session.get_inputs()}
+            feeds = {i.name: (x if i.name == "input1" else weights[_harness_key(weights, i.name)]) for i in session.get_inputs()}
             outputs = dict(zip([o.name for o in session.get_outputs()], session.run(None, feeds)))
         print(f"  exported in {export_s:.2f} s: {len(proto.graph.node)} nodes, onnx.checker ok")
         ref_loss = camel_loss(model)
@@ -199,16 +207,26 @@ def check_onnx(models: List[str], rtol: float) -> bool:
         grads = camel_gradients(model)
         for name in sorted(weights):
             got = outputs.get(f"output_1_{name}")
-            if got is None:
-                print(f"  {name:12s} MISSING in the exported step's outputs")
-                ok = False
-                continue
-            ref = weights[name] - LR * grads[name]
+            if got is None:  # exporter flattens '.' to '_' in output names (nested params)
+                got = outputs.get(f"output_1_{name.replace('.', '_', 1)}")
+            if got is not None:
+                ref = weights[name] - LR * grads[name]
+                what = "max|diff|/max|w|"
+            else:
+                # Not an updated parameter: a carried state (e.g. resnetbn's running
+                # statistics), an output_2_<name> compared with the native dump.
+                got = outputs.get(f"output_2_{name}")
+                if got is None:
+                    print(f"  {name:12s} MISSING in the exported step's outputs")
+                    ok = False
+                    continue
+                ref = grads[name]
+                what = "max|diff|/max|s|"
             scale = float(np.max(np.abs(weights[name]))) or 1.0
             err = float(np.max(np.abs(got - ref))) / scale
             status = "ok" if got.shape == ref.shape and err <= rtol else "MISMATCH"
             ok &= status == "ok"
-            print(f"  {name:12s} {status:8s} max|diff|/max|w| = {err:.2e}")
+            print(f"  {name:12s} {status:8s} {what} = {err:.2e}")
     return ok
 
 
@@ -368,8 +386,10 @@ def main() -> int:
     parser.add_argument("--time", action="store_true", help="time training steps")
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--reps", type=int, default=20)
-    # FastVM's heap grows to its steady-state size over the first few dozen steps (it keeps
-    # more intermediates alive than NodeVM); time the steady state, as for PyTorch.
+    # Time the steady state, as for PyTorch. (FastVM once retained intermediates longer than
+    # NodeVM and needed many steps to reach steady state; since ec34de33 it polls the GC
+    # slow-path flag at every call boundary and matches NodeVM's peak RSS, but warmup=40
+    # keeps the measurement on the same footing as the torch baseline.)
     parser.add_argument("--warmup", type=int, default=40)
     parser.add_argument("--threads", type=int, default=os.cpu_count() or 1)
     parser.add_argument("--out", type=Path)
