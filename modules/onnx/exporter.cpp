@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,6 +33,7 @@
 #include "lowering.h"
 
 #include "camel/core/mm/root_handle.h"
+#include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
@@ -119,6 +120,39 @@ bool allConstant(std::span<const Value> values) {
     return std::ranges::all_of(values, [](const Value &v) { return v.isConstant(); });
 }
 
+/// A deferred closure element of an aggregate (see evalFill): no value, only its function type.
+bool isDeferredClosure(const Value &v) {
+    return v.isConstant() && v.slot == NullSlot && v.ty && v.ty->code() == TypeCode::Function;
+}
+
+/// The Camel scalar type a branch output stands for when the arm values stand for one
+/// (symbolic scalars or scalar constants), mirroring the single-output branch path.
+type::Type *scalarCamelTypeOf(const Value &v) {
+    if (v.isSymbolic()) {
+        return v.form == Value::Form::Scalar ? v.camelType : nullptr;
+    }
+    return tensor::asTensorType(v.ty) ? nullptr : v.ty;
+}
+
+/// Operator arguments backed by constant values, for the exporter's constant folds (the local
+/// analog of the simplifier's StaticArgsView).
+class FoldArgsView final : public ArgsView {
+  public:
+    FoldArgsView(std::vector<slot_t> slots, std::vector<type::Type *> types)
+        : slots_(std::move(slots)), types_(std::move(types)) {}
+    size_t size() const override { return slots_.size(); }
+    slot_t slot(size_t index) const override { return slots_[index]; }
+    void setSlot(size_t index, slot_t value) override { slots_[index] = value; }
+    type::TypeCode code(size_t index) const override {
+        return types_[index] ? types_[index]->code() : type::TypeCode::Void;
+    }
+    type::Type *type(size_t index) const override { return types_[index]; }
+
+  private:
+    std::vector<slot_t> slots_;
+    std::vector<type::Type *> types_;
+};
+
 ValueInfo valueInfoOf(const std::string &name, const TensorFacts &facts) {
     if (!facts.dtype) {
         throw ExportError(std::format("the dtype of '{}' is not known statically", name));
@@ -159,9 +193,9 @@ std::vector<Value> elementsOf(slot_t slot, type::Type *ty) {
 class Evaluator {
   public:
     Evaluator(
-        Emitter &emitter, const ExportOptions &options,
+        Emitter &emitter, const ExportOptions &options, core::context::Context &ctx,
         std::unordered_map<slot_t, std::string> names, camel::source::source_context_ptr_t source)
-        : emitter_(emitter), options_(options), names_(std::move(names)),
+        : emitter_(emitter), options_(options), ctx_(ctx), names_(std::move(names)),
           source_(std::move(source)) {}
 
     /// Translates `graph`, with its parameters bound to `inputs`, and returns its result.
@@ -185,16 +219,36 @@ class Evaluator {
         Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values);
     Value
     evalSymbolicBranch(Activation &act, const Value &cond, std::span<const gc_node_ref_t> arms);
+    /// A branch on a model-dependent condition whose JOIN is tuple/struct-typed: the arms
+    /// yield aggregates, so the If gets one output per leaf value.
+    Value evalSymbolicAggregateBranch(
+        Activation &act, const std::string &condName, std::span<const gc_node_ref_t> arms);
+    struct ArmLeaf {
+        Value arms[2];
+    };
+    /// Flattens both arm results of an aggregate-typed branch leaf by leaf, checking that the
+    /// structure matches. A constant tuple/struct arm reads as its elements.
+    void
+    collectArmLeaves(Activation &act, const Value &a, const Value &b, std::vector<ArmLeaf> &leaves);
+    /// Rebuilds the branch's aggregate from the combined leaf values, in collectArmLeaves' order.
+    Value rebuildArmAggregate(type::Type *camelType, std::span<const Value> combined, size_t &next);
     Value evalAccs(Activation &act, gc_node_ref_t ref);
 
     std::vector<Value> evalAll(Activation &act, std::span<const gc_node_ref_t> refs);
     Value keep(slot_t slot, type::Type *type);
+    /// A pure operator whose arguments are all constants, evaluated as the VM would evaluate
+    /// it. Simplification folds these only where replacement is execution-safe; inside a branch
+    /// arm (ctrl-waiting on the BRCH) they survive, and the exported value DAG folds them here.
+    std::optional<Value> foldConstantOper(
+        std::string_view uri, std::span<const Value> norm, std::span<const Value> with,
+        type::Type *resultType);
     [[noreturn]] void unsupported(Activation &act, std::string_view what);
     /// "file:line:col" of a source origin, or empty.
     std::string locationOf(uint64_t origin) const;
 
     Emitter &emitter_;
     const ExportOptions &options_;
+    core::context::Context &ctx_;
     // Source names of constant objects (the fields of captured structs), to name initializers.
     std::unordered_map<slot_t, std::string> names_;
     camel::source::source_context_ptr_t source_;
@@ -358,6 +412,34 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
     }
 }
 
+std::optional<Value> Evaluator::foldConstantOper(
+    std::string_view uri, std::span<const Value> norm, std::span<const Value> with,
+    type::Type *resultType) {
+    auto found = ctx_.execMgr().find(std::string(uri));
+    if (!found) {
+        return std::nullopt;
+    }
+    std::vector<slot_t> withSlots, normSlots;
+    std::vector<type::Type *> withTypes, normTypes;
+    for (const Value &v : with) {
+        withSlots.push_back(v.slot);
+        withTypes.push_back(v.ty);
+    }
+    for (const Value &v : norm) {
+        normSlots.push_back(v.slot);
+        normTypes.push_back(v.ty);
+    }
+    FoldArgsView withView(std::move(withSlots), std::move(withTypes));
+    FoldArgsView normView(std::move(normSlots), std::move(normTypes));
+    slot_t result;
+    try {
+        result = (*found)(withView, normView, ctx_);
+    } catch (...) {
+        return std::nullopt; // leave the failure to be reported when the program runs
+    }
+    return keep(result, resultType);
+}
+
 Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     GCGraph *g       = act.graph;
     const auto *body = g->nodeBodyAs<camel::runtime::GCOperBody>(ref);
@@ -370,6 +452,12 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     // left is translated. Side effects have no ONNX counterpart.
     if (!core::OperatorTraitsRegistry::instance().isPure(uri)) {
         unsupported(act, std::format("impure operator '{}' cannot be exported", uri));
+    }
+    if (allConstant(norm) && allConstant(with) && !std::ranges::any_of(norm, isDeferredClosure) &&
+        !std::ranges::any_of(with, isDeferredClosure)) {
+        if (auto folded = foldConstantOper(uri, norm, with, g->node(ref)->dataType)) {
+            return *folded;
+        }
     }
     const Lowering *lowering = LoweringRegistry::instance().find(uri, emitter_.opset());
     if (!lowering || !with.empty()) {
@@ -434,6 +522,11 @@ Value Evaluator::evalJoin(Activation &act, gc_node_ref_t join) {
                 act,
                 "a match on a value that depends on the model input cannot be exported");
         }
+        type::Type *joinType = g->node(join)->dataType;
+        if (joinType &&
+            (joinType->code() == TypeCode::Tuple || joinType->code() == TypeCode::Struct)) {
+            return evalSymbolicAggregateBranch(act, emitter_.operand(cond, TypeCode::Bool), arms);
+        }
         return evalSymbolicBranch(act, cond, arms);
     }
 
@@ -489,6 +582,17 @@ Value Evaluator::evalSymbolicBranch(
             throw;
         }
     }
+    // Arms that already agree need no selection: the same constant (duplicated constant nodes
+    // fold to the same slot, e.g. a loop counter carried across a decision tree) or the same
+    // symbolic value. Emitting an If here would needlessly make the result input-dependent.
+    if (results[0].isConstant() && results[1].isConstant() && results[0].slot == results[1].slot &&
+        results[0].ty == results[1].ty) {
+        return results[0];
+    }
+    if (results[0].isSymbolic() && results[1].isSymbolic() && results[0].form == results[1].form &&
+        results[0].name == results[1].name && !results[0].name.empty()) {
+        return results[0];
+    }
     const TensorFacts a = factsOf(results[0]), b = factsOf(results[1]);
     const bool sameForm =
         results[0].isConstant() || results[1].isConstant() || results[0].form == results[1].form;
@@ -513,43 +617,216 @@ Value Evaluator::evalSymbolicBranch(
         {Attribute::makeGraph("then_branch", std::move(bodies[0])),
          Attribute::makeGraph("else_branch", std::move(bodies[1]))});
     // The If stands for a Camel scalar when the arms do (symbolic scalars or scalar constants).
-    const auto scalarTypeOf = [](const Value &v) -> type::Type * {
-        if (v.isSymbolic()) {
-            return v.form == Value::Form::Scalar ? v.camelType : nullptr;
-        }
-        return tensor::asTensorType(v.ty) ? nullptr : v.ty;
-    };
     for (const Value &r : results) {
         if (r.isSymbolic() && r.form == Value::Form::IntArray) {
             unsupported(act, "a branch on a model-dependent condition cannot yield an int array");
         }
     }
-    if (type::Type *scalar = scalarTypeOf(results[0])) {
+    if (type::Type *scalar = scalarCamelTypeOf(results[0])) {
         return Value::symbolicScalar(out, scalar);
     }
     return Value::symbolic(out, a.dtype, shape);
 }
 
+void Evaluator::collectArmLeaves(
+    Activation &act, const Value &a, const Value &b, std::vector<ArmLeaf> &leaves) {
+    const auto isAggregateForm = [](const Value &v) {
+        return v.isAggregate() ||
+               (v.isConstant() && v.ty &&
+                (v.ty->code() == TypeCode::Tuple || v.ty->code() == TypeCode::Struct));
+    };
+    const auto asAggregate = [](const Value &v) {
+        if (v.isAggregate()) {
+            return v;
+        }
+        return Value::aggregate(v.ty, elementsOf(v.slot, v.ty));
+    };
+    if (isAggregateForm(a) != isAggregateForm(b)) {
+        unsupported(
+            act,
+            "the arms of a branch on a model-dependent condition yield different types");
+    }
+    if (isAggregateForm(a)) {
+        const Value va = asAggregate(a), vb = asAggregate(b);
+        if (va.camelType != vb.camelType || va.fields.size() != vb.fields.size()) {
+            unsupported(
+                act,
+                "the arms of a branch on a model-dependent condition yield different types");
+        }
+        for (size_t i = 0; i < va.fields.size(); ++i) {
+            collectArmLeaves(act, va.fields[i], vb.fields[i], leaves);
+        }
+        return;
+    }
+    leaves.push_back({{a, b}});
+}
+
+Value Evaluator::rebuildArmAggregate(
+    type::Type *camelType, std::span<const Value> combined, size_t &next) {
+    const bool isTuple = camelType->code() == TypeCode::Tuple;
+    const size_t count = isTuple ? static_cast<type::TupleType *>(camelType)->size()
+                                 : static_cast<type::StructType *>(camelType)->size();
+    const auto typeAt  = [&](size_t i) {
+        return isTuple ? static_cast<type::TupleType *>(camelType)->typeAt(i)
+                       : static_cast<type::StructType *>(camelType)->typeAt(i);
+    };
+    std::vector<Value> fields;
+    fields.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        type::Type *fieldType = typeAt(i);
+        if (fieldType->code() == TypeCode::Tuple || fieldType->code() == TypeCode::Struct) {
+            fields.push_back(rebuildArmAggregate(fieldType, combined, next));
+        } else {
+            fields.push_back(combined[next++]);
+        }
+    }
+    return Value::aggregate(camelType, std::move(fields));
+}
+
+/// if-then-else on a condition that depends on the input, with tuple/struct-typed arms: one
+/// multi-output If whose subgraphs yield every leaf value (a deferred closure element produces
+/// no output; two identical constants need no selection).
+Value Evaluator::evalSymbolicAggregateBranch(
+    Activation &act, const std::string &condName, std::span<const gc_node_ref_t> arms) {
+    Graph bodies[2];
+    Value results[2];
+    for (size_t i = 0; i < 2; ++i) {
+        emitter_.pushScope(i == 0 ? "then_branch" : "else_branch");
+        act.memo.emplace_back();
+        try {
+            results[i] = eval(act, arms[i]);
+            act.memo.pop_back();
+            bodies[i] = emitter_.popScope();
+        } catch (...) {
+            act.memo.pop_back();
+            emitter_.popScope();
+            throw;
+        }
+    }
+    std::vector<ArmLeaf> leaves;
+    collectArmLeaves(act, results[0], results[1], leaves);
+
+    std::vector<Value> combined(leaves.size());
+    std::vector<size_t> selected;
+    for (size_t j = 0; j < leaves.size(); ++j) {
+        const Value &a = leaves[j].arms[0];
+        const Value &b = leaves[j].arms[1];
+        if (isDeferredClosure(a) || isDeferredClosure(b)) {
+            combined[j] = isDeferredClosure(a) ? a : b;
+            continue;
+        }
+        if (a.isConstant() && b.isConstant() && a.slot == b.slot && a.ty == b.ty) {
+            combined[j] = a;
+            continue;
+        }
+        // Arms that already agree need no selection (see evalSymbolicBranch).
+        if (a.isSymbolic() && b.isSymbolic() && a.form == b.form && a.name == b.name &&
+            !a.name.empty()) {
+            combined[j] = a;
+            continue;
+        }
+        const TensorFacts fa = factsOf(a), fb = factsOf(b);
+        const bool sameForm = a.isConstant() || b.isConstant() || a.form == b.form;
+        if (!fa.dtype || fa.dtype != fb.dtype || !sameForm) {
+            unsupported(
+                act,
+                "the arms of a branch on a model-dependent condition yield different types");
+        }
+        if ((a.isSymbolic() && a.form == Value::Form::IntArray) ||
+            (b.isSymbolic() && b.form == Value::Form::IntArray)) {
+            unsupported(act, "a branch on a model-dependent condition cannot yield an int array");
+        }
+        selected.push_back(j);
+    }
+    for (size_t i = 0; i < 2; ++i) {
+        for (size_t j : selected) {
+            const Value &leaf = leaves[j].arms[i];
+            const std::string out =
+                emitter_.appendIdentity(bodies[i], emitter_.operand(leaf), "arm_out");
+            bodies[i].outputs.push_back(valueInfoOf(out, factsOf(leaf)));
+        }
+    }
+    const std::vector<std::string> outputs = emitter_.nodeN(
+        "If",
+        {condName},
+        {Attribute::makeGraph("then_branch", std::move(bodies[0])),
+         Attribute::makeGraph("else_branch", std::move(bodies[1]))},
+        selected.size());
+    for (size_t k = 0; k < selected.size(); ++k) {
+        const size_t j       = selected[k];
+        const Value &a       = leaves[j].arms[0];
+        const Value &b       = leaves[j].arms[1];
+        const TensorFacts fa = factsOf(a), fb = factsOf(b);
+        // Extents that agree survive; others become dynamic.
+        std::optional<tensor::StaticShape> shape;
+        if (fa.shape && fb.shape && fa.shape->size() == fb.shape->size()) {
+            shape = fa.shape;
+            for (size_t d = 0; d < shape->size(); ++d) {
+                if ((*fa.shape)[d] != (*fb.shape)[d]) {
+                    (*shape)[d] = tensor::kUnknownDim;
+                }
+            }
+        }
+        if (type::Type *scalar = scalarCamelTypeOf(a)) {
+            combined[j] = Value::symbolicScalar(outputs[k], scalar);
+        } else {
+            combined[j] = Value::symbolic(outputs[k], fa.dtype, shape);
+        }
+    }
+    size_t next           = 0;
+    type::Type *camelType = results[0].isAggregate() ? results[0].camelType : results[0].ty;
+    return rebuildArmAggregate(camelType, combined, next);
+}
+
 Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
-    GCGraph *g                = act.graph;
-    const Value source        = eval(act, g->normInputsOf(ref).front());
-    std::vector<Value> values = evalAll(act, g->withInputsOf(ref));
-    type::Type *targetType    = g->node(ref)->dataType;
-    if (source.isConstant() && !allConstant(values) && isIntArrayType(targetType)) {
+    GCGraph *g             = act.graph;
+    const Value source     = eval(act, g->normInputsOf(ref).front());
+    type::Type *targetType = g->node(ref)->dataType;
+    const auto slots       = g->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
+    const auto refs        = g->withInputsOf(ref);
+    const auto elemTypeAt  = [&](size_t k) -> type::Type  *{
+        if (targetType->code() == TypeCode::Tuple) {
+            return static_cast<type::TupleType *>(targetType)->typeAt(slots[k]);
+        }
+        if (targetType->code() == TypeCode::Struct) {
+            return static_cast<type::StructType *>(targetType)->typeAt(slots[k]);
+        }
+        return nullptr;
+    };
+    const bool isAggregate =
+        targetType->code() == TypeCode::Tuple || targetType->code() == TypeCode::Struct;
+    std::vector<Value> values(refs.size());
+    bool allConst    = true;
+    bool sawDeferred = false;
+    for (size_t k = 0; k < refs.size(); ++k) {
+        // A closure element of a tuple or struct that simplification did not fold captures a
+        // value that depends on the model input (e.g. a branch arm's (value, pullback) tuple
+        // whose pullback is never called on the exported path). It has no ONNX representation
+        // and emits nothing, so it is deferred instead of failing the whole aggregate: the
+        // element is evaluated only if an access reads it back. The marker carries the function
+        // type; anything that tries to use it as a value fails on the type.
+        type::Type *elemType = isAggregate ? elemTypeAt(k) : nullptr;
+        if (elemType && elemType->code() == TypeCode::Function && source.isConstant()) {
+            values[k]   = Value::constant(NullSlot, elemType);
+            sawDeferred = true;
+            continue;
+        }
+        values[k] = eval(act, refs[k]);
+        allConst  = allConst && values[k].isConstant();
+    }
+    if (source.isConstant() && !allConst && isIntArrayType(targetType)) {
         return symbolicIntArray(act, ref, source, values);
     }
-    if (source.isConstant() && !allConstant(values) &&
-        (targetType->code() == TypeCode::Tuple || targetType->code() == TypeCode::Struct)) {
+    if (source.isConstant() && (sawDeferred || !allConst) && isAggregate) {
         // A tuple or struct of input-dependent values (e.g. gradients) exists only at export
         // time; its elements are read back by accesses or become graph outputs.
         std::vector<Value> fields = elementsOf(source.slot, targetType);
-        const auto slots          = g->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
         for (size_t k = 0; k < slots.size(); ++k) {
             fields[static_cast<size_t>(slots[k])] = values[k];
         }
         return Value::aggregate(targetType, std::move(fields));
     }
-    if (!source.isConstant() || !allConstant(values)) {
+    if (!source.isConstant() || !allConst) {
         unsupported(
             act,
             "a value that depends on the model input is stored in an array or a closure; pass "
@@ -910,7 +1187,7 @@ Model exportFunction(
             collectNames(captured->get<slot_t>(i), layout->typeAt(i), "", names);
         }
     }
-    Evaluator evaluator(emitter, options, std::move(names), ctx.sourceContext());
+    Evaluator evaluator(emitter, options, ctx, std::move(names), ctx.sourceContext());
     emitOutputs(emitter, evaluator.translate(root, inputs), options.outputName);
 
     Model model;

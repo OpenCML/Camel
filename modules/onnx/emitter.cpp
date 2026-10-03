@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -361,6 +361,38 @@ std::pair<std::string, std::string> Emitter::node2(
     n.attributes = std::move(attributes);
     scopes_.back().graph.nodes.push_back(std::move(n));
     return {first, second};
+}
+
+std::vector<std::string> Emitter::nodeN(
+    std::string opType, std::vector<std::string> inputs, std::vector<Attribute> attributes,
+    size_t outputCount, std::string_view hint) {
+    checkCapability(opType, inputs);
+    std::vector<std::string> outputs;
+    outputs.reserve(outputCount);
+    const std::string base = fresh(hint.empty() ? std::string_view(opType) : hint);
+    outputs.push_back(base);
+    for (size_t i = 1; i < outputCount; ++i) {
+        outputs.push_back(fresh(std::format("{}_{}", base, i)));
+    }
+    Node n;
+    n.opType     = std::move(opType);
+    n.name       = "n_" + base;
+    n.inputs     = std::move(inputs);
+    n.outputs    = outputs;
+    n.attributes = std::move(attributes);
+    scopes_.back().graph.nodes.push_back(std::move(n));
+    return outputs;
+}
+
+std::string Emitter::appendIdentity(Graph &body, const std::string &input, std::string_view hint) {
+    const std::string output = fresh(hint);
+    Node n;
+    n.opType  = "Identity";
+    n.name    = "n_" + output;
+    n.inputs  = {input};
+    n.outputs = {output};
+    body.nodes.push_back(std::move(n));
+    return output;
 }
 
 std::string Emitter::operand(const Value &value, std::optional<TypeCode> dtype) {

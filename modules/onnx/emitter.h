@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -115,6 +115,17 @@ class Emitter {
     std::pair<std::string, std::string> node2(
         std::string opType, std::vector<std::string> inputs, std::vector<Attribute> attributes,
         ElemType secondElem, std::string_view hint = {});
+
+    /// Appends a node with `outputCount` outputs (e.g. an If whose arms yield a tuple) and
+    /// returns the output names. Not memoized: multi-output nodes are emitted once per call site.
+    std::vector<std::string> nodeN(
+        std::string opType, std::vector<std::string> inputs, std::vector<Attribute> attributes,
+        size_t outputCount, std::string_view hint = {});
+
+    /// Appends an Identity node to an already popped subgraph and returns its output name. Used
+    /// for the outputs of a branch arm that yields several values: the arm subgraph is complete
+    /// before the leaf count is known, so the output Identities are added afterwards.
+    std::string appendIdentity(Graph &body, const std::string &input, std::string_view hint);
 
     /// Operand name for `value`, converted to `dtype` when given.
     std::string operand(const Value &value, std::optional<type::TypeCode> dtype = std::nullopt);
