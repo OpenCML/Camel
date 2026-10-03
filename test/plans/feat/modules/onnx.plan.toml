@@ -359,6 +359,59 @@ assert(!text.includes('unreachable'), 'export must fail before the next statemen
 timeout_ms = 6000
 
 [[tests]]
+name = "export_train_step_dynamic"
+desc = "E14/T7: a training step (value_and_grad + sgd) exports with a dynamic batch axis. The batch mean written as sum / shape arithmetic keeps the divisor input-dependent (Shape + Gather + Div instead of a folded constant) and the gradient's broadcast becomes an Expand on a Shape."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_dynamic.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_dynamic.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_dynamic.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
+assert(JSON.stringify(model.inputDims[model.inputs.indexOf('input1')]) === '["batch",2]', `data input must keep a symbolic batch, got ${JSON.stringify(model.inputDims)}`)
+assert(model.inputDims[0].join() === '2,3', `weights must stay static, got ${JSON.stringify(model.inputDims)}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+for (const op of ['Shape', 'Gather', 'Div', 'Expand']) {
+    assert(model.ops.includes(op), `dynamic batch count/broadcast must lower via ${op}, got ${model.ops}`)
+}
+const standard = new Set(['MatMul', 'Add', 'Relu', 'Mul', 'ReduceSum', 'Shape', 'Gather', 'Cast', 'Div', 'Expand', 'Transpose', 'Greater', 'Reshape', 'Sub', 'Identity'])
+assert(model.ops.every((o) => standard.has(o)), `non-standard op in ${model.ops}`)
+assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_dynamic_mean"
+desc = "E14/T7 boundary: the canonical mean(y*y) batch mean cannot export with a dynamic batch axis — its VJP divides by tensor:numel, which folds for a static batch but is input-dependent once the batch is symbolic, and tensor:numel has no ONNX lowering; the exporter reports it at the mean call."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_dynamic_mean.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_dynamic_mean.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes("operator 'tensor:numel' has no ONNX lowering at opset 17"), 'missing unsupported-operator detail')
+assert(/at [^ ]*export_train_step_dynamic_mean[.]cml:28:22[)]/.test(text), 'missing source position of the mean call')
+assert(!text.includes('unreachable'), 'export must fail before the next statement')
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
 name = "export_gated_gru_forward"
 desc = "E13/T5: a data-dependent branch inside a statically unrolled recurrence (GRU cell update gated on mean(|x_t|), T = 3) exports as a binary decision tree of standard If operators (2^3 - 1 = 7 counting nested subgraphs)."
 kind = "behavior"
@@ -492,3 +545,16 @@ expect_exit = 0
 expect_stdout_contains = ["input dims ['batch', 2]", "batch 1: shape [3]", "batch 7: shape [21]", "ort run: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+[[tests]]
+name = "ort_train_step_dynamic"
+desc = "E14/T7: one training-step graph (value_and_grad + sgd) exported with a dynamic batch axis runs on ONNX Runtime at batch sizes 1, 16 and 64 and matches the per-batch specialized exports and Camel's native run of the same step at each (<= 1e-6)."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_train_dynamic.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["input dims ['batch', 2]", "ort train dynamic: worst", "PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000

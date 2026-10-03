@@ -1,0 +1,42 @@
+/**
+ * E14/T7 boundary: the canonical batch-mean loss mean(y * y) cannot export
+ * with a dynamic batch axis — its VJP divides by tensor:numel, which folds to
+ * a constant for a static batch but becomes input-dependent once the batch is
+ * symbolic, and tensor:numel has no ONNX lowering. The exporter reports the
+ * operator at the mean call. (The same semantics written as sum / shape
+ * arithmetic exports fine — see export_train_step_dynamic.)
+ */
+module export_train_step_dynamic_mean
+
+import { Tensor, relu, mean, reshape } from tensor
+import { value_and_grad } from autodiff
+import { sgd } from nn
+import { export_model } from onnx
+import { get_env } from sys
+
+type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+
+with <m: Mlp>
+func loss(x: Tensor): float {
+    let h = relu(x @ m.w1 + m.b1)
+    let y = h @ m.w2 + m.b2
+    return mean(y * y)
+}
+
+func step(m: Mlp, x: Tensor): (float, Mlp) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func main(): int sync {
+    let m = {
+        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
+        b1: reshape([0.1, 0.0, -0.1], [3]),
+        w2: reshape([1.0, -1.0, 0.5], [3, 1]),
+        b2: reshape([0.2], [1])
+    }
+    let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
+    export_model(step, (m, x), get_env('ONNX_OUT'), [0])
+    println('exported')
+    return 0
+}
