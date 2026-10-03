@@ -1,19 +1,20 @@
 """T13 account 2: per-operator kernel time vs step time (CAMEL_TENSOR_OPSTATS=1).
 
-The op-stats table aggregates every executed step, including the slower first
-(compile) step, while CAMEL_BENCH latency lines cover only the steady-state timed
-steps. To put both on the same footing, each trial differences two runs with the
-same warmup and different rep counts:
+Two estimators, reported side by side:
 
-  run A: warmup W, reps R0     run B: warmup W, reps R1 (> R0)
-  steady kernel ms/step  = (kernel_B - kernel_A) / (R1 - R0)     (per-op too)
-  steady step ms         = median of run B's timed latencies
-  non-kernel ms/step     = steady step - steady kernel
-                           (nvm node scheduling, closure dispatch, allocation,
-                            and ops the tensor registry does not wrap, e.g. nn:sgd)
+  same-process (primary): kernel/step = (long run's op total - setup ops) /
+  executed steps, against the long run's median timed latency. Kernel and step
+  time come from one process, so the gap is real non-kernel time; the compile
+  step inflates the kernel sum by ~(compile-steady)/steps (~1-3% at these rep
+  counts), biasing non-kernel time DOWN (conservative for the overhead claim).
 
-Setup ops (load_npy, set_num_threads) run once per process and cancel in the
-difference. Op call counts verified integral per step in both configs.
+  differenced (cross-check): two runs with the same warmup and reps R0 < R1;
+  (kernel_B - kernel_A)/(R1-R0) cancels the compile step exactly but adds
+  process-to-process variance, which dominates for the fast opt config.
+
+Non-kernel time covers nvm node scheduling, closure dispatch, allocation, and
+ops the tensor registry does not wrap (nn:sgd - measured separately in
+run_micro.py). Op call counts from differencing are exact (integral per step).
 
 Usage:
   .venv/Scripts/python e17attr/run_opstats.py --out <dir> [--trials 3]
@@ -107,6 +108,14 @@ def main() -> int:
                     }
                 kernel = sum(v["ms_per_step"] for k, v in ops.items() if k not in SETUP_OPS)
                 step = statistics.median(b["lat"])
+                # Same-process estimator (primary): kernel and latency from the long
+                # run only. The first (compile) step inflates the kernel sum by
+                # roughly (compile-steady)/(1+(W-1)+R1) ~= 1-3% here, so this slightly
+                # UNDERSTATES non-kernel time - conservative for the overhead claim.
+                steps_b = 1 + (args.warmup - 1) + args.reps1
+                kernel_sp = sum(v["ms"] for k, v in b["ops"].items() if k not in SETUP_OPS) / steps_b
+                ops_sp = {n: {"calls_per_step": v["calls"] / steps_b, "ms_per_step": v["ms"] / steps_b}
+                          for n, v in b["ops"].items() if n not in SETUP_OPS}
                 rows.append(
                     {
                         "model": model,
@@ -115,21 +124,25 @@ def main() -> int:
                         "threads": args.threads,
                         "warmup": args.warmup,
                         "reps": f"{args.reps0}+{args.reps1}",
-                        "kernel_per_step_ms": round(kernel, 4),
+                        "kernel_per_step_ms": round(kernel_sp, 4),
                         "step_median_ms": round(step, 4),
-                        "nonkernel_ms": round(step - kernel, 4),
-                        "nonkernel_pct": round(100.0 * (step - kernel) / step, 2),
-                        "ops_json": json.dumps(ops, sort_keys=True),
+                        "nonkernel_ms": round(step - kernel_sp, 4),
+                        "nonkernel_pct": round(100.0 * (step - kernel_sp) / step, 2),
+                        "kernel_diff_ms": round(kernel, 4),
+                        "nonkernel_diff_ms": round(step - kernel, 4),
+                        "ops_json": json.dumps(ops_sp, sort_keys=True),
                     }
                 )
                 print(
-                    f"t{trial} {model:10s} {config:14s} step {step:8.3f} ms  kernel {kernel:8.3f} ms/step  "
-                    f"non-kernel {step - kernel:7.3f} ms ({100.0 * (step - kernel) / step:5.1f}%)",
+                    f"t{trial} {model:10s} {config:14s} step {step:8.3f} ms  kernel {kernel_sp:8.3f} ms/step  "
+                    f"non-kernel {step - kernel_sp:7.3f} ms ({100.0 * (step - kernel_sp) / step:5.1f}%)  "
+                    f"[diff xcheck: kernel {kernel:7.3f}]",
                     flush=True,
                 )
 
     cols = ["model", "config", "trial", "threads", "warmup", "reps",
-            "kernel_per_step_ms", "step_median_ms", "nonkernel_ms", "nonkernel_pct", "ops_json"]
+            "kernel_per_step_ms", "step_median_ms", "nonkernel_ms", "nonkernel_pct",
+            "kernel_diff_ms", "nonkernel_diff_ms", "ops_json"]
     with open(args.out / "opstats.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()

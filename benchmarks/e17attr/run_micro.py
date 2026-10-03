@@ -44,16 +44,18 @@ sys.path.insert(0, str(BENCH_ROOT))
 from common.camel import _camel_env  # noqa: E402
 from common.configs import camel_binary  # noqa: E402
 
-# name, kind, (M, K, N) for lin; (N, Cin, Cout, K, H, W, pad) for conv
+# name, kind, (M, K, N) for lin; (N, Cin, Cout, K, H, W, pad) for conv; (numel,) for sgd
 SHAPES = [
     ("mlp_fc1", "lin", (256, 784, 1024)),
     ("mlp_fc2", "lin", (256, 1024, 512)),
     ("mlp_fc3", "lin", (256, 512, 10)),
+    ("mlp_sgd", "sgd", (784 * 1024 + 1024 + 1024 * 512 + 512 + 512 * 10 + 10,)),
     ("lenet_conv1", "conv_s1_p2", (128, 1, 16, 5, 28, 28, 2)),
     ("lenet_conv2", "conv_s1_p0", (128, 16, 48, 5, 14, 14, 0)),
     ("lenet_fc1", "lin", (128, 1200, 120)),
     ("lenet_fc2", "lin", (128, 120, 84)),
     ("lenet_fc3", "lin", (128, 84, 10)),
+    ("lenet_sgd", "sgd", (16 * 25 + 16 + 48 * 16 * 25 + 48 + 1200 * 120 + 120 + 120 * 84 + 84 + 84 * 10 + 10,)),
 ]
 
 OPROW = re.compile(r"^  (\S+)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*$")
@@ -69,6 +71,10 @@ def gen_inputs(shape, d: Path) -> None:
         np.save(d / "x.npy", rng.standard_normal((n, cin, h, w), dtype=np.float32))
         np.save(d / "w.npy", rng.standard_normal((cout, cin, k, k), dtype=np.float32))
         np.save(d / "b.npy", rng.standard_normal((cout,), dtype=np.float32))
+    elif shape[0] == "sgd":
+        (numel,) = shape[1]
+        np.save(d / "x.npy", rng.standard_normal(numel, dtype=np.float32))
+        np.save(d / "w.npy", rng.standard_normal(numel, dtype=np.float32))
     else:
         m, k, n = shape[1]
         np.save(d / "x.npy", rng.standard_normal((m, k), dtype=np.float32))
@@ -100,6 +106,8 @@ def camel_micro(shape, d: Path, warmup: int, reps: int, threads: int) -> dict:
         m = OPROW.match(line)
         if m and m.group(1) not in SETUP_OPS:
             ops[m.group(1)] = {"calls_per_step": int(m.group(2)) / steps, "us_per_call": float(m.group(4))}
+    if not lat or (shape[0] != "sgd" and not ops):
+        raise RuntimeError(f"micro {shape[0]}: lost op-stats table or latencies (stderr {len(proc.stderr)} B)")
     return {"step_median_ms": statistics.median(lat), "ops": ops, "stderr": proc.stderr}
 
 
@@ -163,17 +171,39 @@ def main() -> int:
     ap.add_argument("--warmup", type=int, default=10)
     ap.add_argument("--reps", type=int, default=30)
     ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--shapes", default="", help="comma filter on shape names")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
+    wanted = set(args.shapes.split(",")) if args.shapes else None
     rows = []
     for name, kind, dims in SHAPES:
+        if wanted and name not in wanted:
+            continue
         shape = (kind, dims)
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
             gen_inputs(shape, d)
             for trial in range(1, args.trials + 1):
                 cam = camel_micro(shape, d, args.warmup, args.reps, args.threads)
+                if kind == "sgd":
+                    # nn:sgd is invisible to op-stats: the whole step is the fused
+                    # update (plus ~us of sync dispatch), so the step median is the
+                    # kernel wall time. No torch equivalent here (see torch_step_split).
+                    row = {
+                        "shape": name,
+                        "kind": kind,
+                        "dims": json.dumps(dims),
+                        "trial": trial,
+                        "camel_fwd_us": round(cam["step_median_ms"] * 1e3, 2),
+                        "camel_bwd_us": "",
+                        "camel_ops_json": json.dumps(cam["ops"], sort_keys=True),
+                        "torch_fwd_us": "",
+                        "torch_bwd_us": "",
+                    }
+                    rows.append(row)
+                    print(f"{name:12s} t{trial}  sgd step camel {row['camel_fwd_us']:9.2f} us", flush=True)
+                    continue
                 tor = torch_micro(shape, d, args.warmup, args.reps, args.threads)
                 kernels = LIN_KERNELS if kind == "lin" else CONV_KERNELS
                 cam_fwd = cam["ops"].get(kernels[0], {}).get("us_per_call", float("nan"))
@@ -199,9 +229,11 @@ def main() -> int:
                 )
 
     cols = ["shape", "kind", "dims", "trial", "camel_fwd_us", "camel_bwd_us", "torch_fwd_us", "torch_bwd_us", "camel_ops_json"]
-    with open(args.out / "micro.csv", "w", newline="") as f:
+    mode = "a" if args.shapes else "w"
+    with open(args.out / "micro.csv", mode, newline="") as f:
         w = csv.DictWriter(f, fieldnames=cols)
-        w.writeheader()
+        if mode == "w":
+            w.writeheader()
         w.writerows(rows)
     print(f"[done] wrote {args.out / 'micro.csv'}")
     return 0
