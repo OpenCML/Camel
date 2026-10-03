@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,9 +48,14 @@ bool specializeDirectFuncInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId);
 /// Rewrites a CALL into a direct FUNC when its callee is known: a static Function (its static
 /// captures bound into a specialization), or a closure built in this graph by FILL, whose graph
-/// is lifted so that the captures become trailing norm arguments.
+/// is lifted so that the captures become trailing norm arguments. With `unwrapGatedCallee` a
+/// callee hidden behind gates (sync code gates a callee after the previous statement) is seen
+/// through; the FUNC keeps the gate as a control input, so ordering is preserved. That mode is
+/// export-only: gate it on OptimizeRewriteConfig::enableBranchedCallSplit like the branched
+/// split, since it exists for graphs that are only walked as value DAGs.
 bool devirtualizeStaticCallInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId);
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId,
+    bool unwrapGatedCallee = false);
 
 /// Rewrites a CALL whose callee is projected out of a branch JOIN (the value_and_grad pullback
 /// shape: each arm packs (value, closure) into a tuple, the JOIN selects, and the closure is

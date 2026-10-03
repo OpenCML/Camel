@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1044,7 +1044,8 @@ bool devirtualizeClosureCallInDraft(
 } // namespace
 
 bool devirtualizeStaticCallInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId) {
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId,
+    bool unwrapGatedCallee) {
     static size_t specializationNonce = 0;
 
     const DraftNodeHeader *callHeader = draft.header(callNodeId);
@@ -1061,13 +1062,31 @@ bool devirtualizeStaticCallInDraft(
         return false;
     }
 
-    const gc_node_ref_t callee = resolveTupleProjection(draft, withInputs.front());
+    gc_node_ref_t calleeRef = withInputs.front();
+    if (unwrapGatedCallee) {
+        // A gate orders the callee value without changing it (sync code gates a callee after
+        // the previous statement); look through it. keepCalleeOrdering keeps the gate as a
+        // control input of the rewritten FUNC, so statement ordering is preserved.
+        while (true) {
+            const DraftNodeHeader *gateHeader = draft.header(calleeRef);
+            if (!gateHeader || gateHeader->kind != GCNodeKind::Gate) {
+                break;
+            }
+            const auto gateNorm = draft.normInputsOf(calleeRef);
+            if (gateNorm.empty()) {
+                break;
+            }
+            calleeRef = gateNorm.back();
+        }
+    }
+
+    const gc_node_ref_t callee = resolveTupleProjection(draft, calleeRef);
     if (const auto *calleeHeader = draft.header(callee);
         calleeHeader && calleeHeader->kind == GCNodeKind::Fill) {
         return devirtualizeClosureCallInDraft(session, draft, callNodeId, callee);
     }
 
-    DraftStaticValue calleeStatic = tryResolveStaticValue(draft, withInputs.front());
+    DraftStaticValue calleeStatic = tryResolveStaticValue(draft, calleeRef);
     if (!calleeStatic.valid() || !calleeStatic.type ||
         calleeStatic.type->code() != camel::core::type::TypeCode::Function) {
         CAMEL_LOG_INFO_S(
@@ -1220,10 +1239,17 @@ gc_node_ref_t armFillElement(const GraphDraft &draft, gc_node_ref_t fillId, size
 /// inside the arm. The extra JOINs ctrl-wait on the main one so the topo builder places them
 /// after it (they read values already computed inside the arms).
 ///
+/// The CALL's arguments may themselves be computed after the JOIN (a cotangent derived from the
+/// branch's value projection is the common case): the per-arm calls then read a value that runs
+/// later than the branch their chain belongs to. Arguments produced strictly inside an arm are
+/// rejected instead (see the inArm walk below).
+///
 /// EXPORT-ONLY: the result has several sibling JOINs reading the same BRCH whose users merge
-/// downstream. That is a valid graph for a value-DAG consumer (the ONNX exporter) but breaks
-/// the scheduler invariant that a JOIN cuts its BRCH off from everything downstream — the
-/// execution-topo builder reports a cycle. Gate on OptimizeRewriteConfig::enableBranchedCallSplit.
+/// downstream, and per-arm chains may read post-JOIN values. That is a valid graph for a
+/// value-DAG consumer (the ONNX exporter, which emits an If whose arm subgraphs capture
+/// outer-scope names) but is not executable: a JOIN no longer cuts its BRCH off from what runs
+/// after it, and the execution-topo builder reports a cycle. Gate on
+/// OptimizeRewriteConfig::enableBranchedCallSplit.
 bool devirtualizeBranchedCallInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId) {
     (void)session;
@@ -1240,7 +1266,15 @@ bool devirtualizeBranchedCallInDraft(
     if (callWith.empty()) {
         return false;
     }
-    const gc_node_ref_t calleeAccs    = callWith.front();
+    const gc_node_ref_t calleeInput = callWith.front();
+    gc_node_ref_t calleeAccs        = calleeInput;
+    // Sync code gates the projected callee after the previous statement; the gate orders the
+    // value without changing it, so the split sees through it. The gate dies with the call.
+    if (const DraftNodeHeader *gateHeader = draft.header(calleeAccs);
+        gateHeader && gateHeader->kind == GCNodeKind::Gate &&
+        !draft.normInputsOf(calleeAccs).empty()) {
+        calleeAccs = draft.normInputsOf(calleeAccs).back();
+    }
     const DraftNodeHeader *accsHeader = draft.header(calleeAccs);
     if (!accsHeader || accsHeader->kind != GCNodeKind::Accs ||
         draft.normInputsOf(calleeAccs).size() != 1 || !draft.ctrlInputsOf(calleeAccs).empty() ||
@@ -1260,11 +1294,23 @@ bool devirtualizeBranchedCallInDraft(
         !draft.ctrlInputsOf(join).empty()) {
         return false;
     }
-    // The callee projection feeds this call alone.
+    // The callee projection feeds this call alone (through the gate when one wraps it). A
+    // shared projection (e.g. also captured into a continuation tuple) is left alone: keeping
+    // the JOIN alive for it while splitting the call duplicates the continuation structure and
+    // grows the graph past the encoding limit.
     for (auto users : {draft.normUsersOf(calleeAccs), draft.withUsersOf(calleeAccs)}) {
         for (gc_node_ref_t user : users) {
-            if (user != callNodeId) {
+            if (user != calleeInput && user != callNodeId) {
                 return false;
+            }
+        }
+    }
+    if (calleeInput != calleeAccs) {
+        for (auto users : {draft.normUsersOf(calleeInput), draft.withUsersOf(calleeInput)}) {
+            for (gc_node_ref_t user : users) {
+                if (user != callNodeId) {
+                    return false;
+                }
             }
         }
     }
@@ -1291,10 +1337,13 @@ bool devirtualizeBranchedCallInDraft(
     std::map<size_t, std::vector<gc_node_ref_t>> joinProjections;
     for (auto users : {draft.normUsersOf(join), draft.withUsersOf(join)}) {
         for (gc_node_ref_t user : users) {
+            // The projections may carry control edges (sync code orders reads after the JOIN
+            // or the call); the split retargets those waits onto the replacement JOINs. Nodes
+            // an outer branch anchors on are still left alone: erasing them would dangle that
+            // branch's arms.
             const DraftNodeHeader *userHeader = draft.header(user);
             if (!userHeader || userHeader->kind != GCNodeKind::Accs ||
                 draft.normInputsOf(user).size() != 1 || draft.normInputsOf(user).front() != join ||
-                !draft.ctrlInputsOf(user).empty() || !draft.ctrlUsersOf(user).empty() ||
                 draft.isBranchArmAnchor(user) || user == draft.exitNode() ||
                 user == draft.outputNode() || user == draft.returnNode()) {
                 return false;
@@ -1320,15 +1369,15 @@ bool devirtualizeBranchedCallInDraft(
     if (calleeProjIt == joinProjections.end() || calleeProjIt->second.size() != 1) {
         return false;
     }
-    // Every value user of the CALL projects one of its result slots.
+    // Every value user of the CALL projects one of its result slots (control edges allowed, as
+    // above).
     std::map<size_t, std::vector<gc_node_ref_t>> callProjections;
     for (auto users : {draft.normUsersOf(callNodeId), draft.withUsersOf(callNodeId)}) {
         for (gc_node_ref_t user : users) {
             const DraftNodeHeader *userHeader = draft.header(user);
             if (!userHeader || userHeader->kind != GCNodeKind::Accs ||
                 draft.normInputsOf(user).size() != 1 ||
-                draft.normInputsOf(user).front() != callNodeId ||
-                !draft.ctrlInputsOf(user).empty() || !draft.ctrlUsersOf(user).empty()) {
+                draft.normInputsOf(user).front() != callNodeId) {
                 return false;
             }
             const auto *body = reinterpret_cast<const GCAccsBody *>(draft.payloadOf(user).data());
@@ -1391,9 +1440,9 @@ bool devirtualizeBranchedCallInDraft(
         }
     }
 
-    // Nodes running inside the branch (arms and everything after). Arguments and control
-    // predecessors of the CALL must live outside it: a per-arm call reading an in-branch value
-    // would execute in every arm that value does not belong to.
+    // Nodes running inside the branch (arms and everything after). Control predecessors of the
+    // CALL must live outside it: a per-arm call ctrl-waiting on an in-branch node would order it
+    // against work another arm owns.
     std::vector<bool> inBranch(draft.nodeSlotCount(), false);
     {
         std::vector<gc_node_ref_t> work;
@@ -1416,13 +1465,45 @@ bool devirtualizeBranchedCallInDraft(
     const auto outsideBranch = [&](gc_node_ref_t id) {
         return id < inBranch.size() && !inBranch[id] && draft.header(id);
     };
+    // Arguments need a weaker rule than control predecessors. The split graph is only ever
+    // walked as a value DAG (export-only, see enableBranchedCallSplit), so a per-arm call may
+    // read anything the original CALL read that is not owned by an arm — including a value
+    // computed after the JOIN, such as a cotangent derived from the branch's value projection:
+    // the exporter emits it ahead of the If and the arm subgraphs reference it as an
+    // outer-scope name. An argument produced strictly inside an arm (reachable from the BRCH
+    // without passing through the JOIN) is still rejected: its producer exists only under that
+    // arm's condition, and the split would reference it from the sibling arm as well.
+    std::vector<bool> inArm(draft.nodeSlotCount(), false);
+    {
+        std::vector<gc_node_ref_t> work;
+        for (auto users :
+             {draft.normUsersOf(brch), draft.withUsersOf(brch), draft.ctrlUsersOf(brch)}) {
+            for (gc_node_ref_t user : users) {
+                if (user != join) {
+                    work.push_back(user);
+                }
+            }
+        }
+        while (!work.empty()) {
+            const gc_node_ref_t n = work.back();
+            work.pop_back();
+            if (n >= inArm.size() || inArm[n] || !draft.header(n) || n == join) {
+                continue;
+            }
+            inArm[n] = true;
+            for (auto users : {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
+                work.insert(work.end(), users.begin(), users.end());
+            }
+        }
+    }
+    const auto insideArm = [&](gc_node_ref_t id) { return id < inArm.size() && inArm[id]; };
     for (gc_node_ref_t arg : callNorm) {
-        if (!outsideBranch(arg)) {
+        if (insideArm(arg)) {
             return false;
         }
     }
     for (size_t i = 1; i < callWith.size(); ++i) {
-        if (!outsideBranch(callWith[i])) {
+        if (insideArm(callWith[i])) {
             return false;
         }
     }
@@ -1501,6 +1582,7 @@ bool devirtualizeBranchedCallInDraft(
                                             gc_node_ref_t replacement) {
         for (gc_node_ref_t user : users) {
             draft.replaceAllValueUses(user, replacement);
+            draft.replaceAllCtrlUses(user, replacement);
             draft.eraseNode(user);
         }
     };
@@ -1536,6 +1618,9 @@ bool devirtualizeBranchedCallInDraft(
     // which completes after the taken arm's call. This also retargets the BRCH's join payload.
     draft.replaceAllCtrlUses(callNodeId, mainJoin);
     draft.eraseNode(callNodeId);
+    if (calleeInput != calleeAccs) {
+        draft.eraseNode(calleeInput);
+    }
     draft.eraseNode(calleeAccs);
     draft.replaceAllCtrlUses(join, mainJoin);
     draft.eraseNode(join);

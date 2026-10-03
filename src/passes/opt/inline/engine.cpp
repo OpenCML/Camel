@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 03, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -471,7 +471,11 @@ GCGraph *applyRuntimeOptimizeRewrite(
                              session,
                              draft,
                              callNodeId)) ||
-                        camel::runtime::devirtualizeStaticCallInDraft(session, draft, callNodeId)) {
+                        camel::runtime::devirtualizeStaticCallInDraft(
+                            session,
+                            draft,
+                            callNodeId,
+                            config.enableBranchedCallSplit)) {
                         changed      = true;
                         roundChanged = true;
                     }
