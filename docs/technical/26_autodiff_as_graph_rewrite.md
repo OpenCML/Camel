@@ -71,6 +71,36 @@ result (a new function value) is materialized as static data by `std::macro`.
 The synthesized graph joins the reachable graph closure at commit time, so every
 later pass sees it like user code.
 
+### Pass order: `std::macro` and the inlining passes
+
+`grad(f)` transforms f's graph **as compiled**: the pullback builder takes one
+pullback per branch-arm call (§4.3), so it cannot differentiate an arm that
+was merged into its owner, nor the shape left when a recursive call is inlined
+into its own arm.
+
+- **`std::macro` first** is the intended order: every `grad` whose function is
+  static is expanded before any rewrite, and the passes after it optimize the
+  derivative like user code.
+- **Without `std::macro`, or with it after an inlining pass**, `grad` runs with
+  the program on the graphs the passes left. The inlining engine
+  (`std::inline`, `std::opt`, `std::opt::simplify`; `MacroOperandGraphs` in
+  `src/passes/opt/inline/engine.cpp`) therefore inlines nothing into the
+  graphs an unexpanded macro operator can still reach: its function operand
+  and what that calls or holds as a function constant. Calls of those
+  functions from elsewhere are inlined as usual. The program runs and gives
+  the same results; the differentiated functions and their derivatives are
+  just not optimized.
+- **A macro operator whose function is not a constant** (`grad(f)` where `f`
+  is a parameter) cannot be expanded by `std::macro` at all. While such an
+  operator is in the program, any function may reach it, so the inlining
+  engine inlines nothing anywhere. Pass the function so that it is static at
+  the `grad` call to get the optimizations back.
+
+Other rewrites of a function that `grad` later differentiates at run time
+(`std::opt::cse`, `std::opt::fold`) keep the result valid but may change its
+floating-point rounding, because the derivative is built from a different
+expression.
+
 ## 3. User-Facing API
 
 ```camel

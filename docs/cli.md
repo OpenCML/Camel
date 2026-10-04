@@ -60,6 +60,10 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `std::gir`: dump the current graph IR and stop
 - `tensor::fuse`, `onnx::export`: passes contributed by modules; they exist only when the program imports the module (`tensor`, `onnx`)
 
+### Pass order: `std::macro` before the inlining passes
+
+Macro operators over functions (`grad`, `value_and_grad`, `vjp` of `autodiff`) transform a function's graph as compiled. Run `std::macro` first (`camel m.cml std::macro std::opt::simplify std::fvm`): it expands them ahead of time and the later passes optimize the result. Without `std::macro`, or with it after `std::inline` / `std::opt` / `std::opt::simplify`, the operator runs with the program; to keep that working, the inlining passes inline nothing into the functions an unexpanded macro operator will transform (every function, when the operator's function argument is not a constant, e.g. a parameter). Such a pipeline gives the same results but leaves those functions unoptimized. See `docs/technical/26_autodiff_as_graph_rewrite.md` §2.
+
 ### ONNX export as a pass (`onnx::export`)
 
     CAMEL_ONNX_OUT=model.onnx camel m.cml std::macro std::opt::simplify onnx::export

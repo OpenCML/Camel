@@ -33,6 +33,7 @@
 #include "engine.h"
 
 #include "../generic/rewrite.h"
+#include "camel/core/rtdata/func.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/log.h"
@@ -195,6 +196,101 @@ bool isDraftBranchArmHead(const camel::runtime::GraphDraft &draft, gc_node_ref_t
         }
     }
     return false;
+}
+
+/// The graphs a macro operator that is still in the program will transform.
+///
+/// A macro operator over a function value (`grad(f)`) rewrites f's graph. `std::macro` expands
+/// it ahead of time; when it has not run (or could not evaluate the call), the operator runs
+/// with the program and transforms whatever graph the rewrite passes left. Such transforms are
+/// written against the graph as compiled. The pullback builder of `autodiff` takes one pullback
+/// per branch-arm call, so it rejects an arm that was merged into its owner, and it crashes on
+/// the shape recursion compaction leaves (the recursive call inlined into the arm, which makes
+/// the arm's graph an arm of itself). So nothing is inlined into the graphs an unexpanded macro
+/// operator can still reach: its function operand, and what that calls or holds as a function
+/// constant. Calls of these graphs from elsewhere are inlined as usual (the copy belongs to the
+/// caller).
+struct MacroOperandGraphs {
+    std::unordered_set<const GCGraph *> graphs;
+    /// A macro operator takes a function that is not a constant of the graph (a parameter, the
+    /// result of a call): any function of the program may reach it.
+    bool all = false;
+
+    bool contains(const GCGraph *graph) const { return all || graphs.contains(graph); }
+};
+
+/// The graph of the function constant `ref` of `graph` (a DATA node, or the closure template a
+/// FILL builds on), or null.
+GCGraph *functionConstantGraph(const GCGraph *graph, gc_node_ref_t ref) {
+    using camel::core::type::TypeCode;
+    const auto *node = graph->node(ref);
+    if (node->kind == GCNodeKind::Fill && !graph->normInputsOf(ref).empty()) {
+        ref  = graph->normInputsOf(ref).front();
+        node = graph->node(ref);
+    }
+    if (node->kind != GCNodeKind::Data || node->dataIndex >= 0 || !node->dataType ||
+        node->dataType->code() != TypeCode::Function) {
+        return nullptr;
+    }
+    auto *function = camel::core::rtdata::fromSlot<::Function *>(
+        graph->staticArea()->get<slot_t>(static_cast<size_t>(-node->dataIndex)));
+    return function ? function->graph() : nullptr;
+}
+
+MacroOperandGraphs collectMacroOperandGraphs(const std::vector<GCGraph *> &closure) {
+    using camel::core::type::TypeCode;
+    MacroOperandGraphs result;
+    std::vector<const GCGraph *> work;
+    for (GCGraph *graph : closure) {
+        if (!graph) {
+            continue;
+        }
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            const auto *node = *it;
+            if (!node || node->kind != GCNodeKind::Oper || !node->isMacro()) {
+                continue;
+            }
+            for (auto inputs : {graph->normInputsOf(it.ref()), graph->withInputsOf(it.ref())}) {
+                for (gc_node_ref_t input : inputs) {
+                    const auto *operand = graph->node(input);
+                    if (!operand->dataType || operand->dataType->code() != TypeCode::Function) {
+                        continue;
+                    }
+                    if (operand->kind == GCNodeKind::Oper && operand->isMacro()) {
+                        continue; // the result of another macro operator, handled at that one
+                    }
+                    GCGraph *target = functionConstantGraph(graph, input);
+                    if (!target) {
+                        result.all = true;
+                        return result;
+                    }
+                    if (result.graphs.insert(target).second) {
+                        work.push_back(target);
+                    }
+                }
+            }
+        }
+    }
+    while (!work.empty()) {
+        const GCGraph *graph = work.back();
+        work.pop_back();
+        if (!graph->hasNodePayload()) {
+            continue;
+        }
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            if (!*it) {
+                continue;
+            }
+            GCGraph *target = graph->directCalleeGraphOf(it.ref());
+            if (!target) {
+                target = functionConstantGraph(graph, it.ref());
+            }
+            if (target && result.graphs.insert(target).second) {
+                work.push_back(target);
+            }
+        }
+    }
+    return result;
 }
 
 struct RuntimeCallGraphSccInfo {
@@ -377,7 +473,9 @@ GCGraph *applyRuntimeOptimizeRewrite(
 
         std::unordered_set<GCGraph *> closureSet;
         RuntimeCallGraphSccInfo sccInfo;
+        MacroOperandGraphs macroOperands;
         if (config.enableInlining) {
+            macroOperands = collectMacroOperandGraphs(closure);
             closureSet.insert(closure.begin(), closure.end());
             for (GCGraph *runtimeGraph : closure) {
                 if (!runtimeGraph) {
@@ -483,6 +581,11 @@ GCGraph *applyRuntimeOptimizeRewrite(
             }
 
             if (!config.enableInlining) {
+                continue;
+            }
+            // An unexpanded macro operator will transform this graph and needs it as compiled
+            // (see MacroOperandGraphs): nothing is inlined into it.
+            if (macroOperands.contains(nextGraph)) {
                 continue;
             }
 
