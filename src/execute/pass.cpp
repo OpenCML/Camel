@@ -37,6 +37,7 @@
 #include "passes/sched/fastvm/jit/dump/mirdump.h"
 #include "passes/sched/nodevm/nodevm.h"
 #include "passes/sched/taskflow/taskflow.h"
+#include "passes/test/fault.h"
 #include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/stats/stats.h"
@@ -512,6 +513,13 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     // 4. Passes contributed by loaded modules (full names such as "tensor::fuse")
     if (auto factory = findModulePass(resolved)) {
         return factory;
+    }
+
+    // 5. Test-only fault-injection passes, off unless the environment enables them.
+    if (resolved == kDropCallArgumentPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<DropCallArgumentTestPass>(ctx);
+        };
     }
 
     // Not found; list the available passes on stderr. The listing is help text for the

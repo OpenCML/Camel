@@ -704,6 +704,9 @@ GCGraph *RuntimeGraphDraftSession::commit() {
             allocatedBytes.at(graph));
         validateRuntimeGraphPayload(rewritten[graph]);
     }
+    for (GCGraph *graph : closure) {
+        validateRuntimeGraphCalls(rewritten.at(graph));
+    }
 
     // A session over the program's root replaces it. A session over another root (a detached
     // program, e.g. a function being exported) only returns the rewritten root: the running
@@ -779,6 +782,9 @@ void GraphDraftGroup::encode() {
             rewritten.at(key),
             bytes.at(key));
         validateRuntimeGraphPayload(graph);
+    }
+    for (GCGraph *key : order_) {
+        validateRuntimeGraphCalls(rewritten.at(key));
     }
     for (GCGraph *key : order_) {
         member(key).encoded = rewritten.at(key);

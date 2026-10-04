@@ -900,3 +900,40 @@ assert(!out.includes('[12, 2]'), `the program ran: ${out}`)
 }
 """
 timeout_ms = 30000
+
+[[tests]]
+name = "broken_graph.commit_validation"
+desc = "D23: structural validation runs when a rewrite is committed, in release builds too. The test-only pass test::drop_call_argument (enabled by CAMEL_ENABLE_TEST_PASSES) commits a call that passes fewer arguments than its callee takes; the commit is rejected as PassInternalError naming the pass, and nothing executes. Before, nvm/fvm/jit ran the broken program and printed 0 instead of 42."
+kind = "behavior"
+case = "../../../cases/opt/generic/broken_graph.cml"
+args = ["--output-format", "json", "${case}", "test::drop_call_argument", "std::fvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout + input.normalized.stderr
+assert(out.includes('"stage":"pass:test::drop_call_argument"'), `stage missing: ${out}`)
+assert(out.includes('"name":"RuntimeDiag::PassInternalError"'), `name missing: ${out}`)
+assert(/Runtime graph 'main' has FUNC node \d+ passing 0 arguments and 0 'with' arguments to 'twice', which takes 1 and 0/.test(out), `reason missing: ${out}`)
+assert(!out.includes('main start'), `the program ran: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "broken_graph.test_pass_is_off_by_default"
+desc = "The fault-injection pass does not exist unless CAMEL_ENABLE_TEST_PASSES is set: naming it is an unknown-pass error and the program does not run."
+kind = "behavior"
+case = "../../../cases/opt/generic/broken_graph.cml"
+args = ["--output-format", "json", "${case}", "test::drop_call_argument", "std::fvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('"name":"RuntimeDiag::UnrecognizedGraphPass"'), `expected an unknown-pass diagnostic: ${out}`)
+assert(!out.includes('main start'), `the program ran: ${out}`)
+}
+"""
+timeout_ms = 8000

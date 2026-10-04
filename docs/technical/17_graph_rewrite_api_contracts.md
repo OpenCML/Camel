@@ -136,15 +136,33 @@
 
 ---
 
-## 4. 验证器约束（seal 前必须满足）
+## 4. 验证器约束（提交时必须满足）
 
-`GraphBuilder::validateGraph` 当前关键检查：
+结构检查在**所有构建模式**下执行（不是 `ASSERT`），位置是运行时图编码之后：前端编码
+（`src/compile/gir/graph_encode.cpp`）、每次 `RuntimeGraphDraftSession::commit()` 与
+`GraphDraftGroup::encode()`（`src/runtime/draft_session.cpp`）。实现为
+`validateRuntimeGraphPayload` 与 `validateRuntimeGraphCalls`（`src/runtime/graph.cpp`），失败时抛出
+`std::runtime_error`；在 pass 内由 pass 驱动转为 `RuntimeDiag::PassInternalError`，诊断中给出 pass 名，
+程序不会开始执行。
 
-1. 图必须有值出口锚点 `exitNode`；
-2. 邻接表双向一致（输入/输出镜像）；
-3. `BRCH/JOIN` arm 数匹配；
-4. `FUNC` 图引用与 dependency 注册一致；
-5. 若 `exitNode` 为 `GATE`，则必须满足 `Norm>=1 && Ctrl>=1`。
+`validateRuntimeGraphPayload`（单图）：
+
+1. 入口/出口/输出/返回锚点、端口、闭包节点、所有边的节点引用有效；数据槽位在范围内；无残留 `DREF`；
+2. 邻接表双向一致（每条输入边在对端的输出表中出现，反之亦然）；
+3. `BRCH` 有唯一选择输入，`BRCH`/`JOIN` 的 arm 数与负载一致，arm 首尾引用有效；
+4. `GATE` 同时有值输入与控制输入（没有控制输入的 `GATE` 在提交前由 `dissolveUnorderedGates` 消除）；
+5. `FUNC` 有被调图，`CALL` 有被调输入。
+
+`validateRuntimeGraphCalls`（同一次提交的图全部编码之后）：
+
+6. 每个 `FUNC` 的普通实参数与 `with` 实参数等于被调图的端口数。
+
+`src/compile/gir/validate.cpp` 中的 `assertGraphSealingPreconditions` /
+`assertGraphTreeSealingPreconditions` 是旧的 seal 前检查（以 `ASSERT` 实现）；自编译期重写 API 移除后
+已没有任何调用点，在任何构建模式下都不执行。上面的检查取代了它。
+
+测试用的故障注入遍 `test::drop_call_argument`（`src/passes/test/fault.cpp`）只在设置环境变量
+`CAMEL_ENABLE_TEST_PASSES` 时可用，用来验证破坏结构的图会在提交时被拒绝。
 
 ---
 
