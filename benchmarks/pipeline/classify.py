@@ -112,9 +112,18 @@ class Rules:
     determinism_payload: bool = True
     files: bool = True
     macro_exception: bool = True
+    # Deviation D1 (recorded in CLASSIFIER-RULES.md after the first run under the frozen rules):
+    # the payload text carries the static type of each argument (`Tensor=...`), and passes that
+    # refine types change that text (`Tensor<float32, [2, 4]>=...`) without changing the value.
+    # With this flag the type prefixes are removed before payloads are compared.
+    payload_strip_types: bool = False
 
+
+_TYPE_PREFIX = re.compile(r"(^|\|)[A-Za-z_][^=|]*=")
+STRIP_PAYLOAD_TYPES = False  # set from the rule set in main()
 
 RULESETS = {r.name: r for r in [
+    Rules("frozen+D1", payload_strip_types=True),
     Rules("v1", exclude_macro_ops=False, payload="hash-in-sequence", numeric_tolerance=False,
           error_no_diagnostic=False, c10=False, worst_repeat=False, determinism_payload=True, files=False,
           macro_exception=False),
@@ -227,6 +236,8 @@ def payload_text(event: dict, mask: str) -> Optional[str]:
     text = event.get("payload")
     if not isinstance(text, str) or event.get("payload_truncated"):
         return None
+    if STRIP_PAYLOAD_TYPES:
+        text = _TYPE_PREFIX.sub(lambda m: m.group(1), text)
     return mask_text(text, mask) if event.get("uri") in PRINT_OPERATORS else text
 
 
@@ -247,6 +258,9 @@ def compare_payloads(ref: dict, rec: dict, rules: Rules, mask: str) -> Tuple[str
         if x.get("payload_sha1") == y.get("payload_sha1") and x.get("payload_sha1") is not None:
             continue
         px, py = x.get("payload"), y.get("payload")
+        if STRIP_PAYLOAD_TYPES and isinstance(px, str) and isinstance(py, str):
+            px = _TYPE_PREFIX.sub(lambda m: m.group(1), px)
+            py = _TYPE_PREFIX.sub(lambda m: m.group(1), py)
         if isinstance(px, str) and isinstance(py, str):
             # Both truncated (or one): a difference inside the common prefix is a difference.
             n = min(len(px), len(py))
@@ -749,6 +763,8 @@ def main() -> int:
     ap.add_argument("--time-floor", type=float, default=10.0)
     args = ap.parse_args()
     rules = RULESETS[args.rules]
+    global STRIP_PAYLOAD_TYPES
+    STRIP_PAYLOAD_TYPES = rules.payload_strip_types
 
     cells = load_cells(args.records)
     rows, ref_rows, refusal_rows, programs, pipeline_ids = classify_all(cells, rules, args.time_factor, args.time_floor)
