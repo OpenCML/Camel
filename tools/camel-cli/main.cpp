@@ -27,6 +27,7 @@
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
 #include "camel/execute/pass/base.h"
+#include "camel/execute/pass/snapshot.h"
 #include "camel/init.h"
 #include "camel/parse/antlr/OpenCMLLexer.h"
 #include "camel/parse/antlr/OpenCMLParser.h"
@@ -38,6 +39,7 @@
 #include "camel/utils/memperf.h"
 #include "config.h"
 #include "passes/trans/dot/graphviz.h"
+#include "passes/trans/stats/stats.h"
 #include "passes/trans/tns/topo_node_seq.h"
 #include "service/codegen/source/generator.h"
 #include "service/profiler/advanced/advanced_tracer.h"
@@ -46,6 +48,7 @@
 
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -64,6 +67,53 @@ using namespace CLI;
 #define DEBUG_LEVEL -1
 
 string targetFile = "";
+
+namespace {
+
+/// State of `--dump-after-each-pass <dir>`: one readable DOT (std::rgir format, with the
+/// origin/span/srcfile attributes of each node) and one GRAPH_STATS JSON per snapshot.
+/// Snapshot 00 is the graph before the first pass; snapshot N is the output of the N-th pass
+/// that returned a graph. Passes that consume the graph (scheduling and translation passes)
+/// leave nothing to dump.
+struct PassDumpState {
+    fs::path dir;
+    context_ptr_t ctx;
+    size_t next = 0;
+};
+
+string passDumpStem(size_t index, const string &passName) {
+    string safe;
+    for (size_t i = 0; i < passName.size(); ++i) {
+        const char c = passName[i];
+        if (c == ':' && i + 1 < passName.size() && passName[i + 1] == ':') {
+            safe += '.';
+            ++i;
+        } else if (isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '_' || c == '-') {
+            safe += c;
+        } else {
+            safe += '_';
+        }
+    }
+    return std::format("{:02}_{}", index, safe);
+}
+
+void writePassDump(PassDumpState &state, const string &passName, camel::runtime::GCGraph *graph) {
+    const string stem = passDumpStem(state.next++, passName);
+    {
+        std::ofstream dot(state.dir / (stem + ".rgir.dot"), std::ios::binary);
+        dot << dumpReadableRuntimeGraph(graph, state.ctx);
+    }
+    {
+        std::ofstream stats(state.dir / (stem + ".stats.json"), std::ios::binary);
+        stats << collectGraphStats(state.ctx, graph).toJson() << '\n';
+    }
+}
+
+void passDumpHandler(const char *passName, size_t, camel::runtime::GCGraph *graph, void *userData) {
+    writePassDump(*static_cast<PassDumpState *>(userData), passName ? passName : "", graph);
+}
+
+} // namespace
 
 int main(int argc, char *argv[]) {
     camel::ScopedRuntime camelRuntime;
@@ -249,6 +299,20 @@ int main(int argc, char *argv[]) {
             try {
                 try {
                     auto *graph = ctx->runtimeRootGraph();
+                    static PassDumpState passDump;
+                    if (!Run::dumpAfterEachPassDir.empty()) {
+                        passDump.dir = Run::dumpAfterEachPassDir;
+                        passDump.ctx = ctx;
+                        std::error_code ec;
+                        fs::create_directories(passDump.dir, ec);
+                        if (ec) {
+                            std::cerr << "Error: cannot create snapshot directory "
+                                      << passDump.dir.string() << ": " << ec.message() << endl;
+                            return 1;
+                        }
+                        writePassDump(passDump, "input", graph);
+                        setPassSnapshotHandler(&passDumpHandler, &passDump);
+                    }
                     auto result = applyPassesDetailed(graph, Run::resolvedPassList, ctx, os);
                     graph       = result.graph;
                     if (result.failed()) {

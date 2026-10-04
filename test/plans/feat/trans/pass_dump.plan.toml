@@ -1,0 +1,16 @@
+id = "trans.pass_dump"
+order = 336
+tier = "feat"
+tags = ["feat", "trans", "pass_dump"]
+
+[[tests]]
+name = "dump_after_each_pass"
+desc = "`--dump-after-each-pass` writes the input graph and one snapshot per graph-returning pass (readable DOT + stats JSON); tools/graph-diff reports the macro call removed at its call site and the materialized constant added."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/pass_dump/pass_dump.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["pass dump: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000

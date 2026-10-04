@@ -39,6 +39,7 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `--input <file>`: Input file path (alternative to positional; use with `--passes` to avoid ambiguity)  
 - `--passes <list>`: Comma-separated pass list (e.g. `--passes std::gir,other`). If omitted, first positional is file, rest are passes.  
 - `--timeit <pass>/<N>`: Measure one pass `N` times from a fresh graph; text mode prints samples plus a compact summary table, while `--output-format json` emits structured benchmark data  
+- `--dump-after-each-pass <dir>`: Write the graph before the first pass (`00_input`) and after each pass that returns a graph (`NN_<pass>`, `::` written as `.`) into `<dir>`: a readable DOT (`.rgir.dot`, the `std::rgir` format with `origin`/`span`/`srcfile` per node) and the `std::stats` counters (`.stats.json`). Scheduling and translation passes consume the graph and leave no snapshot. Compare two snapshots with `python tools/graph-diff/graph_diff.py BEFORE AFTER`  
 - `-P`, `--profile`: Record time spent in each stage and output a performance report  
 - `-S`, `--scheduler <type>`: Specify the scheduler type  
 - `-t`, `--threads <num>`: Maximum number of threads  

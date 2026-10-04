@@ -218,6 +218,7 @@ vector<string> fallbackPasses   = {"std::default"};
 string timeitPass               = "";
 unsigned int timeitIterations   = 0;
 bool timeitEnabled              = false;
+string dumpAfterEachPassDir     = "";
 
 bool profile      = false;
 bool noCache      = false;
@@ -332,6 +333,9 @@ bool parseArgs(int argc, char *argv[]) {
              "measure one pass N times from a fresh graph (e.g. --timeit std::jit/10)",
          (option("--input") & value("input file", inputFile)) %
              "input file (optional if positional given)",
+         (option("--dump-after-each-pass") & value("dir", dumpAfterEachPassDir)) %
+             "write the graph (readable DOT + stats JSON) before the first pass and after each "
+             "pass that returns a graph",
          globalOps,
          opt_values("input", targetFiles) %
              "input file (optional if --input given; at least one required)");

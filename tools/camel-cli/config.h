@@ -57,6 +57,8 @@ extern std::vector<std::string> fallbackPasses;   // run when graph != null afte
 extern std::string timeitPass;                    // parsed target pass from --timeit
 extern unsigned int timeitIterations;             // parsed iteration count from --timeit
 extern bool timeitEnabled;
+/// --dump-after-each-pass <dir>: directory for per-pass graph snapshots ("" = disabled).
+extern std::string dumpAfterEachPassDir;
 
 extern bool profile;
 extern bool noCache;
