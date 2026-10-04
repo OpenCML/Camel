@@ -6,8 +6,9 @@
  * agreement check. When CAMEL_BENCH_EXPORT names a path, it exports the
  * forward function to ONNX there instead (camel_onnx_ort configuration).
  * Models also offer a training workload (CAMEL_BENCH_WORKLOAD=train, see
- * train.py): `run_training` times a training step, or dumps the gradients
- * of one step when CAMEL_BENCH_GRADS names a directory.
+ * train.py): `run_training` times the steps of the model's stateful training
+ * loop (or, on request, the stateless step), or dumps the gradients of one
+ * step when CAMEL_BENCH_GRADS names a directory.
  * Imported through CAMEL_PACKAGES=benchmarks/common.
  */
 module camel_bench
@@ -84,20 +85,76 @@ sync func timed_steps(step: (x: Tensor) => float, x: Tensor, remaining: int): in
     }
 }
 
-/// Times training steps (`step` computes the loss, its gradient, and the parameter update and
-/// returns the loss), or, when CAMEL_BENCH_GRADS names a directory, lets `dump` write the
-/// gradients of one step there.
-export func run_training(step: (x: Tensor) => float, dump: (x: Tensor, dir: string) => int): int sync {
+/// The stateless protocol (CAMEL_BENCH_TRAIN_PROTOCOL=stateless): every step starts from the
+/// same weights and its parameter update is discarded. Updates are NOT consumed, so an
+/// optimizing pipeline may legally remove the update and the backward pass that feeds it;
+/// the timings are not training-step timings (kept for comparison with earlier results).
+func stateless_training(step: (x: Tensor) => float, x: Tensor): int sync {
+    'CAMEL_BENCH protocol=stateless updates=not-consumed'->println
+    let warmStart = now()
+    let first = step(x)
+    'CAMEL_BENCH compile_ms={}'->format<(now() - warmStart) * 1000.0>->println
+    let warmed = warm_steps(step, x, int(get_env('CAMEL_BENCH_WARMUP')) - 1)
+    'CAMEL_BENCH warmup_ms={}'->format<(now() - warmStart) * 1000.0>->println
+    return timed_steps(step, x, int(get_env('CAMEL_BENCH_REPS')))
+}
+
+/// Untimed steps at the start of the stateful loop (at least the first, which carries the
+/// first-call overhead).
+export func warm_count(): int {
+    let n = int(get_env('CAMEL_BENCH_WARMUP'))
+    return if n < 1 then 1 else n
+}
+
+/// Steps of the stateful loop: the untimed ones, then CAMEL_BENCH_REPS timed ones.
+export func step_count(): int {
+    return warm_count() + int(get_env('CAMEL_BENCH_REPS'))
+}
+
+func log_ms(enabled: bool, key: string, ms: float): int sync {
+    return if enabled then sync {
+        'CAMEL_BENCH {}={}'->format<key, ms>->println
+        return 0
+    } else 0
+}
+
+/// Reports step `i` of a model's stateful loop, which took `elapsed` seconds and whose loss
+/// (at the parameters the step started from) is `loss`. Steps before `warm` are untimed: the
+/// first is reported as compile_ms, the last as warmup_ms (time since `t0`, when the loop
+/// started). Later steps are the timed ones.
+export func log_step(i: int, warm: int, t0: float, elapsed: float, loss: float): int sync {
+    let key = if i < warm then 'warm_ms' else 'latency_ms'
+    // since_start_ms lets the harness check that the step's work ran inside `elapsed`: the gap
+    // between two consecutive reports is one step plus this report.
+    'CAMEL_BENCH {}={} loss={} step={} since_start_ms={}'->format<key, elapsed * 1000.0, loss, i, (now() - t0) * 1000.0>->println
+    let first = log_ms(i == 0, 'compile_ms', elapsed * 1000.0)
+    return log_ms(i == warm - 1, 'warmup_ms', (now() - t0) * 1000.0)
+}
+
+/// Reports the end of a model's stateful loop: `digest` is the model's loss evaluated at the
+/// final parameters, a scalar function of the parameters the last update produced.
+export func log_final(digest: float): int sync {
+    'CAMEL_BENCH final_params_loss={}'->format<digest>->println
+    return 0
+}
+
+/// The training workload. When CAMEL_BENCH_GRADS names a directory, `dump` writes the
+/// gradients of one step there. Otherwise training steps (loss, gradient, parameter update)
+/// are timed: by default `stateful` runs the model's stateful loop, in which every step
+/// starts from the parameters the previous step produced (see `log_step`); with
+/// CAMEL_BENCH_TRAIN_PROTOCOL=stateless, `step` (which discards its update) is timed from the
+/// same weights every time.
+export func run_training(
+    step: (x: Tensor) => float,
+    dump: (x: Tensor, dir: string) => int,
+    stateful: (x: Tensor) => int
+): int sync {
     set_num_threads(int(get_env('CAMEL_BENCH_THREADS')))
     let x = load_npy(get_env('CAMEL_BENCH_INPUT'))
     let gradsDir = get_env('CAMEL_BENCH_GRADS')
-    return if gradsDir != '' then dump(x, gradsDir) else sync {
-        let warmStart = now()
-        let first = step(x)
-        'CAMEL_BENCH compile_ms={}'->format<(now() - warmStart) * 1000.0>->println
-        let warmed = warm_steps(step, x, int(get_env('CAMEL_BENCH_WARMUP')) - 1)
-        'CAMEL_BENCH warmup_ms={}'->format<(now() - warmStart) * 1000.0>->println
-        return timed_steps(step, x, int(get_env('CAMEL_BENCH_REPS')))
+    return if gradsDir != '' then dump(x, gradsDir) else if get_env('CAMEL_BENCH_TRAIN_PROTOCOL') == 'stateless' then stateless_training(step, x) else sync {
+        'CAMEL_BENCH protocol=stateful updates=consumed-by-next-step'->println
+        return stateful(x)
     }
 }
 

@@ -357,6 +357,42 @@ plus warmup, reported apart from the steady state), latency statistics of the
 timed steps and `peak_rss_mb`; the `_summary.csv` has the median step time, its
 bootstrap 95% CI and the speedup over PyTorch eager.
 
+**Protocols.** The default is the *stateful* loop: each model's `train_loop`
+runs `max(warmup, 1) + reps` consecutive steps, every step starting from the
+parameters the previous one produced, and finally prints the loss evaluated at
+the final parameters (`CAMEL_BENCH final_params_loss=`) — so every update is
+consumed. Each step prints `CAMEL_BENCH latency_ms=<ms> loss=<loss> step=<i>
+since_start_ms=<ms>` (`warm_ms=` for the untimed steps); with
+`CAMEL_BENCH_PARAMS=<dir>` the final parameters are saved there. `train.py
+--check-ksteps` compares the per-step losses and the final parameters with
+PyTorch running the same number of SGD steps (tolerance 1e-4).
+
+`--stateless` (`CAMEL_BENCH_TRAIN_PROTOCOL=stateless`) is the earlier protocol:
+every timed step starts from the same weights and discards its update. The
+**updates are not consumed**, so `std::opt::simplify` removes the update and
+the whole backward pass; those are not training-step timings. The protocol is
+kept for comparison with earlier results and as the negative control of the
+reconciliation.
+
+**Configurations** (`train.config_commands()`; an assertion at import rejects
+two names for one command line): `torch_eager`, `camel_nvm` (`std::macro
+std::nvm`), `camel_fvm` (`std::macro std::fvm`), `camel_fuse_nvm` (`std::macro
+tensor::fuse std::nvm`), `camel_opt_nvm` (`std::macro std::opt::simplify
+std::nvm`) and `camel_export_ort` (the training step exported by
+`onnx.export_model`, run by ONNX Runtime with the driver feeding the updated
+parameters back). Note that `camel_opt` in `run.py` (inference) is
+`tensor::fuse`, not `std::opt::simplify`.
+
+**Reconciliation before timing.** `reconcile_train.py` checks, per model,
+configuration and protocol, that a step executes the full gradient-operator
+multiset (per-step counts from `CAMEL_TENSOR_OPSTATS=1`, expected = what
+`camel_nvm` executes), that the update is consumed, and that the final
+parameters agree with PyTorch; it writes `reconciliation.csv` with a verdict.
+`train.py --time --reconciliation <csv>` times only the PASS pairs.
+`d13_train_eval.py --out <dir>` runs the whole sequence (weights,
+reconciliation under both protocols, timing) and writes the raw logs,
+summaries and `meta.json` into `<dir>`.
+
 ## Numerical agreement
 
 `common/check.py` runs every available configuration once and compares it with
