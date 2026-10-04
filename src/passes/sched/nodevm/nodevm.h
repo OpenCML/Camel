@@ -40,6 +40,11 @@ struct NodeVMGraphCache {
     std::vector<uint32_t> directCallArgOffsets;
     std::vector<runtime_data_idx_t> directCallArgSlots;
     std::vector<runtime_data_idx_t> dataIndexByRef;
+    // For the BRCH at topo index i, branchArmEntries[branchArmEntryOffsets[i] + arm] is the node
+    // where that arm starts executing: its first executable node in topoNodeRefs, or the JOIN
+    // when the arm has nothing to execute (resolveRuntimeBranchArmEntry, shared with FastVM).
+    std::vector<uint32_t> branchArmEntryOffsets;
+    std::vector<camel::runtime::gc_node_ref_t> branchArmEntries;
     camel::runtime::gc_node_ref_t tailValueRef = camel::runtime::kInvalidNodeRef;
     size_t tailValueTopoIndex                  = 0;
     bool tailValueIsJoin                       = false;

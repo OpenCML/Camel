@@ -105,10 +105,10 @@ TCO 在「当前 `currNodes` 中某下标 `i` 处命中 `FUNC`」时，可能**�
 
 NodeVM 在遇到 **BRCH** 时设置：
 
-- `tillNode`：选中分支的**头结点**（从此开始执行）；
+- `tillNode`：选中分支的**入口节点**（从此开始执行），即该臂在线性拓扑序中位于 BRCH 之后的第一个可执行节点，由 `resolveRuntimeBranchArmEntry` 计算（NodeVM、Taskflow 线性路径与 FastVM 共用同一定义）。它不一定是 BRCH 记录的臂头：内联之后，臂内节点可能排在记录的臂头之前，从臂头开始执行会跳过它们。臂内没有可执行节点时，入口就是 JOIN；
 - `skipNode` / `joinNode`：选中分支的**尾**与对应 **JOIN**。
 
-主循环在 `tillNode` 非空时 **continue** 跳过序列前缀，直到到达分支头；在 `skipNode` 命中后切换到向 **JOIN** 推进的模式。
+主循环在 `tillNode` 非空时 **continue** 跳过序列前缀，直到到达分支入口；在 `skipNode` 命中后切换到向 **JOIN** 推进的模式。
 
 **尾调触发时**，实现将 **`tillNode`、`skipNode` 清空**。理由：尾调表示当前图剩余工作已由 callee 接替，不应再保留未消费的分支跳转状态，否则易与新的 `currGraph` 不一致。
 

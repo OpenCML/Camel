@@ -152,6 +152,21 @@ directCallArgSlotsOf(const NodeVMGraphCache *cache, size_t topoIndex) {
         end - begin);
 }
 
+/// Where each arm of the BRCH at `topoIndex` starts executing (see NodeVMGraphCache).
+inline std::span<const gc_node_ref_t>
+branchArmEntriesOf(const NodeVMGraphCache *cache, size_t topoIndex) {
+    ASSERT(cache != nullptr, "NodeVM branch-arm cache is null.");
+    ASSERT(
+        topoIndex + 1 < cache->branchArmEntryOffsets.size(),
+        "NodeVM branch-arm entry offset lookup is out of range.");
+    const uint32_t begin = cache->branchArmEntryOffsets[topoIndex];
+    const uint32_t end   = cache->branchArmEntryOffsets[topoIndex + 1];
+    ASSERT(
+        begin <= end && end <= cache->branchArmEntries.size(),
+        "NodeVM branch-arm cache is corrupt.");
+    return std::span<const gc_node_ref_t>(cache->branchArmEntries.data() + begin, end - begin);
+}
+
 void bindDirectCallFrameSlots(
     Frame *sourceFrame, Frame *targetFrame, const NodeVMCallLayoutCache *layout,
     std::span<const runtime_data_idx_t> argSlots, std::vector<slot_t> &scratch) {
@@ -211,6 +226,7 @@ NodeVMSchedPass::buildTopoNodes(camel::runtime::GCGraph *runtimeGraph) {
     cache->directCallTailEligible.resize(cache->topoNodeRefs.size(), 0);
     cache->directCallFeedsTailJoin.resize(cache->topoNodeRefs.size(), 0);
     cache->directCallArgOffsets.resize(cache->topoNodeRefs.size() + 1, 0);
+    cache->branchArmEntryOffsets.resize(cache->topoNodeRefs.size() + 1, 0);
     cache->dataIndexByRef.resize(runtimeGraph->nodeBlockCount(), 0);
     cache->tailValueRef =
         hasValueReturn ? camel::execute::resolveRuntimeTailValueRef(runtimeGraph) : kInvalidNodeRef;
@@ -249,6 +265,18 @@ NodeVMSchedPass::buildTopoNodes(camel::runtime::GCGraph *runtimeGraph) {
             cache->dataIndexByRef[nodeRef] = node->dataIndex;
         }
         cache->directCallArgOffsets[idx] = static_cast<uint32_t>(cache->directCallArgSlots.size());
+        cache->branchArmEntryOffsets[idx] = static_cast<uint32_t>(cache->branchArmEntries.size());
+        if (node && node->kind == GCNodeKind::Brch) {
+            const size_t armCount = runtimeGraph->branchArmsOf(nodeRef).size();
+            for (size_t arm = 0; arm < armCount; ++arm) {
+                cache->branchArmEntries.push_back(
+                    camel::execute::resolveRuntimeBranchArmEntry(
+                        runtimeGraph,
+                        nodeRef,
+                        arm,
+                        cache->topoNodeRefs));
+            }
+        }
         if (!node || node->kind != GCNodeKind::Func) {
             continue;
         }
@@ -269,6 +297,8 @@ NodeVMSchedPass::buildTopoNodes(camel::runtime::GCGraph *runtimeGraph) {
     }
     cache->directCallArgOffsets[cache->topoNodeRefs.size()] =
         static_cast<uint32_t>(cache->directCallArgSlots.size());
+    cache->branchArmEntryOffsets[cache->topoNodeRefs.size()] =
+        static_cast<uint32_t>(cache->branchArmEntries.size());
     NodeVMGraphCache *cacheRaw = cache.get();
     graphCaches_.push_back(std::move(cache));
     setNodeVmCacheOf(runtimeGraph, cacheRaw);
@@ -412,8 +442,8 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
         auto *currCache                          = nodeVmCacheOf(currRuntimeGraph);
         ASSERT(currCache != nullptr, "NodeVM graph cache must be initialized before execution.");
 
-        // Branch execution is implemented by skipping until the selected arm
-        // head, executing through the arm tail, and then resuming at JOIN.
+        // Branch execution is implemented by skipping until the selected arm's
+        // entry, executing through the arm tail, and then resuming at JOIN.
         gc_node_ref_t tillNode = kInvalidNodeRef;
         gc_node_ref_t skipNode = kInvalidNodeRef;
         gc_node_ref_t joinNode = kInvalidNodeRef;
@@ -563,9 +593,12 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 const auto arms  = currRuntimeGraph->branchArmsOf(nodeRef);
                 const auto *body = currRuntimeGraph->nodeBodyAs<GCBrchBody>(nodeRef);
                 ASSERT(jumpIdx < arms.size(), "Branch arm index out of range in NodeVM.");
-                tillNode = arms[jumpIdx].head;
-                skipNode = arms[jumpIdx].tail;
+                // The arm runs from its first executable node in the linear order (not from
+                // its recorded head: after inlining, nodes of the arm can precede the head)
+                // through its tail. An arm with nothing to execute resumes at the JOIN.
                 joinNode = body->join;
+                tillNode = branchArmEntriesOf(currCache, i)[jumpIdx];
+                skipNode = tillNode == joinNode ? kInvalidNodeRef : arms[jumpIdx].tail;
                 EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                     "NodeVM",
                     "BRCH ref {}: jumpIdx={}, branches={}, tillNode={}, skipNode={}, joinNode={}",

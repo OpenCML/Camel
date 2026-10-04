@@ -133,6 +133,7 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
     ASSERT(graph != nullptr, "Taskflow requires a non-null runtime root graph.");
 
     linearTopoCache_.clear();
+    linearArmEntryCache_.clear();
     Frame *rootFrame = framePool_.acquire(graph);
     try {
         slot_t result = evalGraphTF(graph, rootFrame);
@@ -157,6 +158,22 @@ std::span<const gc_node_ref_t> TaskflowExecSchedPass::topoNodesForLinear(GCGraph
         it->second = camel::execute::buildReachableExecutionTopoIndices(graph);
     }
     return std::span<const gc_node_ref_t>(it->second);
+}
+
+gc_node_ref_t TaskflowExecSchedPass::branchArmEntryForLinear(
+    GCGraph *graph, gc_node_ref_t brchRef, size_t armIndex,
+    std::span<const gc_node_ref_t> topoNodes) {
+    auto [it, inserted] = linearArmEntryCache_[graph].try_emplace(brchRef);
+    if (inserted) {
+        const size_t armCount = graph->branchArmsOf(brchRef).size();
+        it->second.reserve(armCount);
+        for (size_t arm = 0; arm < armCount; ++arm) {
+            it->second.push_back(
+                camel::execute::resolveRuntimeBranchArmEntry(graph, brchRef, arm, topoNodes));
+        }
+    }
+    ASSERT(armIndex < it->second.size(), "Taskflow linear BRCH arm index is out of range.");
+    return it->second[armIndex];
 }
 
 slot_t TaskflowExecSchedPass::evalGraphLinear(GCGraph *graph, Frame *frame) {
@@ -207,9 +224,11 @@ loop_start:
             const auto arms  = currRuntimeGraph->branchArmsOf(nodeRef);
             const auto *body = currRuntimeGraph->nodeBodyAs<camel::runtime::GCBrchBody>(nodeRef);
             ASSERT(jumpIdx < arms.size(), "Taskflow linear BRCH arm index is out of range.");
-            tillNode = arms[jumpIdx].head;
-            skipNode = arms[jumpIdx].tail;
+            // Same arm range as NodeVM: from the arm's first executable node in the linear
+            // order (nodes of an inlined arm can precede its recorded head) through its tail.
             joinNode = body->join;
+            tillNode = branchArmEntryForLinear(currRuntimeGraph, nodeRef, jumpIdx, currNodes);
+            skipNode = tillNode == joinNode ? kInvalidNodeRef : arms[jumpIdx].tail;
             continue;
         }
 

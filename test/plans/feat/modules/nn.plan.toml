@@ -153,6 +153,42 @@ assert(dec_b_gradLine.startsWith('tensor([') && !dec_b_gradLine.startsWith('tens
 timeout_ms = 4000
 
 [[tests]]
+name = "autoencoder.opt.nvm"
+desc = "autoencoder prints exactly what it prints under std::macro std::nvm when run as std::macro std::opt std::nvm (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
+kind = "differential"
+case = "../../../cases/modules/nn/autoencoder.cml"
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+compare_to = "autoencoder"
+compare_fields = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "autoencoder.opt.tf"
+desc = "autoencoder prints exactly what it prints under std::macro std::nvm when run as std::macro std::opt std::tf (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
+kind = "differential"
+case = "../../../cases/modules/nn/autoencoder.cml"
+args = ["${case}", "std::macro", "std::opt", "std::tf"]
+compare_to = "autoencoder"
+compare_fields = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "autoencoder.devirtualize_inline.nvm"
+desc = "autoencoder prints exactly what it prints under std::macro std::nvm when run as std::macro std::devirtualize std::inline std::nvm (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
+kind = "differential"
+case = "../../../cases/modules/nn/autoencoder.cml"
+args = ["${case}", "std::macro", "std::devirtualize", "std::inline", "std::nvm"]
+compare_to = "autoencoder"
+compare_fields = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "tiny_rnn"
 desc = "Trains a fixed two-step tanh RNN; shared weights accumulate gradient over both time steps."
 kind = "behavior"
@@ -181,6 +217,42 @@ assert(b_gradLine.startsWith('tensor([') && !b_gradLine.startsWith('tensor([['),
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "tiny_rnn.opt.nvm"
+desc = "tiny_rnn prints exactly what it prints under std::macro std::nvm when run as std::macro std::opt std::nvm (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
+kind = "differential"
+case = "../../../cases/modules/nn/tiny_rnn.cml"
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+compare_to = "tiny_rnn"
+compare_fields = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "tiny_rnn.opt.tf"
+desc = "tiny_rnn prints exactly what it prints under std::macro std::nvm when run as std::macro std::opt std::tf (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
+kind = "differential"
+case = "../../../cases/modules/nn/tiny_rnn.cml"
+args = ["${case}", "std::macro", "std::opt", "std::tf"]
+compare_to = "tiny_rnn"
+compare_fields = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "tiny_rnn.devirtualize_inline.nvm"
+desc = "tiny_rnn prints exactly what it prints under std::macro std::nvm when run as std::macro std::devirtualize std::inline std::nvm (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
+kind = "differential"
+case = "../../../cases/modules/nn/tiny_rnn.cml"
+args = ["${case}", "std::macro", "std::devirtualize", "std::inline", "std::nvm"]
+compare_to = "tiny_rnn"
+compare_fields = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
 
 [[tests]]
 name = "matrix_factorization"
@@ -736,6 +808,42 @@ assert(bias_gradLine.startsWith('tensor([') && !bias_gradLine.startsWith('tensor
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "siamese_shared_encoder.opt.nvm"
+desc = "siamese_shared_encoder prints exactly what it prints under std::macro std::nvm when run as std::macro std::opt std::nvm (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
+kind = "differential"
+case = "../../../cases/modules/nn/siamese_shared_encoder.cml"
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+compare_to = "siamese_shared_encoder"
+compare_fields = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "siamese_shared_encoder.opt.tf"
+desc = "siamese_shared_encoder prints exactly what it prints under std::macro std::nvm when run as std::macro std::opt std::tf (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
+kind = "differential"
+case = "../../../cases/modules/nn/siamese_shared_encoder.cml"
+args = ["${case}", "std::macro", "std::opt", "std::tf"]
+compare_to = "siamese_shared_encoder"
+compare_fields = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "siamese_shared_encoder.devirtualize_inline.nvm"
+desc = "siamese_shared_encoder prints exactly what it prints under std::macro std::nvm when run as std::macro std::devirtualize std::inline std::nvm (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
+kind = "differential"
+case = "../../../cases/modules/nn/siamese_shared_encoder.cml"
+args = ["${case}", "std::macro", "std::devirtualize", "std::inline", "std::nvm"]
+compare_to = "siamese_shared_encoder"
+compare_fields = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
 
 [[tests]]
 name = "siamese_shared_encoder_gir"

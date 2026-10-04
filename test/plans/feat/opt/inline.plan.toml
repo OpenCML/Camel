@@ -180,3 +180,178 @@ verify_script = """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
+[[tests]]
+name = "arm_entry_after_inline.reference"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: no pass."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.inline.nvm"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::inline on NodeVM (printed 0 for 0.512)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.inline.tf"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::inline on Taskflow (printed 0 for 0.512)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::inline", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.inline.fvm"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::inline on FastVM."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.inline.jit"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::inline on the JIT."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::inline", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.opt.nvm"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::opt on NodeVM (also got the nested-branch value wrong)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.opt.tf"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::opt on Taskflow."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::opt", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.macro_opt.nvm"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::macro std::opt on NodeVM (printed an uninitialized slot)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline_macro.reference"
+desc = "A macro function whose recursive arm holds inlined helper nodes before the recorded arm head evaluates to the zero-pass value under: no pass (the macro function runs at run time)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline_macro.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '0.512', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline_macro.macro.nvm"
+desc = "A macro function whose recursive arm holds inlined helper nodes before the recorded arm head evaluates to the zero-pass value under: std::macro."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline_macro.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '0.512', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline_macro.inline_macro.nvm"
+desc = "A macro function whose recursive arm holds inlined helper nodes before the recorded arm head evaluates to the zero-pass value under: std::inline std::macro (the macro evaluator printed 0)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline_macro.cml"
+args = ["${case}", "std::inline", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '0.512', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
