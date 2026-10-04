@@ -419,3 +419,115 @@ assert(out === '1 2 40', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.reference"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: no pass."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.specialize_inline.nvm"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::specialize then std::inline (two sessions, was already correct)."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "std::specialize", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.opt.nvm"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::opt (printed only the last line)."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.opt.fvm"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::opt on FastVM."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "std::opt", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.simplify.nvm"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.simplify.jit"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::opt::simplify on the JIT."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.macro_simplify_cse_dce.nvm"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::macro std::opt::simplify std::opt::cse std::opt::dce."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::opt::cse", "std::opt::dce", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
