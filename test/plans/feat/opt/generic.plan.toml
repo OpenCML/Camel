@@ -880,3 +880,23 @@ assert(out === '[12, 2]\n36', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "perm_space_exhausted.diagnostic"
+desc = "Exhausting the 32 MB permanent space inside a pass is a PassInternalError naming the pass, raised before anything executes (it used to be a write through null: the guard was an ASSERT, compiled out in release builds). The budget is lifted by CAMEL_OPT_GROWTH_BUDGET to reach the limit."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialize_growing_shape.cml"
+args = ["--output-format", "json", "${case}", "std::opt::simplify", "std::nvm"]
+envs = ["CAMEL_OPT_GROWTH_BUDGET=100000000"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout + input.normalized.stderr
+assert(out.includes('"stage":"pass:std::opt::simplify"'), `stage missing: ${out}`)
+assert(out.includes('"name":"RuntimeDiag::PassInternalError"'), `name missing: ${out}`)
+assert(out.includes('Permanent space exhausted (32 MB'), `reason missing: ${out}`)
+assert(!out.includes('[12, 2]'), `the program ran: ${out}`)
+}
+"""
+timeout_ms = 30000
