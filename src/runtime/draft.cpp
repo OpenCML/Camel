@@ -1226,6 +1226,27 @@ size_t GraphDraft::dissolveUnorderedGates() {
             changed = true;
         }
     }
+    // A GATE that is the head or tail of a branch arm is not dissolved: it marks where the arm
+    // starts or ends. It can still lose every control input, when all it waited on were gates
+    // dissolved above or parameters of an inlined callee (an inlined function whose exit GATE
+    // only waited on its ports and on gated constants, placed as the tail of an arm). Such a
+    // gate then waits on its BRCH, the shape of the bridge GATE inlining gives an arm whose
+    // body has no control entry; a GATE without control input is not a valid graph.
+    for (gc_node_ref_t brch = 0; brch < nodeSlotCount(); ++brch) {
+        const DraftNodeHeader *h = header(brch);
+        if (!h || h->kind != GCNodeKind::Brch) {
+            continue;
+        }
+        const std::vector<GCBranchArm> arms(branchArmsOf(brch).begin(), branchArmsOf(brch).end());
+        for (const GCBranchArm &arm : arms) {
+            for (gc_node_ref_t anchor : {arm.head, arm.tail}) {
+                const DraftNodeHeader *a = anchor != kInvalidNodeRef ? header(anchor) : nullptr;
+                if (a && a->kind == GCNodeKind::Gate && ctrlInputsOf(anchor).empty()) {
+                    appendInput(DraftEdgeKind::Ctrl, anchor, brch);
+                }
+            }
+        }
+    }
     return removed;
 }
 

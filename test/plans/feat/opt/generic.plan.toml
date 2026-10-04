@@ -626,3 +626,115 @@ assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output:
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "arm_tail_gate.reference"
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: no pass."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arm_tail_gate.simplify.nvm"
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arm_tail_gate.simplify.fvm"
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: std::opt::simplify on FastVM."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arm_tail_gate.simplify.jit"
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: std::opt::simplify on the JIT."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arm_tail_gate.unfolded_inline_small.nvm"
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: two simplify rounds by hand, then std::inline::small (the step that built the gate)."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt", "std::opt::fold", "std::opt::dce", "std::opt", "std::opt::fold", "std::opt::dce", "std::inline::small", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "shape_unroll.cse_simplify.nvm"
+desc = "shape_unroll with its three shape(x) calls merged by cse before simplify (the corpus route to the same GATE defect). Under: std::opt::cse std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/opt/generic/shape_unroll.cml"
+args = ["${case}", "std::opt::cse", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out.includes('[      3.,       3.,       3.,       3.]') && out.endsWith('dtype=float32)'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "shape_unroll.fold_fuse_cse_simplify_specialize.nvm"
+desc = "shape_unroll with its three shape(x) calls merged by cse before simplify (the corpus route to the same GATE defect). Under: the shortest experiment pipeline."
+kind = "behavior"
+case = "../../../cases/opt/generic/shape_unroll.cml"
+args = ["${case}", "std::opt::fold", "tensor::fuse", "std::opt::cse", "std::opt::simplify", "std::specialize", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out.includes('[      3.,       3.,       3.,       3.]') && out.endsWith('dtype=float32)'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
