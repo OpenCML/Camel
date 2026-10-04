@@ -69,7 +69,9 @@ bool devirtualizeBranchedCallInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId);
 
 /// The node whose value `id` reads when `id` projects an element out of a tuple built by FILL
-/// in the same graph (through any chain of such projections); `id` itself otherwise.
+/// in the same graph (through any chain of such projections); `id` itself otherwise. A tuple
+/// that is written in place (see draft_writes.h) is not seen through: the projection may read
+/// what a later assignment stored.
 gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id);
 
 /// Specializes `draft`, a copy of `function`'s graph, for one call: its captured values become

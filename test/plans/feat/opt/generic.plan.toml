@@ -370,3 +370,147 @@ assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${o
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "written_variable.reference"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: no pass."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.fold.nvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt::fold (forwarded the first tuple's element past the reassignment)."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::opt::fold", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.cse.nvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt::cse (merged `x + 1` before and after `x += 5`)."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.simplify.nvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt::simplify (folded the first tuple into a constant the assignment then wrote)."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.simplify.fvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt::simplify on FastVM."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.opt_fold.nvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt then std::opt::fold."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::opt", "std::opt::fold", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.opt_cse.nvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt then std::opt::cse."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::opt", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.inline_fold_cse.nvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::inline, std::opt::fold, std::opt::cse."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::inline", "std::opt::fold", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.inline_fold_cse.jit"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::inline, std::opt::fold, std::opt::cse on the JIT."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::inline", "std::opt::fold", "std::opt::cse", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000

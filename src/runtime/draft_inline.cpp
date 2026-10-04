@@ -38,6 +38,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/runtime/draft_clone.h"
 #include "camel/runtime/draft_types.h"
+#include "camel/runtime/draft_writes.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -899,6 +900,11 @@ gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id) 
         }
         const auto *fill = reinterpret_cast<const GCFillBody *>(draft.payloadOf(sources[0]).data());
         if (fill->fillKind != GCFillKind::Tuple) {
+            return id;
+        }
+        if (isWrittenInPlace(draft, sources[0])) {
+            // The tuple variable is assigned again (`wait t = ...` stores into the FILL's
+            // slot): the projection may read the new tuple, not the one filled here.
             return id;
         }
         const auto slots  = fill->slots();

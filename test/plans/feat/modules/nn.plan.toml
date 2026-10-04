@@ -903,6 +903,46 @@ assert(Number(m[1]) >= 200, `training accuracy too low: ${m[0]}`)
 timeout_ms = 4000
 
 [[tests]]
+name = "mnist_py.fold"
+desc = "MNIST training keeps its result under std::opt::fold: the trained weights are read from a var tuple after it is reassigned (`wait train_result = train<...>(W)`), which the pass must not replace by the initial weights."
+kind = "behavior"
+case = "../../../cases/modules/nn/mnist_py.cml"
+args = ["${case}", "std::opt::fold", "std::nvm"]
+# The training set is downloaded once into tmp/; without network access the test is skipped.
+skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "tmp"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const m = out.match(/Accuracy: ([0-9]+) [/] 256/)
+assert(m, `no accuracy line in: ${out}`)
+assert(Number(m[1]) >= 200, `training accuracy too low: ${m[0]}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "mnist_py.simplify"
+desc = "MNIST training keeps its result under std::opt::simplify: the trained weights are read from a var tuple after it is reassigned (`wait train_result = train<...>(W)`), which the pass must not replace by the initial weights."
+kind = "behavior"
+case = "../../../cases/modules/nn/mnist_py.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+# The training set is downloaded once into tmp/; without network access the test is skipped.
+skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "tmp"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const m = out.match(/Accuracy: ([0-9]+) [/] 256/)
+assert(m, `no accuracy line in: ${out}`)
+assert(Number(m[1]) >= 200, `training accuracy too low: ${m[0]}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
 name = "svm"
 desc = "Exercises a heavier tensor optimization example with SVM-style training and prediction."
 kind = "behavior"

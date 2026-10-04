@@ -37,6 +37,7 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_types.h"
+#include "camel/runtime/draft_writes.h"
 
 #include <deque>
 #include <map>
@@ -50,6 +51,7 @@ using camel::runtime::DraftBrchPayload;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
+using camel::runtime::isWrittenInPlace;
 using camel::runtime::kInvalidNodeRef;
 namespace type = camel::core::type;
 
@@ -122,7 +124,8 @@ class StaticArgsView final : public ArgsView {
 };
 
 /// Static value of a DATA node with a static slot, also seen through GATEs forwarding one (an
-/// inlined call gates its arguments; the value it forwards is the same).
+/// inlined call gates its arguments; the value it forwards is the same). A constant that is
+/// written in place has no static value.
 std::optional<std::pair<slot_t, type::Type *>>
 staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
     for (size_t hops = 0; hops < draft.nodeSlotCount(); ++hops) {
@@ -137,11 +140,19 @@ staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
         return std::nullopt;
     }
     const auto index = static_cast<size_t>(-h->dataIndex);
-    if (index >= draft.staticSlots().size()) {
+    if (index >= draft.staticSlots().size() || isWrittenInPlace(draft, id)) {
         return std::nullopt;
     }
     type::Type *ty = draft.staticSlotTypes()[index];
     return std::pair{draft.staticSlots()[index], ty ? ty : h->dataType};
+}
+
+/// True when `id` can be replaced by another node holding its value: it does not anchor the
+/// graph, and nothing writes it in place. A written node is a variable, not a value: its
+/// writer must keep a slot of its own to store into (a constant's slot is shared by every run
+/// of the graph), and readers ordered after the writer see what it stored.
+bool isFoldable(const GraphDraft &draft, gc_node_ref_t id) {
+    return isReplaceable(draft, id) && !isWrittenInPlace(draft, id);
 }
 
 std::optional<StaticArgsView>
@@ -530,7 +541,7 @@ size_t foldDraft(
             // An element projected out of a tuple built in this graph is the value filled there;
             // an element of a constant tuple or struct is a constant.
             if (const auto *h = draft.header(id);
-                h && h->kind == GCNodeKind::Accs && isReplaceable(draft, id)) {
+                h && h->kind == GCNodeKind::Accs && isFoldable(draft, id)) {
                 const gc_node_ref_t value = camel::runtime::resolveTupleProjection(draft, id);
                 if (value != id) {
                     replaceNode(draft, id, value);
@@ -544,14 +555,14 @@ size_t foldDraft(
             }
             // A tuple, struct or array built from constants is a constant.
             if (const auto *h = draft.header(id);
-                h && h->kind == GCNodeKind::Fill && isReplaceable(draft, id)) {
+                h && h->kind == GCNodeKind::Fill && isFoldable(draft, id)) {
                 if (foldStaticFill(draft, id, roots)) {
                     ++folded;
                     changed = true;
                 }
                 continue;
             }
-            if (!isPureOper(draft, id) || !isReplaceable(draft, id)) {
+            if (!isPureOper(draft, id) || !isFoldable(draft, id)) {
                 continue;
             }
             auto with = staticArgs(draft, draft.withInputsOf(id));
@@ -618,7 +629,8 @@ size_t cseDraft(GraphDraft &draft) {
 
     // Equal scalar constants are one value: merge their DATA nodes first, so expressions over
     // separately written literals (`n * 7` twice) become identical. GC-traced constants keep
-    // their identity (objects may be compared by reference).
+    // their identity (objects may be compared by reference). staticValueOf() leaves out
+    // constants that are written in place.
     std::map<std::tuple<type::Type *, slot_t, std::vector<uint64_t>>, gc_node_ref_t> constants;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         const auto value = staticValueOf(draft, id);
@@ -632,8 +644,21 @@ size_t cseDraft(GraphDraft &draft) {
         }
     }
 
+    // Two identical expressions over a variable that is written in place are not one value: a
+    // write may lie between them (`x + 1`, `wait x += 5`, `x + 1`). Neither is merged, and a
+    // result that is itself written keeps its own slot.
+    const auto readsVariable = [&](gc_node_ref_t id) {
+        for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id)}) {
+            for (gc_node_ref_t in : inputs) {
+                if (isWrittenInPlace(draft, in)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (!isPureOper(draft, id)) {
+        if (!isPureOper(draft, id) || isWrittenInPlace(draft, id) || readsVariable(id)) {
             continue;
         }
         const auto norm = draft.normInputsOf(id);
