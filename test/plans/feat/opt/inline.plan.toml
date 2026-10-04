@@ -531,3 +531,131 @@ assert(out === '1 11 203 4', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "arm_call_then_effect.reference"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: no pass."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.fvm"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::fvm, nothing inlined."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.inline.nvm"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::inline on NodeVM (the println after the call was skipped)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.inline.fvm"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::inline on FastVM (skipped)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.inline.jit"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::inline on the JIT (skipped)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::inline", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.inline_arm.nvm"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::inline::arm, the minimal pipeline."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::inline::arm", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.simplify.nvm"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.simplify.fvm"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::opt::simplify on FastVM."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000

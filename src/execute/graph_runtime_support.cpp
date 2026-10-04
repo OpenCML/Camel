@@ -37,6 +37,7 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <array>
 #include <format>
 #include <functional>
 #include <queue>
@@ -318,6 +319,68 @@ bool runtimeNodeOutputsContain(
            contains(graph->ctrlOutputsOf(nodeRef));
 }
 
+bool runtimeArmEndsWithValue(
+    camel::runtime::GCGraph *graph, gc_node_ref_t armTailRef, gc_node_ref_t valueRef) {
+    ASSERT(graph != nullptr, "Runtime arm-tail check requires a graph.");
+    if (armTailRef == valueRef) {
+        return true;
+    }
+    const auto inputGroups = [graph](gc_node_ref_t ref) {
+        return std::array<std::span<const gc_node_ref_t>, 3>{
+            graph->normInputsOf(ref),
+            graph->withInputsOf(ref),
+            graph->ctrlInputsOf(ref)};
+    };
+    // Whether `ref` runs after the value: the value is among its transitive inputs.
+    std::unordered_map<gc_node_ref_t, bool> afterValue;
+    const auto runsAfterValue = [&](gc_node_ref_t ref) {
+        if (auto it = afterValue.find(ref); it != afterValue.end()) {
+            return it->second;
+        }
+        std::unordered_set<gc_node_ref_t> seen{ref};
+        std::vector<gc_node_ref_t> work{ref};
+        bool found = false;
+        while (!work.empty() && !found) {
+            const gc_node_ref_t current = work.back();
+            work.pop_back();
+            for (const auto inputs : inputGroups(current)) {
+                for (gc_node_ref_t input : inputs) {
+                    if (input == valueRef) {
+                        found = true;
+                    } else if (seen.insert(input).second) {
+                        work.push_back(input);
+                    }
+                }
+            }
+        }
+        afterValue.emplace(ref, found);
+        return found;
+    };
+
+    std::unordered_set<gc_node_ref_t> seen{armTailRef};
+    std::vector<gc_node_ref_t> work{armTailRef};
+    while (!work.empty()) {
+        const gc_node_ref_t current = work.back();
+        work.pop_back();
+        const auto *node = graph->node(current);
+        ASSERT(node != nullptr, "Runtime arm-tail check resolved to null.");
+        if (node->kind != camel::runtime::GCNodeKind::Gate) {
+            if (runsAfterValue(current)) {
+                return false; // something other than forwarding happens after the value
+            }
+            continue;
+        }
+        for (const auto inputs : inputGroups(current)) {
+            for (gc_node_ref_t input : inputs) {
+                if (input != valueRef && seen.insert(input).second) {
+                    work.push_back(input);
+                }
+            }
+        }
+    }
+    return true;
+}
+
 std::vector<gc_node_ref_t>
 collectRuntimeTailJoinArmValues(camel::runtime::GCGraph *graph, gc_node_ref_t tailJoinRef) {
     ASSERT(graph != nullptr, "Runtime tail-join collection requires a graph.");
@@ -330,6 +393,12 @@ collectRuntimeTailJoinArmValues(camel::runtime::GCGraph *graph, gc_node_ref_t ta
             const gc_node_ref_t value = resolveRuntimeForwardedValueRef(graph, armRef);
             const auto *node = value != camel::runtime::kInvalidNodeRef ? graph->node(value) : nullptr;
             if (!node || std::find(values.begin(), values.end(), value) != values.end()) {
+                continue;
+            }
+            // The arm does something after producing the value (an effect the forwarding
+            // GATEs wait on): a call there is not a tail call, and a JOIN there is not in
+            // tail position.
+            if (!runtimeArmEndsWithValue(graph, armRef, value)) {
                 continue;
             }
             values.push_back(value);

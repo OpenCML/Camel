@@ -48,6 +48,8 @@
 
 该规则与 FastVM 的 `resolveTailValueNode` 一致，用于避免把「纯副作用链」误当作返回值尾结点。
 
+**分支臂内的尾调**：尾值为 **JOIN** 时，某一臂的值经转发 **GATE** 到达臂尾；只有当「臂在产生该值之后不再做任何事」时，产生该值的调用才是尾调。判定由 `runtimeArmEndsWithValue`（`src/execute/graph_runtime_support.cpp`）给出：从臂尾沿 GATE 回溯，GATE 等待的结点要么是该值本身、要么是其它转发 GATE、要么不依赖该值；若某个 GATE 等待一个排在该值之后的副作用（`let r = f(x); println(..); return r` 被内联进臂），则该调用**不是**尾调，否则帧被替换后那个副作用永远不会执行。NodeVM（`collectRuntimeTailJoinArmValues`）与 FastVM/JIT（臂出口 JUMP 处）共用这一判定。
+
 ---
 
 ## 3. NodeVM 执行管线总览

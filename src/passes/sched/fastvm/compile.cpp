@@ -595,10 +595,19 @@ static bytecode_vec_t compileRuntimeGraph(
             if (auto it = valueProducerMap.find(runtimeNodeIndex); it != valueProducerMap.end()) {
                 fromIdx = it->second;
             }
+            // The producer is a tail-call candidate (see the JOIN case) only when the arm does
+            // nothing after it: a GATE on the way to the tail may wait on an effect that runs
+            // after the call (`let r = f(x); println(..); return r` inlined into the arm).
+            // Otherwise the JUMP stands in as "from", which is never a FUNC.
+            const auto armValue =
+                camel::execute::resolveRuntimeForwardedValueRef(graph, runtimeNodeIndex);
+            const bool armEndsWithValue =
+                armValue != camel::runtime::kInvalidNodeRef &&
+                camel::execute::runtimeArmEndsWithValue(graph, runtimeNodeIndex, armValue);
             for (const auto joinNode : exits->second) {
                 joinTargetMap[joinNode].push_back({
                     bytecodes.size(),
-                    fromIdx,
+                    armEndsWithValue ? fromIdx : bytecodes.size(),
                 });
                 appendBytecode(bytecodes, OpCode::JUMP, 0, {0});
             }
