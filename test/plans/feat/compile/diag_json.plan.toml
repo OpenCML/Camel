@@ -64,6 +64,8 @@ const diags = JSON.parse(text.slice(start))
 assert(diags.length === 1, 'one diagnostic')
 const d = diags[0]
 assert(d.severity === 'Error', 'severity is a JSON string')
+assert(start === 0, 'nothing but the diagnostics array on stdout')
+assert(input.stderr.includes('available passes are'), 'the pass listing goes to stderr')
 assert(d.data.stage === 'pass:std::no_such_pass', 'stage is pass:std::no_such_pass, got ' + d.data.stage)
 assert(d.data.name === 'RuntimeDiag::UnrecognizedGraphPass', 'name is RuntimeDiag::UnrecognizedGraphPass, got ' + d.data.name)
 assert(d.range.end.line === 0 && d.range.end.character === 0, 'no source range')

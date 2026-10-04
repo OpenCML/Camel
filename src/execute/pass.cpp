@@ -47,6 +47,7 @@
 #include <algorithm>
 #include <atomic>
 #include <format>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -513,28 +514,31 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
         return factory;
     }
 
-    // Not found; print the list of available passes
-    os << std::format("Pass <{}> not found, available passes are:\n", name);
+    // Not found; list the available passes on stderr. The listing is help text for the
+    // command line: stdout stays reserved for program output and the diagnostics array.
+    (void)os;
+    std::ostream &help = std::cerr;
+    help << std::format("Pass <{}> not found, available passes are:\n", name);
     std::vector<std::string> allPaths;
     collectPassPaths(passScope, "", allPaths);
     for (const auto &p : allPaths) {
-        os << std::format("  {}\n", p);
+        help << std::format("  {}\n", p);
     }
     {
         auto &registry = modulePasses();
         std::lock_guard lock(registry.mutex);
         if (!registry.factories.empty()) {
-            os << std::format("Passes contributed by loaded modules:\n");
+            help << std::format("Passes contributed by loaded modules:\n");
             for (const auto &entry : registry.factories) {
-                os << std::format("  {}\n", entry.first);
+                help << std::format("  {}\n", entry.first);
             }
         }
     }
-    os << std::format("Available aliases are:\n");
+    help << std::format("Available aliases are:\n");
     for (const auto &[alias, target] : passAliases) {
-        os << std::format("  {} -> {}\n", alias, target);
+        help << std::format("  {} -> {}\n", alias, target);
     }
-    os << std::endl;
+    help << std::endl;
 
     return nullptr;
 }
