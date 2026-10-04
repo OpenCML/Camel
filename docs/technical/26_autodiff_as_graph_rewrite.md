@@ -270,10 +270,15 @@ What differs from the design above:
   the four `export_train_step_branch*` (indirect call left) and the two
   `export_gated_gru_*` (call left); `export_import_order` is refused because
   its captured weights come from `random` and only exist at run time.
-- **Control dependencies are not checked.** The walk follows data
-  dependencies only, so an effect on the control path of a `sync` function
-  (a `println` whose result nothing reads) is dropped, not refused, in both
-  entries.
+- **Control dependencies are checked, not translated.** The lowering walk
+  follows data dependencies only. Before it, both entries refuse a function in
+  which an impure operator is reachable from the exit through data or control
+  edges, in the function itself or in a function it calls or holds as a
+  constant (`Evaluator::refuseEffects`, `modules/onnx/exporter.cpp`): an effect
+  on the control path of a `sync` function (a `println` whose result nothing
+  reads) is reported at the operator and no model is written. The check is
+  structural: an effect in the arm of a branch on a constant condition that
+  folding did not remove is refused too.
 
 ## 8. Phases
 

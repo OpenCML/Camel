@@ -714,3 +714,96 @@ expect_stdout_contains = ["export_fold.cml: pass: onnx.checker full_check ok", "
 expect_output_not_contains = ["array_equal False"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+
+[[tests]]
+name = "export_ctrl_effect"
+desc = "An effect that is only on the control path of the exported function (a println statement of a sync callee, its value reaches no output) is refused at the println by export_model, and no model is written (it used to exit 0 and write a model without the effect)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_ctrl_effect.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_ctrl_effect.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const text = input.normalized.output
+assert(text.includes("impure operator ':io/println' cannot be exported"), 'missing impure-operator detail')
+assert(/at [^ ]*export_ctrl_effect[.]cml:14:5[)]/.test(text), 'missing source position of the println')
+assert(!text.includes('unreachable'), 'export must fail before the next statement')
+assert(!text.includes('EFFECT'), 'the exported function must not be executed')
+assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/export_ctrl_effect.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "pass_export_ctrl_effect_json"
+desc = "onnx::export refuses the same control-path effect: TranslationRefused, stage pass:onnx::export, the range of the println, no model file."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_ctrl_effect.cml"
+args = ["--output-format", "json", "${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_ctrl_effect.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const diags = JSON.parse(input.normalized.stdout)
+assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
+const d = diags[0]
+assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:onnx::export', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
+assert(d.message.includes("impure operator ':io/println' cannot be exported"), `unexpected message: ${d.message}`)
+assert(d.range.start.line === 13 && d.range.start.character === 4 && d.range.end.character > d.range.start.character, `unexpected range ${JSON.stringify(d.range)}`)
+assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/pass_export_ctrl_effect.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "export_ctrl_effect_in_callee"
+desc = "The effect is in a function that is still called after simplification (recursion of dynamic depth is not unrolled): export_model refuses at the println, before the next statement, and writes no model."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_ctrl_effect_callee.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_ctrl_effect_callee.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const text = input.normalized.output
+assert(text.includes("impure operator ':io/println' cannot be exported"), 'missing impure-operator detail')
+assert(/at [^ ]*export_ctrl_effect_callee[.]cml:14:5[)]/.test(text), 'missing source position of the println')
+assert(!text.includes('unreachable') && !text.includes('EFFECT'), 'neither the statement after the export nor the exported function may run')
+assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/export_ctrl_effect_callee.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "pass_export_ctrl_effect_in_callee_json"
+desc = "onnx::export finds the effect inside the function the exported one still calls and reports the println in 'shrink', not only the leftover call; no model file."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_ctrl_effect_callee.cml"
+args = ["--output-format", "json", "${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_ctrl_effect_callee.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const diags = JSON.parse(input.normalized.stdout)
+assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
+const d = diags[0]
+assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:onnx::export', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
+assert(d.message.includes("in 'shrink': impure operator ':io/println' cannot be exported"), `unexpected message: ${d.message}`)
+assert(d.range.start.line === 13 && d.range.start.character === 4, `unexpected range ${JSON.stringify(d.range)}`)
+assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/pass_export_ctrl_effect_callee.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 4000

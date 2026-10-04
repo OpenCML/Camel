@@ -201,6 +201,13 @@ class Evaluator {
     /// Translates `graph`, with its parameters bound to `inputs`, and returns its result.
     Value translate(GCGraph *graph, std::span<const Value> inputs);
 
+    /// Refuses `graph` when an impure operator is reachable from its exit through data or
+    /// control edges, in `graph` itself or in a function it calls or holds as a constant.
+    /// translate() only follows data dependencies, so an operator that runs for its effect
+    /// alone (a `println` statement of a sync function) would otherwise be left out of the
+    /// model without a word.
+    void refuseEffects(GCGraph *graph);
+
   private:
     struct Activation {
         GCGraph *graph;
@@ -268,6 +275,65 @@ Value Evaluator::translate(GCGraph *graph, std::span<const Value> inputs) {
     return eval(act, execute::resolveRuntimeTailValueRef(graph));
 }
 
+/// A graph or function name worth showing: compiler-generated ones (lambdas, branch arms,
+/// specializations of them) mean nothing in the source; the source position says more.
+bool isSourceName(std::string_view name) { return !name.empty() && !name.starts_with("__"); }
+
+void Evaluator::refuseEffects(GCGraph *root) {
+    std::unordered_set<GCGraph *> seenGraphs{root};
+    std::vector<GCGraph *> graphs{root};
+    while (!graphs.empty()) {
+        GCGraph *g = graphs.back();
+        graphs.pop_back();
+        const gc_node_ref_t exit = g->exitNodeRef();
+        if (!g->hasNodePayload() || exit == camel::runtime::kInvalidNodeRef) {
+            continue;
+        }
+        std::unordered_set<gc_node_ref_t> seen{exit};
+        std::vector<gc_node_ref_t> work{exit};
+        while (!work.empty()) {
+            const gc_node_ref_t ref = work.back();
+            work.pop_back();
+            const auto *n       = g->node(ref);
+            GCGraph *referenced = nullptr;
+            if (n->kind == GCNodeKind::Oper) {
+                const std::string uri(g->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri());
+                if (!core::OperatorTraitsRegistry::instance().isPure(uri)) {
+                    const uint64_t origin = g->nodeOrigin(ref);
+                    const std::string what =
+                        std::format("impure operator '{}' cannot be exported", uri);
+                    throw ExportError(
+                        isSourceName(g->name()) ? std::format("in '{}': {}", g->name(), what)
+                                                : what,
+                        locationOf(origin),
+                        origin,
+                        ExportError::Kind::Other);
+                }
+            } else if (n->kind == GCNodeKind::Func) {
+                referenced = g->directCalleeGraphOf(ref);
+            } else if (
+                n->kind == GCNodeKind::Data && n->dataIndex < 0 && n->dataType &&
+                n->dataType->code() == TypeCode::Function) {
+                // A function constant: the callee of an indirect call, or a closure template.
+                const auto *fn = rtdata::fromSlot<::Function *>(
+                    g->staticArea()->get<slot_t>(static_cast<size_t>(-n->dataIndex)));
+                referenced = fn ? fn->graph() : nullptr;
+            }
+            if (referenced && seenGraphs.insert(referenced).second) {
+                graphs.push_back(referenced);
+            }
+            for (const auto inputs :
+                 {g->normInputsOf(ref), g->withInputsOf(ref), g->ctrlInputsOf(ref)}) {
+                for (gc_node_ref_t input : inputs) {
+                    if (seen.insert(input).second) {
+                        work.push_back(input);
+                    }
+                }
+            }
+        }
+    }
+}
+
 Value Evaluator::eval(Activation &act, gc_node_ref_t ref) {
     for (auto it = act.memo.rbegin(); it != act.memo.rend(); ++it) {
         if (auto found = it->find(ref); found != it->end()) {
@@ -320,10 +386,6 @@ Value Evaluator::keep(slot_t slot, type::Type *type) {
     }
     return Value::constant(slot, type);
 }
-
-/// A graph or function name worth showing: compiler-generated ones (lambdas, branch arms,
-/// specializations of them) mean nothing in the source; the source position says more.
-bool isSourceName(std::string_view name) { return !name.empty() && !name.starts_with("__"); }
 
 void Evaluator::unsupported(Activation &act, std::string_view what, ExportError::Kind kind) {
     const std::string &graph = act.graph->name();
@@ -1280,6 +1342,7 @@ Model exportBound(
         }
     }
     Evaluator evaluator(emitter, options, ctx, std::move(names), ctx.sourceContext());
+    evaluator.refuseEffects(root);
     emitOutputs(emitter, evaluator.translate(root, inputs), options.outputName);
     return finishModel(emitter, options);
 }
