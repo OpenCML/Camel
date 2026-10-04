@@ -19,6 +19,7 @@
 
 #include "fastvm.h"
 #include "camel/core/module/module.h"
+#include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "opperf.h"
@@ -370,6 +371,67 @@ void FastVMSchedPass::push(size_t pc, Frame *frame) {
     ++stackDepth_;
 }
 
+void FastVMSchedPass::writeBackVarArgsToDirectCaller(Frame *callee) {
+    if (stackDepth_ == 0) {
+        return;
+    }
+    const Bytecode &callBc = bytecodes_[pcStack_[stackDepth_ - 1]];
+    Frame *caller          = frameStack_[stackDepth_ - 1];
+    auto *target           = callee->runtimeGraph();
+    const auto *type       = target ? target->funcType() : nullptr;
+    if (type == nullptr || !isDirectCallOpcode(callBc.opcode) ||
+        getFuncExtraRuntimeGraph(&callBc) != target) {
+        return;
+    }
+    // Direct-call operands list the norm arguments, then the with arguments, against the
+    // callee's port slots in the same order.
+    const data_arr_t srcArgs  = callBc.directCallSrcArgs();
+    const data_arr_t dstSlots = callBc.directCallDstSlots();
+    const size_t normCount    = type->normTypesCount();
+    for (size_t i = 0; i < srcArgs.size() && i < dstSlots.size(); ++i) {
+        const bool isVar = i < normCount ? type->normIsVarAt(i)
+                                         : (i - normCount < type->withTypesCount() &&
+                                            type->withIsVarAt(i - normCount));
+        // A static constant argument (slot below 0) is left alone.
+        if (isVar && srcArgs[i] > 0) {
+            caller->set(srcArgs[i], callee->get<slot_t>(dstSlots[i]));
+        }
+    }
+}
+
+slot_t FastVMSchedPass::callIndirectWithVarParams(
+    Frame *caller, Frame *callee, camel::runtime::GCGraph *target, data_arr_t nargs,
+    data_arr_t wargs) {
+    // The graph makes no tail call (see compile), so the frame that returns is `callee`.
+    const CallResult result = callBorrowed(graphEntryPc(target), callee);
+    const auto *type        = target->funcType();
+    const auto store        = [&](data_idx_t argSlot, camel::runtime::gc_node_ref_t portRef) {
+        const auto *port = target->node(portRef);
+        if (port != nullptr && argSlot > 0 && result.rootFrame != nullptr) {
+            caller->set(argSlot, result.rootFrame->get<slot_t>(port->dataIndex));
+        }
+    };
+    const auto normPorts = target->normPorts();
+    for (size_t i = 0; i < type->normTypesCount() && i < nargs.size() && i < normPorts.size();
+         ++i) {
+        if (type->normIsVarAt(i)) {
+            store(nargs[i], normPorts[i]);
+        }
+    }
+    // wargs[0] is the callee function; the with arguments follow.
+    const auto withPorts = target->withPorts();
+    for (size_t i = 0; i < type->withTypesCount() && i + 1 < wargs.size() && i < withPorts.size();
+         ++i) {
+        if (type->withIsVarAt(i)) {
+            store(wargs[i + 1], withPorts[i]);
+        }
+    }
+    if (result.rootFrame) {
+        framePool_.release(result.rootFrame);
+    }
+    return result.result;
+}
+
 std::pair<size_t, Frame *> FastVMSchedPass::pop() {
     ASSERT(stackDepth_ > 0, "FastVM call stack underflow.");
     --stackDepth_;
@@ -671,6 +733,45 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
     std::lock_guard lock(jitCacheMutex_);
     if (jitFnOf(graph) || jitCompileFailedOf(graph)) {
         return;
+    }
+    // `var` parameters are written back by the interpreter (RETN / indirect CALL). Compiled
+    // code neither keeps a parameter's final value in its frame slot nor writes it back, so a
+    // graph that has `var` parameters, or calls one that may, stays interpreted.
+    {
+        bool usesVarParams = camel::execute::runtimeGraphHasVarParams(graph);
+        for (auto it = graph->nodes().begin(); !usesVarParams && it != graph->nodes().end(); ++it) {
+            const auto *node = graph->node(it.ref());
+            if (node == nullptr) {
+                continue;
+            }
+            if (node->kind == camel::runtime::GCNodeKind::Func) {
+                usesVarParams =
+                    camel::execute::runtimeGraphHasVarParams(graph->directCalleeGraphOf(it.ref()));
+            } else if (node->kind == camel::runtime::GCNodeKind::Call) {
+                // The callee is only known by its type; any function type may be one with `var`
+                // parameters unless the type says otherwise.
+                const auto withInputs = graph->withInputsOf(it.ref());
+                const auto *callee = withInputs.empty() ? nullptr : graph->node(withInputs.front());
+                const auto *type   = callee ? callee->dataType : nullptr;
+                usesVarParams      = true;
+                if (type != nullptr && type->code() == camel::core::type::TypeCode::Function) {
+                    const auto *funcType =
+                        static_cast<const camel::core::type::FunctionType *>(type);
+                    usesVarParams = false;
+                    for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
+                        usesVarParams = usesVarParams || funcType->normIsVarAt(i);
+                    }
+                    for (size_t i = 0; i < funcType->withTypesCount(); ++i) {
+                        usesVarParams = usesVarParams || funcType->withIsVarAt(i);
+                    }
+                }
+            }
+        }
+        if (usesVarParams) {
+            setJitCompileFailedOf(graph, true);
+            setJitFailureReportedOf(graph, true);
+            return;
+        }
     }
     ASSERT(
         graph->hasFrameLayout(),

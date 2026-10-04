@@ -225,6 +225,10 @@ NodeVMSchedPass::buildTopoNodes(camel::runtime::GCGraph *runtimeGraph) {
     cache->directCallTargets.resize(cache->topoNodeRefs.size(), nullptr);
     cache->directCallTailEligible.resize(cache->topoNodeRefs.size(), 0);
     cache->directCallFeedsTailJoin.resize(cache->topoNodeRefs.size(), 0);
+    cache->directCallWritesBack.resize(cache->topoNodeRefs.size(), 0);
+    // `var` parameters are written back from the callee frame when the call returns, so a graph
+    // that has them keeps its frame to the end: it makes no tail call, and is not tail-called.
+    const bool selfHasVarParams = camel::execute::runtimeGraphHasVarParams(runtimeGraph);
     cache->directCallArgOffsets.resize(cache->topoNodeRefs.size() + 1, 0);
     cache->branchArmEntryOffsets.resize(cache->topoNodeRefs.size() + 1, 0);
     cache->dataIndexByRef.resize(runtimeGraph->nodeBlockCount(), 0);
@@ -290,10 +294,16 @@ NodeVMSchedPass::buildTopoNodes(camel::runtime::GCGraph *runtimeGraph) {
         for (gc_node_ref_t argRef : runtimeGraph->withInputsOf(nodeRef)) {
             cache->directCallArgSlots.push_back(dataIndexOf(runtimeGraph, argRef));
         }
-        cache->directCallTailEligible[idx] = anchorOk && (nodeRef == cache->tailValueRef);
+        const bool targetHasVarParams =
+            camel::execute::runtimeGraphHasVarParams(cache->directCallTargets[idx]);
+        const bool tailAllowed           = !selfHasVarParams && !targetHasVarParams;
+        cache->directCallWritesBack[idx] = targetHasVarParams ? 1 : 0;
+        cache->directCallTailEligible[idx] =
+            tailAllowed && anchorOk && (nodeRef == cache->tailValueRef);
         cache->directCallFeedsTailJoin[idx] =
+            tailAllowed &&
             std::find(tailJoinArmValues.begin(), tailJoinArmValues.end(), nodeRef) !=
-            tailJoinArmValues.end();
+                tailJoinArmValues.end();
     }
     cache->directCallArgOffsets[cache->topoNodeRefs.size()] =
         static_cast<uint32_t>(cache->directCallArgSlots.size());
@@ -411,7 +421,8 @@ void NodeVMSchedPass::releaseTailFrames(Frame *&tailLow, Frame *&tailHigh) {
 
 // Execute one runtime graph call. Arguments for CALL/FUNC are copied from the
 // source frame into the callee frame's ports and closure slots.
-slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *rootFrame) {
+slot_t NodeVMSchedPass::call(
+    camel::runtime::GCGraph *rootRuntimeGraph, Frame *rootFrame, bool keepRootFrame) {
     currRecursionDepth_++;
     slot_t result = NullSlot;
     ASSERT(
@@ -650,7 +661,17 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     currRuntimeGraph,
                     nodeRef);
 
-                slot_t callResult = call(funcRuntimeGraph, funcFrame);
+                const bool writesBack =
+                    camel::execute::runtimeGraphHasVarParams(funcRuntimeGraph);
+                slot_t callResult = call(funcRuntimeGraph, funcFrame, writesBack);
+                if (writesBack) {
+                    camel::execute::writeBackVarArgs(
+                        currFrame,
+                        funcFrame,
+                        currRuntimeGraph,
+                        nodeRef);
+                    framePool_.release(funcFrame);
+                }
                 if (n->dataIndex != 0) {
                     currFrame->set(n->dataIndex, callResult);
                 }
@@ -706,7 +727,16 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 auto *layout = nodeVmCallLayoutOf(runtimeTarget);
                 ASSERT(layout != nullptr, "NodeVM call layout cache must exist.");
                 bindDirectCallFrameSlots(currFrame, funcFrame, layout, argSlots, callArgScratch_);
-                slot_t callResult = call(runtimeTarget, funcFrame);
+                const bool writesBack = currCache->directCallWritesBack[i] != 0;
+                slot_t callResult     = call(runtimeTarget, funcFrame, writesBack);
+                if (writesBack) {
+                    camel::execute::writeBackVarArgs(
+                        currFrame,
+                        funcFrame,
+                        callerRuntimeGraph,
+                        nodeRef);
+                    framePool_.release(funcFrame);
+                }
 
                 if (n->dataIndex != 0) {
                     currFrame->set(n->dataIndex, callResult);
@@ -793,7 +823,9 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
         result = camel::execute::readRuntimeGraphReturn(currRuntimeGraph, currFrame);
 
         releaseTailFrames(tailLow, tailHigh);
-        framePool_.release(rootFrame);
+        if (!keepRootFrame) {
+            framePool_.release(rootFrame);
+        }
 
         return result;
     } catch (const RuntimeFault &fault) {

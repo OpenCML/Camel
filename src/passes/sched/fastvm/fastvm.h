@@ -141,6 +141,15 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     HigherOrderCallSite higherOrderCallSite(Function *func);
 
     void push(size_t pc, ctx::Frame *frame);
+    // `var` parameters (see camel::execute::writeBackVarArgs). At a RETN whose fastop[1] is
+    // set, the returning frame's `var` parameters are stored back into the argument slots of
+    // the direct call on top of the call stack.
+    void writeBackVarArgsToDirectCaller(ctx::Frame *callee);
+    // Runs an indirect call to a graph with `var` parameters in the interpreter and stores
+    // them back into the caller's argument slots; releases the callee frame.
+    slot_t callIndirectWithVarParams(
+        ctx::Frame *caller, ctx::Frame *callee, camel::runtime::GCGraph *target, data_arr_t nargs,
+        data_arr_t wargs);
     std::pair<size_t, ctx::Frame *> pop();
 
     void evalMarkedOperator(

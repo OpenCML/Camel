@@ -82,4 +82,20 @@ void fillFrameForIndirectCall(
     camel::core::context::Frame *from, camel::core::context::Frame *dest,
     camel::runtime::GCGraph *callerGraph, camel::runtime::gc_node_ref_t callNodeRef);
 
+/// True when `graph` declares a `var` parameter (norm or with).
+bool runtimeGraphHasVarParams(const camel::runtime::GCGraph *graph);
+
+/**
+ * `var` parameters are passed by reference: when a call returns, the value each `var`
+ * parameter holds in the callee frame `callee` is stored back into the slot of the argument the
+ * FUNC or CALL node `callNodeRef` of `callerGraph` passed for it. Schedulers call this after the
+ * callee ran and before its frame is released. The callee frame must be the one the arguments
+ * were bound into, so a graph with `var` parameters is neither entered nor left by a tail call.
+ * An argument that is a static constant is not written (constants are shared by every run of
+ * the caller graph).
+ */
+void writeBackVarArgs(
+    camel::core::context::Frame *caller, camel::core::context::Frame *callee,
+    camel::runtime::GCGraph *callerGraph, camel::runtime::gc_node_ref_t callNodeRef);
+
 } // namespace camel::execute

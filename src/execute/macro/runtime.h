@@ -92,7 +92,10 @@ class MacroEvaluator {
         ::Function *funcObj,
         const std::function<void(camel::core::context::Frame *, camel::runtime::GCGraph *)>
             &fillArgs,
-        bool requireMacroGraph);
+        bool requireMacroGraph,
+        // Runs on the callee frame after the body, before the frame is released (the caller
+        // reads the final values of `var` parameters from it).
+        const std::function<void(camel::core::context::Frame *)> &afterReturn = {});
     slot_t executeGraph(camel::core::context::Frame *frame, camel::runtime::GCGraph *runtimeGraph);
 };
 

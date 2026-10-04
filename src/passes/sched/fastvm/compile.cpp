@@ -183,6 +183,10 @@ static bytecode_vec_t compileRuntimeGraph(
         topoSortedIndices.begin(),
         topoSortedIndices.end());
     const auto tailValueNode       = resolveTailValueNode(graph);
+    // `var` parameters are written back from the callee frame when the call returns (RETN with
+    // fastop[1] set), so a graph that has them keeps its frame to the end: it makes no tail
+    // call, and is not tail-called.
+    const bool selfHasVarParams = camel::execute::runtimeGraphHasVarParams(graph);
     auto hasOnlyTrivialSuffixAfter = [&](size_t index) {
         for (size_t j = index + 1; j < topoSortedIndices.size(); ++j) {
             const auto *suffixNode = graph->node(topoSortedIndices[j]);
@@ -406,7 +410,10 @@ static bytecode_vec_t compileRuntimeGraph(
                     auto &jump     = bytecodes[jumpIdx];
                     auto &from     = bytecodes[fromIdx];
                     jump.fastop[0] = as_index(bytecodes.size());
-                    if (opt.enableTailCallDetection && isTail && from.opcode == OpCode::FUNC) {
+                    if (opt.enableTailCallDetection && isTail && from.opcode == OpCode::FUNC &&
+                        !selfHasVarParams &&
+                        !camel::execute::runtimeGraphHasVarParams(
+                            getFuncExtraRuntimeGraph(&from))) {
                         from.opcode = OpCode::TAIL;
                     }
                 }
@@ -435,8 +442,10 @@ static bytecode_vec_t compileRuntimeGraph(
             break;
 
         case camel::runtime::GCNodeKind::Func: {
-            bool isTail = runtimeNodeIndex == tailValueNode && hasOnlyTrivialSuffixAfter(i);
             auto *targetRuntimeGraph = graph->directCalleeGraphOf(runtimeNodeIndex);
+            bool isTail = runtimeNodeIndex == tailValueNode && hasOnlyTrivialSuffixAfter(i) &&
+                          !selfHasVarParams &&
+                          !camel::execute::runtimeGraphHasVarParams(targetRuntimeGraph);
             ASSERT(
                 targetRuntimeGraph != nullptr,
                 std::format(
@@ -600,7 +609,8 @@ static bytecode_vec_t compileRuntimeGraph(
         bytecodes,
         OpCode::RETN,
         0,
-        {static_cast<data_idx_t>(hasValueReturn ? runtimeDataIndexOf(graph, returnNodeRef) : 0)});
+        {static_cast<data_idx_t>(hasValueReturn ? runtimeDataIndexOf(graph, returnNodeRef) : 0),
+         static_cast<data_idx_t>(selfHasVarParams ? 1 : 0)});
 
     ASSERT(
         brchTargetMap.empty(),

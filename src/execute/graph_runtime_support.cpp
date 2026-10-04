@@ -744,6 +744,66 @@ void fillFrameForDirectInvoke(
     }
 }
 
+bool runtimeGraphHasVarParams(const camel::runtime::GCGraph *graph) {
+    const auto *type = graph ? graph->funcType() : nullptr;
+    if (type == nullptr) {
+        return false;
+    }
+    for (size_t i = 0; i < type->normTypesCount(); ++i) {
+        if (type->normIsVarAt(i)) {
+            return true;
+        }
+    }
+    for (size_t i = 0; i < type->withTypesCount(); ++i) {
+        if (type->withIsVarAt(i)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void writeBackVarArgs(
+    Frame *caller, Frame *callee, camel::runtime::GCGraph *callerGraph,
+    gc_node_ref_t callNodeIndex) {
+    if (caller == nullptr || callee == nullptr || callerGraph == nullptr) {
+        throw std::runtime_error("Frame or graph is null in runtime var-argument write-back.");
+    }
+    auto *targetGraph    = callee->runtimeGraph();
+    const auto *type     = targetGraph ? targetGraph->funcType() : nullptr;
+    const auto *callNode = callerGraph->node(callNodeIndex);
+    if (type == nullptr || callNode == nullptr) {
+        return;
+    }
+    const auto store = [&](gc_node_ref_t argRef, gc_node_ref_t portRef) {
+        const auto *arg  = callerGraph->node(argRef);
+        const auto *port = targetGraph->node(portRef);
+        // Slots above 0 belong to the frame; a static constant argument is left alone.
+        if (arg != nullptr && port != nullptr && arg->dataIndex > 0 && port->dataIndex > 0) {
+            caller->set(arg->dataIndex, callee->get<slot_t>(port->dataIndex));
+        }
+    };
+    const auto normInputs = callerGraph->normInputsOf(callNodeIndex);
+    const auto normPorts  = targetGraph->normPorts();
+    for (size_t i = 0;
+         i < type->normTypesCount() && i < normInputs.size() && i < normPorts.size();
+         ++i) {
+        if (type->normIsVarAt(i)) {
+            store(normInputs[i], normPorts[i]);
+        }
+    }
+    // An indirect CALL keeps the callee function in its first with input.
+    const size_t withOffset = callNode->kind == camel::runtime::GCNodeKind::Call ? 1 : 0;
+    const auto withInputs   = callerGraph->withInputsOf(callNodeIndex);
+    const auto withPorts    = targetGraph->withPorts();
+    for (size_t i = 0;
+         i < type->withTypesCount() && i + withOffset < withInputs.size() && i < withPorts.size();
+         ++i) {
+        if (type->withIsVarAt(i)) {
+            store(withInputs[i + withOffset], withPorts[i]);
+        }
+    }
+}
+
 void fillFrameForIndirectCall(
     Frame *from, Frame *dest, camel::runtime::GCGraph *callerGraph, gc_node_ref_t callNodeIndex) {
     if (from == nullptr || dest == nullptr) {

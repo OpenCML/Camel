@@ -361,6 +361,12 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
         if (!header) {
             return resolved;
         }
+        // A value that is written in place is a variable: the COPY behind `var c = 0` holds
+        // whatever was assigned to c since, and an argument passed to a `var` parameter is
+        // written by the callee. Neither has the static value it was initialized from.
+        if (isWrittenInPlace(draft, canonicalId)) {
+            return resolved;
+        }
         if (header->kind == GCNodeKind::Gate) {
             const auto normInputs = draft.normInputsOf(canonicalId);
             if (!normInputs.empty()) {

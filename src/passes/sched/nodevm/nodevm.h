@@ -37,6 +37,9 @@ struct NodeVMGraphCache {
     std::vector<camel::runtime::GCGraph *> directCallTargets;
     std::vector<uint8_t> directCallTailEligible;
     std::vector<uint8_t> directCallFeedsTailJoin;
+    // 1 when the FUNC at that topo index calls a graph with `var` parameters: the callee frame
+    // is kept until their final values are written back into the argument slots.
+    std::vector<uint8_t> directCallWritesBack;
     std::vector<uint32_t> directCallArgOffsets;
     std::vector<runtime_data_idx_t> directCallArgSlots;
     std::vector<runtime_data_idx_t> dataIndexByRef;
@@ -64,7 +67,10 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     std::vector<runtime_data_idx_t> operIndices_;
     std::vector<slot_t> callArgScratch_;
 
-    slot_t call(camel::runtime::GCGraph *runtimeGraph, ctx::Frame *rootFrame);
+    // With keepRootFrame the root frame is left to the caller on a normal return (it reads the
+    // final values of `var` parameters from it and releases it).
+    slot_t call(
+        camel::runtime::GCGraph *runtimeGraph, ctx::Frame *rootFrame, bool keepRootFrame = false);
     // Tail-call frame management (see the comment above call() in nodevm.cpp).
     ctx::Frame *tailCallFrame(
         camel::runtime::GCGraph *target, ctx::Frame *rootFrame, ctx::Frame *source,

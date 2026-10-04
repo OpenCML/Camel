@@ -65,13 +65,243 @@ timeout_ms = 4000
 
 [[tests]]
 name = "mutable_reference.nvm"
-desc = "Checks by-reference mutable updates propagate back through sync calls."
+desc = "A write to a var parameter is read by the caller after the call (0 before, 1 after), on: NodeVM."
 kind = "behavior"
 case = "../../../cases/linear/nvm/var.cml"
-args = ["${case}", "${run_nvm}"]
+args = ["${case}", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0 1', `unexpected output: ${out}`)
+}
+"""
 timeout_ms = 4000
+
+[[tests]]
+name = "mutable_reference.fvm"
+desc = "A write to a var parameter is read by the caller after the call (0 before, 1 after), on: FastVM."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "mutable_reference.jit"
+desc = "A write to a var parameter is read by the caller after the call (0 before, 1 after), on: the JIT."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "mutable_reference.tf"
+desc = "A write to a var parameter is read by the caller after the call (0 before, 1 after), on: Taskflow."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "mutable_reference.inline.nvm"
+desc = "A write to a var parameter is read by the caller after the call (0 before, 1 after), on: std::inline on NodeVM."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "mutable_reference.opt_cse.nvm"
+desc = "A write to a var parameter is read by the caller after the call (0 before, 1 after), on: std::opt std::opt::cse (used to exit 1: the assignment wrote a constant the exit code shared)."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var.cml"
+args = ["${case}", "std::opt", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "mutable_reference.simplify_cse.nvm"
+desc = "A write to a var parameter is read by the caller after the call (0 before, 1 after), on: std::opt::simplify std::opt::cse (used to exit 1)."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var.cml"
+args = ["${case}", "std::opt::simplify", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "var_params.nvm"
+desc = "var parameters are passed by reference through direct, nested and indirect calls, tuple replacement and a hot loop, on: NodeVM."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var_params.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '1 3 13 6 15 8 113 20001', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "var_params.fvm"
+desc = "var parameters are passed by reference through direct, nested and indirect calls, tuple replacement and a hot loop, on: FastVM."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var_params.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '1 3 13 6 15 8 113 20001', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "var_params.jit"
+desc = "var parameters are passed by reference through direct, nested and indirect calls, tuple replacement and a hot loop, on: the JIT."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var_params.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '1 3 13 6 15 8 113 20001', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "var_params.tf"
+desc = "var parameters are passed by reference through direct, nested and indirect calls, tuple replacement and a hot loop, on: Taskflow."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var_params.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '1 3 13 6 15 8 113 20001', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "var_params.inline.fvm"
+desc = "var parameters are passed by reference through direct, nested and indirect calls, tuple replacement and a hot loop, on: std::inline on FastVM."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var_params.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '1 3 13 6 15 8 113 20001', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "var_params.opt.nvm"
+desc = "var parameters are passed by reference through direct, nested and indirect calls, tuple replacement and a hot loop, on: std::opt."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var_params.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '1 3 13 6 15 8 113 20001', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "var_params.opt_cse.nvm"
+desc = "var parameters are passed by reference through direct, nested and indirect calls, tuple replacement and a hot loop, on: std::opt std::opt::cse."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var_params.cml"
+args = ["${case}", "std::opt", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '1 3 13 6 15 8 113 20001', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "var_params.simplify_cse.jit"
+desc = "var parameters are passed by reference through direct, nested and indirect calls, tuple replacement and a hot loop, on: std::opt::simplify std::opt::cse on the JIT."
+kind = "behavior"
+case = "../../../cases/linear/nvm/var_params.cml"
+args = ["${case}", "std::opt::simplify", "std::opt::cse", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '1 3 13 6 15 8 113 20001', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
 
 
 [[tests]]
