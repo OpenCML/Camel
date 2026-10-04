@@ -738,3 +738,48 @@ assert(out.includes('[      3.,       3.,       3.,       3.]') && out.endsWith(
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "specialize_growing_shape.fold_specialize.nvm"
+desc = "A recursion whose tensor argument grows one row per level has a different argument type at every level; type-only specialization of the recursive function is bounded (8 copies), after which the call keeps its callee. The pass used not to terminate. Under: std::opt::fold std::specialize."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialize_growing_shape.cml"
+args = ["${case}", "std::opt::fold", "std::specialize", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '[12, 2]\n36', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "specialize_growing_shape.fold_specialize.bounded"
+desc = "The program after std::opt::fold std::specialize holds a bounded number of graphs (the 8 type specializations of the recursion's branch arm and what they call), and still prints the zero-pass output."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialize_growing_shape.cml"
+args = ["${case}", "std::opt::fold", "std::specialize", "std::stats", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
+assert(stats.graphs > 5 && stats.graphs <= 40, `unexpected graph count: ${stats.graphs}`)
+assert(out.endsWith('[12, 2]\n36'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "reshape_view_gc.fold_specialize.nvm"
+desc = "The corpus program of the same defect (a recursion that concatenates onto its tensor argument): std::opt::fold std::specialize terminates and reproduces the zero-pass output."
+kind = "behavior"
+case = "../../../cases/modules/tensor/reshape_view_gc.cml"
+args = ["${case}", "std::opt::fold", "std::specialize", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["total 16380", "[      2.,       4.,       6.,       8.,      10.,      12.]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

@@ -845,11 +845,34 @@ bool specializeDirectFuncInDraft(
         return false;
     }
 
+    // Type-only specialization of a recursive function is bounded (see
+    // kMaxTypeSpecializationsPerRecursiveFunction); a copy that already exists is reused freely.
+    const bool boundedTypeSpecialization =
+        std::ranges::none_of(bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); }) &&
+        onCallCycle(funcBody->calleeGraph);
+    if (boundedTypeSpecialization &&
+        !session.findSpecialization(
+            makeRuntimeSpecializationKey(funcBody->calleeGraph, bindings))) {
+        const std::string root = typeSpecializationRoot(funcBody->calleeGraph->stableId());
+        if (session.typeSpecializationCount(root) >=
+            kMaxTypeSpecializationsPerRecursiveFunction) {
+            CAMEL_LOG_INFO_S(
+                "DraftOpt",
+                "FUNC node {} keeps callee '{}': '{}' has {} type specializations.",
+                funcNodeId,
+                funcBody->calleeGraph->name(),
+                root,
+                kMaxTypeSpecializationsPerRecursiveFunction);
+            return false;
+        }
+        session.noteTypeSpecialization(root);
+    }
+
     GCGraph *specializedGraph = specializeGraphWithBindings(
         session,
         funcBody->calleeGraph,
         bindings,
-        "spec",
+        boundedTypeSpecialization ? kTypeSpecializationTag : std::string_view("spec"),
         specializationNonce++);
     ASSERT(specializedGraph != nullptr, "Direct FUNC specialization produced a null graph.");
 
