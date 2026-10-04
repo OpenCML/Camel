@@ -384,10 +384,29 @@ parameters back). Note that `camel_opt` in `run.py` (inference) is
 `tensor::fuse`, not `std::opt::simplify`.
 
 **Reconciliation before timing.** `reconcile_train.py` checks, per model,
-configuration and protocol, that a step executes the full gradient-operator
-multiset (per-step counts from `CAMEL_TENSOR_OPSTATS=1`, expected = what
-`camel_nvm` executes), that the update is consumed, and that the final
-parameters agree with PyTorch; it writes `reconciliation.csv` with a verdict.
+configuration and protocol, the gradient operators a step executes (per-step
+counts from `CAMEL_TENSOR_OPSTATS=1`), that the update is consumed, and that
+the final parameters agree with PyTorch; it writes `reconciliation.csv` with a
+verdict. The rule for gradient operators: every gradient operator whose result
+reaches a parameter update or the returned loss is executed under the optimised
+configuration; operators whose results are provably unused (e.g. the gradient
+with respect to the model input) may be eliminated. The reference multiset is
+what `camel_nvm` executes. Configurations without an optimisation pass must
+execute exactly the reference; optimised ones at least the reference minus the
+operators the script proves unused, and nothing beyond the reference. The proof
+is a demand analysis the script runs on the model's `step` graph after
+`std::macro` (`camel model.cml std::macro std::rgir`): demand starts at what
+`step` returns (the loss and the updated parameters) and follows data edges
+backwards through calls, closures and tuple slots; a gradient operator the
+demand never reaches is unused. There is no per-model list. The analysis is
+accepted only when the per-step gradient multiset it derives from the graph
+equals the measured reference, and only for operators whose per-step count the
+graph fixes (not inside a recursion or a branch arm); otherwise nothing is
+exempted. It does not distinguish call sites, so an operator in a function
+called from several places counts as used if any call uses it. Per model it
+writes `evidence/<model>/unused_gradients.txt` (every gradient operator of the
+step, its operands with source positions, demanded or unused, and for unused
+ones every consumer of the result) next to the graph it read.
 `train.py --time --reconciliation <csv>` times only the PASS pairs.
 `d13_train_eval.py --out <dir>` runs the whole sequence (weights,
 reconciliation under both protocols, timing) and writes the raw logs,

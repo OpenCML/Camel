@@ -13,6 +13,8 @@ and writes under ``--out``:
 
   raw/                         every Camel run (one file each) and the console log of each stage
   summary/reconciliation.csv   verdict per model x config x protocol (+ opcounts.csv)
+  evidence/<model>/            the graph after std::macro and the analysis of its gradient
+                               operators (which are unused and why), written by reconcile_train.py
   summary/train.csv            model, config, trial, ms_per_step ... for pairs whose
                                reconciliation verdict is PASS (and the PyTorch reference)
   summary/train_unreconciled.csv   the same columns for pairs whose verdict is not PASS;
