@@ -17,10 +17,28 @@ the records only (no manual overrides), first matching rule wins:
                     `clean` (nothing was printed and no run-stage effect happened before it).
   RUN_FAIL          a diagnostic of stage run (or any other stage): the program started
                     executing and failed, although P0 succeeded.
-  VALUE_MISMATCH    exit code or program output differs from P0.
-  EFFECT_MISMATCH   same exit code and output, but the effect trace (operator, payload hash,
-                    in order) differs.
+  ERROR_NO_DIAGNOSTIC  non-zero exit with an error text but no structured diagnostic (an
+                    internal error surfaced as plain text), although P0 succeeded.
+  VALUE_MISMATCH    exit code or program output differs from P0. Output is compared as text
+                    with numeric tolerance (plan C-3): the non-numeric text must be identical,
+                    integers equal, and every floating-point number within
+                    |a-b| <= 1e-5 * max(1, |a|). Cells that differ in text but pass this test
+                    are CONSISTENT with `numeric_diff` set (counted separately); cells that
+                    fail at 1e-5 but pass at 1e-3 are VALUE_MISMATCH tagged `near`.
+  EFFECT_MISMATCH   same exit code and output, but the ordered sequence of executed effectful
+                    operators differs (see "Effect sequence" below).
   CONSISTENT        none of the above.
+
+Effect sequence. The trace lists every executed operator that is not registered pure. Two
+adjustments are made before comparing, both decided after the first run on existing programs
+showed what the raw trace contains (the first classification is kept with the results):
+  - macro operators (`autodiff:grad`, `autodiff:value_and_grad`, `autodiff:vjp`) are left out:
+    they build a function value and have no effect outside the program; `std::macro` evaluates
+    them once ahead of time by design, so their count is not an observable.
+  - payload hashes are not part of the sequence. A payload hashes the argument values at full
+    precision, so two runs whose printed output is identical can still differ in the last
+    bits of a float argument. Cells whose sequence agrees but whose payloads differ are
+    CONSISTENT with `payload_differs` set, and are counted separately.
 
 `deterministic` is false when the repeats of that (program, pipeline) differ from each other;
 such cells keep the outcome of the first repeat and are listed for investigation.
@@ -43,6 +61,7 @@ import argparse
 import collections
 import csv
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -50,15 +69,41 @@ from typing import Dict, List, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pipelines as pl  # noqa: E402
 
-VIOLATIONS = {"HANG", "CRASH", "CAPTURE_FAIL", "RUN_FAIL", "VALUE_MISMATCH", "EFFECT_MISMATCH"}
+VIOLATIONS = {"HANG", "CRASH", "CAPTURE_FAIL", "RUN_FAIL", "ERROR_NO_DIAGNOSTIC", "VALUE_MISMATCH",
+              "EFFECT_MISMATCH"}
+
+_NUM = re.compile(r"[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?")
+
+
+def numeric_compare(ref: str, got: str, tol: float) -> bool:
+    """True when the two texts are equal except for floating-point numbers within `tol`."""
+    if _NUM.sub("#", ref) != _NUM.sub("#", got):
+        return False
+    for a, b in zip(_NUM.findall(ref), _NUM.findall(got)):
+        if a == b:
+            continue
+        if not any(c in a + b for c in ".eE"):
+            return False  # integers must match exactly
+        x, y = float(a), float(b)
+        if abs(x - y) > tol * max(1.0, abs(x)):
+            return False
+    return True
 
 
 def errors_of(rec: dict) -> List[dict]:
     return [d for d in (rec.get("diagnostics") or []) if d.get("severity") == "Error"]
 
 
-def effect_key(rec: dict) -> List[Tuple[str, str]]:
-    return [(e.get("uri", "?"), e.get("payload_sha1", "?")) for e in rec.get("effects", [])]
+MACRO_OPERATORS = {"autodiff:grad", "autodiff:value_and_grad", "autodiff:vjp"}
+
+
+def effect_key(rec: dict) -> List[str]:
+    return [e.get("uri", "?") for e in rec.get("effects", []) if e.get("uri") not in MACRO_OPERATORS]
+
+
+def effect_payloads(rec: dict) -> List[str]:
+    return [e.get("payload_sha1", "?") for e in rec.get("effects", [])
+            if e.get("uri") not in MACRO_OPERATORS]
 
 
 def effect_origins(rec: dict) -> List[Optional[Tuple[str, int, int]]]:
@@ -107,6 +152,7 @@ def classify_ref(recs: List[dict]) -> Tuple[str, str]:
 def classify_cell(ref: dict, recs: List[dict]) -> dict:
     r = recs[0]
     info = {"outcome": "", "detail": "", "anchored": "", "clean": "", "diag_stage": "", "diag_name": "",
+            "payload_differs": False, "numeric_diff": False,
             "deterministic": len({observation(x) for x in recs}) == 1}
     errs = errors_of(r)
     if errs:
@@ -131,16 +177,28 @@ def classify_cell(ref: dict, recs: List[dict]) -> dict:
                         anchored=anchored(errs[0]), clean=(r["output"] == "" and not ran))
         else:
             info.update(outcome="RUN_FAIL", detail=errs[0].get("message", "")[:160], anchored=anchored(errs[0]))
+    elif r["exit_code"] != 0 and ref["exit_code"] == 0:
+        info.update(outcome="ERROR_NO_DIAGNOSTIC",
+                    detail=f"exit {r['exit_code']}; " + (r["output"].strip().splitlines() or [""])[-1][:160])
+    elif (r["exit_code"] == ref["exit_code"] and r["output_sha1"] != ref["output_sha1"]
+          and effect_key(r) == effect_key(ref) and numeric_compare(ref["output"], r["output"], 1e-5)):
+        info.update(outcome="CONSISTENT", numeric_diff=True, detail=first_diff(ref["output"], r["output"]),
+                    payload_differs=effect_payloads(r) != effect_payloads(ref))
     elif r["exit_code"] != ref["exit_code"] or r["output_sha1"] != ref["output_sha1"]:
         reorder = sorted(r["output"].splitlines()) == sorted(ref["output"].splitlines())
         detail = f"exit {ref['exit_code']} -> {r['exit_code']}; " if r["exit_code"] != ref["exit_code"] else ""
         info.update(outcome="VALUE_MISMATCH",
-                    detail=detail + ("same lines, different order; " if reorder else "") + first_diff(ref["output"], r["output"]))
+                    detail=detail + ("same lines, different order; " if reorder else "")
+                    + ("near (within 1e-3); " if numeric_compare(ref["output"], r["output"], 1e-3) else "")
+                    + first_diff(ref["output"], r["output"]))
     elif effect_key(r) != effect_key(ref):
+        a, b = effect_key(ref), effect_key(r)
+        at = next((i for i in range(min(len(a), len(b))) if a[i] != b[i]), min(len(a), len(b)))
         info.update(outcome="EFFECT_MISMATCH",
-                    detail=f"{len(effect_key(ref))} effect(s) in reference, {len(effect_key(r))} here")
+                    detail=f"{len(a)} effect(s) in reference, {len(b)} here; first difference at #{at}: "
+                           f"ref={a[at] if at < len(a) else '<end>'} got={b[at] if at < len(b) else '<end>'}")
     else:
-        info.update(outcome="CONSISTENT")
+        info.update(outcome="CONSISTENT", payload_differs=effect_payloads(r) != effect_payloads(ref))
         ro, po = effect_origins(ref), effect_origins(r)
         if any(a and b and a != b for a, b in zip(ro, po)):
             info["detail"] = "effect origins differ"
@@ -194,7 +252,9 @@ def main() -> int:
                          "pipeline_id": pid, "passes": " ".join(recs[0]["passes"]),
                          "outcome": info["outcome"], "deterministic": info["deterministic"],
                          "anchored": info["anchored"], "clean": info["clean"],
-                         "macro_stage": macro_stage, "diag_stage": info["diag_stage"],
+                         "macro_stage": macro_stage, "payload_differs": info["payload_differs"],
+                         "numeric_diff": info["numeric_diff"],
+                         "diag_stage": info["diag_stage"],
                          "diag_name": info["diag_name"], "detail": info["detail"]})
 
     def write_csv(name: str, data: List[dict]) -> None:
@@ -237,8 +297,11 @@ def main() -> int:
             "violations": len(viol),
             "violations_macro_stage": sum(1 for r in viol if r["macro_stage"]),
             "value_mismatch": cnt["VALUE_MISMATCH"], "effect_mismatch": cnt["EFFECT_MISMATCH"],
-            "run_fail": cnt["RUN_FAIL"], "crash": cnt["CRASH"], "hang": cnt["HANG"],
+            "run_fail": cnt["RUN_FAIL"], "error_no_diagnostic": cnt["ERROR_NO_DIAGNOSTIC"],
+            "crash": cnt["CRASH"], "hang": cnt["HANG"],
             "capture_fail": cnt["CAPTURE_FAIL"],
+            "numeric_diff": sum(1 for r in prs if r["numeric_diff"]),
+            "payload_differs": sum(1 for r in prs if r["payload_differs"]),
             "non_deterministic": sum(1 for r in prs if not r["deterministic"]),
         })
     write_csv("by_pipeline.csv", by_pipeline)
@@ -257,6 +320,8 @@ def main() -> int:
         "refused_not_clean": sum(1 for r in rows if r["outcome"] == "REFUSED" and r["clean"] is False),
         "violation_cells": sum(1 for r in rows if is_violation(r)),
         "violation_cells_macro_stage": sum(1 for r in rows if is_violation(r) and r["macro_stage"]),
+        "consistent_with_numeric_output_difference_within_1e-5": sum(1 for r in rows if r["numeric_diff"]),
+        "consistent_with_payload_difference": sum(1 for r in rows if r["payload_differs"]),
         "non_deterministic_cells": sum(1 for r in rows if not r["deterministic"]),
         "programs_with_violation": len(prog_with_violation),
         "pipelines_with_violation": len({r["pipeline_id"] for r in rows if is_violation(r)}),
