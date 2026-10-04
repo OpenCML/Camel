@@ -1,0 +1,14 @@
+module recursion_depth_limit
+
+// Non-tail recursion is limited to 256 frames on NodeVM, FastVM and the JIT. depth(200) fits;
+// depth(300) stops with MaxRecursionDepthExceeded at the recursive call, after what ran before it.
+func depth(n: int): int {
+    return if n == 0 then 0 else 1 + depth(n - 1)
+}
+
+func main(): int sync {
+    println(depth(200))
+    println(depth(300))
+    println('not reached')
+    return 0
+}

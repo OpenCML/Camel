@@ -17,3 +17,67 @@ expect_diagnostic_column = 16
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
+
+[[tests]]
+name = "recursion_depth_limit.nvm"
+desc = "Non-tail recursion past the 256-frame limit stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (NodeVM); depth(200) printed before it, nothing after."
+kind = "negative"
+case = "../../../cases/linear/runtime/recursion_depth_limit.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_code = "0x04000004"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 43
+expect_stdout_contains = ["200", "Maximum recursion depth (256) exceeded"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "recursion_depth_limit.fvm"
+desc = "Non-tail recursion past the 256-frame limit stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (FastVM); depth(200) printed before it, nothing after."
+kind = "negative"
+case = "../../../cases/linear/runtime/recursion_depth_limit.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_code = "0x04000004"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 43
+expect_stdout_contains = ["200", "Maximum recursion depth (256) exceeded"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "recursion_depth_limit.jit"
+desc = "Non-tail recursion past the 256-frame limit stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (the JIT); depth(200) printed before it, nothing after."
+kind = "negative"
+case = "../../../cases/linear/runtime/recursion_depth_limit.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_code = "0x04000004"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 43
+expect_stdout_contains = ["200", "Maximum recursion depth (256) exceeded"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "recursion_depth_limit.inline_nvm"
+desc = "Non-tail recursion past the 256-frame limit stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (NodeVM after std::inline); depth(200) printed before it, nothing after."
+kind = "negative"
+case = "../../../cases/linear/runtime/recursion_depth_limit.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_code = "0x04000004"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 43
+expect_stdout_contains = ["200", "Maximum recursion depth (256) exceeded"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

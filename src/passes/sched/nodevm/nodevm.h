@@ -71,6 +71,10 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     // final values of `var` parameters from it and releases it).
     slot_t call(
         camel::runtime::GCGraph *runtimeGraph, ctx::Frame *rootFrame, bool keepRootFrame = false);
+    // Raises MaxRecursionDepthExceeded when one more non-tail call would exceed the limit. It is
+    // checked in the caller, before the call, so the diagnostic points at the call expression
+    // (as FastVM's does) and not at the callee's definition.
+    void requireRecursionRoom(const camel::runtime::GCGraph *caller) const;
     // Tail-call frame management (see the comment above call() in nodevm.cpp).
     ctx::Frame *tailCallFrame(
         camel::runtime::GCGraph *target, ctx::Frame *rootFrame, ctx::Frame *source,

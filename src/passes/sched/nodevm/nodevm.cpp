@@ -421,6 +421,15 @@ void NodeVMSchedPass::releaseTailFrames(Frame *&tailLow, Frame *&tailHigh) {
 
 // Execute one runtime graph call. Arguments for CALL/FUNC are copied from the
 // source frame into the callee frame's ports and closure slots.
+void NodeVMSchedPass::requireRecursionRoom(const camel::runtime::GCGraph *caller) const {
+    if (currRecursionDepth_ >= maxRecursionDepth_) {
+        throwRuntimeFault(
+            RuntimeDiag::MaxRecursionDepthExceeded,
+            caller->name(),
+            maxRecursionDepth_);
+    }
+}
+
 slot_t NodeVMSchedPass::call(
     camel::runtime::GCGraph *rootRuntimeGraph, Frame *rootFrame, bool keepRootFrame) {
     currRecursionDepth_++;
@@ -654,6 +663,7 @@ slot_t NodeVMSchedPass::call(
                     funcRuntimeGraph != nullptr,
                     "NodeVM indirect CALL requires a materialized runtime graph target.");
 
+                requireRecursionRoom(currRuntimeGraph);
                 Frame *funcFrame = framePool_.acquire(funcRuntimeGraph);
                 camel::execute::fillFrameForIndirectCall(
                     currFrame,
@@ -721,6 +731,7 @@ slot_t NodeVMSchedPass::call(
                     goto loop_start;
                 }
 
+                requireRecursionRoom(currRuntimeGraph);
                 Frame *funcFrame    = framePool_.acquire(runtimeTarget);
                 const auto argSlots = directCallArgSlotsOf(currCache, i);
                 topoNodesFor(runtimeTarget);
