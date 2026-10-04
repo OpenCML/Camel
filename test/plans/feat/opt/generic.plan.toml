@@ -783,3 +783,100 @@ expect_exit = 0
 expect_stdout_contains = ["total 16380", "[      2.,       4.,       6.,       8.,      10.,      12.]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "simplify_growth_budget.simplify.nvm"
+desc = "std::opt::simplify unrolls a recursion with constant arguments one level per round; the growth budget (4096 copied nodes) stops it and leaves the remaining calls as calls. fib(10) and fib(18) keep their values. Before the budget the pass ran for tens of seconds and then failed on the 16-bit edge arena."
+kind = "behavior"
+case = "../../../cases/opt/generic/simplify_growth_budget.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '55\n2584\n2639', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_growth_budget.inline_simplify.fvm"
+desc = "The same program with std::inline before std::opt::simplify (the order that reached the arena error first, and a segfault with two calls). Under: std::inline std::opt::simplify std::fvm."
+kind = "behavior"
+case = "../../../cases/opt/generic/simplify_growth_budget.cml"
+args = ["${case}", "std::inline", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '55\n2584\n2639', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_growth_budget.calls_remain"
+desc = "After the budget is spent the program still holds direct calls of fib (it is not the whole call tree) and stays small: std::stats reports fewer than 4000 nodes and more than 100 direct calls."
+kind = "behavior"
+case = "../../../cases/opt/generic/simplify_growth_budget.cml"
+args = ["${case}", "std::opt::simplify", "std::stats", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
+assert(stats.nodes < 4000, `program too large: ${stats.nodes} nodes`)
+assert(stats.direct_calls > 100, `expected remaining calls, got ${stats.direct_calls}`)
+assert(out.endsWith('55\n2584\n2639'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_growth_budget.env_override"
+desc = "CAMEL_OPT_GROWTH_BUDGET overrides the budget: with 0 nothing is specialized or inlined and the program keeps its size (fewer than 60 nodes) and its output."
+kind = "behavior"
+case = "../../../cases/opt/generic/simplify_growth_budget.cml"
+args = ["${case}", "std::opt::simplify", "std::stats", "std::nvm"]
+envs = ["CAMEL_OPT_GROWTH_BUDGET=0"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
+assert(stats.nodes < 60, `program grew: ${stats.nodes} nodes`)
+assert(out.endsWith('55\n2584\n2639'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "fib_recursive.simplify.nvm"
+desc = "The corpus program of the same defect: test/cases/linear/jit/fib_recursive.cml under std::opt::simplify finishes within the budget and prints the zero-pass output."
+kind = "behavior"
+case = "../../../cases/linear/jit/fib_recursive.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["fib_recursive f0=0 f1=1 f10=55 f15=610"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "specialize_growing_shape.simplify.nvm"
+desc = "The growing-shape recursion under std::opt::simplify: with type specialization bounded, the inliner kept unrolling it until the permanent space was exhausted (a segfault); the growth budget stops it. Output equals the zero-pass output."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialize_growing_shape.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '[12, 2]\n36', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000

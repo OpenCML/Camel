@@ -105,6 +105,21 @@ Setting the environment variable `CAMEL_EFFECT_TRACE=<file>` makes the process a
 
 The trace is written by a wrapper installed where operator URIs are resolved, so all back ends (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`) and the macro evaluator are covered. It does not record whether the operator ran inside a `sync` scope. The file is truncated at the first effect of each process. See `include/camel/core/effect_trace.h`.
 
+### Resource limits
+
+Limits of the compiler and the back ends. A pass that reaches one of its limits stops transforming and passes the program on (it means the same, it is only less optimized), unless the table says it fails.
+
+| Limit | Value | Adjustable | When reached |
+|---|---|---|---|
+| Growth of `std::inline`, `std::specialize`, `std::opt`, `std::opt::simplify` (nodes copied by specializing and inlining; one budget for all rounds of `std::opt::simplify`) | 4096 nodes | `CAMEL_OPT_GROWTH_BUDGET=<nodes>` | nothing further is specialized or inlined; the remaining calls stay calls. Logged with `-v` |
+| Size of a graph that `std::inline` inlines into | 4096 nodes | no | that call is not inlined |
+| Rounds of `std::opt::simplify` | 16 | no | the program is passed on as it is. Logged with `-v` |
+| Type-only specializations of one recursive function (a tensor argument whose shape changes at every level of the recursion) | 8 | no | the call keeps its callee |
+| Nodes, node blocks and edges of one graph | 65535 each (16-bit) | no | the pass that built the graph fails with `RuntimeDiag::PassInternalError` (`... exceeds the target integral width`) before anything runs |
+| Permanent space (types and layouts) | 32 MB | no | the pass fails with `RuntimeDiag::PassInternalError` (`Permanent space exhausted`) before anything runs |
+
+`std::opt::simplify` unrolls a recursion whose arguments are constants one level per round (`fib(15)` would become its whole call tree); the growth budget is what stops it. `onnx.export_model` simplifies the function it exports without the growth budget and the inline size cap, because an export has to reach straight-line code; a pipeline that exports through `std::opt::simplify onnx::export` is held to them and may need `CAMEL_OPT_GROWTH_BUDGET` raised for a large model (the export pass then refuses with `TranslationRefused` rather than writing a partial model).
+
 ---
 
 ## Information Display

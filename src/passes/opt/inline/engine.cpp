@@ -39,6 +39,7 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <format>
 #include <functional>
 #include <stdexcept>
@@ -455,10 +456,11 @@ bool shouldSkipRecursiveInline(
     return false;
 }
 
-/// The rewritten root, or nullptr when nothing changed.
+/// The rewritten root, or nullptr when nothing changed. `growthSpent` counts the nodes copied
+/// so far against `growthBudget` (see OptimizeRewriteConfig::growthBudgetNodes).
 GCGraph *applyRuntimeOptimizeRewrite(
     const camel::core::context::context_ptr_t &context, GCGraph *runtimeRoot,
-    const OptimizeRewriteConfig &config) {
+    const OptimizeRewriteConfig &config, size_t growthBudget, size_t &growthSpent) {
     camel::runtime::RuntimeGraphDraftSession session(context, runtimeRoot);
     bool changed              = false;
     size_t appliedInlineCount = 0;
@@ -548,9 +550,17 @@ GCGraph *applyRuntimeOptimizeRewrite(
                     if (!draft.alive(funcNodeId)) {
                         continue;
                     }
+                    if (growthSpent >= growthBudget) {
+                        break; // out of growth budget: a specialization is a copy of the callee
+                    }
                     if (camel::runtime::specializeDirectFuncInDraft(session, draft, funcNodeId)) {
                         changed      = true;
                         roundChanged = true;
+                        // The callee after the rewrite is the copy (counted in full even when
+                        // an existing copy was reused).
+                        const auto *body =
+                            reinterpret_cast<const GCFuncBody *>(draft.payloadOf(funcNodeId).data());
+                        growthSpent += body->calleeGraph ? body->calleeGraph->nodeCount() : 0;
                     }
                 }
             }
@@ -613,6 +623,12 @@ GCGraph *applyRuntimeOptimizeRewrite(
                         body->calleeGraph,
                         sccInfo,
                         config.inlineConfig)) {
+                    continue;
+                }
+                // Growth: the copy must fit the pass's budget and the owner's size cap.
+                const size_t copied = inlinedNodeCount(body->calleeGraph);
+                if (growthSpent + copied > growthBudget ||
+                    draft.nodeCount() + copied > config.inlineConfig.maxOwnerNodes) {
                     continue;
                 }
 
@@ -694,11 +710,15 @@ GCGraph *applyRuntimeOptimizeRewrite(
                         }
                     }
                 }
+                const size_t copied = inlinedNodeCount(
+                    reinterpret_cast<const GCFuncBody *>(draft.payloadOf(funcNodeId).data())
+                        ->calleeGraph);
                 const auto inlineResult =
                     camel::runtime::inlineCallableInDraft(session, draft, funcNodeId);
                 if (!inlineResult) {
                     continue;
                 }
+                growthSpent += copied;
                 for (const auto &[user, missing] : callUsers) {
                     if (!draft.alive(user)) {
                         continue;
@@ -749,6 +769,17 @@ GCGraph *applyRuntimeOptimizeRewrite(
 
 } // namespace
 
+size_t optimizeGrowthBudget(const OptimizeRewriteConfig &config) {
+    if (const char *text = std::getenv(kGrowthBudgetEnvVar); text && *text) {
+        char *end                      = nullptr;
+        const unsigned long long value = std::strtoull(text, &end, 10);
+        if (end && *end == 0) {
+            return static_cast<size_t>(value);
+        }
+    }
+    return config.growthBudgetNodes;
+}
+
 camel::runtime::GCGraph *applyOptimizeRewritePass(
     const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *graph,
     std::ostream &os, const OptimizeRewriteConfig &config, bool *changedOut) {
@@ -760,18 +791,31 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
     if (!hasAnyRewritePhaseEnabled(config)) {
         return graph;
     }
+    const size_t growthBudget = optimizeGrowthBudget(config);
+    size_t ownGrowthSpent     = 0;
+    size_t &growthSpent       = config.growthSpentNodes ? *config.growthSpentNodes : ownGrowthSpent;
+    const bool hadBudget      = growthSpent < growthBudget;
     // A session only inlines calls that existed when it started; calls exposed by its own
     // inlining (nested helpers, devirtualized pullbacks) wait for the next session. Repeat until
     // nothing changes; the bound only guards against a rewrite that never settles.
     constexpr size_t kMaxSessions = 32;
     bool changed                  = false;
     for (size_t i = 0; i < kMaxSessions; ++i) {
-        GCGraph *rewritten = applyRuntimeOptimizeRewrite(context, graph, config);
+        GCGraph *rewritten =
+            applyRuntimeOptimizeRewrite(context, graph, config, growthBudget, growthSpent);
         if (!rewritten) {
             break;
         }
         changed = true;
         graph   = rewritten;
+    }
+    if (hadBudget && growthSpent >= growthBudget) {
+        CAMEL_LOG_WARN_S(
+            "OptimizePass",
+            "Growth budget of {} nodes reached ({} overrides it): the remaining calls are "
+            "neither specialized nor inlined.",
+            growthBudget,
+            kGrowthBudgetEnvVar);
     }
     if (changedOut) {
         *changedOut = changed;

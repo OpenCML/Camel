@@ -812,7 +812,14 @@ GCGraph *DeadCodePass::apply(GCGraph *graph, std::ostream &) {
 
 GCGraph *simplifyGraph(
     const camel::core::context::context_ptr_t &context, GCGraph *graph,
-    const OptimizeRewriteConfig &config, std::ostream &os, size_t maxRounds) {
+    const OptimizeRewriteConfig &baseConfig, std::ostream &os, size_t maxRounds) {
+    // One growth budget for all rounds: each round unrolls a recursion with constant arguments
+    // one level further, so a budget per round would only be reached after maxRounds of them.
+    size_t growthSpent           = 0;
+    OptimizeRewriteConfig config = baseConfig;
+    if (!config.growthSpentNodes) {
+        config.growthSpentNodes = &growthSpent;
+    }
     for (size_t round = 0; round < maxRounds; ++round) {
         bool optChanged = false;
         graph = applyOptimizeRewritePass(context, graph, os, config, &optChanged);

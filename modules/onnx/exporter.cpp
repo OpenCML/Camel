@@ -1224,6 +1224,11 @@ simplifyFully(const core::context::context_ptr_t &context, GCGraph *root, std::o
     // only walked as a value DAG from here on (no execution topo is built), so the sibling
     // JOINs this creates are valid.
     config.enableBranchedCallSplit = true;
+    // An export has to reach straight-line code or it is refused, so it is not held to the
+    // growth bounds that keep an optimization pass cheap (CAMEL_OPT_GROWTH_BUDGET still applies
+    // when set). A graph too large for the runtime representation fails at commit.
+    config.growthBudgetNodes          = std::numeric_limits<size_t>::max();
+    config.inlineConfig.maxOwnerNodes = std::numeric_limits<size_t>::max();
     // Recursion unrolls about one level per round; one of dynamic depth stops changing instead.
     constexpr size_t kMaxRounds = 4096;
     // Macros (grad, value_and_grad) expand once their arguments are constants, which

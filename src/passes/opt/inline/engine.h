@@ -34,6 +34,10 @@
 #include "camel/execute/pass/opt.h"
 #include "config.h"
 
+/// The growth budget in effect: CAMEL_OPT_GROWTH_BUDGET when it holds a number, else
+/// `config.growthBudgetNodes`.
+size_t optimizeGrowthBudget(const OptimizeRewriteConfig &config);
+
 camel::runtime::GCGraph *applyOptimizeRewritePass(
     const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *graph,
     std::ostream &os, const OptimizeRewriteConfig &config, bool *changed = nullptr);
