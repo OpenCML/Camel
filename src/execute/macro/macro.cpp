@@ -38,6 +38,7 @@ camel::runtime::GCGraph *MacroRewritePass::apply(camel::runtime::GCGraph *graph,
 
     while (true) {
         bool roundChanged     = false;
+        evaluator.beginRound();
         auto runtimeGraphs    = runtimeSession.collectReachableRuntimeGraphs();
         const auto candidates = camel::execute::macro_runtime::collectMacroCandidates(
             std::span<camel::runtime::GCGraph *const>(runtimeGraphs.data(), runtimeGraphs.size()));
@@ -55,6 +56,8 @@ camel::runtime::GCGraph *MacroRewritePass::apply(camel::runtime::GCGraph *graph,
         }
 
         if (!roundChanged) {
+            // Nothing evaluates any more: the calls that failed in this round stay calls.
+            evaluator.reportFailures();
             break;
         }
         graph = runtimeSession.commit();

@@ -40,6 +40,8 @@ enum class RuntimeDiag : uint32_t {
     UnrecognizedGraphPass     = 0x00000A,
     TranslationRefused        = 0x00000B,
     PassInternalError         = 0x00000C,
+    // Warnings (severity bits = Warn).
+    MacroEvaluationDeferred = 0x10000D,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

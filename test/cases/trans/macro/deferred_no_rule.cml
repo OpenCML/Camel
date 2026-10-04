@@ -1,0 +1,17 @@
+module deferred_no_rule
+
+import { grad } from autodiff
+import { sqrt } from math
+
+// math:sqrt has no derivative rule, so `grad(f)` cannot be expanded ahead of time. std::macro
+// leaves the call in the program and warns at it, naming the operator.
+func f(x: float): float {
+    return sqrt(x) * x
+}
+
+func main(): int sync {
+    println('main start')
+    let d = grad(f)(4.0)
+    println(d)
+    return 0
+}

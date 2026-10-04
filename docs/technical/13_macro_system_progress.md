@@ -109,7 +109,8 @@ $env:CAMEL_HOME = "D:/Projects/Camel/out/latest"
 1. **宏内调用函数参数**：当前通过“编译期跳过”规避崩溃，该场景在运行时执行。
 2. **`std::macro` 未入默认 pipeline**：需显式 `camel xxx.cml std::macro`；默认 fallback 仍为 `std::default`。
 3. **CONST 关键字**：暂未实现，本版将任意 DATA 视为编译期值。
-4. **返回码**：`camel xxx.cml std::gir` / `std::macro std::gir` 可能返回非 0，但 DOT 输出正常，与 CLI/pass 约定有关。
+4. **提前求值失败**：实参全为静态但求值失败（算子报错、异常、超过 64 帧的求值深度）时，调用保留到运行期，`std::macro` 在默认日志级别向 stderr 输出告警 `RuntimeDiag::MacroEvaluationDeferred`（定位到调用处，附原因）；实参非静态属正常情况，仅在 `-v` 下有一行说明。失败前已执行的效应会在运行期再次发生（未解决，见 `docs/cli.md` “What `std::macro` reports”）。
+5. **返回码**：`camel xxx.cml std::gir` / `std::macro std::gir` 可能返回非 0，但 DOT 输出正常，与 CLI/pass 约定有关。
 
 ---
 

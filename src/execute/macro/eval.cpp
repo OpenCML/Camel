@@ -44,6 +44,9 @@
 #include <algorithm>
 #include <cstdlib>
 #include <format>
+#include <iostream>
+#include <mutex>
+#include <set>
 #include <unordered_set>
 
 #ifdef _WIN32
@@ -266,32 +269,170 @@ MacroEvaluator::tryEvaluate(const MacroCandidate &candidate, std::ostream &os) {
         }
     } catch (const MacroExecutionError &e) {
         (void)os;
-        CAMEL_LOG_DEBUG_S(
-            "Macro",
-            "Skip {}::ref#{}: {}",
-            candidate.runtimeGraph ? candidate.runtimeGraph->name() : "(null)",
-            candidate.nodeRef,
-            e.what());
+        noteFailure(candidate, e.what());
         return std::nullopt;
     } catch (const Diagnostic &d) {
         (void)os;
-        CAMEL_LOG_WARN_S(
-            "Macro",
-            "Diagnostic while evaluating {}::ref#{}: {} | {}",
-            candidate.runtimeGraph ? candidate.runtimeGraph->name() : "(null)",
-            candidate.nodeRef,
-            d.name,
-            d.message);
+        // The diagnostic of the failing operation, with its own position when it has one.
+        std::string where;
+        if (d.sourceContext) {
+            std::optional<CharRange> range;
+            std::string path;
+            if (std::holds_alternative<camel::source::origin_id_t>(d.range)) {
+                const auto origin = std::get<camel::source::origin_id_t>(d.range);
+                range             = d.sourceContext->resolveOrigin(origin);
+                path              = d.sourceContext->pathForOrigin(origin);
+            } else if (std::holds_alternative<camel::source::span_id_t>(d.range)) {
+                const auto span = std::get<camel::source::span_id_t>(d.range);
+                range           = d.sourceContext->resolveSpan(span);
+                path            = d.sourceContext->pathForSpan(span);
+            }
+            if (range && !path.empty()) {
+                where = std::format(
+                    " at {}:{}:{}",
+                    path,
+                    range->start.line + 1,
+                    range->start.character + 1);
+            }
+        }
+        noteFailure(candidate, std::format("{}{}: {}", d.name, where, d.message));
+        return std::nullopt;
+    } catch (const RuntimeFault &fault) {
+        (void)os;
+        // A fault of an operator the evaluation ran (it has no position of its own here): its
+        // diagnostic name and message, as the run would report it.
+        const DiagInfo info = getDiagInfo(fault.diag());
+        std::string message = info.message;
+        for (size_t i = 0; i < fault.formatArgs().size(); ++i) {
+            const std::string slot = std::format("{{{}}}", i);
+            for (size_t at = message.find(slot); at != std::string::npos;
+                 at        = message.find(slot, at + fault.formatArgs()[i].size())) {
+                message.replace(at, slot.size(), fault.formatArgs()[i]);
+            }
+        }
+        noteFailure(candidate, std::format("{}: {}", info.name, message));
         return std::nullopt;
     } catch (const std::exception &e) {
         (void)os;
-        CAMEL_LOG_WARN_S(
-            "Macro",
-            "Exception while evaluating {}::ref#{}: {}",
-            candidate.runtimeGraph ? candidate.runtimeGraph->name() : "(null)",
-            candidate.nodeRef,
-            e.what());
+        noteFailure(candidate, e.what());
         return std::nullopt;
+    }
+}
+
+namespace {
+
+/// What the candidate calls, for messages: the callee graph, the function constant, or the
+/// operator.
+std::string calleeNameOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
+    const auto *node = graph ? graph->node(nodeRef) : nullptr;
+    if (!node) {
+        return "(unknown)";
+    }
+    switch (node->kind) {
+    case GCNodeKind::Func:
+        if (const GCGraph *callee = graph->directCalleeGraphOf(nodeRef)) {
+            return callee->name();
+        }
+        break;
+    case GCNodeKind::Call: {
+        const auto withInputs = graph->withInputsOf(nodeRef);
+        if (!withInputs.empty()) {
+            const auto *calleeNode = graph->node(withInputs.front());
+            if (calleeNode && calleeNode->kind == GCNodeKind::Data && calleeNode->dataIndex < 0) {
+                return macroFunctionName(
+                    fromSlot<::Function *>(getStaticRuntimeNodeSlot(graph, withInputs.front())));
+            }
+        }
+    } break;
+    case GCNodeKind::Oper:
+        if (const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef)) {
+            return std::string(body->uri());
+        }
+        break;
+    default:
+        break;
+    }
+    return "(unknown)";
+}
+
+/// (call origin, text) pairs already reported in this process: the pass re-evaluates every
+/// candidate each round, and export_model runs it several times.
+bool firstReport(uint64_t origin, const std::string &text) {
+    static std::mutex mutex;
+    static std::set<std::pair<uint64_t, std::string>> seen;
+    std::lock_guard<std::mutex> lock(mutex);
+    return seen.emplace(origin, text).second;
+}
+
+} // namespace
+
+void MacroEvaluator::noteFailure(const MacroCandidate &candidate, std::string reason) {
+    while (!reason.empty() && (reason.back() == '.' || reason.back() == '\n')) {
+        reason.pop_back(); // the diagnostic's message ends the sentence itself
+    }
+    failures_.push_back(
+        Failure{
+            .origin = candidate.runtimeGraph ? candidate.runtimeGraph->nodeOrigin(candidate.nodeRef)
+                                             : 0,
+            .callee = calleeNameOf(candidate.runtimeGraph, candidate.nodeRef),
+            .reason = std::move(reason),
+        });
+}
+
+void MacroEvaluator::reportFailures() {
+    for (const Failure &failure : failures_) {
+        if (!firstReport(failure.origin, failure.reason)) {
+            continue;
+        }
+        auto builder = context_->rtmDiags()->of(RuntimeDiag::MacroEvaluationDeferred);
+        if (failure.origin != 0) {
+            builder.atOrigin(static_cast<camel::source::origin_id_t>(failure.origin));
+        }
+        const Diagnostic diag = builder.commit(failure.callee, failure.reason);
+        // Runtime diagnostics are printed only when the run ends in an error; a deferred
+        // evaluation must be visible when the program then runs fine, and without a log flag.
+        std::cerr << diag.toText() << std::endl;
+    }
+    failures_.clear();
+}
+
+void MacroEvaluator::noteNotStatic(
+    GCGraph *ownerGraph, gc_node_ref_t nodeRef, std::string_view callee,
+    std::span<const gc_node_ref_t> withInputs, std::span<const gc_node_ref_t> normInputs,
+    size_t withStart) const {
+    const auto isStatic = [&](gc_node_ref_t ref) {
+        const auto *input = ownerGraph->node(ref);
+        return input && input->kind == GCNodeKind::Data && input->dataIndex < 0;
+    };
+    std::string which;
+    for (size_t i = withStart; i < withInputs.size() && which.empty(); ++i) {
+        if (!isStatic(withInputs[i])) {
+            which = std::format("'with' argument {}", i - withStart + 1);
+        }
+    }
+    for (size_t i = 0; i < normInputs.size() && which.empty(); ++i) {
+        if (!isStatic(normInputs[i])) {
+            which = std::format("argument {}", i + 1);
+        }
+    }
+    const uint64_t origin = ownerGraph->nodeOrigin(nodeRef);
+    std::string where     = "(no source position)";
+    if (origin != 0 && context_->sourceContext()) {
+        const auto id    = static_cast<camel::source::origin_id_t>(origin);
+        const auto range = context_->sourceContext()->resolveOrigin(id);
+        where            = std::format(
+            "{}:{}:{}",
+            context_->sourceContext()->pathForOrigin(id),
+            range.start.line + 1,
+            range.start.character + 1);
+    }
+    const std::string text = std::format(
+        "'{}' at {} stays a run-time call: {} is not a constant.",
+        callee,
+        where,
+        which);
+    if (firstReport(origin, text)) {
+        CAMEL_LOG_WARN_S("Macro", "{}", text);
     }
 }
 
@@ -324,11 +465,17 @@ MacroEvaluator::tryExecuteDirectFunc(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
     if (!node || node->kind != GCNodeKind::Func || !node->isMacro()) {
         return std::nullopt;
     }
+    auto *calleeGraph = ownerGraph->directCalleeGraphOf(nodeRef);
     if (!areStaticRuntimeDataInputs(ownerGraph, ownerGraph->withInputsOf(nodeRef)) ||
         !areStaticRuntimeDataInputs(ownerGraph, ownerGraph->normInputsOf(nodeRef))) {
+        noteNotStatic(
+            ownerGraph,
+            nodeRef,
+            calleeGraph ? calleeGraph->name() : "(unknown)",
+            ownerGraph->withInputsOf(nodeRef),
+            ownerGraph->normInputsOf(nodeRef));
         return std::nullopt;
     }
-    auto *calleeGraph = ownerGraph->directCalleeGraphOf(nodeRef);
     if (!calleeGraph || macroCallsFunctionParam(calleeGraph)) {
         return std::nullopt;
     }
@@ -369,6 +516,13 @@ std::optional<MacroEvalResult> MacroEvaluator::tryExecuteIndirectCall(
     }
     if (!areStaticRuntimeDataInputs(ownerGraph, withInputs, 1) ||
         !areStaticRuntimeDataInputs(ownerGraph, ownerGraph->normInputsOf(nodeRef))) {
+        noteNotStatic(
+            ownerGraph,
+            nodeRef,
+            macroFunctionName(funcObj),
+            withInputs,
+            ownerGraph->normInputsOf(nodeRef),
+            1);
         return std::nullopt;
     }
     (void)os;
@@ -404,6 +558,12 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
     }
     if (!areStaticRuntimeDataInputs(ownerGraph, ownerGraph->withInputsOf(nodeRef)) ||
         !areStaticRuntimeDataInputs(ownerGraph, ownerGraph->normInputsOf(nodeRef))) {
+        noteNotStatic(
+            ownerGraph,
+            nodeRef,
+            body->uri(),
+            ownerGraph->withInputsOf(nodeRef),
+            ownerGraph->normInputsOf(nodeRef));
         return std::nullopt;
     }
 
@@ -471,7 +631,10 @@ slot_t MacroEvaluator::executeFunction(
     }
     if (recursionDepth_ >= kMaxMacroRecursionDepth) {
         throw MacroExecutionError(
-            std::format("Macro recursion depth exceeded at '{}'.", runtimeGraph->name()));
+            std::format(
+                "the evaluation needs more than {} nested calls (at '{}')",
+                kMaxMacroRecursionDepth,
+                runtimeGraph->name()));
     }
 
     ::Tuple *staticAreaSnapshot = staticAreas_->cloneStaticArea(runtimeGraph);
@@ -514,7 +677,10 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
     ASSERT(runtimeGraph != nullptr, "Macro runtime graph execution requires a runtime graph.");
     if (recursionDepth_ > kMaxMacroRecursionDepth) {
         throw MacroExecutionError(
-            std::format("Macro recursion depth exceeded at '{}'.", runtimeGraph->name()));
+            std::format(
+                "the evaluation needs more than {} nested calls (at '{}')",
+                kMaxMacroRecursionDepth,
+                runtimeGraph->name()));
     }
     auto runtimeTopoIndices = camel::execute::buildReachableExecutionTopoIndices(runtimeGraph);
     std::optional<uint32_t> tillRuntimeIndex;

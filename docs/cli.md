@@ -64,6 +64,15 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 
 Macro operators over functions (`grad`, `value_and_grad`, `vjp` of `autodiff`) transform a function's graph as compiled. Run `std::macro` first (`camel m.cml std::macro std::opt::simplify std::fvm`): it expands them ahead of time and the later passes optimize the result. Without `std::macro`, or with it after `std::inline` / `std::opt` / `std::opt::simplify`, the operator runs with the program; to keep that working, the inlining passes inline nothing into the functions an unexpanded macro operator will transform (every function, when the operator's function argument is not a constant, e.g. a parameter). Such a pipeline gives the same results but leaves those functions unoptimized. See `docs/technical/26_autodiff_as_graph_rewrite.md` §2.
 
+### What `std::macro` reports
+
+`std::macro` replaces a call of a `macro` function or macro operator by its result when every argument is a constant. Two things can keep a call in the program:
+
+- **An argument is not a constant.** This is the normal case and not a failure; nothing is printed. With `-v` a log line names the call and the argument: `<Macro> 'count' at m.cml:11:17 stays a run-time call: argument 1 is not a constant.`
+- **The evaluation fails**: an operator raises an error (division by zero, `autodiff: no derivative rule for operator ...`), an exception escapes, or the evaluation needs more than 64 nested calls. The call stays in the program and runs with it, and the pass prints the warning `RuntimeDiag::MacroEvaluationDeferred` (`0x0410000D`, stage `pass:std::macro`) on stderr at the default log level, located at the call, with the reason: `m.cml:17:17: [Warn]: 'boom' could not be evaluated ahead of time and is left to run with the program: DivisionByZero: Attempted division by zero.` The program is not rejected: if the call is never reached at run time, it runs as it does without the pass. If the run later ends in an error, the warning is also in the diagnostics printed then (and in the `--output-format json` array, with severity `Warn`).
+
+Known gap: effects that the failed evaluation performed before it failed have happened at pass time (once per round of the pass) and happen again when the call runs. A `macro` function with effects that can fail is therefore not reproduced by a pipeline containing `std::macro`.
+
 ### ONNX export as a pass (`onnx::export`)
 
     CAMEL_ONNX_OUT=model.onnx camel m.cml std::macro std::opt::simplify onnx::export
@@ -118,7 +127,7 @@ Limits of the compiler and the back ends. A pass that reaches one of its limits 
 | Non-tail recursion on `std::nvm`, `std::fvm` and the interpreted part of `std::jit` | 256 frames | no | the program stops with `RuntimeDiag::MaxRecursionDepthExceeded` (`0x04000004`, stage `run`, exit 1) at the call expression that would open frame 257; what ran before it has run |
 | Recursion in code `std::jit` compiled to native code (a self-recursive function whose branch arms were inlined, e.g. after `std::inline` or `std::opt`) | none | no | limited only by the frame pool; exhausting it aborts the process (`std::bad_alloc`), without a diagnostic |
 | Recursion on `std::tf` | none | no | limited only by the native stack; exhausting it is a segmentation fault |
-| Ahead-of-time evaluation of a `macro` function by `std::macro` | 64 evaluator frames (a self-recursion of 32 levels: `count(31)` is evaluated, `count(32)` is not) | no | the call is not evaluated ahead of time; it stays a call and runs with the program |
+| Ahead-of-time evaluation of a `macro` function by `std::macro` | 64 evaluator frames (a self-recursion of 32 levels: `count(31)` is evaluated, `count(32)` is not) | no | the call is not evaluated ahead of time; it stays a call and runs with the program. Warning `RuntimeDiag::MacroEvaluationDeferred` at the call |
 | Nodes, node blocks and edges of one graph | 65535 each (16-bit) | no | the pass that built the graph fails with `RuntimeDiag::PassInternalError` (`... exceeds the target integral width`) before anything runs |
 | Permanent space (types and layouts) | 32 MB | no | the pass fails with `RuntimeDiag::PassInternalError` (`Permanent space exhausted`) before anything runs |
 

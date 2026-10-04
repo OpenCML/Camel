@@ -1,0 +1,19 @@
+module deferred_depth
+
+// Ahead-of-time evaluation is limited to 64 nested evaluator frames (a self-recursion of 32
+// levels). count(20) is folded to a constant; count(40) stays a call, with a warning, and gives
+// the same value at run time.
+macro func count(n: int): int {
+    return if n == 0 then 0 else 1 + count(n - 1)
+}
+
+func run(n: int): int {
+    return count(n)
+}
+
+func main(): int sync {
+    println(count(20))
+    println(count(40))
+    println(run(7))
+    return 0
+}

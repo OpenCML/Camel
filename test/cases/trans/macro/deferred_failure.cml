@@ -1,0 +1,20 @@
+module deferred_failure
+
+// A macro call whose ahead-of-time evaluation fails (here: division by zero, after an effect)
+// stays a call. std::macro must say so: a warning at the call, with the reason.
+macro func boom(x: int): int sync {
+    println('EFFECT boom')
+    return 10 / x
+}
+
+macro func fine(x: int): int {
+    return x + 1
+}
+
+func main(): int sync {
+    println('main start')
+    println(fine(41))
+    let v = boom(0)
+    println(v)
+    return 0
+}

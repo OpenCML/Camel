@@ -127,6 +127,18 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::MacroEvaluationDeferred,
+            {
+                "MacroEvaluationDeferred",
+                "'{0}' could not be evaluated ahead of time and is left to run with the "
+                "program: {1}.",
+                "std::macro replaces a macro call whose arguments are constants by its result; "
+                "this call's evaluation failed, so the call stays in the program and the failure "
+                "will occur again if the call is reached at run time. Effects the evaluation "
+                "performed before it failed have already happened and happen again then.",
+            },
+        },
+        {
             RuntimeDiag::PassInternalError,
             {
                 "PassInternalError",

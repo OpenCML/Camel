@@ -153,3 +153,98 @@ failure_note = "Macro runtime execution is currently unstable under std::macro o
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
+
+[[tests]]
+name = "deferred_failure.warning"
+desc = "A macro call whose ahead-of-time evaluation fails stays a call and std::macro reports it at default log level: RuntimeDiag::MacroEvaluationDeferred on stderr, at the call (17:17), with the reason. The run then fails as it does without the pass. The effect before the failure still happens at pass time as well as at run time (open issue): the test locks the warning, not the count."
+kind = "behavior"
+case = "../../../cases/trans/macro/deferred_failure.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const err = input.normalized.stderr
+assert(/deferred_failure\.cml:17:17: \[Warn\]: 'boom' could not be evaluated ahead of time and is left to run with the program: DivisionByZero: Attempted division by zero\./.test(err), `warning missing on stderr: ${err}`)
+assert(err.includes('(name=RuntimeDiag::MacroEvaluationDeferred, code=0x0410000D)'), `name/code missing: ${err}`)
+assert(!err.includes("'fine'"), `a call that evaluated was reported: ${err}`)
+const out = input.normalized.stdout
+assert(out.includes('main start\n42\n'), `unexpected stdout: ${out}`)
+assert(out.includes('name=RuntimeDiag::DivisionByZero'), `run-time diagnostic missing: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "deferred_failure.json"
+desc = "With --output-format json the deferred evaluation is in the diagnostics array as a Warn with stage pass:std::macro and the call's range, before the run-time error."
+kind = "behavior"
+case = "../../../cases/trans/macro/deferred_failure.cml"
+args = ["--output-format", "json", "${case}", "std::macro", "std::nvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const diags = JSON.parse(out.slice(out.indexOf('[\n{')))
+const warn = diags.find((d) => d.data.name === 'RuntimeDiag::MacroEvaluationDeferred')
+assert(warn, `warning missing: ${out}`)
+assert(warn.severity === 'Warn' && warn.data.stage === 'pass:std::macro', `severity/stage: ${JSON.stringify(warn)}`)
+assert(warn.range.start.line === 16 && warn.range.start.character === 16, `range: ${JSON.stringify(warn.range)}`)
+const error = diags.find((d) => d.data.name === 'RuntimeDiag::DivisionByZero')
+assert(error && error.data.stage === 'run', `run-time error missing: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "deferred_no_rule.warning"
+desc = "grad over an operator without a derivative rule cannot be expanded by std::macro: the warning is at the grad call (14:13) and names the operator, before the program starts."
+kind = "behavior"
+case = "../../../cases/trans/macro/deferred_no_rule.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const err = input.normalized.stderr
+assert(/deferred_no_rule\.cml:14:13: \[Warn\]: 'autodiff:grad' could not be evaluated ahead of time and is left to run with the program: RuntimeError: An error has occurred: autodiff: no derivative rule for operator 'math:sqrt'\./.test(err), `warning missing on stderr: ${err}`)
+assert(err.includes('name=RuntimeDiag::MacroEvaluationDeferred'), `name missing: ${err}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "deferred_depth.warning"
+desc = "A macro recursion deeper than the 64-frame evaluation limit stays a call with a warning at the call (16:18) naming the limit; count(20) is evaluated without one; the values are unchanged."
+kind = "behavior"
+case = "../../../cases/trans/macro/deferred_depth.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const err = input.normalized.stderr
+assert(/deferred_depth\.cml:16:18: \[Warn\]: 'count' could not be evaluated ahead of time and is left to run with the program: the evaluation needs more than 64 nested calls \(at 'count'\)\./.test(err), `warning missing on stderr: ${err}`)
+assert((err.match(/MacroEvaluationDeferred/g) || []).length === 1, `expected one warning: ${err}`)
+assert(!err.includes('is not a constant'), `the not-static note must not show at default level: ${err}`)
+assert(input.normalized.stdout.trim() === '20\n40\n7', `unexpected stdout: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "deferred_depth.not_static_note"
+desc = "A macro call with an argument that is not a constant is the normal case, not a failure: nothing at default level; with -v a note names the call (11:17) and the argument."
+kind = "behavior"
+case = "../../../cases/trans/macro/deferred_depth.cml"
+args = ["-v", "${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const err = input.normalized.stderr
+assert(/<Macro> 'count' at .*deferred_depth\.cml:11:17 stays a run-time call: argument 1 is not a constant\./.test(err), `note missing: ${err}`)
+}
+"""
+timeout_ms = 4000
