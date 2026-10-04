@@ -1,7 +1,9 @@
 # Automatic Differentiation as Graph Rewriting
 
 Status: implemented through phase 5 and phase 7 (§8); phase 6 (thin ONNX) is
-open. Supersedes the tape-based synthesis inside `nn.apply_gradients`, which
+partly done: `onnx::export` exists as a module-contributed translation pass,
+but shape specialization still happens inside it and `onnx.export_model` still
+runs its own simplification (§7, "Status"). Supersedes the tape-based synthesis inside `nn.apply_gradients`, which
 has been removed together with `Parameter`.
 
 Implementation map:
@@ -223,6 +225,55 @@ unrolling, branch selection, shape facts). These move to general passes:
 
 `onnx.export_model(fn, x, path)` stays as a convenience that runs this pipeline
 on `fn`.
+
+### Status
+
+What exists (`modules/onnx/passes/export.cpp`, `docs/cli.md`):
+
+    CAMEL_ONNX_OUT=model.onnx camel m.cml std::macro std::opt::simplify onnx::export
+
+- `onnx::export` is registered by the `onnx` module and is the last pass of the
+  pipeline; it consumes the graph, so the program does not run. The export
+  request is the program's own `onnx.export_model(fn, example, path, ...)`
+  call, which the pass finds in the entry graph with constant arguments (no new
+  syntax, no new command-line option). `CAMEL_ONNX_OUT` overrides the path.
+- It refuses, with the diagnostic `RuntimeDiag::TranslationRefused` at the node
+  and the name of the missing pass, a graph that still has a call (not inlined,
+  or the entry graph still calling `main`) or an unexpanded macro operator. It
+  never expands macros, devirtualizes, specializes calls, inlines or unrolls.
+- For the programs both entries accept, the models are equivalent: same
+  checker result and bit-identical ONNX Runtime outputs
+  (`test/cases/modules/onnx/pass_export.py`).
+
+What differs from the design above:
+
+- **Shape specialization is not a general pass.** There is no pass that takes
+  example input types, so the pass does that step itself: it binds the example
+  types to the function's ports, re-infers node types, and runs the
+  `std::opt::fold` / `std::opt::dce` fixpoint on its copy of the function
+  (shape arithmetic such as `shape(x)[0] * shape(x)[1]` or `numel` in a
+  gradient can only fold then). This is the one simplification step left
+  inside the pass.
+- **Shapes are not read from node types.** The lowering walks the graph as a
+  value DAG and re-derives dtype and shape per value with operator inference
+  (this is what carries dynamic axes); in that walk it also evaluates pure
+  operators whose arguments are all constants and takes the arm of a branch on
+  a constant condition, where folding left them (inside branch arms).
+- **`onnx.export_model` does not run the pass pipeline.** It simplifies the
+  bound function itself with settings `std::opt::simplify` does not have:
+  inlining regardless of size, up to 4096 rounds (deeper static recursion),
+  and the branched-call split that turns the pullback of a data-dependent
+  branch into per-arm calls (`enableBranchedCallSplit`, valid only for a
+  consumer that builds no execution order). Programs that need these export
+  through `export_model` and are refused by the pipeline: of the exporting
+  programs in `test/cases/modules/onnx`, the pipeline accepts nine and refuses
+  the four `export_train_step_branch*` (indirect call left) and the two
+  `export_gated_gru_*` (call left); `export_import_order` is refused because
+  its captured weights come from `random` and only exist at run time.
+- **Control dependencies are not checked.** The walk follows data
+  dependencies only, so an effect on the control path of a `sync` function
+  (a `println` whose result nothing reads) is dropped, not refused, in both
+  entries.
 
 ## 8. Phases
 

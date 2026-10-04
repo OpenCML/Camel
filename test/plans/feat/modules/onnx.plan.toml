@@ -612,3 +612,105 @@ expect_exit = 0
 expect_stdout_contains = ["input dims ['batch', 2]", "ort train dynamic: worst", "PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+
+[[tests]]
+name = "pass_export_fold"
+desc = "onnx::export as the last pass: `std::macro std::opt::simplify onnx::export` writes the same model shape as export_model for the forward export (weights as named initializers, three unrolled steps, shape arithmetic folded) without executing the program."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_fold.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_fold.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_fold.onnx"]
+expect_output_not_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_fold.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('MatMul') === 3 && count('Relu') === 3 && count('Mul') === 3, `expected 3 unrolled steps, got ${model.ops}`)
+assert(model.ops.length === 14, `shape arithmetic must fold away, got ${model.ops}`)
+assert(model.initializers.includes('w') && model.initializers.includes('b'), `weights not named by field: ${model.initializers}`)
+assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "pass_export_refuses_without_simplify"
+desc = "onnx::export only translates: with no preceding pass the entry graph still calls main, and the pass refuses with TranslationRefused at main, naming std::opt::simplify, and writes no file."
+kind = "negative"
+case = "../../../cases/modules/onnx/export_train_step.cml"
+args = ["${case}", "onnx::export"]
+envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_refused_a.onnx"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_code = "0x0400000B"
+expect_diagnostic_line = 29
+expect_diagnostic_column = 1
+expect_output_contains = ["run std::opt::simplify before onnx::export"]
+expect_output_not_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/pass_export_refused_a.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "pass_export_refuses_without_macro"
+desc = "Without std::macro the training step still contains value_and_grad: onnx::export refuses with TranslationRefused at the macro call, naming std::macro, and writes no file."
+kind = "negative"
+case = "../../../cases/modules/onnx/export_train_step.cml"
+args = ["${case}", "std::opt::simplify", "onnx::export"]
+envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_refused_b.onnx"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_code = "0x0400000B"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 14
+expect_output_contains = ["macro operator 'autodiff:value_and_grad' is not expanded; run std::macro"]
+expect_output_not_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/pass_export_refused_b.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "pass_export_refusals_json"
+desc = "The refusals of onnx::export in --output-format json: name RuntimeDiag::TranslationRefused, stage pass:onnx::export, a source position, no model file (no simplify; no std::macro; a call left by a recursion of dynamic depth)."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/pass_export.py"
+args = ["${case}", "refuse"]
+skip_unless = ["${python}", "-c", "import json"]
+expect_exit = 0
+expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:29:1 file written: False", "stage pass:onnx::export at export_train_step.cml:25:14 file written: False", "at export_dynamic_recursion.cml:17:41 file written: False", "onnx::export refuse: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "pass_export_equals_export_model"
+desc = "For nine programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes) the model written by `std::macro std::opt::simplify onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/pass_export.py"
+args = ["${case}", "equiv"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["export_fold.cml: pass: onnx.checker full_check ok", "export_train_step.cml: pass: onnx.checker full_check ok", "onnx::export equiv: PASS"]
+expect_output_not_contains = ["array_equal False"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000

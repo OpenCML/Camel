@@ -116,6 +116,16 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "supported in the current version.",
             },
         },
+        {
+            RuntimeDiag::TranslationRefused,
+            {
+                "TranslationRefused",
+                "Translation pass '{0}' refused the graph: {1}.",
+                "A translation pass only translates the graph the preceding passes left. "
+                "Run the passes named in the message before it, "
+                "or remove the construct it cannot express.",
+            },
+        },
 
     };
 

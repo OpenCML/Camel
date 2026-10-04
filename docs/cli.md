@@ -58,6 +58,20 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `std::fvm`: high-performance bytecode VM scheduler
 - `std::jit`: JIT-enabled bytecode VM scheduler
 - `std::gir`: dump the current graph IR and stop
+- `tensor::fuse`, `onnx::export`: passes contributed by modules; they exist only when the program imports the module (`tensor`, `onnx`)
+
+### ONNX export as a pass (`onnx::export`)
+
+    CAMEL_ONNX_OUT=model.onnx camel m.cml std::macro std::opt::simplify onnx::export
+
+`onnx::export` is a translation pass contributed by the `onnx` module. As the last pass of a pipeline it writes an ONNX model and consumes the graph: the program is not executed.
+
+- **What is exported** is declared in the program, by the same call that exports at run time: `onnx.export_model(fn, example, path[, dynamic_axes[, target]])`. The pass looks for that call in the entry graph left by the preceding passes and reads its arguments there, so they must be constants of the graph by then: the function (a closure may capture constants), the example inputs (their dtypes and shapes become the model inputs), `dynamic_axes` and `target`. Values that only exist at run time (random initial weights, a loaded file) are not available to a pass; such a program exports with `camel m.cml`, which runs `export_model`.
+- **Where it is written**: the environment variable `CAMEL_ONNX_OUT` if set (it then requires exactly one `export_model` call), otherwise the call's `path` argument, which must be a string literal (`get_env(...)` is not evaluated by a pass).
+- **What the pass does itself**: it binds the example types (dtype and shape) to the function's parameters, re-infers node types, folds what those types make constant (`std::opt::fold` / `std::opt::dce` on its private copy of the function) and lowers the result node by node. It does not expand macros, devirtualize, specialize calls, inline or unroll; those are the job of `std::macro` and `std::opt::simplify` before it.
+- **Refusal**: if the graph still needs one of those (the entry graph still calls `main`, a macro operator such as `grad` is not expanded, a call remains in the function), or contains something ONNX cannot express (an impure operator, an operator without a lowering), the pass writes no file and exits non-zero with the diagnostic `RuntimeDiag::TranslationRefused` (`0x0400000B`, stage `pass:onnx::export`) at the offending node; the message names the pass to run.
+
+Running the program without passes (`camel m.cml`) keeps working: `export_model` then simplifies the function itself, with settings the pass pipeline does not have (it inlines regardless of size, unrolls deeper recursion, and splits the gradient of a data-dependent branch), so it accepts some programs that the pipeline refuses.
 
 ### JSON diagnostics (`--output-format json`)
 
