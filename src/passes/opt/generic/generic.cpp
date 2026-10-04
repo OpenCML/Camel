@@ -60,12 +60,19 @@ namespace {
 // ---------------------------------------------------------------- branch regions
 
 /**
- * For every node, the branch arms it lies in (token = brch << 16 | arm, sorted). Arms are inline
- * regions: nodes forward-reachable from an arm's head, up to the branch's JOIN. Two nodes may
+ * For every node, the branch arms it lies in (token = brch << 16 | arm, sorted). Two nodes may
  * only be merged when they lie in exactly the same arms, so the survivor runs whenever the
  * replaced node would have.
+ *
+ * Arms are inline regions. An arm's nodes are those forward-reachable from its head up to the
+ * branch's JOIN, and also the nodes of the branch (what runs after the BRCH and before the
+ * JOIN) that its tail depends on: inlining an arm whose body is a bare constant leaves that
+ * DATA node waiting on the BRCH directly, *before* the bridge GATE that is the arm's head, so
+ * the head alone does not find it (branchArmNodes() below relies on the same shape). A node of
+ * the branch that belongs to no arm by either rule gets a token of its own and is never merged.
  */
 std::vector<std::vector<uint64_t>> armRegions(const GraphDraft &draft) {
+    constexpr uint64_t kUnattributed = uint64_t{1} << 63;
     std::vector<std::vector<uint64_t>> regions(draft.nodeSlotCount());
     for (gc_node_ref_t brch = 0; brch < draft.nodeSlotCount(); ++brch) {
         const auto *h = draft.header(brch);
@@ -75,6 +82,30 @@ std::vector<std::vector<uint64_t>> armRegions(const GraphDraft &draft) {
         const auto join =
             reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(brch).data())->join;
         const auto arms = draft.branchArmsOf(brch);
+
+        // What runs in this branch: forward from the BRCH, stopping at the JOIN.
+        std::vector<bool> inBranch(draft.nodeSlotCount(), false);
+        std::vector<gc_node_ref_t> stack;
+        for (auto users :
+             {draft.normUsersOf(brch), draft.withUsersOf(brch), draft.ctrlUsersOf(brch)}) {
+            stack.insert(stack.end(), users.begin(), users.end());
+        }
+        while (!stack.empty()) {
+            const gc_node_ref_t n = stack.back();
+            stack.pop_back();
+            if (n == join || n == brch || inBranch[n] || !draft.header(n)) {
+                continue;
+            }
+            inBranch[n] = true;
+            for (auto users : {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
+                stack.insert(stack.end(), users.begin(), users.end());
+            }
+        }
+        std::vector<bool> attributed(draft.nodeSlotCount(), false);
+        const auto tails = join != kInvalidNodeRef && draft.header(join)
+                               ? draft.withInputsOf(join)
+                               : std::span<const gc_node_ref_t>{};
+
         for (size_t arm = 0; arm < arms.size(); ++arm) {
             const uint64_t token = (static_cast<uint64_t>(brch) << 16) | arm;
             std::vector<bool> seen(draft.nodeSlotCount(), false);
@@ -88,7 +119,8 @@ std::vector<std::vector<uint64_t>> armRegions(const GraphDraft &draft) {
                 if (n == join || n == brch || seen[n] || !draft.header(n)) {
                     continue;
                 }
-                seen[n] = true;
+                seen[n]       = true;
+                attributed[n] = true;
                 regions[n].push_back(token);
                 for (auto users :
                      {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
@@ -96,6 +128,36 @@ std::vector<std::vector<uint64_t>> armRegions(const GraphDraft &draft) {
                         work.push(u);
                     }
                 }
+            }
+            // The nodes of the branch this arm's result depends on.
+            if (tails.size() == arms.size() && tails[arm] < inBranch.size() &&
+                inBranch[tails[arm]]) {
+                if (!seen[tails[arm]]) {
+                    seen[tails[arm]]       = true;
+                    attributed[tails[arm]] = true;
+                    regions[tails[arm]].push_back(token);
+                }
+                stack.push_back(tails[arm]);
+            }
+            while (!stack.empty()) {
+                const gc_node_ref_t n = stack.back();
+                stack.pop_back();
+                for (auto inputs :
+                     {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
+                    for (gc_node_ref_t in : inputs) {
+                        if (in < inBranch.size() && inBranch[in] && !seen[in]) {
+                            seen[in]       = true;
+                            attributed[in] = true;
+                            regions[in].push_back(token);
+                            stack.push_back(in);
+                        }
+                    }
+                }
+            }
+        }
+        for (gc_node_ref_t n = 0; n < inBranch.size(); ++n) {
+            if (inBranch[n] && !attributed[n]) {
+                regions[n].push_back(kUnattributed | n);
             }
         }
     }

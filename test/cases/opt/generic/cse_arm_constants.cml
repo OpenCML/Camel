@@ -1,0 +1,37 @@
+/**
+ * Equal literals in the arms of different branches are not one node for
+ * std::opt::cse once the arms are inlined. An inlined arm whose body is a bare
+ * constant leaves the DATA node waiting on its BRCH; merging the 7 of one
+ * branch with the 7 of the other made a node of the second branch wait on the
+ * first BRCH, which the schedulers reject as a cycle.
+ *
+ * Conditions are float comparisons so that no other 7 exists outside the arms
+ * (an ungated equal constant would absorb both and hide the defect). `now()`
+ * gives a condition std::opt::simplify cannot fold; the output does not depend
+ * on the clock.
+ */
+module cse_arm_constants
+
+import { now } from time
+
+func literal(x: float): int {
+    let a = if x < 2.5 then 7 else 8
+    let b = if x > 2.5 then 7 else 9
+    return a + b
+}
+
+func nested(x: float): int {
+    let a = if x < 2.5 then (if x < 1.0 then 7 else 11) else 8
+    let b = if x > 2.5 then 7 else (if x > 1.0 then 11 else 9)
+    return a * 100 + b
+}
+
+func main(): int sync {
+    let s = now()
+    let a = if s > 1.0 then 7 else 8
+    let b = if s < 1.0 then 7 else 9
+    'cse_arm_constants l={} {} n={} {} rt={}'
+        ->format<literal(1.5), literal(3.5), nested(1.5), nested(0.5), a + b>
+        ->println
+    return 0
+}

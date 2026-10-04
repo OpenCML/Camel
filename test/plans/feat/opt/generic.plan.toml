@@ -514,3 +514,115 @@ assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.reference"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: no pass."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.inline_cse.nvm"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::inline std::opt::cse."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}", "std::inline", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.inline_cse.fvm"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::inline std::opt::cse on FastVM."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}", "std::inline", "std::opt::cse", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.inline_cse.jit"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::inline std::opt::cse on the JIT."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}", "std::inline", "std::opt::cse", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.inline_arm_cse.nvm"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::inline::arm std::opt::cse."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}", "std::inline::arm", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.simplify_cse.nvm"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::opt::simplify std::opt::cse (a condition simplify cannot fold)."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}", "std::opt::simplify", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.inline_specialize_cse_devirtualize.nvm"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: the experiment pipeline R06."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}", "std::inline", "std::specialize", "std::opt::cse", "std::devirtualize", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
