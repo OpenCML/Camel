@@ -87,6 +87,7 @@ Errors are printed on stdout, after any program output, as a JSON array of objec
 
 - `range` is 0-based; `data.modulePath` is the file. A diagnostic without a source position (for example an unknown pass name) has an all-zero range and an empty `modulePath`.
 - `data.name` is the stable diagnostic name; `code` is its numeric form.
+- An exception that escapes a pass without being a diagnostic (graph validation when a rewrite is committed, a cycle met while a scheduler builds its execution order, an arena limit) is reported as `RuntimeDiag::PassInternalError` (`0x0400000C`) with stage `pass:<name>`, the exception text in the message, no source position, and exit code 1. It marks a defect of the compiler, not a refusal of the program. The stage names the pass even when it is a scheduling pass, so it does not tell whether part of the program had already run. An exception outside any pass is reported as `InternalDiag::UnknownInternalError` with stage `internal`.
 - `data.stage` tells where in the pipeline the diagnostic was raised: `parse`, `typecheck`, `pass:<name>` for a rewrite or translation pass (including an unknown pass name), `run` for a scheduling pass (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`), or `internal`.
 
 ### Effect trace (`CAMEL_EFFECT_TRACE`)

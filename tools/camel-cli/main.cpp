@@ -374,7 +374,17 @@ int main(int argc, char *argv[]) {
         os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText()) << endl;
         return selectedCommand == Command::Check ? 0 : 1;
     } catch (exception &e) {
-        os << e.what() << endl;
+        // An exception that is not a diagnostic and was not raised inside a pass (the pass
+        // driver reports those itself). JSON output stays a diagnostics array.
+        if (useJsonFormat) {
+            os << "[\n"
+               << DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
+                      .commit(std::string(e.what()))
+                      .toJson()
+               << "\n]" << endl;
+        } else {
+            os << e.what() << endl;
+        }
         ASSERT(false, e.what());
         return selectedCommand == Command::Check ? 0 : 1;
     } catch (...) {

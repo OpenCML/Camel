@@ -39,6 +39,7 @@ enum class RuntimeDiag : uint32_t {
     TensorDimensionMismatch   = 0x000009,
     UnrecognizedGraphPass     = 0x00000A,
     TranslationRefused        = 0x00000B,
+    PassInternalError         = 0x00000C,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

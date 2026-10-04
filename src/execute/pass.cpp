@@ -577,7 +577,26 @@ PassApplyResult applyPassesDetailed(
             } stageScope(
                 dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ? std::string("run")
                                                                          : "pass:" + p);
-            graph = pass->apply(graph, os);
+            try {
+                graph = pass->apply(graph, os);
+            } catch (const DiagnosticsLimitExceededBaseException &) {
+                throw; // diagnostics already recorded; the caller dumps them
+            } catch (const std::exception &e) {
+                // A pass that gives up with a plain exception (graph validation at commit, the
+                // execution-order builder meeting a cycle, an arena limit) hit a defect of the
+                // compiler, not of the program. It is still reported as a diagnostic, so that
+                // --output-format json stays a valid diagnostics array. There is no source
+                // position for it. The stage names the pass even for a scheduling pass: the
+                // failure belongs to the pass, whatever part of the program had run.
+                setPipelineStage("pass:" + p);
+                std::string what = e.what();
+                while (!what.empty() && (what.back() == '.' || what.back() == '\n')) {
+                    what.pop_back(); // the diagnostic's message ends the sentence itself
+                }
+                ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(p, what);
+                CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (internal error)", p);
+                return {nullptr, PassApplyStatus::Failed};
+            }
             camel::core::mm::autoSpace().safepoint(std::format("after pass {}", p));
             if (ctx->rtmDiags()->hasErrors()) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (see diagnostics)", p);

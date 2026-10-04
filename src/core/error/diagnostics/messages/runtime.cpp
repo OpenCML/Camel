@@ -126,6 +126,17 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "or remove the construct it cannot express.",
             },
         },
+        {
+            RuntimeDiag::PassInternalError,
+            {
+                "PassInternalError",
+                "Pass '{0}' failed with an internal error: {1}.",
+                "The pass gave up without a diagnostic of its own: it built or was given a graph "
+                "it cannot handle, which is a defect of the compiler rather than of the program. "
+                "Try the pipeline without this pass or with the passes in another order, and "
+                "report the program together with the pass list.",
+            },
+        },
 
     };
 
