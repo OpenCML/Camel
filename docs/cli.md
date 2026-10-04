@@ -59,6 +59,20 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `std::jit`: JIT-enabled bytecode VM scheduler
 - `std::gir`: dump the current graph IR and stop
 
+### Effect trace (`CAMEL_EFFECT_TRACE`)
+
+Setting the environment variable `CAMEL_EFFECT_TRACE=<file>` makes the process append one JSON line per executed effectful operator (any operator not registered as pure in the operator-traits registry: `println`, file I/O, `py_*`, in-place assignment, ...), in call order:
+
+```json
+{"seq":0,"uri":":io/println","stage":"run","origin":{"file":"a.cml","line":12,"col":5},"payload_sha1":"..."}
+```
+
+- `stage` is `macro` while `std::macro` evaluates a call ahead of time and `run` otherwise.
+- `origin` is the 1-based source position of the operator node, or `null` when the node has none (nodes synthesized by passes).
+- `payload_sha1` hashes the printed argument values, taken before the operator runs.
+
+The trace is written by a wrapper installed where operator URIs are resolved, so all back ends (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`) and the macro evaluator are covered. It does not record whether the operator ran inside a `sync` scope. The file is truncated at the first effect of each process. See `include/camel/core/effect_trace.h`.
+
 ---
 
 ## Information Display

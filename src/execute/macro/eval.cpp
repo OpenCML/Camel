@@ -28,6 +28,7 @@
 
 #include "runtime.h"
 
+#include "camel/core/effect_trace.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/alloc/allocator.h"
 #include "camel/core/rtdata/array.h"
@@ -245,6 +246,8 @@ void MacroEvaluator::traceValueRoots(
 
 std::optional<MacroEvalResult>
 MacroEvaluator::tryEvaluate(const MacroCandidate &candidate, std::ostream &os) {
+    // Effects executed while a call is evaluated ahead of time are traced with stage "macro".
+    camel::core::effect_trace::MacroStageScope macroStage;
     try {
         GCGraph *runtimeGraph = candidate.runtimeGraph;
         const auto *node      = runtimeGraph ? runtimeGraph->node(candidate.nodeRef) : nullptr;
@@ -437,6 +440,9 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
         (void)os;
         CAMEL_LOG_INFO_S("Macro", "Execute static operator '{}'.", std::string(body->uri()));
         mm::safepoint("macro static operator");
+        if (camel::core::effect_trace::enabled()) [[unlikely]] {
+            camel::core::effect_trace::setSite(ownerGraph->nodeOrigin(nodeRef));
+        }
         slot_t value = (*op)(withView, normView, *context_);
         framePool_.release(frame);
         return anchorResult(value, node->dataType, node->flags);
@@ -706,6 +712,9 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             data_arr_t wargs{indices.data() + normCount, indices.size() - normCount};
             FrameArgsView withView(*frame, wargs);
             FrameArgsView normView(*frame, nargs);
+            if (camel::core::effect_trace::enabled()) [[unlikely]] {
+                camel::core::effect_trace::setSite(runtimeGraph->nodeOrigin(runtimeNodeIndex));
+            }
             slot_t result = (*op)(withView, normView, *context_);
             frame->set(node->dataIndex, result);
         } break;

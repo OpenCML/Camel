@@ -19,6 +19,7 @@
 
 #include "camel/execute/executor.h"
 #include "camel/core/context/frame.h"
+#include "camel/core/effect_trace.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
 
@@ -57,9 +58,17 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
         return std::nullopt;
     }
     const std::string protocol = uri.substr(0, pos);
-    auto itExec                = loadedExecutors.find(protocol);
+    // With CAMEL_EFFECT_TRACE set, effectful operators are handed out behind a logging
+    // trampoline (camel/core/effect_trace.h); otherwise wrap() returns the operator unchanged.
+    auto traced = [&uri](std::optional<operator_t> op) -> std::optional<operator_t> {
+        if (op && camel::core::effect_trace::enabled()) {
+            return camel::core::effect_trace::wrap(uri, *op);
+        }
+        return op;
+    };
+    auto itExec = loadedExecutors.find(protocol);
     if (itExec != loadedExecutors.end()) {
-        return itExec->second->find(uri.substr(pos + 1));
+        return traced(itExec->second->find(uri.substr(pos + 1)));
     }
     auto itFact = executorFactories.find(protocol);
     if (itFact == executorFactories.end()) {
@@ -68,10 +77,11 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
     CAMEL_LOG_INFO_S("ExecMgr", "Loading executor for protocol <{}>", protocol);
     auto executor = itFact->second();
     loadedExecutors.emplace(protocol, executor);
-    return executor->find(uri.substr(pos + 1));
+    return traced(executor->find(uri.substr(pos + 1)));
 }
 
-std::string ExecutorManager::getNameOfAnOperator(const operator_t &op) const {
+std::string ExecutorManager::getNameOfAnOperator(const operator_t &tracedOp) const {
+    const operator_t op = camel::core::effect_trace::unwrap(tracedOp);
     for (const auto &[protocol, executor] : loadedExecutors) {
         std::string name = executor->getNameOfAnOperator(op);
         if (!name.empty()) {

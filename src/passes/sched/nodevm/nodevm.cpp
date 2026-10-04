@@ -28,6 +28,7 @@
 #include "camel/utils/log.h"
 
 #include "camel/core/context/frame.h"
+#include "camel/core/effect_trace.h"
 #include "camel/core/error/runtime.h"
 
 #include <algorithm>
@@ -718,6 +719,9 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 FrameArgsView withView(*currFrame, wargs);
                 FrameArgsView normView(*currFrame, nargs);
 
+                if (camel::core::effect_trace::enabled()) [[unlikely]] {
+                    camel::core::effect_trace::setSite(currRuntimeGraph->nodeOrigin(nodeRef));
+                }
                 slot_t result = (*opFunc)(withView, normView, *context_);
 
                 currFrame->set(n->dataIndex, result);

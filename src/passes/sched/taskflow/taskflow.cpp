@@ -19,6 +19,7 @@
 
 #include "taskflow.h"
 
+#include "camel/core/effect_trace.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
@@ -597,6 +598,9 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     FrameArgsView withView(*frame, wargs);
     FrameArgsView normView(*frame, nargs);
 
+    if (camel::core::effect_trace::enabled()) [[unlikely]] {
+        camel::core::effect_trace::setSite(graph->nodeOrigin(nodeRef));
+    }
     try {
         return (*opFunc)(withView, normView, *context_);
     } catch (const RuntimeFault &fault) {
