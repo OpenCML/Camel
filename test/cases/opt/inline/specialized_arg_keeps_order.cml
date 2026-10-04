@@ -1,0 +1,23 @@
+module specialized_arg_keeps_order
+
+// The result of a sync call is a constant, but reading it orders the next call after the first
+// one's effects. Once the first call is inlined, std::opt sees the constant through the GATE
+// that waits for those effects and binds it into a specialization of the second call, which
+// then no longer reads it. The second call must still wait for the GATE: otherwise the effects
+// before it no longer reach the exit and never run.
+// Expected output (one value per line): 1, 2, 40.
+func show(x: int): int sync {
+    println(x)
+    return 0
+}
+
+func add_show(a: int, b: int): int sync {
+    println(a + b)
+    return 0
+}
+
+func main(): int sync {
+    println(1)
+    let shown = show(2)
+    return add_show(40, shown)
+}
