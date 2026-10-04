@@ -565,7 +565,15 @@ PassApplyResult applyPassesDetailed(
             camel::core::mm::autoSpace().safepoint(std::format("before pass {}", p));
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), graph); });
             auto pass = factory(ctx);
-            graph     = pass->apply(graph, os);
+            // Diagnostics raised while this pass runs carry its stage: "run" for a scheduling
+            // pass (the program executes), "pass:<name>" for rewrite and translation passes.
+            struct StageScope {
+                explicit StageScope(std::string stage) { setPipelineStage(std::move(stage)); }
+                ~StageScope() { setPipelineStage(""); }
+            } stageScope(
+                dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ? std::string("run")
+                                                                         : "pass:" + p);
+            graph = pass->apply(graph, os);
             camel::core::mm::autoSpace().safepoint(std::format("after pass {}", p));
             if (ctx->rtmDiags()->hasErrors()) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (see diagnostics)", p);
@@ -585,7 +593,10 @@ PassApplyResult applyPassesDetailed(
             }
             CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> next graph '{}'", p, graph->name());
         } else {
-            throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(p);
+            setPipelineStage("pass:" + p);
+            auto unknown = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(p);
+            setPipelineStage("");
+            throw unknown;
         }
     }
 

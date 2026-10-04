@@ -43,6 +43,10 @@ struct Diagnostic {
     std::string name;
     std::string message;
     std::string suggestion;
+    /// Pipeline stage the diagnostic was raised in: "parse", "typecheck", "pass:<name>" (a
+    /// rewrite or translation pass), "run" (a scheduling pass), or "internal". Filled from
+    /// stageForDiagnostic() when the diagnostic is created.
+    std::string stage;
 
     // range can be a traditional CharRange/TokenRange or a lazily resolved SpanId/OriginId.
     SourceRange range{};
@@ -59,6 +63,12 @@ struct Diagnostic {
     static std::string escapeJson(const std::string &s);
     static char hexNib(int v);
 };
+
+/// Names the pipeline stage that diagnostics raised from now on belong to ("" = none: the
+/// stage then follows the diagnostic type). The pass driver sets it around each pass.
+void setPipelineStage(std::string stage);
+/// The stage a diagnostic of `type` raised now belongs to (see Diagnostic::stage).
+std::string stageForDiagnostic(DiagType type);
 
 // ---- Exception classes ----
 class DiagnosticsLimitExceededBaseException : public std::exception {
@@ -214,6 +224,7 @@ template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args)
     d.type     = type_;
     d.specific = specific_;
     d.name     = name_;
+    d.stage    = stageForDiagnostic(type_);
     try {
         auto arg_storage = std::make_tuple(std::forward<Args>(args)...);
         auto make_args   = [&] {

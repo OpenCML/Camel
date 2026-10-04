@@ -59,6 +59,18 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `std::jit`: JIT-enabled bytecode VM scheduler
 - `std::gir`: dump the current graph IR and stop
 
+### JSON diagnostics (`--output-format json`)
+
+Errors are printed on stdout, after any program output, as a JSON array of objects:
+
+```json
+{"range":{"start":{"line":6,"character":13},"end":{"line":6,"character":14}},"severity":"Error","code":"0x04000001","source":"Camel","message":"Attempted division by zero.","data":{"stage":"run","name":"RuntimeDiag::DivisionByZero","moduleName":"m","modulePath":"m.cml","suggestion":"..."}}
+```
+
+- `range` is 0-based; `data.modulePath` is the file. A diagnostic without a source position (for example an unknown pass name) has an all-zero range and an empty `modulePath`.
+- `data.name` is the stable diagnostic name; `code` is its numeric form.
+- `data.stage` tells where in the pipeline the diagnostic was raised: `parse`, `typecheck`, `pass:<name>` for a rewrite or translation pass (including an unknown pass name), `run` for a scheduling pass (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`), or `internal`.
+
 ### Effect trace (`CAMEL_EFFECT_TRACE`)
 
 Setting the environment variable `CAMEL_EFFECT_TRACE=<file>` makes the process append one JSON line per executed effectful operator (any operator not registered as pure in the operator-traits registry: `println`, file I/O, `py_*`, in-place assignment, ...), in call order:

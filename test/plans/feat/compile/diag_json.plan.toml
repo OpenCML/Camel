@@ -1,0 +1,118 @@
+id = "compile.diag_json"
+order = 319
+tier = "feat"
+tags = ["feat", "compile", "diagnostics"]
+
+[[tests]]
+name = "parse_stage"
+desc = "A syntax error is reported as valid JSON with stage parse and a source range."
+kind = "behavior"
+case = "../../../cases/parse/syntax/missing_then.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 1
+verify_script = """
+const text = input.stdout
+const start = text.lastIndexOf('[\n{')
+assert(start >= 0, 'stdout ends with a JSON diagnostics array')
+const diags = JSON.parse(text.slice(start))
+assert(diags.length === 1, 'one diagnostic')
+const d = diags[0]
+assert(d.severity === 'Error', 'severity is a JSON string')
+assert(d.data.stage === 'parse', 'stage is parse, got ' + d.data.stage)
+assert(d.data.name === 'SyntaxDiag::UnknownSyntaxError', 'name is SyntaxDiag::UnknownSyntaxError, got ' + d.data.name)
+assert(d.range.end.line > 0 || d.range.end.character > 0, 'diagnostic has a source range')
+assert(d.data.modulePath.length > 0, 'diagnostic names its file')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "typecheck_stage"
+desc = "A semantic error is reported with stage typecheck."
+kind = "behavior"
+case = "../../../cases/compile/semantic/unresolved_reference.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 1
+verify_script = """
+const text = input.stdout
+const start = text.lastIndexOf('[\n{')
+assert(start >= 0, 'stdout ends with a JSON diagnostics array')
+const diags = JSON.parse(text.slice(start))
+assert(diags.length === 1, 'one diagnostic')
+const d = diags[0]
+assert(d.severity === 'Error', 'severity is a JSON string')
+assert(d.data.stage === 'typecheck', 'stage is typecheck, got ' + d.data.stage)
+assert(d.data.name === 'SemanticDiag::UnresolvedReference', 'name is SemanticDiag::UnresolvedReference, got ' + d.data.name)
+assert(d.range.end.line > 0 || d.range.end.character > 0, 'diagnostic has a source range')
+assert(d.data.modulePath.length > 0, 'diagnostic names its file')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "unknown_pass_stage"
+desc = "An unknown pass name is reported with stage pass:<name>; it has no source range because it is a command-line error."
+kind = "behavior"
+case = "../../../cases/compile/diag_json/div_zero.cml"
+args = ["--output-format", "json", "${case}", "std::no_such_pass"]
+expect_exit = 1
+verify_script = """
+const text = input.stdout
+const start = text.lastIndexOf('[\n{')
+assert(start >= 0, 'stdout ends with a JSON diagnostics array')
+const diags = JSON.parse(text.slice(start))
+assert(diags.length === 1, 'one diagnostic')
+const d = diags[0]
+assert(d.severity === 'Error', 'severity is a JSON string')
+assert(d.data.stage === 'pass:std::no_such_pass', 'stage is pass:std::no_such_pass, got ' + d.data.stage)
+assert(d.data.name === 'RuntimeDiag::UnrecognizedGraphPass', 'name is RuntimeDiag::UnrecognizedGraphPass, got ' + d.data.name)
+assert(d.range.end.line === 0 && d.range.end.character === 0, 'no source range')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "run_stage_nvm"
+desc = "A run-time fault under NodeVM is reported with stage run and the source range of the failing expression."
+kind = "behavior"
+case = "../../../cases/compile/diag_json/div_zero.cml"
+args = ["--output-format", "json", "${case}", "std::nvm"]
+expect_exit = 1
+verify_script = """
+const text = input.stdout
+const start = text.lastIndexOf('[\n{')
+assert(start >= 0, 'stdout ends with a JSON diagnostics array')
+const diags = JSON.parse(text.slice(start))
+assert(diags.length === 1, 'one diagnostic')
+const d = diags[0]
+assert(d.severity === 'Error', 'severity is a JSON string')
+assert(d.data.stage === 'run', 'stage is run, got ' + d.data.stage)
+assert(d.data.name === 'RuntimeDiag::DivisionByZero', 'name is RuntimeDiag::DivisionByZero, got ' + d.data.name)
+assert(d.range.end.line > 0 || d.range.end.character > 0, 'diagnostic has a source range')
+assert(d.data.modulePath.length > 0, 'diagnostic names its file')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "run_stage_after_rewrite_fvm"
+desc = "The same fault after rewrite passes under FastVM still has stage run."
+kind = "behavior"
+case = "../../../cases/compile/diag_json/div_zero.cml"
+args = ["--output-format", "json", "${case}", "std::macro", "std::fvm"]
+expect_exit = 1
+verify_script = """
+const text = input.stdout
+const start = text.lastIndexOf('[\n{')
+assert(start >= 0, 'stdout ends with a JSON diagnostics array')
+const diags = JSON.parse(text.slice(start))
+assert(diags.length === 1, 'one diagnostic')
+const d = diags[0]
+assert(d.severity === 'Error', 'severity is a JSON string')
+assert(d.data.stage === 'run', 'stage is run, got ' + d.data.stage)
+assert(d.data.name === 'RuntimeDiag::DivisionByZero', 'name is RuntimeDiag::DivisionByZero, got ' + d.data.name)
+assert(d.range.end.line > 0 || d.range.end.character > 0, 'diagnostic has a source range')
+assert(d.data.modulePath.length > 0, 'diagnostic names its file')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
