@@ -29,7 +29,10 @@ Camel 的同步执行语义要求：
 - `blockStmt : WAIT? stmtBlock`
 - `waitExpr : WAIT? assignExpr`
 
-函数层面，`sync` 通过函数类型修饰符体现（`Modifier::Sync`），例如 `func main(): int sync { ... }` 或 `sync func ...`。
+函数层面有两种写法，当前实现中它们**不是同一件事**（详见 2.5）：
+
+- 后缀写法 `func main(): int sync { ... }`：`sync` 属于函数体这个 `stmtBlock`，函数体是一个同步块；函数类型上**没有** `Modifier::Sync`。
+- 前缀写法 `sync func f(...) { ... }`：`sync` 是 `modifiers` 中的函数类型修饰符（`Modifier::Sync`）；函数体是普通块。
 
 ### 2.2 `sync` 的语义
 
@@ -55,6 +58,54 @@ Camel 的同步执行语义要求：
 
 - 变量参数（`var`）只允许出现在 `sync` 函数中；否则触发 `VarParamInAsyncFunction`。
 - 调用带副作用签名（典型是 `var` 参数）而既不在 `sync` 上下文也不加 `wait`，会触发 `IgnoredSideEffect` 告警。
+- 这两条都是 Warn 级诊断，目前只在模块同时存在 Error 时才会被输出（见 2.5 第 6 条）。
+
+### 2.5 当前行为与未决问题：`sync` 块之外的效应
+
+> **状态：当前实现的行为记录，不是语言承诺。** 下面每一条都由程序运行确认
+> （`test/cases/linear/runtime/effects_outside_sync.cml`，计划 `linear.runtime_negative` 中的
+> `effects_outside_sync.*`；零遍、`std::fvm`、`std::jit`、`std::tf` 以及含 `std::inline`、
+> `std::opt::simplify`、`std::macro` 的流水线输出相同）。应当采用哪种语义尚未决定，见本节末尾。
+
+**实际行为。** GIR builder 只通过三种途径把一个调用接到函数出口（`visitExitNode`，
+`src/compile/gir/builder.cpp`）：数据边（结果被用到，最终流向返回值）、`var` 实参的修饰链
+（`modifierOf`）、以及**函数体自身是同步块时**的同步链尾（`synced_ && lastSyncedNode_`）。都不满足的调用
+不可达于出口，不进入运行时图，因此**在任何调度器上都不执行**——不是“顺序不定”，而是不存在。具体地：
+
+1. 非同步函数体中，结果未被使用的效应调用（例如一条 `println(...)` 语句）不执行。
+2. 给它加 `wait` 不改变这一点：`wait` 目前只影响 `IgnoredSideEffect` 告警的判定，不建立到出口的连接。
+3. 非同步函数体内嵌套的 `sync { ... }` 块：块内语句彼此有序，但块尾同样没有接到外层出口
+   （`visitExecNode` 退出时恢复外层的 `lastSyncedNode_`），整块效应不执行。
+4. 结果作为返回值的效应调用（`return println(...)`）在数据路径上，会执行；同一函数里它之前那条结果未用的
+   `println` 仍不执行。
+5. **前缀与后缀写法不等价。** `func f(): T sync { 效应; return v }` 的函数体是同步块，效应执行。
+   `sync func f(): T { 效应; return v }` 只给函数类型加 `Modifier::Sync`（其作用是允许 `var` 参数，
+   见 2.4），函数体是普通块，效应按第 1 条被丢弃——`sync func main(): int { println(...) }` 什么也不输出。
+   反过来，后缀写法的函数不带 `Modifier::Sync`，声明 `var` 参数会触发（不显示的）
+   `VarParamInAsyncFunction` 告警，但 `var` 回写照常工作。两种写法同时使用（`sync func f(): T sync { ... }`）
+   时两者兼得。成因在语法：`funcDecl : ... modifiers? FUNC ... stmtBlock`，`stmtBlock : SYNC? '{' ... '}'`
+   （`src/parse/ast/builder.cpp` 的 `visitFuncDecl` / `visitStmtBlock`），两个 `sync` 落在不同的 AST 标记上，
+   之后没有任何一处把它们关联起来。
+6. **告警。** `IgnoredSideEffect` 只对带 `var` 参数、且既不在同步块内也未加 `wait` 的调用产生；对
+   `println` 这类不纯算子不产生。并且模块诊断只在模块有 Error 时才输出
+   （`Context::dumpAllModuleDiagnostics`，`src/core/context/context.cpp`）：没有错误的程序，其告警在
+   `camel`、`camel -v`、`camel check` 下都不显示；`camel check -N/--max-warning` 被解析但没有被使用。
+   所以上述被丢弃的效应目前没有任何提示。
+7. 附录第二个示例（`wait_boundary_demo`，非同步的 `main` 末尾一条 `println`）按第 1 条不输出任何内容。
+
+**未决问题（需要语言层面的决定，实现没有替语言做决定）。**
+
+- A. `sync` 块之外、结果未被使用的效应调用应当如何处理：
+  - A1. **保证执行，顺序不定**：构图时把这类调用接到函数出口（控制边），不与其他语句排序；
+  - A2. **编译错误**：在非同步上下文中丢弃不纯调用的结果是错误；
+  - A3. **保持不执行，但告警**：对所有不纯算子（不仅是 `var` 参数调用）给出 `IgnoredSideEffect` 类告警，
+    并让告警在没有错误的模块上也能显示。
+- B. 前缀 `sync func` 与后缀 `func ...: T sync { }` 是否应当等价（前缀隐含同步的函数体，和/或后缀隐含
+  `Modifier::Sync`）。`docs/language/04_execution_model.md` 4.4 的示例对两种写法的用法不同（前缀写法的函数体内
+  显式使用 `wait`），没有声明二者等价；让前缀隐含同步函数体会改变现有 `sync func` 程序的行为（目前被丢弃的
+  效应会开始执行）。
+- C. `wait` 在非同步上下文中是否应当建立到出口的依赖（2.3 的文字描述暗示应当，实现没有）。
+- D. 嵌套 `sync` 块的块尾是否应当成为外层函数完成的条件。
 
 ## 3. 编译实现层：从 AST/GCT 到 GIR 的落地
 

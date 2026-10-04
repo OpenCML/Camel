@@ -81,3 +81,71 @@ expect_stdout_contains = ["200", "Maximum recursion depth (256) exceeded"]
 expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
+
+[[tests]]
+name = "effects_outside_sync.nvm"
+desc = "Locks the CURRENT behaviour documented as an open question in docs/technical/18_sync_control_semantics.md section 2.5: an effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body, under wait, in a nested sync block and in a prefix `sync func` it is absent from the graph. Same output on every scheduler (nvm)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/effects_outside_sync.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_output_not_contains = ["DROPPED"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n10\nKEPT main end', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "effects_outside_sync.fvm"
+desc = "Locks the CURRENT behaviour documented as an open question in docs/technical/18_sync_control_semantics.md section 2.5: an effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body, under wait, in a nested sync block and in a prefix `sync func` it is absent from the graph. Same output on every scheduler (fvm)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/effects_outside_sync.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_output_not_contains = ["DROPPED"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n10\nKEPT main end', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "effects_outside_sync.jit"
+desc = "Locks the CURRENT behaviour documented as an open question in docs/technical/18_sync_control_semantics.md section 2.5: an effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body, under wait, in a nested sync block and in a prefix `sync func` it is absent from the graph. Same output on every scheduler (jit)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/effects_outside_sync.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+expect_output_not_contains = ["DROPPED"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n10\nKEPT main end', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "effects_outside_sync.tf"
+desc = "Locks the CURRENT behaviour documented as an open question in docs/technical/18_sync_control_semantics.md section 2.5: an effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body, under wait, in a nested sync block and in a prefix `sync func` it is absent from the graph. Same output on every scheduler (tf)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/effects_outside_sync.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+expect_output_not_contains = ["DROPPED"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n10\nKEPT main end', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
