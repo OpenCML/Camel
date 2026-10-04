@@ -2,13 +2,21 @@
 
 A pipeline is the list of pass names given to `camel <file> <pass>...`.
 
-  fixed    P0-P12 of the experiment plan (P0, zero passes, is the reference).
-  random   a frozen set drawn once from a seed: a random subset of the rewrite passes in a
-           random order (length 0..N, no pass repeated, `std::macro` neither forced first nor
-           forced present), followed by one terminal scheduling pass. The same set is used
-           for every program.
+  fixed     P0-P12 of the experiment plan (P0, zero passes, is the reference).
+  random    a frozen set drawn once from a seed: a random subset of the rewrite passes in a
+            random order (length 0..N, no pass repeated, `std::macro` neither forced first nor
+            forced present), followed by one terminal. R01-R60 end in a scheduling pass
+            (`std::nvm`, `std::fvm`, `std::jit`, 20 each) and are the same 60 pipelines as in
+            the first run; R61-R80 end in the translation pass `onnx::export` (drawn from the
+            same generator after the first 60, so the first 60 are unchanged).
+  onnx      E1 (`std::macro std::opt::simplify onnx::export`, the documented export pipeline)
+            and R61-R80. They are run only on programs with an export entry (their own
+            `onnx.export_model` call); the written model is then run on ONNX Runtime.
+  refuse    pipelines that every program must refuse: an unknown pass name (XU1, XU2) and,
+            for programs with an export entry, `onnx::export` without the passes it needs
+            (XO1). They exercise the "refuse" half of the contract.
 
-Run `python pipelines.py` to print the set as JSON.
+Run `python pipelines.py` to print the sets as JSON.
 """
 
 from __future__ import annotations
@@ -50,10 +58,11 @@ REWRITE_PASSES: List[str] = [
 ]
 
 TERMINALS: List[str] = ["std::nvm", "std::fvm", "std::jit"]
+ONNX_TERMINAL = "onnx::export"
 
 # Passes contributed by a module: they exist only in programs that import the module, so a
 # pipeline naming one is "not applicable" to other programs rather than a refusal.
-MODULE_PASSES = {"tensor::fuse": "tensor"}
+MODULE_PASSES = {"tensor::fuse": "tensor", "onnx::export": "onnx"}
 
 SCHEDULING_PASSES = {"std::nvm", "std::fvm", "std::jit", "std::tf", "std::nodevm", "std::fastvm",
                      "std::taskflow", "std::default", "std::linear", "std::parallel"}
@@ -61,13 +70,32 @@ SCHEDULING_PASSES = {"std::nvm", "std::fvm", "std::jit", "std::tf", "std::nodevm
 RANDOM_SEED = 20261004
 RANDOM_PER_TERMINAL = 20
 
+# The pipeline the documentation gives for the export pass (docs/cli.md).
+ONNX_FIXED: Dict[str, List[str]] = {
+    "E1": ["std::macro", "std::opt::simplify", ONNX_TERMINAL],
+}
 
-def random_pipelines(seed: int = RANDOM_SEED, per_terminal: int = RANDOM_PER_TERMINAL) -> Dict[str, List[str]]:
-    rng = random.Random(seed)
+UNKNOWN_PASS = "x1a::no_such_pass"
+# Pipelines that must be refused, with what they are expected to do and where that comes from.
+EXPECT_REFUSE: Dict[str, dict] = {
+    "XU1": {"passes": ["std::macro", UNKNOWN_PASS, "std::nvm"], "applies": "all",
+            "source": "docs/cli.md: an unknown pass name is a diagnostic of stage pass:<name> "
+                      "without a source position"},
+    "XU2": {"passes": ["std::nvm", UNKNOWN_PASS], "applies": "all",
+            "source": "same; the unknown name comes after a scheduling pass, so a refusal that "
+                      "is not raised before execution shows as output/effects before the "
+                      "diagnostic"},
+    "XO1": {"passes": [ONNX_TERMINAL], "applies": "onnx",
+            "source": "docs/cli.md, 'Refusal': without std::opt::simplify the entry graph still "
+                      "calls main, so onnx::export refuses with TranslationRefused"},
+}
+
+
+def _draw(rng: random.Random, terminals: List[str], per_terminal: int, seen: set, first_index: int
+          ) -> Dict[str, List[str]]:
     out: Dict[str, List[str]] = {}
-    seen = {tuple(p) for p in FIXED.values()}
-    index = 1
-    for terminal in TERMINALS:
+    index = first_index
+    for terminal in terminals:
         made = 0
         while made < per_terminal:
             length = rng.randint(0, len(REWRITE_PASSES))
@@ -81,11 +109,66 @@ def random_pipelines(seed: int = RANDOM_SEED, per_terminal: int = RANDOM_PER_TER
     return out
 
 
-def all_pipelines() -> Dict[str, List[str]]:
+def _random_all(seed: int = RANDOM_SEED, per_terminal: int = RANDOM_PER_TERMINAL) -> Dict[str, List[str]]:
+    rng = random.Random(seed)
+    seen = {tuple(p) for p in FIXED.values()}
+    out = _draw(rng, TERMINALS, per_terminal, seen, 1)
+    seen |= {tuple(p) for p in ONNX_FIXED.values()}
+    seen |= {tuple(v["passes"]) for v in EXPECT_REFUSE.values()}
+    out.update(_draw(rng, [ONNX_TERMINAL], per_terminal, seen, len(out) + 1))
+    return out
+
+
+def random_pipelines(seed: int = RANDOM_SEED, per_terminal: int = RANDOM_PER_TERMINAL) -> Dict[str, List[str]]:
+    """R01-R60: the random pipelines that end in a scheduling pass."""
+    return {k: v for k, v in _random_all(seed, per_terminal).items() if v[-1] != ONNX_TERMINAL}
+
+
+def native_pipelines() -> Dict[str, List[str]]:
     pipelines = dict(FIXED)
     pipelines.update(random_pipelines())
     return pipelines
 
 
+def onnx_pipelines() -> Dict[str, List[str]]:
+    pipelines = dict(ONNX_FIXED)
+    pipelines.update({k: v for k, v in _random_all().items() if v[-1] == ONNX_TERMINAL})
+    return pipelines
+
+
+def refuse_pipelines() -> Dict[str, List[str]]:
+    return {k: list(v["passes"]) for k, v in EXPECT_REFUSE.items()}
+
+
+def all_pipelines() -> Dict[str, List[str]]:
+    pipelines = native_pipelines()
+    pipelines.update(onnx_pipelines())
+    pipelines.update(refuse_pipelines())
+    return pipelines
+
+
+def kind(pipeline_id: str, passes: List[str]) -> str:
+    """native | onnx | refuse | plan (a command line taken from a test plan)."""
+    if pipeline_id in EXPECT_REFUSE:
+        return "refuse"
+    if pipeline_id == "PLAN":
+        return "plan"
+    if passes and passes[-1] == ONNX_TERMINAL:
+        return "onnx"
+    return "native"
+
+
+def applies(pipeline_id: str, passes: List[str], program: dict) -> bool:
+    """Whether a pipeline is run on a program of the agree set. Native pipelines run on every
+    program; the ONNX pipelines and XO1 only on programs with an export entry."""
+    k = kind(pipeline_id, passes)
+    if k == "onnx":
+        return bool(program.get("onnx"))
+    if k == "refuse" and EXPECT_REFUSE[pipeline_id]["applies"] == "onnx":
+        return bool(program.get("onnx"))
+    return True
+
+
 if __name__ == "__main__":
-    print(json.dumps(all_pipelines(), indent=1))
+    print(json.dumps({"native": native_pipelines(), "onnx": onnx_pipelines(),
+                      "refuse": EXPECT_REFUSE}, indent=1))
