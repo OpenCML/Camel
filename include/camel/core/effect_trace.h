@@ -24,13 +24,18 @@
  * registered as pure in OperatorTraitsRegistry appends one JSON line when it is called:
  *
  *   {"seq":0,"uri":":io/println","stage":"run",
- *    "origin":{"file":"a.cml","line":12,"col":5},"payload_sha1":"..."}
+ *    "origin":{"file":"a.cml","line":12,"col":5},"payload_sha1":"...",
+ *    "payload":"string=hello|||"}
  *
  * - `seq` counts effect calls of the process, in call order.
  * - `stage` is "macro" while `std::macro` evaluates a call ahead of time, "run" otherwise.
  * - `origin` is the source position (1-based) of the operator node, or null when the executing
  *   back end does not report it (JIT-compiled code) or the node was synthesized by a pass.
  * - `payload_sha1` hashes the printed argument values, taken before the operator runs.
+ * - `payload` is the hashed text itself: each argument as `type=value` followed by `|`, the
+ *   normal arguments first, then `||`, then the `with` arguments (the hashed bytes use 0x1f and
+ *   0x1e for the two separators). It is cut to 2048 bytes, in which case the line also carries
+ *   `"payload_truncated":true`; the hash always covers the full text.
  *
  * The hook sits where operator URIs are resolved to functions (ExecutorManager::find): an
  * effectful operator is handed out behind a trampoline, so every back end, including

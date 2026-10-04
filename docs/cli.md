@@ -90,12 +90,13 @@ Errors are printed on stdout, after any program output, as a JSON array of objec
 Setting the environment variable `CAMEL_EFFECT_TRACE=<file>` makes the process append one JSON line per executed effectful operator (any operator not registered as pure in the operator-traits registry: `println`, file I/O, `py_*`, in-place assignment, ...), in call order:
 
 ```json
-{"seq":0,"uri":":io/println","stage":"run","origin":{"file":"a.cml","line":12,"col":5},"payload_sha1":"..."}
+{"seq":0,"uri":":io/println","stage":"run","origin":{"file":"a.cml","line":12,"col":5},"payload_sha1":"...","payload":"string=hello|||"}
 ```
 
 - `stage` is `macro` while `std::macro` evaluates a call ahead of time and `run` otherwise.
 - `origin` is the 1-based source position of the operator node, or `null` when the node has none (nodes synthesized by passes).
 - `payload_sha1` hashes the printed argument values, taken before the operator runs.
+- `payload` is the text that is hashed: each argument as `type=value` followed by `|`, the normal arguments first, then `||`, then the `with` arguments (in the hashed bytes the two separators are `0x1f` and `0x1e`). It is cut to 2048 bytes; a cut line also carries `"payload_truncated":true`, and `payload_sha1` still covers the full text.
 
 The trace is written by a wrapper installed where operator URIs are resolved, so all back ends (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`) and the macro evaluator are covered. It does not record whether the operator ran inside a `sync` scope. The file is truncated at the first effect of each process. See `include/camel/core/effect_trace.h`.
 

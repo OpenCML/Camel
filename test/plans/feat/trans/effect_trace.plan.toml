@@ -26,3 +26,15 @@ expect_exit = 0
 expect_stdout_contains = ["effect trace: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+[[tests]]
+name = "effect_payload_text"
+desc = "CAMEL_EFFECT_TRACE: `payload` is the hashed argument text, JSON-escaped; a payload over 2048 bytes is cut on a character boundary with payload_truncated, and payload_sha1 still covers the full text."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/effect_trace/effect_trace.py"
+args = ["${case}", "payload"]
+expect_exit = 0
+expect_stdout_contains = ["effect trace: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000

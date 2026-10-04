@@ -207,6 +207,37 @@ void appendArgs(std::ostringstream &os, ArgsView &args) {
     }
 }
 
+/// Upper bound, in bytes, of the payload text written to a trace line.
+constexpr size_t kMaxPayloadBytes = 2048;
+
+/// The payload as written to the trace: the hashed text with the unit separator (0x1f, after
+/// each argument) shown as `|` and the record separator (0x1e, between the normal and the
+/// `with` arguments) as `||`, cut to kMaxPayloadBytes. The cut backs off to a UTF-8 character
+/// boundary so a multi-byte character is never split; `truncated` reports whether anything
+/// was dropped.
+std::string payloadText(std::string_view raw, bool &truncated) {
+    std::string text;
+    text.reserve(raw.size() + 1);
+    for (const char c : raw) {
+        if (c == '\x1f') {
+            text += '|';
+        } else if (c == '\x1e') {
+            text += "||";
+        } else {
+            text.push_back(c);
+        }
+    }
+    truncated = text.size() > kMaxPayloadBytes;
+    if (truncated) {
+        size_t cut = kMaxPayloadBytes;
+        while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) {
+            --cut;
+        }
+        text.resize(cut);
+    }
+    return text;
+}
+
 slot_t invoke(size_t index, ArgsView &with, ArgsView &norm, context::Context &ctx) {
     const Slot &slot = registry().slots[index];
 
@@ -244,11 +275,16 @@ slot_t invoke(size_t index, ArgsView &with, ArgsView &norm, context::Context &ct
             }
         }
         if (s.file) {
+            // The hash covers the full payload; the text written next to it may be cut.
+            const std::string raw  = payload.str();
+            bool truncated         = false;
+            const std::string text = payloadText(raw, truncated);
             const std::string line =
                 "{\"seq\":" + std::to_string(s.seq++) + ",\"uri\":\"" + jsonEscape(slot.uri) +
                 "\",\"stage\":\"" + (tlsMacroDepth > 0 ? "macro" : "run") +
-                "\",\"origin\":" + originJson + ",\"payload_sha1\":\"" + sha1Hex(payload.str()) +
-                "\"}\n";
+                "\",\"origin\":" + originJson + ",\"payload_sha1\":\"" + sha1Hex(raw) +
+                "\",\"payload\":\"" + jsonEscape(text) + "\"" +
+                (truncated ? ",\"payload_truncated\":true" : "") + "}\n";
             std::fwrite(line.data(), 1, line.size(), s.file);
             std::fflush(s.file);
         }
