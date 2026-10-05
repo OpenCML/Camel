@@ -2891,3 +2891,20 @@ assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 2
 }
 """
 timeout_ms = 20000
+
+[[tests]]
+name = "var_param_jit"
+desc = "std::inline std::jit compiles a function that passes its var parameter on (200000-deep tail recursion); a function that reads the variable stays in the interpreter because :var/get is a generic operator (current limit, update when it is lowered)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_param_jit.cml"
+args = ["-vv", "${case}", "std::inline", "std::jit"]
+expect_exit = 0
+expect_output_contains = ["compiled & cached graph 'down'", "compiled & cached graph 'plain'", "compile skipped for graph 'read'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').filter(l => /^[0-9]+$/.test(l)).join(' ')
+assert(out === '0 7 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
