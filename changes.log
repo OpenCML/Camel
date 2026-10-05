@@ -1,4 +1,38 @@
+[0.2.2]
+New Features:
+- 新增逐 pass 图快照、图差异工具、效应追踪和流水线诊断。
+- 完善 var 引用语义、捕获写入追踪、sync/wait 顺序与副作用警告。
+
+Bug Fixes:
+- 修复图优化、分支调度及 ONNX 导出的顺序和诊断问题。
+
+[0.2.1]
+New Features:
+- 新增节点断点、单步和逐 pass 图查询。
+- 完善 ONNX 分支、动态 batch、Adam 状态和训练态 BatchNorm 导出。
+
+Bug Fixes:
+- 修复语言服务器诊断与格式化。
+
+Technical Notes:
+- 补齐部署、跨框架对齐和性能归因工具。
+
+[0.2.0]
+New Features:
+- 重构 Tensor 算子与内核，优化矩阵和向量计算。
+- 引入静态图自动求导、高阶梯度、自定义导数及参数树优化器。
+- 新增图优化、ONNX 函数与训练步导出。
+
+Technical Notes:
+- 完善运行时图编译、VM/JIT、诊断及验证工具。
+
 [0.1.23]
+New Features:
+- 新增 refinement 类型统一与拓宽接口。
+
+Bug Fixes:
+- 修复特殊类型的可赋值性判断。
+- 修复文件头更新脚本的换行符保留。
 
 [0.1.22]
 New Features:
