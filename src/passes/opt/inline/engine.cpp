@@ -209,8 +209,8 @@ bool isDraftBranchArmHead(const camel::runtime::GraphDraft &draft, gc_node_ref_t
 /// the shape recursion compaction leaves (the recursive call inlined into the arm, which makes
 /// the arm's graph an arm of itself). So nothing is inlined into the graphs an unexpanded macro
 /// operator can still reach: its function operand, and what that calls or holds as a function
-/// constant. Calls of these graphs from elsewhere are inlined as usual (the copy belongs to the
-/// caller).
+/// constant, including the copies specialization made of them earlier in the same session. Calls
+/// of these graphs from elsewhere are inlined as usual (the copy belongs to the caller).
 struct MacroOperandGraphs {
     std::unordered_set<const GCGraph *> graphs;
     /// A macro operator takes a function that is not a constant of the graph (a parameter, the
@@ -238,7 +238,9 @@ GCGraph *functionConstantGraph(const GCGraph *graph, gc_node_ref_t ref) {
     return function ? function->graph() : nullptr;
 }
 
-MacroOperandGraphs collectMacroOperandGraphs(const std::vector<GCGraph *> &closure) {
+MacroOperandGraphs collectMacroOperandGraphs(
+    const camel::runtime::RuntimeGraphDraftSession &session,
+    const std::vector<GCGraph *> &closure) {
     using camel::core::type::TypeCode;
     MacroOperandGraphs result;
     std::vector<const GCGraph *> work;
@@ -272,9 +274,37 @@ MacroOperandGraphs collectMacroOperandGraphs(const std::vector<GCGraph *> &closu
             }
         }
     }
+    const auto reach = [&](GCGraph *target) {
+        if (target && result.graphs.insert(target).second) {
+            work.push_back(target);
+        }
+    };
     while (!work.empty()) {
         const GCGraph *graph = work.back();
         work.pop_back();
+        // A graph this session already edited calls what its draft calls: a specialization
+        // made in this session is a new graph that only the draft refers to, and it is as much
+        // part of what the operator transforms as the function it was copied from.
+        if (const auto *draft = session.tryDraft(graph)) {
+            for (gc_node_ref_t id = 0; id < draft->nodeSlotCount(); ++id) {
+                const auto *header = draft->header(id);
+                if (!header || header->kind != GCNodeKind::Func) {
+                    continue;
+                }
+                const auto payload = draft->payloadOf(id);
+                if (payload.size_bytes() >= sizeof(GCFuncBody)) {
+                    reach(reinterpret_cast<const GCFuncBody *>(payload.data())->calleeGraph);
+                }
+            }
+            const auto slots = draft->staticSlots();
+            const auto types = draft->staticSlotTypes();
+            for (size_t i = 1; i < slots.size() && i < types.size(); ++i) {
+                if (types[i] && types[i]->code() == TypeCode::Function) {
+                    auto *function = camel::core::rtdata::fromSlot<::Function *>(slots[i]);
+                    reach(function ? function->graph() : nullptr);
+                }
+            }
+        }
         if (!graph->hasNodePayload()) {
             continue;
         }
@@ -286,9 +316,7 @@ MacroOperandGraphs collectMacroOperandGraphs(const std::vector<GCGraph *> &closu
             if (!target) {
                 target = functionConstantGraph(graph, it.ref());
             }
-            if (target && result.graphs.insert(target).second) {
-                work.push_back(target);
-            }
+            reach(target);
         }
     }
     return result;
@@ -477,7 +505,7 @@ GCGraph *applyRuntimeOptimizeRewrite(
         RuntimeCallGraphSccInfo sccInfo;
         MacroOperandGraphs macroOperands;
         if (config.enableInlining) {
-            macroOperands = collectMacroOperandGraphs(closure);
+            macroOperands = collectMacroOperandGraphs(session, closure);
             closureSet.insert(closure.begin(), closure.end());
             for (GCGraph *runtimeGraph : closure) {
                 if (!runtimeGraph) {
