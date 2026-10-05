@@ -781,7 +781,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
             // Case 2: Multiple data nodes - build once with Factory to avoid recomputing the type.
             TupleDataFactory tupleFactory;
             bool dangling       = false;
-            node_ptr_t execNode = createNodeAs<ExecLoad>();
+            node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
 
             for (const auto &item : *dataNodes) {
                 node_ptr_t dataNode = visitData(item);
@@ -1702,7 +1702,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
 
     ArrayDataFactory factory;
     bool dangling       = false;
-    node_ptr_t execNode = createNodeAs<ExecLoad>();
+    node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
@@ -1732,7 +1732,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
 
     StructDataFactory factory;
     bool dangling       = false;
-    node_ptr_t execNode = createNodeAs<ExecLoad>();
+    node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
@@ -1764,7 +1764,7 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
 
     TupleDataFactory factory;
     bool dangling       = false;
-    node_ptr_t execNode = createNodeAs<ExecLoad>();
+    node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);

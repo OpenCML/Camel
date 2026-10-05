@@ -1924,8 +1924,13 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     const auto &execLoad      = gct->loadAs<GCT::ExecLoad>();
     bool old                  = synced_;
     node_handle_t oldFuncNode = lastSyncedNode_;
-    synced_                   = execLoad->synced();
-    lastSyncedNode_           = {};
+    // The operands of a composite literal are not a block: in a sync block they continue its
+    // chain, in written order, like the arguments of a call statement.
+    const bool operands = execLoad->operands();
+    if (!operands) {
+        synced_         = execLoad->synced();
+        lastSyncedNode_ = {};
+    }
     node_handle_t res{};
     for (size_t i = 0; i < gct->size(); i++) {
         try {
@@ -1943,8 +1948,10 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
             continue;
         }
     }
-    synced_         = old;
-    lastSyncedNode_ = oldFuncNode;
+    if (!operands) {
+        synced_         = old;
+        lastSyncedNode_ = oldFuncNode;
+    }
     LEAVE("EXEC");
     return res;
 }
