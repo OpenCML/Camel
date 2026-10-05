@@ -682,6 +682,8 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
     std::optional<uint32_t> tillRuntimeIndex;
     std::optional<uint32_t> skipRuntimeIndex;
     std::optional<uint32_t> joinRuntimeIndex;
+    // Same as the schedulers: the (tail, join) pairs of the arms that enclose a nested branch.
+    std::vector<std::pair<uint32_t, std::optional<uint32_t>>> enclosingArms;
 
     auto executeNode = [&](uint32_t runtimeNodeIndex) {
         const auto *node = runtimeGraph->node(runtimeNodeIndex);
@@ -907,6 +909,12 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
                 continue;
             }
         }
+        if (!skipRuntimeIndex.has_value() && !enclosingArms.empty() &&
+            joinRuntimeIndex.has_value() && *joinRuntimeIndex == runtimeNodeIndex) {
+            skipRuntimeIndex = enclosingArms.back().first;
+            joinRuntimeIndex = enclosingArms.back().second;
+            enclosingArms.pop_back();
+        }
         if (skipRuntimeIndex.has_value() && *skipRuntimeIndex == runtimeNodeIndex) {
             skipRuntimeIndex.reset();
             tillRuntimeIndex = joinRuntimeIndex;
@@ -927,6 +935,9 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
                 runtimeNodeIndex,
                 jumpIdx,
                 runtimeTopoIndices);
+            if (skipRuntimeIndex.has_value()) {
+                enclosingArms.emplace_back(*skipRuntimeIndex, joinRuntimeIndex);
+            }
             joinRuntimeIndex = body->join;
             tillRuntimeIndex = entry;
             if (entry == body->join) {

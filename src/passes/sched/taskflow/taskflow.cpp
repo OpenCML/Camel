@@ -197,6 +197,8 @@ slot_t TaskflowExecSchedPass::evalGraphLinear(GCGraph *graph, Frame *frame) {
     gc_node_ref_t tillNode = kInvalidNodeRef;
     gc_node_ref_t skipNode = kInvalidNodeRef;
     gc_node_ref_t joinNode = kInvalidNodeRef;
+    // Same as NodeVM: the (tail, join) pairs of the arms that enclose a nested branch.
+    std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> enclosingArms;
 
 loop_start:
     gcSafepoint("taskflow graph boundary");
@@ -215,6 +217,11 @@ loop_start:
                 continue;
             }
         }
+        if (skipNode == kInvalidNodeRef && !enclosingArms.empty() && nodeRef == joinNode) {
+            skipNode = enclosingArms.back().first;
+            joinNode = enclosingArms.back().second;
+            enclosingArms.pop_back();
+        }
         if (skipNode != kInvalidNodeRef && skipNode == nodeRef) {
             skipNode = kInvalidNodeRef;
             tillNode = joinNode;
@@ -231,6 +238,9 @@ loop_start:
             ASSERT(jumpIdx < arms.size(), "Taskflow linear BRCH arm index is out of range.");
             // Same arm range as NodeVM: from the arm's first executable node in the linear
             // order (nodes of an inlined arm can precede its recorded head) through its tail.
+            if (skipNode != kInvalidNodeRef) {
+                enclosingArms.emplace_back(skipNode, joinNode);
+            }
             joinNode = body->join;
             tillNode = branchArmEntryForLinear(currRuntimeGraph, nodeRef, jumpIdx, currNodes);
             skipNode = tillNode == joinNode ? kInvalidNodeRef : arms[jumpIdx].tail;
@@ -264,6 +274,7 @@ loop_start:
                 tillNode         = kInvalidNodeRef;
                 skipNode         = kInvalidNodeRef;
                 joinNode         = kInvalidNodeRef;
+                enclosingArms.clear();
 
                 if (runtimeTarget == currRuntimeGraph) {
                     camel::execute::fillFrameForDirectInvoke(

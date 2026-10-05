@@ -456,6 +456,10 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
         gc_node_ref_t tillNode = kInvalidNodeRef;
         gc_node_ref_t skipNode = kInvalidNodeRef;
         gc_node_ref_t joinNode = kInvalidNodeRef;
+        // A BRCH met while an arm is still running (a branch nested in an arm of the same graph,
+        // e.g. after inlining) must not lose that arm's end: the enclosing (tail, join) pairs
+        // wait here and are restored when the nested JOIN is reached.
+        std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> enclosingArms;
 
         // Tail-call loop. Rebind currRuntimeGraph/currFrame instead of growing the C++ stack.
     loop_start: {
@@ -489,6 +493,13 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                         nodeRef));
                     continue;
                 }
+            }
+            if (skipNode == kInvalidNodeRef && !enclosingArms.empty() && nodeRef == joinNode) {
+                // The nested branch is over; the enclosing arm continues (its tail may be
+                // this very JOIN, which the next check handles).
+                skipNode = enclosingArms.back().first;
+                joinNode = enclosingArms.back().second;
+                enclosingArms.pop_back();
             }
             if (skipNode != kInvalidNodeRef && skipNode == nodeRef) {
                 EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
@@ -605,6 +616,9 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 // The arm runs from its first executable node in the linear order (not from
                 // its recorded head: after inlining, nodes of the arm can precede the head)
                 // through its tail. An arm with nothing to execute resumes at the JOIN.
+                if (skipNode != kInvalidNodeRef) {
+                    enclosingArms.emplace_back(skipNode, joinNode);
+                }
                 joinNode = body->join;
                 tillNode = branchArmEntriesOf(currCache, i)[jumpIdx];
                 skipNode = tillNode == joinNode ? kInvalidNodeRef : arms[jumpIdx].tail;
@@ -686,6 +700,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     Frame *lastFrame = currFrame;
                     tillNode         = kInvalidNodeRef;
                     skipNode         = kInvalidNodeRef;
+                    enclosingArms.clear();
 
                     const auto argSlots = directCallArgSlotsOf(currCache, i);
                     if (runtimeTarget != currRuntimeGraph) {
