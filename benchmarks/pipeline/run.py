@@ -29,6 +29,18 @@ In the effect payload text the path is replaced by `{tmp}`. When the trace has n
 the same directory path, so that the hash of a payload containing the path is the same in
 every run; all other cells run in parallel.
 
+Written files (deviation D7 of the classifier rules). Besides the `.npy` digests, a written
+file of at most TEXT_FILE_BYTES that is valid UTF-8 is recorded with its text (per-run paths
+replaced as in the output), and a model (`.onnx`) that a program of the agree set wrote under a
+native pipeline and that differs by hash from the one its zero-pass run wrote is compared with
+that one on ONNX Runtime (onnx_gate.py, same seeded inputs); the result is the file's `vs_ref`.
+classify.py uses both to compare an event of a file-writing operator whose payload text was
+truncated in the trace. A `.npy` file of more than NPY_FULL_VALUES elements is recorded as a
+sample; when numpy is importable and the file differs by hash from the zero-pass run's, all its
+elements are compared with that file and the result is stored as `npy.vs_ref`, which classify.py
+then uses instead of the sample. The zero-pass run's files (repeat 0) are kept under
+files/<program>/P0.r0/ when they include a model or a sampled array.
+
 Which cells exist. Programs of the agree set run under the native pipelines (P0-P12,
 R01-R60) and the must-refuse pipelines XU1, XU2; programs with an export entry also under
 the ONNX pipelines (E1, R61-R80) and XO1. Entries of the must-refuse set run once, under
@@ -77,6 +89,7 @@ HERE = Path(__file__).resolve().parent
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 NPY_FULL_VALUES = 4096
+TEXT_FILE_BYTES = 65536
 
 
 def default_camel() -> str:
@@ -162,7 +175,10 @@ def npy_digest(data: bytes) -> Optional[dict]:
         return None
 
 
-def digest_files(tmp: Path) -> List[dict]:
+def digest_files(tmp: Path, normalize=None) -> List[dict]:
+    """One entry per file under the run directory: name, size, SHA-1; `.npy` files with their
+    values (`npy`); other files that are short valid UTF-8 text with their text (`text`, after
+    `normalize`, which replaces the per-run paths)."""
     out = []
     for path in sorted(p for p in tmp.rglob("*") if p.is_file()):
         data = path.read_bytes()
@@ -172,6 +188,12 @@ def digest_files(tmp: Path) -> List[dict]:
             npy = npy_digest(data)
             if npy:
                 entry["npy"] = npy
+        elif len(data) <= TEXT_FILE_BYTES and b"\x00" not in data:
+            try:
+                text = data.decode("utf-8")
+                entry["text"] = normalize(text) if normalize else text
+            except UnicodeDecodeError:
+                pass
         out.append(entry)
     return out
 
@@ -240,6 +262,10 @@ def base_record(program: dict, pipeline_id: str, passes: List[str], repeat: int,
         "has_export_entry": bool(program.get("onnx")),
         "expect": program.get("expect"),
         "expect_source": program.get("source", ""),
+        # D5: what the plan expects of a must-refuse command line (corpus.py); "" in the agree set.
+        "expect_kind": program.get("expect_kind", "") if program.get("role") == "must_refuse" else "",
+        # D4: the reason the program is on the static exclusion list, or "".
+        "exclusion": program.get("exclusion", ""),
         "pipeline_id": pipeline_id,
         "pipeline_kind": pl.kind(pipeline_id, passes),
         "passes": passes,
@@ -312,7 +338,11 @@ def run_one(program: dict, pipeline_id: str, passes: List[str], repeat: int, set
                 event["payload"] = unfill(event["payload"], tmp, settings)
             effects.append(event)
 
-    files = digest_files(tmp)
+    files = digest_files(tmp, lambda text: unfill(text, tmp, settings))
+    if (program.get("role", "agree") == "agree" and pl.kind(pipeline_id, passes) == "native"
+            and pipeline_id != pl.REFERENCE and ref_info):
+        compare_models_with_reference(files, tmp, ref_info, settings)
+        compare_arrays_with_reference(files, tmp, ref_info)
     record = base_record(program, pipeline_id, passes, repeat, settings)
     record.update({
         "command": [unfill(c, tmp, settings) for c in cmd],
@@ -336,7 +366,8 @@ def run_one(program: dict, pipeline_id: str, passes: List[str], repeat: int, set
                 "effects": str(effects_path.relative_to(out)).replace("\\", "/")},
     })
 
-    keep = is_onnx or (pipeline_id == pl.REFERENCE and repeat == 0 and any(f["name"].endswith(".onnx") for f in files))
+    keep = is_onnx or (pipeline_id == pl.REFERENCE and repeat == 0 and any(
+        f["name"].endswith(".onnx") or "sample" in (f.get("npy") or {}) for f in files))
     kept_dir = out / "files" / pid / stem
     shutil.rmtree(kept_dir, ignore_errors=True)
     if is_onnx and program.get("role", "agree") == "agree" and pl.kind(pipeline_id, passes) == "onnx":
@@ -349,6 +380,86 @@ def run_one(program: dict, pipeline_id: str, passes: List[str], repeat: int, set
         shutil.rmtree(tmp, ignore_errors=True)
     write_record(out, record)
     return record
+
+
+def compare_arrays_with_reference(files: List[dict], tmp: Path, ref_info: dict) -> None:
+    """D7: a written `.npy` file too large to be recorded element by element is compared, on all
+    its elements, with the file of the same name of the zero-pass run (repeat 0) when the two
+    differ by hash. Adds `vs_ref` to the file's `npy` digest: dtype and shape equality, the
+    largest |a-b| and the largest |a-b| / max(1, |a|) (a the reference; NaN equals NaN only),
+    and whether that is within the strict (1e-5) and the near (1e-3) tolerance; integer and
+    boolean arrays must be equal. Needs numpy; without it the sample stays the only evidence."""
+    ref_sha, ref_dir = ref_info.get("file_sha1") or {}, ref_info.get("files_dir", "")
+    todo = [e for e in files if "sample" in (e.get("npy") or {}) and e["name"] in ref_sha
+            and ref_sha[e["name"]] != e["sha1"] and (Path(ref_dir) / e["name"]).exists()]
+    if not todo:
+        return
+    try:
+        import numpy as np  # noqa: PLC0415
+    except ImportError:
+        return
+    for entry in todo:
+        try:
+            a, b = np.load(Path(ref_dir) / entry["name"]), np.load(tmp / entry["name"])
+            verdict = {"dtype_equal": a.dtype == b.dtype, "shape_equal": a.shape == b.shape, "elements": int(a.size)}
+            if not (verdict["dtype_equal"] and verdict["shape_equal"]):
+                verdict.update(within_strict=False, within_near=False)
+            elif not np.issubdtype(a.dtype, np.floating):
+                same = bool(np.array_equal(a, b))
+                verdict.update(max_abs_err=0.0 if same else None, max_scaled_err=0.0 if same else None,
+                               within_strict=same, within_near=same)
+            else:
+                x, y = a.astype(np.float64).ravel(), b.astype(np.float64).ravel()
+                diff = np.abs(x - y)
+                diff = np.where(np.isnan(x) & np.isnan(y), 0.0, diff)
+                diff = np.where(np.isnan(diff), np.inf, diff)       # NaN on one side only
+                diff = np.where(x == y, 0.0, diff)                   # equal infinities
+                scaled = diff / np.maximum(1.0, np.where(np.isfinite(x), np.abs(x), 1.0))
+                worst = float(scaled.max()) if scaled.size else 0.0
+                verdict.update(max_abs_err=float(diff.max()) if diff.size else 0.0, max_scaled_err=worst,
+                               within_strict=worst <= 1e-5, within_near=worst <= 1e-3)
+            entry["npy"]["vs_ref"] = verdict
+        except Exception as e:  # noqa: BLE001 - recorded; the sample stays the evidence
+            entry["npy"]["vs_ref_error"] = str(e)[:200]
+
+
+def compare_models_with_reference(files: List[dict], tmp: Path, ref_info: dict, settings: Settings) -> None:
+    """D7: a model a program wrote under a native pipeline is compared by content with the model
+    of the same name its zero-pass run (repeat 0) wrote, when the two differ by hash. Adds
+    `vs_ref` to the file's entry: `equivalent` is True when every output of the two models agrees
+    within the strict tolerance on the gate's seeded inputs, False when one differs or the model
+    does not check, load or run, None when the comparison could not be made."""
+    ref_sha, ref_dir = ref_info.get("onnx_sha1") or {}, ref_info.get("files_dir", "")
+    for entry in files:
+        name = entry["name"]
+        if not name.endswith(".onnx") or name not in ref_sha or ref_sha[name] == entry["sha1"]:
+            continue
+        req_path, res_path = tmp / "gate-request.json", tmp / "gate-result.json"
+        req_path.write_text(json.dumps({"model": str(tmp / name), "native": None, "ref_output": "",
+                                        "ref_model": str(Path(ref_dir) / name)}), encoding="utf-8")
+        try:
+            subprocess.run([settings.gate_python, str(HERE / "onnx_gate.py"), str(req_path), str(res_path)],
+                           capture_output=True, text=True, timeout=300)
+            result = json.loads(res_path.read_text(encoding="utf-8"))
+        except Exception as e:  # noqa: BLE001 - recorded; the file then stays "differs by hash"
+            result = {"available": False, "error": f"onnx_gate.py did not produce a result: {e}"}
+        for leftover in (req_path, res_path):
+            leftover.unlink(missing_ok=True)
+        cmps = result.get("comparisons", [])
+        broken = result.get("checker_ok") is False or result.get("load_ok") is False or result.get("run_ok") is False
+        if broken:
+            verdict = {"equivalent": False, "within_near": False}
+        elif not result.get("available", True) or result.get("oracle") != "export_model_artifact" or not cmps:
+            verdict = {"equivalent": None, "within_near": None}
+        else:
+            verdict = {"equivalent": all(c.get("within_strict") for c in cmps),
+                       "within_near": all(c.get("within_near") for c in cmps)}
+        errors = [c.get("max_abs_err") for c in cmps if c.get("max_abs_err") is not None]
+        verdict.update({"max_abs_err": max(errors) if errors else None, "comparisons": len(cmps),
+                        "bit_identical_outputs": bool(cmps) and all(c.get("bit_identical") for c in cmps),
+                        "oracle": result.get("oracle", ""), "ref_sha1": ref_sha[name],
+                        "detail": str(result.get("error", "") or (f"max |diff| {max(errors)}" if errors else ""))[:300]})
+        entry["vs_ref"] = verdict
 
 
 def onnx_gate(program: dict, tmp: Path, ref_info: Optional[dict], settings: Settings) -> dict:
@@ -572,9 +683,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         ref_info = None
         if ref0 is not None:
             models_written = [f["name"] for f in ref0.get("files", []) if f["name"].endswith(".onnx")]
+            ref_dir = out / "files" / prog["id"] / stem_of(pl.REFERENCE, 0)
             ref_info = {"output": ref0["output"],
-                        "model": str(out / "files" / prog["id"] / stem_of(pl.REFERENCE, 0) / models_written[0])
-                        if len(models_written) == 1 else ""}
+                        "model": str(ref_dir / models_written[0]) if len(models_written) == 1 else "",
+                        "files_dir": str(ref_dir),
+                        "file_sha1": {f["name"]: f["sha1"] for f in ref0.get("files", [])},
+                        "onnx_sha1": {f["name"]: f["sha1"] for f in ref0.get("files", [])
+                                      if f["name"].endswith(".onnx")}}
         return run_one(prog, pid, passes, rep, settings, limit, max(2 * limit, args.hang_cap), ref_ms, ref_info)
 
     def run_unit(unit: list) -> None:

@@ -90,6 +90,19 @@ EXPECT_REFUSE: Dict[str, dict] = {
                       "calls main, so onnx::export refuses with TranslationRefused"},
 }
 
+# Deviation D5: what a command line of the must-refuse set is expected to do, decided from what
+# its test plan or manifest states (corpus.py, `expectation_kind`). Only the first two kinds
+# are in the must-refuse set; the others are listed in corpus.json and not run.
+#   front_end          rejected by the parser or the type checker (stage parse / typecheck)
+#   pipeline_refusal   rejected by a pass of the pipeline (stage pass:<name>)
+#   run_time           the plan expects a failure while the program runs (stage run)
+#   not_stated         the plan states neither a diagnostic name nor a stage
+#   ambiguous          the plan names diagnostics of more than one kind
+MUST_REFUSE_KINDS = {"front_end", "pipeline_refusal"}
+# Diagnostics of the RuntimeDiag family that a pass raises before anything executes.
+PASS_STAGE_DIAGNOSTICS = {"RuntimeDiag::TranslationRefused", "RuntimeDiag::UnrecognizedGraphPass",
+                          "RuntimeDiag::PassInternalError"}
+
 
 def _draw(rng: random.Random, terminals: List[str], per_terminal: int, seen: set, first_index: int
           ) -> Dict[str, List[str]]:

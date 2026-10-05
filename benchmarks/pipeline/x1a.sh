@@ -14,17 +14,30 @@
 # Exit code 0 means the run completed and every cell (program, pipeline, repeat) listed in
 # cells*.json has a record; it says nothing about the outcomes, which are in summary/.
 #
+# Rule set: the newest one of classify.py (frozen rules plus the recorded deviations D1-D9 of
+# CLASSIFIER-RULES.md) unless RULES says otherwise, e.g. RULES=frozen+D1 or RULES=frozen. The
+# rule set in force is printed before the run and with the summary, and is in totals.json.
+# The summary has the cause groups first (signatures.csv, signature_causes.csv), then the cells.
+# To compare with an earlier run on the same cells:
+#   python3 benchmarks/pipeline/compare_runs.py --old <old>/summary --new <out-dir>/summary --out <dir>
+# Everything is preliminary, container on a dev machine.
+#
 # Sharding: run `x1a.sh <out-dir> --shard K/N` for K = 0..N-1 (same or different machines; the
 # shards write disjoint files, so they may share <out-dir> or be copied into one afterwards),
 # then classify everything once:
-#   python3 benchmarks/pipeline/classify.py --records <out-dir>/records --out <out-dir>/summary
+#   python3 benchmarks/pipeline/classify.py --records <out-dir>/records --out <out-dir>/summary \
+#       --corpus <out-dir>/corpus.json
 # With --shard, the summary written here covers the records present in <out-dir> so far.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 out="${1:?usage: x1a.sh <out-dir> [run.py options]}"
 shift
 py="${PYTHON:-python3}"
+export PYTHONDONTWRITEBYTECODE=1
+rules="${RULES:-$("$py" -c "import sys; sys.path.insert(0, sys.argv[1]); import classify; print(classify.DEFAULT_RULES)" "$here")}"
 mkdir -p "$out"
+echo "[x1a] rule set in force: $rules (override with RULES=...); preliminary, container on a dev machine"
+"$py" "$here/selftest.py" > "$out/selftest.txt" || { cat "$out/selftest.txt"; echo "[x1a] selftest.py failed" >&2; exit 1; }
 "$py" "$here/corpus.py" --out "$out/corpus.json"
 "$py" "$here/run.py" --corpus "$out/corpus.json" --out "$out" "$@"
 "$py" - "$out" <<'EOF'
@@ -39,6 +52,10 @@ for manifest in sorted(out.glob("cells*.json")):
 print(f"records: {found} / expected {expected}")
 sys.exit(0 if found == expected and expected > 0 else 1)
 EOF
-"$py" "$here/classify.py" --records "$out/records" --out "$out/summary" > "$out/summary.stdout.json"
+"$py" "$here/classify.py" --records "$out/records" --out "$out/summary" --rules "$rules" \
+    --corpus "$out/corpus.json" > "$out/summary.stdout.json"
 cat "$out/summary.stdout.json"
+echo "[x1a] rule set in force: $rules"
+echo "cause groups: $out/summary/signatures.csv (with common passes), signature_causes.csv"
 echo "per-pipeline table: $out/summary/by_pipeline.csv; must-refuse: $out/summary/refusal_by_pipeline.csv"
+echo "not judged: $out/summary/excluded.csv, nondeterministic.csv, not_judged.csv, resource.csv"

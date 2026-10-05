@@ -20,11 +20,21 @@ under every pipeline and must agree with its zero-pass run or be refused.
      `train` (the stateful loop: one warm-up step and two timed steps, final parameters saved).
      Their timing lines are masked (see OUTPUT_MASKS in classify.py).
 
-`must_refuse` (the refuse set): command lines that are expected to fail.
+`must_refuse` (the refuse set): command lines that are expected to be rejected BEFORE anything
+executes, by the front end (parse / typecheck) or by a pass of the pipeline.
   4. test plans: every camel test with `expect_exit != 0` (same exclusions as above), with the
      passes and environment of that test and the diagnostic the plan expects.
   5. exemplars: the runs of `exemplar.toml` that execute the program and expect a non-zero exit.
   6. the refusals listed in `test/cases/modules/onnx/pass_export.py` (REFUSALS).
+Deviation D5: a command line whose plan expects a failure while the program runs (or states no
+diagnostic at all) is not in this set; it is listed under `removed_from_must_refuse` with the
+reason and is not run. What a plan expects is read from the plan (`expectation_kind`), never
+from what the compiler did.
+
+Deviation D4: `exclusions.json` (next to this file) lists the programs that print wall-clock
+times or unseeded random values. They stay in `programs` (they are still run: the must-refuse
+pipelines apply to them and their repeats keep feeding the determinism check) and carry the
+reason in `exclusion`; classify.py does not judge them.
 The pipelines that every program must refuse (unknown pass, `onnx::export` alone) are in
 pipelines.py (EXPECT_REFUSE); they are run on the agree set.
 
@@ -48,6 +58,9 @@ import os
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pipelines as pl  # noqa: E402
 
 EXCLUDED_PLAN_DIRS = ("parse", "format", "perf")
 SCHEDULING = {"std::nvm", "std::fvm", "std::jit", "std::tf", "std::prl", "std::nodevm", "std::fastvm",
@@ -110,11 +123,15 @@ def parse_tables(text: str, table: str) -> dict:
     plan: dict = {table: []}
     current = plan
     in_block = False
+    block_key, block = "", []
     for line in text.splitlines():
         stripped = line.strip()
         if in_block:
             if '"""' in stripped:
                 in_block = False
+                current[block_key] = "\n".join(block)   # kept as text (D5 reads verify_script)
+            else:
+                block.append(line)
             continue
         if stripped == f"[[{table}]]":
             current = {}
@@ -126,6 +143,9 @@ def parse_tables(text: str, table: str) -> dict:
         key, value = m.group(1), m.group(2)
         if value.startswith('"""'):
             in_block = value.count('"""') < 2
+            block_key, block = key, [value[3:]]
+            if not in_block:
+                current[key] = value[3:].rsplit('"""', 1)[0]
             continue
         if value.startswith("["):
             current[key] = [x.replace('\\"', '"').replace("\\\\", "\\") for x in _STR.findall(value)]
@@ -185,6 +205,37 @@ def expand_args(argv: list, variables: dict):
     return passes, other
 
 
+_DIAG_NAME = re.compile(r"\b([A-Z][A-Za-z]*Diag::[A-Za-z]+)")
+_STAGE = re.compile(r"\bstage\s*={2,3}\s*['\"]([^'\"]+)['\"]")
+
+
+def expectation_kind(expected_diagnostic: str, script: str) -> tuple:
+    """(kind, basis): what a failing command line is expected to do, from what its plan states:
+    the stage its verify script asserts (`d.data.stage === '...'`), else the diagnostic names the
+    plan gives (`expect_diagnostic_name`, the manifest's `diagnostic`, names in the verify
+    script). Kinds are those of pipelines.MUST_REFUSE_KINDS plus run_time, not_stated,
+    ambiguous. SyntaxDiag / SemanticDiag are front-end diagnostics; of the RuntimeDiag family
+    only pipelines.PASS_STAGE_DIAGNOSTICS are raised by a pass before execution."""
+    stages = sorted(set(_STAGE.findall(script or "")))
+    if stages:
+        kinds = {"front_end" if s in ("parse", "typecheck") else "pipeline_refusal" if s.startswith("pass:")
+                 else "run_time" for s in stages}
+        return (kinds.pop() if len(kinds) == 1 else "ambiguous"), "stage asserted by the plan: " + ", ".join(stages)
+    names = sorted(set(_DIAG_NAME.findall((expected_diagnostic or "") + " " + (script or ""))))
+    if not names:
+        return "not_stated", "the plan states neither a diagnostic name nor a stage"
+    kinds = {"pipeline_refusal" if n in pl.PASS_STAGE_DIAGNOSTICS else "run_time" if n.startswith("RuntimeDiag::")
+             else "front_end" for n in names}
+    return (kinds.pop() if len(kinds) == 1 else "ambiguous"), "diagnostic named by the plan: " + ", ".join(names)
+
+
+def load_exclusions(here: Path) -> dict:
+    path = here / "exclusions.json"
+    if not path.exists():
+        return {}
+    return {e["path"]: e for e in json.loads(path.read_text(encoding="utf-8")).get("excluded", [])}
+
+
 def has_export_entry(source: str) -> bool:
     return bool(re.search(r"\bexport_model\s*\(", source)) and bool(re.search(r"\bonnx\b", source))
 
@@ -204,6 +255,8 @@ def main() -> int:
     variants: dict[str, int] = {}         # path -> number of entries
     must_refuse: list[dict] = []
     refuse_seen: set = set()
+    removed: list[dict] = []
+    exclusion_list = load_exclusions(Path(__file__).resolve().parent)
     excluded: list[dict] = []
     seen_excluded: set[tuple[str, str]] = set()
 
@@ -232,18 +285,33 @@ def main() -> int:
             suffix = f"@{variant_hint}" if variant_hint else ("" if n == 1 else f"@v{n}")
             programs[key] = {"id": program_id(path) + suffix, "path": path, "env": env, "role": "agree",
                              "corpus": "dev", "origin": origin, "variant": variant_hint or f"v{n}",
-                             "onnx": onnx_spec(path), "output_mask": "", "plans": [], "plan_passes": []}
+                             "onnx": onnx_spec(path), "output_mask": "", "plans": [], "plan_passes": [],
+                             "exclusion": exclusion_list.get(path, {}).get("reason", "")}
         return programs[key]
 
-    def add_refusal(path: str, env: dict, passes: list, origin: str, source: str, expect: dict) -> None:
+    def add_refusal(path: str, env: dict, passes: list, origin: str, source: str, expect: dict,
+                    script: str = "") -> None:
         key = (path, json.dumps(env, sort_keys=True), tuple(passes))
         if key in refuse_seen:
             return
         refuse_seen.add(key)
-        n = sum(1 for m in must_refuse if m["path"] == path) + 1
-        must_refuse.append({"id": f"{program_id(path)}@refuse{n}", "path": path, "env": env,
-                            "role": "must_refuse", "corpus": "dev", "origin": origin,
-                            "passes": passes, "expect": expect, "source": source})
+        # The id counts every failing command line of the file, kept or removed, so that ids are
+        # the same as in the runs made before D5.
+        n = sum(1 for m in must_refuse + removed if m["path"] == path) + 1
+        kind, basis = expectation_kind(expect.get("diagnostic", ""), script)
+        entry = {"id": f"{program_id(path)}@refuse{n}", "path": path, "env": env,
+                 "role": "must_refuse", "corpus": "dev", "origin": origin,
+                 "passes": passes, "expect": expect, "source": source,
+                 "expect_kind": kind, "expect_kind_basis": basis}
+        if kind in pl.MUST_REFUSE_KINDS:
+            must_refuse.append(entry)
+        else:
+            entry["removed_reason"] = {
+                "run_time": "the plan expects a failure while the program runs, not a refusal before execution",
+                "not_stated": "the plan states no diagnostic name and no stage; a refusal before execution "
+                              "cannot be shown to be what it expects",
+                "ambiguous": "the plan names diagnostics of more than one kind"}[kind]
+            removed.append(entry)
 
     # 1 and 4: test plans.
     plans_root = root / "test" / "plans"
@@ -282,7 +350,8 @@ def main() -> int:
                           "diagnostic": test.get("expect_diagnostic_name", ""),
                           "line": test.get("expect_diagnostic_line", ""),
                           "column": test.get("expect_diagnostic_column", "")}
-                add_refusal(path, env, passes, "test/cases", f"test plan {label}", expect)
+                add_refusal(path, env, passes, "test/cases", f"test plan {label}", expect,
+                            str(test.get("verify_script", "")))
                 continue
             if passes and passes[-1] not in SCHEDULING and passes[-1].startswith("onnx::"):
                 # A test of the export pass: the program is not executed, so it does not give
@@ -354,7 +423,7 @@ def main() -> int:
             entry["onnx"] = None
 
     kept = sorted(programs.values(), key=lambda p: p["id"])
-    ids = [p["id"] for p in kept] + [m["id"] for m in must_refuse]
+    ids = [p["id"] for p in kept] + [m["id"] for m in must_refuse + removed]
     if len(ids) != len(set(ids)):
         raise SystemExit("corpus.py: duplicate program ids")
     agree_paths = {p["path"] for p in kept}
@@ -362,7 +431,9 @@ def main() -> int:
     by_origin = {}
     for p in kept:
         by_origin[p["origin"]] = by_origin.get(p["origin"], 0) + 1
-    out = {"programs": kept, "must_refuse": sorted(must_refuse, key=lambda m: m["id"]),
+    out = {"label": "preliminary, container on a dev machine",
+           "programs": kept, "must_refuse": sorted(must_refuse, key=lambda m: m["id"]),
+           "removed_from_must_refuse": sorted(removed, key=lambda m: m["id"]),
            "excluded": only_excluded,
            "counts": {"programs": len(kept), "distinct_files": len(agree_paths),
                       "by_origin": by_origin,
@@ -371,6 +442,13 @@ def main() -> int:
                       "with_native_onnx_oracle": sum(1 for p in kept if p["onnx"] and p["onnx"]["native"]),
                       "must_refuse": len(must_refuse),
                       "must_refuse_distinct_files": len({m["path"] for m in must_refuse}),
+                      "must_refuse_by_kind": {k: sum(1 for m in must_refuse if m["expect_kind"] == k)
+                                              for k in sorted({m["expect_kind"] for m in must_refuse})},
+                      "removed_from_must_refuse": len(removed),
+                      "removed_from_must_refuse_by_kind": {k: sum(1 for m in removed if m["expect_kind"] == k)
+                                                           for k in sorted({m["expect_kind"] for m in removed})},
+                      "on_exclusion_list": sum(1 for p in kept if p["exclusion"]),
+                      "on_exclusion_list_distinct_files": len({p["path"] for p in kept if p["exclusion"]}),
                       "excluded_programs": len({e["path"] for e in only_excluded})}}
     Path(args.out).write_text(json.dumps(out, indent=1), encoding="utf-8")
     print(json.dumps(out["counts"]))
