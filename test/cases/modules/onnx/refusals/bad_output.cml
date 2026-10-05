@@ -1,0 +1,13 @@
+/**
+ * The result of an exported function must be a tensor or a number. A function returning a
+ * string is refused at the export_model call (line 11).
+ */
+module bad_output
+
+import { Tensor, reshape } from tensor
+import { export_model } from onnx
+
+func main(): int sync {
+    export_model((t: Tensor): string => 'text', reshape([1.0, 2.0], [2]), 'tmp/test/onnx/refusal_output.onnx')
+    return 0
+}

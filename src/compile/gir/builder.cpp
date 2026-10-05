@@ -561,6 +561,18 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
         const bool entryModule =
             context_ && module_ && context_->mainModule() && context_->mainModule() == module_;
         if (entryGraph) {
+            // The entry graph stands for the entry function where a diagnostic is about the
+            // program as a whole (a translation pass that finds nothing to translate): it
+            // shares the origin of `main`, also after passes have inlined `main` into it.
+            if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
+                const auto mainOrigin =
+                    sourceContext->debugMap().graphOrigin(entryGraph->stableId());
+                if (mainOrigin != camel::source::kInvalidOriginId) {
+                    sourceContext->debugMap().registerGraphOrigin(
+                        rootGraph_->stableId(),
+                        mainOrigin);
+                }
+            }
             auto entryFuncValue = createFuncDataNode(entryGraph, true, false);
             auto entryCall      = rootGraph_->addCallNode(entryGraph->funcType()->exitType());
             linkNodes(LinkType::With, entryFuncValue, entryCall);

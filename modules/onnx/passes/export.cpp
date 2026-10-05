@@ -33,6 +33,7 @@
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/source/ids.h"
+#include "camel/core/source/manager.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/graph.h"
 
@@ -56,7 +57,9 @@ constexpr const char *kPassName     = "onnx::export";
 constexpr const char *kRequestUri   = "onnx:export_model";
 constexpr const char *kOutputEnvVar = "CAMEL_ONNX_OUT";
 
-/// Why the pass does not translate, and the node it is about.
+/// Why the pass does not translate, and the node it is about. A refusal that is about no
+/// particular node leaves `origin` invalid; apply() then reports it at the export_model call
+/// being translated or, before any call is known, at the entry function (see locate()).
 struct Refusal {
     uint64_t origin;
     std::string message;
@@ -64,7 +67,8 @@ struct Refusal {
 
 /// One `onnx.export_model(...)` call of the entry graph, with its arguments read as constants.
 struct Request {
-    ::Function *fn = nullptr; // constant function value (the closure template when built by FILL)
+    uint64_t origin = camel::source::kInvalidOriginId; // the call, for refusals about it
+    ::Function *fn  = nullptr; // constant function value (the closure template when built by FILL)
     GCGraph *graph = nullptr;
     std::vector<Example> captures;
     std::vector<Example> examples;
@@ -192,6 +196,7 @@ void readFunction(const GCGraph *g, gc_node_ref_t node, Request &request) {
 
 Request readRequest(const GCGraph *g, gc_node_ref_t node) {
     Request request;
+    request.origin  = originNear(g, node);
     const auto args = g->normInputsOf(node);
     readFunction(g, node, request);
     if (!request.graph) {
@@ -237,21 +242,68 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node) {
     return request;
 }
 
-/// A source-level name of the function a call node of `g` calls, when it is statically known.
-std::string calleeNameOf(const GCGraph *g, gc_node_ref_t ref) {
-    const GCGraph *callee = nullptr;
+/// The function a call node of `g` calls, when it is statically known.
+const GCGraph *calleeGraphOf(const GCGraph *g, gc_node_ref_t ref) {
     if (g->node(ref)->kind == GCNodeKind::Func) {
-        callee = g->directCalleeGraphOf(ref);
-    } else if (const auto with = g->withInputsOf(ref); !with.empty()) {
+        return g->directCalleeGraphOf(ref);
+    }
+    if (const auto with = g->withInputsOf(ref); !with.empty()) {
         if (const auto fn = constantOf(g, with.front());
             fn && fn->type && fn->type->code() == TypeCode::Function) {
-            callee = rtdata::fromSlot<::Function *>(fn->value)->graph();
+            return rtdata::fromSlot<::Function *>(fn->value)->graph();
         }
     }
+    return nullptr;
+}
+
+/// A source-level name of the function a call node of `g` calls, when it is statically known.
+std::string calleeNameOf(const GCGraph *g, gc_node_ref_t ref) {
+    const GCGraph *callee = calleeGraphOf(g, ref);
     if (!callee || callee->name().empty() || callee->name().starts_with("__")) {
         return {};
     }
     return callee->name().substr(0, callee->name().find('$'));
+}
+
+/// The definition of the function `g` was compiled from, or the first of its nodes that has a
+/// source position (a graph a pass cloned keeps its nodes' origins but not its own).
+uint64_t graphOriginOf(core::context::Context &ctx, const GCGraph *g) {
+    if (g == nullptr) {
+        return camel::source::kInvalidOriginId;
+    }
+    if (const auto source = ctx.sourceContext()) {
+        const auto origin = source->debugMap().graphOrigin(g->stableId());
+        if (origin != camel::source::kInvalidOriginId) {
+            return origin;
+        }
+    }
+    for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+        if (*it == nullptr) {
+            continue;
+        }
+        if (const uint64_t origin = g->nodeOrigin(it.ref());
+            origin != camel::source::kInvalidOriginId) {
+            return origin;
+        }
+    }
+    return camel::source::kInvalidOriginId;
+}
+
+/// Where a refusal about the program as a whole is reported: the entry function, that is the
+/// function the entry graph calls (`main`) while it is still a call, the entry graph itself
+/// once `main` has been inlined into it.
+uint64_t entryOriginOf(core::context::Context &ctx, const GCGraph *root) {
+    for (auto it = root->nodes().begin(); it != root->nodes().end(); ++it) {
+        const auto *n = *it;
+        if (n == nullptr || (n->kind != GCNodeKind::Func && n->kind != GCNodeKind::Call)) {
+            continue;
+        }
+        const uint64_t origin = graphOriginOf(ctx, calleeGraphOf(root, it.ref()));
+        if (origin != camel::source::kInvalidOriginId) {
+            return origin;
+        }
+    }
+    return graphOriginOf(ctx, root);
 }
 
 /// The export requests of the entry graph. A program whose entry graph still calls `main`
@@ -325,7 +377,11 @@ Model translate(core::context::Context &ctx, const Request &request) {
                        "macros such as grad) before it, and a call those passes leave cannot "
                        "be exported";
         }
-        throw Refusal{e.origin(), std::move(message)};
+        // An error about the request as a whole (its examples, dynamic axes, target, the
+        // function's arity or result) names no node: it is reported at the export_model call.
+        throw Refusal{
+            e.origin() != camel::source::kInvalidOriginId ? e.origin() : request.origin,
+            std::move(message)};
     }
 }
 
@@ -336,8 +392,9 @@ GCGraph *OnnxExportPass::apply(GCGraph *graph, std::ostream &os) {
         // Every request is translated before any file is written: a refusal leaves no model.
         const std::vector<Request> requests = collectRequests(graph);
         if (requests.size() > 1 && std::getenv(kOutputEnvVar) && *std::getenv(kOutputEnvVar)) {
+            // Reported at the second call: the first one is what the file name stands for.
             throw Refusal{
-                camel::source::kInvalidOriginId,
+                requests[1].origin,
                 std::format(
                     "{} names one model file but the entry graph contains {} "
                     "onnx.export_model calls",
@@ -352,14 +409,20 @@ GCGraph *OnnxExportPass::apply(GCGraph *graph, std::ostream &os) {
             try {
                 writeModelFile(models[i], requests[i].path);
             } catch (const std::runtime_error &e) {
-                throw Refusal{camel::source::kInvalidOriginId, e.what()};
+                throw Refusal{requests[i].origin, e.what()};
             }
             os << std::format("onnx::export: wrote {}\n", requests[i].path);
         }
     } catch (const Refusal &refusal) {
+        // Every refusal is located: at the node it names, else at the export_model call it
+        // concerns (set where it is raised), else at the entry function.
+        uint64_t origin = refusal.origin;
+        if (origin == camel::source::kInvalidOriginId) {
+            origin = entryOriginOf(*context_, graph);
+        }
         auto diag = context_->rtmDiags()->of(RuntimeDiag::TranslationRefused);
-        if (refusal.origin != camel::source::kInvalidOriginId) {
-            diag.atOrigin(refusal.origin);
+        if (origin != camel::source::kInvalidOriginId) {
+            diag.atOrigin(origin);
         }
         diag.commit(kPassName, refusal.message);
     }
