@@ -135,13 +135,17 @@ return [res1, res2]
 
 ### 4.3.2 raise / throw
 
-- **`raise expr`** / **`throw expr`**：引发异常；语法为 **retStmt**：**RETURN | RAISE | THROW** + **dataList**。
-- 具体异常类型与传播由实现定义。
+> **未实现。** 语法接受该写法，但异常机制（抛出、传播、捕获）没有实现：使用它是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该语句或 `try` 处）。
+
+- **`raise expr`** / **`throw expr`**：语法为 **retStmt**：**RETURN | RAISE | THROW** + **dataList**；设计上用于
+  引发异常。
 
 ### 4.3.3 try-catch-finally
 
+> **未实现。** 语法接受该写法，但异常机制（抛出、传播、捕获）没有实现：使用它是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该语句或 `try` 处）。
+
 - **`try stmtBlock catchClause+ (finally stmtBlock)?`**。
-- **catchClause**：**`catch identDef ':' typeExpr stmtBlock`**，捕获指定类型的异常并执行对应块。
+- **catchClause**：**`catch identDef ':' typeExpr stmtBlock`**，设计上用于捕获指定类型的异常并执行对应块。
 
 ```cml
 try {

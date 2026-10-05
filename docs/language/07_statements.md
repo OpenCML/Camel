@@ -1,6 +1,6 @@
 # 7. 语句
 
-本章描述 Camel 的**简单语句**与**复合语句**：表达式语句、return/raise/throw、let/var、use、using namespace、块、if、match、try、函数定义、类型定义，并配有完整程序片段示例。
+本章描述 Camel 的**简单语句**与**复合语句**：表达式语句、return（raise/throw 尚未实现）、let/var、use、using namespace、块、if、match、try（尚未实现）、函数定义、类型定义，并配有完整程序片段示例。
 
 ---
 
@@ -32,6 +32,8 @@ seed(s)
 ### 7.1.2 return / raise / throw 语句
 
 - **retStmt**：**`(return | raise | throw) dataList?`**。
+- **`raise` / `throw` 未实现**：语法接受，但异常机制没有实现，使用它是编译期错误
+  `SemanticDiag::ConstructNotSupported`（它们不再被当作 `return` 编译）。
 - **return** 可带多个表达式，或省略表示无值返回；可返回 **null**。
 
 **示例**
@@ -184,7 +186,9 @@ match dir {
 }
 ```
 
-### 7.2.4 try 语句
+### 7.2.4 try 语句（未实现）
+
+> **未实现。** 语法接受该写法，但异常机制（抛出、传播、捕获）没有实现：使用它是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该语句或 `try` 处）。
 
 - **`try stmtBlock catchClause+ (finally stmtBlock)?`**；**catchClause**：**`catch identDef ':' typeExpr stmtBlock`**。
 - 见 [6.9.3 try](06_expressions.md#693-try)。
@@ -192,8 +196,9 @@ match dir {
 ### 7.2.5 函数定义
 
 - **funcDecl**：**`(with angledParams)? export? implMark? modifiers? func identRef parentParams (':' typeExpr)? stmtBlock`**。
-- **implMark**：**inner** | **outer**。
-- **modifiers**：**atomic**、**shared**、**sync**、**macro** 等组合。
+- **implMark**：**inner** | **outer**。**未实现**：能被解析并记录，编译器不读取，没有语义。
+- **modifiers**：**atomic**、**shared**、**sync**、**macro** 等组合。其中 **atomic**、**shared** **未实现**：能被
+  解析并记录在函数类型上，没有任何语义；有语义的只有 **sync**（函数修饰符）和 **macro**。
 - 写在 `func` 之前的 **`sync`** 是函数修饰符：声明函数有副作用、需要被同步（带 `var` 形参的函数必须如此声明）；它**不会**使函数体成为同步块。要让函数体按书写顺序执行，把函数体写成同步块：`func f(): T sync { ... }`，或两者并用 `sync func f(): T sync { ... }`（见第 4 章 4.4.2、4.4.3）。
 - `var` 形参是引用；把 `let` 对象传给 `var` 形参是编译期错误（见第 4 章 4.4.4）。
 - **parentParams**：**`'(' pairedParams? ','? ')'`**；**keyParamPair**：**`var? identDef ':' typeExpr ('=' dataExpr)?`**。

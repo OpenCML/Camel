@@ -1,0 +1,17 @@
+/**
+ * `try` / `catch` / `finally` are in the grammar but exceptions are not implemented. The whole
+ * expression is a compile-time error located at `try` (line 9); nothing of the program runs.
+ */
+module try_not_supported
+
+func main(): int sync {
+    println('never printed')
+    try {
+        println('body')
+    } catch e: int {
+        println('handler')
+    } finally {
+        println('cleanup')
+    }
+    return 0
+}

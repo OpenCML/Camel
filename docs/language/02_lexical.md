@@ -104,6 +104,13 @@ merge_sorted_arrays
 | 修饰符 | `sync`, `macro`, `inner`, `outer`, `atomic`, `shared` |
 | 字面量 | `null`, `true`, `false` |
 
+其中**尚未实现**的关键字：
+
+- `try`、`catch`、`finally`、`throw`、`raise`：是保留字，语法接受，但异常机制没有实现；使用时是编译期错误
+  `SemanticDiag::ConstructNotSupported`。
+- `atomic`、`shared`、`inner`、`outer`：能被解析并记录在函数类型上，但编译器和运行时都不读取它们，
+  **没有任何语义**（对用户函数加不加都一样）。
+
 `sync` 有两种位置、两种含义：写在 `func` 之前是**函数修饰符**（函数有副作用、需要被同步），写在块之前（`sync { ... }`，或返回类型之后、函数体之前）是**块修饰符**（块内按书写顺序执行）。二者不等价，见第 4 章 4.4。`macro` 标记可由 `std::macro` 遍提前求值的函数，见 4.4.6。
 
 ### 2.3.4 多字符记号

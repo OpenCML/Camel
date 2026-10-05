@@ -1,6 +1,6 @@
 # 6. 表达式
 
-本章详细描述 Camel 的**表达式**：求值顺序、原子、访问/下标/调用/泛型、管道、一元与类型断言、可空、各类运算、控制表达式（if/match/try）、wait、Lambda，以及**运算符优先级**。每类都配有示例。
+本章详细描述 Camel 的**表达式**：求值顺序、原子、访问/下标/调用/泛型、管道、一元与类型断言、可空、各类运算、控制表达式（if/match；try 尚未实现）、wait、Lambda，以及**运算符优先级**。每类都配有示例。
 
 ---
 
@@ -399,7 +399,9 @@ let new_head = match dir {
 }
 ```
 
-### 6.9.3 try
+### 6.9.3 try（未实现）
+
+> **未实现。** 语法接受该写法，但异常机制（抛出、传播、捕获）没有实现：使用它是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该语句或 `try` 处）。
 
 - **`try stmtBlock catchClause+ (finally stmtBlock)?`**。
 - **catchClause**：**`catch identDef ':' typeExpr stmtBlock`**。
