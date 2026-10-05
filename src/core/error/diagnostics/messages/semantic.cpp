@@ -276,6 +276,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::AssignmentTargetNotVariable,
+            {
+                "AssignmentTargetNotVariable",
+                "The target of an assignment must be a variable.",
+                "A field, an element or any other expression cannot be assigned: the store "
+                "would go to a temporary. Assign a new value to the whole variable instead.",
+            },
+        },
+        {
             SemanticDiag::ImmutablePassedToVarParam,
             {
                 "ImmutablePassedToVarParam",

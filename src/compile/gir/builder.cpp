@@ -1697,7 +1697,16 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         requireMutableArgument(arg, calleeLabel);
         const bool named = isVariable(arg.node);
         if (takesVariables) {
-            // An expression that is not a name is a fresh object nobody else refers to.
+            // `s.x = e`, `arr[0] = e`, `f() = e`: the target is a temporary, and the store
+            // would be lost without a trace.
+            if (!named && targetOperator != nullptr) {
+                diags_->of(SemanticDiag::AssignmentTargetNotVariable)
+                    .atOrigin(arg.expr->load()->origin())
+                    .commit();
+                throw BuildAbortException();
+            }
+            // An expression that is not a name, passed to a function, is a fresh object
+            // nobody else refers to.
             node_handle_t variable = named ? arg.node : newVariable(arg.node);
             return std::pair{variable, variable};
         }

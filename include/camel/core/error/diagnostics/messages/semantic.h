@@ -58,6 +58,7 @@ enum class SemanticDiag : uint32_t {
     EntryModuleMissingMain       = 0x00001B,
     ArgumentsRejected            = 0x00001C,
     ImmutablePassedToVarParam    = 0x00001D,
+    AssignmentTargetNotVariable  = 0x00001E,
 
     // Warnings
     FeatureNotSupported     = 0x100000,

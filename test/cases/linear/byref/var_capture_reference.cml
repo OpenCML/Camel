@@ -7,7 +7,9 @@
  *   1 1      a lambda called later writes the captured variable
  *   12 12    a write from outside is seen by the lambda, and its write outside again
  *   6        a lambda passed to foreach writes it once per element
- *   [2, 4, 6] 3   a lambda passed to map: the results, and the calls it counted
+ *   [11, 12, 13]  a lambda passed to map reads the variable as it is at the call. (It does not
+ *                 write it: `map` may run its elements in parallel, and writes to one variable
+ *                 from several of them are not ordered.)
  *   1 2 3    a lambda that outlives the function declaring the variable keeps it
  *   1 1      ... and each call of that function declares a new variable
  *   8        a nested function writes a variable of the enclosing function
@@ -74,12 +76,10 @@ func main(): int sync {
     }>
     println(total)
 
-    var calls = 0
-    let doubled = [1, 2, 3]->map<(x: int): int => sync {
-        wait calls += 1
-        return x * 2
-    }>
-    println('{} {}'->format<doubled, calls>)
+    var base = 0
+    wait base += 10
+    let shifted = [1, 2, 3]->map<(x: int): int => x + base>
+    println(shifted)
 
     let next = counter()
     let n1 = next()

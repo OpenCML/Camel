@@ -1,0 +1,13 @@
+/**
+ * A store into an element of a `var` array: the target is not a variable.
+ * Rejected at compile time (docs/design-principles.cn.md 2.5, 2.6: a side effect
+ * must be declared, and only a `var` can be changed).
+ */
+module element_assigned
+
+func main(): int sync {
+    var arr = [1, 2, 3]
+    wait arr[0] = 9
+    println(arr)
+    return 0
+}
