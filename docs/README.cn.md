@@ -1,5 +1,7 @@
 # Camel：一种用于统一 AI 开发的图原生编程语言
 
+> **先读 [`design-principles.cn.md`](design-principles.cn.md)。** 它是语言作者对 Camel 根本定位与执行模型的规范性说明：与实现或其他文档冲突时以它为准；它没有覆盖或标为“未定”的问题，向语言作者提问，不要自行选择。
+
 [English](../README.md) | 中文简体
 
 [![许可证：MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)

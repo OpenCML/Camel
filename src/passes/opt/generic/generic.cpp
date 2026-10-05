@@ -37,6 +37,7 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_types.h"
+#include "camel/runtime/draft_writes.h"
 
 #include <deque>
 #include <map>
@@ -50,6 +51,7 @@ using camel::runtime::DraftBrchPayload;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
+using camel::runtime::isWrittenInPlace;
 using camel::runtime::kInvalidNodeRef;
 namespace type = camel::core::type;
 
@@ -58,12 +60,19 @@ namespace {
 // ---------------------------------------------------------------- branch regions
 
 /**
- * For every node, the branch arms it lies in (token = brch << 16 | arm, sorted). Arms are inline
- * regions: nodes forward-reachable from an arm's head, up to the branch's JOIN. Two nodes may
+ * For every node, the branch arms it lies in (token = brch << 16 | arm, sorted). Two nodes may
  * only be merged when they lie in exactly the same arms, so the survivor runs whenever the
  * replaced node would have.
+ *
+ * Arms are inline regions. An arm's nodes are those forward-reachable from its head up to the
+ * branch's JOIN, and also the nodes of the branch (what runs after the BRCH and before the
+ * JOIN) that its tail depends on: inlining an arm whose body is a bare constant leaves that
+ * DATA node waiting on the BRCH directly, *before* the bridge GATE that is the arm's head, so
+ * the head alone does not find it (branchArmNodes() below relies on the same shape). A node of
+ * the branch that belongs to no arm by either rule gets a token of its own and is never merged.
  */
 std::vector<std::vector<uint64_t>> armRegions(const GraphDraft &draft) {
+    constexpr uint64_t kUnattributed = uint64_t{1} << 63;
     std::vector<std::vector<uint64_t>> regions(draft.nodeSlotCount());
     for (gc_node_ref_t brch = 0; brch < draft.nodeSlotCount(); ++brch) {
         const auto *h = draft.header(brch);
@@ -73,6 +82,30 @@ std::vector<std::vector<uint64_t>> armRegions(const GraphDraft &draft) {
         const auto join =
             reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(brch).data())->join;
         const auto arms = draft.branchArmsOf(brch);
+
+        // What runs in this branch: forward from the BRCH, stopping at the JOIN.
+        std::vector<bool> inBranch(draft.nodeSlotCount(), false);
+        std::vector<gc_node_ref_t> stack;
+        for (auto users :
+             {draft.normUsersOf(brch), draft.withUsersOf(brch), draft.ctrlUsersOf(brch)}) {
+            stack.insert(stack.end(), users.begin(), users.end());
+        }
+        while (!stack.empty()) {
+            const gc_node_ref_t n = stack.back();
+            stack.pop_back();
+            if (n == join || n == brch || inBranch[n] || !draft.header(n)) {
+                continue;
+            }
+            inBranch[n] = true;
+            for (auto users : {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
+                stack.insert(stack.end(), users.begin(), users.end());
+            }
+        }
+        std::vector<bool> attributed(draft.nodeSlotCount(), false);
+        const auto tails = join != kInvalidNodeRef && draft.header(join)
+                               ? draft.withInputsOf(join)
+                               : std::span<const gc_node_ref_t>{};
+
         for (size_t arm = 0; arm < arms.size(); ++arm) {
             const uint64_t token = (static_cast<uint64_t>(brch) << 16) | arm;
             std::vector<bool> seen(draft.nodeSlotCount(), false);
@@ -86,7 +119,8 @@ std::vector<std::vector<uint64_t>> armRegions(const GraphDraft &draft) {
                 if (n == join || n == brch || seen[n] || !draft.header(n)) {
                     continue;
                 }
-                seen[n] = true;
+                seen[n]       = true;
+                attributed[n] = true;
                 regions[n].push_back(token);
                 for (auto users :
                      {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
@@ -94,6 +128,36 @@ std::vector<std::vector<uint64_t>> armRegions(const GraphDraft &draft) {
                         work.push(u);
                     }
                 }
+            }
+            // The nodes of the branch this arm's result depends on.
+            if (tails.size() == arms.size() && tails[arm] < inBranch.size() &&
+                inBranch[tails[arm]]) {
+                if (!seen[tails[arm]]) {
+                    seen[tails[arm]]       = true;
+                    attributed[tails[arm]] = true;
+                    regions[tails[arm]].push_back(token);
+                }
+                stack.push_back(tails[arm]);
+            }
+            while (!stack.empty()) {
+                const gc_node_ref_t n = stack.back();
+                stack.pop_back();
+                for (auto inputs :
+                     {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
+                    for (gc_node_ref_t in : inputs) {
+                        if (in < inBranch.size() && inBranch[in] && !seen[in]) {
+                            seen[in]       = true;
+                            attributed[in] = true;
+                            regions[in].push_back(token);
+                            stack.push_back(in);
+                        }
+                    }
+                }
+            }
+        }
+        for (gc_node_ref_t n = 0; n < inBranch.size(); ++n) {
+            if (inBranch[n] && !attributed[n]) {
+                regions[n].push_back(kUnattributed | n);
             }
         }
     }
@@ -122,7 +186,8 @@ class StaticArgsView final : public ArgsView {
 };
 
 /// Static value of a DATA node with a static slot, also seen through GATEs forwarding one (an
-/// inlined call gates its arguments; the value it forwards is the same).
+/// inlined call gates its arguments; the value it forwards is the same). A constant that is
+/// written in place has no static value.
 std::optional<std::pair<slot_t, type::Type *>>
 staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
     for (size_t hops = 0; hops < draft.nodeSlotCount(); ++hops) {
@@ -137,11 +202,19 @@ staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
         return std::nullopt;
     }
     const auto index = static_cast<size_t>(-h->dataIndex);
-    if (index >= draft.staticSlots().size()) {
+    if (index >= draft.staticSlots().size() || isWrittenInPlace(draft, id)) {
         return std::nullopt;
     }
     type::Type *ty = draft.staticSlotTypes()[index];
     return std::pair{draft.staticSlots()[index], ty ? ty : h->dataType};
+}
+
+/// True when `id` can be replaced by another node holding its value: it does not anchor the
+/// graph, and nothing writes it in place. A written node is not one value: it is a variable's
+/// cell or an object an operator changes in place (a constant's object is shared by every run
+/// of the graph), and readers ordered after the writer see what it wrote.
+bool isFoldable(const GraphDraft &draft, gc_node_ref_t id) {
+    return isReplaceable(draft, id) && !isWrittenInPlace(draft, id);
 }
 
 std::optional<StaticArgsView>
@@ -530,7 +603,7 @@ size_t foldDraft(
             // An element projected out of a tuple built in this graph is the value filled there;
             // an element of a constant tuple or struct is a constant.
             if (const auto *h = draft.header(id);
-                h && h->kind == GCNodeKind::Accs && isReplaceable(draft, id)) {
+                h && h->kind == GCNodeKind::Accs && isFoldable(draft, id)) {
                 const gc_node_ref_t value = camel::runtime::resolveTupleProjection(draft, id);
                 if (value != id) {
                     replaceNode(draft, id, value);
@@ -544,14 +617,14 @@ size_t foldDraft(
             }
             // A tuple, struct or array built from constants is a constant.
             if (const auto *h = draft.header(id);
-                h && h->kind == GCNodeKind::Fill && isReplaceable(draft, id)) {
+                h && h->kind == GCNodeKind::Fill && isFoldable(draft, id)) {
                 if (foldStaticFill(draft, id, roots)) {
                     ++folded;
                     changed = true;
                 }
                 continue;
             }
-            if (!isPureOper(draft, id) || !isReplaceable(draft, id)) {
+            if (!isPureOper(draft, id) || !isFoldable(draft, id)) {
                 continue;
             }
             auto with = staticArgs(draft, draft.withInputsOf(id));
@@ -618,7 +691,8 @@ size_t cseDraft(GraphDraft &draft) {
 
     // Equal scalar constants are one value: merge their DATA nodes first, so expressions over
     // separately written literals (`n * 7` twice) become identical. GC-traced constants keep
-    // their identity (objects may be compared by reference).
+    // their identity (objects may be compared by reference). staticValueOf() leaves out
+    // constants that are written in place.
     std::map<std::tuple<type::Type *, slot_t, std::vector<uint64_t>>, gc_node_ref_t> constants;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         const auto value = staticValueOf(draft, id);
@@ -632,8 +706,25 @@ size_t cseDraft(GraphDraft &draft) {
         }
     }
 
+    // Two identical expressions over an object that is changed in place are not one value: a
+    // write may lie between them (`len(a)`, `arr->append<4>`, `len(a)`). The object may be
+    // passed to the writer under this node, or be the one a variable holds (`:var/get`), which
+    // every other reference to the variable reaches. Neither expression is merged, and a
+    // result that is itself written keeps its own slot.
+    const auto readsVariable = [&](gc_node_ref_t id) {
+        for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id)}) {
+            for (gc_node_ref_t in : inputs) {
+                const auto *h = draft.header(in);
+                if (isWrittenInPlace(draft, in) ||
+                    (h && h->kind == GCNodeKind::Oper && operUriOf(draft, in) == ":var/get")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (!isPureOper(draft, id)) {
+        if (!isPureOper(draft, id) || isWrittenInPlace(draft, id) || readsVariable(id)) {
             continue;
         }
         const auto norm = draft.normInputsOf(id);
@@ -725,7 +816,14 @@ GCGraph *DeadCodePass::apply(GCGraph *graph, std::ostream &) {
 
 GCGraph *simplifyGraph(
     const camel::core::context::context_ptr_t &context, GCGraph *graph,
-    const OptimizeRewriteConfig &config, std::ostream &os, size_t maxRounds) {
+    const OptimizeRewriteConfig &baseConfig, std::ostream &os, size_t maxRounds) {
+    // One growth budget for all rounds: each round unrolls a recursion with constant arguments
+    // one level further, so a budget per round would only be reached after maxRounds of them.
+    size_t growthSpent           = 0;
+    OptimizeRewriteConfig config = baseConfig;
+    if (!config.growthSpentNodes) {
+        config.growthSpentNodes = &growthSpent;
+    }
     for (size_t round = 0; round < maxRounds; ++round) {
         bool optChanged = false;
         graph = applyOptimizeRewritePass(context, graph, os, config, &optChanged);

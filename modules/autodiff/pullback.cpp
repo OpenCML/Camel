@@ -303,6 +303,21 @@ std::vector<Type *> portTypesOf(FunctionType *type) {
     return types;
 }
 
+/// The types of the ports of `graph` (with ports, then norm ports), read from the port nodes.
+/// The function type of a graph does not always describe its ports: a branch arm takes what it
+/// reads as with ports under the type `() => T`, and a copy specialized to constant arguments
+/// keeps the type of the function it was copied from although the bound parameters are gone.
+/// Reading tangent positions off such a type drops gradients without any error.
+std::vector<Type *> portTypesOf(const GCGraph *graph) {
+    std::vector<Type *> types;
+    for (auto ports : {graph->withPorts(), graph->normPorts()}) {
+        for (gc_node_ref_t port : ports) {
+            types.push_back(graph->node(port)->dataType);
+        }
+    }
+    return types;
+}
+
 std::vector<gc_node_ref_t> portsOf(const GraphDraft &draft) {
     std::vector<gc_node_ref_t> ports = copyOf(draft.withPorts());
     for (gc_node_ref_t port : draft.normPorts()) {
@@ -726,17 +741,25 @@ void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
         fail("found a call without a callee graph");
     }
     FunctionType *type     = callee->funcType();
-    const auto portTypes   = portTypesOf(type);
+    const auto portTypes   = portTypesOf(callee);
     Type *valueType        = type->exitType();
     const bool carriesFlow = tangentTypeOf(valueType) != nullptr && anyTangent(portTypes);
     if (!carriesFlow || type->modifiers().macro()) {
         return;
     }
-    const PullbackPlan &plan          = engine_.planFor(callee);
     std::vector<gc_node_ref_t> inputs = copyOf(draft_.withInputsOf(call));
     for (gc_node_ref_t input : draft_.normInputsOf(call)) {
         inputs.push_back(input);
     }
+    if (inputs.size() != portTypes.size()) {
+        fail(
+            std::format(
+                "call of '{}' passes {} arguments to {} ports",
+                callee->name(),
+                inputs.size(),
+                portTypes.size()));
+    }
+    const PullbackPlan &plan = engine_.planFor(callee);
     retarget(call, plan);
     split(call, plan, std::move(inputs));
 }
@@ -1202,8 +1225,8 @@ const PullbackPlan &Engine::planFor(GCGraph *callee) {
     if (auto it = plans_.find(callee); it != plans_.end()) {
         return it->second;
     }
-    FunctionType *type = callee->funcType();
-    PullbackPlan plan = reserve(callee->name(), makePlanTypes(portTypesOf(type), type->exitType()));
+    PullbackPlan plan =
+        reserve(callee->name(), makePlanTypes(portTypesOf(callee), callee->funcType()->exitType()));
     pending_.push_back(Pending{.plan = plan, .source = GraphDraft::decode(callee)});
     return plans_.emplace(callee, plan).first->second;
 }
@@ -1365,12 +1388,14 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
     Type *result = withValue
                        ? TupleType::create(std::vector<Type *>{valueType, signature.gradientType})
                        : signature.gradientType;
+    // The gradient function runs the function: a `var` parameter stays one, so its caller
+    // passes the variable and the function's writes reach it.
     param_vec_t withParams, normParams;
     for (size_t i = 0; i < function->withTypesCount(); ++i) {
-        withParams.emplace_back(function->withTypeAt(i), false);
+        withParams.emplace_back(function->withTypeAt(i), function->withIsVarAt(i));
     }
     for (size_t i = 0; i < function->normTypesCount(); ++i) {
-        normParams.emplace_back(function->normTypeAt(i), false);
+        normParams.emplace_back(function->normTypeAt(i), function->normIsVarAt(i));
     }
     signature.functionType = FunctionType::create(withParams, normParams, result);
     return signature;

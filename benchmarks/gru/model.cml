@@ -11,7 +11,8 @@ import { grad, value_and_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from sys
 import { export_model } from onnx
-import { weight, bench_input, run_benchmark, run_training } from camel_bench
+import { now } from time
+import { weight, bench_input, run_benchmark, run_training, warm_count, step_count, log_step, log_final } from camel_bench
 
 type Gru = {
     w_ir: Tensor, w_iz: Tensor, w_in: Tensor,
@@ -73,6 +74,32 @@ func dump_grads(m: Gru, x: Tensor, dir: string): int sync {
     return 0
 }
 
+/// The stateful training loop: step `i` starts from the parameters step `i - 1` produced.
+/// Returns the parameters after step `total - 1`.
+sync func train_loop(m: Gru, x: Tensor, i: int, warm: int, total: int, t0: float): Gru {
+    return if i >= total then m else sync {
+        let start = now()
+        let r = step(m, x)
+        let elapsed = now() - start
+        let logged = log_step(i, warm, t0, elapsed, r.0)
+        return train_loop(r.1, x, i + 1, warm, total, t0)
+    }
+}
+
+func save_trained(m: Gru, dir: string): int sync {
+    save_params(m, dir)
+    return 0
+}
+
+/// Runs the stateful loop and reports the loss at the final parameters; saves them when
+/// CAMEL_BENCH_PARAMS names a directory.
+func train_stateful(m: Gru, x: Tensor): int sync {
+    let trained = train_loop(m, x, 0, warm_count(), step_count(), now())
+    let reported = log_final(loss<trained>(x))
+    let dir = get_env('CAMEL_BENCH_PARAMS')
+    return if dir != '' then save_trained(trained, dir) else 0
+}
+
 func main(): int sync {
     let m = {
         w_ir: weight('w_ir'), w_iz: weight('w_iz'), w_in: weight('w_in'),
@@ -84,6 +111,7 @@ func main(): int sync {
     let workload = get_env('CAMEL_BENCH_WORKLOAD')
     return if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT')) else if workload == 'train' then run_training(
         (x: Tensor): float => { return train_step(m, x) },
-        (x: Tensor, dir: string): int => { return dump_grads(m, x, dir) }
+        (x: Tensor, dir: string): int => { return dump_grads(m, x, dir) },
+        (x: Tensor): int => { return train_stateful(m, x) }
     ) else run_benchmark((x: Tensor): Tensor => forward<m>(x))
 }

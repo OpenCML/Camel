@@ -40,6 +40,11 @@ struct NodeVMGraphCache {
     std::vector<uint32_t> directCallArgOffsets;
     std::vector<runtime_data_idx_t> directCallArgSlots;
     std::vector<runtime_data_idx_t> dataIndexByRef;
+    // For the BRCH at topo index i, branchArmEntries[branchArmEntryOffsets[i] + arm] is the node
+    // where that arm starts executing: its first executable node in topoNodeRefs, or the JOIN
+    // when the arm has nothing to execute (resolveRuntimeBranchArmEntry, shared with FastVM).
+    std::vector<uint32_t> branchArmEntryOffsets;
+    std::vector<camel::runtime::gc_node_ref_t> branchArmEntries;
     camel::runtime::gc_node_ref_t tailValueRef = camel::runtime::kInvalidNodeRef;
     size_t tailValueTopoIndex                  = 0;
     bool tailValueIsJoin                       = false;
@@ -60,6 +65,10 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     std::vector<slot_t> callArgScratch_;
 
     slot_t call(camel::runtime::GCGraph *runtimeGraph, ctx::Frame *rootFrame);
+    // Raises MaxRecursionDepthExceeded when one more non-tail call would exceed the limit. It is
+    // checked in the caller, before the call, so the diagnostic points at the call expression
+    // (as FastVM's does) and not at the callee's definition.
+    void requireRecursionRoom(const camel::runtime::GCGraph *caller) const;
     // Tail-call frame management (see the comment above call() in nodevm.cpp).
     ctx::Frame *tailCallFrame(
         camel::runtime::GCGraph *target, ctx::Frame *rootFrame, ctx::Frame *source,

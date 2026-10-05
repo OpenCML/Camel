@@ -75,6 +75,10 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/stos", __stos__},
         {"op/atos", __atos__},
 
+        // variables
+        {"var/new", __builtin__var_new__},
+        {"var/get", __builtin__var_get__},
+
         // ops
         {"op/assn_i", __builtin__assn__},
         {"op/assn_l", __builtin__assn__},
@@ -292,6 +296,9 @@ void registerBuiltinOperatorTraits() {
             registry.set(":" + name, {.pure = true, .elementwise = false});
         }
     }
+    // Creating and reading a variable changes nothing outside the program's variables.
+    registry.set(":var/new", {.stateOnly = true});
+    registry.set(":var/get", {.stateOnly = true});
 }
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsImplMap()) {}

@@ -57,11 +57,16 @@ enum class SemanticDiag : uint32_t {
     UnrecognizedExecutorProtocol = 0x00001A,
     EntryModuleMissingMain       = 0x00001B,
     ArgumentsRejected            = 0x00001C,
+    ImmutablePassedToVarParam    = 0x00001D,
+    AssignmentTargetNotVariable  = 0x00001E,
+    ConstructNotSupported        = 0x00001F,
 
     // Warnings
     FeatureNotSupported     = 0x100000,
     VarParamInAsyncFunction = 0x100001,
     IgnoredSideEffect       = 0x100002,
+    CapturedWriteInAsyncFunction = 0x100003,
+    EffectNotExecuted            = 0x100004,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

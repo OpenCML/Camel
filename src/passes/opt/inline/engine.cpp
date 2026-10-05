@@ -33,11 +33,13 @@
 #include "engine.h"
 
 #include "../generic/rewrite.h"
+#include "camel/core/rtdata/func.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <format>
 #include <functional>
 #include <stdexcept>
@@ -195,6 +197,129 @@ bool isDraftBranchArmHead(const camel::runtime::GraphDraft &draft, gc_node_ref_t
         }
     }
     return false;
+}
+
+/// The graphs a macro operator that is still in the program will transform.
+///
+/// A macro operator over a function value (`grad(f)`) rewrites f's graph. `std::macro` expands
+/// it ahead of time; when it has not run (or could not evaluate the call), the operator runs
+/// with the program and transforms whatever graph the rewrite passes left. Such transforms are
+/// written against the graph as compiled. The pullback builder of `autodiff` takes one pullback
+/// per branch-arm call, so it rejects an arm that was merged into its owner, and it crashes on
+/// the shape recursion compaction leaves (the recursive call inlined into the arm, which makes
+/// the arm's graph an arm of itself). So nothing is inlined into the graphs an unexpanded macro
+/// operator can still reach: its function operand, and what that calls or holds as a function
+/// constant, including the copies specialization made of them earlier in the same session. Calls
+/// of these graphs from elsewhere are inlined as usual (the copy belongs to the caller).
+struct MacroOperandGraphs {
+    std::unordered_set<const GCGraph *> graphs;
+    /// A macro operator takes a function that is not a constant of the graph (a parameter, the
+    /// result of a call): any function of the program may reach it.
+    bool all = false;
+
+    bool contains(const GCGraph *graph) const { return all || graphs.contains(graph); }
+};
+
+/// The graph of the function constant `ref` of `graph` (a DATA node, or the closure template a
+/// FILL builds on), or null.
+GCGraph *functionConstantGraph(const GCGraph *graph, gc_node_ref_t ref) {
+    using camel::core::type::TypeCode;
+    const auto *node = graph->node(ref);
+    if (node->kind == GCNodeKind::Fill && !graph->normInputsOf(ref).empty()) {
+        ref  = graph->normInputsOf(ref).front();
+        node = graph->node(ref);
+    }
+    if (node->kind != GCNodeKind::Data || node->dataIndex >= 0 || !node->dataType ||
+        node->dataType->code() != TypeCode::Function) {
+        return nullptr;
+    }
+    auto *function = camel::core::rtdata::fromSlot<::Function *>(
+        graph->staticArea()->get<slot_t>(static_cast<size_t>(-node->dataIndex)));
+    return function ? function->graph() : nullptr;
+}
+
+MacroOperandGraphs collectMacroOperandGraphs(
+    const camel::runtime::RuntimeGraphDraftSession &session,
+    const std::vector<GCGraph *> &closure) {
+    using camel::core::type::TypeCode;
+    MacroOperandGraphs result;
+    std::vector<const GCGraph *> work;
+    for (GCGraph *graph : closure) {
+        if (!graph) {
+            continue;
+        }
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            const auto *node = *it;
+            if (!node || node->kind != GCNodeKind::Oper || !node->isMacro()) {
+                continue;
+            }
+            for (auto inputs : {graph->normInputsOf(it.ref()), graph->withInputsOf(it.ref())}) {
+                for (gc_node_ref_t input : inputs) {
+                    const auto *operand = graph->node(input);
+                    if (!operand->dataType || operand->dataType->code() != TypeCode::Function) {
+                        continue;
+                    }
+                    if (operand->kind == GCNodeKind::Oper && operand->isMacro()) {
+                        continue; // the result of another macro operator, handled at that one
+                    }
+                    GCGraph *target = functionConstantGraph(graph, input);
+                    if (!target) {
+                        result.all = true;
+                        return result;
+                    }
+                    if (result.graphs.insert(target).second) {
+                        work.push_back(target);
+                    }
+                }
+            }
+        }
+    }
+    const auto reach = [&](GCGraph *target) {
+        if (target && result.graphs.insert(target).second) {
+            work.push_back(target);
+        }
+    };
+    while (!work.empty()) {
+        const GCGraph *graph = work.back();
+        work.pop_back();
+        // A graph this session already edited calls what its draft calls: a specialization
+        // made in this session is a new graph that only the draft refers to, and it is as much
+        // part of what the operator transforms as the function it was copied from.
+        if (const auto *draft = session.tryDraft(graph)) {
+            for (gc_node_ref_t id = 0; id < draft->nodeSlotCount(); ++id) {
+                const auto *header = draft->header(id);
+                if (!header || header->kind != GCNodeKind::Func) {
+                    continue;
+                }
+                const auto payload = draft->payloadOf(id);
+                if (payload.size_bytes() >= sizeof(GCFuncBody)) {
+                    reach(reinterpret_cast<const GCFuncBody *>(payload.data())->calleeGraph);
+                }
+            }
+            const auto slots = draft->staticSlots();
+            const auto types = draft->staticSlotTypes();
+            for (size_t i = 1; i < slots.size() && i < types.size(); ++i) {
+                if (types[i] && types[i]->code() == TypeCode::Function) {
+                    auto *function = camel::core::rtdata::fromSlot<::Function *>(slots[i]);
+                    reach(function ? function->graph() : nullptr);
+                }
+            }
+        }
+        if (!graph->hasNodePayload()) {
+            continue;
+        }
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            if (!*it) {
+                continue;
+            }
+            GCGraph *target = graph->directCalleeGraphOf(it.ref());
+            if (!target) {
+                target = functionConstantGraph(graph, it.ref());
+            }
+            reach(target);
+        }
+    }
+    return result;
 }
 
 struct RuntimeCallGraphSccInfo {
@@ -359,10 +484,11 @@ bool shouldSkipRecursiveInline(
     return false;
 }
 
-/// The rewritten root, or nullptr when nothing changed.
+/// The rewritten root, or nullptr when nothing changed. `growthSpent` counts the nodes copied
+/// so far against `growthBudget` (see OptimizeRewriteConfig::growthBudgetNodes).
 GCGraph *applyRuntimeOptimizeRewrite(
     const camel::core::context::context_ptr_t &context, GCGraph *runtimeRoot,
-    const OptimizeRewriteConfig &config) {
+    const OptimizeRewriteConfig &config, size_t growthBudget, size_t &growthSpent) {
     camel::runtime::RuntimeGraphDraftSession session(context, runtimeRoot);
     bool changed              = false;
     size_t appliedInlineCount = 0;
@@ -377,7 +503,9 @@ GCGraph *applyRuntimeOptimizeRewrite(
 
         std::unordered_set<GCGraph *> closureSet;
         RuntimeCallGraphSccInfo sccInfo;
+        MacroOperandGraphs macroOperands;
         if (config.enableInlining) {
+            macroOperands = collectMacroOperandGraphs(session, closure);
             closureSet.insert(closure.begin(), closure.end());
             for (GCGraph *runtimeGraph : closure) {
                 if (!runtimeGraph) {
@@ -450,9 +578,17 @@ GCGraph *applyRuntimeOptimizeRewrite(
                     if (!draft.alive(funcNodeId)) {
                         continue;
                     }
+                    if (growthSpent >= growthBudget) {
+                        break; // out of growth budget: a specialization is a copy of the callee
+                    }
                     if (camel::runtime::specializeDirectFuncInDraft(session, draft, funcNodeId)) {
                         changed      = true;
                         roundChanged = true;
+                        // The callee after the rewrite is the copy (counted in full even when
+                        // an existing copy was reused).
+                        const auto *body =
+                            reinterpret_cast<const GCFuncBody *>(draft.payloadOf(funcNodeId).data());
+                        growthSpent += body->calleeGraph ? body->calleeGraph->nodeCount() : 0;
                     }
                 }
             }
@@ -485,6 +621,11 @@ GCGraph *applyRuntimeOptimizeRewrite(
             if (!config.enableInlining) {
                 continue;
             }
+            // An unexpanded macro operator will transform this graph and needs it as compiled
+            // (see MacroOperandGraphs): nothing is inlined into it.
+            if (macroOperands.contains(nextGraph)) {
+                continue;
+            }
 
             const auto callCounts = directCallCounts(session, closure);
             std::vector<gc_node_ref_t> candidates;
@@ -510,6 +651,12 @@ GCGraph *applyRuntimeOptimizeRewrite(
                         body->calleeGraph,
                         sccInfo,
                         config.inlineConfig)) {
+                    continue;
+                }
+                // Growth: the copy must fit the pass's budget and the owner's size cap.
+                const size_t copied = inlinedNodeCount(body->calleeGraph);
+                if (growthSpent + copied > growthBudget ||
+                    draft.nodeCount() + copied > config.inlineConfig.maxOwnerNodes) {
                     continue;
                 }
 
@@ -591,11 +738,15 @@ GCGraph *applyRuntimeOptimizeRewrite(
                         }
                     }
                 }
+                const size_t copied = inlinedNodeCount(
+                    reinterpret_cast<const GCFuncBody *>(draft.payloadOf(funcNodeId).data())
+                        ->calleeGraph);
                 const auto inlineResult =
                     camel::runtime::inlineCallableInDraft(session, draft, funcNodeId);
                 if (!inlineResult) {
                     continue;
                 }
+                growthSpent += copied;
                 for (const auto &[user, missing] : callUsers) {
                     if (!draft.alive(user)) {
                         continue;
@@ -646,6 +797,17 @@ GCGraph *applyRuntimeOptimizeRewrite(
 
 } // namespace
 
+size_t optimizeGrowthBudget(const OptimizeRewriteConfig &config) {
+    if (const char *text = std::getenv(kGrowthBudgetEnvVar); text && *text) {
+        char *end                      = nullptr;
+        const unsigned long long value = std::strtoull(text, &end, 10);
+        if (end && *end == 0) {
+            return static_cast<size_t>(value);
+        }
+    }
+    return config.growthBudgetNodes;
+}
+
 camel::runtime::GCGraph *applyOptimizeRewritePass(
     const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *graph,
     std::ostream &os, const OptimizeRewriteConfig &config, bool *changedOut) {
@@ -657,18 +819,31 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
     if (!hasAnyRewritePhaseEnabled(config)) {
         return graph;
     }
+    const size_t growthBudget = optimizeGrowthBudget(config);
+    size_t ownGrowthSpent     = 0;
+    size_t &growthSpent       = config.growthSpentNodes ? *config.growthSpentNodes : ownGrowthSpent;
+    const bool hadBudget      = growthSpent < growthBudget;
     // A session only inlines calls that existed when it started; calls exposed by its own
     // inlining (nested helpers, devirtualized pullbacks) wait for the next session. Repeat until
     // nothing changes; the bound only guards against a rewrite that never settles.
     constexpr size_t kMaxSessions = 32;
     bool changed                  = false;
     for (size_t i = 0; i < kMaxSessions; ++i) {
-        GCGraph *rewritten = applyRuntimeOptimizeRewrite(context, graph, config);
+        GCGraph *rewritten =
+            applyRuntimeOptimizeRewrite(context, graph, config, growthBudget, growthSpent);
         if (!rewritten) {
             break;
         }
         changed = true;
         graph   = rewritten;
+    }
+    if (hadBudget && growthSpent >= growthBudget) {
+        CAMEL_LOG_WARN_S(
+            "OptimizePass",
+            "Growth budget of {} nodes reached ({} overrides it): the remaining calls are "
+            "neither specialized nor inlined.",
+            growthBudget,
+            kGrowthBudgetEnvVar);
     }
     if (changedOut) {
         *changedOut = changed;

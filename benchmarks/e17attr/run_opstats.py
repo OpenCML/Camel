@@ -50,6 +50,9 @@ def run_once(model: str, config: str, warmup: int, reps: int, threads: int) -> d
         model,
         {
             "CAMEL_BENCH_WORKLOAD": "train",
+            # This account is about the stateless protocol (updates not consumed), where
+            # simplify removes the backward pass; train.py's default is now the stateful loop.
+            "CAMEL_BENCH_TRAIN_PROTOCOL": "stateless",
             "CAMEL_BENCH_WARMUP": str(warmup),
             "CAMEL_BENCH_REPS": str(reps),
             "CAMEL_BENCH_THREADS": str(threads),

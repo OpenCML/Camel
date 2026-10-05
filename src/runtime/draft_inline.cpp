@@ -38,6 +38,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/runtime/draft_clone.h"
 #include "camel/runtime/draft_types.h"
+#include "camel/runtime/draft_writes.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -358,6 +359,12 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
     while (canonicalId != kInvalidNodeRef) {
         const DraftNodeHeader *header = draft.header(canonicalId);
         if (!header) {
+            return resolved;
+        }
+        // An argument passed to a `var` parameter is written by the callee (a variable's cell,
+        // or an object an operator changes in place): it does not have the static value it
+        // was initialized from.
+        if (isWrittenInPlace(draft, canonicalId)) {
             return resolved;
         }
         if (header->kind == GCNodeKind::Gate) {
@@ -838,11 +845,34 @@ bool specializeDirectFuncInDraft(
         return false;
     }
 
+    // Type-only specialization of a recursive function is bounded (see
+    // kMaxTypeSpecializationsPerRecursiveFunction); a copy that already exists is reused freely.
+    const bool boundedTypeSpecialization =
+        std::ranges::none_of(bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); }) &&
+        onCallCycle(funcBody->calleeGraph);
+    if (boundedTypeSpecialization &&
+        !session.findSpecialization(
+            makeRuntimeSpecializationKey(funcBody->calleeGraph, bindings))) {
+        const std::string root = typeSpecializationRoot(funcBody->calleeGraph->stableId());
+        if (session.typeSpecializationCount(root) >=
+            kMaxTypeSpecializationsPerRecursiveFunction) {
+            CAMEL_LOG_INFO_S(
+                "DraftOpt",
+                "FUNC node {} keeps callee '{}': '{}' has {} type specializations.",
+                funcNodeId,
+                funcBody->calleeGraph->name(),
+                root,
+                kMaxTypeSpecializationsPerRecursiveFunction);
+            return false;
+        }
+        session.noteTypeSpecialization(root);
+    }
+
     GCGraph *specializedGraph = specializeGraphWithBindings(
         session,
         funcBody->calleeGraph,
         bindings,
-        "spec",
+        boundedTypeSpecialization ? kTypeSpecializationTag : std::string_view("spec"),
         specializationNonce++);
     ASSERT(specializedGraph != nullptr, "Direct FUNC specialization produced a null graph.");
 
@@ -855,16 +885,19 @@ bool specializeDirectFuncInDraft(
         draft.withInputsOf(funcNodeId).end());
 
     const size_t normCount = funcBody->calleeGraph->normPorts().size();
+    std::vector<gc_node_ref_t> boundActuals; // arguments the call no longer passes
     for (auto it = bindings.rbegin(); it != bindings.rend(); ++it) {
         if (!it->bindsValue()) {
             continue; // the argument is still passed, to a parameter of a more precise type
         }
         if (it->kind == FormalKind::Norm) {
+            boundActuals.push_back(normInputs[it->index]);
             normInputs.erase(normInputs.begin() + static_cast<std::ptrdiff_t>(it->index));
             continue;
         }
         const size_t withIndex = it->index - normCount;
         if (withIndex < withInputs.size()) {
+            boundActuals.push_back(withInputs[withIndex]);
             withInputs.erase(withInputs.begin() + static_cast<std::ptrdiff_t>(withIndex));
         }
     }
@@ -879,6 +912,33 @@ bool specializeDirectFuncInDraft(
         init.dataType = type->exitType();
     }
     draft.rewriteNode(funcNodeId, init);
+
+    // A bound argument may have been a constant seen through a GATE that waits (the result of an
+    // inlined sync call: its value is static, but reading it ordered this call after the
+    // callee's effects). The call no longer reads it, so it waits on that GATE instead;
+    // otherwise everything the GATE waited on would no longer reach the exit and never run.
+    for (gc_node_ref_t actual : boundActuals) {
+        for (gc_node_ref_t current = actual; current != kInvalidNodeRef;) {
+            const DraftNodeHeader *header = draft.header(current);
+            if (!header) {
+                break;
+            }
+            if (!draft.ctrlInputsOf(current).empty()) {
+                const auto existing = draft.ctrlInputsOf(funcNodeId);
+                if (current != funcNodeId &&
+                    std::find(existing.begin(), existing.end(), current) == existing.end()) {
+                    draft.appendInput(DraftEdgeKind::Ctrl, funcNodeId, current);
+                }
+                break;
+            }
+            if (header->kind != GCNodeKind::Gate && header->kind != GCNodeKind::Copy &&
+                header->kind != GCNodeKind::Cast && header->kind != GCNodeKind::Dref) {
+                break;
+            }
+            const auto inputs = draft.normInputsOf(current);
+            current           = inputs.empty() ? kInvalidNodeRef : inputs.back();
+        }
+    }
     return true;
 }
 
@@ -899,6 +959,11 @@ gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id) 
         }
         const auto *fill = reinterpret_cast<const GCFillBody *>(draft.payloadOf(sources[0]).data());
         if (fill->fillKind != GCFillKind::Tuple) {
+            return id;
+        }
+        if (isWrittenInPlace(draft, sources[0])) {
+            // The tuple is passed to a `var` parameter: what the projection reads is up to
+            // the callee, not what was filled here.
             return id;
         }
         const auto slots  = fill->slots();

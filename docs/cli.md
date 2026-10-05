@@ -39,6 +39,7 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `--input <file>`: Input file path (alternative to positional; use with `--passes` to avoid ambiguity)  
 - `--passes <list>`: Comma-separated pass list (e.g. `--passes std::gir,other`). If omitted, first positional is file, rest are passes.  
 - `--timeit <pass>/<N>`: Measure one pass `N` times from a fresh graph; text mode prints samples plus a compact summary table, while `--output-format json` emits structured benchmark data  
+- `--dump-after-each-pass <dir>`: Write the graph before the first pass (`00_input`) and after each pass that returns a graph (`NN_<pass>`, `::` written as `.`) into `<dir>`: a readable DOT (`.rgir.dot`, the `std::rgir` format with `origin`/`span`/`srcfile` per node) and the `std::stats` counters (`.stats.json`). Scheduling and translation passes consume the graph and leave no snapshot. Compare two snapshots with `python tools/graph-diff/graph_diff.py BEFORE AFTER`  
 - `-P`, `--profile`: Record time spent in each stage and output a performance report  
 - `-S`, `--scheduler <type>`: Specify the scheduler type  
 - `-t`, `--threads <num>`: Maximum number of threads  
@@ -46,6 +47,18 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `-I`, `--include <dir>`: Add module search path (can be used multiple times)  
 - `-L`, `--stdlib <path>`: Specify standard library path (default: `./stdlib` under current directory)  
 - `-E`, `--error-format`, `--output-format <text|json>`: Output format (default: `text`); `--timeit` reuses this, and the test harness expects `json`
+
+### Pass pipelines
+
+The passes given on the command line run in the order written. Each pass transforms the graph, executes it (a scheduling pass) or translates it (a translation pass).
+
+- **Default pipeline.** With no pass given, `std::default` runs; it is an alias of `std::nodevm` (the node VM). The same default runs after the given passes when none of them consumed the graph. `.opencmlrc` (`passes.fallback`) can change it.
+- **Every pass name is checked before anything runs.** After the program is compiled (passes contributed by modules exist only then) and before the first pass runs or the first `--dump-after-each-pass` snapshot is written, all names of the pipeline and of the fallback are resolved (aliases first). The first unknown one is reported as `RuntimeDiag::UnrecognizedGraphPass` with stage `pass:<name>`, the available passes are listed on stderr, and the exit code is 1. Nothing has executed: `camel f.cml std::nvm std::no_such_pass` does not run the program.
+- **Passes written after a pass that consumes the graph never run.** A scheduling pass (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`) executes the program and a translation pass (`std::gir`, `std::rgir`, `std::cpp`, `onnx::export`, the bytecode and JIT dumps) translates it; neither hands a graph on, so the pipeline ends there. `camel f.cml std::nvm std::inline` runs the program on the node VM and never runs `std::inline`. This is accepted, with the warning `RuntimeDiag::PassesNeverRun` (`0x0410000F`, stage `pass:<consuming pass>`) on stderr before anything runs, naming the passes that will not run (see "Warnings").
+- **Pass order is not restricted by the language, and it can matter.** A pass does not promise to produce the same graph as another order would: it modifies the graph and may have side effects. "Any pass sequence gives the same behaviour" is not a property of Camel.
+- **Standard optimisation passes** (`std::devirtualize`, `std::specialize`, `std::inline`, `std::opt::fold`, `std::opt::cse`, `std::opt::dce`, `std::opt::simplify`, `tensor::fuse`) aim to preserve a program's results. That is a quality requirement on those passes, checked by tests, not a language guarantee.
+- **`std::macro` is optional.** Without it a `macro` function is an ordinary function that runs with the program.
+- **Libraries built on passes can have preconditions.** The `autodiff` library needs `std::macro` to run before `grad` / `value_and_grad` / `vjp` can be expanded: a graph on which macros have not run lacks the information differentiation needs. This is a constraint of that library, not of the language core.
 
 ### Common Passes
 
@@ -57,6 +70,110 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `std::fvm`: high-performance bytecode VM scheduler
 - `std::jit`: JIT-enabled bytecode VM scheduler
 - `std::gir`: dump the current graph IR and stop
+- `tensor::fuse`, `onnx::export`: passes contributed by modules; they exist only when the program imports the module (`tensor`, `onnx`)
+
+### Pass order: `std::macro` before the inlining passes
+
+Macro operators over functions (`grad`, `value_and_grad`, `vjp` of `autodiff`) transform a function's graph as compiled. Run `std::macro` first (`camel m.cml std::macro std::opt::simplify std::fvm`): it expands them ahead of time and the later passes optimize the result. Without `std::macro`, or with it after `std::inline` / `std::opt` / `std::opt::simplify`, the operator runs with the program; to keep that working, the inlining passes inline nothing into the functions an unexpanded macro operator will transform (every function, when the operator's function argument is not a constant, e.g. a parameter). Such a pipeline gives the same results but leaves those functions unoptimized. See `docs/technical/26_autodiff_as_graph_rewrite.md` §2.
+
+### What `std::macro` reports
+
+`std::macro` replaces a call of a `macro` function or macro operator by its result when every argument is a constant. Two things can keep a call in the program:
+
+- **An argument is not a constant.** This is the normal case and not a failure; nothing is printed. With `-v` a log line names the call and the argument: `<Macro> 'count' at m.cml:11:17 stays a run-time call: argument 1 is not a constant.`
+- **The evaluation fails**: an operator raises an error (division by zero, `autodiff: no derivative rule for operator ...`), an exception escapes, or the evaluation needs more than 64 nested calls. This is a compile-time error (a provisional rule of the language; the final handling is undecided): `RuntimeDiag::MacroEvaluationFailed` (`0x0400000E`, stage `pass:std::macro`), located at the call, with the reason: `m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero.` The pipeline stops there with exit code 1; no later pass runs and the program is not executed.
+
+Consequences of the rule:
+
+- A program is rejected for a failing macro call **even if the call would never be reached at run time** (a call in a function nothing calls, or in an arm that is not taken): `std::macro` evaluates every macro call whose arguments are constants.
+- A macro recursion deeper than the evaluator's 64 frames is a failed evaluation, so a program that runs without `std::macro` can be rejected with it (`count(40)` for `macro func count(n) = if n == 0 then 0 else 1 + count(n - 1)`).
+- Effects that the failed evaluation performed before it failed have happened at pass time (once per round of the pass). They are not repeated, since the program does not run.
+- Without `std::macro` in the pipeline nothing changes: the call is an ordinary call and fails, if at all, when it is reached.
+- `onnx.export_model` expands macros of the function it exports with the same evaluator while the program runs; a failed evaluation there is the same diagnostic, with stage `run`.
+
+Before this rule (up to commit `b0fa6b4b`) a failed evaluation was the warning `RuntimeDiag::MacroEvaluationDeferred` and the call was left to run with the program; that behaviour is one commit away (`git revert` of the commit that introduced `MacroEvaluationFailed`).
+
+### ONNX export as a pass (`onnx::export`)
+
+    CAMEL_ONNX_OUT=model.onnx camel m.cml std::macro std::opt::simplify onnx::export
+
+`onnx::export` is a translation pass contributed by the `onnx` module. As the last pass of a pipeline it writes an ONNX model and consumes the graph: the program is not executed.
+
+- **What is exported** is declared in the program, by the same call that exports at run time: `onnx.export_model(fn, example, path[, dynamic_axes[, target]])`. The pass looks for that call in the entry graph left by the preceding passes and reads its arguments there, so they must be constants of the graph by then: the function (a closure may capture constants), the example inputs (their dtypes and shapes become the model inputs), `dynamic_axes` and `target`. Values that only exist at run time (random initial weights, a loaded file) are not available to a pass; such a program exports with `camel m.cml`, which runs `export_model`.
+- **Where it is written**: the environment variable `CAMEL_ONNX_OUT` if set (it then requires exactly one `export_model` call), otherwise the call's `path` argument, which must be a string literal (`get_env(...)` is not evaluated by a pass).
+- **What the pass does itself**: it binds the example types (dtype and shape) to the function's parameters, re-infers node types, folds what those types make constant (`std::opt::fold` / `std::opt::dce` on its private copy of the function) and lowers the result node by node. It does not expand macros, devirtualize, specialize calls, inline or unroll; those are the job of `std::macro` and `std::opt::simplify` before it.
+- **Refusal**: if the graph still needs one of those (the entry graph still calls `main`, a macro operator such as `grad` is not expanded, a call remains in the function), or contains something ONNX cannot express (an impure operator, an operator without a lowering), the pass writes no file and exits non-zero with the diagnostic `RuntimeDiag::TranslationRefused` (`0x0400000B`, stage `pass:onnx::export`); the message names the pass to run. Every refusal has a source position: the offending node when there is one; the `export_model` call for a refusal about the request as a whole (a dynamic axis out of range, an unknown target, the number of examples, a result that is not a tensor, a model file that cannot be written; with `CAMEL_ONNX_OUT` and several calls, the second call); the entry function `main` when no call is visible (the entry graph still calls `main`, or the program has no `export_model` call). An impure operator is refused wherever it is reachable from the function's result, through data or control edges and inside the functions it calls: a `println` statement of a `sync` function is refused at the `println`, not left out of the model. `onnx.export_model` applies the same check.
+
+Running the program without passes (`camel m.cml`) keeps working: `export_model` then simplifies the function itself, with settings the pass pipeline does not have (it inlines regardless of size, unrolls deeper recursion, and splits the gradient of a data-dependent branch), so it accepts some programs that the pipeline refuses.
+
+### Warnings
+
+A warning (a `[Warn]` diagnostic) does not stop a program. The compiler's warnings about effects:
+
+| Name | Code | Where | Meaning |
+|---|---|---|---|
+| `SemanticDiag::EffectNotExecuted` | `0x03100004` | the call, assignment or branch | It has side effects but nothing depends on it and it is not in a sync block, so it never runs. Legal (evaluation is driven by dependencies); reported so that a forgotten `sync` is seen. One warning per dropped chain (`println(log(1))` reports the `println`). Never reported inside a sync block |
+| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | the call or branch | It writes a variable (a `var` argument, or a captured variable) and is neither waited nor in a sync block: it is not ordered after earlier uses of the variable |
+| `SemanticDiag::VarParamInAsyncFunction` | `0x03100001` | the parameter | A `var` parameter in a function without the `sync` modifier |
+| `SemanticDiag::CapturedWriteInAsyncFunction` | `0x03100003` | the function | The function writes a captured variable and has no `sync` modifier |
+| `RuntimeDiag::PassesNeverRun` | `0x0410000F` | no source position (a command-line matter) | Passes are written after a pass that consumes the graph; they will not run. Printed with the program's warnings (the last element of the stderr array in JSON mode) |
+
+What counts as an effect for `EffectNotExecuted`: an operator that is neither pure nor state-only in the operator-traits registry (the same set the effect trace records), a call of a function declared `sync func` or with a `var` parameter, a call of a function whose own result depends on an effect, and a branch with such an arm. A call through a function value is only recognised by its type (`sync` modifier, `var` parameter).
+
+- **A program that compiles without an error** prints its warnings on **stderr**, once, after compilation and before the first pass runs, at the default log level (no `-v` needed). In text mode, one line per warning: `(module)file:line:col: [Warn]: text suggestion (name=SemanticDiag::IgnoredSideEffect, code=0x03100002)`. With `--output-format json`, one JSON array on stderr with the same objects as the error array below (`"severity":"Warn"`). Nothing is written when there is no warning (no empty array).
+- **stdout is the same in both modes as without warnings**: the program's output, and the diagnostics array only when there is an error. Tools that parse stdout are not affected.
+- **A module that has an error** shows its warnings with the error, as before (in the stdout array in JSON mode); they are not repeated on stderr.
+- `camel check` prints them the same way. `--timeit`, `camel inspect`, `camel-cpp` and the debugger do not print warnings.
+
+### JSON diagnostics (`--output-format json`)
+
+Errors are printed on stdout, after any program output, as a JSON array of objects:
+
+```json
+{"range":{"start":{"line":6,"character":13},"end":{"line":6,"character":14}},"severity":"Error","code":"0x04000001","source":"Camel","message":"Attempted division by zero.","data":{"stage":"run","name":"RuntimeDiag::DivisionByZero","moduleName":"m","modulePath":"m.cml","suggestion":"..."}}
+```
+
+- `range` is 0-based; `data.modulePath` is the file. A diagnostic without a source position (an unknown pass name, passes that never run) has an all-zero range and an empty `modulePath`.
+- `data.name` is the stable diagnostic name; `code` is its numeric form.
+- Every graph a pass commits (and every graph the front end encodes) is validated structurally, in release builds as well: node, slot and edge references in range, inputs and outputs mirroring each other, `BRCH`/`JOIN` arm counts, a `GATE` with a value and a control input, a direct call passing as many arguments as its callee takes. A violation is a `RuntimeDiag::PassInternalError` naming the pass that committed the graph, before anything runs.
+- An exception that escapes a pass without being a diagnostic (graph validation when a rewrite is committed, a cycle met while a scheduler builds its execution order, an arena limit) is reported as `RuntimeDiag::PassInternalError` (`0x0400000C`) with stage `pass:<name>`, the exception text in the message, no source position, and exit code 1. It marks a defect of the compiler, not a refusal of the program. The stage names the pass even when it is a scheduling pass, so it does not tell whether part of the program had already run. An exception outside any pass is reported as `InternalDiag::UnknownInternalError` with stage `internal`.
+- `data.stage` tells where in the pipeline the diagnostic was raised: `parse`, `typecheck`, `pass:<name>` for a rewrite or translation pass (including an unknown pass name), `run` for a scheduling pass (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`), or `internal`.
+
+### Effect trace (`CAMEL_EFFECT_TRACE`)
+
+Setting the environment variable `CAMEL_EFFECT_TRACE=<file>` makes the process append one JSON line per executed effectful operator (any operator not registered as pure or as state-only in the operator-traits registry: `println`, file I/O, `py_*`, assignment `:op/assn*`, in-place array operators, ...), in call order. Creating and reading a `var` variable (`:var/new`, `:var/get`) are state-only and emit no event; a store into one (`:op/assn*`) does, as before variables became cells:
+
+```json
+{"seq":0,"uri":":io/println","stage":"run","origin":{"file":"a.cml","line":12,"col":5},"payload_sha1":"...","payload":"string=hello|||"}
+```
+
+- `stage` is `macro` while `std::macro` evaluates a call ahead of time and `run` otherwise.
+- `origin` is the 1-based source position of the operator node, or `null` when the node has none (nodes synthesized by passes).
+- `payload_sha1` hashes the printed argument values, taken before the operator runs.
+- `payload` is the text that is hashed: each argument as `type=value` followed by `|`, the normal arguments first, then `||`, then the `with` arguments (in the hashed bytes the two separators are `0x1f` and `0x1e`). It is cut to 2048 bytes; a cut line also carries `"payload_truncated":true`, and `payload_sha1` still covers the full text.
+
+The trace is written by a wrapper installed where operator URIs are resolved, so all back ends (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`) and the macro evaluator are covered. It does not record whether the operator ran inside a `sync` scope. The file is truncated at the first effect of each process. See `include/camel/core/effect_trace.h`.
+
+### Resource limits
+
+Limits of the compiler and the back ends. A pass that reaches one of its limits stops transforming and passes the program on (it means the same, it is only less optimized), unless the table says it fails.
+
+| Limit | Value | Adjustable | When reached |
+|---|---|---|---|
+| Growth of `std::inline`, `std::specialize`, `std::opt`, `std::opt::simplify` (nodes copied by specializing and inlining; one budget for all rounds of `std::opt::simplify`) | 4096 nodes | `CAMEL_OPT_GROWTH_BUDGET=<nodes>` | nothing further is specialized or inlined; the remaining calls stay calls. Logged with `-v` |
+| Size of a graph that `std::inline` inlines into | 4096 nodes | no | that call is not inlined |
+| Rounds of `std::opt::simplify` | 16 | no | the program is passed on as it is. Logged with `-v` |
+| Type-only specializations of one recursive function (a tensor argument whose shape changes at every level of the recursion) | 8 | no | the call keeps its callee |
+| Non-tail recursion on `std::nvm`, `std::fvm` and the interpreted part of `std::jit` | 256 frames | no | the program stops with `RuntimeDiag::MaxRecursionDepthExceeded` (`0x04000004`, stage `run`, exit 1) at the call expression that would open frame 257; what ran before it has run |
+| Recursion in code `std::jit` compiled to native code (a self-recursive function whose branch arms were inlined, e.g. after `std::inline` or `std::opt`) | none | no | limited only by the frame pool; exhausting it aborts the process (`std::bad_alloc`), without a diagnostic |
+| Recursion on `std::tf` | none | no | limited only by the native stack; exhausting it is a segmentation fault |
+| Ahead-of-time evaluation of a `macro` function by `std::macro` | 64 evaluator frames (a self-recursion of 32 levels: `count(31)` is evaluated, `count(32)` is not) | no | the evaluation has failed: error `RuntimeDiag::MacroEvaluationFailed` at the call, the pipeline stops (see "What `std::macro` reports") |
+| Nodes, node blocks and edges of one graph | 65535 each (16-bit) | no | the pass that built the graph fails with `RuntimeDiag::PassInternalError` (`... exceeds the target integral width`) before anything runs |
+| Permanent space (types and layouts) | 32 MB | no | the pass fails with `RuntimeDiag::PassInternalError` (`Permanent space exhausted`) before anything runs |
+
+Recursion depth counts frames, not source-level calls: a call in tail position reuses its frame (see `docs/technical/19_tail_call_optimization.md`), so tail recursion of any depth runs, and the frames of `main` and of the entry graph count towards the 256 (in `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)` called from `main`, `depth(253)` is the deepest call that runs on `std::nvm` and `depth(255)` on `std::fvm` / `std::jit`). The limits marked "no" are compile-time constants (`nodevm.h`, `fastvm.h`, `src/execute/macro/eval.cpp`, `generic.h`); there is no command-line option or `.opencmlrc` key for them (`.opencmlrc` only configures the pass list). The recursion limit is not the same under every pipeline today: `std::inline std::jit` and `std::tf` run `depth(300)` to completion where `std::nvm`, `std::fvm` and plain `std::jit` stop with the diagnostic.
+
+`std::opt::simplify` unrolls a recursion whose arguments are constants one level per round (`fib(15)` would become its whole call tree); the growth budget is what stops it. `onnx.export_model` simplifies the function it exports without the growth budget and the inline size cap, because an export has to reach straight-line code; a pipeline that exports through `std::opt::simplify onnx::export` is held to them and may need `CAMEL_OPT_GROWTH_BUDGET` raised for a large model (the export pass then refuses with `TranslationRefused` rather than writing a partial model).
 
 ---
 

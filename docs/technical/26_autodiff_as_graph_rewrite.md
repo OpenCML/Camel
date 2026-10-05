@@ -1,7 +1,15 @@
 # Automatic Differentiation as Graph Rewriting
 
+> **Read [`../design-principles.cn.md`](../design-principles.cn.md) first** (English translation: [`design-principles.en.md`](../design-principles.en.md)). It is the language author's normative statement of what Camel is and of its execution model; it prevails over code and other documents, and questions it leaves undecided go to the language author.
+>
+> In its terms (section 4): automatic differentiation is a **library built on the pass mechanism, not part of the language core**. Its precondition is that `std::macro` runs before `grad` / `value_and_grad` / `vjp` are used: a graph on which macros have not been executed lacks the information differentiation needs. When the precondition is not met the library must give a clear diagnostic. Pass order is otherwise unrestricted by the language and may change results.
+>
+> **Implementation status**: an unmet precondition can still surface as a run-time error instead of a clear located diagnostic (e.g. "branch arms must be subgraph calls" after `std::opt::simplify` on the GRU benchmark; tracking item N3 / D21).
+
 Status: implemented through phase 5 and phase 7 (§8); phase 6 (thin ONNX) is
-open. Supersedes the tape-based synthesis inside `nn.apply_gradients`, which
+partly done: `onnx::export` exists as a module-contributed translation pass,
+but shape specialization still happens inside it and `onnx.export_model` still
+runs its own simplification (§7, "Status"). Supersedes the tape-based synthesis inside `nn.apply_gradients`, which
 has been removed together with `Parameter`.
 
 Implementation map:
@@ -68,6 +76,36 @@ source ── compile ──> GIR
 result (a new function value) is materialized as static data by `std::macro`.
 The synthesized graph joins the reachable graph closure at commit time, so every
 later pass sees it like user code.
+
+### Pass order: `std::macro` and the inlining passes
+
+`grad(f)` transforms f's graph **as compiled**: the pullback builder takes one
+pullback per branch-arm call (§4.3), so it cannot differentiate an arm that
+was merged into its owner, nor the shape left when a recursive call is inlined
+into its own arm.
+
+- **`std::macro` first** is the intended order: every `grad` whose function is
+  static is expanded before any rewrite, and the passes after it optimize the
+  derivative like user code.
+- **Without `std::macro`, or with it after an inlining pass**, `grad` runs with
+  the program on the graphs the passes left. The inlining engine
+  (`std::inline`, `std::opt`, `std::opt::simplify`; `MacroOperandGraphs` in
+  `src/passes/opt/inline/engine.cpp`) therefore inlines nothing into the
+  graphs an unexpanded macro operator can still reach: its function operand
+  and what that calls or holds as a function constant. Calls of those
+  functions from elsewhere are inlined as usual. The program runs and gives
+  the same results; the differentiated functions and their derivatives are
+  just not optimized.
+- **A macro operator whose function is not a constant** (`grad(f)` where `f`
+  is a parameter) cannot be expanded by `std::macro` at all. While such an
+  operator is in the program, any function may reach it, so the inlining
+  engine inlines nothing anywhere. Pass the function so that it is static at
+  the `grad` call to get the optimizations back.
+
+Other rewrites of a function that `grad` later differentiates at run time
+(`std::opt::cse`, `std::opt::fold`) keep the result valid but may change its
+floating-point rounding, because the derivative is built from a different
+expression.
 
 ## 3. User-Facing API
 
@@ -223,6 +261,60 @@ unrolling, branch selection, shape facts). These move to general passes:
 
 `onnx.export_model(fn, x, path)` stays as a convenience that runs this pipeline
 on `fn`.
+
+### Status
+
+What exists (`modules/onnx/passes/export.cpp`, `docs/cli.md`):
+
+    CAMEL_ONNX_OUT=model.onnx camel m.cml std::macro std::opt::simplify onnx::export
+
+- `onnx::export` is registered by the `onnx` module and is the last pass of the
+  pipeline; it consumes the graph, so the program does not run. The export
+  request is the program's own `onnx.export_model(fn, example, path, ...)`
+  call, which the pass finds in the entry graph with constant arguments (no new
+  syntax, no new command-line option). `CAMEL_ONNX_OUT` overrides the path.
+- It refuses, with the diagnostic `RuntimeDiag::TranslationRefused` at the node
+  and the name of the missing pass, a graph that still has a call (not inlined,
+  or the entry graph still calling `main`) or an unexpanded macro operator. It
+  never expands macros, devirtualizes, specializes calls, inlines or unrolls.
+- For the programs both entries accept, the models are equivalent: same
+  checker result and bit-identical ONNX Runtime outputs
+  (`test/cases/modules/onnx/pass_export.py`).
+
+What differs from the design above:
+
+- **Shape specialization is not a general pass.** There is no pass that takes
+  example input types, so the pass does that step itself: it binds the example
+  types to the function's ports, re-infers node types, and runs the
+  `std::opt::fold` / `std::opt::dce` fixpoint on its copy of the function
+  (shape arithmetic such as `shape(x)[0] * shape(x)[1]` or `numel` in a
+  gradient can only fold then). This is the one simplification step left
+  inside the pass.
+- **Shapes are not read from node types.** The lowering walks the graph as a
+  value DAG and re-derives dtype and shape per value with operator inference
+  (this is what carries dynamic axes); in that walk it also evaluates pure
+  operators whose arguments are all constants and takes the arm of a branch on
+  a constant condition, where folding left them (inside branch arms).
+- **`onnx.export_model` does not run the pass pipeline.** It simplifies the
+  bound function itself with settings `std::opt::simplify` does not have:
+  inlining regardless of size, up to 4096 rounds (deeper static recursion),
+  and the branched-call split that turns the pullback of a data-dependent
+  branch into per-arm calls (`enableBranchedCallSplit`, valid only for a
+  consumer that builds no execution order). Programs that need these export
+  through `export_model` and are refused by the pipeline: of the exporting
+  programs in `test/cases/modules/onnx`, the pipeline accepts nine and refuses
+  the four `export_train_step_branch*` (indirect call left) and the two
+  `export_gated_gru_*` (call left); `export_import_order` is refused because
+  its captured weights come from `random` and only exist at run time.
+- **Control dependencies are checked, not translated.** The lowering walk
+  follows data dependencies only. Before it, both entries refuse a function in
+  which an impure operator is reachable from the exit through data or control
+  edges, in the function itself or in a function it calls or holds as a
+  constant (`Evaluator::refuseEffects`, `modules/onnx/exporter.cpp`): an effect
+  on the control path of a `sync` function (a `println` whose result nothing
+  reads) is reported at the operator and no model is written. The check is
+  structural: an effect in the arm of a branch on a constant condition that
+  folding did not remove is refused too.
 
 ## 8. Phases
 

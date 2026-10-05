@@ -27,6 +27,8 @@
 #include "camel/utils/type.h"
 #include "core/module/entity_internal.h"
 
+#include "camel/core/operator_traits.h"
+
 #include <atomic>
 #define DEBUG_LEVEL -1
 
@@ -317,14 +319,18 @@ compile_graph_ptr_t createCompileGraph(
             const std::string portName = i < funcType->argNamesCount()
                                              ? std::string(funcType->argNameAt(i))
                                              : std::format("__w{}", i);
-            graph->addPortNode(funcType->withTypeAt(i), portName, true, funcType->withIsVarAt(i));
+            const bool isVar = funcType->withIsVarAt(i);
+            Type *type       = funcType->withTypeAt(i);
+            graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, true, isVar);
         }
         for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
             const size_t argIndex      = funcType->withTypesCount() + i;
             const std::string portName = argIndex < funcType->argNamesCount()
                                              ? std::string(funcType->argNameAt(argIndex))
                                              : std::format("__n{}", i);
-            graph->addPortNode(funcType->normTypeAt(i), portName, false, funcType->normIsVarAt(i));
+            const bool isVar = funcType->normIsVarAt(i);
+            Type *type       = funcType->normTypeAt(i);
+            graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, false, isVar);
         }
     }
     return graph;
@@ -519,6 +525,15 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     varied_ = false;
     diags_  = diags;
     usedGraphs_.clear();
+    variables_.clear();
+    pendingUses_.clear();
+    captures_.clear();
+    bodyStates_.clear();
+    capturePortNames_.clear();
+    pendingIgnoredWrites_.clear();
+    builtFunctions_.clear();
+    effectfulGraphs_.clear();
+    armGraphs_.clear();
     typeDecls_.clear();
     syntheticRefIndex_ = 0;
 
@@ -534,6 +549,8 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
 
     try {
         visit(gct);
+        reportIgnoredCapturedWrites();
+        reportUndeclaredCapturedWrites();
 
         compile_graph_ptr_t entryGraph = nullptr;
         if (auto decoratedMain = decoratedGraphAt("main")) {
@@ -544,6 +561,18 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
         const bool entryModule =
             context_ && module_ && context_->mainModule() && context_->mainModule() == module_;
         if (entryGraph) {
+            // The entry graph stands for the entry function where a diagnostic is about the
+            // program as a whole (a translation pass that finds nothing to translate): it
+            // shares the origin of `main`, also after passes have inlined `main` into it.
+            if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
+                const auto mainOrigin =
+                    sourceContext->debugMap().graphOrigin(entryGraph->stableId());
+                if (mainOrigin != camel::source::kInvalidOriginId) {
+                    sourceContext->debugMap().registerGraphOrigin(
+                        rootGraph_->stableId(),
+                        mainOrigin);
+                }
+            }
             auto entryFuncValue = createFuncDataNode(entryGraph, true, false);
             auto entryCall      = rootGraph_->addCallNode(entryGraph->funcType()->exitType());
             linkNodes(LinkType::With, entryFuncValue, entryCall);
@@ -552,6 +581,8 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
                 nodeIdOf(entryCall),
                 nodeIdOf(entryCall),
                 entryGraph->funcType()->exitType());
+            // Module-level statements run only as far as the call of `main` depends on them.
+            reportDroppedEffects(rootGraph_);
         } else if (entryModule) {
             diags_->of(SemanticDiag::EntryModuleMissingMain).commit(module_->name());
             throw BuildAbortException();
@@ -638,7 +669,8 @@ node_handle_t Builder::resolveCrossGraphRef(node_handle_t node, const std::strin
             throw BuildAbortException();
         }
 
-        auto *portNode = curr->addPortNode(nodeTypeOf(node), name, false, false);
+        // A captured variable is captured by reference: the port holds the same cell.
+        auto *portNode = curr->addPortNode(nodeTypeOf(node), name, false, isVariable(node));
         curr->draft().removeNormPort(nodeIdOf(portNode));
         curr->draft().appendClosureNode(nodeIdOf(portNode));
         const auto closureRefs = curr->funcType()->closureRefs();
@@ -646,6 +678,11 @@ node_handle_t Builder::resolveCrossGraphRef(node_handle_t node, const std::strin
             curr->funcType()->addClosureRef(name);
         }
         scope->insert(name, portNode);
+        if (isVariable(node)) {
+            variables_.insert(portNode);
+            capturePortNames_.emplace(portNode, name);
+            captures_[curr.get()].variables.push_back(name);
+        }
 
         curr  = curr->outerGraph();
         scope = scope->outer();
@@ -758,22 +795,29 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     compile_graph_ptr_t graph = enterScope(funcType, name);
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
-        for (draft_node_ref_t port : graph->draft().withPorts()) {
-            insertNode(graph->nodePortName(graph->draft().node(port)), graph->draft().node(port));
-        }
-        for (draft_node_ref_t port : graph->draft().normPorts()) {
-            insertNode(graph->nodePortName(graph->draft().node(port)), graph->draft().node(port));
-        }
-        node_handle_t res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
-        if (graph->draft().exitNode() == runtime::kInvalidNodeRef) {
-            if (res != nullptr) {
-                setGraphReturnFromResult(graph, nodeIdOf(res), nodeIdOf(res), nodeTypeOf(res));
-            } else {
-                auto *resNode = graph->addStaticDataNode(Data::null());
-                setGraphReturnFromResult(graph, nodeIdOf(resNode), nodeIdOf(resNode), Type::Void());
+        const auto withPorts = graph->draft().withPorts();
+        for (size_t i = 0; i < withPorts.size(); ++i) {
+            node_handle_t port = graph->draft().node(withPorts[i]);
+            insertNode(graph->nodePortName(port), port);
+            if (i < funcType->withTypesCount() && funcType->withIsVarAt(i)) {
+                variables_.insert(port);
             }
         }
+        const auto normPorts = graph->draft().normPorts();
+        for (size_t i = 0; i < normPorts.size(); ++i) {
+            node_handle_t port = graph->draft().node(normPorts[i]);
+            insertNode(graph->nodePortName(port), port);
+            if (i < funcType->normTypesCount() && funcType->normIsVarAt(i)) {
+                variables_.insert(port);
+            }
+        }
+        bodyStates_[graph.get()] = BodyState::Open;
+        setBodyResult(graph, visitBodyNode(gct->atAs<GCT::ExecLoad>(1)));
+        bodyStates_[graph.get()] = BodyState::Built;
+        builtFunctions_.push_back({graph.get(), gct->load()->origin(), name});
+        reportDroppedEffects(graph);
     } catch (...) {
+        bodyStates_[graph.get()] = BodyState::Built;
         leaveScope();
         throw;
     }
@@ -810,7 +854,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             type_vec_t refTypes;
             std::vector<node_handle_t> refNodes;
             for (const auto &ref : composedData->refs()) {
-                const auto &refNode = resolveNodeByRef(std::string(ref));
+                const auto &refNode = valueOf(resolveNodeByRef(std::string(ref)));
                 refTypes.push_back(nodeTypeOf(refNode));
                 refNodes.push_back(refNode);
             }
@@ -879,8 +923,13 @@ Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
 node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     ENTER("NREF");
     const string &ident = gct->loadAs<GCT::NRefLoad>()->ref();
-    node_handle_t node  = valueNodeOf(visit(gct->at(0)));
-    bool success        = insertNode(ident, node);
+    // Names declared inside the initializer are not part of this declaration.
+    const bool isVar   = std::exchange(declaresVariable_, false);
+    node_handle_t node = valueNodeOf(visit(gct->at(0)));
+    declaresVariable_  = isVar;
+    // `var x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
+    // that value.
+    bool success = insertNode(ident, isVar ? newVariable(node) : node);
     if (!success) {
         diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->load()->origin()).commit(ident);
         throw BuildAbortException();
@@ -914,6 +963,341 @@ void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
     nodeModifierMaps_[inputGraph][nodeIdOf(input)] = nodeIdOf(modifier);
 }
 
+void Builder::recordWrite(
+    node_handle_t variable, node_handle_t entry, node_handle_t exit, bool throughCallee) {
+    // `A(i); wait modify(i); B(i)` gives A -> modify -> B (design principles 2.6). The second
+    // half follows from setModifier. The first: the waited writer is ordered after every
+    // operation that directly used the variable's value before it: the operations that took a
+    // value read from it (the read itself when nothing took it), and the calls and branches
+    // that used the variable through a capture. `wait` orders by this use of the variable, not
+    // by position: in `A(i + 1); wait modify(i)` the direct user is `+`, not A. In a sync block
+    // the block's chain already orders them. A writer that is neither waited nor in a sync
+    // block is not ordered after earlier users; they stay pending for the next waited writer.
+    auto &uses = pendingUses_[variable];
+    if (waited_ && !synced_) {
+        std::unordered_set<node_handle_t> before;
+        for (const VariableUse &use : uses) {
+            bool taken = false;
+            if (use.isRead) {
+                for (auto users : {normUsersOf(use.node), withUsersOf(use.node)}) {
+                    for (draft_node_ref_t user : users) {
+                        before.insert(nodeDraftOf(use.node)->node(user));
+                        taken = true;
+                    }
+                }
+            }
+            if (!taken) {
+                before.insert(use.node);
+            }
+        }
+        for (node_handle_t node : before) {
+            if (node != exit && shouldAddSyncCtrlLink(node, entry)) {
+                linkNodes(LinkType::Ctrl, node, entry);
+            }
+        }
+    }
+    if (waited_ || synced_) {
+        uses.clear();
+    }
+    setModifier(variable, exit);
+    // A write of a captured variable is what callers of this graph have to see.
+    if (!throughCallee) {
+        if (auto captured = capturePortNames_.find(variable);
+            captured != capturePortNames_.end()) {
+            captures_[nodeGraphOf(variable)].written.insert(captured->second);
+        }
+    }
+}
+
+void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
+    if (auto modifier = modifierOf(variable); modifier.has_value()) {
+        if (sameGraph(*modifier, currGraph_) && shouldAddSyncCtrlLink(*modifier, node)) {
+            linkNodes(LinkType::Ctrl, *modifier, node);
+        }
+    }
+}
+
+std::set<std::string> Builder::capturedWritesOf(DraftGraphBuilder *root) const {
+    const auto isOpen = [&](DraftGraphBuilder *graph) {
+        auto state = bodyStates_.find(graph);
+        return state != bodyStates_.end() && state->second == BodyState::Open;
+    };
+    const auto summaryOf = [&](DraftGraphBuilder *graph) -> const CaptureSummary * {
+        auto summary = captures_.find(graph);
+        return summary == captures_.end() ? nullptr : &summary->second;
+    };
+    // The graphs reachable through direct calls and arms. An open body is not looked into:
+    // what it will write is not known yet, so all it captured stands for it.
+    std::vector<DraftGraphBuilder *> reached{root};
+    std::unordered_map<DraftGraphBuilder *, std::set<std::string>> writes;
+    for (size_t i = 0; i < reached.size(); ++i) {
+        DraftGraphBuilder *graph = reached[i];
+        const auto *summary      = summaryOf(graph);
+        if (summary == nullptr) {
+            writes[graph];
+            continue;
+        }
+        if (isOpen(graph)) {
+            writes[graph].insert(summary->variables.begin(), summary->variables.end());
+            continue;
+        }
+        writes[graph] = summary->written;
+        for (DraftGraphBuilder *callee : summary->callees) {
+            if (std::ranges::find(reached, callee) == reached.end()) {
+                reached.push_back(callee);
+            }
+        }
+    }
+    // Least fixpoint of: a graph writes what its callees write, as far as it captured the
+    // variable itself (a callee's write of the graph's own local variable stops there). A
+    // recursive call adds nothing to the function's own set, so recursion needs no special
+    // case here.
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (DraftGraphBuilder *graph : reached) {
+            const auto *summary = summaryOf(graph);
+            if (summary == nullptr || isOpen(graph)) {
+                continue;
+            }
+            auto &own = writes[graph];
+            for (DraftGraphBuilder *callee : summary->callees) {
+                for (const std::string &name : writes[callee]) {
+                    if (std::ranges::find(summary->variables, name) != summary->variables.end() &&
+                        own.insert(name).second) {
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+    return writes[root];
+}
+
+std::vector<Builder::CapturedUse> Builder::capturedUsesOf(const compile_graph_ptr_t &callee) {
+    auto &callees = captures_[currGraph_.get()].callees;
+    if (std::ranges::find(callees, callee.get()) == callees.end()) {
+        callees.push_back(callee.get());
+    }
+    auto summary = captures_.find(callee.get());
+    if (summary == captures_.end() || summary->second.variables.empty()) {
+        return {};
+    }
+    // Resolving a name may add a capture port to the current graph and its summary.
+    const std::vector<std::string> names = summary->second.variables;
+    const std::set<std::string> written  = capturedWritesOf(callee.get());
+    std::vector<CapturedUse> uses;
+    for (const std::string &name : names) {
+        // The callee's capture is bound by name where it is called, as its with-inputs are.
+        node_handle_t variable = resolveNodeByRef(name);
+        if (isVariable(variable)) {
+            uses.push_back({variable, name, written.contains(name)});
+        }
+    }
+    return uses;
+}
+
+void Builder::reportIgnoredCapturedWrites() {
+    for (const PendingIgnoredWrite &pending : pendingIgnoredWrites_) {
+        std::set<std::string> written;
+        for (DraftGraphBuilder *graph : pending.graphs) {
+            written.merge(capturedWritesOf(graph));
+        }
+        std::vector<std::string> names;
+        for (const std::string &name : pending.names) {
+            if (written.contains(name)) {
+                names.push_back("'" + name + "'");
+            }
+        }
+        if (names.empty()) {
+            continue;
+        }
+        diags_->of(SemanticDiag::IgnoredSideEffect)
+            .atOrigin(pending.origin)
+            .commit(
+                pending.subject,
+                std::format(
+                    "{} the captured variable{} {}",
+                    pending.verb,
+                    names.size() > 1 ? "s" : "",
+                    strutil::join(names, ", ", [](const std::string &name) { return name; })));
+    }
+    pendingIgnoredWrites_.clear();
+}
+
+void Builder::reportUndeclaredCapturedWrites() {
+    // The prefix `sync` of a function declares that it has side effects (design principles
+    // 2.3); a function with a `var` parameter is already checked for it
+    // (VarParamInAsyncFunction, in the GCT builder). A function that writes a variable it
+    // captured, itself or through the functions it calls, has side effects as well. This is a
+    // declaration check only: the modifier changes nothing in how calls are compiled.
+    for (const BuiltFunction &function : builtFunctions_) {
+        if (function.graph->funcType()->modifiers().sync()) {
+            continue;
+        }
+        std::vector<std::string> names;
+        for (const std::string &name : capturedWritesOf(function.graph)) {
+            names.push_back("'" + name + "'");
+        }
+        if (names.empty()) {
+            continue;
+        }
+        diags_->of(SemanticDiag::CapturedWriteInAsyncFunction)
+            .atOrigin(function.origin)
+            .commit(
+                function.name.empty() ? std::string("The lambda")
+                                      : std::format("Function '{}'", function.name),
+                names.size() > 1 ? "s" : "",
+                strutil::join(names, ", ", [](const std::string &name) { return name; }));
+    }
+    builtFunctions_.clear();
+}
+
+bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
+    const auto declaresEffects = [](Type *type) {
+        if (type == nullptr || type->code() != TypeCode::Function) {
+            return false;
+        }
+        const auto *func = tt::as_ptr<FunctionType>(type);
+        if (func->modifiers().sync()) {
+            return true;
+        }
+        for (size_t i = 0; i < func->normTypesCount(); ++i) {
+            if (func->normIsVarAt(i)) {
+                return true;
+            }
+        }
+        for (size_t i = 0; i < func->withTypesCount(); ++i) {
+            if (func->withIsVarAt(i)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const auto calleeOf = [&](node_handle_t func) { return graph->funcTarget(func); };
+    switch (nodeKindOf(node)) {
+    case runtime::GCNodeKind::Oper: {
+        const auto &op = graph->operTarget(node);
+        return op != nullptr &&
+               camel::core::OperatorTraitsRegistry::instance().hasExternalEffect(op->uri());
+    }
+    case runtime::GCNodeKind::Func: {
+        const auto callee = calleeOf(node);
+        // An arm is entered by its branch, which is what gets reported.
+        if (callee == nullptr || armGraphs_.contains(callee.get())) {
+            return false;
+        }
+        return declaresEffects(callee->funcType()) || effectfulGraphs_.contains(callee.get());
+    }
+    case runtime::GCNodeKind::Call: {
+        const auto callee = withInputsOf(node);
+        return !callee.empty() && declaresEffects(nodeTypeOf(nodeDraftOf(node)->node(callee[0])));
+    }
+    case runtime::GCNodeKind::Join: {
+        for (draft_node_ref_t arm : withInputsOf(node)) {
+            node_handle_t armNode = nodeDraftOf(node)->node(arm);
+            if (nodeIsKind(armNode, runtime::GCNodeKind::Func)) {
+                const auto callee = calleeOf(armNode);
+                if (callee != nullptr && effectfulGraphs_.contains(callee.get())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    default:
+        return false;
+    }
+}
+
+void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph) {
+    auto &draft = graph->draft();
+    // What the exit depends on, through data and control edges.
+    std::unordered_set<draft_node_ref_t> needed;
+    std::vector<draft_node_ref_t> work;
+    for (draft_node_ref_t root : {draft.outputNode(), draft.exitNode(), draft.returnNode()}) {
+        if (root != runtime::kInvalidNodeRef && needed.insert(root).second) {
+            work.push_back(root);
+        }
+    }
+    if (work.empty()) {
+        return; // the body did not build (an error was reported)
+    }
+    while (!work.empty()) {
+        const draft_node_ref_t id = work.back();
+        work.pop_back();
+        for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+            for (draft_node_ref_t input : inputs) {
+                if (needed.insert(input).second) {
+                    work.push_back(input);
+                }
+            }
+        }
+    }
+    std::vector<draft_node_ref_t> dropped;
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id) || !isEffectNode(graph.get(), draft.node(id))) {
+            continue;
+        }
+        if (needed.contains(id)) {
+            effectfulGraphs_.insert(graph.get());
+        } else {
+            dropped.push_back(id);
+        }
+    }
+    // One warning per dropped chain: an effect whose result feeds another dropped effect
+    // (`println(log(1))`, the statements of a dropped sync block) is reported through the
+    // last one.
+    const auto feedsDroppedEffect = [&](draft_node_ref_t start) {
+        std::unordered_set<draft_node_ref_t> seen{start};
+        std::vector<draft_node_ref_t> stack{start};
+        while (!stack.empty()) {
+            const draft_node_ref_t id = stack.back();
+            stack.pop_back();
+            for (auto users : {draft.normUsersOf(id), draft.withUsersOf(id), draft.ctrlUsersOf(id)}) {
+                for (draft_node_ref_t user : users) {
+                    if (!seen.insert(user).second) {
+                        continue;
+                    }
+                    if (std::ranges::find(dropped, user) != dropped.end()) {
+                        return true;
+                    }
+                    stack.push_back(user);
+                }
+            }
+        }
+        return false;
+    };
+    auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+    for (draft_node_ref_t id : dropped) {
+        if (feedsDroppedEffect(id)) {
+            continue;
+        }
+        node_handle_t node = draft.node(id);
+        std::string subject;
+        switch (nodeKindOf(node)) {
+        case runtime::GCNodeKind::Oper: {
+            const std::string &name = graph->operTarget(node)->name();
+            subject = name.starts_with("__assn") ? std::string("The assignment")
+                                                 : std::format("The call of '{}'", name);
+        } break;
+        case runtime::GCNodeKind::Func:
+            subject = std::format("The call of '{}'", graph->funcTarget(node)->name());
+            break;
+        case runtime::GCNodeKind::Join:
+            subject = "The branch";
+            break;
+        default:
+            subject = "The call";
+            break;
+        }
+        camel::source::origin_id_t origin = node->header.origin;
+        if (origin == camel::source::kInvalidOriginId && sourceContext) {
+            origin = sourceContext->debugMap().graphOrigin(graph->stableId());
+        }
+        diags_->of(SemanticDiag::EffectNotExecuted).atOrigin(origin).commit(subject);
+    }
+}
+
 node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     ENTER("DREF");
     const string name = gct->loadAs<GCT::DRefLoad>()->ref().toString();
@@ -925,7 +1309,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             ASSERT(sameGraph(node, currGraph_), "Failed to resolve cross-graph reference.");
         }
         LEAVE("DREF");
-        return node;
+        return valueOf(node);
     }
     auto &graph       = currGraph_;
     auto optDecorated = decoratedGraphAt(name);
@@ -1015,20 +1399,17 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
 
 node_handle_t Builder::visitVariNode(const GCT::node_ptr_t &gct) {
     ENTER("VARI");
-    bool old        = varied_;
-    varied_         = true;
-    const auto &res = visit(gct->at(0));
+    bool old          = varied_;
+    bool oldDeclares  = declaresVariable_;
+    varied_           = true;
+    declaresVariable_ = true;
+    const auto &res   = visit(gct->at(0));
     ASSERT(
         res.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of VARI node.");
     node_handle_t node = any_cast<node_handle_t>(res);
     varied_            = old;
-    // A mutable binding takes the widened type of its initializer, so later
-    // assignments may store values with a different refinement (e.g. shape).
-    Type *valueType = nodeTypeOf(node);
-    if (Type *widened = valueType->widened(); widened != valueType) {
-        setNodeType(node, widened);
-    }
+    declaresVariable_  = oldDeclares;
     LEAVE("VARI");
     return node;
 }
@@ -1318,6 +1699,81 @@ node_handle_t Builder::argumentNodeOf(const std::any &res, const GCT::node_ptr_t
     return node;
 }
 
+node_handle_t Builder::variableOperator(const std::string &group, node_handle_t input) {
+    const auto entity = module_->getImportedEntity(group);
+    ASSERT(entity.has_value() && entity->isOperGroup(), "Variable operators are not available.");
+    const std::vector<std::optional<slot_t>> statics(1);
+    const auto op = entity->operGroup()->resolve({}, {nodeTypeOf(input)}, statics, Modifier::None);
+    ASSERT(op.has_value(), "Variable operator rejected its operand.");
+    node_handle_t node = currGraph_->addOperNode(*op, 0);
+    linkNodes(LinkType::Norm, input, node);
+    return node;
+}
+
+node_handle_t Builder::newVariable(node_handle_t value) {
+    // The variable takes the widened type of its initializer (:var/new), so later assignments
+    // may store values with a different refinement (e.g. shape).
+    node_handle_t variable = variableOperator("__var_new__", value);
+    variables_.insert(variable);
+    return variable;
+}
+
+node_handle_t Builder::readVariable(node_handle_t variable) {
+    node_handle_t value = variableOperator("__var_get__", variable);
+    pendingUses_[variable].push_back({value, true});
+    if (auto modifier = modifierOf(variable); modifier.has_value()) {
+        if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
+            linkNodes(LinkType::Ctrl, *modifier, value);
+        }
+    }
+    // In a sync block a read happens where it is written, like a call.
+    if (synced_) {
+        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {
+            linkNodes(LinkType::Ctrl, lastSyncedNode_, value);
+        }
+        lastSyncedNode_ = value;
+    }
+    return value;
+}
+
+node_handle_t Builder::visitOperand(const GCT::node_ptr_t &expr, const GCT::node_ptr_t &call) {
+    if (expr->type() == GCT::LoadType::DREF) {
+        const std::string name = expr->loadAs<GCT::DRefLoad>()->ref().toString();
+        if (nodeAt(name).has_value()) {
+            if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
+                return node;
+            }
+        }
+    }
+    return argumentNodeOf(visit(expr), call);
+}
+
+std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr) {
+    GCT::node_ptr_t root = expr;
+    while (root && root->type() == GCT::LoadType::ACCS) {
+        root = root->at(0);
+    }
+    if (!root || root->type() != GCT::LoadType::DREF) {
+        return std::nullopt;
+    }
+    const std::string name = root->loadAs<GCT::DRefLoad>()->ref().toString();
+    // A name without a node is a function or an operator.
+    const auto node = nodeAt(name);
+    if (!node.has_value() || isVariable(*node)) {
+        return std::nullopt;
+    }
+    return name;
+}
+
+void Builder::requireMutableArgument(const Argument &arg, const std::string &callee) {
+    if (auto name = immutableNameOf(arg.expr)) {
+        diags_->of(SemanticDiag::ImmutablePassedToVarParam)
+            .atOrigin(arg.expr->load()->origin())
+            .commit(*name, callee);
+        throw BuildAbortException();
+    }
+}
+
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ENTER("LINK");
     any targetNodeRes = visit(gct->at(0));
@@ -1329,14 +1785,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     compile_graph_ptr_t targetGraph = nullptr;
     oper_idx_ptr_t targetOperator   = nullptr;
     FunctionType *targetFuncType    = nullptr;
-    node_vec_t withInputNodes, normInputNodes;
+    std::vector<Argument> withInputs, normInputs;
     type_vec_t withInputTypes, normInputTypes;
 
     if (auto bound = boundWithArgs_.find(targetNode); bound != boundWithArgs_.end()) {
-        withInputNodes = bound->second;
+        withInputs = bound->second;
     }
-    for (node_handle_t inputNode : withInputNodes) {
-        withInputTypes.push_back(nodeTypeOf(inputNode));
+    for (const Argument &input : withInputs) {
+        withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
     }
 
     // Call results take the callee's current exit type (a recursive callee's
@@ -1364,9 +1820,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     };
 
     for (size_t i = 1; i < gct->size(); i++) {
-        node_handle_t inputNode = argumentNodeOf(visit(gct->at(i)), gct);
-        normInputNodes.push_back(inputNode);
-        normInputTypes.push_back(callableValueType(inputNode));
+        node_handle_t inputNode = visitOperand(gct->at(i), gct);
+        normInputs.push_back({inputNode, gct->at(i)});
+        normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
     }
 
     if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
@@ -1413,9 +1869,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             auto ops        = std::get<oper_group_ptr_t>(drefTarget);
             // Constant arguments (shape literals, axes) let operators refine their result type.
             std::vector<std::optional<slot_t>> normStatics;
-            normStatics.reserve(normInputNodes.size());
-            for (node_handle_t input : normInputNodes) {
-                normStatics.push_back(staticValueOf(input));
+            normStatics.reserve(normInputs.size());
+            for (const Argument &input : normInputs) {
+                normStatics.push_back(staticValueOf(input.node));
             }
             const auto &res =
                 ops->resolve(withInputTypes, normInputTypes, normStatics, Modifier::None);
@@ -1459,6 +1915,44 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
             targetOperator = *res;
+            // An operator calls a function argument with values. A function with a `var`
+            // parameter needs a variable there, which an operator does not have. A macro
+            // operator (grad, value_and_grad, ...) does not call its argument: it rewrites the
+            // function's graph into another function, whose `var` parameters are passed by
+            // the caller of that function as usual.
+            const auto takesVariable = [](Type *type) {
+                if (type == nullptr || type->code() != TypeCode::Function) {
+                    return false;
+                }
+                const auto *func = tt::as_ptr<FunctionType>(type);
+                for (size_t i = 0; i < func->normTypesCount(); ++i) {
+                    if (func->normIsVarAt(i)) {
+                        return true;
+                    }
+                }
+                for (size_t i = 0; i < func->withTypesCount(); ++i) {
+                    if (func->withIsVarAt(i)) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            const bool callsArguments = !targetOperator->funcType()->modifiers().macro();
+            for (const auto *inputs : {&withInputs, &normInputs}) {
+                for (const Argument &input : *inputs) {
+                    Type *type = valueTypeOf(nodeTypeOf(input.node));
+                    if (callsArguments && takesVariable(type)) {
+                        diags_->of(SemanticDiag::ArgumentsRejected)
+                            .atOrigin(input.expr->load()->origin())
+                            .commit(
+                                ops->name(),
+                                type->toString(),
+                                "an operator calls a function argument with values, and a "
+                                "function with a var parameter must be given a variable");
+                        throw BuildAbortException();
+                    }
+                }
+            }
             targetNode     = currGraph_->addOperNode(targetOperator, 0);
             // An operator whose resolved type is macro runs in std::macro once its inputs are
             // static, like a call of a macro function.
@@ -1519,47 +2013,105 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     std::string targetName = targetGraph
                                  ? targetGraph->name()
                                  : (targetOperator ? "<" + targetOperator->name() + ">" : "");
+    // A function value has no name of its own; its type stands for it in diagnostics.
+    const std::string calleeLabel = targetName.empty() ? targetFuncType->toString() : targetName;
 
-    for (size_t i = 0; i < withInputNodes.size(); i++) {
-        node_handle_t inputNode = withInputNodes[i];
-        bool isVar              = (i < targetFuncType->withTypesCount()) &&
-                     targetFuncType->withIsVarAt(static_cast<size_t>(i));
-        tryRemoveCtrlLink(inputNode, targetNode);
-        linkNodes(LinkType::With, inputNode, targetNode);
-        if (auto modifierNode = modifierOf(inputNode); modifierNode.has_value()) {
+    // How an argument is passed. A function (a graph or a function value) and assignment take
+    // a `var` argument as the variable itself. Any other operator with a `var` parameter mutates
+    // an object in place and takes the object; the call still counts as a write of the variable
+    // the object was read from. Every other parameter takes the value.
+    const bool takesVariables =
+        targetOperator == nullptr || targetOperator->name().starts_with("__assn");
+    // The node to link and, at a `var` position, the variable the callee writes (if any).
+    const auto passArgument = [&](const Argument &arg, bool isVar) {
+        if (!isVar) {
+            return std::pair{valueOf(arg.node), node_handle_t{}};
+        }
+        requireMutableArgument(arg, calleeLabel);
+        const bool named = isVariable(arg.node);
+        if (takesVariables) {
+            // `s.x = e`, `arr[0] = e`, `f() = e`: the target is a temporary, and the store
+            // would be lost without a trace.
+            if (!named && targetOperator != nullptr) {
+                diags_->of(SemanticDiag::AssignmentTargetNotVariable)
+                    .atOrigin(arg.expr->load()->origin())
+                    .commit();
+                throw BuildAbortException();
+            }
+            // An expression that is not a name, passed to a function, is a fresh object
+            // nobody else refers to.
+            node_handle_t variable = named ? arg.node : newVariable(arg.node);
+            return std::pair{variable, variable};
+        }
+        return std::pair{valueOf(arg.node), named ? arg.node : node_handle_t{}};
+    };
+
+    // All arguments are read before the call is recorded as a writer: a variable passed both
+    // by value and to a `var` parameter (`f(c, c)`) is read before the call, not after it.
+    struct Passed {
+        node_handle_t node;
+        node_handle_t written;
+        LinkType link;
+    };
+    std::vector<Passed> passed;
+    bool hasVarArgument = false;
+    for (size_t i = 0; i < withInputs.size(); i++) {
+        bool isVar = i < targetFuncType->withTypesCount() && targetFuncType->withIsVarAt(i);
+        const auto [node, written] = passArgument(withInputs[i], isVar);
+        passed.push_back({node, written, LinkType::With});
+        hasVarArgument |= isVar;
+    }
+    for (size_t i = 0; i < normInputs.size(); i++) {
+        bool isVar = i < targetFuncType->normTypesCount() && targetFuncType->normIsVarAt(i);
+        const auto [node, written] = passArgument(normInputs[i], isVar);
+        passed.push_back({node, written, LinkType::Norm});
+        hasVarArgument |= isVar;
+    }
+    for (const Passed &arg : passed) {
+        tryRemoveCtrlLink(arg.node, targetNode);
+        linkNodes(arg.link, arg.node, targetNode);
+        if (auto modifierNode = modifierOf(arg.node); modifierNode.has_value()) {
             if (sameGraph(*modifierNode, currGraph_) &&
                 shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
                 linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
             }
-        }
-        if (isVar) {
-            if (!waited_ && !synced_) {
-                diags_->of(SemanticDiag::IgnoredSideEffect)
-                    .atOrigin(gct->load()->origin())
-                    .commit(targetName + ": " + targetFuncType->toString());
-            }
-            setModifier(inputNode, targetNode);
         }
     }
-
-    for (size_t i = 0; i < normInputNodes.size(); i++) {
-        node_handle_t inputNode = normInputNodes[i];
-        bool isVar = i < targetFuncType->normTypesCount() && targetFuncType->normIsVarAt(i);
-        tryRemoveCtrlLink(inputNode, targetNode);
-        linkNodes(LinkType::Norm, inputNode, targetNode);
-        if (auto modifierNode = modifierOf(inputNode); modifierNode.has_value()) {
-            if (sameGraph(*modifierNode, currGraph_) &&
-                shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
-                linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
-            }
+    // A function called directly brings its captured variables with it: the call uses each of
+    // them, and writes those the function writes, exactly as if they were `var` arguments.
+    std::vector<CapturedUse> captured;
+    if (targetGraph) {
+        captured = capturedUsesOf(targetGraph);
+    }
+    std::vector<std::string> capturedWrites;
+    for (const CapturedUse &use : captured) {
+        orderAfterLastWriter(use.variable, targetNode);
+        if (use.written) {
+            capturedWrites.push_back(use.name);
         }
-        if (isVar) {
-            if (!waited_ && !synced_) {
-                diags_->of(SemanticDiag::IgnoredSideEffect)
-                    .atOrigin(gct->load()->origin())
-                    .commit(targetName + ": " + targetFuncType->toString());
-            }
-            setModifier(inputNode, targetNode);
+    }
+    if (!waited_ && !synced_) {
+        const std::string subject =
+            std::format("The call of '{}: {}'", targetName, targetFuncType->toString());
+        if (hasVarArgument) {
+            diags_->of(SemanticDiag::IgnoredSideEffect)
+                .atOrigin(gct->load()->origin())
+                .commit(subject, "it takes a var argument");
+        } else if (!capturedWrites.empty()) {
+            pendingIgnoredWrites_.push_back(
+                {{targetGraph.get()}, capturedWrites, gct->load()->origin(), subject, "it writes"});
+        }
+    }
+    for (const Passed &arg : passed) {
+        if (arg.written != nullptr) {
+            recordWrite(arg.written, targetNode);
+        }
+    }
+    for (const CapturedUse &use : captured) {
+        if (use.written) {
+            recordWrite(use.variable, targetNode, targetNode, true);
+        } else {
+            pendingUses_[use.variable].push_back({targetNode, false});
         }
     }
 
@@ -1580,9 +2132,9 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         targetNodeRes.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of WITH node.");
     node_handle_t targetNode = any_cast<node_handle_t>(targetNodeRes);
-    vector<node_handle_t> inputs;
+    vector<Argument> inputs;
     for (size_t i = 1; i < gct->size(); i++) {
-        inputs.push_back(argumentNodeOf(visit(gct->at(i)), gct));
+        inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i)});
     }
     auto &bound = boundWithArgs_[targetNode];
     bound.insert(bound.end(), inputs.begin(), inputs.end());
@@ -1676,6 +2228,9 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     linkNodes(LinkType::Norm, condNode, brchNode);
     std::vector<runtime::GCBranchArm> branchArms;
     std::vector<node_handle_t> branchFuncs;
+    // The variables the arms captured, and whether some arm writes them.
+    std::vector<CapturedUse> captured;
+    std::vector<DraftGraphBuilder *> armGraphs;
 
     for (size_t i = 1; i < gct->size(); i++) {
         const auto &caseNode         = gct->atAs<GCT::CaseLoad>(i);
@@ -1709,24 +2264,27 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
         graph_ptr_t subGraph = enterScope(FunctionType::create());
         registerGraphOrigin(context_, subGraph, caseExecNode, "gir.brch.case.graph");
-        node_handle_t resNode = visitExecNode(caseExecNode);
-        if (subGraph->draft().exitNode() == runtime::kInvalidNodeRef) {
-            if (resNode != nullptr) {
-                setGraphReturnFromResult(
-                    subGraph,
-                    nodeIdOf(resNode),
-                    nodeIdOf(resNode),
-                    nodeTypeOf(resNode));
+        bodyStates_[subGraph.get()] = BodyState::Open;
+        try {
+            setBodyResult(subGraph, visitBodyNode(caseExecNode));
+        } catch (...) {
+            bodyStates_[subGraph.get()] = BodyState::Built;
+            leaveScope();
+            throw;
+        }
+        bodyStates_[subGraph.get()] = BodyState::Built;
+        armGraphs_.insert(subGraph.get());
+        reportDroppedEffects(subGraph);
+        leaveScope();
+        armGraphs.push_back(subGraph.get());
+        for (const CapturedUse &use : capturedUsesOf(subGraph)) {
+            auto known = std::ranges::find(captured, use.variable, &CapturedUse::variable);
+            if (known == captured.end()) {
+                captured.push_back(use);
             } else {
-                node_handle_t nullNode = subGraph->addStaticDataNode(Data::null());
-                setGraphReturnFromResult(
-                    subGraph,
-                    nodeIdOf(nullNode),
-                    nodeIdOf(nullNode),
-                    Type::Void());
+                known->written |= use.written;
             }
         }
-        leaveScope();
 
         currGraph_->addDependencyGraph(subGraph);
         Type *exitType = subGraph->funcType()->exitType();
@@ -1868,6 +2426,27 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
     linkNodes(LinkType::Norm, brchNode, joinNode);
 
+    // Entering an arm is like calling it: the branch uses every variable an arm captured and
+    // writes those an arm writes. It begins at BRCH and is complete at JOIN.
+    std::vector<std::string> capturedWrites;
+    for (const CapturedUse &use : captured) {
+        orderAfterLastWriter(use.variable, brchNode);
+        if (use.written) {
+            capturedWrites.push_back(use.name);
+        }
+    }
+    if (!capturedWrites.empty() && !waited_ && !synced_) {
+        pendingIgnoredWrites_.push_back(
+            {armGraphs, capturedWrites, gct->load()->origin(), "The branch", "an arm writes"});
+    }
+    for (const CapturedUse &use : captured) {
+        if (use.written) {
+            recordWrite(use.variable, brchNode, joinNode, true);
+        } else {
+            pendingUses_[use.variable].push_back({joinNode, false});
+        }
+    }
+
     if (synced_) {
         if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, brchNode)) {
             linkNodes(LinkType::Ctrl, lastSyncedNode_, brchNode);
@@ -1919,13 +2498,54 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     return resNode;
 }
 
+node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
+    const bool outerSynced        = std::exchange(synced_, false);
+    const node_handle_t outerLast = std::exchange(lastSyncedNode_, {});
+    node_handle_t result{};
+    try {
+        result = visitExecNode(gct);
+    } catch (...) {
+        synced_         = outerSynced;
+        lastSyncedNode_ = outerLast;
+        throw;
+    }
+    synced_         = outerSynced;
+    lastSyncedNode_ = outerLast;
+    return result;
+}
+
+void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result) {
+    if (graph->draft().exitNode() != runtime::kInvalidNodeRef) {
+        return;
+    }
+    if (result == nullptr) {
+        result = graph->addStaticDataNode(Data::null());
+        setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(result), Type::Void());
+        return;
+    }
+    // A sync block that ends in a value hands it back behind a GATE (see visitExecNode): the
+    // GATE is the output anchor, the value it forwards is what the graph returns.
+    node_handle_t value = result;
+    if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
+        value = nodeDraftOf(result)->node(normInputsOf(result).front());
+    }
+    setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(value), nodeTypeOf(value));
+}
+
 node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     ENTER("EXEC");
     const auto &execLoad      = gct->loadAs<GCT::ExecLoad>();
     bool old                  = synced_;
     node_handle_t oldFuncNode = lastSyncedNode_;
-    synced_                   = execLoad->synced();
-    lastSyncedNode_           = {};
+    // A scope the lowering introduced (the operands of a composite literal, the names of a
+    // declaration) is not a block: in a sync block it continues the chain, in written order,
+    // like the arguments of a call statement. So does a sync block written inside a sync
+    // block: its expressions are expressions of the enclosing block, in the same order.
+    const bool operands = execLoad->operands() || (synced_ && execLoad->synced());
+    if (!operands) {
+        synced_         = execLoad->synced();
+        lastSyncedNode_ = {};
+    }
     node_handle_t res{};
     for (size_t i = 0; i < gct->size(); i++) {
         try {
@@ -1943,8 +2563,23 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
             continue;
         }
     }
-    synced_         = old;
-    lastSyncedNode_ = oldFuncNode;
+    if (!operands) {
+        // A sync block that is not part of an enclosing chain: whoever takes its value takes
+        // it after the block's last expression (a `return` has already done this for the
+        // graph's exit). Without this the chain of a block ending in a plain value was not
+        // reachable from anything and the block's effects were dropped.
+        const bool returned =
+            gct->size() > 0 && gct->at(gct->size() - 1)->type() == GCT::LoadType::EXIT;
+        if (synced_ && !returned && res != nullptr && lastSyncedNode_ != nullptr &&
+            lastSyncedNode_ != res && sameGraph(res, currGraph_)) {
+            node_handle_t gate = currGraph_->addGateNode(nodeTypeOf(res));
+            linkNodes(LinkType::Norm, res, gate);
+            linkNodes(LinkType::Ctrl, lastSyncedNode_, gate);
+            res = gate;
+        }
+        synced_         = old;
+        lastSyncedNode_ = oldFuncNode;
+    }
     LEAVE("EXEC");
     return res;
 }

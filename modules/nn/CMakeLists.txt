@@ -9,8 +9,6 @@ add_camel_module(
     optim.cpp
     state.cpp
     tensor_ops.cpp
-  EXTRA_INCLUDES
-    ${CMAKE_SOURCE_DIR}/src
   EXTRA_LIBS
     tensor_cmo
 )

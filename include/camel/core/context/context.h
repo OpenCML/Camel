@@ -137,6 +137,16 @@ class Context : public std::enable_shared_from_this<Context> {
     /// format
     void dumpAllModuleDiagnostics(std::ostream &os, bool json) const;
 
+    /// Dump the Warn-level diagnostics of the user modules that compiled without an error (the
+    /// modules with errors show theirs through dumpAllModuleDiagnostics). Text: one line per
+    /// warning; JSON: one array, the same objects as the error array. Nothing is written when
+    /// there is no warning. Returns the number of warnings written. `extra` are warnings that
+    /// belong to no module (about the command line), written after the modules' in the same
+    /// form, so that JSON output stays one array.
+    size_t dumpModuleWarnings(
+        std::ostream &os, bool json,
+        const std::vector<camel::core::error::Diagnostic> &extra = {}) const;
+
     void registerExecutorFactory(std::string name, std::function<std::shared_ptr<Executor>()> fact);
 
     void clearProcessExitCode() { processExitCode_.reset(); }

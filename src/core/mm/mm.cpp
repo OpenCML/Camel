@@ -23,6 +23,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
 namespace camel::core::mm {
@@ -189,8 +190,33 @@ FreeListAllocator &graphSpace() {
     static auto *allocator = new FreeListAllocator(64 * MB, "graph"); // 64 MB
     return *allocator;
 }
+namespace {
+
+constexpr size_t kPermSpaceBytes = 32 * MB;
+
+/// The permanent space never frees, so it can only fill up. Its users (type and layout
+/// constructors) place an object in the returned memory right away and guard the pointer with an
+/// ASSERT, which release builds compile out: exhaustion has to be reported here, as an error the
+/// caller's driver turns into a diagnostic, instead of a write through null.
+class PermSpaceAllocator final : public BumpPointerAllocator {
+  public:
+    using BumpPointerAllocator::BumpPointerAllocator;
+
+    void *alloc(size_t size, size_t align = alignof(slot_t)) override {
+        void *mem = BumpPointerAllocator::alloc(size, align);
+        if (!mem) {
+            throw std::runtime_error(
+                "Permanent space exhausted (" + std::to_string(kPermSpaceBytes / MB) +
+                " MB of types and layouts): the program, or what a pass made of it, is too large.");
+        }
+        return mem;
+    }
+};
+
+} // namespace
+
 BumpPointerAllocator &permSpace() {
-    static auto *allocator = new BumpPointerAllocator(32 * MB, "perm"); // 32 MB
+    static auto *allocator = new PermSpaceAllocator(kPermSpaceBytes, "perm");
     return *allocator;
 }
 

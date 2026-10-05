@@ -32,8 +32,6 @@ add_camel_module(
     ops/utility_ops.cpp
     ops/vjp.cpp
     passes/fuse.cpp
-  EXTRA_INCLUDES
-    ${CMAKE_SOURCE_DIR}/src
 )
 
 # x86-64: add AVX2+FMA and AVX-512F GEMM and unary units, selected at runtime after a CPU check.

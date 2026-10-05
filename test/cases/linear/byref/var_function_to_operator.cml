@@ -1,0 +1,15 @@
+/**
+ * A function with a `var` parameter passed to an operator that calls it (foreach, map, ...).
+ * The operator calls it with element values; a `var` parameter needs a variable. Rejected at
+ * compile time, at the argument.
+ */
+module var_function_to_operator
+
+sync func bump(var x: int) {
+    wait x += 1
+}
+
+func main(): int sync {
+    [1, 2, 3]->foreach<bump>
+    return 0
+}

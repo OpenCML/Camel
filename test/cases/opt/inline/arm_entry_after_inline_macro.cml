@@ -1,0 +1,17 @@
+module arm_entry_after_inline_macro
+
+// The macro evaluator runs branch arms the way the schedulers do. `train` is evaluated ahead of
+// time by std::macro; after std::inline its recursive arm holds the helper's nodes before the
+// node recorded as the arm's head. Expected output: 0.512.
+func dsq(x: float): float {
+    return 1.0 * x + 1.0 * x
+}
+
+macro func train(w: float, steps: int): float {
+    return if steps == 0 then w else train(w - dsq(w) * 0.1, steps - 1)
+}
+
+func main(): int sync {
+    println(train(1.0, 3))
+    return 0
+}

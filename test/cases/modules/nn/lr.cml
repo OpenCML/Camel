@@ -28,7 +28,7 @@ with <X: Tensor, y: Tensor, lr: float>
 sync func update(var w: Tensor): Tensor {
     let pred = X @ w
     let errors = pred - y
-    let dw = transpose(X) @ errors
+    var dw = transpose(X) @ errors
     let m = shape(X)[0]
     wait dw = 2.0 / float(m) * dw
     wait w = w - lr * dw
@@ -63,7 +63,7 @@ func main(): int sync {
 
     let X = random([num_samples, num_features], 0.0, 10.0)
     let y = ones([num_samples, 1])
-    let w = zeros([num_features + 1, 1]) // +1 for bias term
+    var w = zeros([num_features + 1, 1]) // +1 for bias term
 
     println('Feature matrix X:', X)
     println('Target vector y:', y)

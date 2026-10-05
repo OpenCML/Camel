@@ -37,6 +37,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -73,6 +75,13 @@ struct RuntimeSpecializationKey {
     bool operator==(const RuntimeSpecializationKey &other) const = default;
 };
 
+/// Suffix tag of a specialization that binds no value and only refines parameter types
+/// (`loop$tspec3`): the stable id up to the first such tag names the function it derives from.
+inline constexpr std::string_view kTypeSpecializationTag = "tspec";
+
+/// The stable id of the function a (possibly type-specialized) graph derives from.
+std::string typeSpecializationRoot(std::string_view stableId);
+
 struct RuntimeSpecializationKeyHasher {
     size_t operator()(const RuntimeSpecializationKey &key) const;
 };
@@ -94,6 +103,11 @@ class RuntimeGraphDraftSession {
     GCGraph *findSpecialization(const RuntimeSpecializationKey &key) const;
     void rememberSpecialization(RuntimeSpecializationKey key, GCGraph *graph);
 
+    /// Type-only specializations (see kTypeSpecializationTag) of the function `rootStableId`
+    /// that the program holds: those reachable when first asked, plus those noted since.
+    size_t typeSpecializationCount(const std::string &rootStableId);
+    void noteTypeSpecialization(const std::string &rootStableId);
+
     std::vector<GCGraph *> collectReachableRuntimeGraphs() const;
     GCGraph *commit();
 
@@ -111,6 +125,8 @@ class RuntimeGraphDraftSession {
     std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
     std::unordered_map<RuntimeSpecializationKey, GCGraph *, RuntimeSpecializationKeyHasher>
         specializationCache_;
+    std::unordered_map<std::string, size_t> typeSpecializationCounts_;
+    bool typeSpecializationCountsReady_ = false;
 };
 
 /// Encodes new graphs that may refer to one another, such as the mutually recursive graphs a

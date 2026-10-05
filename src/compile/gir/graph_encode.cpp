@@ -342,6 +342,9 @@ class EncodeSession {
             CAMEL_LOG_INFO_S("GIREncode", "Finalize runtime graph '{}'.", prepared.source->name());
             finalizeRuntimeGraph(prepared);
         }
+        for (auto &prepared : prepared_) {
+            camel::runtime::validateRuntimeGraphCalls(prepared.runtime);
+        }
 
         return resolvePreparedGraph(rootGraph_)->runtime;
     }

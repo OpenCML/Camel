@@ -47,10 +47,10 @@
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
-#include "execute/macro/macro.h"
-#include "passes/opt/generic/generic.h"
-#include "passes/opt/inline/config.h"
-#include "passes/trans/dot/graphviz.h"
+#include "camel/passes/macro/macro.h"
+#include "camel/passes/opt/generic.h"
+#include "camel/passes/opt/config.h"
+#include "camel/passes/trans/dot/graphviz.h"
 
 #include <cstdlib>
 #include <format>
@@ -201,6 +201,13 @@ class Evaluator {
     /// Translates `graph`, with its parameters bound to `inputs`, and returns its result.
     Value translate(GCGraph *graph, std::span<const Value> inputs);
 
+    /// Refuses `graph` when an impure operator is reachable from its exit through data or
+    /// control edges, in `graph` itself or in a function it calls or holds as a constant.
+    /// translate() only follows data dependencies, so an operator that runs for its effect
+    /// alone (a `println` statement of a sync function) would otherwise be left out of the
+    /// model without a word.
+    void refuseEffects(GCGraph *graph);
+
   private:
     struct Activation {
         GCGraph *graph;
@@ -242,7 +249,8 @@ class Evaluator {
     std::optional<Value> foldConstantOper(
         std::string_view uri, std::span<const Value> norm, std::span<const Value> with,
         type::Type *resultType);
-    [[noreturn]] void unsupported(Activation &act, std::string_view what);
+    [[noreturn]] void unsupported(
+        Activation &act, std::string_view what, ExportError::Kind kind = ExportError::Kind::Other);
     /// "file:line:col" of a source origin, or empty.
     std::string locationOf(uint64_t origin) const;
 
@@ -267,6 +275,65 @@ Value Evaluator::translate(GCGraph *graph, std::span<const Value> inputs) {
     return eval(act, execute::resolveRuntimeTailValueRef(graph));
 }
 
+/// A graph or function name worth showing: compiler-generated ones (lambdas, branch arms,
+/// specializations of them) mean nothing in the source; the source position says more.
+bool isSourceName(std::string_view name) { return !name.empty() && !name.starts_with("__"); }
+
+void Evaluator::refuseEffects(GCGraph *root) {
+    std::unordered_set<GCGraph *> seenGraphs{root};
+    std::vector<GCGraph *> graphs{root};
+    while (!graphs.empty()) {
+        GCGraph *g = graphs.back();
+        graphs.pop_back();
+        const gc_node_ref_t exit = g->exitNodeRef();
+        if (!g->hasNodePayload() || exit == camel::runtime::kInvalidNodeRef) {
+            continue;
+        }
+        std::unordered_set<gc_node_ref_t> seen{exit};
+        std::vector<gc_node_ref_t> work{exit};
+        while (!work.empty()) {
+            const gc_node_ref_t ref = work.back();
+            work.pop_back();
+            const auto *n       = g->node(ref);
+            GCGraph *referenced = nullptr;
+            if (n->kind == GCNodeKind::Oper) {
+                const std::string uri(g->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri());
+                if (!core::OperatorTraitsRegistry::instance().isPure(uri)) {
+                    const uint64_t origin = g->nodeOrigin(ref);
+                    const std::string what =
+                        std::format("impure operator '{}' cannot be exported", uri);
+                    throw ExportError(
+                        isSourceName(g->name()) ? std::format("in '{}': {}", g->name(), what)
+                                                : what,
+                        locationOf(origin),
+                        origin,
+                        ExportError::Kind::Other);
+                }
+            } else if (n->kind == GCNodeKind::Func) {
+                referenced = g->directCalleeGraphOf(ref);
+            } else if (
+                n->kind == GCNodeKind::Data && n->dataIndex < 0 && n->dataType &&
+                n->dataType->code() == TypeCode::Function) {
+                // A function constant: the callee of an indirect call, or a closure template.
+                const auto *fn = rtdata::fromSlot<::Function *>(
+                    g->staticArea()->get<slot_t>(static_cast<size_t>(-n->dataIndex)));
+                referenced = fn ? fn->graph() : nullptr;
+            }
+            if (referenced && seenGraphs.insert(referenced).second) {
+                graphs.push_back(referenced);
+            }
+            for (const auto inputs :
+                 {g->normInputsOf(ref), g->withInputsOf(ref), g->ctrlInputsOf(ref)}) {
+                for (gc_node_ref_t input : inputs) {
+                    if (seen.insert(input).second) {
+                        work.push_back(input);
+                    }
+                }
+            }
+        }
+    }
+}
+
 Value Evaluator::eval(Activation &act, gc_node_ref_t ref) {
     for (auto it = act.memo.rbegin(); it != act.memo.rend(); ++it) {
         if (auto found = it->find(ref); found != it->end()) {
@@ -281,11 +348,12 @@ Value Evaluator::eval(Activation &act, gc_node_ref_t ref) {
         if (!e.location().empty()) {
             throw;
         }
-        std::string location = locationOf(act.graph->nodeOrigin(ref));
+        const uint64_t origin = act.graph->nodeOrigin(ref);
+        std::string location  = locationOf(origin);
         if (location.empty()) {
             throw;
         }
-        throw ExportError(e.what(), std::move(location));
+        throw ExportError(e.what(), std::move(location), origin, e.kind());
     }
     act.memo.back().emplace(ref, v);
     return v;
@@ -319,14 +387,11 @@ Value Evaluator::keep(slot_t slot, type::Type *type) {
     return Value::constant(slot, type);
 }
 
-/// A graph or function name worth showing: compiler-generated ones (lambdas, branch arms,
-/// specializations of them) mean nothing in the source; the source position says more.
-bool isSourceName(std::string_view name) { return !name.empty() && !name.starts_with("__"); }
-
-void Evaluator::unsupported(Activation &act, std::string_view what) {
+void Evaluator::unsupported(Activation &act, std::string_view what, ExportError::Kind kind) {
     const std::string &graph = act.graph->name();
     throw ExportError(
-        isSourceName(graph) ? std::format("in '{}': {}", graph, what) : std::string(what));
+        isSourceName(graph) ? std::format("in '{}': {}", graph, what) : std::string(what),
+        kind);
 }
 
 Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
@@ -398,13 +463,15 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
                 "a call{} remains after simplification; recursion whose depth depends on the "
                 "model input cannot be exported",
                 isSourceName(callee) ? std::format(" to '{}'", callee.substr(0, callee.find('$')))
-                                     : std::string()));
+                                     : std::string()),
+            ExportError::Kind::CallRemains);
     }
     case GCNodeKind::Call:
         unsupported(
             act,
             "an indirect call remains after simplification; its callee must be known at export "
-            "time");
+            "time",
+            ExportError::Kind::CallRemains);
     default:
         unsupported(
             act,
@@ -1081,44 +1148,48 @@ void emitOutputs(Emitter &emitter, const Value &result, const std::string &name)
     emitter.graph().outputs.push_back(valueInfoOf(output, facts));
 }
 
-} // namespace
-
-Model exportFunction(
-    core::context::Context &ctx, ::Function *fn, std::span<const Example> examples,
-    const ExportOptions &options) {
-    if (!fn || !fn->graph()) {
-        throw ExportError("expected a function value");
+/// The capability table of the export target, or null when the check is off. Throws on an
+/// unknown target.
+const CapabilityTable *capabilitiesFor(const ExportOptions &options) {
+    if (options.target.empty() || options.target == "none") {
+        return nullptr;
     }
-    GCGraph *graph = fn->graph();
-    if (graph->withPorts().size() != 0 || graph->normPorts().size() != examples.size()) {
+    const CapabilityTable *capabilities = CapabilityTable::forTarget(options.target);
+    if (!capabilities) {
+        std::string known;
+        for (const std::string &t : CapabilityTable::targets()) {
+            known += (known.empty() ? "" : ", ") + t;
+        }
+        throw ExportError(
+            std::format(
+                "unknown export target '{}' (known: {}, or 'none')",
+                options.target,
+                known));
+    }
+    return capabilities;
+}
+
+void checkArity(GCGraph *graph, size_t examples) {
+    if (graph->withPorts().size() != 0 || graph->normPorts().size() != examples) {
         throw ExportError(
             std::format(
                 "'{}' takes {} arguments but {} examples were given",
                 graph->name(),
                 graph->withPorts().size() + graph->normPorts().size(),
-                examples.size()));
+                examples));
     }
+}
 
-    const CapabilityTable *capabilities = nullptr;
-    if (!options.target.empty() && options.target != "none") {
-        capabilities = CapabilityTable::forTarget(options.target);
-        if (!capabilities) {
-            std::string known;
-            for (const std::string &t : CapabilityTable::targets()) {
-                known += (known.empty() ? "" : ", ") + t;
-            }
-            throw ExportError(
-                std::format(
-                    "unknown export target '{}' (known: {}, or 'none')",
-                    options.target,
-                    known));
-        }
-    }
-    Emitter emitter(options.opset, capabilities);
-    emitter.graph().name = options.graphName;
+struct BoundInputs {
+    std::vector<Value> values;
+    std::vector<type::Type *> types; // the exact type of each input (dtypes and shapes)
+};
+
+/// Declares one graph input per tensor of `examples` and returns the parameters' values.
+BoundInputs
+bindInputs(Emitter &emitter, const ExportOptions &options, std::span<const Example> examples) {
     InputBinder binder(emitter, options);
-    std::vector<Value> inputs;
-    std::vector<type::Type *> inputTypes;
+    BoundInputs inputs;
     size_t tensorArgs = 0;
     for (const Example &example : examples) {
         tensorArgs += tensor::asTensorType(example.type) ? 1 : 0;
@@ -1128,31 +1199,23 @@ Model exportFunction(
                                       ? options.inputName
                                       : std::format("{}{}", options.inputName, i);
         auto [input, exactType] = binder.bind(examples[i], name, true);
-        inputs.push_back(std::move(input));
-        inputTypes.push_back(exactType);
+        inputs.values.push_back(std::move(input));
+        inputs.types.push_back(exactType);
     }
+    return inputs;
+}
 
-    // The function applied to inputs of the examples' types, with its captures bound, is a
-    // program of its own: simplification specializes it for the input shapes, inlines its
-    // calls, unrolls recursion of static depth and folds everything that does not depend on the
-    // inputs. The running program is left as it is. Simplification allocates and may collect:
-    // what is read afterwards stays rooted.
-    std::optional<core::mm::RootHandle> captures;
-    if (fn->tuple()) {
-        captures.emplace(
-            core::mm::autoSpace(),
-            const_cast<::Tuple *>(fn->tuple()),
-            fn->tupleType(),
-            "onnx::export");
-    }
-    DetachedGraphsGuard guard{ctx};
-    const auto context = ctx.shared_from_this();
-    GCGraph *root      = nullptr;
-    {
-        camel::runtime::RuntimeGraphDraftSession session(context, graph);
-        camel::runtime::bindFunctionCall(session.rootDraft(), fn, inputTypes);
-        root = session.commit();
-    }
+Model finishModel(Emitter &emitter, const ExportOptions &options) {
+    Model model;
+    model.graph = std::move(emitter.graph());
+    model.opset = options.opset;
+    return model;
+}
+
+/// The simplification onnx.export_model performs on the bound function: macro expansion and
+/// the std::opt::simplify fixpoint, inlining everything that is not recursive.
+GCGraph *
+simplifyFully(const core::context::context_ptr_t &context, GCGraph *root, std::ostream &log) {
     OptimizeRewriteConfig config;
     // Everything that is not recursive is inlined; ONNX has no calls.
     config.inlineConfig.smallSubgraphMaxNonDataPortNodes = std::numeric_limits<size_t>::max();
@@ -1161,7 +1224,11 @@ Model exportFunction(
     // only walked as a value DAG from here on (no execution topo is built), so the sibling
     // JOINs this creates are valid.
     config.enableBranchedCallSplit = true;
-    std::ostringstream log;
+    // An export has to reach straight-line code or it is refused, so it is not held to the
+    // growth bounds that keep an optimization pass cheap (CAMEL_OPT_GROWTH_BUDGET still applies
+    // when set). A graph too large for the runtime representation fails at commit.
+    config.growthBudgetNodes          = std::numeric_limits<size_t>::max();
+    config.inlineConfig.maxOwnerNodes = std::numeric_limits<size_t>::max();
     // Recursion unrolls about one level per round; one of dynamic depth stops changing instead.
     constexpr size_t kMaxRounds = 4096;
     // Macros (grad, value_and_grad) expand once their arguments are constants, which
@@ -1175,25 +1242,128 @@ Model exportFunction(
         }
         root = expanded;
     }
+    return root;
+}
+
+/// Binds the closure slots of `draft` to the constants `captures` (a closure the program
+/// builds from constants, which exists only as a FILL node until the program runs).
+void bindCaptures(camel::runtime::GraphDraft &draft, std::span<const Example> captures) {
+    const std::vector<gc_node_ref_t> nodes(
+        draft.closureNodes().begin(),
+        draft.closureNodes().end());
+    if (nodes.size() != captures.size()) {
+        throw ExportError(
+            std::format(
+                "the function captures {} values but {} are bound",
+                nodes.size(),
+                captures.size()));
+    }
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        const gc_node_ref_t value = draft.materializeStaticValue(
+            captures[i].value,
+            captures[i].type,
+            camel::runtime::kGCNodeFlagConstant);
+        draft.replaceAllValueUses(nodes[i], value);
+        draft.removeClosureNode(nodes[i]);
+        draft.eraseNode(nodes[i]);
+    }
+}
+
+/// How much of the function's simplification an export performs itself.
+enum class Preparation {
+    /// onnx.export_model: macro expansion and the whole std::opt::simplify fixpoint.
+    Full,
+    /// onnx::export: only what needs the example inputs (see translateFunction).
+    ShapesOnly,
+};
+
+Model exportBound(
+    core::context::Context &ctx, ::Function *fn, std::span<const Example> captures,
+    std::span<const Example> examples, const ExportOptions &options, Preparation preparation) {
+    if (!fn || !fn->graph()) {
+        throw ExportError("expected a function value");
+    }
+    GCGraph *graph = fn->graph();
+    checkArity(graph, examples.size());
+
+    Emitter emitter(options.opset, capabilitiesFor(options));
+    emitter.graph().name                        = options.graphName;
+    const BoundInputs bound                     = bindInputs(emitter, options, examples);
+    const std::vector<Value> &inputs            = bound.values;
+    const std::vector<type::Type *> &inputTypes = bound.types;
+
+    // The function applied to inputs of the examples' types, with its captures bound, is a
+    // program of its own: simplification specializes it for the input shapes, inlines its
+    // calls, unrolls recursion of static depth and folds everything that does not depend on the
+    // inputs. The running program is left as it is. Simplification allocates and may collect:
+    // what is read afterwards stays rooted.
+    std::optional<core::mm::RootHandle> rooted;
+    if (fn->tuple()) {
+        rooted.emplace(
+            core::mm::autoSpace(),
+            const_cast<::Tuple *>(fn->tuple()),
+            fn->tupleType(),
+            "onnx::export");
+    }
+    DetachedGraphsGuard guard{ctx};
+    const auto context = ctx.shared_from_this();
+    GCGraph *root      = nullptr;
+    {
+        camel::runtime::RuntimeGraphDraftSession session(context, graph);
+        if (!captures.empty()) {
+            bindCaptures(session.rootDraft(), captures);
+        }
+        camel::runtime::bindFunctionCall(session.rootDraft(), fn, inputTypes);
+        root = session.commit();
+    }
+    std::ostringstream log;
+    if (preparation == Preparation::ShapesOnly) {
+        // The graph is taken as the preceding passes left it. Binding the example types above
+        // re-inferred the node types; what those types now fix (the shape of a tensor whose
+        // type carries it, and the arithmetic on it) folds here, as std::opt::fold and
+        // std::opt::dce would fold it. Calls are not touched: no devirtualization, no
+        // specialization, no inlining, no macro expansion.
+        OptimizeRewriteConfig foldOnly;
+        foldOnly.enableDevirtualization = false;
+        foldOnly.enableSpecialization   = false;
+        foldOnly.enableInlining         = false;
+        root                            = simplifyGraph(context, root, foldOnly, log);
+    } else {
+        root = simplifyFully(context, root, log);
+    }
     if (dumpEnabled()) {
         GraphVizDumpPass(context, GraphVizDumpConfig{.readableOnly = true}).apply(root, std::cerr);
     }
 
     std::unordered_map<slot_t, std::string> names;
-    if (captures) {
-        const auto *captured = captures->getAs<::Tuple>();
-        const auto *layout   = static_cast<const type::TupleType *>(captures->type());
+    for (const Example &capture : captures) {
+        collectNames(capture.value, capture.type, "", names);
+    }
+    if (rooted) {
+        const auto *captured = rooted->getAs<::Tuple>();
+        const auto *layout   = static_cast<const type::TupleType *>(rooted->type());
         for (size_t i = 0; i < captured->size(); ++i) {
             collectNames(captured->get<slot_t>(i), layout->typeAt(i), "", names);
         }
     }
     Evaluator evaluator(emitter, options, ctx, std::move(names), ctx.sourceContext());
+    evaluator.refuseEffects(root);
     emitOutputs(emitter, evaluator.translate(root, inputs), options.outputName);
+    return finishModel(emitter, options);
+}
 
-    Model model;
-    model.graph = std::move(emitter.graph());
-    model.opset = options.opset;
-    return model;
+} // namespace
+
+Model translateFunction(
+    core::context::Context &ctx, ::Function *fn, std::span<const Example> captures,
+    std::span<const Example> examples, const ExportOptions &options) {
+    return exportBound(ctx, fn, captures, examples, options, Preparation::ShapesOnly);
+}
+
+Model exportFunction(
+    core::context::Context &ctx, ::Function *fn, std::span<const Example> examples,
+    const ExportOptions &options) {
+    return exportBound(ctx, fn, {}, examples, options, Preparation::Full);
 }
 
 } // namespace camel::onnx

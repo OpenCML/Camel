@@ -27,6 +27,10 @@
 | 类型 | **typeDecl** | `implMark? TYPE identRef '=' (typeExpr \| STRING)` |
 | use | **useDecl** | `USE (identDef '=')? identRef` |
 
+> 语法中已有、但**尚未实现**的部分：`implMark`（`inner` / `outer`）和 `modifiers` 中的 `atomic` / `shared`
+> 能被解析并记录，没有任何语义；`retStmt` 的 `RAISE` / `THROW` 与 `ctrlExpr` 的 `TRY ... CATCH ... FINALLY`
+> 语法接受，使用时是编译期错误 `SemanticDiag::ConstructNotSupported`（异常机制没有实现）。
+
 ### 8.1.3 语句（用于块内与顶层）
 
 - **stmt**：**dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | useDecl | retStmt | blockStmt**。
@@ -40,6 +44,7 @@
 ### 8.2.1 块
 
 - **stmtBlock**：**`SYNC? '{' stmtList? '}'`**。
+  - 这里的 `SYNC` 是**块修饰符**（同步块）；**funcDecl** 的 `modifiers` 中的 `sync` 是**函数修饰符**。两者含义不同，见第 4 章 4.4.2、4.4.3。
 - **blockStmt**：**`WAIT? stmtBlock`**。
 - **blockExpr**：**stmtBlock | dataExpr**（用于 then/else、match case、Lambda 体等）。
 
@@ -69,7 +74,7 @@
 
 - **IF** logicalOrExpr **THEN** blockExpr (**ELSE** blockExpr)?
 - **MATCH** identRef **'{'** matchCase+ **'}'**
-- **TRY** stmtBlock catchClause+ (**FINALLY** stmtBlock)?
+- **TRY** stmtBlock catchClause+ (**FINALLY** stmtBlock)?（**未实现**：编译期错误 `ConstructNotSupported`）
 
 ---
 

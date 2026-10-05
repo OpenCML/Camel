@@ -214,8 +214,9 @@ size_t reinferDraftTypes(GraphDraft &draft) {
     }
     type::param_vec_t withTypes, normTypes;
     bool differs = false;
+    // The port of a `var` parameter holds the variable; the parameter is typed by its value.
     const auto portType = [&](gc_node_ref_t port, type::Type *declared) {
-        type::Type *t = typeOf(draft, port);
+        type::Type *t = type::valueTypeOf(typeOf(draft, port));
         differs |= t && t != declared;
         return t ? t : declared;
     };

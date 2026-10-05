@@ -17,3 +17,247 @@ expect_diagnostic_column = 16
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
+
+[[tests]]
+name = "recursion_depth_limit.nvm"
+desc = "Non-tail recursion past the 256-frame limit stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (NodeVM); depth(200) printed before it, nothing after."
+kind = "negative"
+case = "../../../cases/linear/runtime/recursion_depth_limit.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_code = "0x04000004"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 43
+expect_stdout_contains = ["200", "Maximum recursion depth (256) exceeded"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "recursion_depth_limit.fvm"
+desc = "Non-tail recursion past the 256-frame limit stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (FastVM); depth(200) printed before it, nothing after."
+kind = "negative"
+case = "../../../cases/linear/runtime/recursion_depth_limit.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_code = "0x04000004"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 43
+expect_stdout_contains = ["200", "Maximum recursion depth (256) exceeded"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "recursion_depth_limit.jit"
+desc = "Non-tail recursion past the 256-frame limit stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (the JIT); depth(200) printed before it, nothing after."
+kind = "negative"
+case = "../../../cases/linear/runtime/recursion_depth_limit.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_code = "0x04000004"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 43
+expect_stdout_contains = ["200", "Maximum recursion depth (256) exceeded"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "recursion_depth_limit.inline_nvm"
+desc = "Non-tail recursion past the 256-frame limit stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (NodeVM after std::inline); depth(200) printed before it, nothing after."
+kind = "negative"
+case = "../../../cases/linear/runtime/recursion_depth_limit.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_code = "0x04000004"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 43
+expect_stdout_contains = ["200", "Maximum recursion depth (256) exceeded"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "effects_outside_sync.nvm"
+desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 2.1, 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (nvm)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/effects_outside_sync.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_output_not_contains = ["DROPPED"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n10\nKEPT main end', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "effects_outside_sync.fvm"
+desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 2.1, 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (fvm)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/effects_outside_sync.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_output_not_contains = ["DROPPED"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n10\nKEPT main end', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "effects_outside_sync.jit"
+desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 2.1, 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (jit)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/effects_outside_sync.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+expect_output_not_contains = ["DROPPED"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n10\nKEPT main end', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "effects_outside_sync.tf"
+desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 2.1, 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (tf)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/effects_outside_sync.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+expect_output_not_contains = ["DROPPED"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n10\nKEPT main end', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "sync_literal_operands.reference"
+desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: no pass (printed one, four, nine first: the operands were outside the block's ordering)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_literal_operands.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'one | two | three | four | five | six | seven | eight | nine | twothreefivesixseveneight', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "sync_literal_operands.fvm"
+desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: FastVM."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_literal_operands.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'one | two | three | four | five | six | seven | eight | nine | twothreefivesixseveneight', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "sync_literal_operands.jit"
+desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: the JIT."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_literal_operands.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'one | two | three | four | five | six | seven | eight | nine | twothreefivesixseveneight', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "sync_literal_operands.tf"
+desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: Taskflow."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_literal_operands.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'one | two | three | four | five | six | seven | eight | nine | twothreefivesixseveneight', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "sync_literal_operands.macro_opt.nvm"
+desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: std::macro then std::opt (the pipeline under which the weight loads of benchmarks/resnetbn changed order)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_literal_operands.cml"
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'one | two | three | four | five | six | seven | eight | nine | twothreefivesixseveneight', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "sync_literal_operands.simplify.fvm"
+desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: std::opt::simplify on FastVM."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_literal_operands.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'one | two | three | four | five | six | seven | eight | nine | twothreefivesixseveneight', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "sync_literal_operands.macro_simplify.tf"
+desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: std::macro then std::opt::simplify on Taskflow."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_literal_operands.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'one | two | three | four | five | six | seven | eight | nine | twothreefivesixseveneight', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000

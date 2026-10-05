@@ -1,0 +1,72 @@
+/**
+ * The control edges the graph builder records for captured variables, checked on the graph
+ * dump (plan linear.captured_writes, test captured_write_graph.edges). Every function is used
+ * by one case only, so that a node is identified by its label.
+ *
+ *   writes()   write_a() writes `a`, read_a() reads it:     write_a -> read_a
+ *   waits()    use_b() uses `b`, then `wait write_b()`:      use_b -> write_b
+ *   reads()    look() is recursive and only reads `limit`:   no edge between its two calls
+ *   arms()     an arm writes the local `c`, then c is read:  JOIN -> the read of c
+ */
+module captured_write_graph
+
+var a = 0
+var b = 0
+var limit = 3
+
+func write_a(): int sync {
+    wait a += 1
+    return 0
+}
+
+func read_a(): int {
+    return a
+}
+
+func write_b(): int sync {
+    wait b += 1
+    return 0
+}
+
+func use_b(): int {
+    return b
+}
+
+func look(n: int): int {
+    return if n > limit then 0 else look(n + 1) + 1
+}
+
+func writes(): int {
+    let x = write_a()
+    let y = read_a()
+    return y * 10 + x
+}
+
+func waits(): int {
+    let y = use_b()
+    let x = wait write_b()
+    return y * 10 + x
+}
+
+func reads(): int {
+    let x = look(0)
+    let y = look(2)
+    return y * 10 + x
+}
+
+func arms(): int {
+    var c = 1
+    let r = if c > 0 then sync {
+        wait c += 10
+        return 1
+    } else 0
+    return c + r * 100
+}
+
+func main(): int sync {
+    println(writes())
+    println(waits())
+    println(reads())
+    println(arms())
+    return 0
+}

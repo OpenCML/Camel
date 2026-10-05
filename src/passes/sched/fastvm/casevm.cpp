@@ -19,6 +19,7 @@
 
 #include "fastvm.h"
 
+#include "camel/core/effect_trace.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/global_config.h"
 #include "camel/execute/graph_runtime_support.h"
@@ -375,6 +376,11 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 FrameArgsView withView(*currFrame, wargs);
                 FrameArgsView normView(*currFrame, nargs);
                 slot_t result;
+                if (camel::core::effect_trace::enabled()) [[unlikely]] {
+                    if (auto sc = context_->sourceContext()) {
+                        camel::core::effect_trace::setSite(sc->debugMap().pcOrigin(pc));
+                    }
+                }
                 try {
                     result = func(withView, normView, *context_);
                 } catch (const RuntimeFault &fault) {

@@ -1,0 +1,32 @@
+/**
+ * A `var` parameter of a function called through `value_and_grad`: the gradient function keeps
+ * the parameter a variable, so the function's write reaches the caller's variable on every
+ * pipeline. Expected output:
+ *   plain call: value 1 cnt 1
+ *   value_and_grad: value 2 cnt 2
+ *   value_and_grad: value 3 cnt 3
+ */
+module var_through_value_and_grad
+import { Tensor, reshape, sum } from tensor
+import { value_and_grad } from autodiff
+
+type P = { p0: Tensor }
+
+with <m: P>
+sync func loss(x: Tensor, var cnt: int): float sync {
+    cnt += 1
+    return sum(m.p0 * x) * float(cnt)
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0], [2])
+    let m = { p0: reshape([0.5, 0.25], [2]) }
+    var cnt = 0
+    let a = wait loss<m>(x, cnt)
+    println("plain call: value {} cnt {}"->format<a, cnt>)
+    let vg1 = wait value_and_grad(loss)<m>(x, cnt)
+    println("value_and_grad: value {} cnt {}"->format<vg1.0, cnt>)
+    let vg2 = wait value_and_grad(loss)<m>(x, cnt)
+    println("value_and_grad: value {} cnt {}"->format<vg2.0, cnt>)
+    return 0
+}

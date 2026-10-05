@@ -1,0 +1,18 @@
+module specialize_growing_shape
+
+import { Tensor, new, concat, sum, shape } from tensor
+
+// Every level of the recursion passes a tensor one row longer than the one it received, so the
+// type of `acc` (which carries the shape once the first argument is a constant) is different at
+// every level. Specializing the callee on that type must stop: nothing in the types says where
+// the recursion ends.
+func grow(i: int, n: int, acc: Tensor): Tensor {
+    return if i >= n then acc else grow(i + 1, n, concat(acc, new([[1.0, 2.0]]), 0))
+}
+
+func main(): int sync {
+    let t = grow(1, 12, new([[1.0, 2.0]]))
+    println(shape(t))
+    println(sum(t))
+    return 0
+}

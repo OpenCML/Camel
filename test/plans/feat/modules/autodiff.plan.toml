@@ -896,3 +896,410 @@ envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_
 expect_exit = 0
 expect_stdout_contains = ["loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342", "loss2=0.3579342999437358 gqw2=0.19846567139029503 gkw2=0.0764192040078342"]
 timeout_ms = 20000
+
+[[tests]]
+name = "control_flow_grad.inline.nvm"
+desc = "grad that std::macro has not expanded differentiates at run time the graph the passes left; inlining leaves the functions it will transform as compiled. Under: std::inline (failed at run time: branch arms must be subgraph calls)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "control_flow_grad.inline_macro.nvm"
+desc = "grad that std::macro has not expanded differentiates at run time the graph the passes left; inlining leaves the functions it will transform as compiled. Under: std::inline before std::macro (failed the same way)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "std::inline", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "control_flow_grad.simplify_only.nvm"
+desc = "grad that std::macro has not expanded differentiates at run time the graph the passes left; inlining leaves the functions it will transform as compiled. Under: std::opt::simplify without std::macro (failed the same way)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "control_flow_grad.inline.fvm"
+desc = "grad that std::macro has not expanded differentiates at run time the graph the passes left; inlining leaves the functions it will transform as compiled. Under: std::inline on FastVM."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/control_flow_grad.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'control_flow_grad a=6 b=0.5 c=80 d=(12, 4) e=(0, 1) w=-10', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_inline.reference"
+desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: no pass."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_inline.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_inline a=6 b=80 c=12 d=49', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_inline.macro.nvm"
+desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::macro."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_inline.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_inline a=6 b=80 c=12 d=49', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_inline.inline.nvm"
+desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::inline (failed at run time after printing: branch arms must be subgraph calls)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_inline.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_inline a=6 b=80 c=12 d=49', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_inline.inline_small.nvm"
+desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::inline::small (the recursive call merged into its arm made grad crash with SIGSEGV)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_inline.cml"
+args = ["${case}", "std::inline::small", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_inline a=6 b=80 c=12 d=49', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_inline.macro_inline.nvm"
+desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::macro then std::inline (grad of a parameter cannot be expanded by std::macro, so even this order failed)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_inline.cml"
+args = ["${case}", "std::macro", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_inline a=6 b=80 c=12 d=49', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_inline.simplify.fvm"
+desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::opt::simplify on FastVM."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_inline.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_inline a=6 b=80 c=12 d=49', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_inline.opt.jit"
+desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::opt on the JIT."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_inline.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_inline a=6 b=80 c=12 d=49', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_specialized_callee.reference"
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: no pass."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_specialized_callee scaled=30 unrolled=510', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_specialized_callee.macro.nvm"
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::macro."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_specialized_callee scaled=30 unrolled=510', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_specialized_callee.specialize.nvm"
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::specialize (scaled was 0: the tangent positions were read off the unspecialized function type)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
+args = ["${case}", "std::specialize", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_specialized_callee scaled=30 unrolled=510', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_specialized_callee.specialize_fold.nvm"
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::specialize then std::opt::fold (unrolled was 0: the arm left by the folded branch has type () => float)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
+args = ["${case}", "std::specialize", "std::opt::fold", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_specialized_callee scaled=30 unrolled=510', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_specialized_callee.specialize_fold.fvm"
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::specialize then std::opt::fold on FastVM."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
+args = ["${case}", "std::specialize", "std::opt::fold", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_specialized_callee scaled=30 unrolled=510', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_specialize.reference"
+desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: no pass."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
+args = ["${case}"]
+envs = ["STEPS=3"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_specialize loss=225 grad=510 direct=225', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_specialize.macro_simplify.nvm"
+desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::macro then std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::nvm"]
+envs = ["STEPS=3"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_specialize loss=225 grad=510 direct=225', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_specialize.specialize_inline.nvm"
+desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::specialize then std::inline (two sessions: already correct)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
+args = ["${case}", "std::specialize", "std::inline", "std::nvm"]
+envs = ["STEPS=3"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_specialize loss=225 grad=510 direct=225', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_specialize.opt.nvm"
+desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt (failed at run time after printing: branch arms must be subgraph calls; the arms of the copy specialization made in the same session were inlined)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+envs = ["STEPS=3"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_specialize loss=225 grad=510 direct=225', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_specialize.simplify.nvm"
+desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt::simplify (the failing pipeline of benchmarks/gru training)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+envs = ["STEPS=3"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_specialize loss=225 grad=510 direct=225', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_specialize.opt.fvm"
+desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt on FastVM."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
+args = ["${case}", "std::opt", "std::fvm"]
+envs = ["STEPS=3"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_specialize loss=225 grad=510 direct=225', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_unexpanded_specialize.simplify.jit"
+desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt::simplify on the JIT."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+envs = ["STEPS=3"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_unexpanded_specialize loss=225 grad=510 direct=225', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_specialized_callee.opt.nvm"
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::opt (failed at run time: the arms of the specialized copy of unroll were inlined)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_specialized_callee scaled=30 unrolled=510', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_specialized_callee.simplify.nvm"
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::opt::simplify (unrolled was 0)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_specialized_callee scaled=30 unrolled=510', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000

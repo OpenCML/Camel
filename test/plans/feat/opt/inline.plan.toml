@@ -180,3 +180,482 @@ verify_script = """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
+[[tests]]
+name = "arm_entry_after_inline.reference"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: no pass."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.inline.nvm"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::inline on NodeVM (printed 0 for 0.512)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.inline.tf"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::inline on Taskflow (printed 0 for 0.512)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::inline", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.inline.fvm"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::inline on FastVM."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.inline.jit"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::inline on the JIT."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::inline", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.opt.nvm"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::opt on NodeVM (also got the nested-branch value wrong)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.opt.tf"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::opt on Taskflow."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::opt", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline.macro_opt.nvm"
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::macro std::opt on NodeVM (printed an uninitialized slot)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '0.512 1 3 12 -3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline_macro.reference"
+desc = "A macro function whose recursive arm holds inlined helper nodes before the recorded arm head evaluates to the zero-pass value under: no pass (the macro function runs at run time)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline_macro.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '0.512', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline_macro.macro.nvm"
+desc = "A macro function whose recursive arm holds inlined helper nodes before the recorded arm head evaluates to the zero-pass value under: std::macro."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline_macro.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '0.512', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_entry_after_inline_macro.inline_macro.nvm"
+desc = "A macro function whose recursive arm holds inlined helper nodes before the recorded arm head evaluates to the zero-pass value under: std::inline std::macro (the macro evaluator printed 0)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_entry_after_inline_macro.cml"
+args = ["${case}", "std::inline", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '0.512', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "specialized_arg_keeps_order.reference"
+desc = "A call whose argument is the constant result of an inlined sync call still runs after that call's effects when the constant is bound into a specialization, under: no pass."
+kind = "behavior"
+case = "../../../cases/opt/inline/specialized_arg_keeps_order.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '1 2 40', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "specialized_arg_keeps_order.opt.nvm"
+desc = "A call whose argument is the constant result of an inlined sync call still runs after that call's effects when the constant is bound into a specialization, under: std::opt (printed only 40)."
+kind = "behavior"
+case = "../../../cases/opt/inline/specialized_arg_keeps_order.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '1 2 40', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "specialized_arg_keeps_order.simplify.fvm"
+desc = "A call whose argument is the constant result of an inlined sync call still runs after that call's effects when the constant is bound into a specialization, under: std::opt::simplify on FastVM (printed only 40)."
+kind = "behavior"
+case = "../../../cases/opt/inline/specialized_arg_keeps_order.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '1 2 40', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "specialized_arg_keeps_order.macro_simplify_cse_dce.nvm"
+desc = "A call whose argument is the constant result of an inlined sync call still runs after that call's effects when the constant is bound into a specialization, under: std::macro std::opt::simplify std::opt::cse std::opt::dce."
+kind = "behavior"
+case = "../../../cases/opt/inline/specialized_arg_keeps_order.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::opt::cse", "std::opt::dce", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '1 2 40', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.reference"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: no pass."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.specialize_inline.nvm"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::specialize then std::inline (two sessions, was already correct)."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "std::specialize", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.opt.nvm"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::opt (printed only the last line)."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.opt.fvm"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::opt on FastVM."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "std::opt", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.simplify.nvm"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.simplify.jit"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::opt::simplify on the JIT."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "consecutive_sync_calls.macro_simplify_cse_dce.nvm"
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::macro std::opt::simplify std::opt::cse std::opt::dce."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::opt::cse", "std::opt::dce", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' ')
+assert(out === '1 11 203 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_call_then_effect.reference"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: no pass."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.fvm"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::fvm, nothing inlined."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.inline.nvm"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::inline on NodeVM (the println after the call was skipped)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.inline.fvm"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::inline on FastVM (skipped)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.inline.jit"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::inline on the JIT (skipped)."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::inline", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.inline_arm.nvm"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::inline::arm, the minimal pipeline."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::inline::arm", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.simplify.nvm"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.simplify.fvm"
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::opt::simplify on FastVM."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000

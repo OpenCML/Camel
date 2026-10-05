@@ -1,0 +1,15 @@
+/**
+ * A warning (line 7: var parameter without the `sync` modifier) in a module that also has an
+ * error (line 12). Both are in the diagnostics on stdout, in source order; nothing is printed
+ * twice on stderr.
+ */
+module warning_with_error
+
+func inc(var x: int): int sync {
+    wait x += 1
+    return 0
+}
+
+func main(): int sync {
+    return missing_name
+}

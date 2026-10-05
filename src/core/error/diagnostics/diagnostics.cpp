@@ -69,6 +69,41 @@ Diagnostic &Diagnostic::fetchRange(const RangeConverter &conv) {
     return *this;
 }
 
+namespace {
+std::mutex &pipelineStageMutex() {
+    static std::mutex m;
+    return m;
+}
+std::string &pipelineStageSlot() {
+    static std::string stage;
+    return stage;
+}
+} // namespace
+
+void setPipelineStage(std::string stage) {
+    std::lock_guard<std::mutex> lk(pipelineStageMutex());
+    pipelineStageSlot() = std::move(stage);
+}
+
+std::string stageForDiagnostic(DiagType type) {
+    switch (type) {
+    case DiagType::LexicalDiag:
+    case DiagType::SyntaxDiag:
+        return "parse";
+    case DiagType::SemanticDiag:
+        return "typecheck";
+    default:
+        break;
+    }
+    {
+        std::lock_guard<std::mutex> lk(pipelineStageMutex());
+        if (!pipelineStageSlot().empty()) {
+            return pipelineStageSlot();
+        }
+    }
+    return type == DiagType::InternalDiag ? "internal" : "run";
+}
+
 std::string Diagnostic::toText() const {
     int ln = -1, ch = -1;
     std::string path       = effectiveModulePath(*this);
@@ -126,11 +161,12 @@ std::string Diagnostic::toJson() const {
         << ",\"character\":" << r.start.character << "},"
         << "\"end\":{\"line\":" << r.end.line << ",\"character\":" << r.end.character << "}"
         << "},"
-        << "\"severity\":" << to_string(severity) << ","
+        << "\"severity\":\"" << to_string(severity) << "\","
         << "\"code\":\"0x" << hex8(diagCode()) << "\","
         << "\"source\":\"Camel\","
         << "\"message\":\"" << escapeJson(message) << "\","
         << "\"data\":{"
+        << "\"stage\":\"" << escapeJson(stage.empty() ? stageForDiagnostic(type) : stage) << "\","
         << "\"name\":\"" << escapeJson(diagName) << "\","
         << "\"moduleName\":\"" << escapeJson(moduleName) << "\","
         << "\"modulePath\":\"" << escapeJson(path) << "\"";
@@ -196,6 +232,9 @@ Diagnostic &Diagnostics::add(Diagnostic &&d) {
     }
     if (!d.sourceContext) {
         d.sourceContext = sourceContext_;
+    }
+    if (d.stage.empty()) {
+        d.stage = stageForDiagnostic(d.type);
     }
     d.persisted = true;
     std::lock_guard<std::mutex> lk(mtx_);

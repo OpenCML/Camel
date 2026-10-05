@@ -53,8 +53,17 @@ camel::runtime::gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph
 bool runtimeNodeOutputsContain(
     const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
     camel::runtime::gc_node_ref_t targetRef);
+// True when nothing of the arm runs after `valueRef` before the arm ends at `armTailRef`: the
+// tail reaches the value through forwarding GATEs that wait only on the value, on each other,
+// or on nodes that do not themselves run after the value. A GATE on that path that waits on an
+// effect ordered after the value (`let r = f(x); println(..); return r`, inlined into an arm)
+// makes this false: the value is then not the last thing the arm does.
+bool runtimeArmEndsWithValue(
+    camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t armTailRef,
+    camel::runtime::gc_node_ref_t valueRef);
 // The values a tail JOIN can yield, seen through forwarding GATEs: the arm values of the
-// JOIN and, recursively, of every JOIN among them (a nested branch in tail position).
+// JOIN and, recursively, of every JOIN among them (a nested branch in tail position). An arm
+// whose value is not the last thing it does (runtimeArmEndsWithValue) contributes nothing.
 std::vector<camel::runtime::gc_node_ref_t> collectRuntimeTailJoinArmValues(
     camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t tailJoinRef);
 bool hasOnlyTrivialRuntimeTailSuffixAfter(

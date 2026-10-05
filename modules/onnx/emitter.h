@@ -54,15 +54,27 @@ namespace camel::onnx {
 /// A model the exporter cannot express; reported to the user with its message.
 class ExportError : public std::runtime_error {
   public:
+    /// What stopped the export, where a caller needs to tell cases apart: a call that was not
+    /// inlined is something an earlier pass should have removed (see passes/export.h).
+    enum class Kind { Other, CallRemains };
+
     using std::runtime_error::runtime_error;
-    ExportError(const std::string &what, std::string location)
-        : std::runtime_error(what), location_(std::move(location)) {}
+    ExportError(const std::string &what, Kind kind) : std::runtime_error(what), kind_(kind) {}
+    ExportError(
+        const std::string &what, std::string location, uint64_t origin = 0,
+        Kind kind = Kind::Other)
+        : std::runtime_error(what), location_(std::move(location)), origin_(origin), kind_(kind) {}
 
     /// Source position of the construct the export failed on ("file:line:col"), or empty.
     const std::string &location() const { return location_; }
+    /// Source origin id of that construct (0 when unknown), for diagnostics.
+    uint64_t origin() const { return origin_; }
+    Kind kind() const { return kind_; }
 
   private:
     std::string location_;
+    uint64_t origin_ = 0;
+    Kind kind_       = Kind::Other;
 };
 
 /// ONNX element type of a Camel tensor storage dtype.

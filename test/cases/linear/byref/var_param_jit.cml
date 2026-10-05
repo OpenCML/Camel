@@ -1,0 +1,32 @@
+/**
+ * What std::jit compiles when a function has a `var` parameter (after std::inline, which the JIT
+ * needs for any function with a branch: it compiles self-recursive graphs only).
+ *   down   passes its `var` parameter on: compiled. (With write-back at return it was excluded
+ *          and overflowed the recursion limit.)
+ *   read   reads the variable: not compiled. A read is the operator `:var/get`, and the JIT
+ *          leaves every graph that contains a generic operator to the interpreter. Lowering
+ *          `:var/get` and the assignment operators to JIT primitives is not implemented.
+ *   plain  no variable: compiled.
+ * Output: 0, 7, 7.
+ */
+module var_param_jit
+
+sync func down(var acc: int, n: int): int {
+    return if n <= 0 then 0 else down(acc, n - 1)
+}
+
+sync func read(var acc: int, n: int): int {
+    return if n <= 0 then acc else read(acc, n - 1)
+}
+
+func plain(a: int, n: int): int {
+    return if n <= 0 then a else plain(a, n - 1)
+}
+
+func main(): int sync {
+    var c = 7
+    println(down(c, 200000))
+    println(read(c, 200000))
+    println(plain(7, 200000))
+    return 0
+}

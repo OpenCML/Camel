@@ -170,6 +170,18 @@ A sweep over every test case with `fold cse dce` enabled matches the unoptimized
 output (the only differences are three unseeded random nn cases that differ
 between plain runs too).
 
+Write rule shared by `fold` and `cse`: a node passed to a `var` parameter is not
+one value. It is a variable's cell (created by `:var/new`, read by `:var/get`,
+stored into by `:op/assn*`; see doc 18 section 8.1) or an object an operator
+changes in place. `isWrittenInPlace`
+(`include/camel/runtime/draft_writes.h`) answers this from the callee's
+signature (operator overload, FUNC target, CALL callee type), through GATEs. A
+written node is never replaced by a constant or by another node, a tuple
+projection is not forwarded out of a written FILL, a written constant has no
+static value, and `cse` merges neither a written node nor an expression that
+reads one or reads what `:var/get` returned (`len(a)` before and after
+`arr->append<4>` are two values).
+
 ### 3.5 Module-contributed passes
 
 `registerModulePass(path, factory)` (`include/camel/execute/pass/base.h`) lets a

@@ -1,0 +1,13 @@
+/**
+ * A store into a field of a `var` struct: the target is not a variable.
+ * Rejected at compile time (docs/design-principles.cn.md 2.5, 2.6: a side effect
+ * must be declared, and only a `var` can be changed).
+ */
+module field_assigned
+
+func main(): int sync {
+    var p = { x: 1, y: 2 }
+    wait p.x = 9
+    println(p)
+    return 0
+}

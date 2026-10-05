@@ -22,6 +22,8 @@
 #include "camel/core/operator.h"
 #include "camel/core/type.h"
 
+slot_t __builtin__var_new__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__var_get__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

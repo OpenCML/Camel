@@ -1,0 +1,67 @@
+/**
+ * `var` parameters are passed by reference: what the callee assigns to one is what the caller
+ * reads from the variable it passed, after the call (docs/language/04_execution_model.md 4.4.2,
+ * docs/technical/18_sync_control_semantics.md). Every pass pipeline must print the same lines:
+ *   1       bump(c)
+ *   3       a var parameter forwarded twice to another var parameter
+ *   13      a var parameter written by a function that also returns a value
+ *   6       ... and its return value
+ *   15      a var tuple replaced by the callee: (7, 8)
+ *   8       a function value with a var parameter, called indirectly
+ *   113     a variable assigned after its initialization, passed by value (not its initial 0)
+ *   20001   a hot loop of calls with a var argument (the JIT tiers see every graph involved)
+ * Aliased arguments and variables captured by a branch arm or a lambda are covered by
+ * test/cases/linear/byref/.
+ */
+module var_params
+
+sync func bump(var x: int) {
+    wait x += 1
+}
+
+sync func bump_twice(var y: int) {
+    wait bump(y)
+    wait bump(y)
+}
+
+func bump_then(var z: int, k: int): int sync {
+    wait z += 10
+    return k + 1
+}
+
+sync func replace(var t: (int, int), a: int) {
+    wait t = (a, a + 1)
+}
+
+func show(x: int): int sync {
+    println(x)
+    return 0
+}
+
+func spin(n: int, acc: int): int sync {
+    var s = acc
+    wait bump(s)
+    return if n == 0 then s else spin(n - 1, s)
+}
+
+func main(): int sync {
+    var c = 0
+    wait bump(c)
+    println(c)
+    wait bump_twice(c)
+    println(c)
+    let r = bump_then(c, 5)
+    println(c)
+    println(r)
+    var p = (1, 2)
+    wait replace(p, 7)
+    println(p.0 + p.1)
+    let f = bump
+    var g = 7
+    wait f(g)
+    println(g)
+    wait c += 100
+    let shown = show(c)
+    println(spin(20000, shown))
+    return 0
+}

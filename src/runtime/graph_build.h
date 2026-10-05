@@ -117,6 +117,13 @@ void emitDraftNativePayload(
 void collectStaticGraphRefsRecursive(
     std::vector<GCGraph *> &refs, slot_t slot, camel::core::type::Type *type,
     std::unordered_set<const camel::core::rtdata::Object *> &visited);
+/// Structural checks on one encoded graph, in every build mode: node, slot and edge references
+/// in range, inputs and outputs mirroring each other, BRCH/JOIN arm counts, GATE with a value
+/// and a control input, FUNC with a callee, CALL with a callee input. Throws std::runtime_error;
+/// inside a pass that becomes RuntimeDiag::PassInternalError naming the pass.
 void validateRuntimeGraphPayload(const GCGraph *graph);
+/// The check that needs the callees encoded: every direct call passes as many arguments as its
+/// callee has ports. Run on each graph once the whole set of a commit is encoded.
+void validateRuntimeGraphCalls(const GCGraph *graph);
 
 } // namespace camel::runtime

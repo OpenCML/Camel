@@ -16,9 +16,9 @@ add_camel_module(
     lowering.cpp
     lowering_grad.cpp
     module.cpp
+    passes/export.cpp
     proto/onnx_writer.cpp
   EXTRA_INCLUDES
-    ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_CURRENT_BINARY_DIR}/generated
   EXTRA_LIBS
     tensor_cmo

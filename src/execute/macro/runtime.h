@@ -39,6 +39,8 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace camel::execute::macro_runtime {
@@ -66,7 +68,31 @@ class MacroEvaluator {
 
     std::optional<MacroEvalResult> tryEvaluate(const MacroCandidate &candidate, std::ostream &os);
 
+    /// Failures are collected per round of the pass: a call that fails in one round may
+    /// evaluate in a later one (another expansion made it evaluable), so only the failures of
+    /// the last round, in which nothing changed any more, are final.
+    void beginRound() { failures_.clear(); }
+    /// Reports the failures of the current round as RuntimeDiag::MacroEvaluationFailed errors
+    /// at the call, with the reason, in the runtime diagnostics: a failed evaluation rejects
+    /// the program (provisional rule, design principles 3 and 6). An argument that is not a
+    /// constant is not a failure and is never reported here.
+    void reportFailures();
+
   private:
+    struct Failure {
+        uint64_t origin = 0;
+        std::string callee;
+        std::string reason;
+    };
+    std::vector<Failure> failures_;
+    void noteFailure(const MacroCandidate &candidate, std::string reason);
+    /// The normal reason a macro call is not evaluated: an argument that is not a constant.
+    /// Logged at warn level (visible with -v), naming the argument.
+    void noteNotStatic(
+        camel::runtime::GCGraph *ownerGraph, camel::runtime::gc_node_ref_t nodeRef,
+        std::string_view callee, std::span<const camel::runtime::gc_node_ref_t> withInputs,
+        std::span<const camel::runtime::gc_node_ref_t> normInputs, size_t withStart = 0) const;
+
     camel::core::context::context_ptr_t context_;
     camel::core::context::FramePool framePool_;
     std::unique_ptr<MacroStaticAreaStore> staticAreas_;

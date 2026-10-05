@@ -116,6 +116,48 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "supported in the current version.",
             },
         },
+        {
+            RuntimeDiag::TranslationRefused,
+            {
+                "TranslationRefused",
+                "Translation pass '{0}' refused the graph: {1}.",
+                "A translation pass only translates the graph the preceding passes left. "
+                "Run the passes named in the message before it, "
+                "or remove the construct it cannot express.",
+            },
+        },
+        {
+            RuntimeDiag::MacroEvaluationFailed,
+            {
+                "MacroEvaluationFailed",
+                "'{0}' could not be evaluated by std::macro: {1}.",
+                "Every argument of this macro call is a constant, so std::macro evaluates it "
+                "ahead of time, and a failed evaluation is a compile-time error (provisional "
+                "rule). The program is rejected even if the call would never be reached at "
+                "run time. Without std::macro in the pipeline the call runs with the program.",
+            },
+        },
+        {
+            RuntimeDiag::PassesNeverRun,
+            {
+                "PassesNeverRun",
+                "Pass '{0}' consumes the graph, so {1} written after it will not run.",
+                "A scheduling pass executes the program and a translation pass translates it; "
+                "neither hands a graph on, and the pipeline ends there. Remove the passes "
+                "written after it, or move them before it.",
+            },
+        },
+        {
+            RuntimeDiag::PassInternalError,
+            {
+                "PassInternalError",
+                "Pass '{0}' failed with an internal error: {1}.",
+                "The pass gave up without a diagnostic of its own: it built or was given a graph "
+                "it cannot handle, which is a defect of the compiler rather than of the program. "
+                "Try the pipeline without this pass or with the passes in another order, and "
+                "report the program together with the pass list.",
+            },
+        },
 
     };
 

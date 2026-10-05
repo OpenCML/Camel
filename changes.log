@@ -1,4 +1,10 @@
 [0.2.2]
+New Features:
+- 新增逐 pass 图快照、图差异工具、效应追踪和流水线诊断。
+- 完善 var 引用语义、捕获写入追踪、sync/wait 顺序与副作用警告。
+
+Bug Fixes:
+- 修复图优化、分支调度及 ONNX 导出的顺序和诊断问题。
 
 [0.2.1]
 New Features:

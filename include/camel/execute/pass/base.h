@@ -24,7 +24,9 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 class GraphIRPass {
   protected:
@@ -72,6 +74,31 @@ struct PassApplyResult {
     bool failed() const { return status == PassApplyStatus::Failed; }
     bool consumed() const { return status == PassApplyStatus::Consumed; }
 };
+
+/**
+ * Checks every name of a pass list, after alias resolution, before anything runs. Passes
+ * contributed by modules ("tensor::fuse", "onnx::export") exist once the program's modules
+ * are loaded, so this is called after compilation. Throws RuntimeDiag::UnrecognizedGraphPass
+ * with stage `pass:<name>` for the first unknown name, after listing the available passes on
+ * stderr. applyPassesDetailed calls it for its own list; a driver that runs several lists
+ * (the given passes, then the fallback) calls it for all of them first.
+ */
+void requireKnownPasses(const std::vector<std::string> &passes);
+
+/**
+ * The index of the first pass of the list that consumes the graph by its kind (a scheduling or
+ * a translation pass); the passes written after it can never run. nullopt when there is none.
+ * Unknown names are skipped.
+ */
+std::optional<size_t> firstConsumingPass(
+    const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx);
+
+/**
+ * The warning RuntimeDiag::PassesNeverRun for the passes written after the first consuming pass
+ * of the list, or nullopt when there are none.
+ */
+std::optional<camel::core::error::Diagnostic> passesNeverRunWarning(
+    const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx);
 
 /**
  * Applies passes to the given graph.

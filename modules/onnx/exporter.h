@@ -88,4 +88,21 @@ Model exportFunction(
     core::context::Context &ctx, ::Function *fn, std::span<const Example> examples,
     const ExportOptions &options = {});
 
+/**
+ * The export of the onnx::export pass (passes/export.h): translates the graph of `fn` as the
+ * preceding passes left it. `captures` binds the closure slots of a function whose closure the
+ * program builds from constants (empty when `fn` carries its own closure or has none).
+ *
+ * Unlike exportFunction this does not simplify the function: no macro expansion, no
+ * devirtualization, no call specialization, no inlining, no unrolling. A call that remains is
+ * an ExportError of kind CallRemains. The one thing no earlier pass can do is done here,
+ * because it needs the examples: the parameters take the examples' exact types (dtype and
+ * shape), node types are re-inferred, and what those types make constant (the shape of an
+ * input and the arithmetic on it) is folded and the dead nodes are dropped, i.e. the
+ * std::opt::fold / std::opt::dce fixpoint with every call-rewriting phase off.
+ */
+Model translateFunction(
+    core::context::Context &ctx, ::Function *fn, std::span<const Example> captures,
+    std::span<const Example> examples, const ExportOptions &options = {});
+
 } // namespace camel::onnx

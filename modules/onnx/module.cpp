@@ -28,6 +28,7 @@
 #include "emitter.h"
 #include "exporter.h"
 #include "lowering.h"
+#include "passes/export.h"
 
 #include "../tensor/interop.h"
 #include "camel/core/rtdata/array.h"
@@ -121,6 +122,7 @@ class OnnxExecutor : public Executor {
 } // namespace
 
 OnnxModule::OnnxModule(context_ptr_t ctx) : BuiltinModule("onnx", ctx) {
+    camel::onnx::passes::registerOnnxPasses();
     exportEntity(
         "export_model",
         OperatorGroup::create(

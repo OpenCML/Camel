@@ -19,6 +19,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <set>
 
 #include "camel/common/scope.h"
 #include "camel/core/context/context.h"
@@ -73,6 +74,14 @@ class Builder {
     bool waited_;
     bool synced_;
     bool varied_;
+    // Inside a `var` declaration: the names it binds are variables.
+    bool declaresVariable_ = false;
+
+    // An argument of a call: its value node and the expression it was written as.
+    struct Argument {
+        node_handle_t node;
+        GCT::node_ptr_t expr;
+    };
 
     // Track whether this Graph has already been used (via createFuncDataNode).
     // A used Graph can no longer accept additional closure captures.
@@ -83,7 +92,73 @@ class Builder {
     // With-arguments bound to a callee by `f<a, b>`, consumed when the callee is invoked. Kept
     // beside the graph rather than as edges: the callee node is a value (a function literal, a
     // closure FILL whose with-inputs are its captures) that the binding must not alter.
-    std::unordered_map<node_handle_t, std::vector<node_handle_t>> boundWithArgs_;
+    std::unordered_map<node_handle_t, std::vector<Argument>> boundWithArgs_;
+    // Variables: the nodes bound by `var` (declarations, `var` parameters, the ports that capture
+    // them). Such a node does not hold a value but the variable's cell (TupleType::cell), which
+    // is what a `var` parameter or a capture receives; a value is read out of it by `:var/get`
+    // and stored by the assignment operators. Every other named node is an immutable value
+    // (`let`, a parameter without `var`).
+    std::unordered_set<node_handle_t> variables_;
+    // A use of a variable that no writer has been ordered after yet. A read (`:var/get`) hands
+    // the value on, so the operations that take the read's result are the direct users of the
+    // value; an operation that uses the variable itself (a call of a function that captured
+    // it, a branch whose arm did) is the direct user.
+    struct VariableUse {
+        node_handle_t node;
+        bool isRead;
+    };
+    std::unordered_map<node_handle_t, std::vector<VariableUse>> pendingUses_;
+
+    // Captured variables. A graph (function, lambda, branch arm) that names a variable of an
+    // enclosing graph, a module-level one included, holds the variable's cell in a capture
+    // port. What the graph does with it is not in its type, so the builder keeps a summary per
+    // graph and consults it wherever the graph is called directly or entered as a branch arm:
+    // the call or branch is then a use of each captured variable, and a write of those the
+    // graph writes (design principles 2.6: tracking of modifications is complete).
+    struct CaptureSummary {
+        // Names of the captured variables, in capture order.
+        std::vector<std::string> variables;
+        // Those the body itself stores into or hands to a `var` parameter. What its callees
+        // and arms write is derived from `callees` (capturedWritesOf), not recorded here: at
+        // a recursive call it is only an upper bound.
+        std::set<std::string> written;
+        // The graphs the body calls directly or enters as arms.
+        std::vector<DraftGraphBuilder *> callees;
+    };
+    enum class BodyState { Open, Built };
+    std::unordered_map<DraftGraphBuilder *, CaptureSummary> captures_;
+    std::unordered_map<DraftGraphBuilder *, BodyState> bodyStates_;
+    std::unordered_map<node_handle_t, std::string> capturePortNames_;
+    // A captured variable as the current graph sees it at a call or branch.
+    struct CapturedUse {
+        node_handle_t variable;
+        std::string name;
+        bool written;
+    };
+    // An unwaited write of captured variables outside a sync block, reported once every body
+    // is built: while a recursive function's body is open its writes are only an upper bound.
+    struct PendingIgnoredWrite {
+        std::vector<DraftGraphBuilder *> graphs;
+        std::vector<std::string> names;
+        camel::source::origin_id_t origin;
+        std::string subject;
+        std::string verb;
+    };
+    std::vector<PendingIgnoredWrite> pendingIgnoredWrites_;
+    // The functions and lambdas of the module, in source order, for the check that a function
+    // with side effects declares them (the `sync` function modifier).
+    struct BuiltFunction {
+        DraftGraphBuilder *graph;
+        camel::source::origin_id_t origin;
+        std::string name;
+    };
+    std::vector<BuiltFunction> builtFunctions_;
+    // Dropped effects (design principles 2.1): outside a sync block an effectful expression
+    // whose result nothing uses is not connected to the graph's exit and does not run. That
+    // is legal; the builder warns about it. Graphs whose exit depends on an effect, and the
+    // graphs that are branch arms (reported through their branch, not as calls).
+    std::unordered_set<DraftGraphBuilder *> effectfulGraphs_;
+    std::unordered_set<DraftGraphBuilder *> armGraphs_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -146,12 +221,63 @@ class Builder {
         const compile_graph_ptr_t &decoratedGraph, const GCT::node_ptr_t &origin);
     std::optional<node_handle_t> modifierOf(node_handle_t node) const;
     void setModifier(node_handle_t input, node_handle_t modifier);
+    // An operation writes `variable`: later reads and writers are ordered after it, and a
+    // waited one is ordered after the operations before it that used the variable's value. The
+    // operation starts at `entry` and is complete at `exit` (one node for a call; BRCH and
+    // JOIN for a branch). `throughCallee`: the write is one a called function or an arm makes
+    // to a variable it captured, which the summaries already account for.
+    void recordWrite(
+        node_handle_t variable, node_handle_t entry, node_handle_t exit,
+        bool throughCallee = false);
+    void recordWrite(node_handle_t variable, node_handle_t writer) {
+        recordWrite(variable, writer, writer);
+    }
+    // Orders `node` after the last writer of `variable` in the current graph.
+    void orderAfterLastWriter(node_handle_t variable, node_handle_t node);
+    // The captured variables `graph` writes: by its own body, by its arms and by the functions
+    // it calls directly, transitively. Exact once every graph reached is built; for a graph
+    // whose body is still open (a recursive call) every variable it captured counts as written.
+    std::set<std::string> capturedWritesOf(DraftGraphBuilder *graph) const;
+    // The captured variables of `callee` as nodes of the current graph, which becomes a
+    // caller of `callee`.
+    std::vector<CapturedUse> capturedUsesOf(const compile_graph_ptr_t &callee);
+    // Reports the unwaited writes of captured variables that turned out to be real.
+    void reportIgnoredCapturedWrites();
+    // Reports the functions that write a captured variable without the `sync` modifier.
+    void reportUndeclaredCapturedWrites();
+    // Whether running `node` of `graph` is an effect: an operator that is neither pure nor
+    // state-only, a call of a function that declares effects (`sync` modifier, `var`
+    // parameter) or whose exit depends on one, a branch with such an arm.
+    bool isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const;
+    // Once the body of `graph` is built: records whether its exit depends on an effect, and
+    // warns (EffectNotExecuted) about the effects that the exit does not depend on.
+    void reportDroppedEffects(const compile_graph_ptr_t &graph);
     compile_graph_ptr_t buildDecoratedGraph(
         const std::string &funcName, const compile_graph_ptr_t &rawGraph,
         const std::vector<GCT::node_ptr_t> &annoNodes);
     node_handle_t applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcValueNode);
     node_handle_t resolveCrossGraphRef(node_handle_t node, const std::string &name);
     node_handle_t resolveNodeByRef(const std::string &name);
+    bool isVariable(node_handle_t node) const { return variables_.contains(node); }
+    // A new variable holding the value of `value` (`:var/new`).
+    node_handle_t newVariable(node_handle_t value);
+    // The value `variable` holds when the returned node runs (`:var/get`), ordered after the
+    // variable's last writer in this graph and, in a sync block, in the block's chain.
+    node_handle_t readVariable(node_handle_t variable);
+    // `node` as a value: read when it is a variable, itself otherwise.
+    node_handle_t valueOf(node_handle_t node) {
+        return isVariable(node) ? readVariable(node) : node;
+    }
+    // An operand of a call. A variable named directly stays a variable: whether the callee
+    // takes the variable or its value is only known once the callee is resolved.
+    node_handle_t visitOperand(const GCT::node_ptr_t &expr, const GCT::node_ptr_t &call);
+    // The node of `:var/new` or `:var/get` applied to `input`.
+    node_handle_t variableOperator(const std::string &group, node_handle_t input);
+    // The immutable name an argument expression denotes: the name itself or a field of it
+    // (`s`, `s.x`). Empty for a variable and for an expression that is not a name.
+    std::optional<std::string> immutableNameOf(const GCT::node_ptr_t &expr);
+    // Reports an immutable name passed where the callee has a `var` parameter.
+    void requireMutableArgument(const Argument &arg, const std::string &callee);
 
     std::any visit(const GCT::node_ptr_t &gct);
 
@@ -171,6 +297,11 @@ class Builder {
     node_handle_t visitAnnoNode(const GCT::node_ptr_t &gct);
     node_handle_t visitExitNode(const GCT::node_ptr_t &gct);
     node_handle_t visitExecNode(const GCT::node_ptr_t &gct);
+    // The body of a graph (function, lambda, branch arm): a block of its own, whatever block
+    // the function or arm is written in.
+    node_handle_t visitBodyNode(const GCT::node_ptr_t &gct);
+    // Makes `result` the result of `graph` when its body set none with `return`.
+    void setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result);
     void_ptr_t visitExptNode(const GCT::node_ptr_t &gct);
 };
 

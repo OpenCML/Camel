@@ -1,0 +1,22 @@
+module failed_evaluation
+
+// A macro call whose arguments are constants is evaluated by std::macro. Here the evaluation
+// fails (division by zero, after an effect). Provisional rule: that is a compile-time error at
+// the call (line 19), with the reason; the program does not run. Without std::macro the call
+// is an ordinary call and fails when it is reached, after `main start` and 42.
+macro func boom(x: int): int sync {
+    println('EFFECT boom')
+    return 10 / x
+}
+
+macro func fine(x: int): int {
+    return x + 1
+}
+
+func main(): int sync {
+    println('main start')
+    println(fine(41))
+    let v = boom(0)
+    println(v)
+    return 0
+}

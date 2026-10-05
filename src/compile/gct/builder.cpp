@@ -492,8 +492,9 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     const auto &typeNodes    = ast->atAs<AST::RepeatedLoad>(0);
     const auto &dataNodes    = ast->atAs<AST::RepeatedLoad>(1);
 
-    // Create an execution node as the initial result
-    node_ptr_t res = createNodeAs<ExecLoad>();
+    // The names of the declaration get a scope of their own, which is not a block of the
+    // program: in a sync block the initializer keeps its place in the block's order.
+    node_ptr_t res = createNodeAs<ExecLoad>(false, true);
 
     // Handle different unpacking types
     switch (dataDeclLoad->unpackType()) {
@@ -781,7 +782,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
             // Case 2: Multiple data nodes - build once with Factory to avoid recomputing the type.
             TupleDataFactory tupleFactory;
             bool dangling       = false;
-            node_ptr_t execNode = createNodeAs<ExecLoad>();
+            node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
 
             for (const auto &item : *dataNodes) {
                 node_ptr_t dataNode = visitData(item);
@@ -1702,7 +1703,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
 
     ArrayDataFactory factory;
     bool dangling       = false;
-    node_ptr_t execNode = createNodeAs<ExecLoad>();
+    node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
@@ -1732,7 +1733,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
 
     StructDataFactory factory;
     bool dangling       = false;
-    node_ptr_t execNode = createNodeAs<ExecLoad>();
+    node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
@@ -1764,7 +1765,7 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
 
     TupleDataFactory factory;
     bool dangling       = false;
-    node_ptr_t execNode = createNodeAs<ExecLoad>();
+    node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);

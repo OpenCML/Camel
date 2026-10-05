@@ -153,3 +153,190 @@ failure_note = "Macro runtime execution is currently unstable under std::macro o
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
+
+[[tests]]
+name = "failed_evaluation.error"
+desc = "A macro call with constant arguments whose evaluation fails is a compile-time error of std::macro (provisional rule): RuntimeDiag::MacroEvaluationFailed at the call (19:17), with the reason. The program does not run. The effect the evaluation performed before failing has happened at pass time (once per round of the pass)."
+kind = "behavior"
+case = "../../../cases/trans/macro/failed_evaluation.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
+expect_diagnostic_code = "0x0400000E"
+expect_diagnostic_line = 19
+expect_diagnostic_column = 17
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.output
+assert(/failed_evaluation\.cml:19:17: \[Error\]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero\./.test(out), `error missing: ${out}`)
+assert(!out.includes('main start'), `the program must not run: ${out}`)
+assert(!out.includes("'fine'"), `a call that evaluated was reported: ${out}`)
+assert(!out.includes('[Warn]'), `no warning is left: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "failed_evaluation.json"
+desc = "With --output-format json the failed evaluation is the only diagnostic: an Error with stage pass:std::macro and the call's range. No run-stage diagnostic follows, because nothing ran."
+kind = "behavior"
+case = "../../../cases/trans/macro/failed_evaluation.cml"
+args = ["--output-format", "json", "${case}", "std::macro", "std::nvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const diags = JSON.parse(out.slice(out.indexOf('[\n{')))
+assert(diags.length === 1, `one diagnostic: ${out}`)
+const d = diags[0]
+assert(d.data.name === 'RuntimeDiag::MacroEvaluationFailed' && d.severity === 'Error' && d.code === '0x0400000E', `name/severity/code: ${JSON.stringify(d)}`)
+assert(d.data.stage === 'pass:std::macro', `stage: ${d.data.stage}`)
+assert(d.range.start.line === 18 && d.range.start.character === 16, `range: ${JSON.stringify(d.range)}`)
+assert(d.message === "'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero.", `message: ${d.message}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "failed_evaluation.without_macro"
+desc = "Without std::macro the same macro function is an ordinary function: the program runs up to the failing call and stops there with the run-time error."
+kind = "behavior"
+case = "../../../cases/trans/macro/failed_evaluation.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.startsWith('main start\n42\nEFFECT boom\n'), `unexpected stdout: ${out}`)
+assert(!input.normalized.output.includes('MacroEvaluationFailed'), 'no macro diagnostic without the pass')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "failed_no_rule.error"
+desc = "grad over an operator without a derivative rule cannot be expanded by std::macro: a compile-time error at the grad call (14:13) that names the operator; the program does not start."
+kind = "behavior"
+case = "../../../cases/trans/macro/failed_no_rule.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 13
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.output
+assert(/failed_no_rule\.cml:14:13: \[Error\]: 'autodiff:grad' could not be evaluated by std::macro: RuntimeError: An error has occurred: autodiff: no derivative rule for operator 'math:sqrt'\./.test(out), `error missing: ${out}`)
+assert(!out.includes('main start'), `the program must not run: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "failed_depth.error"
+desc = "A macro recursion deeper than the 64-frame evaluation limit is a failed evaluation: an error at the call (17:18) naming the limit, and the program does not run, although it runs without std::macro (next test). count(20) on the line before is evaluated without a diagnostic."
+kind = "behavior"
+case = "../../../cases/trans/macro/failed_depth.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
+expect_diagnostic_line = 17
+expect_diagnostic_column = 18
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.output
+assert(/failed_depth\.cml:17:18: \[Error\]: 'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls \(at 'count'\)\./.test(out), `error missing: ${out}`)
+assert((out.match(/MacroEvaluationFailed/g) || []).length === 1, `expected one error: ${out}`)
+assert(!/^20$/m.test(input.normalized.stdout), `the program must not run: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "failed_depth.without_macro"
+desc = "The program that std::macro rejects for the evaluation depth runs without the pass and prints 20, 40, 7."
+kind = "behavior"
+case = "../../../cases/trans/macro/failed_depth.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+assert(input.normalized.stdout.trim() === '20\n40\n7', `unexpected stdout: ${input.normalized.stdout}`)
+assert(input.normalized.stderr === '', `stderr: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "failed_unreached.error"
+desc = "Consequence of the provisional rule: a failing macro call in a function nothing calls is rejected by std::macro, at the call (11:16), although the program never reaches it."
+kind = "behavior"
+case = "../../../cases/trans/macro/failed_unreached.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 16
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+assert(!/^42$/m.test(input.normalized.stdout), `the program must not run: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "failed_unreached.without_macro"
+desc = "The same program without std::macro runs and prints 42: the failing call is never reached."
+kind = "behavior"
+case = "../../../cases/trans/macro/failed_unreached.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+assert(input.normalized.stdout.trim() === '42', `unexpected stdout: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "not_static.note"
+desc = "A macro call with an argument that is not a constant is the normal case, not a failure: the program runs (20, 7), nothing is printed at default level, and with -v a note names the call (10:17) and the argument."
+kind = "behavior"
+case = "../../../cases/trans/macro/not_static.cml"
+args = ["-v", "${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const err = input.normalized.stderr
+assert(/<Macro> 'count' at .*not_static\.cml:10:17 stays a run-time call: argument 1 is not a constant\./.test(err), `note missing: ${err}`)
+assert(!input.normalized.output.includes('MacroEvaluationFailed'), 'not a failure')
+assert(input.normalized.stdout.trim() === '20\n7', `unexpected stdout: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "not_static.quiet"
+desc = "The same program at the default log level: no diagnostic and nothing on stderr."
+kind = "behavior"
+case = "../../../cases/trans/macro/not_static.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+assert(input.normalized.stderr === '', `stderr: ${input.normalized.stderr}`)
+assert(input.normalized.stdout.trim() === '20\n7', `unexpected stdout: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 4000

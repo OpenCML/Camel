@@ -603,6 +603,32 @@ void RuntimeGraphDraftSession::rememberSpecialization(
     specializationCache_.insert_or_assign(std::move(key), graph);
 }
 
+std::string typeSpecializationRoot(std::string_view stableId) {
+    const std::string marker = "$" + std::string(kTypeSpecializationTag);
+    return std::string(stableId.substr(0, stableId.find(marker)));
+}
+
+size_t RuntimeGraphDraftSession::typeSpecializationCount(const std::string &rootStableId) {
+    if (!typeSpecializationCountsReady_) {
+        // Earlier sessions (and earlier passes) leave their specializations in the program; the
+        // bound is on what the program holds, so it is read from the program, not remembered.
+        typeSpecializationCountsReady_ = true;
+        for (const GCGraph *graph : collectCommitClosure()) {
+            const std::string root = typeSpecializationRoot(graph->stableId());
+            if (root.size() != graph->stableId().size()) {
+                ++typeSpecializationCounts_[root];
+            }
+        }
+    }
+    const auto it = typeSpecializationCounts_.find(rootStableId);
+    return it == typeSpecializationCounts_.end() ? 0 : it->second;
+}
+
+void RuntimeGraphDraftSession::noteTypeSpecialization(const std::string &rootStableId) {
+    (void)typeSpecializationCount(rootStableId);
+    ++typeSpecializationCounts_[rootStableId];
+}
+
 std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
     std::vector<GCGraph *> closure;
     if (!runtimeRoot_) {
@@ -677,6 +703,9 @@ GCGraph *RuntimeGraphDraftSession::commit() {
             rewritten.at(graph),
             allocatedBytes.at(graph));
         validateRuntimeGraphPayload(rewritten[graph]);
+    }
+    for (GCGraph *graph : closure) {
+        validateRuntimeGraphCalls(rewritten.at(graph));
     }
 
     // A session over the program's root replaces it. A session over another root (a detached
@@ -753,6 +782,9 @@ void GraphDraftGroup::encode() {
             rewritten.at(key),
             bytes.at(key));
         validateRuntimeGraphPayload(graph);
+    }
+    for (GCGraph *key : order_) {
+        validateRuntimeGraphCalls(rewritten.at(key));
     }
     for (GCGraph *key : order_) {
         member(key).encoded = rewritten.at(key);
