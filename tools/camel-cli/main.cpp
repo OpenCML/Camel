@@ -274,8 +274,15 @@ int main(int argc, char *argv[]) {
         }
         // The program compiled. Its warnings go to stderr, before anything runs and whatever
         // the log level: stdout stays the program's output (and, on an error, the diagnostics
-        // array), which is what tools parse.
-        ctx->dumpModuleWarnings(std::cerr, useJsonFormat);
+        // array), which is what tools parse. With them, the warning about passes written after
+        // a pass that consumes the graph: they can never run.
+        std::vector<Diagnostic> commandLineWarnings;
+        if (selectedCommand == Command::Run) {
+            if (auto neverRun = passesNeverRunWarning(Run::resolvedPassList, ctx)) {
+                commandLineWarnings.push_back(std::move(*neverRun));
+            }
+        }
+        ctx->dumpModuleWarnings(std::cerr, useJsonFormat, commandLineWarnings);
 
         CAMEL_LOG_INFO_S(
             "Main",
@@ -302,6 +309,11 @@ int main(int argc, char *argv[]) {
 
             try {
                 try {
+                    // All pass names, the fallback's included, are checked before the first
+                    // snapshot is written and before any pass runs: an unknown name anywhere
+                    // on the command line leaves no effect and no artefact.
+                    requireKnownPasses(Run::resolvedPassList);
+                    requireKnownPasses(Run::fallbackPasses);
                     auto *graph = ctx->runtimeRootGraph();
                     static PassDumpState passDump;
                     if (!Run::dumpAfterEachPassDir.empty()) {

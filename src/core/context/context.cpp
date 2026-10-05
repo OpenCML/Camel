@@ -169,7 +169,8 @@ void resolveTokenRanges(const std::shared_ptr<UserDefinedModule> &module) {
 
 } // namespace
 
-size_t Context::dumpModuleWarnings(std::ostream &os, bool json) const {
+size_t Context::dumpModuleWarnings(
+    std::ostream &os, bool json, const std::vector<Diagnostic> &extra) const {
     std::vector<std::string> lines;
     for (const auto &mod : allUserModules()) {
         auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
@@ -180,6 +181,9 @@ size_t Context::dumpModuleWarnings(std::ostream &os, bool json) const {
         for (const Diagnostic *diag : ud->diagnostics()->findBySeverity(Severity::Warn)) {
             lines.push_back(json ? diag->toJson() : diag->toText());
         }
+    }
+    for (const Diagnostic &diag : extra) {
+        lines.push_back(json ? diag.toJson() : diag.toText());
     }
     if (lines.empty()) {
         return 0;

@@ -41,6 +41,8 @@ enum class RuntimeDiag : uint32_t {
     TranslationRefused        = 0x00000B,
     PassInternalError         = 0x00000C,
     MacroEvaluationFailed     = 0x00000E,
+    // Warnings (severity bits = Warn).
+    PassesNeverRun = 0x10000F,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

@@ -298,3 +298,107 @@ assert(!input.stdout.includes('DROPPED'), 'no dropped line is printed')
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
+
+[[tests]]
+name = "unknown_pass_after_scheduler"
+desc = "An unknown pass name written after a scheduling pass is rejected before anything runs: the program is not executed (stdout is nothing but the diagnostics array), exit 1, UnrecognizedGraphPass with stage pass:<name>."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["--output-format", "json", "${case}", "std::nvm", "std::no_such_pass"]
+expect_exit = 1
+verify_script = """
+const text = input.stdout
+assert(text.indexOf('[\n{') === 0, 'nothing but the diagnostics array on stdout (the program printed nothing): ' + JSON.stringify(text.slice(0, 80)))
+assert(!text.includes('2011'), 'the program must not run')
+const diags = JSON.parse(text)
+assert(diags.length === 1, 'one diagnostic')
+const d = diags[0]
+assert(d.data.name === 'RuntimeDiag::UnrecognizedGraphPass' && d.severity === 'Error', d.data.name)
+assert(d.data.stage === 'pass:std::no_such_pass', 'stage ' + d.data.stage)
+assert(d.message.includes("'std::no_such_pass'"), d.message)
+assert(input.stderr.includes('available passes are'), 'the pass listing goes to stderr')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "unknown_pass_after_rewrite_and_scheduler"
+desc = "The first unknown name is the one reported, wherever it is written: after a rewrite pass and a scheduling pass, in text mode. Nothing runs."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::inline", "std::fvm", "std::typo_one", "std::typo_two"]
+expect_exit = 1
+verify_script = """
+const out = input.normalized.stdout
+assert(!out.includes('2011'), 'the program must not run: ' + out)
+assert(out.includes("pass 'std::typo_one'") && out.includes('name=RuntimeDiag::UnrecognizedGraphPass'), 'diagnostic: ' + out)
+assert(!out.includes('typo_two'), 'only the first unknown name is reported')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "unknown_module_pass"
+desc = "A pass contributed by a module the program does not import does not exist for that program: onnx::export on a program without `import onnx` is an unknown pass, and the program does not run."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["--output-format", "json", "${case}", "std::nvm", "onnx::export"]
+expect_exit = 1
+verify_script = """
+const diags = JSON.parse(input.stdout)
+assert(diags.length === 1 && diags[0].data.name === 'RuntimeDiag::UnrecognizedGraphPass', 'diagnostic: ' + input.stdout)
+assert(diags[0].data.stage === 'pass:onnx::export', 'stage ' + diags[0].data.stage)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "passes_never_run_text"
+desc = "Passes written after a scheduling pass can never run. The program still runs; before it does, the warning PassesNeverRun on stderr names the consuming pass and the passes after it."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::nvm", "std::inline", "std::fvm"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === '2011\n', 'the program runs once: ' + JSON.stringify(input.normalized.stdout))
+const lines = input.normalized.stderr.trim().split('\n')
+assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
+assert(lines[0].includes("[Warn]: Pass 'std::nvm' consumes the graph, so 'std::inline', 'std::fvm' written after it will not run."), lines[0])
+assert(lines[0].endsWith('(name=RuntimeDiag::PassesNeverRun, code=0x0410000F)'), lines[0])
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "passes_never_run_json"
+desc = "The same warning with --output-format json, after a translation pass: one JSON array on stderr with severity Warn and stage pass:<consuming pass>; stdout is the translation's output and the program is not executed."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["--output-format", "json", "${case}", "std::rgir", "std::nvm"]
+expect_exit = 0
+verify_script = """
+assert(input.stdout.startsWith('digraph GraphIR'), 'stdout is the graph dump')
+assert(!input.stdout.includes('2011\n'), 'the program is not executed')
+const diags = JSON.parse(input.stderr)
+assert(diags.length === 1, 'one warning')
+const d = diags[0]
+assert(d.severity === 'Warn' && d.data.name === 'RuntimeDiag::PassesNeverRun' && d.code === '0x0410000F', JSON.stringify(d))
+assert(d.data.stage === 'pass:std::rgir', 'stage ' + d.data.stage)
+assert(d.message === "Pass 'std::rgir' consumes the graph, so 'std::nvm' written after it will not run.", d.message)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "passes_last_consumer_quiet"
+desc = "A consuming pass written last is the normal pipeline: no warning."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+verify_script = """
+assert(input.stderr === '', 'stderr: ' + input.stderr)
+assert(input.normalized.stdout === '2011\n', 'stdout: ' + input.normalized.stdout)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
