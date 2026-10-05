@@ -96,6 +96,16 @@ Known gap: effects that the failed evaluation performed before it failed have ha
 
 Running the program without passes (`camel m.cml`) keeps working: `export_model` then simplifies the function itself, with settings the pass pipeline does not have (it inlines regardless of size, unrolls deeper recursion, and splits the gradient of a data-dependent branch), so it accepts some programs that the pipeline refuses.
 
+### Warnings
+
+A warning (a `[Warn]` diagnostic such as `SemanticDiag::IgnoredSideEffect` or `SemanticDiag::VarParamInAsyncFunction`) does not stop a program.
+
+- **A program that compiles without an error** prints its warnings on **stderr**, once, after compilation and before the first pass runs, at the default log level (no `-v` needed). In text mode, one line per warning: `(module)file:line:col: [Warn]: text suggestion (name=SemanticDiag::IgnoredSideEffect, code=0x03100002)`. With `--output-format json`, one JSON array on stderr with the same objects as the error array below (`"severity":"Warn"`). Nothing is written when there is no warning (no empty array).
+- **stdout is the same in both modes as without warnings**: the program's output, and the diagnostics array only when there is an error. Tools that parse stdout are not affected.
+- **A module that has an error** shows its warnings with the error, as before (in the stdout array in JSON mode); they are not repeated on stderr.
+- `camel check` prints them the same way. `--timeit`, `camel inspect`, `camel-cpp` and the debugger do not print warnings.
+- A warning raised while a pass runs (`RuntimeDiag::MacroEvaluationDeferred`) is printed on stderr by that pass, in text form in both modes.
+
 ### JSON diagnostics (`--output-format json`)
 
 Errors are printed on stdout, after any program output, as a JSON array of objects:

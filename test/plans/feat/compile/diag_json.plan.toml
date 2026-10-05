@@ -151,3 +151,79 @@ expect_exit = 1
 expect_output_contains = ["Pass 'std::cpp' failed with an internal error", "name=RuntimeDiag::PassInternalError, code=0x0400000C"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
+
+[[tests]]
+name = "warnings_visible_text"
+desc = "A program without errors prints its warnings on stderr at the default log level, each with name, file:line:column and text, before it runs; stdout is the program's output only."
+kind = "behavior"
+case = "../../../cases/compile/diag_json/warnings_visible.cml"
+args = ["${case}"]
+expect_exit = 11
+verify_script = """
+assert(input.normalized.stdout === '11\n', 'stdout is the program output only: ' + JSON.stringify(input.normalized.stdout))
+const lines = input.normalized.stderr.trim().split('\n')
+assert(lines.length === 3, 'three warnings on stderr, got ' + lines.length + ': ' + input.normalized.stderr)
+const expect = [
+    ['warnings_visible.cml:11:10: [Warn]: Variable parameters are only allowed in sync functions.', 'SemanticDiag::VarParamInAsyncFunction, code=0x03100001'],
+    ['warnings_visible.cml:18:5: [Warn]: The call of \'inc: (var x: i64) => i64\' is neither waited nor in a sync block, and it takes a var argument.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
+    ['warnings_visible.cml:19:13: [Warn]: The branch is neither waited nor in a sync block, and an arm writes the captured variable \'c\'.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
+]
+expect.forEach(([text, name], i) => {
+    assert(lines[i].includes(text), `warning ${i + 1}: expected ${text}, got ${lines[i]}`)
+    assert(lines[i].endsWith('(name=' + name + ')'), `warning ${i + 1}: expected name ${name}, got ${lines[i]}`)
+})
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "warnings_visible_json"
+desc = "With --output-format json the warnings of an error-free program are one JSON array on stderr (severity Warn, source ranges); stdout stays the program's output, with no diagnostics array."
+kind = "behavior"
+case = "../../../cases/compile/diag_json/warnings_visible.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 11
+verify_script = """
+assert(input.normalized.stdout === '11\n', 'stdout is the program output only: ' + JSON.stringify(input.normalized.stdout))
+const diags = JSON.parse(input.stderr)
+assert(diags.length === 3, 'three warnings, got ' + diags.length)
+assert(diags.every(d => d.severity === 'Warn'), 'severity Warn')
+assert(diags.every(d => d.data.stage === 'typecheck'), 'stage typecheck')
+const got = diags.map(d => d.data.name + '@' + (d.range.start.line + 1) + ':' + (d.range.start.character + 1))
+const want = ['SemanticDiag::VarParamInAsyncFunction@11:10', 'SemanticDiag::IgnoredSideEffect@18:5', 'SemanticDiag::IgnoredSideEffect@19:13']
+assert(JSON.stringify(got) === JSON.stringify(want), 'names and positions: ' + got.join(' '))
+assert(diags.every(d => d.data.modulePath.endsWith('warnings_visible.cml')), 'each names its file')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "warnings_none_stderr_empty"
+desc = "A program without warnings prints nothing on stderr, in text and in JSON mode alike (no empty array)."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 0
+verify_script = """
+assert(input.stderr === '', 'stderr is empty: ' + JSON.stringify(input.stderr))
+assert(input.normalized.stdout === '2011\n', 'stdout is the program output only')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "warning_with_error_json"
+desc = "When the module has an error, its warnings stay where they were: in the diagnostics array on stdout, with the error; stderr does not repeat them. A warning placed by the GCT builder now has its source position there too."
+kind = "behavior"
+case = "../../../cases/compile/diag_json/warning_with_error.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 1
+verify_script = """
+const diags = JSON.parse(input.stdout)
+const got = diags.map(d => d.severity + ' ' + d.data.name + '@' + (d.range.start.line + 1) + ':' + (d.range.start.character + 1))
+const want = ['Warn SemanticDiag::VarParamInAsyncFunction@8:10', 'Error SemanticDiag::UnresolvedReference@14:12']
+assert(JSON.stringify(got) === JSON.stringify(want), 'diagnostics on stdout: ' + got.join(' | '))
+assert(input.stderr === '', 'nothing on stderr: ' + JSON.stringify(input.stderr))
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000

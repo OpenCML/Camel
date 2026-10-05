@@ -157,12 +157,49 @@ context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &d
     return ctx;
 }
 
+namespace {
+
+/// A diagnostic placed by token range (the GCT builder's) only gets a line and column once the
+/// range is converted with the module's token stream; without this it prints as `?:?`.
+void resolveTokenRanges(const std::shared_ptr<UserDefinedModule> &module) {
+    if (module && module->diagnostics() && module->parser()) {
+        module->diagnostics()->fetchAll(module->parser()->getTokens());
+    }
+}
+
+} // namespace
+
+size_t Context::dumpModuleWarnings(std::ostream &os, bool json) const {
+    std::vector<std::string> lines;
+    for (const auto &mod : allUserModules()) {
+        auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
+        if (!ud || !ud->diagnostics() || ud->diagnostics()->hasErrors()) {
+            continue;
+        }
+        resolveTokenRanges(ud);
+        for (const Diagnostic *diag : ud->diagnostics()->findBySeverity(Severity::Warn)) {
+            lines.push_back(json ? diag->toJson() : diag->toText());
+        }
+    }
+    if (lines.empty()) {
+        return 0;
+    }
+    if (json) {
+        os << "[\n" << join(lines, ",\n") << "\n]\n";
+    } else {
+        os << join(lines, "\n") << "\n";
+    }
+    os << std::flush;
+    return lines.size();
+}
+
 void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
     auto allMods = allUserModules();
     std::vector<module_ptr_t> modsErr;
     for (const auto &mod : allMods) {
         auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
         if (ud && ud->diagnostics() && ud->diagnostics()->hasErrors()) {
+            resolveTokenRanges(ud);
             modsErr.push_back(mod);
         }
     }

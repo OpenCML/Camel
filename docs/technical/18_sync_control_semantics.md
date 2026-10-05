@@ -120,8 +120,9 @@ sync func g(): int sync {
 - **JIT**：带 `var` 形参的图不再被排除，只把 `var` 形参继续传下去的函数在 `std::inline std::jit` 下会被
   编译；但 JIT 对任何含通用算子（`OPER`）的图回退到解释器，赋值与 `:var/get` 都是这样的算子，所以读写变量
   的图仍由解释器执行（测试 `var_param_jit` 记录了这一现状）。
-- **告警尚不显示。** `IgnoredSideEffect` 只对变量的写入产生，对 `println` 这类不纯算子不产生；并且
-  模块没有 Error 时，Warn 级诊断不输出（`Context::dumpAllModuleDiagnostics`）。因此被丢弃的效应目前没有提示。
+- **告警的范围。** 模块没有 Error 时，Warn 级诊断在编译之后、运行之前输出到标准错误
+  （`Context::dumpModuleWarnings`，见 `docs/cli.md` “Warnings”）。`IgnoredSideEffect` 只对变量的写入产生，
+  对 `println` 这类不纯算子不产生，因此“同步块之外、结果未被使用而被丢弃的效应调用”目前还没有提示。
 - **`wait` 的跟踪范围**：`A(i); wait modify(i); B(i)` 的两段依赖都已建立（3.3）。不带 `wait` 且不在同步块
   内的写入与此前的读取之间没有顺序。经由捕获（含模块顶层变量）的写入，对直接调用和分支已经跟踪（3.3）；
   通过函数值（作为实参、返回值或存放起来的 lambda / 函数）进行的调用不在其内：函数类型不携带“写入了哪些

@@ -272,6 +272,10 @@ int main(int argc, char *argv[]) {
             ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
             return selectedCommand == Command::Check ? 0 : 1;
         }
+        // The program compiled. Its warnings go to stderr, before anything runs and whatever
+        // the log level: stdout stays the program's output (and, on an error, the diagnostics
+        // array), which is what tools parse.
+        ctx->dumpModuleWarnings(std::cerr, useJsonFormat);
 
         CAMEL_LOG_INFO_S(
             "Main",
