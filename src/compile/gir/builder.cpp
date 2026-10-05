@@ -27,6 +27,8 @@
 #include "camel/utils/type.h"
 #include "core/module/entity_internal.h"
 
+#include "camel/core/operator_traits.h"
+
 #include <atomic>
 #define DEBUG_LEVEL -1
 
@@ -530,6 +532,8 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     capturePortNames_.clear();
     pendingIgnoredWrites_.clear();
     builtFunctions_.clear();
+    effectfulGraphs_.clear();
+    armGraphs_.clear();
     typeDecls_.clear();
     syntheticRefIndex_ = 0;
 
@@ -565,6 +569,8 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
                 nodeIdOf(entryCall),
                 nodeIdOf(entryCall),
                 entryGraph->funcType()->exitType());
+            // Module-level statements run only as far as the call of `main` depends on them.
+            reportDroppedEffects(rootGraph_);
         } else if (entryModule) {
             diags_->of(SemanticDiag::EntryModuleMissingMain).commit(module_->name());
             throw BuildAbortException();
@@ -797,6 +803,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         setBodyResult(graph, visitBodyNode(gct->atAs<GCT::ExecLoad>(1)));
         bodyStates_[graph.get()] = BodyState::Built;
         builtFunctions_.push_back({graph.get(), gct->load()->origin(), name});
+        reportDroppedEffects(graph);
     } catch (...) {
         bodyStates_[graph.get()] = BodyState::Built;
         leaveScope();
@@ -1131,6 +1138,152 @@ void Builder::reportUndeclaredCapturedWrites() {
                 strutil::join(names, ", ", [](const std::string &name) { return name; }));
     }
     builtFunctions_.clear();
+}
+
+bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
+    const auto declaresEffects = [](Type *type) {
+        if (type == nullptr || type->code() != TypeCode::Function) {
+            return false;
+        }
+        const auto *func = tt::as_ptr<FunctionType>(type);
+        if (func->modifiers().sync()) {
+            return true;
+        }
+        for (size_t i = 0; i < func->normTypesCount(); ++i) {
+            if (func->normIsVarAt(i)) {
+                return true;
+            }
+        }
+        for (size_t i = 0; i < func->withTypesCount(); ++i) {
+            if (func->withIsVarAt(i)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const auto calleeOf = [&](node_handle_t func) { return graph->funcTarget(func); };
+    switch (nodeKindOf(node)) {
+    case runtime::GCNodeKind::Oper: {
+        const auto &op = graph->operTarget(node);
+        return op != nullptr &&
+               camel::core::OperatorTraitsRegistry::instance().hasExternalEffect(op->uri());
+    }
+    case runtime::GCNodeKind::Func: {
+        const auto callee = calleeOf(node);
+        // An arm is entered by its branch, which is what gets reported.
+        if (callee == nullptr || armGraphs_.contains(callee.get())) {
+            return false;
+        }
+        return declaresEffects(callee->funcType()) || effectfulGraphs_.contains(callee.get());
+    }
+    case runtime::GCNodeKind::Call: {
+        const auto callee = withInputsOf(node);
+        return !callee.empty() && declaresEffects(nodeTypeOf(nodeDraftOf(node)->node(callee[0])));
+    }
+    case runtime::GCNodeKind::Join: {
+        for (draft_node_ref_t arm : withInputsOf(node)) {
+            node_handle_t armNode = nodeDraftOf(node)->node(arm);
+            if (nodeIsKind(armNode, runtime::GCNodeKind::Func)) {
+                const auto callee = calleeOf(armNode);
+                if (callee != nullptr && effectfulGraphs_.contains(callee.get())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    default:
+        return false;
+    }
+}
+
+void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph) {
+    auto &draft = graph->draft();
+    // What the exit depends on, through data and control edges.
+    std::unordered_set<draft_node_ref_t> needed;
+    std::vector<draft_node_ref_t> work;
+    for (draft_node_ref_t root : {draft.outputNode(), draft.exitNode(), draft.returnNode()}) {
+        if (root != runtime::kInvalidNodeRef && needed.insert(root).second) {
+            work.push_back(root);
+        }
+    }
+    if (work.empty()) {
+        return; // the body did not build (an error was reported)
+    }
+    while (!work.empty()) {
+        const draft_node_ref_t id = work.back();
+        work.pop_back();
+        for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+            for (draft_node_ref_t input : inputs) {
+                if (needed.insert(input).second) {
+                    work.push_back(input);
+                }
+            }
+        }
+    }
+    std::vector<draft_node_ref_t> dropped;
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id) || !isEffectNode(graph.get(), draft.node(id))) {
+            continue;
+        }
+        if (needed.contains(id)) {
+            effectfulGraphs_.insert(graph.get());
+        } else {
+            dropped.push_back(id);
+        }
+    }
+    // One warning per dropped chain: an effect whose result feeds another dropped effect
+    // (`println(log(1))`, the statements of a dropped sync block) is reported through the
+    // last one.
+    const auto feedsDroppedEffect = [&](draft_node_ref_t start) {
+        std::unordered_set<draft_node_ref_t> seen{start};
+        std::vector<draft_node_ref_t> stack{start};
+        while (!stack.empty()) {
+            const draft_node_ref_t id = stack.back();
+            stack.pop_back();
+            for (auto users : {draft.normUsersOf(id), draft.withUsersOf(id), draft.ctrlUsersOf(id)}) {
+                for (draft_node_ref_t user : users) {
+                    if (!seen.insert(user).second) {
+                        continue;
+                    }
+                    if (std::ranges::find(dropped, user) != dropped.end()) {
+                        return true;
+                    }
+                    stack.push_back(user);
+                }
+            }
+        }
+        return false;
+    };
+    auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+    for (draft_node_ref_t id : dropped) {
+        if (feedsDroppedEffect(id)) {
+            continue;
+        }
+        node_handle_t node = draft.node(id);
+        std::string subject;
+        switch (nodeKindOf(node)) {
+        case runtime::GCNodeKind::Oper: {
+            const std::string &name = graph->operTarget(node)->name();
+            subject = name.starts_with("__assn") ? std::string("The assignment")
+                                                 : std::format("The call of '{}'", name);
+        } break;
+        case runtime::GCNodeKind::Func:
+            subject = std::format("The call of '{}'", graph->funcTarget(node)->name());
+            break;
+        case runtime::GCNodeKind::Join:
+            subject = "The branch";
+            break;
+        default:
+            subject = "The call";
+            break;
+        }
+        camel::source::origin_id_t origin = node->header.origin;
+        if (origin == camel::source::kInvalidOriginId && sourceContext) {
+            origin = sourceContext->debugMap().graphOrigin(graph->stableId());
+        }
+        diags_->of(SemanticDiag::EffectNotExecuted).atOrigin(origin).commit(subject);
+    }
 }
 
 node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
@@ -2108,6 +2261,8 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
             throw;
         }
         bodyStates_[subGraph.get()] = BodyState::Built;
+        armGraphs_.insert(subGraph.get());
+        reportDroppedEffects(subGraph);
         leaveScope();
         armGraphs.push_back(subGraph.get());
         for (const CapturedUse &use : capturedUsesOf(subGraph)) {

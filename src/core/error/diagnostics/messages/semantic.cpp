@@ -323,6 +323,18 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::EffectNotExecuted,
+            {
+                "EffectNotExecuted",
+                "{0} has side effects but is never executed: nothing depends on it and it is "
+                "not in a sync block.",
+                "Evaluation is driven by dependencies: outside a sync block an expression "
+                "whose result (or the variable it writes) nothing needs does not run. This is "
+                "legal. To run it, put it in a sync block ('sync {{ ... }}', or a function body "
+                "'func f(): T sync {{ ... }}'), or use its result.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

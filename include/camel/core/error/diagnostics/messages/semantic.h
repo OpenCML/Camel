@@ -65,6 +65,7 @@ enum class SemanticDiag : uint32_t {
     VarParamInAsyncFunction = 0x100001,
     IgnoredSideEffect       = 0x100002,
     CapturedWriteInAsyncFunction = 0x100003,
+    EffectNotExecuted            = 0x100004,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

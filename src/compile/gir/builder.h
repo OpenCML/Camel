@@ -153,6 +153,12 @@ class Builder {
         std::string name;
     };
     std::vector<BuiltFunction> builtFunctions_;
+    // Dropped effects (design principles 2.1): outside a sync block an effectful expression
+    // whose result nothing uses is not connected to the graph's exit and does not run. That
+    // is legal; the builder warns about it. Graphs whose exit depends on an effect, and the
+    // graphs that are branch arms (reported through their branch, not as calls).
+    std::unordered_set<DraftGraphBuilder *> effectfulGraphs_;
+    std::unordered_set<DraftGraphBuilder *> armGraphs_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -239,6 +245,13 @@ class Builder {
     void reportIgnoredCapturedWrites();
     // Reports the functions that write a captured variable without the `sync` modifier.
     void reportUndeclaredCapturedWrites();
+    // Whether running `node` of `graph` is an effect: an operator that is neither pure nor
+    // state-only, a call of a function that declares effects (`sync` modifier, `var`
+    // parameter) or whose exit depends on one, a branch with such an arm.
+    bool isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const;
+    // Once the body of `graph` is built: records whether its exit depends on an effect, and
+    // warns (EffectNotExecuted) about the effects that the exit does not depend on.
+    void reportDroppedEffects(const compile_graph_ptr_t &graph);
     compile_graph_ptr_t buildDecoratedGraph(
         const std::string &funcName, const compile_graph_ptr_t &rawGraph,
         const std::vector<GCT::node_ptr_t> &annoNodes);

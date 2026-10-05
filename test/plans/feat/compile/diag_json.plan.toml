@@ -251,3 +251,50 @@ assert(JSON.stringify(got) === JSON.stringify(want), 'warnings: ' + got.join(' |
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
+
+[[tests]]
+name = "dropped_effects"
+desc = "Outside a sync block an effectful expression nothing depends on is not executed; that is legal and each one gets the warning EffectNotExecuted at its position: an impure operator, a function whose body has effects, a call bound to an unused name, a write nothing reads, an assignment, a function declared `sync func`, a branch with an effectful arm; a chain of dropped effects gets one warning. Nothing in a sync block and no pure expression is reported, and the program runs as written."
+kind = "behavior"
+case = "../../../cases/compile/diag_json/dropped_effects.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === 'kept 1\n0 5\n', 'program output: ' + JSON.stringify(input.normalized.stdout))
+const diags = JSON.parse(input.stderr)
+assert(diags.every(d => d.severity === 'Warn'), 'warnings only')
+const dropped = diags.filter(d => d.data.name === 'SemanticDiag::EffectNotExecuted')
+const got = dropped.map(d => (d.range.start.line + 1) + ' ' + d.message.replace(/ has side effects.*/, ''))
+const want = [
+    "31 The call of 'println'",
+    "32 The call of 'noisy'",
+    "33 The call of 'noisy'",
+    "34 The call of 'modify'",
+    "35 The assignment",
+    "36 The call of 'declared'",
+    "37 The call of 'println'",
+    "38 The branch",
+]
+assert(JSON.stringify(got) === JSON.stringify(want), 'dropped effects: ' + got.join(' | '))
+assert(dropped.every(d => d.message.endsWith('has side effects but is never executed: nothing depends on it and it is not in a sync block.')), 'message text')
+assert(dropped.every(d => d.code === '0x03100004'), 'code 0x03100004')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "dropped_effects_outside_sync"
+desc = "The five dropped prints of effects_outside_sync.cml (plain body, under wait, nested sync block, prefix sync func, a statement before the returned call) are each reported as EffectNotExecuted; the three kept ones are not."
+kind = "behavior"
+case = "../../../cases/linear/runtime/effects_outside_sync.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 0
+verify_script = """
+const diags = JSON.parse(input.stderr)
+const got = diags.map(d => d.data.name + '@' + (d.range.start.line + 1))
+const want = [11, 19, 28, 36, 48].map(line => 'SemanticDiag::EffectNotExecuted@' + line)
+assert(JSON.stringify(got) === JSON.stringify(want), 'warnings: ' + got.join(' '))
+assert(!input.stdout.includes('DROPPED'), 'no dropped line is printed')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000

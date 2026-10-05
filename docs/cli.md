@@ -98,7 +98,16 @@ Running the program without passes (`camel m.cml`) keeps working: `export_model`
 
 ### Warnings
 
-A warning (a `[Warn]` diagnostic such as `SemanticDiag::IgnoredSideEffect` or `SemanticDiag::VarParamInAsyncFunction`) does not stop a program.
+A warning (a `[Warn]` diagnostic) does not stop a program. The compiler's warnings about effects:
+
+| Name | Code | Where | Meaning |
+|---|---|---|---|
+| `SemanticDiag::EffectNotExecuted` | `0x03100004` | the call, assignment or branch | It has side effects but nothing depends on it and it is not in a sync block, so it never runs. Legal (evaluation is driven by dependencies); reported so that a forgotten `sync` is seen. One warning per dropped chain (`println(log(1))` reports the `println`). Never reported inside a sync block |
+| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | the call or branch | It writes a variable (a `var` argument, or a captured variable) and is neither waited nor in a sync block: it is not ordered after earlier uses of the variable |
+| `SemanticDiag::VarParamInAsyncFunction` | `0x03100001` | the parameter | A `var` parameter in a function without the `sync` modifier |
+| `SemanticDiag::CapturedWriteInAsyncFunction` | `0x03100003` | the function | The function writes a captured variable and has no `sync` modifier |
+
+What counts as an effect for `EffectNotExecuted`: an operator that is neither pure nor state-only in the operator-traits registry (the same set the effect trace records), a call of a function declared `sync func` or with a `var` parameter, a call of a function whose own result depends on an effect, and a branch with such an arm. A call through a function value is only recognised by its type (`sync` modifier, `var` parameter).
 
 - **A program that compiles without an error** prints its warnings on **stderr**, once, after compilation and before the first pass runs, at the default log level (no `-v` needed). In text mode, one line per warning: `(module)file:line:col: [Warn]: text suggestion (name=SemanticDiag::IgnoredSideEffect, code=0x03100002)`. With `--output-format json`, one JSON array on stderr with the same objects as the error array below (`"severity":"Warn"`). Nothing is written when there is no warning (no empty array).
 - **stdout is the same in both modes as without warnings**: the program's output, and the diagnostics array only when there is an error. Tools that parse stdout are not affected.
