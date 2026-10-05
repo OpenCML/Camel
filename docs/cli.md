@@ -79,9 +79,17 @@ Macro operators over functions (`grad`, `value_and_grad`, `vjp` of `autodiff`) t
 `std::macro` replaces a call of a `macro` function or macro operator by its result when every argument is a constant. Two things can keep a call in the program:
 
 - **An argument is not a constant.** This is the normal case and not a failure; nothing is printed. With `-v` a log line names the call and the argument: `<Macro> 'count' at m.cml:11:17 stays a run-time call: argument 1 is not a constant.`
-- **The evaluation fails**: an operator raises an error (division by zero, `autodiff: no derivative rule for operator ...`), an exception escapes, or the evaluation needs more than 64 nested calls. The call stays in the program and runs with it, and the pass prints the warning `RuntimeDiag::MacroEvaluationDeferred` (`0x0410000D`, stage `pass:std::macro`) on stderr at the default log level, located at the call, with the reason: `m.cml:17:17: [Warn]: 'boom' could not be evaluated ahead of time and is left to run with the program: DivisionByZero: Attempted division by zero.` The program is not rejected: if the call is never reached at run time, it runs as it does without the pass. If the run later ends in an error, the warning is also in the diagnostics printed then (and in the `--output-format json` array, with severity `Warn`).
+- **The evaluation fails**: an operator raises an error (division by zero, `autodiff: no derivative rule for operator ...`), an exception escapes, or the evaluation needs more than 64 nested calls. This is a compile-time error (a provisional rule of the language; the final handling is undecided): `RuntimeDiag::MacroEvaluationFailed` (`0x0400000E`, stage `pass:std::macro`), located at the call, with the reason: `m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero.` The pipeline stops there with exit code 1; no later pass runs and the program is not executed.
 
-Known gap: effects that the failed evaluation performed before it failed have happened at pass time (once per round of the pass) and happen again when the call runs. A `macro` function with effects that can fail is therefore not reproduced by a pipeline containing `std::macro`.
+Consequences of the rule:
+
+- A program is rejected for a failing macro call **even if the call would never be reached at run time** (a call in a function nothing calls, or in an arm that is not taken): `std::macro` evaluates every macro call whose arguments are constants.
+- A macro recursion deeper than the evaluator's 64 frames is a failed evaluation, so a program that runs without `std::macro` can be rejected with it (`count(40)` for `macro func count(n) = if n == 0 then 0 else 1 + count(n - 1)`).
+- Effects that the failed evaluation performed before it failed have happened at pass time (once per round of the pass). They are not repeated, since the program does not run.
+- Without `std::macro` in the pipeline nothing changes: the call is an ordinary call and fails, if at all, when it is reached.
+- `onnx.export_model` expands macros of the function it exports with the same evaluator while the program runs; a failed evaluation there is the same diagnostic, with stage `run`.
+
+Before this rule (up to commit `b0fa6b4b`) a failed evaluation was the warning `RuntimeDiag::MacroEvaluationDeferred` and the call was left to run with the program; that behaviour is one commit away (`git revert` of the commit that introduced `MacroEvaluationFailed`).
 
 ### ONNX export as a pass (`onnx::export`)
 
@@ -113,7 +121,6 @@ What counts as an effect for `EffectNotExecuted`: an operator that is neither pu
 - **stdout is the same in both modes as without warnings**: the program's output, and the diagnostics array only when there is an error. Tools that parse stdout are not affected.
 - **A module that has an error** shows its warnings with the error, as before (in the stdout array in JSON mode); they are not repeated on stderr.
 - `camel check` prints them the same way. `--timeit`, `camel inspect`, `camel-cpp` and the debugger do not print warnings.
-- A warning raised while a pass runs (`RuntimeDiag::MacroEvaluationDeferred`) is printed on stderr by that pass, in text form in both modes.
 
 ### JSON diagnostics (`--output-format json`)
 
@@ -157,7 +164,7 @@ Limits of the compiler and the back ends. A pass that reaches one of its limits 
 | Non-tail recursion on `std::nvm`, `std::fvm` and the interpreted part of `std::jit` | 256 frames | no | the program stops with `RuntimeDiag::MaxRecursionDepthExceeded` (`0x04000004`, stage `run`, exit 1) at the call expression that would open frame 257; what ran before it has run |
 | Recursion in code `std::jit` compiled to native code (a self-recursive function whose branch arms were inlined, e.g. after `std::inline` or `std::opt`) | none | no | limited only by the frame pool; exhausting it aborts the process (`std::bad_alloc`), without a diagnostic |
 | Recursion on `std::tf` | none | no | limited only by the native stack; exhausting it is a segmentation fault |
-| Ahead-of-time evaluation of a `macro` function by `std::macro` | 64 evaluator frames (a self-recursion of 32 levels: `count(31)` is evaluated, `count(32)` is not) | no | the call is not evaluated ahead of time; it stays a call and runs with the program. Warning `RuntimeDiag::MacroEvaluationDeferred` at the call |
+| Ahead-of-time evaluation of a `macro` function by `std::macro` | 64 evaluator frames (a self-recursion of 32 levels: `count(31)` is evaluated, `count(32)` is not) | no | the evaluation has failed: error `RuntimeDiag::MacroEvaluationFailed` at the call, the pipeline stops (see "What `std::macro` reports") |
 | Nodes, node blocks and edges of one graph | 65535 each (16-bit) | no | the pass that built the graph fails with `RuntimeDiag::PassInternalError` (`... exceeds the target integral width`) before anything runs |
 | Permanent space (types and layouts) | 32 MB | no | the pass fails with `RuntimeDiag::PassInternalError` (`Permanent space exhausted`) before anything runs |
 

@@ -380,20 +380,19 @@ void MacroEvaluator::noteFailure(const MacroCandidate &candidate, std::string re
 }
 
 void MacroEvaluator::reportFailures() {
-    for (const Failure &failure : failures_) {
-        if (!firstReport(failure.origin, failure.reason)) {
-            continue;
-        }
-        auto builder = context_->rtmDiags()->of(RuntimeDiag::MacroEvaluationDeferred);
+    // Provisional rule of the language author: a macro call that std::macro evaluates and
+    // that fails (an operator's error, an exception, the depth limit) is an error, reported
+    // at the call with the reason. The pass driver stops the pipeline on it; with the
+    // command line's error limit the first one already ends the pass.
+    std::vector<Failure> failures = std::move(failures_);
+    failures_.clear();
+    for (const Failure &failure : failures) {
+        auto builder = context_->rtmDiags()->of(RuntimeDiag::MacroEvaluationFailed);
         if (failure.origin != 0) {
             builder.atOrigin(static_cast<camel::source::origin_id_t>(failure.origin));
         }
-        const Diagnostic diag = builder.commit(failure.callee, failure.reason);
-        // Runtime diagnostics are printed only when the run ends in an error; a deferred
-        // evaluation must be visible when the program then runs fine, and without a log flag.
-        std::cerr << diag.toText() << std::endl;
+        builder.commit(failure.callee, failure.reason);
     }
-    failures_.clear();
 }
 
 void MacroEvaluator::noteNotStatic(

@@ -1,0 +1,17 @@
+module failed_unreached
+
+// A consequence of the provisional rule: the failing macro call is in a function nothing
+// calls, so the program runs fine without std::macro (it prints 42), and std::macro still
+// rejects it, at the call (line 11).
+macro func boom(x: int): int {
+    return 10 / x
+}
+
+func never_called(): int {
+    return boom(0)
+}
+
+func main(): int sync {
+    println(42)
+    return 0
+}

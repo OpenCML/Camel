@@ -56,7 +56,8 @@ camel::runtime::GCGraph *MacroRewritePass::apply(camel::runtime::GCGraph *graph,
         }
 
         if (!roundChanged) {
-            // Nothing evaluates any more: the calls that failed in this round stay calls.
+            // Nothing evaluates any more: the calls that failed in this round are final
+            // failures, and each is an error.
             evaluator.reportFailures();
             break;
         }

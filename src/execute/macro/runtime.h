@@ -72,9 +72,10 @@ class MacroEvaluator {
     /// evaluate in a later one (another expansion made it evaluable), so only the failures of
     /// the last round, in which nothing changed any more, are final.
     void beginRound() { failures_.clear(); }
-    /// Reports the failures of the current round as RuntimeDiag::MacroEvaluationDeferred
-    /// warnings at the call, on stderr and in the runtime diagnostics. Each (call, reason) is
-    /// reported once per process.
+    /// Reports the failures of the current round as RuntimeDiag::MacroEvaluationFailed errors
+    /// at the call, with the reason, in the runtime diagnostics: a failed evaluation rejects
+    /// the program (provisional rule, design principles 3 and 6). An argument that is not a
+    /// constant is not a failure and is never reported here.
     void reportFailures();
 
   private:
