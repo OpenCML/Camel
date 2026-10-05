@@ -1072,3 +1072,83 @@ assert(out === 'before grad | grad_unexpanded_inline a=6 b=80 c=12 d=49', `unexp
 }
 """
 timeout_ms = 6000
+
+[[tests]]
+name = "grad_specialized_callee.reference"
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: no pass."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_specialized_callee scaled=30 unrolled=510', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_specialized_callee.macro.nvm"
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::macro."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_specialized_callee scaled=30 unrolled=510', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_specialized_callee.specialize.nvm"
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::specialize (scaled was 0: the tangent positions were read off the unspecialized function type)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
+args = ["${case}", "std::specialize", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_specialized_callee scaled=30 unrolled=510', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_specialized_callee.specialize_fold.nvm"
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::specialize then std::opt::fold (unrolled was 0: the arm left by the folded branch has type () => float)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
+args = ["${case}", "std::specialize", "std::opt::fold", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_specialized_callee scaled=30 unrolled=510', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "grad_specialized_callee.specialize_fold.fvm"
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::specialize then std::opt::fold on FastVM."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
+args = ["${case}", "std::specialize", "std::opt::fold", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'before grad | grad_specialized_callee scaled=30 unrolled=510', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 6000
