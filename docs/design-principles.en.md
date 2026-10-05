@@ -95,7 +95,13 @@ B(i)
 
 The compiler automatically inserts the control dependencies A → modify → B.
 
-**The precondition is that the side effect is declared explicitly.** Camel only checks functions that declare their side effects explicitly: in the example above `modify` must declare the parameter it modifies as `var` (`modify(var i: ...)`). If `modify` does not declare `var i`, the compiler does not treat it as a function that modifies `i`, and does not insert these control dependencies. When testing the behaviour of `wait`, the test program must satisfy this precondition.
+**The declaration of side effects is a closed loop.** If `modify` wants to change the value of `i` internally, it must use a function that itself has a side effect: assignment in Camel is a function with a side effect; or it uses other built-in C++ operators, whose declarations also mark the side effect explicitly and require the corresponding input parameter to be mutable. So for `modify` to modify a parameter, that parameter must be declared `var` (`modify(var i: ...)`); otherwise it has no effective way of its own to modify it.
+
+Hence:
+- Mutability is passed upward from the operator declarations at the bottom, and every level must declare it explicitly; the compiler only needs to check the functions that explicitly declare side effects to track every modification.
+- A function that does not declare a parameter `var` cannot modify it, so the compiler does not, and need not, insert control dependencies for it.
+- Assigning to a non-`var` parameter inside a function body, or passing it to an operator that requires a mutable input, is a compile-time error.
+- When testing the behaviour of `wait`, the `modify` in the test program must declare `var i` and actually modify it.
 
 Inside a sync block it makes no difference whether `wait` is written.
 
