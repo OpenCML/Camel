@@ -70,14 +70,35 @@ so `--rules frozen` and `--rules frozen+D1` still give the earlier classificatio
   D8  (no rule change) XU2, the unknown pass after a scheduler, stays in the must-refuse set.
   D9  reporting: contract class per cell, signatures.csv (cause groups), resource.csv,
       excluded.csv; compare_runs.py compares two runs on their common cells.
-  D10 PROPOSED, not an owner ruling and NOT in the default rule set: a large `.npy` file is
-      judged by the comparison of all its elements that run.py records (`npy.vs_ref`) instead
-      of the 4 096-element sample with the sum and the sum of absolute values. Select it with
-      `--rules frozen+D1-D9+D10`.
+  D10 written arrays are compared element by element at the stated tolerance (1e-5 per
+      element, `near` at 1e-3), never through whole-array sums at the tolerance of one element.
+      A large `.npy` file is judged by the comparison of all its elements that run.py records
+      (`npy.vs_ref`). Where a record only holds the 4 096-element sample with the sum and the
+      sum of absolute values (records made before that), the sampled elements are compared
+      element by element and the two sums relative to the sum of absolute values; the cell says
+      so (`file_compare_mode`) and is flagged as needing a rerun (`needs_rerun`).
+  R1  owner-directed reframing (CLASSIFIER-RULES.md section 13). What is tested: pipelines of
+      the standard optimisation passes and schedulers preserve results relative to the default
+      pipeline (P0, no pass on the command line). "Any pass sequence behaves the same" is not a
+      property of Camel and is not what a cell is charged with. Defect classes charged to the
+      standard passes / schedulers (`defect_class`):
+        silent_result_change          VALUE_MISMATCH, EFFECT_MISMATCH
+        crash_hang_or_error           CRASH, HANG, ERROR_NO_DIAGNOSTIC, RUN_FAIL, LOAD_FAIL,
+                                      CAPTURE_FAIL
+        diagnostic_unlocated_or_late  REFUSED_UNLOCATED, REFUSED_NOT_CLEAN
+      A failure whose diagnostic comes from a library precondition (message prefix in
+      LIBRARY_PRECONDITIONS, initially `autodiff:`) is LIBRARY_PRECONDITION, not charged to a
+      standard pass; `library_precondition` says `located_before_execution` (conforming) or
+      `late_or_obscure` (a usability defect of the library). A program without a result on the
+      default pipeline because of such a precondition, that runs under `std::macro std::nvm`,
+      is REQUIRES_STD_MACRO (listed in requires_std_macro.csv), not INVALID_REF. Reporting:
+      by_standard_pass.csv (defect cells among the pipelines containing each pass; an
+      association, no causal claim), and the refusals without a location split by what was
+      refused: a program, or a command line (unknown pass name: no source construct to locate).
 The default rule set is the newest one (DEFAULT_RULES); the rule set in force is printed.
 
 Usage: classify.py --records DIR/records [DIR2/records ...] --out DIR/summary
-                   [--rules frozen+D1-D9|frozen+D1|frozen|frozen+D1+D4+...|v1|v2|v3|...]
+                   [--rules frozen+D1-D10+R1|frozen+D1-D9|frozen+D1|frozen|frozen+D1+D4+...|v1|...]
                    [--exclusions exclusions.json] [--corpus corpus.json]
                    [--time-factor 20] [--time-floor 10]
 """
@@ -148,7 +169,65 @@ CONTRACT_CLASS = {
     "RESOURCE_LIMIT": "resource_limit",
     "UNDECIDED": "not_judged", "MACRO_EXCEPTION": "not_judged",
     "NOT_APPLICABLE": "not_applicable",
+    "LIBRARY_PRECONDITION": "library_precondition",
 }
+
+# ---- R1 (owner-directed reframing; CLASSIFIER-RULES.md section 13) -------------------------------
+# Library preconditions: a failure whose first Error diagnostic starts with one of these prefixes
+# (after the generic "An error has occurred: ") comes from a library, not from a standard pass or
+# the language core. The list is part of the rule set; extend it only with a recorded revision.
+LIBRARY_PRECONDITIONS = [
+    {"prefix": "autodiff:", "library": "autodiff", "requires_pass": "std::macro",
+     "precondition": "std::macro must run before grad / value_and_grad / vjp "
+                     "(docs/design-principles.cn.md section 4)"},
+]
+_GENERIC_ERROR_HEAD = re.compile(r"^An error has occurred: ")
+# Outcomes a library precondition can show as (a diagnostic exists and names the library).
+LIBRARY_PRECONDITION_SOURCES = {"RUN_FAIL", "CAPTURE_FAIL", "REFUSED", "REFUSED_LOCATED", "REFUSED_UNLOCATED",
+                                "REFUSED_NOT_CLEAN"}
+# Defect classes charged to the standard optimisation passes / schedulers, and the other classes.
+DEFECT_CLASS = {
+    "CONSISTENT": "agrees",
+    "REFUSED_LOCATED": "refused_located",
+    "VALUE_MISMATCH": "silent_result_change", "EFFECT_MISMATCH": "silent_result_change",
+    "CRASH": "crash_hang_or_error", "HANG": "crash_hang_or_error", "RUN_FAIL": "crash_hang_or_error",
+    "LOAD_FAIL": "crash_hang_or_error", "ERROR_NO_DIAGNOSTIC": "crash_hang_or_error",
+    "CAPTURE_FAIL": "crash_hang_or_error",
+    "REFUSED_UNLOCATED": "diagnostic_unlocated_or_late", "REFUSED_NOT_CLEAN": "diagnostic_unlocated_or_late",
+    "LIBRARY_PRECONDITION": "library_precondition",
+    "RESOURCE_LIMIT": "resource_limit",
+    "UNDECIDED": "not_judged", "MACRO_EXCEPTION": "not_judged",
+    "NOT_APPLICABLE": "not_applicable",
+}
+DEFECT_CLASSES = ["silent_result_change", "crash_hang_or_error", "diagnostic_unlocated_or_late"]
+ALL_CLASSES_R1 = ["agrees", "refused_located", *DEFECT_CLASSES, "library_precondition", "resource_limit",
+                  "not_judged", "not_applicable"]
+# Defect classes of the must-refuse set (R1 vocabulary; the outcomes are unchanged).
+MUST_REFUSE_DEFECT_CLASS = {
+    "REFUSED_UNLOCATED": "diagnostic_unlocated", "FAILED_AFTER_START": "diagnostic_late",
+    "ACCEPTED_SHOULD_REFUSE": "invalid_command_line_accepted",
+    "CRASH": "crash_hang_or_error", "HANG": "crash_hang_or_error", "ERROR_NO_DIAGNOSTIC": "crash_hang_or_error",
+}
+BY_PASS_NOTE = ("Association only, no causal claim: a pipeline has several passes, so one defect cell is counted "
+                "under every pass of its pipeline, and the pipelines containing a pass are not a random sample "
+                "(module passes run only on programs that import the module). A count here does not say that "
+                "the pass causes the defect.")
+D10_RERUN = ("D10: a written array differs by hash from the default pipeline's and the record holds a "
+             "4 096-element sample with two sums, not all elements")
+
+
+def library_of(message: str) -> Optional[dict]:
+    """The library whose precondition a diagnostic message reports, or None."""
+    text = _GENERIC_ERROR_HEAD.sub("", message or "")
+    return next((e for e in LIBRARY_PRECONDITIONS if text.startswith(e["prefix"])), None)
+
+
+def macro_position(passes: List[str]) -> str:
+    """Where `std::macro` is in a pipeline (evidence for the autodiff precondition)."""
+    if "std::macro" not in passes:
+        return "no std::macro in the pipeline"
+    at = passes.index("std::macro")
+    return "std::macro first" if at == 0 else "std::macro after " + " ".join(passes[:at])
 
 
 @dataclasses.dataclass(frozen=True)
@@ -176,7 +255,8 @@ class Rules:
     must_refuse_static_only: bool = False       # D5
     file_ops_by_content: bool = False           # D7
     report_v2: bool = False                     # D9 (also carries the reporting part of D3)
-    npy_full_comparison: bool = False           # D10 (proposed; not in the default rule set)
+    npy_full_comparison: bool = False           # D10: arrays element by element; sums only relative to abs_sum
+    r1: bool = False                            # R1: defect classes, LIBRARY_PRECONDITION, REQUIRES_STD_MACRO
 
 
 # Deviation -> the flag it sets (None: a recorded ruling that changes no rule of the classifier).
@@ -190,22 +270,40 @@ DEVIATIONS = {
     "D7": ("file_ops_by_content", "file-writing operators with a truncated payload compared through written content"),
     "D8": (None, "XU2 (unknown pass after a scheduler) stays in the must-refuse set (unchanged)"),
     "D9": ("report_v2", "contract classes, violation signatures, resource and exclusion tables"),
-    "D10": ("npy_full_comparison", "PROPOSED, not ruled: large .npy files judged on all elements (run.py's "
-                                   "vs_ref) instead of the sample with its sums"),
+    "D10": ("npy_full_comparison", "written arrays compared element by element (1e-5, near 1e-3): all elements "
+                                   "where the record has them (values, or run.py's vs_ref); otherwise the sample "
+                                   "element by element and the sums relative to the sum of absolute values, "
+                                   "flagged as needing a rerun"),
+    "R1": ("r1", "owner-directed reframing: defect classes charged to the standard passes / schedulers; "
+                 "LIBRARY_PRECONDITION for diagnostics of a library precondition (prefixes: "
+                 + ", ".join(e["prefix"] for e in LIBRARY_PRECONDITIONS) + "); REQUIRES_STD_MACRO programs listed; "
+                 "per-standard-pass table; unlocated refusals split into programs and command lines"),
 }
-# The deviations of the newest rule set. D10 is not among them: it is a proposal of the harness
-# maintainer that removes violation cells and waits for the owner's decision.
-NEWEST_DEVIATIONS = ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9"]
-NEWEST = "frozen+D1-D9"
+# The same rulings in the vocabulary of R1 (used in the summaries of rule sets with R1; the rules
+# are unchanged, the earlier texts above stay as they were archived).
+DEVIATIONS_R1_TEXT = {
+    "D2": "a refusal without a source location is a defect of the diagnostics (class "
+          "diagnostic_unlocated_or_late), reported as REFUSED_UNLOCATED",
+    "D3": "late finish = RESOURCE_LIMIT, reported, not a defect; hard kill = HANG, a defect (unchanged)",
+    "D9": "classes per cell, defect signatures and cause groups, resource and exclusion tables",
+}
+# The revisions of the newest rule set, in the order they were recorded.
+NEWEST_DEVIATIONS = ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "R1"]
+NEWEST = "frozen+D1-D10+R1"
 DEFAULT_RULES = NEWEST
+
+
+def _revision_key(name: str) -> tuple:
+    return (0 if name[0] == "D" else 1, int(name[1:]))
+
 
 _TYPE_PREFIX = re.compile(r"(^|\|)[A-Za-z_][^=|]*=")
 STRIP_PAYLOAD_TYPES = False  # set from the rule set in classify_all()
 ACTIVE: Optional["Rules"] = None  # the rule set in force, set in classify_all()
 
+# `frozen+D1-D9` (the default until R1) and the newest rule set are resolved from their names
+# like every `frozen+Dk+...` (resolve_rules).
 RULESETS = {r.name: r for r in [
-    Rules(NEWEST, payload_strip_types=True, unlocated_refusal_violation=True, exclusion_list=True,
-          must_refuse_static_only=True, file_ops_by_content=True, report_v2=True),
     Rules("frozen+D1", payload_strip_types=True),
     Rules("v1", exclude_macro_ops=False, payload="hash-in-sequence", numeric_tolerance=False,
           error_no_diagnostic=False, c10=False, worst_repeat=False, determinism_payload=True, files=False,
@@ -239,6 +337,8 @@ def resolve_rules(name: str) -> Rules:
         raise SystemExit(f"classify.py: unknown rule set '{name}'; known: {sorted(RULESETS)} "
                          f"or frozen+Dk+... with Dk in {sorted(DEVIATIONS)}")
     flags = {DEVIATIONS[p][0]: True for p in parts[1:] if DEVIATIONS[p][0]}
+    if flags.get("r1") and not (flags.get("unlocated_refusal_violation") and flags.get("report_v2")):
+        raise SystemExit(f"classify.py: rule set '{name}': R1 names its classes on top of D2 and D9; add them")
     rules = Rules(name, **flags)
     _NAMED_DEVIATIONS[name] = parts[1:]
     return rules
@@ -248,15 +348,17 @@ _NAMED_DEVIATIONS: Dict[str, List[str]] = {}
 
 
 def deviations_of(rules: Rules) -> List[str]:
-    """The deviations in force under a rule set (those without a flag count as in force under
-    the newest rule set only, where they are recorded)."""
-    if rules.name == NEWEST:
-        return list(NEWEST_DEVIATIONS)
+    """The deviations in force under a rule set (those without a flag count as in force only
+    where the name of the rule set lists them)."""
     if rules.name.startswith("frozen+"):
         named = _NAMED_DEVIATIONS.get(rules.name, rules.name.split("+"))
-        return [d for d in sorted(DEVIATIONS, key=lambda d: int(d[1:]))
+        return [d for d in sorted(DEVIATIONS, key=_revision_key)
                 if (DEVIATIONS[d][0] and getattr(rules, DEVIATIONS[d][0])) or d in named]
     return []
+
+
+def revision_text(name: str, rules: Rules) -> str:
+    return DEVIATIONS_R1_TEXT.get(name, DEVIATIONS[name][1]) if rules.r1 else DEVIATIONS[name][1]
 
 # ---------------------------------------------------------------------------------------------
 # Text and number comparison
@@ -420,14 +522,41 @@ def has_macro_body_effects(recs: List[dict]) -> bool:
 # Files
 # ---------------------------------------------------------------------------------------------
 
-def compare_files(ref: dict, rec: dict, by_content: bool = False, full_arrays: bool = False) -> Tuple[str, str, bool]:
+def _scaled_diff(p: float, q: float) -> float:
+    """|p - q| / max(1, |p|), p the reference; NaN equals NaN only."""
+    if p != p or q != q:
+        return 0.0 if (p != p and q != q) else float("inf")
+    return 0.0 if p == q else abs(p - q) / max(1.0, abs(p))
+
+
+def _relative_diff(a: float, b: float, scale: float) -> float:
+    if a != a or b != b:
+        return 0.0 if (a != a and b != b) else float("inf")
+    return 0.0 if a == b else abs(a - b) / max(1.0, abs(scale))
+
+
+def compare_files(ref: dict, rec: dict, by_content: bool = False, full_arrays: bool = False,
+                  evidence: Optional[dict] = None) -> Tuple[str, str, bool]:
     """(verdict, detail, sampled): verdict equal | set | value | near | other. Written .npy
     files are compared by value; other files by hash (`other`: reported, not an outcome).
 
     With `by_content` (D7) the other files are compared by content where the record has it:
     a text file through its recorded text (numbers per the tolerances), an exported model through
     `vs_ref`, the comparison run.py made with the zero-pass run's file of the same name on ONNX
-    Runtime. A file that differs by hash and has neither stays `other`."""
+    Runtime. A file that differs by hash and has neither stays `other`.
+
+    With `full_arrays` (D10) an array is compared element by element at the tolerance and never
+    through whole-array sums at the tolerance of one element: all elements when the record has
+    them (`values`, or run.py's `vs_ref`); otherwise the record holds 4 096 evenly spaced
+    elements with the sum and the sum of absolute values of the whole array, and then the
+    sampled elements are compared element by element and the two sums relative to the sum of
+    absolute values of the reference (|d| <= tol * max(1, abs_sum)).
+
+    `evidence` (optional) receives what the comparison rested on: `modes`, the set of
+    identical | all_elements | all_elements_vs_ref | sample_and_relative_sums |
+    sample_and_sums_at_element_tolerance | text | model_on_onnxruntime | hash_only over the files
+    looked at, and under D10 `max_sampled_scaled_diff` / `max_sum_diff_relative_to_abs_sum`."""
+    modes = evidence.setdefault("modes", set()) if evidence is not None else set()
     fa = {f["name"]: f for f in ref.get("files", []) if not f["name"].startswith("gate-")}
     fb = {f["name"]: f for f in rec.get("files", []) if not f["name"].startswith("gate-")}
     if set(fa) != set(fb):
@@ -436,11 +565,13 @@ def compare_files(ref: dict, rec: dict, by_content: bool = False, full_arrays: b
     for name in sorted(fa):
         x, y = fa[name], fb[name]
         if x["sha1"] == y["sha1"]:
+            modes.add("identical")
             continue
         nx, ny = x.get("npy"), y.get("npy")
         if by_content and not (nx and ny):
             tx, ty, cmp = x.get("text"), y.get("text"), y.get("vs_ref")
             if isinstance(tx, str) and isinstance(ty, str):
+                modes.add("text")
                 if numeric_compare(tx, ty, STRICT):
                     continue
                 if not numeric_compare(tx, ty, NEAR):
@@ -448,6 +579,8 @@ def compare_files(ref: dict, rec: dict, by_content: bool = False, full_arrays: b
                 if verdict in ("equal", "other"):
                     verdict, detail = "near", f"file {name}: text differs (within 1e-3): {first_diff(tx, ty)}"
                 continue
+            if isinstance(cmp, dict) and cmp.get("equivalent") is not None:
+                modes.add("model_on_onnxruntime")
             if isinstance(cmp, dict) and cmp.get("equivalent") is True:
                 continue
             if isinstance(cmp, dict) and cmp.get("equivalent") is False:
@@ -459,6 +592,7 @@ def compare_files(ref: dict, rec: dict, by_content: bool = False, full_arrays: b
                                               f"Runtime (within 1e-3): {cmp.get('detail', '')}"[:200]
                 continue
         if not nx or not ny or nx.get("values", nx.get("sample")) is None:
+            modes.add("hash_only")
             if verdict == "equal":
                 verdict, detail = "other", f"file {name} differs (compared by hash only)"
             continue
@@ -467,6 +601,7 @@ def compare_files(ref: dict, rec: dict, by_content: bool = False, full_arrays: b
         full = ny.get("vs_ref") if full_arrays else None
         if isinstance(full, dict) and full.get("within_strict") is not None:
             # D10: run.py compared every element of a large array with the zero-pass run's file.
+            modes.add("all_elements_vs_ref")
             if full["within_strict"]:
                 continue
             if not full.get("within_near"):
@@ -476,6 +611,32 @@ def compare_files(ref: dict, rec: dict, by_content: bool = False, full_arrays: b
             continue
         is_float = "f" in nx["dtype"]
         va, vb = nx.get("values"), ny.get("values")
+        if va is None and full_arrays:
+            # D10 on a record without all elements: the sample element by element, the sums of the
+            # whole array relative to the sum of absolute values. Not a comparison of all elements.
+            sampled = True
+            modes.add("sample_and_relative_sums")
+            sa, sb = nx["sample"], ny["sample"]
+            if is_float:
+                worst = max((_scaled_diff(p, q) for p, q in zip(sa, sb)), default=0.0)
+                sums = max(_relative_diff(nx["sum"], ny["sum"], nx["abs_sum"]),
+                           _relative_diff(nx["abs_sum"], ny["abs_sum"], nx["abs_sum"]))
+            else:
+                worst = 0.0 if sa == sb else float("inf")
+                sums = 0.0 if (nx["sum"], nx["abs_sum"]) == (ny["sum"], ny["abs_sum"]) else float("inf")
+            if evidence is not None:
+                evidence["max_sampled_scaled_diff"] = max(evidence.get("max_sampled_scaled_diff", 0.0), worst)
+                evidence["max_sum_diff_relative_to_abs_sum"] = max(
+                    evidence.get("max_sum_diff_relative_to_abs_sum", 0.0), sums)
+            if worst <= STRICT and sums <= STRICT:
+                continue
+            what = (f"file {name}: sampled elements max scaled |diff| {worst:.3e}; sums differ by {sums:.3e} "
+                    f"of the sum of absolute values")
+            if worst <= NEAR and sums <= NEAR:
+                verdict, detail = "near", what + " (within 1e-3)"
+                continue
+            return "value", what + " (beyond 1e-3)", sampled
+        modes.add("all_elements" if va is not None else "sample_and_sums_at_element_tolerance")
         if va is None:
             sampled = True
             va = nx["sample"] + [nx["sum"], nx["abs_sum"]]
@@ -568,7 +729,10 @@ def new_info() -> dict:
     return {"outcome": "", "detail": "", "located": "", "clean": "", "diag_stage": "", "diag_name": "",
             "near": False, "numeric_diff": False, "payload_mode": "", "payload_differs": False,
             "late_result": "", "files_differ": False, "file_sampled": False, "onnx_oracle": "",
-            "max_abs_err": "", "export_ran_program": False, "macro_effects_before_refusal": False}
+            "max_abs_err": "", "export_ran_program": False, "macro_effects_before_refusal": False,
+            # R1 / D10 (written into the summaries of rule sets with R1 only)
+            "diag_message": "", "underlying_outcome": "", "library": "", "library_precondition": "",
+            "file_compare_mode": "", "file_max_sampled_scaled_diff": "", "file_max_sum_diff_rel_abs_sum": ""}
 
 
 def not_applicable(r: dict, errs: List[dict]) -> str:
@@ -618,6 +782,7 @@ def classify_native(ref: dict, r: dict, rules: Rules, limit_s: Optional[float]) 
     if errs:
         info["diag_stage"] = errs[0].get("data", {}).get("stage", "")
         info["diag_name"] = errs[0].get("data", {}).get("name", "")
+        info["diag_message"] = errs[0].get("message", "")
     na = not_applicable(r, errs)
     if na:
         info.update(outcome="NOT_APPLICABLE", detail=na)
@@ -664,8 +829,13 @@ def compare_values_and_effects(ref: dict, r: dict, rules: Rules, info: dict) -> 
     file_set_differs = False
     files_state = "the records have no file digests"
     if rules.files and "files" in ref and "files" in r:
-        verdict, detail, sampled = compare_files(ref, r, rules.file_ops_by_content, rules.npy_full_comparison)
+        evidence: dict = {}
+        verdict, detail, sampled = compare_files(ref, r, rules.file_ops_by_content, rules.npy_full_comparison,
+                                                 evidence)
         info["file_sampled"] = sampled
+        info["file_compare_mode"] = "+".join(sorted(evidence.get("modes", ()))) or "none"
+        info["file_max_sampled_scaled_diff"] = evidence.get("max_sampled_scaled_diff", "")
+        info["file_max_sum_diff_rel_abs_sum"] = evidence.get("max_sum_diff_relative_to_abs_sum", "")
         written = [f for f in ref.get("files", []) if not f["name"].startswith("gate-")]
         files_state = ("equal" if written else "the run wrote nothing into its run directory") \
             if verdict == "equal" else detail
@@ -717,6 +887,7 @@ def classify_onnx(ref: dict, r: dict, rules: Rules, limit_s: Optional[float]) ->
     if errs:
         info["diag_stage"] = errs[0].get("data", {}).get("stage", "")
         info["diag_name"] = errs[0].get("data", {}).get("name", "")
+        info["diag_message"] = errs[0].get("message", "")
     na = not_applicable(r, errs)
     if na or r.get("skipped"):
         info.update(outcome="NOT_APPLICABLE", detail=na or f"not run: {r['skipped']}")
@@ -791,7 +962,28 @@ def classify_cell(ref: dict, recs: List[dict], rules: Rules, limit_of) -> dict:
         infos = [dict(i, outcome=refusal_name(i, rules)) for i in infos]
     info["deterministic"] = len({observation(x, rules) for x in recs}) == 1 and len({i["outcome"] for i in infos}) == 1
     info["repeat_outcomes"] = "/".join(i["outcome"] for i in infos)
+    if rules.r1:
+        apply_library_precondition(info)
     return info
+
+
+def apply_library_precondition(info: dict) -> None:
+    """R1: a failure whose diagnostic comes from a library precondition is LIBRARY_PRECONDITION,
+    whatever it was called before (`underlying_outcome` keeps that name). It conforms when the
+    diagnostic has a location and came before anything executed (a front-end stage, or a pass
+    stage with no output and no run-stage effect before it); otherwise it is late or obscure.
+    Applied to the cell after the worst repeat was chosen, so the order of section 9 is unchanged."""
+    info["underlying_outcome"] = info["outcome"]
+    if info["outcome"] not in LIBRARY_PRECONDITION_SOURCES:
+        return
+    entry = library_of(info["diag_message"])
+    if entry is None:
+        return
+    stage = info["diag_stage"]
+    before = stage in ("parse", "typecheck") or (stage.startswith("pass:") and info["clean"] is True)
+    info.update(outcome="LIBRARY_PRECONDITION", library=entry["library"],
+                library_precondition="located_before_execution" if before and info["located"] is True
+                else "late_or_obscure")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -799,7 +991,7 @@ def classify_cell(ref: dict, recs: List[dict], rules: Rules, limit_of) -> dict:
 # ---------------------------------------------------------------------------------------------
 
 def classify_refusal(r: dict) -> dict:
-    info = {"outcome": "", "detail": "", "located": "", "diag_stage": "", "diag_name": "",
+    info = {"outcome": "", "detail": "", "located": "", "diag_stage": "", "diag_name": "", "library": "",
             "matches_expected_diagnostic": "", "matches_expected_line": "",
             "macro_effects_before_refusal": any(e.get("stage") == "macro" for e in r.get("effects", []))}
     errs = errors_of(r)
@@ -808,6 +1000,7 @@ def classify_refusal(r: dict) -> dict:
         d = errs[0]
         info.update(diag_stage=d.get("data", {}).get("stage", ""), diag_name=d.get("data", {}).get("name", ""),
                     located=located(d), detail=d.get("message", "")[:160])
+        info["library"] = (library_of(d.get("message", "")) or {}).get("library", "")
         if expect.get("diagnostic"):
             info["matches_expected_diagnostic"] = info["diag_name"] == expect["diagnostic"]
         if expect.get("line") not in ("", None):
@@ -854,6 +1047,56 @@ def load_cells(record_dirs: List[str]) -> Dict[Tuple[str, str], List[dict]]:
     for recs in cells.values():
         recs.sort(key=lambda r: r["repeat"])
     return cells
+
+
+def program_record_paths(record_dirs: List[str]) -> Dict[str, List[Path]]:
+    """The record files of each program: run.py writes records/<program id>/<pipeline>.r<k>.json."""
+    groups: Dict[str, List[Path]] = collections.defaultdict(list)
+    for d in record_dirs:
+        for path in sorted(Path(d).rglob("*.json")):
+            groups[path.parent.name].append(path)
+    return groups
+
+
+def classify_stream(record_dirs: List[str], rule_sets: List["Rules"], factor: float, floor: float,
+                    exclusions: Optional[dict] = None, removed: Optional[dict] = None) -> Dict[str, dict]:
+    """Classifies the records one program at a time, under every rule set of `rule_sets`, so that
+    only one program's records are in memory (all records of the after-run need about 8 GB at
+    once). A cell is judged from the records of its own program only, and classify_all visits the
+    programs in sorted order, so the result is the same as classifying everything at once.
+    Returns {rule set name: {rows, ref_rows, refusal_rows, programs, pipeline_ids,
+    old_plan_records, records, cells}}."""
+    groups = program_record_paths(record_dirs)
+    result = {r.name: {"rows": [], "ref_rows": [], "refusal_rows": [], "programs": [], "pipeline_ids": set(),
+                       "old_plan_records": 0, "records": 0, "cells": 0} for r in rule_sets}
+    for name in sorted(groups):
+        cells: Dict[Tuple[str, str], List[dict]] = collections.defaultdict(list)
+        for path in groups[name]:
+            rec = json.loads(path.read_text(encoding="utf-8"))
+            cells[(rec["program_id"], rec["pipeline_id"])].append(rec)
+        for recs in cells.values():
+            recs.sort(key=lambda r: r["repeat"])
+        if {p for p, _ in cells} != {name}:
+            raise SystemExit(f"classify.py: records under '{name}/' belong to {sorted({p for p, _ in cells})}; "
+                             f"expected records/<program id>/<pipeline>.r<k>.json")
+        old_plan = sum(1 for recs in cells.values() if recs[0].get("role") == "must_refuse"
+                       and recs[0].get("expect_kind") is None)
+        for rules in rule_sets:
+            rows, ref_rows, refusal_rows, programs, pipeline_ids = classify_all(
+                cells, rules, factor, floor, exclusions, removed)
+            part = result[rules.name]
+            part["rows"] += rows
+            part["ref_rows"] += ref_rows
+            part["refusal_rows"] += refusal_rows
+            part["programs"] += programs
+            part["pipeline_ids"] |= set(pipeline_ids)
+            part["old_plan_records"] += old_plan
+            part["records"] += sum(len(v) for v in cells.values())
+            part["cells"] += len(cells)
+        del cells
+    for part in result.values():
+        part["pipeline_ids"] = sorted(part["pipeline_ids"], key=pipeline_sort_key)
+    return result
 
 
 def load_exclusions(path: Optional[str] = None) -> dict:
@@ -907,6 +1150,10 @@ def classify_all(cells, rules: Rules, factor: float, floor: float, exclusions: O
         listed = excluded.get(ref["program"])
         if listed:
             ref_outcome, ref_detail = "EXCLUDED", listed["reason"]
+        if rules.r1 and ref_outcome == "INVALID_REF":
+            need = requires_macro(ref_recs, cells.get((prog, pl.MACRO_REFERENCE)))
+            if need:
+                ref_outcome, ref_detail = "REQUIRES_STD_MACRO", need
         walls = [x["wall_ms"] for x in ref_recs if not x["timed_out"]]
         ref_ms = statistics.median(walls) if walls else None
         ref_rows.append({"program": ref["program"], "program_id": prog, "corpus": ref["corpus"],
@@ -928,6 +1175,10 @@ def classify_all(cells, rules: Rules, factor: float, floor: float, exclusions: O
                 "clock_or_random_reviewed": ("excluded" if listed else "reviewed" if ref["program"] in reviewed
                                              else "NOT REVIEWED" if ops and rules.exclusion_list else ""),
                 "output_mask": ref.get("output_mask", "")})
+        if rules.r1:
+            ref_rows[-1]["library_precondition"] = next(
+                ((library_of(errors_of(x)[0].get("message", "")) or {}).get("library", "")
+                 for x in ref_recs if errors_of(x)), "")
         for pid in pipeline_ids:
             if (prog, pid) in cells and pl.kind(pid, cells[(prog, pid)][0]["passes"]) == "refuse":
                 refusal_rows.append(refusal_row(cells[(prog, pid)]))
@@ -970,13 +1221,107 @@ def classify_all(cells, rules: Rules, factor: float, floor: float, exclusions: O
             if rules.report_v2:
                 rows[-1]["contract_class"] = CONTRACT_CLASS.get(info["outcome"], "")
                 rows[-1]["signature"] = signature_of(rows[-1])
+            if rules.r1:
+                modes = info["file_compare_mode"].split("+")
+                rerun = []
+                if "sample_and_relative_sums" in modes:
+                    rerun.append(D10_RERUN)
+                if info["files_differ"] or (info["outcome"] == "UNDECIDED" and "hash_only" in modes):
+                    rerun.append("a written file differs by hash from the default pipeline's and the record "
+                                 "has no comparison of its content")
+                lp = info["outcome"] == "LIBRARY_PRECONDITION"
+                module_passes = [p for p in recs[0]["passes"] if p in pl.MODULE_PASSES]
+                rows[-1].update({
+                    "underlying_outcome": info["underlying_outcome"],
+                    "defect_class": DEFECT_CLASS.get(info["outcome"], ""),
+                    "library": info["library"], "library_precondition": info["library_precondition"],
+                    "std_macro_in_pipeline": macro_position(recs[0]["passes"]) if lp else "",
+                    "pipeline_passes_kind": ("with module pass: " + " ".join(module_passes)) if module_passes
+                    else "standard passes only",
+                    "file_compare_mode": info["file_compare_mode"],
+                    "file_max_sampled_scaled_diff": info["file_max_sampled_scaled_diff"],
+                    "file_max_sum_diff_rel_abs_sum": info["file_max_sum_diff_rel_abs_sum"],
+                    "needs_rerun": "; ".join(rerun)})
     if rules.must_refuse_static_only or rules.report_v2:
         for row in refusal_rows:
             row.setdefault("removed_reason", "")
     if rules.report_v2:
         for row in refusal_rows:
             row["signature"] = signature_of(row)
+    for row in refusal_rows:
+        library = row.pop("_library", "")
+        if rules.r1:
+            in_set = row["set"].startswith("must-refuse")
+            row["refusal_subject"] = refusal_subject(row)
+            row["defect_class"] = MUST_REFUSE_DEFECT_CLASS.get(row["outcome"], "") if in_set else ""
+            row["library"] = library
     return rows, ref_rows, refusal_rows, programs, pipeline_ids
+
+
+def requires_macro(ref_recs: List[dict], macro_recs: Optional[List[dict]]) -> str:
+    """R1: why a program without a result on the default pipeline is REQUIRES_STD_MACRO ('' when
+    it is not). Both must hold in the records: every repeat of the default pipeline reports a
+    diagnostic of a library precondition that names `std::macro` as the pass it needs, and every
+    repeat of `std::macro std::nvm` (P4) finishes with exit code 0 and no Error diagnostic."""
+    entries = []
+    for x in ref_recs:
+        if x.get("skipped") or x["timed_out"] or not errors_of(x):
+            return ""
+        entry = library_of(errors_of(x)[0].get("message", ""))
+        if entry is None or entry.get("requires_pass") != "std::macro":
+            return ""
+        entries.append(entry)
+    if not macro_recs or any(x.get("skipped") or x["timed_out"] or errors_of(x) or x["exit_code"] != 0
+                             for x in macro_recs):
+        return ""
+    message = _GENERIC_ERROR_HEAD.sub("", errors_of(ref_recs[0])[0].get("message", ""))
+    return (f"requires std::macro: no result on the default pipeline ({entries[0]['library']} precondition: "
+            f"{message[:110]}); runs under {' '.join(pl.FIXED[pl.MACRO_REFERENCE])} ({pl.MACRO_REFERENCE})")
+
+
+def refusal_subject(row: dict) -> str:
+    """What a must-refuse cell is expected to refuse: a command line (it names a pass that does
+    not exist, so there is no source construct a diagnostic could point at) or a program."""
+    unknown = pl.UNKNOWN_PASS in row["passes"].split() or row["diag_name"].endswith("UnrecognizedGraphPass")
+    return "command line (no source construct to locate)" if unknown else "program"
+
+
+def pass_kind(name: str) -> str:
+    if name in pl.SCHEDULING_PASSES:
+        return "standard scheduler"
+    if name in pl.MODULE_PASSES:
+        return f"module-contributed pass ({pl.MODULE_PASSES[name]})"
+    return "standard rewrite pass" if name.startswith("std::") else "other pass"
+
+
+def standard_pass_table(rows: List[dict]) -> List[dict]:
+    """R1: per pass, the cells of the agree set on pipelines that contain it, and how many of
+    them are defect cells, next to the same for the pipelines that do not contain it. An
+    association, not a cause (BY_PASS_NOTE). A defect signature here is (outcome, signature)."""
+    order = ["standard rewrite pass", "standard scheduler"]
+    names = sorted({p for r in rows for p in r["passes"].split()},
+                   key=lambda n: (order.index(pass_kind(n)) if pass_kind(n) in order else 2, n))
+    table = []
+    for name in names:
+        inside = [r for r in rows if name in r["passes"].split()]
+        outside = [r for r in rows if name not in r["passes"].split()]
+
+        def side(cells_: List[dict], suffix: str) -> dict:
+            defects = [r for r in cells_ if r["defect_class"] in DEFECT_CLASSES]
+            out = {f"pipelines{suffix}": len({r["pipeline_id"] for r in cells_}),
+                   f"cells{suffix}": len(cells_),
+                   f"applicable_cells{suffix}": sum(1 for r in cells_ if r["outcome"] != "NOT_APPLICABLE"),
+                   f"defect_cells{suffix}": len(defects)}
+            if not suffix:
+                out.update({f"defect_{k}": sum(1 for r in defects if r["defect_class"] == k) for k in DEFECT_CLASSES})
+            out[f"defect_signatures{suffix}"] = len({(r["outcome"], r["signature"]) for r in defects})
+            out[f"programs_with_defect{suffix}"] = len({r["program_id"] for r in defects})
+            out[f"library_precondition_cells{suffix}"] = sum(1 for r in cells_ if r["outcome"] == "LIBRARY_PRECONDITION")
+            return out
+
+        table.append({"pass": name, "kind": pass_kind(name), **side(inside, ""),
+                      **side(outside, "_in_pipelines_without_it")})
+    return table
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1008,14 +1353,21 @@ def signature_of(row: dict) -> str:
     return text[:120]
 
 
-def signature_tables(rows: List[dict], refusal_rows: List[dict]) -> Tuple[List[dict], List[dict]]:
+LIBRARY_SET = "agree set: library precondition, late or obscure (not charged to a standard pass)"
+
+
+def signature_tables(rows: List[dict], refusal_rows: List[dict], r1: bool = False) -> Tuple[List[dict], List[dict]]:
     """signatures.csv: one row per (set, outcome, signature, passes common to all the failing
     pipelines of a program), grouped across programs. signature_causes.csv: the same without
-    the passes. Only cells that violate the contract are in them."""
+    the passes. Only cells that violate the contract are in them (R1: defect cells; the late or
+    obscure library-precondition cells are listed as a set of their own and are not counted
+    among the defect signatures)."""
     failing: Dict[tuple, List[dict]] = collections.defaultdict(list)
     for r in rows:
         if is_violation(r):
             failing[("agree set", r["outcome"], r["contract_class"], r["signature"], r["program_id"])].append(r)
+        elif r1 and r["outcome"] == "LIBRARY_PRECONDITION" and r["library_precondition"] == "late_or_obscure":
+            failing[(LIBRARY_SET, r["outcome"], r["contract_class"], r["signature"], r["program_id"])].append(r)
     for r in refusal_rows:
         if r["set"].startswith("must-refuse") and r["outcome"] not in REFUSAL_CONFORMING:
             failing[(r["set"], r["outcome"], "must_refuse_violation", r["signature"], r["program_id"])].append(r)
@@ -1030,11 +1382,16 @@ def signature_tables(rows: List[dict], refusal_rows: List[dict]) -> Tuple[List[d
         cells_ = [c for _, cs in members for c in cs]
         progs = sorted({p for p, _ in members})
         shortest = min(cells_, key=lambda c: (len(c["passes"].split()), c["pipeline_id"]))
-        return {"programs": len(progs), "cells": len(cells_),
-                "pipelines": len({c["pipeline_id"] for c in cells_}),
-                "shortest_failing_pipeline": f"{shortest['pipeline_id']}: {shortest['passes'] or '(no pass)'}",
-                "program_list": " ".join(progs[:12]) + (f" ... (+{len(progs) - 12})" if len(progs) > 12 else ""),
-                "example_detail": (cells_[0].get("detail") or "")[:200]}
+        out = {"programs": len(progs), "cells": len(cells_),
+               "pipelines": len({c["pipeline_id"] for c in cells_}),
+               "shortest_failing_pipeline": f"{shortest['pipeline_id']}: {shortest['passes'] or '(no pass)'}",
+               "program_list": " ".join(progs[:12]) + (f" ... (+{len(progs) - 12})" if len(progs) > 12 else ""),
+               "example_detail": (cells_[0].get("detail") or "")[:200]}
+        if r1:
+            out["defect_class"] = cells_[0].get("defect_class", "")
+            out["refusal_subject"] = cells_[0].get("refusal_subject", "")
+            out["cells_needing_rerun"] = sum(1 for c in cells_ if c.get("needs_rerun"))
+        return out
 
     table = []
     for key, members in groups.items():
@@ -1066,7 +1423,7 @@ def refusal_row(recs: List[dict]) -> dict:
             "matches_expected_diagnostic": info["matches_expected_diagnostic"],
             "matches_expected_line": info["matches_expected_line"],
             "macro_effects_before_refusal": info["macro_effects_before_refusal"],
-            "expectation_source": source, "detail": info["detail"]}
+            "expectation_source": source, "detail": info["detail"], "_library": info["library"]}
 
 
 def is_violation(row: dict) -> bool:
@@ -1091,7 +1448,7 @@ def announce(rules: Rules) -> List[str]:
     print(f"[classify] rule set in force: {rules.name}" + (f" (deviations {', '.join(in_force)})" if in_force else "")
           + f"; {LABEL}", file=sys.stderr, flush=True)
     for d in in_force:
-        print(f"[classify]   {d}: {DEVIATIONS[d][1]}", file=sys.stderr, flush=True)
+        print(f"[classify]   {d}: {revision_text(d, rules)}", file=sys.stderr, flush=True)
     return in_force
 
 
@@ -1112,8 +1469,8 @@ def main() -> int:
     announce(rules)
     exclusions = load_exclusions(args.exclusions or None) if rules.exclusion_list else None
     removed = load_removed(args.corpus) if rules.must_refuse_static_only and args.corpus else None
-    cells = load_cells(args.records)
-    totals = summarize(cells, rules, Path(args.out), args.time_factor, args.time_floor, exclusions, removed)[3]
+    part = classify_stream(args.records, [rules], args.time_factor, args.time_floor, exclusions, removed)[rules.name]
+    totals = write_summary(part, rules, Path(args.out), args.time_factor, args.time_floor, removed)[3]
     print(json.dumps(totals, indent=1))
     return 0
 
@@ -1121,13 +1478,28 @@ def main() -> int:
 def summarize(cells, rules: Rules, out: Path, time_factor: float = 20.0, time_floor: float = 10.0,
               exclusions: Optional[dict] = None, removed: Optional[dict] = None):
     """Classifies the cells under a rule set and writes the summary files into `out`. Returns
-    (rows, ref_rows, refusal_rows, totals)."""
+    (rows, ref_rows, refusal_rows, totals). Needs all records in memory; classify_stream with
+    write_summary gives the same files one program at a time."""
+    rows, ref_rows, refusal_rows, programs, pipeline_ids = classify_all(
+        cells, rules, time_factor, time_floor, exclusions, removed)
+    part = {"rows": rows, "ref_rows": ref_rows, "refusal_rows": refusal_rows, "programs": programs,
+            "pipeline_ids": pipeline_ids,
+            "old_plan_records": sum(1 for recs in cells.values() if recs[0].get("role") == "must_refuse"
+                                    and recs[0].get("expect_kind") is None)}
+    return write_summary(part, rules, out, time_factor, time_floor, removed)
+
+
+def write_summary(part: dict, rules: Rules, out: Path, time_factor: float = 20.0, time_floor: float = 10.0,
+                  removed: Optional[dict] = None):
+    """Writes the summary files of one classification (a value of classify_stream, or what
+    summarize built) into `out`. Returns (rows, ref_rows, refusal_rows, totals)."""
     args = argparse.Namespace(time_factor=time_factor, time_floor=time_floor)
     in_force = deviations_of(rules)
-    rows, ref_rows, refusal_rows, programs, pipeline_ids = classify_all(
-        cells, rules, args.time_factor, args.time_floor, exclusions, removed)
+    rows, ref_rows, refusal_rows = part["rows"], part["ref_rows"], part["refusal_rows"]
+    programs, pipeline_ids = part["programs"], part["pipeline_ids"]
     out.mkdir(parents=True, exist_ok=True)
     v2 = rules.report_v2
+    r1 = rules.r1
 
     def write_csv(name: str, data: List[dict]) -> None:
         if not data:
@@ -1186,6 +1558,18 @@ def summarize(cells, rules: Rules, out: Path, time_factor: float = 20.0, time_fl
             by_pipeline[-1].update({f"class_{k}": cls[k] for k in (
                 "agree", "refused_located", "refused_unlocated", "refused_after_start", "run_time_error",
                 "silent_divergence", "resource_limit", "not_judged", "not_applicable")})
+        if r1:
+            dc = collections.Counter(r["defect_class"] for r in prs)
+            lp = collections.Counter(r["library_precondition"] for r in prs if r["outcome"] == "LIBRARY_PRECONDITION")
+            by_pipeline[-1].update({
+                "defect_cells": sum(dc[k] for k in DEFECT_CLASSES),
+                **{f"defect_{k}": dc[k] for k in DEFECT_CLASSES},
+                "defect_signatures": len({(r["outcome"], r["signature"]) for r in prs
+                                          if r["defect_class"] in DEFECT_CLASSES}),
+                "library_precondition": dc["library_precondition"],
+                "library_precondition_located_before_execution": lp["located_before_execution"],
+                "library_precondition_late_or_obscure": lp["late_or_obscure"],
+                "needs_rerun": sum(1 for r in prs if r["needs_rerun"])})
     write_csv("by_pipeline.csv", by_pipeline)
 
     refusal_by: List[dict] = []
@@ -1205,6 +1589,12 @@ def summarize(cells, rules: Rules, out: Path, time_factor: float = 20.0, time_fl
         if v2:
             conforming = sum(1 for r in rs if r["outcome"] in REFUSAL_CONFORMING)
             refusal_by[-1].update({"conforming": conforming, "violations": len(rs) - conforming})
+        if r1:
+            unlocated = [r for r in rs if r["outcome"] == "REFUSED_UNLOCATED"]
+            refusal_by[-1].update({
+                "defect_cells": len(rs) - conforming if key[0].startswith("must-refuse") else 0,
+                "unlocated_refusals_of_programs": sum(1 for r in unlocated if r["refusal_subject"] == "program"),
+                "unlocated_refusals_of_command_lines": sum(1 for r in unlocated if r["refusal_subject"] != "program")})
     write_csv("refusal_by_pipeline.csv", refusal_by)
 
     refs = collections.Counter(r["reference"] for r in ref_rows)
@@ -1246,7 +1636,7 @@ def summarize(cells, rules: Rules, out: Path, time_factor: float = 20.0, time_fl
         "must_refuse_refused_unlocated": sum(1 for r in refusal_rows if r["outcome"] in REFUSAL_REFUSED and r["located"] is not True),
     }
     if v2:
-        signatures, causes = signature_tables(rows, refusal_rows)
+        signatures, causes = signature_tables(rows, refusal_rows, r1)
         write_csv("signatures.csv", signatures)
         write_csv("signature_causes.csv", causes)
         write_csv("resource.csv", [r for r in rows if r["outcome"] == "RESOURCE_LIMIT"])
@@ -1254,11 +1644,10 @@ def summarize(cells, rules: Rules, out: Path, time_factor: float = 20.0, time_fl
         write_csv("removed_from_must_refuse.csv", [r for r in refusal_rows if not r["set"].startswith("must-refuse")])
         not_listed = sorted(r["program_id"] for r in ref_rows if r["reference"] == "NONDETERMINISTIC")
         not_reviewed = sorted(r["program_id"] for r in ref_rows if r["clock_or_random_reviewed"] == "NOT REVIEWED")
-        old_plan_records = sum(1 for (p, q), recs in cells.items() if recs[0].get("role") == "must_refuse"
-                               and recs[0].get("expect_kind") is None)
+        old_plan_records = part["old_plan_records"]
         classes = collections.Counter(r["contract_class"] for r in rows)
         totals.update({
-            "deviations_in_force": {d: DEVIATIONS[d][1] for d in in_force},
+            "deviations_in_force": {d: revision_text(d, rules) for d in in_force},
             "contract_classes": dict(classes),
             "contract_classes_native": dict(collections.Counter(r["contract_class"] for r in rows if r["pipeline_kind"] == "native")),
             "contract_classes_onnx": dict(collections.Counter(r["contract_class"] for r in rows if r["pipeline_kind"] == "onnx")),
@@ -1276,7 +1665,7 @@ def summarize(cells, rules: Rules, out: Path, time_factor: float = 20.0, time_fl
                                            or removed is not None,
             "violation_signatures": sum(1 for s in signatures if s["set"] == "agree set"),
             "violation_cause_groups": sum(1 for s in causes if s["set"] == "agree set"),
-            "must_refuse_violation_signatures": sum(1 for s in signatures if s["set"] != "agree set"),
+            "must_refuse_violation_signatures": sum(1 for s in signatures if s["set"].startswith("must-refuse")),
         })
         if rules.must_refuse_static_only and old_plan_records and removed is None:
             print(f"[classify] WARNING: {old_plan_records} must-refuse cells were recorded before D5 and no "
@@ -1288,8 +1677,129 @@ def summarize(cells, rules: Rules, out: Path, time_factor: float = 20.0, time_fl
         if not_reviewed:
             print(f"[classify] {len(not_reviewed)} program(s) run clock/random operators and are neither excluded "
                   f"nor reviewed in exclusions.json: {not_reviewed}", file=sys.stderr)
+    if r1:
+        totals.update(r1_report(rows, ref_rows, refusal_rows, signatures, causes, write_csv, out))
     (out / "totals.json").write_text(json.dumps(totals, indent=1), encoding="utf-8")
     return rows, ref_rows, refusal_rows, totals
+
+
+def r1_report(rows: List[dict], ref_rows: List[dict], refusal_rows: List[dict], signatures: List[dict],
+              causes: List[dict], write_csv, out: Path) -> dict:
+    """R1: the tables and totals in the vocabulary of the owner-directed reframing. The keys of
+    the earlier rule sets stay in totals.json with their old names (`vocabulary` says what each
+    means now); these are added."""
+    defects = [r for r in rows if r["defect_class"] in DEFECT_CLASSES]
+    library = [r for r in rows if r["outcome"] == "LIBRARY_PRECONDITION"]
+    needs = [r for r in rows if r["needs_rerun"]]
+    requires = [r for r in ref_rows if r["reference"] == "REQUIRES_STD_MACRO"]
+    in_set = [r for r in refusal_rows if r["set"].startswith("must-refuse")]
+    unlocated = [dict(r, set="agree set") for r in rows if r["outcome"] == "REFUSED_UNLOCATED"] \
+        + [r for r in in_set if r["outcome"] == "REFUSED_UNLOCATED"]
+    by_pass = standard_pass_table(rows)
+
+    write_csv("defects.csv", defects)
+    write_csv("library_precondition.csv", library)
+    write_csv("requires_std_macro.csv", requires)
+    write_csv("needs_rerun.csv", needs)
+    write_csv("by_standard_pass.csv", by_pass)
+    write_csv("unlocated_refusals.csv", [
+        {"set": r["set"], "refusal_subject": r.get("refusal_subject", "program"), "program": r["program"],
+         "program_id": r["program_id"], "pipeline_id": r["pipeline_id"], "passes": r["passes"],
+         "diag_stage": r["diag_stage"], "diag_name": r["diag_name"], "detail": r["detail"]} for r in unlocated])
+    lines = [f"# Defect cells per pass ({LABEL})", "", BY_PASS_NOTE, "",
+             "Cells of the agree set (program x pipeline, judged programs). `applicable` leaves out NOT_APPLICABLE "
+             "(a module pass on a program that does not import the module). A defect signature is "
+             "(outcome, signature). Library-precondition cells are not defect cells.", "",
+             "| pass | kind | pipelines with it | cells (applicable) | defect cells | silent result change | "
+             "crash, hang or error | diagnostic unlocated or late | defect signatures | programs with a defect | "
+             "library precondition | without it: pipelines | cells (applicable) | defect cells | defect signatures |",
+             "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    w = "_in_pipelines_without_it"
+    for t in by_pass:
+        lines.append(f"| `{t['pass']}` | {t['kind']} | {t['pipelines']} | {t['cells']} ({t['applicable_cells']}) | "
+                     f"{t['defect_cells']} | {t['defect_silent_result_change']} | {t['defect_crash_hang_or_error']} | "
+                     f"{t['defect_diagnostic_unlocated_or_late']} | {t['defect_signatures']} | "
+                     f"{t['programs_with_defect']} | {t['library_precondition_cells']} | {t['pipelines' + w]} | "
+                     f"{t['cells' + w]} ({t['applicable_cells' + w]}) | {t['defect_cells' + w]} | "
+                     f"{t['defect_signatures' + w]} |")
+    (out / "by_standard_pass.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def subject_counts(cells_: List[dict]) -> dict:
+        return dict(collections.Counter(r.get("refusal_subject", "program") for r in cells_))
+
+    agree_unlocated = [r for r in unlocated if r["set"] == "agree set"]
+    refuse_unlocated = [r for r in unlocated if r["set"] != "agree set"]
+    sampled = [r for r in rows if "sample_and_relative_sums" in r["file_compare_mode"].split("+")]
+    return {
+        "what_is_tested": "pipelines of the standard optimisation passes and schedulers preserve results relative "
+                          "to the default pipeline (P0: no pass on the command line); order-sensitivity as such "
+                          "is not a defect (R1)",
+        "library_precondition_prefixes": [e["prefix"] for e in LIBRARY_PRECONDITIONS],
+        "programs_requires_std_macro": len(requires),
+        "programs_requires_std_macro_list": sorted(r["program"] for r in requires),
+        "classes": dict(collections.Counter(r["defect_class"] for r in rows)),
+        "defect_cells": len(defects),
+        "defect_cells_by_class": {k: sum(1 for r in defects if r["defect_class"] == k) for k in DEFECT_CLASSES},
+        "defect_cells_by_outcome": dict(collections.Counter(r["outcome"] for r in defects)),
+        "defect_cells_by_pipeline_passes_kind": dict(collections.Counter(r["pipeline_passes_kind"] for r in defects)),
+        "defect_signatures": sum(1 for t in signatures if t["set"] == "agree set"),
+        "defect_cause_groups": sum(1 for t in causes if t["set"] == "agree set"),
+        "defect_cause_groups_by_class": dict(collections.Counter(t["defect_class"] for t in causes
+                                                                 if t["set"] == "agree set")),
+        "programs_with_defect": len({r["program_id"] for r in defects}),
+        "pipelines_with_defect": len({r["pipeline_id"] for r in defects}),
+        "library_precondition_cells": {
+            "total": len(library),
+            "located_before_execution": sum(1 for r in library if r["library_precondition"] == "located_before_execution"),
+            "late_or_obscure": sum(1 for r in library if r["library_precondition"] == "late_or_obscure"),
+            "by_library": dict(collections.Counter(r["library"] for r in library)),
+            "by_underlying_outcome": dict(collections.Counter(r["underlying_outcome"] for r in library)),
+            "by_std_macro_in_pipeline": dict(collections.Counter(
+                "std::macro after another pass" if " after " in r["std_macro_in_pipeline"]
+                else r["std_macro_in_pipeline"] for r in library)),
+            "programs": len({r["program_id"] for r in library}),
+            "cause_groups": sum(1 for t in causes if t["set"] == LIBRARY_SET)},
+        "unlocated_refusals": {
+            "note": "D2 is unchanged: every refusal without a source location is a defect of the diagnostics. "
+                    "Reported apart for the owner: a refusal of a command line (unknown pass name) has no source "
+                    "construct to locate.",
+            "of_programs": len([r for r in unlocated if r.get("refusal_subject", "program") == "program"]),
+            "of_command_lines": len([r for r in unlocated if r.get("refusal_subject", "program") != "program"]),
+            "agree_set": subject_counts(agree_unlocated),
+            "must_refuse_set": subject_counts(refuse_unlocated),
+            "agree_set_by_terminal": dict(collections.Counter(r["passes"].split()[-1] for r in agree_unlocated)),
+            "must_refuse_set_by_diagnostic": dict(collections.Counter(
+                f"{r.get('refusal_subject')}: {r['diag_name']}" for r in refuse_unlocated))},
+        "must_refuse_defect_cells_by_class": dict(collections.Counter(
+            r["defect_class"] for r in in_set if r["outcome"] not in REFUSAL_CONFORMING)),
+        "file_compare_modes": dict(collections.Counter(r["file_compare_mode"] for r in rows if r["file_compare_mode"])),
+        "cells_judged_on_sample_and_relative_sums": {
+            "total": len(sampled),
+            "by_outcome": dict(collections.Counter(r["outcome"] for r in sampled)),
+            "max_sampled_scaled_diff": max((r["file_max_sampled_scaled_diff"] for r in sampled
+                                            if r["file_max_sampled_scaled_diff"] != ""), default=""),
+            "max_sum_diff_relative_to_abs_sum": max((r["file_max_sum_diff_rel_abs_sum"] for r in sampled
+                                                     if r["file_max_sum_diff_rel_abs_sum"] != ""), default="")},
+        "cells_needing_rerun": {
+            "total": len(needs),
+            "by_reason_and_outcome": dict(collections.Counter(f"{r['outcome']}: {r['needs_rerun']}" for r in needs))},
+        "effect_mismatch_cells_sync_scope_not_observable": {
+            "cells": sum(1 for r in defects if r["outcome"] == "EFFECT_MISMATCH"),
+            "note": "R1 charges an effect difference only inside a sync scope; the trace does not record the "
+                    "scope (no in_sync_scope), so these cells are counted as silent_result_change without "
+                    "that check"},
+        "by_standard_pass_note": BY_PASS_NOTE,
+        "vocabulary": {
+            "violation_cells": "= defect_cells (cells of the three defect classes; library-precondition cells are "
+                               "not among them)",
+            "violation_signatures / violation_cause_groups": "= defect_signatures / defect_cause_groups",
+            "contract_class (invariance.csv), class_* (by_pipeline.csv), contract_classes": "kept for scripts; read "
+                               "defect_class, defect_* and classes instead",
+            "must_refuse_violation_cells": "defect cells of the must-refuse set (must_refuse_defect_cells_by_class)",
+            "programs_invalid_reference": "programs without a usable result on the default pipeline, NOT counting "
+                                          "programs_requires_std_macro",
+        },
+    }
 
 
 if __name__ == "__main__":

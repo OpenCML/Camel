@@ -19,6 +19,9 @@ The must-refuse cells are compared the same way (set, program id, pipeline id).
 Writes into DIR: same_cells.csv (every cell of the intersection whose outcome differs),
 transitions.csv (old outcome, new outcome, cells), only_new.csv, only_old.csv, by_program.csv
 (violation cells per program in both runs, on the intersection), compare.json and compare.md.
+"violation" is the name the earlier rule sets use; under a rule set with R1 it reads "defect cell
+charged to the standard passes / schedulers", and LIBRARY_PRECONDITION cells are counted apart
+(reading "library precondition").
 Everything is preliminary, container on a dev machine.
 """
 
@@ -46,6 +49,8 @@ def reading(row: dict) -> str:
     o = row["outcome"]
     if o in c.VIOLATIONS or o in ("REFUSED_UNLOCATED", "REFUSED_NOT_CLEAN") or (o == "REFUSED" and row.get("clean") == "False"):
         return "violation"
+    if o == "LIBRARY_PRECONDITION":      # R1: not charged to a standard pass; conforming or a library defect
+        return "library precondition"
     if o in c.NOT_JUDGED:
         return "not judged"
     if o == "NOT_APPLICABLE":
@@ -196,7 +201,7 @@ def main() -> int:
              + ("" if same_rules else " -- **different rule sets: reclassify one run first**"), "",
              f"Cells judged: old {len(old['cells'])}, new {len(new['cells'])}, in both {len(common)}.", "",
              "| reading on the common cells | old | new |", "|---|---:|---:|"]
-    for name in ("conforming", "violation", "not judged", "not applicable"):
+    for name in ("conforming", "violation", "library precondition", "not judged", "not applicable"):
         lines.append(f"| {name} | {counts['old'][name]} | {counts['new'][name]} |")
     lines += ["", "| old outcome | new outcome | cells |", "|---|---|---:|"]
     lines += [f"| {k[0]} | {k[1]} | {n} |" for k, n in sorted(transitions.items(), key=lambda kv: -kv[1])]

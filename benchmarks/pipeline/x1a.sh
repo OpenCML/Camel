@@ -14,10 +14,14 @@
 # Exit code 0 means the run completed and every cell (program, pipeline, repeat) listed in
 # cells*.json has a record; it says nothing about the outcomes, which are in summary/.
 #
-# Rule set: the newest one of classify.py (frozen rules plus the recorded deviations D1-D9 of
-# CLASSIFIER-RULES.md) unless RULES says otherwise, e.g. RULES=frozen+D1 or RULES=frozen. The
-# rule set in force is printed before the run and with the summary, and is in totals.json.
+# Rule set: the newest one of classify.py (frozen rules plus the recorded deviations D1-D10 and
+# the owner-directed reframing R1 of CLASSIFIER-RULES.md: frozen+D1-D10+R1) unless RULES says
+# otherwise, e.g. RULES=frozen+D1-D9, RULES=frozen+D1 or RULES=frozen. The rule set in force is
+# printed before the run and with the summary, and is in totals.json.
 # The summary has the cause groups first (signatures.csv, signature_causes.csv), then the cells.
+# What is tested (R1): pipelines of the standard passes and schedulers preserve results relative
+# to the default pipeline; defect classes, library preconditions and the per-pass table are in
+# totals.json, defects.csv, library_precondition.csv, by_standard_pass.{csv,md}.
 # To compare with an earlier run on the same cells:
 #   python3 benchmarks/pipeline/compare_runs.py --old <old>/summary --new <out-dir>/summary --out <dir>
 # Everything is preliminary, container on a dev machine.
@@ -59,3 +63,8 @@ echo "[x1a] rule set in force: $rules"
 echo "cause groups: $out/summary/signatures.csv (with common passes), signature_causes.csv"
 echo "per-pipeline table: $out/summary/by_pipeline.csv; must-refuse: $out/summary/refusal_by_pipeline.csv"
 echo "not judged: $out/summary/excluded.csv, nondeterministic.csv, not_judged.csv, resource.csv"
+if [ -f "$out/summary/defects.csv" ]; then
+  echo "defect cells: $out/summary/defects.csv; per pass (association, no causal claim): $out/summary/by_standard_pass.md"
+  echo "library preconditions: $out/summary/library_precondition.csv; requires std::macro: $out/summary/requires_std_macro.csv"
+  echo "refusals without a location (programs / command lines): $out/summary/unlocated_refusals.csv; rerun: needs_rerun.csv"
+fi

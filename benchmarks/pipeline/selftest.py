@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Synthetic checks of classify.py: under the frozen rules, payload comparison by value and its
-hash fallback, tolerances, the benchmark timing mask, the time limit, written files; under the
-newest rule set, the deviations D2 (unlocated refusals), D4 (exclusion list), D5 (must-refuse
-pruning) and D7 (file-writing operators compared through written content).
+hash fallback, tolerances, the benchmark timing mask, the time limit, written files; under
+`frozen+D1-D9`, the deviations D2 (unlocated refusals), D4 (exclusion list), D5 (must-refuse
+pruning) and D7 (file-writing operators compared through written content); under the newest
+rule set, D10 (arrays element by element, sums relative to the sum of absolute values) and R1
+(defect classes, LIBRARY_PRECONDITION, REQUIRES_STD_MACRO, refusal subjects, per-pass table).
 
     python3 benchmarks/pipeline/selftest.py      (exit 1 when a check fails)
 """
@@ -90,7 +92,8 @@ check("npy beyond tol", outcome(fa, fc), "VALUE_MISMATCH")
 check("file missing", outcome(fa, dict(rec([]), files=[])), "EFFECT_MISMATCH")
 
 # ---- Deviations D2, D4, D5, D7 (CLASSIFIER-RULES.md section 12) --------------------------------
-N = c.resolve_rules(c.NEWEST)
+N = c.resolve_rules("frozen+D1-D9")       # the rule set these checks were written for
+NEW = c.resolve_rules(c.NEWEST)
 D1 = c.resolve_rules("frozen+D1")
 
 
@@ -111,8 +114,13 @@ def save(prefix, sha, files):
 
 check("rule set name frozen+D1+D7", c.resolve_rules("frozen+D1+D7").file_ops_by_content, True)
 check("rule set name frozen+D1+D7 has no D2", c.resolve_rules("frozen+D1+D7").unlocated_refusal_violation, False)
-check("newest has every flag", (N.unlocated_refusal_violation, N.exclusion_list, N.must_refuse_static_only,
-                                N.file_ops_by_content, N.report_v2), (True,) * 5)
+check("frozen+D1-D9 has every flag", (N.unlocated_refusal_violation, N.exclusion_list, N.must_refuse_static_only,
+                                      N.file_ops_by_content, N.report_v2, N.npy_full_comparison, N.r1),
+      (True,) * 5 + (False, False))
+check("frozen+D1-D9 names D1..D9", c.deviations_of(N), [f"D{k}" for k in range(1, 10)])
+check("newest rule set", (c.NEWEST, c.DEFAULT_RULES, NEW.npy_full_comparison, NEW.r1, NEW.report_v2),
+      ("frozen+D1-D10+R1", "frozen+D1-D10+R1", True, True, True))
+check("newest names D1..D10 and R1", c.deviations_of(NEW), [f"D{k}" for k in range(1, 11)] + ["R1"])
 s0 = save("Tensor=tensor([1.0, 2.0", "p0", [npy("a", [1.0, 2.0])])
 s1 = save("Tensor=tensor([1.0, 2.0", "p1", [npy("b", [1.0, 2.000001])])
 s2 = save("Tensor=tensor([1.0, 2.1", "p2", [npy("b", [1.0, 2.000001])])
@@ -165,11 +173,39 @@ check("default rules: the full comparison is recorded but not used",
       outcome_under(N, b0, big("b", [1.0, 2.0], differs))["outcome"], "CONSISTENT")
 check("default rules: sums differ although every element agrees",
       outcome_under(N, b0, big("b", [1.0, 2.0001], within))["outcome"], "VALUE_MISMATCH")
-check("D10 (proposed): full comparison differs", outcome_under(P10, b0, big("b", [1.0, 2.0], differs))["outcome"],
+check("D10: full comparison differs", outcome_under(P10, b0, big("b", [1.0, 2.0], differs))["outcome"],
       "VALUE_MISMATCH")
-check("D10 (proposed): full comparison within tolerance",
-      (lambda i: (i["outcome"], i["file_sampled"]))(outcome_under(P10, b0, big("b", [1.0, 2.0001], within))),
-      ("CONSISTENT", False))
+check("D10: full comparison within tolerance",
+      (lambda i: (i["outcome"], i["file_sampled"], i["file_compare_mode"]))(
+          outcome_under(P10, b0, big("b", [1.0, 2.0001], within))),
+      ("CONSISTENT", False, "all_elements_vs_ref"))
+
+
+def big2(sha, sample, total, abs_total):
+    d = {"dtype": "<f4", "shape": [9000], "count": 9000, "sample": sample, "sum": total, "abs_sum": abs_total}
+    return dict(rec([ev("tensor:save_npy", "Tensor=tensor([1.0", sha, truncated=True)]),
+                files=[{"name": "o.npy", "bytes": 1, "sha1": sha, "npy": d}])
+
+
+# A record without all elements: the sample element by element, the sums relative to abs_sum.
+g0 = big2("a", [1.0, -2.0], -3.707, 27730.8)
+i_sum = outcome_under(NEW, g0, big2("b", [1.0000001, -2.0], -3.707084, 27730.8))
+check("frozen+D1-D9: sum differs by 8.4e-5 at element tolerance",
+      outcome_under(N, g0, big2("b", [1.0000001, -2.0], -3.707084, 27730.8))["outcome"], "VALUE_MISMATCH")
+check("D10: the same sum difference relative to abs_sum (3e-9)",
+      (i_sum["outcome"], i_sum["file_sampled"], i_sum["file_compare_mode"]),
+      ("CONSISTENT", True, "sample_and_relative_sums"))
+check("D10: a sampled element beyond 1e-5 is a mismatch",
+      (lambda i: (i["outcome"], i["near"]))(outcome_under(NEW, g0, big2("b", [1.0001, -2.0], -3.707, 27730.8))),
+      ("VALUE_MISMATCH", True))
+check("D10: a sampled element beyond 1e-3",
+      (lambda i: (i["outcome"], i["near"]))(outcome_under(NEW, g0, big2("b", [1.5, -2.0], -3.707, 27730.8))),
+      ("VALUE_MISMATCH", False))
+check("D10: sums beyond 1e-5 of abs_sum are a mismatch",
+      outcome_under(NEW, g0, big2("b", [1.0, -2.0], -3.107, 27730.8))["outcome"], "VALUE_MISMATCH")
+check("D10: byte-identical file is mode identical",
+      outcome_under(NEW, g0, big2("a", [1.0, -2.0], -3.707, 27730.8))["file_compare_mode"], "identical")
+check("D10: small array, all elements", outcome_under(NEW, s0, s1)["file_compare_mode"], "all_elements")
 t0 = dict(rec([ev("fs:write_text", sha="p0")]), files=[{"name": "a.txt", "bytes": 5, "sha1": "a", "text": "v=1.0\n"}])
 t1 = dict(rec([ev("fs:write_text", sha="p1")]), files=[{"name": "a.txt", "bytes": 9, "sha1": "b", "text": "v=1.0000001\n"}])
 t2 = dict(rec([ev("fs:write_text", sha="p1")]), files=[{"name": "a.txt", "bytes": 5, "sha1": "c", "text": "v=2.0\n"}])
@@ -229,6 +265,96 @@ rows, ref_rows, _, _, _ = c.classify_all(recs, D1, 20.0, 10.0, listed, None)
 check("D4 off: the list is not used", {r["program"]: r["reference"] for r in ref_rows}["a/listed.cml"], "REFERENCE")
 check("D9: signature without a diagnostic", c.signature_of({"diag_name": "", "detail": "near (within 1e-3); file params/b1_w.npy: max |diff| 8.4e-05 (within 1e-3)"}),
       "file <*.npy>: max |diff| N (within N)")
+c.ACTIVE, c.STRIP_PAYLOAD_TYPES = None, False
+
+# ---- R1 (CLASSIFIER-RULES.md section 13) ---------------------------------------------------------
+
+
+def failing(message, stage="run", line=61, output="started\n", effects=()):
+    r = rec(list(effects), output=output, exit_code=1)
+    r["diagnostics"] = [{"severity": "Error", "message": message,
+                         "range": {"start": {"line": line, "character": 1}, "end": {"line": line, "character": 5 if line else 1}},
+                         "data": {"stage": stage, "name": "RuntimeDiag::RuntimeError", "modulePath": "m.cml" if line else ""}}]
+    return r
+
+
+AD = "An error has occurred: autodiff: branch arms must be subgraph calls; differentiate before inlining them."
+lib = outcome_under(NEW, rec([]), failing(AD))
+check("R1: autodiff run-time diagnostic is a library precondition, late",
+      (lib["outcome"], lib["underlying_outcome"], lib["library"], lib["library_precondition"]),
+      ("LIBRARY_PRECONDITION", "RUN_FAIL", "autodiff", "late_or_obscure"))
+check("R1 off: the same cell is RUN_FAIL", outcome_under(N, rec([]), failing(AD))["outcome"], "RUN_FAIL")
+check("R1: a library precondition is not a defect of a standard pass",
+      (c.is_violation(lib), c.DEFECT_CLASS[lib["outcome"]]), (False, "library_precondition"))
+other = outcome_under(NEW, rec([]), failing("An error has occurred: Array index out of bounds.."))
+check("R1: another run-time error stays a defect",
+      (other["outcome"], c.DEFECT_CLASS[other["outcome"]]), ("RUN_FAIL", "crash_hang_or_error"))
+early = outcome_under(NEW, rec([], output=""), failing("autodiff: needs std::macro", stage="pass:std::opt::simplify", output=""))
+check("R1: located library diagnostic of a pass, before execution",
+      (early["outcome"], early["library_precondition"]), ("LIBRARY_PRECONDITION", "located_before_execution"))
+obscure = outcome_under(NEW, rec([], output=""), failing("autodiff: needs std::macro", stage="pass:std::opt::simplify",
+                                                         output="", line=0))
+check("R1: the same without a location is obscure", obscure["library_precondition"], "late_or_obscure")
+check("R1: prefix must start the message", c.library_of("An error has occurred: x in autodiff: y"), None)
+check("R1: std::macro position", [c.macro_position(p) for p in (["std::nvm"], ["std::macro", "std::nvm"],
+                                                                 ["std::inline", "std::macro", "std::nvm"])],
+      ["no std::macro in the pipeline", "std::macro first", "std::macro after std::inline"])
+check("R1: classes of the defect outcomes",
+      [c.DEFECT_CLASS[o] for o in ("VALUE_MISMATCH", "EFFECT_MISMATCH", "CRASH", "HANG", "REFUSED_UNLOCATED", "CONSISTENT")],
+      ["silent_result_change"] * 2 + ["crash_hang_or_error"] * 2 + ["diagnostic_unlocated_or_late", "agrees"])
+check("R1 needs D2 and D9", (lambda: [c.resolve_rules("frozen+D1+D2+D9+R1").r1])(), [True])
+try:
+    c.resolve_rules("frozen+D1+R1")
+    check("R1 without D2/D9 is rejected", "accepted", "rejected")
+except SystemExit:
+    check("R1 without D2/D9 is rejected", "rejected", "rejected")
+
+
+def cell2(prog, pid, repeat, base):
+    r = copy.deepcopy(base)
+    r.update(program=prog, program_id=prog.replace("/", "_"), pipeline_id=pid, passes=c.pl.all_pipelines()[pid],
+             repeat=repeat, corpus="dev", origin="test", role="agree")
+    return r
+
+
+AD0 = "An error has occurred: autodiff: cannot differentiate through a call of a function value."
+recs = {}
+for prog, by_pid in (
+        ("a/needs_macro.cml", {"P0": failing(AD0, output=""), "P1": failing(AD0, output=""), "P4": rec([])}),
+        ("a/broken.cml", {"P0": failing("An error has occurred: boom", output=""), "P4": rec([])}),
+        ("a/never.cml", {"P0": failing(AD0, output=""), "P4": failing(AD0, output="")}),
+        ("a/grad.cml", {"P0": rec([]), "P4": rec([]), "P11": failing(AD), "P1": failing("An error has occurred: boom")})):
+    for pid, base in by_pid.items():
+        recs[(prog.replace("/", "_"), pid)] = [cell2(prog, pid, k, base) for k in range(3)]
+unknown = failing("Unrecognized graph rewriting/scheduling/translation pass 'x1a::no_such_pass'.",
+                  stage="pass:x1a::no_such_pass", output="", line=0)
+unknown["diagnostics"][0]["data"]["name"] = "RuntimeDiag::UnrecognizedGraphPass"
+recs[("a_grad.cml", "XU1")] = [cell2("a/grad.cml", "XU1", k, unknown) for k in range(3)]
+none = {"excluded": {}, "reviewed": {}}
+rows, ref_rows, refusal_rows, _, _ = c.classify_all(recs, NEW, 20.0, 10.0, none, None)
+by = {r["program"]: r["reference"] for r in ref_rows}
+check("R1: program that needs std::macro is listed, not an invalid reference",
+      (by["a/needs_macro.cml"], by["a/broken.cml"], by["a/never.cml"], by["a/grad.cml"]),
+      ("REQUIRES_STD_MACRO", "INVALID_REF", "INVALID_REF", "REFERENCE"))
+check("R1 off: the same program is an invalid reference",
+      {r["program"]: r["reference"] for r in c.classify_all(recs, N, 20.0, 10.0, none, None)[1]}["a/needs_macro.cml"],
+      "INVALID_REF")
+cellrow = {r["pipeline_id"]: r for r in rows}
+check("R1: row columns", (cellrow["P11"]["outcome"], cellrow["P11"]["defect_class"], cellrow["P11"]["std_macro_in_pipeline"],
+                          cellrow["P1"]["defect_class"], cellrow["P4"]["defect_class"]),
+      ("LIBRARY_PRECONDITION", "library_precondition", "no std::macro in the pipeline", "crash_hang_or_error", "agrees"))
+check("R1: unknown pass is a refusal of a command line, still unlocated (D2 kept)",
+      [(r["outcome"], r["refusal_subject"], r["defect_class"]) for r in refusal_rows],
+      [("REFUSED_UNLOCATED", "command line (no source construct to locate)", "diagnostic_unlocated")])
+table = {t["pass"]: t for t in c.standard_pass_table(rows)}
+check("R1: per-pass table counts defect cells, not library preconditions",
+      (table["std::nvm"]["cells"], table["std::nvm"]["defect_cells"], table["std::nvm"]["library_precondition_cells"],
+       table["std::opt::simplify"]["defect_cells"], table["std::macro"]["defect_cells_in_pipelines_without_it"]),
+      (3, 1, 1, 0, 1))
+sig, causes = c.signature_tables(rows, refusal_rows, True)
+check("R1: library precondition has its own set in the signature tables",
+      sorted((t["set"] == "agree set", t["cells"]) for t in causes if t["set"].startswith("agree set")),
+      [(False, 1), (True, 1)])
 c.ACTIVE, c.STRIP_PAYLOAD_TYPES = None, False
 
 bad = [x for x in checks if not x[3]]
