@@ -47,10 +47,10 @@
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
-#include "execute/macro/macro.h"
-#include "passes/opt/generic/generic.h"
-#include "passes/opt/inline/config.h"
-#include "passes/trans/dot/graphviz.h"
+#include "camel/passes/macro/macro.h"
+#include "camel/passes/opt/generic.h"
+#include "camel/passes/opt/config.h"
+#include "camel/passes/trans/dot/graphviz.h"
 
 #include <cstdlib>
 #include <format>

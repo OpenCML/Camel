@@ -17,16 +17,8 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+/* Moved to the public header camel/passes/macro/macro.h; this file forwards to it. */
+
 #pragma once
 
-#include "camel/execute/pass/opt.h"
-
-class MacroRewritePass : public RuntimeGraphRewritePass {
-  public:
-    MacroRewritePass(const camel::core::context::context_ptr_t &ctx)
-        : RuntimeGraphRewritePass(ctx) {};
-    virtual ~MacroRewritePass() = default;
-
-    virtual camel::runtime::GCGraph *
-    apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
-};
+#include "camel/passes/macro/macro.h"
