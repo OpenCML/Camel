@@ -312,6 +312,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::CapturedWriteInAsyncFunction,
+            {
+                "CapturedWriteInAsyncFunction",
+                "{0} writes the captured variable{1} {2} but is not declared with the 'sync' "
+                "modifier.",
+                "Write 'sync' before the function ('sync func f(...)', 'sync (...) => ...'): the "
+                "modifier declares that the function has side effects, as it does for a "
+                "function with a var parameter. It does not make the body a sync block.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

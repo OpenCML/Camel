@@ -145,6 +145,14 @@ class Builder {
         std::string verb;
     };
     std::vector<PendingIgnoredWrite> pendingIgnoredWrites_;
+    // The functions and lambdas of the module, in source order, for the check that a function
+    // with side effects declares them (the `sync` function modifier).
+    struct BuiltFunction {
+        DraftGraphBuilder *graph;
+        camel::source::origin_id_t origin;
+        std::string name;
+    };
+    std::vector<BuiltFunction> builtFunctions_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -229,6 +237,8 @@ class Builder {
     std::vector<CapturedUse> capturedUsesOf(const compile_graph_ptr_t &callee);
     // Reports the unwaited writes of captured variables that turned out to be real.
     void reportIgnoredCapturedWrites();
+    // Reports the functions that write a captured variable without the `sync` modifier.
+    void reportUndeclaredCapturedWrites();
     compile_graph_ptr_t buildDecoratedGraph(
         const std::string &funcName, const compile_graph_ptr_t &rawGraph,
         const std::vector<GCT::node_ptr_t> &annoNodes);

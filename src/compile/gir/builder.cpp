@@ -529,6 +529,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     bodyStates_.clear();
     capturePortNames_.clear();
     pendingIgnoredWrites_.clear();
+    builtFunctions_.clear();
     typeDecls_.clear();
     syntheticRefIndex_ = 0;
 
@@ -545,6 +546,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     try {
         visit(gct);
         reportIgnoredCapturedWrites();
+        reportUndeclaredCapturedWrites();
 
         compile_graph_ptr_t entryGraph = nullptr;
         if (auto decoratedMain = decoratedGraphAt("main")) {
@@ -794,6 +796,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         bodyStates_[graph.get()] = BodyState::Open;
         setBodyResult(graph, visitBodyNode(gct->atAs<GCT::ExecLoad>(1)));
         bodyStates_[graph.get()] = BodyState::Built;
+        builtFunctions_.push_back({graph.get(), gct->load()->origin(), name});
     } catch (...) {
         bodyStates_[graph.get()] = BodyState::Built;
         leaveScope();
@@ -1100,6 +1103,34 @@ void Builder::reportIgnoredCapturedWrites() {
                     strutil::join(names, ", ", [](const std::string &name) { return name; })));
     }
     pendingIgnoredWrites_.clear();
+}
+
+void Builder::reportUndeclaredCapturedWrites() {
+    // The prefix `sync` of a function declares that it has side effects (design principles
+    // 2.3); a function with a `var` parameter is already checked for it
+    // (VarParamInAsyncFunction, in the GCT builder). A function that writes a variable it
+    // captured, itself or through the functions it calls, has side effects as well. This is a
+    // declaration check only: the modifier changes nothing in how calls are compiled.
+    for (const BuiltFunction &function : builtFunctions_) {
+        if (function.graph->funcType()->modifiers().sync()) {
+            continue;
+        }
+        std::vector<std::string> names;
+        for (const std::string &name : capturedWritesOf(function.graph)) {
+            names.push_back("'" + name + "'");
+        }
+        if (names.empty()) {
+            continue;
+        }
+        diags_->of(SemanticDiag::CapturedWriteInAsyncFunction)
+            .atOrigin(function.origin)
+            .commit(
+                function.name.empty() ? std::string("The lambda")
+                                      : std::format("Function '{}'", function.name),
+                names.size() > 1 ? "s" : "",
+                strutil::join(names, ", ", [](const std::string &name) { return name; }));
+    }
+    builtFunctions_.clear();
 }
 
 node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {

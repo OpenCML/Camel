@@ -93,7 +93,12 @@ sync func g(): int sync {
 
 ### 2.4 静态约束
 
-- `var` 形参只允许出现在带函数修饰符 `sync` 的函数中（前缀 `sync func`）；否则 `VarParamInAsyncFunction`。
+- `var` 形参只允许出现在带函数修饰符 `sync` 的函数中（前缀 `sync func`）；否则 `VarParamInAsyncFunction`
+  告警。
+- 写入被捕获变量（包括模块顶层变量）的函数或 lambda——自己写，或经由它直接调用的函数写——同样有副作用，
+  没有函数修饰符 `sync` 时给出 `CapturedWriteInAsyncFunction` 告警（定位在函数定义处，列出变量名）。
+- **函数修饰符 `sync` 目前只是声明。** 编译器只做上面两项声明检查，不依据它在调用处产生任何顺序、
+  也不要求调用处写 `wait`；调用处应当如何对待这个修饰符，有待语言作者决定。
 - 调用带 `var` 形参的函数或算子、直接调用写入被捕获变量的函数、或进入有分支臂写入被捕获变量的分支，
   而既不在同步块内也不加 `wait`：`IgnoredSideEffect` 告警。
 - 把 `let` 对象传给 `var` 形参：编译期错误（见 2.3）。
