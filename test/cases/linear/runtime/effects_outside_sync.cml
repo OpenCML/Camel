@@ -1,8 +1,9 @@
 module effects_outside_sync
 
-// Current behaviour of effectful calls outside a `sync` block, as documented in
-// docs/technical/18_sync_control_semantics.md section 2.5 (an open question of the language, not
-// a guarantee). Only the lines marked KEPT are printed, on every scheduler.
+// Effectful calls outside a `sync` block (docs/design-principles.cn.md 2.1, 2.3, 2.6;
+// docs/technical/18_sync_control_semantics.md section 2.2). Only the lines marked KEPT are
+// printed, on every scheduler. All cases are the language rule except `nested`, which is an
+// open question (section 2.5 there) whose current behaviour is recorded here.
 
 // A statement whose result is unused, in a function whose body is not a `sync` block: the call
 // is not connected to the function's exit and is not in the graph.
@@ -11,14 +12,16 @@ func plain(x: int): int {
     return x + 1
 }
 
-// `wait` does not change that.
+// `wait` does not change that, by design: `wait` orders by the use of a `var`, and this
+// expression involves none, so there is nothing to order it by. It is not an error either;
+// such a call belongs in a sync block.
 func waited(x: int): int {
     wait println('DROPPED waited')
     return x + 1
 }
 
-// A nested `sync` block orders its statements among themselves, but its tail is not connected
-// to the exit of the enclosing non-sync body either.
+// Open question: a nested `sync` block orders its statements among themselves, but its tail
+// is not connected to the exit of the enclosing non-sync body either.
 func nested(x: int): int {
     sync {
         println('DROPPED nested 1')

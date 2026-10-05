@@ -313,3 +313,307 @@ assert(reads.some(r => edge(join[1], r, 'CTRL')), 'missing JOIN -> read of c aft
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "wait_direct_user.default"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: default (no pass)."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.fvm"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.jit"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.tf"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.inline"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::inline."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.opt"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::opt."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.simplify"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.macro"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::macro."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.macro_fvm"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::macro std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.macro_jit"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::macro std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::macro", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.macro_tf"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::macro std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::macro", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.macro_inline"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::macro std::inline."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::macro", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.macro_opt"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::macro std::opt."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::macro", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.macro_simplify"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::macro std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::macro", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.inline_fvm"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::inline std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.simplify_tf"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::opt::simplify std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::opt::simplify", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.macro_opt_jit"
+desc = "A(i + 1); wait modify(i) outside a sync block: the value read by `+` is the old one and the read after modify the new one, whichever of A and modify runs first. Pipeline: std::macro std::opt std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::macro", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2011', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_direct_user.graph"
+desc = "A(i + 1); wait modify(i): `wait` orders by the use of the variable. The direct user of i is `+`, so the graph has the control edge `+` -> modify and none from A to modify (design principles 2.6)."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+const edge = (from, to, type) =>
+    new RegExp(from + ' -> ' + to + ' \\[label="[^"]*", type="' + type + '"').test(text)
+const call = (label) => {
+    const m = text.match(new RegExp('(N[0-9A-F]+) \\[label="' + label + '", type="FUNC"'))
+    assert(m, `no call of ${label}`)
+    return m[1]
+}
+const a = call('before'), modify = call('modify')
+// The `+` of `i + 1` is the :op/add node whose result is A's argument.
+const adds = [...text.matchAll(/(N[0-9A-F]+) \[label=":op\/add[^"]*", type="OPER"/g)].map(m => m[1])
+const plus = adds.find(n => edge(n, a, 'NORM'))
+assert(plus, 'no `+` feeding A')
+assert(edge(plus, modify, 'CTRL'), 'missing control edge `+` -> modify')
+assert(!edge(a, modify, 'CTRL'), 'A must not be ordered before modify: it does not use i')
+// The read written after the wait follows modify.
+const reads = [...text.matchAll(/(N[0-9A-F]+) \[label=":var\/get", type="OPER"/g)].map(m => m[1])
+assert(reads.some(r => edge(modify, r, 'CTRL')), 'missing control edge modify -> later read of i')
+}
+"""
+timeout_ms = 4000

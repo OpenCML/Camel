@@ -84,7 +84,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "effects_outside_sync.nvm"
-desc = "Locks the CURRENT behaviour documented as an open question in docs/technical/18_sync_control_semantics.md section 2.5: an effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body, under wait, in a nested sync block and in a prefix `sync func` it is absent from the graph. Same output on every scheduler (nvm)."
+desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 2.1, 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (nvm)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "${run_nvm}"]
@@ -101,7 +101,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "effects_outside_sync.fvm"
-desc = "Locks the CURRENT behaviour documented as an open question in docs/technical/18_sync_control_semantics.md section 2.5: an effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body, under wait, in a nested sync block and in a prefix `sync func` it is absent from the graph. Same output on every scheduler (fvm)."
+desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 2.1, 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (fvm)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "${run_fvm}"]
@@ -118,7 +118,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "effects_outside_sync.jit"
-desc = "Locks the CURRENT behaviour documented as an open question in docs/technical/18_sync_control_semantics.md section 2.5: an effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body, under wait, in a nested sync block and in a prefix `sync func` it is absent from the graph. Same output on every scheduler (jit)."
+desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 2.1, 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (jit)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "${run_jit}"]
@@ -135,7 +135,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "effects_outside_sync.tf"
-desc = "Locks the CURRENT behaviour documented as an open question in docs/technical/18_sync_control_semantics.md section 2.5: an effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body, under wait, in a nested sync block and in a prefix `sync func` it is absent from the graph. Same output on every scheduler (tf)."
+desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 2.1, 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (tf)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "std::tf"]
