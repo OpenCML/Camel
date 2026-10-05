@@ -617,3 +617,28 @@ assert(reads.some(r => edge(modify, r, 'CTRL')), 'missing control edge modify ->
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "captured_write_graph.warnings"
+desc = "IgnoredSideEffect for captured writes: reported for the unwaited call of a function that writes a captured variable and for the unwaited branch whose arm does; not for the waited call, and not for a recursive function that only reads the variable it captured (inside its open body its writes are an upper bound, the warning is decided once all bodies are built). The same function is not reported as an undeclared writer either."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_graph.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const diags = JSON.parse(input.stderr)
+const at = d => (d.range.start.line + 1) + ':' + (d.range.start.character + 1)
+const ignored = diags.filter(d => d.data.name === 'SemanticDiag::IgnoredSideEffect').map(d => at(d) + ' ' + d.message)
+const want = [
+    "40:20 The call of 'write_a: () => i64' is neither waited nor in a sync block, and it writes the captured variable 'a'.",
+    "59:13 The branch is neither waited nor in a sync block, and an arm writes the captured variable 'c'.",
+]
+assert(JSON.stringify(ignored) === JSON.stringify(want), 'IgnoredSideEffect: ' + ignored.join(' | '))
+const undeclared = diags.filter(d => d.data.name === 'SemanticDiag::CapturedWriteInAsyncFunction').map(d => d.message.split(' writes ')[0])
+assert(JSON.stringify(undeclared) === JSON.stringify(["Function 'write_a'", "Function 'write_b'", "Function 'writes'", "Function 'waits'", "Function 'main'"]), 'undeclared writers: ' + undeclared.join(' | '))
+assert(!diags.some(d => d.message.includes("'look'") || d.message.includes("'limit'")), 'the read-only recursive function is not reported')
+}
+"""
+timeout_ms = 4000
