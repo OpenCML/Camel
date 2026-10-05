@@ -11,7 +11,10 @@
           (`payload_sha1` is its SHA-1), and the long one is cut on a character boundary below
           2048 bytes with `payload_truncated` set, its hash still covering the full text.
 
-Usage: python effect_trace.py order|stage|payload   (needs only the standard library)
+  variables a `var` declared, read and assigned: the trace has the store (`:op/assn*`) and the
+          println; creating and reading the variable (`:var/new`, `:var/get`) emit nothing.
+
+Usage: python effect_trace.py order|stage|payload|variables   (needs only the standard library)
 """
 
 from __future__ import annotations
@@ -135,6 +138,22 @@ def main() -> int:
                       f"(got {len(cut.encode('utf-8'))} bytes)")
                 check(long["payload_sha1"] == sha1(hashed_text([full])),
                       "long payload_sha1 covers the full text")
+        elif mode == "variables":
+            program = Path(t) / "variables.cml"
+            program.write_text(
+                "module effect_trace_variables\n\nfunc main(): int sync {\n"
+                "    var c = 1\n"
+                "    let a = c + 1\n"
+                "    wait c += a\n"
+                "    println(c)\n"
+                "    return 0\n}\n", encoding="utf-8")
+            for passes in (["std::nvm"], ["std::fvm"], ["std::inline", "std::nvm"]):
+                code, out, lines = run(program, passes, trace)
+                uris = [l["uri"] for l in lines]
+                check(code == 0 and out == "3\n", f"{passes}: prints 3")
+                check(uris == [":op/assn_add_l", ":io/println"],
+                      f"{passes}: the store and the println are traced, :var/new and :var/get "
+                      f"are not (got {uris})")
         else:
             raise SystemExit(f"unknown mode: {mode}")
 

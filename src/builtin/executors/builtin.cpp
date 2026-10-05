@@ -296,6 +296,9 @@ void registerBuiltinOperatorTraits() {
             registry.set(":" + name, {.pure = true, .elementwise = false});
         }
     }
+    // Creating and reading a variable changes nothing outside the program's variables.
+    registry.set(":var/new", {.stateOnly = true});
+    registry.set(":var/get", {.stateOnly = true});
 }
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsImplMap()) {}
