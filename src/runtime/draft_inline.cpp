@@ -361,9 +361,9 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
         if (!header) {
             return resolved;
         }
-        // A value that is written in place is a variable: the COPY behind `var c = 0` holds
-        // whatever was assigned to c since, and an argument passed to a `var` parameter is
-        // written by the callee. Neither has the static value it was initialized from.
+        // An argument passed to a `var` parameter is written by the callee (a variable's cell,
+        // or an object an operator changes in place): it does not have the static value it
+        // was initialized from.
         if (isWrittenInPlace(draft, canonicalId)) {
             return resolved;
         }
@@ -962,8 +962,8 @@ gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id) 
             return id;
         }
         if (isWrittenInPlace(draft, sources[0])) {
-            // The tuple variable is assigned again (`wait t = ...` stores into the FILL's
-            // slot): the projection may read the new tuple, not the one filled here.
+            // The tuple is passed to a `var` parameter: what the projection reads is up to
+            // the callee, not what was filled here.
             return id;
         }
         const auto slots  = fill->slots();

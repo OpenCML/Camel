@@ -19,7 +19,10 @@
 
 #include "ops.h"
 #include "camel/core/context/context.h"
+#include "camel/core/mm.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/utils/assert.h"
 
 #include <cmath>
@@ -32,112 +35,145 @@ using namespace camel::core::context;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
 
+// A `var` variable is a cell: a one-slot tuple (TupleType::cell) that the declaration creates
+// and that every `var` parameter and capture bound to the variable points to. Reading the
+// variable and assigning to it are the operators below, applied to the cell, so a store is
+// seen through every reference.
+namespace {
+Tuple *variableOf(ArgsView &norm) {
+    Tuple *cell = norm.get<Tuple *>(0);
+    ASSERT(cell != nullptr && cell->size() == 1, "Operand is not a variable.");
+    return cell;
+}
+} // namespace
+
+slot_t __builtin__var_new__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Tuple *cell = Tuple::create(1, mm::autoSpace());
+    cell->set<slot_t>(0, norm.slot(0), TupleType::cell(norm.type(0)));
+    return toSlot(cell);
+}
+
+slot_t __builtin__var_get__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return variableOf(norm)->get<slot_t>(0);
+}
+
 slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    // Generic assignment: store rhs into lhs (Ref slot), return rhs.
-    // lhs (norm[0]) is the target slot (var/reference), rhs (norm[1]) is the value.
     slot_t rhs = norm.slot(1);
-    norm.set(0, rhs);
+    variableOf(norm)->set<slot_t>(0, rhs, static_cast<TupleType *>(norm.type(0)));
     return rhs;
 }
 
 slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Int32 lhs = norm.get<Int32>(0);
+    Tuple *cell = variableOf(norm);
+    Int32 lhs = cell->get<Int32>(0);
     Int32 rhs = norm.get<Int32>(1);
     lhs += rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_add_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Int64 lhs = norm.get<Int64>(0);
+    Tuple *cell = variableOf(norm);
+    Int64 lhs = cell->get<Int64>(0);
     Int64 rhs = norm.get<Int64>(1);
     lhs += rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_add_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Float32 lhs = norm.get<Float32>(0);
+    Tuple *cell = variableOf(norm);
+    Float32 lhs = cell->get<Float32>(0);
     Float32 rhs = norm.get<Float32>(1);
     lhs += rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_add_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Float64 lhs = norm.get<Float64>(0);
+    Tuple *cell = variableOf(norm);
+    Float64 lhs = cell->get<Float64>(0);
     Float64 rhs = norm.get<Float64>(1);
     lhs += rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_sub_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Int32 lhs = norm.get<Int32>(0);
+    Tuple *cell = variableOf(norm);
+    Int32 lhs = cell->get<Int32>(0);
     Int32 rhs = norm.get<Int32>(1);
     lhs -= rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_sub_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Int64 lhs = norm.get<Int64>(0);
+    Tuple *cell = variableOf(norm);
+    Int64 lhs = cell->get<Int64>(0);
     Int64 rhs = norm.get<Int64>(1);
     lhs -= rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_sub_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Float32 lhs = norm.get<Float32>(0);
+    Tuple *cell = variableOf(norm);
+    Float32 lhs = cell->get<Float32>(0);
     Float32 rhs = norm.get<Float32>(1);
     lhs -= rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_sub_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Float64 lhs = norm.get<Float64>(0);
+    Tuple *cell = variableOf(norm);
+    Float64 lhs = cell->get<Float64>(0);
     Float64 rhs = norm.get<Float64>(1);
     lhs -= rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_mul_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Int32 lhs = norm.get<Int32>(0);
+    Tuple *cell = variableOf(norm);
+    Int32 lhs = cell->get<Int32>(0);
     Int32 rhs = norm.get<Int32>(1);
     lhs *= rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_mul_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Int64 lhs = norm.get<Int64>(0);
+    Tuple *cell = variableOf(norm);
+    Int64 lhs = cell->get<Int64>(0);
     Int64 rhs = norm.get<Int64>(1);
     lhs *= rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_mul_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Float32 lhs = norm.get<Float32>(0);
+    Tuple *cell = variableOf(norm);
+    Float32 lhs = cell->get<Float32>(0);
     Float32 rhs = norm.get<Float32>(1);
     lhs *= rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_mul_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Float64 lhs = norm.get<Float64>(0);
+    Tuple *cell = variableOf(norm);
+    Float64 lhs = cell->get<Float64>(0);
     Float64 rhs = norm.get<Float64>(1);
     lhs *= rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_div_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Int32 lhs = norm.get<Int32>(0);
+    Tuple *cell = variableOf(norm);
+    Int32 lhs = cell->get<Int32>(0);
     Int32 rhs = norm.get<Int32>(1);
 
     if (rhs == 0) {
@@ -145,12 +181,13 @@ slot_t __builtin__assn_div_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 
     lhs /= rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_div_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Int64 lhs = norm.get<Int64>(0);
+    Tuple *cell = variableOf(norm);
+    Int64 lhs = cell->get<Int64>(0);
     Int64 rhs = norm.get<Int64>(1);
 
     if (rhs == 0) {
@@ -158,12 +195,13 @@ slot_t __builtin__assn_div_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 
     lhs /= rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_div_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Float32 lhs = norm.get<Float32>(0);
+    Tuple *cell = variableOf(norm);
+    Float32 lhs = cell->get<Float32>(0);
     Float32 rhs = norm.get<Float32>(1);
 
     if (rhs == 0.0f) {
@@ -171,12 +209,13 @@ slot_t __builtin__assn_div_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 
     lhs /= rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 
 slot_t __builtin__assn_div_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Float64 lhs = norm.get<Float64>(0);
+    Tuple *cell = variableOf(norm);
+    Float64 lhs = cell->get<Float64>(0);
     Float64 rhs = norm.get<Float64>(1);
 
     if (rhs == 0.0) {
@@ -184,7 +223,7 @@ slot_t __builtin__assn_div_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 
     lhs /= rhs;
-    norm.set(0, lhs);
+    cell->set(0, lhs);
     return toSlot(lhs);
 }
 

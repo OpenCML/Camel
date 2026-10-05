@@ -73,6 +73,8 @@ class Builder {
     bool waited_;
     bool synced_;
     bool varied_;
+    // Inside a `var` declaration: the names it binds are variables.
+    bool declaresVariable_ = false;
 
     // An argument of a call: its value node and the expression it was written as.
     struct Argument {
@@ -90,8 +92,11 @@ class Builder {
     // beside the graph rather than as edges: the callee node is a value (a function literal, a
     // closure FILL whose with-inputs are its captures) that the binding must not alter.
     std::unordered_map<node_handle_t, std::vector<Argument>> boundWithArgs_;
-    // Nodes bound by `var`: declarations, `var` parameters, and the ports that capture them.
-    // Every other named node is immutable (`let`, a parameter without `var`).
+    // Variables: the nodes bound by `var` (declarations, `var` parameters, the ports that capture
+    // them). Such a node does not hold a value but the variable's cell (TupleType::cell), which
+    // is what a `var` parameter or a capture receives; a value is read out of it by `:var/get`
+    // and stored by the assignment operators. Every other named node is an immutable value
+    // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
@@ -161,6 +166,21 @@ class Builder {
     node_handle_t applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcValueNode);
     node_handle_t resolveCrossGraphRef(node_handle_t node, const std::string &name);
     node_handle_t resolveNodeByRef(const std::string &name);
+    bool isVariable(node_handle_t node) const { return variables_.contains(node); }
+    // A new variable holding the value of `value` (`:var/new`).
+    node_handle_t newVariable(node_handle_t value);
+    // The value `variable` holds when the returned node runs (`:var/get`), ordered after the
+    // variable's last writer in this graph and, in a sync block, in the block's chain.
+    node_handle_t readVariable(node_handle_t variable);
+    // `node` as a value: read when it is a variable, itself otherwise.
+    node_handle_t valueOf(node_handle_t node) {
+        return isVariable(node) ? readVariable(node) : node;
+    }
+    // An operand of a call. A variable named directly stays a variable: whether the callee
+    // takes the variable or its value is only known once the callee is resolved.
+    node_handle_t visitOperand(const GCT::node_ptr_t &expr, const GCT::node_ptr_t &call);
+    // The node of `:var/new` or `:var/get` applied to `input`.
+    node_handle_t variableOperator(const std::string &group, node_handle_t input);
     // The immutable name an argument expression denotes: the name itself or a field of it
     // (`s`, `s.x`). Empty for a variable and for an expression that is not a name.
     std::optional<std::string> immutableNameOf(const GCT::node_ptr_t &expr);

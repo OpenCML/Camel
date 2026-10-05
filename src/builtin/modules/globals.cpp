@@ -211,6 +211,39 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
 
+        // ======= Variables =======
+        // A `var` variable is a cell (TupleType::cell). The compiler emits these two for a
+        // declaration and for a read; assignment is the family below.
+        OperatorGroup::create(
+            "__var_new__",
+            {
+                {
+                    ":var/new",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(value: T) => var T",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> { return TupleType::cell(norm[0]->widened()); }),
+                },
+            }),
+        OperatorGroup::create(
+            "__var_get__",
+            {
+                {
+                    ":var/get",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(variable: var T) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (valueTypeOf(norm[0]) == norm[0]) {
+                                return nullopt; // not a variable
+                            }
+                            return valueTypeOf(norm[0]);
+                        }),
+                },
+            }),
+
         // ======= Assignment operators =======
         OperatorGroup::create(
             "__assn__",

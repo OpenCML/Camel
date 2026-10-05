@@ -75,6 +75,10 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/stos", __stos__},
         {"op/atos", __atos__},
 
+        // variables
+        {"var/new", __builtin__var_new__},
+        {"var/get", __builtin__var_get__},
+
         // ops
         {"op/assn_i", __builtin__assn__},
         {"op/assn_l", __builtin__assn__},

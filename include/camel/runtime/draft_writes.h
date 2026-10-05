@@ -21,12 +21,13 @@
  * In-place writes on a graph draft.
  *
  * A node is not always a single value. An argument passed to a `var` parameter is written by
- * the callee: the assignment operators (`:op/assn*`) store into the slot of their first operand,
- * and operators such as an in-place sort change the object it holds. The graph expresses this
- * only through the callee's signature and the control edges that order later readers after the
- * writer. A rewrite that treats such a node as one value (forwarding what was filled into it,
- * merging two reads of it, replacing it by a constant) changes the program, so rewrites ask
- * here first.
+ * the callee. For a function and for the assignment operators (`:op/assn*`) the argument is a
+ * variable: the cell that `:var/new` created (TupleType::cell), which the callee stores into.
+ * For any other operator it is the object the operator changes in place (an in-place sort, an
+ * append). The graph expresses this only through the callee's signature and the control edges
+ * that order later readers after the writer. A rewrite that treats such a node as one value
+ * (forwarding what was filled into it, merging two reads of it, replacing it by a constant)
+ * changes the program, so rewrites ask here first.
  */
 
 #pragma once

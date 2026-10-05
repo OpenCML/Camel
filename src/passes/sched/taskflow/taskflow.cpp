@@ -253,11 +253,7 @@ loop_start:
                 (nodeRef == lastNode) ||
                 (lastNodeIsJoin &&
                  camel::execute::runtimeNodeOutputsContain(currRuntimeGraph, nodeRef, lastNode));
-            // A graph with `var` parameters keeps its frame until they are written back.
-            const bool isTailCall =
-                anchorOk && tailShape &&
-                !camel::execute::runtimeGraphHasVarParams(currRuntimeGraph) &&
-                !camel::execute::runtimeGraphHasVarParams(runtimeTarget);
+            const bool isTailCall = anchorOk && tailShape;
             if (isTailCall) {
                 Frame *lastFrame = currFrame;
                 tillNode         = kInvalidNodeRef;
@@ -483,7 +479,6 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
         slot_t result      = NullSlot;
         try {
             result = evalGraphLinear(targetGraph, calleeFrame);
-            camel::execute::writeBackVarArgs(frame, calleeFrame, graph, nodeRef);
             framePool_.release(calleeFrame);
         } catch (...) {
             framePool_.release(calleeFrame);
@@ -503,7 +498,6 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
         slot_t result      = NullSlot;
         try {
             result = evalGraphLinear(targetGraph, calleeFrame);
-            camel::execute::writeBackVarArgs(frame, calleeFrame, graph, nodeRef);
             framePool_.release(calleeFrame);
         } catch (...) {
             framePool_.release(calleeFrame);

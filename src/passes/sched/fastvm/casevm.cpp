@@ -107,9 +107,6 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                     return CallResult{result, currFrame};
                 }
 
-                if (bc.fastop[1] != 0) [[unlikely]] {
-                    writeBackVarArgsToDirectCaller(currFrame);
-                }
                 framePool_.release(currFrame);
 
                 auto [lastPC, lastFrame] = pop();
@@ -241,16 +238,13 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 populateIndirectCallFrame(currFrame, funcFrame, function, nargs, wargs);
 
                 _timer.pause();
-                const slot_t result =
-                    camel::execute::runtimeGraphHasVarParams(runtimeTarget)
-                        ? callIndirectWithVarParams(currFrame, funcFrame, runtimeTarget, nargs, wargs)
-                        : (jitEnabled() ? invokeCallOrJit(
-                                              graphEntryPc(runtimeTarget),
-                                              runtimeTarget,
-                                              funcFrame,
-                                              currentJitCtx_,
-                                              callCount)
-                                        : call(graphEntryPc(runtimeTarget), funcFrame));
+                const auto &result = jitEnabled() ? invokeCallOrJit(
+                                                        graphEntryPc(runtimeTarget),
+                                                        runtimeTarget,
+                                                        funcFrame,
+                                                        currentJitCtx_,
+                                                        callCount)
+                                                  : call(graphEntryPc(runtimeTarget), funcFrame);
                 _timer.resume();
 
                 currFrame->set(bc.result, result);

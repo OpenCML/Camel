@@ -210,9 +210,9 @@ staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
 }
 
 /// True when `id` can be replaced by another node holding its value: it does not anchor the
-/// graph, and nothing writes it in place. A written node is a variable, not a value: its
-/// writer must keep a slot of its own to store into (a constant's slot is shared by every run
-/// of the graph), and readers ordered after the writer see what it stored.
+/// graph, and nothing writes it in place. A written node is not one value: it is a variable's
+/// cell or an object an operator changes in place (a constant's object is shared by every run
+/// of the graph), and readers ordered after the writer see what it wrote.
 bool isFoldable(const GraphDraft &draft, gc_node_ref_t id) {
     return isReplaceable(draft, id) && !isWrittenInPlace(draft, id);
 }
@@ -706,13 +706,17 @@ size_t cseDraft(GraphDraft &draft) {
         }
     }
 
-    // Two identical expressions over a variable that is written in place are not one value: a
-    // write may lie between them (`x + 1`, `wait x += 5`, `x + 1`). Neither is merged, and a
+    // Two identical expressions over an object that is changed in place are not one value: a
+    // write may lie between them (`len(a)`, `arr->append<4>`, `len(a)`). The object may be
+    // passed to the writer under this node, or be the one a variable holds (`:var/get`), which
+    // every other reference to the variable reaches. Neither expression is merged, and a
     // result that is itself written keeps its own slot.
     const auto readsVariable = [&](gc_node_ref_t id) {
         for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id)}) {
             for (gc_node_ref_t in : inputs) {
-                if (isWrittenInPlace(draft, in)) {
+                const auto *h = draft.header(in);
+                if (isWrittenInPlace(draft, in) ||
+                    (h && h->kind == GCNodeKind::Oper && operUriOf(draft, in) == ":var/get")) {
                     return true;
                 }
             }

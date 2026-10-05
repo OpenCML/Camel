@@ -317,14 +317,18 @@ compile_graph_ptr_t createCompileGraph(
             const std::string portName = i < funcType->argNamesCount()
                                              ? std::string(funcType->argNameAt(i))
                                              : std::format("__w{}", i);
-            graph->addPortNode(funcType->withTypeAt(i), portName, true, funcType->withIsVarAt(i));
+            const bool isVar = funcType->withIsVarAt(i);
+            Type *type       = funcType->withTypeAt(i);
+            graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, true, isVar);
         }
         for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
             const size_t argIndex      = funcType->withTypesCount() + i;
             const std::string portName = argIndex < funcType->argNamesCount()
                                              ? std::string(funcType->argNameAt(argIndex))
                                              : std::format("__n{}", i);
-            graph->addPortNode(funcType->normTypeAt(i), portName, false, funcType->normIsVarAt(i));
+            const bool isVar = funcType->normIsVarAt(i);
+            Type *type       = funcType->normTypeAt(i);
+            graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, false, isVar);
         }
     }
     return graph;
@@ -639,7 +643,8 @@ node_handle_t Builder::resolveCrossGraphRef(node_handle_t node, const std::strin
             throw BuildAbortException();
         }
 
-        auto *portNode = curr->addPortNode(nodeTypeOf(node), name, false, false);
+        // A captured variable is captured by reference: the port holds the same cell.
+        auto *portNode = curr->addPortNode(nodeTypeOf(node), name, false, isVariable(node));
         curr->draft().removeNormPort(nodeIdOf(portNode));
         curr->draft().appendClosureNode(nodeIdOf(portNode));
         const auto closureRefs = curr->funcType()->closureRefs();
@@ -647,7 +652,7 @@ node_handle_t Builder::resolveCrossGraphRef(node_handle_t node, const std::strin
             curr->funcType()->addClosureRef(name);
         }
         scope->insert(name, portNode);
-        if (variables_.contains(node)) {
+        if (isVariable(node)) {
             variables_.insert(portNode);
         }
 
@@ -824,7 +829,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             type_vec_t refTypes;
             std::vector<node_handle_t> refNodes;
             for (const auto &ref : composedData->refs()) {
-                const auto &refNode = resolveNodeByRef(std::string(ref));
+                const auto &refNode = valueOf(resolveNodeByRef(std::string(ref)));
                 refTypes.push_back(nodeTypeOf(refNode));
                 refNodes.push_back(refNode);
             }
@@ -893,8 +898,13 @@ Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
 node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     ENTER("NREF");
     const string &ident = gct->loadAs<GCT::NRefLoad>()->ref();
-    node_handle_t node  = valueNodeOf(visit(gct->at(0)));
-    bool success        = insertNode(ident, node);
+    // Names declared inside the initializer are not part of this declaration.
+    const bool isVar   = std::exchange(declaresVariable_, false);
+    node_handle_t node = valueNodeOf(visit(gct->at(0)));
+    declaresVariable_  = isVar;
+    // `var x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
+    // that value.
+    bool success = insertNode(ident, isVar ? newVariable(node) : node);
     if (!success) {
         diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->load()->origin()).commit(ident);
         throw BuildAbortException();
@@ -939,7 +949,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             ASSERT(sameGraph(node, currGraph_), "Failed to resolve cross-graph reference.");
         }
         LEAVE("DREF");
-        return node;
+        return valueOf(node);
     }
     auto &graph       = currGraph_;
     auto optDecorated = decoratedGraphAt(name);
@@ -1029,21 +1039,17 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
 
 node_handle_t Builder::visitVariNode(const GCT::node_ptr_t &gct) {
     ENTER("VARI");
-    bool old        = varied_;
-    varied_         = true;
-    const auto &res = visit(gct->at(0));
+    bool old          = varied_;
+    bool oldDeclares  = declaresVariable_;
+    varied_           = true;
+    declaresVariable_ = true;
+    const auto &res   = visit(gct->at(0));
     ASSERT(
         res.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of VARI node.");
     node_handle_t node = any_cast<node_handle_t>(res);
     varied_            = old;
-    // A mutable binding takes the widened type of its initializer, so later
-    // assignments may store values with a different refinement (e.g. shape).
-    Type *valueType = nodeTypeOf(node);
-    if (Type *widened = valueType->widened(); widened != valueType) {
-        setNodeType(node, widened);
-    }
-    variables_.insert(node);
+    declaresVariable_  = oldDeclares;
     LEAVE("VARI");
     return node;
 }
@@ -1333,6 +1339,54 @@ node_handle_t Builder::argumentNodeOf(const std::any &res, const GCT::node_ptr_t
     return node;
 }
 
+node_handle_t Builder::variableOperator(const std::string &group, node_handle_t input) {
+    const auto entity = module_->getImportedEntity(group);
+    ASSERT(entity.has_value() && entity->isOperGroup(), "Variable operators are not available.");
+    const std::vector<std::optional<slot_t>> statics(1);
+    const auto op = entity->operGroup()->resolve({}, {nodeTypeOf(input)}, statics, Modifier::None);
+    ASSERT(op.has_value(), "Variable operator rejected its operand.");
+    node_handle_t node = currGraph_->addOperNode(*op, 0);
+    linkNodes(LinkType::Norm, input, node);
+    return node;
+}
+
+node_handle_t Builder::newVariable(node_handle_t value) {
+    // The variable takes the widened type of its initializer (:var/new), so later assignments
+    // may store values with a different refinement (e.g. shape).
+    node_handle_t variable = variableOperator("__var_new__", value);
+    variables_.insert(variable);
+    return variable;
+}
+
+node_handle_t Builder::readVariable(node_handle_t variable) {
+    node_handle_t value = variableOperator("__var_get__", variable);
+    if (auto modifier = modifierOf(variable); modifier.has_value()) {
+        if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
+            linkNodes(LinkType::Ctrl, *modifier, value);
+        }
+    }
+    // In a sync block a read happens where it is written, like a call.
+    if (synced_) {
+        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {
+            linkNodes(LinkType::Ctrl, lastSyncedNode_, value);
+        }
+        lastSyncedNode_ = value;
+    }
+    return value;
+}
+
+node_handle_t Builder::visitOperand(const GCT::node_ptr_t &expr, const GCT::node_ptr_t &call) {
+    if (expr->type() == GCT::LoadType::DREF) {
+        const std::string name = expr->loadAs<GCT::DRefLoad>()->ref().toString();
+        if (nodeAt(name).has_value()) {
+            if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
+                return node;
+            }
+        }
+    }
+    return argumentNodeOf(visit(expr), call);
+}
+
 std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr) {
     GCT::node_ptr_t root = expr;
     while (root && root->type() == GCT::LoadType::ACCS) {
@@ -1344,7 +1398,7 @@ std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr)
     const std::string name = root->loadAs<GCT::DRefLoad>()->ref().toString();
     // A name without a node is a function or an operator.
     const auto node = nodeAt(name);
-    if (!node.has_value() || variables_.contains(*node)) {
+    if (!node.has_value() || isVariable(*node)) {
         return std::nullopt;
     }
     return name;
@@ -1377,7 +1431,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         withInputs = bound->second;
     }
     for (const Argument &input : withInputs) {
-        withInputTypes.push_back(nodeTypeOf(input.node));
+        withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
     }
 
     // Call results take the callee's current exit type (a recursive callee's
@@ -1405,9 +1459,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     };
 
     for (size_t i = 1; i < gct->size(); i++) {
-        node_handle_t inputNode = argumentNodeOf(visit(gct->at(i)), gct);
+        node_handle_t inputNode = visitOperand(gct->at(i), gct);
         normInputs.push_back({inputNode, gct->at(i)});
-        normInputTypes.push_back(callableValueType(inputNode));
+        normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
     }
 
     if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
@@ -1500,6 +1554,40 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
             targetOperator = *res;
+            // An operator calls a function argument with values. A function with a `var`
+            // parameter needs a variable there, which an operator does not have.
+            const auto takesVariable = [](Type *type) {
+                if (type == nullptr || type->code() != TypeCode::Function) {
+                    return false;
+                }
+                const auto *func = tt::as_ptr<FunctionType>(type);
+                for (size_t i = 0; i < func->normTypesCount(); ++i) {
+                    if (func->normIsVarAt(i)) {
+                        return true;
+                    }
+                }
+                for (size_t i = 0; i < func->withTypesCount(); ++i) {
+                    if (func->withIsVarAt(i)) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            for (const auto *inputs : {&withInputs, &normInputs}) {
+                for (const Argument &input : *inputs) {
+                    Type *type = valueTypeOf(nodeTypeOf(input.node));
+                    if (takesVariable(type)) {
+                        diags_->of(SemanticDiag::ArgumentsRejected)
+                            .atOrigin(input.expr->load()->origin())
+                            .commit(
+                                ops->name(),
+                                type->toString(),
+                                "an operator calls a function argument with values, and a "
+                                "function with a var parameter must be given a variable");
+                        throw BuildAbortException();
+                    }
+                }
+            }
             targetNode     = currGraph_->addOperNode(targetOperator, 0);
             // An operator whose resolved type is macro runs in std::macro once its inputs are
             // static, like a call of a macro function.
@@ -1563,13 +1651,31 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // A function value has no name of its own; its type stands for it in diagnostics.
     const std::string calleeLabel = targetName.empty() ? targetFuncType->toString() : targetName;
 
-    for (size_t i = 0; i < withInputs.size(); i++) {
-        node_handle_t inputNode = withInputs[i].node;
-        bool isVar              = (i < targetFuncType->withTypesCount()) &&
-                     targetFuncType->withIsVarAt(static_cast<size_t>(i));
-        if (isVar) {
-            requireMutableArgument(withInputs[i], calleeLabel);
+    // How an argument is passed. A function (a graph or a function value) and assignment take
+    // a `var` argument as the variable itself. Any other operator with a `var` parameter mutates
+    // an object in place and takes the object; the call still counts as a write of the variable
+    // the object was read from. Every other parameter takes the value.
+    const bool takesVariables =
+        targetOperator == nullptr || targetOperator->name().starts_with("__assn");
+    // The node to link and, at a `var` position, the variable the callee writes (if any).
+    const auto passArgument = [&](const Argument &arg, bool isVar) {
+        if (!isVar) {
+            return std::pair{valueOf(arg.node), node_handle_t{}};
         }
+        requireMutableArgument(arg, calleeLabel);
+        const bool named = isVariable(arg.node);
+        if (takesVariables) {
+            // An expression that is not a name is a fresh object nobody else refers to.
+            node_handle_t variable = named ? arg.node : newVariable(arg.node);
+            return std::pair{variable, variable};
+        }
+        return std::pair{valueOf(arg.node), named ? arg.node : node_handle_t{}};
+    };
+
+    for (size_t i = 0; i < withInputs.size(); i++) {
+        bool isVar = (i < targetFuncType->withTypesCount()) &&
+                     targetFuncType->withIsVarAt(static_cast<size_t>(i));
+        const auto [inputNode, written] = passArgument(withInputs[i], isVar);
         tryRemoveCtrlLink(inputNode, targetNode);
         linkNodes(LinkType::With, inputNode, targetNode);
         if (auto modifierNode = modifierOf(inputNode); modifierNode.has_value()) {
@@ -1584,16 +1690,15 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     .atOrigin(gct->load()->origin())
                     .commit(targetName + ": " + targetFuncType->toString());
             }
-            setModifier(inputNode, targetNode);
+            if (written != nullptr) {
+                setModifier(written, targetNode);
+            }
         }
     }
 
     for (size_t i = 0; i < normInputs.size(); i++) {
-        node_handle_t inputNode = normInputs[i].node;
         bool isVar = i < targetFuncType->normTypesCount() && targetFuncType->normIsVarAt(i);
-        if (isVar) {
-            requireMutableArgument(normInputs[i], calleeLabel);
-        }
+        const auto [inputNode, written] = passArgument(normInputs[i], isVar);
         tryRemoveCtrlLink(inputNode, targetNode);
         linkNodes(LinkType::Norm, inputNode, targetNode);
         if (auto modifierNode = modifierOf(inputNode); modifierNode.has_value()) {
@@ -1608,7 +1713,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     .atOrigin(gct->load()->origin())
                     .commit(targetName + ": " + targetFuncType->toString());
             }
-            setModifier(inputNode, targetNode);
+            if (written != nullptr) {
+                setModifier(written, targetNode);
+            }
         }
     }
 
@@ -1631,7 +1738,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     node_handle_t targetNode = any_cast<node_handle_t>(targetNodeRes);
     vector<Argument> inputs;
     for (size_t i = 1; i < gct->size(); i++) {
-        inputs.push_back({argumentNodeOf(visit(gct->at(i)), gct), gct->at(i)});
+        inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i)});
     }
     auto &bound = boundWithArgs_[targetNode];
     bound.insert(bound.end(), inputs.begin(), inputs.end());

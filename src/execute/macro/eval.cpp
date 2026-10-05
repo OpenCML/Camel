@@ -614,7 +614,7 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
 
 slot_t MacroEvaluator::executeFunction(
     ::Function *funcObj, const std::function<void(Frame *, GCGraph *)> &fillArgs,
-    bool requireMacroGraph, const std::function<void(Frame *)> &afterReturn) {
+    bool requireMacroGraph) {
     if (!funcObj) {
         throw MacroExecutionError("Macro callee is null.");
     }
@@ -659,9 +659,6 @@ slot_t MacroEvaluator::executeFunction(
         mm::safepoint("macro function entry");
         slot_t result = executeGraph(frame, runtimeGraph);
         recursionDepth_--;
-        if (afterReturn) {
-            afterReturn(frame);
-        }
         framePool_.release(frame);
         return result;
     } catch (...) {
@@ -826,14 +823,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
                         runtimeGraph,
                         runtimeNodeIndex);
                 },
-                true,
-                [&](Frame *calleeFrame) {
-                    camel::execute::writeBackVarArgs(
-                        frame,
-                        calleeFrame,
-                        runtimeGraph,
-                        runtimeNodeIndex);
-                });
+                true);
             frame->set(node->dataIndex, result);
         } break;
 
@@ -855,14 +845,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
                         runtimeGraph,
                         runtimeNodeIndex);
                 },
-                false,
-                [&](Frame *calleeFrame) {
-                    camel::execute::writeBackVarArgs(
-                        frame,
-                        calleeFrame,
-                        runtimeGraph,
-                        runtimeNodeIndex);
-                });
+                false);
             frame->set(node->dataIndex, result);
         } break;
 

@@ -19,6 +19,7 @@
 
 #include "camel/core/type/resolver.h"
 
+#include "camel/core/type/composite/tuple.h"
 #include "camel/utils/assert.h"
 
 using namespace camel::core::type;
@@ -31,13 +32,15 @@ std::optional<FunctionType *> StaticFuncTypeResolver::resolve(
     if (withCount != with.size() || normCount != norm.size()) {
         return std::nullopt; // reject
     }
+    // A parameter type is the type of the value; the argument of a `var` parameter is the
+    // variable holding it.
     for (size_t i = 0; i < withCount; i++) {
-        if (!funcType_->withTypeAt(i)->assignableFrom(with[i])) {
+        if (!funcType_->withTypeAt(i)->assignableFrom(valueTypeOf(with[i]))) {
             return std::nullopt; // reject
         }
     }
     for (size_t i = 0; i < normCount; i++) {
-        if (!funcType_->normTypeAt(i)->assignableFrom(norm[i])) {
+        if (!funcType_->normTypeAt(i)->assignableFrom(valueTypeOf(norm[i]))) {
             return std::nullopt; // reject
         }
     }
@@ -45,12 +48,23 @@ std::optional<FunctionType *> StaticFuncTypeResolver::resolve(
 }
 
 std::optional<FunctionType *> DynamicFuncTypeResolver::resolve(
-    const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const {
-    if (withVars_.first != -1 && static_cast<int>(with.size()) != withVars_.first) {
+    const type_vec_t &withArgs, const type_vec_t &normArgs, const ModifierSet &modifiers) const {
+    if (withVars_.first != -1 && static_cast<int>(withArgs.size()) != withVars_.first) {
         return std::nullopt; // reject
     }
-    if (normVars_.first != -1 && static_cast<int>(norm.size()) != normVars_.first) {
+    if (normVars_.first != -1 && static_cast<int>(normArgs.size()) != normVars_.first) {
         return std::nullopt; // reject
+    }
+    // A `var` parameter is typed by the value; its argument may be the variable holding it.
+    const auto isVar = [](const var_declare_t &vars, size_t i) {
+        return static_cast<int>(i) < vars.first ? bool(vars.second[i]) : false;
+    };
+    type_vec_t with = withArgs, norm = normArgs;
+    for (size_t i = 0; i < with.size(); i++) {
+        with[i] = isVar(withVars_, i) ? valueTypeOf(with[i]) : with[i];
+    }
+    for (size_t i = 0; i < norm.size(); i++) {
+        norm[i] = isVar(normVars_, i) ? valueTypeOf(norm[i]) : norm[i];
     }
     auto optResType = resolver_(with, norm, modifiers);
     if (!optResType) {
@@ -58,14 +72,10 @@ std::optional<FunctionType *> DynamicFuncTypeResolver::resolve(
     }
     param_vec_t withParams, normParams;
     for (size_t i = 0; i < with.size(); i++) {
-        withParams.emplace_back(
-            with[i],
-            static_cast<int>(i) < withVars_.first ? withVars_.second[i] : false);
+        withParams.emplace_back(with[i], isVar(withVars_, i));
     }
     for (size_t i = 0; i < norm.size(); i++) {
-        normParams.emplace_back(
-            norm[i],
-            static_cast<int>(i) < normVars_.first ? normVars_.second[i] : false);
+        normParams.emplace_back(norm[i], isVar(normVars_, i));
     }
     return FunctionType::create(
         std::move(withParams),
