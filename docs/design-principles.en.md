@@ -95,6 +95,8 @@ B(i)
 
 The compiler automatically inserts the control dependencies A → modify → B.
 
+**The precondition is that the side effect is declared explicitly.** Camel only checks functions that declare their side effects explicitly: in the example above `modify` must declare the parameter it modifies as `var` (`modify(var i: ...)`). If `modify` does not declare `var i`, the compiler does not treat it as a function that modifies `i`, and does not insert these control dependencies. When testing the behaviour of `wait`, the test program must satisfy this precondition.
+
 Inside a sync block it makes no difference whether `wait` is written.
 
 ### 2.7 Known shortcomings
