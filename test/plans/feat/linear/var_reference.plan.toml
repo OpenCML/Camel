@@ -642,3 +642,1059 @@ assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2
 }
 """
 timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.default"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: default (no pass)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.fvm"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.jit"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.tf"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.inline"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::inline."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.specialize"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::specialize."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::specialize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.devirtualize"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::devirtualize."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::devirtualize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.fold"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::fold."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.cse"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::cse."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::opt::cse"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.dce"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::dce."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.opt"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.simplify"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.macro"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.macro_inline"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::inline."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::macro", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.macro_specialize"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::specialize."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::macro", "std::specialize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.macro_devirtualize"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::devirtualize."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::macro", "std::devirtualize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.macro_fold"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt::fold."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::macro", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.macro_cse"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt::cse."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::macro", "std::opt::cse"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.macro_dce"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt::dce."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::macro", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.macro_opt"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::macro", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.macro_simplify"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::macro", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.all_6"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::inline std::specialize std::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::inline", "std::specialize", "std::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.all_macro_9"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::inline std::specialize std::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::macro", "std::inline", "std::specialize", "std::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.opt_fvm"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::opt", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.opt_jit"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.opt_tf"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::opt", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.inline_fvm"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::inline std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.inline_jit"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::inline std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::inline", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.inline_tf"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::inline std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::inline", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.specialize_jit"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::specialize std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::specialize", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.simplify_jit"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::simplify std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.macro_opt_jit"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::macro", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_capture.macro_opt_tf"
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_capture_reference.cml"
+args = ["${case}", "std::macro", "std::opt", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [2, 4, 6] 3 | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.default"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: default (no pass)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.fvm"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.jit"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.tf"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.inline"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::inline."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.specialize"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::specialize."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::specialize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.devirtualize"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::devirtualize."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::devirtualize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.fold"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::fold."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.cse"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::cse."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::opt::cse"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.dce"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::dce."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.opt"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.simplify"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.macro"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.macro_inline"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::inline."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::macro", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.macro_specialize"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::specialize."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::macro", "std::specialize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.macro_devirtualize"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::devirtualize."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::macro", "std::devirtualize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.macro_fold"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::fold."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::macro", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.macro_cse"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::cse."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::macro", "std::opt::cse"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.macro_dce"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::dce."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::macro", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.macro_opt"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::macro", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.macro_simplify"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::macro", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.all_6"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::inline std::specialize std::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::inline", "std::specialize", "std::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.all_macro_9"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::inline std::specialize std::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::macro", "std::inline", "std::specialize", "std::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.opt_fvm"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt std::fvm."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::opt", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.opt_jit"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt std::jit."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.opt_tf"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt std::tf."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::opt", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.inline_fvm"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::inline std::fvm."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.inline_jit"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::inline std::jit."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::inline", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.inline_tf"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::inline std::tf."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::inline", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.specialize_jit"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::specialize std::jit."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::specialize", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.simplify_jit"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::simplify std::jit."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.macro_opt_jit"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt std::jit."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::macro", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor.macro_opt_tf"
+desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt std::tf."
+kind = "behavior"
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+args = ["${case}", "std::macro", "std::opt", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000

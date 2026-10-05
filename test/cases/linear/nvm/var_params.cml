@@ -10,8 +10,8 @@
  *   8       a function value with a var parameter, called indirectly
  *   113     a variable assigned after its initialization, passed by value (not its initial 0)
  *   20001   a hot loop of calls with a var argument (the JIT tiers see every graph involved)
- * Only variables declared with `var` are passed, each to one parameter, and none is captured
- * by a branch arm or a lambda: what happens otherwise is not settled.
+ * Aliased arguments and variables captured by a branch arm or a lambda are covered by
+ * test/cases/linear/byref/.
  */
 module var_params
 
