@@ -1583,7 +1583,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             targetOperator = *res;
             // An operator calls a function argument with values. A function with a `var`
-            // parameter needs a variable there, which an operator does not have.
+            // parameter needs a variable there, which an operator does not have. A macro
+            // operator (grad, value_and_grad, ...) does not call its argument: it rewrites the
+            // function's graph into another function, whose `var` parameters are passed by
+            // the caller of that function as usual.
             const auto takesVariable = [](Type *type) {
                 if (type == nullptr || type->code() != TypeCode::Function) {
                     return false;
@@ -1601,10 +1604,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
                 return false;
             };
+            const bool callsArguments = !targetOperator->funcType()->modifiers().macro();
             for (const auto *inputs : {&withInputs, &normInputs}) {
                 for (const Argument &input : *inputs) {
                     Type *type = valueTypeOf(nodeTypeOf(input.node));
-                    if (takesVariable(type)) {
+                    if (callsArguments && takesVariable(type)) {
                         diags_->of(SemanticDiag::ArgumentsRejected)
                             .atOrigin(input.expr->load()->origin())
                             .commit(

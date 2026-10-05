@@ -1388,12 +1388,14 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
     Type *result = withValue
                        ? TupleType::create(std::vector<Type *>{valueType, signature.gradientType})
                        : signature.gradientType;
+    // The gradient function runs the function: a `var` parameter stays one, so its caller
+    // passes the variable and the function's writes reach it.
     param_vec_t withParams, normParams;
     for (size_t i = 0; i < function->withTypesCount(); ++i) {
-        withParams.emplace_back(function->withTypeAt(i), false);
+        withParams.emplace_back(function->withTypeAt(i), function->withIsVarAt(i));
     }
     for (size_t i = 0; i < function->normTypesCount(); ++i) {
-        normParams.emplace_back(function->normTypeAt(i), false);
+        normParams.emplace_back(function->normTypeAt(i), function->normIsVarAt(i));
     }
     signature.functionType = FunctionType::create(withParams, normParams, result);
     return signature;
