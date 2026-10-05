@@ -48,6 +48,16 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `-L`, `--stdlib <path>`: Specify standard library path (default: `./stdlib` under current directory)  
 - `-E`, `--error-format`, `--output-format <text|json>`: Output format (default: `text`); `--timeit` reuses this, and the test harness expects `json`
 
+### Pass pipelines
+
+The passes given on the command line run in the order written. Each pass transforms the graph, executes it (a scheduling pass) or translates it (a translation pass).
+
+- **Default pipeline.** With no pass given, `std::default` runs; it is an alias of `std::nodevm` (the node VM). The same default runs after the given passes when none of them consumed the graph. `.opencmlrc` (`passes.fallback`) can change it.
+- **Pass order is not restricted by the language, and it can matter.** A pass does not promise to produce the same graph as another order would: it modifies the graph and may have side effects. "Any pass sequence gives the same behaviour" is not a property of Camel.
+- **Standard optimisation passes** (`std::devirtualize`, `std::specialize`, `std::inline`, `std::opt::fold`, `std::opt::cse`, `std::opt::dce`, `std::opt::simplify`, `tensor::fuse`) aim to preserve a program's results. That is a quality requirement on those passes, checked by tests, not a language guarantee.
+- **`std::macro` is optional.** Without it a `macro` function is an ordinary function that runs with the program.
+- **Libraries built on passes can have preconditions.** The `autodiff` library needs `std::macro` to run before `grad` / `value_and_grad` / `vjp` can be expanded: a graph on which macros have not run lacks the information differentiation needs. This is a constraint of that library, not of the language core.
+
 ### Common Passes
 
 - `std::inline`: inline-only rewrite pass; default target strategy is `std::inline::hybrid`
