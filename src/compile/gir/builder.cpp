@@ -524,6 +524,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     diags_  = diags;
     usedGraphs_.clear();
     variables_.clear();
+    pendingReads_.clear();
     typeDecls_.clear();
     syntheticRefIndex_ = 0;
 
@@ -936,6 +937,40 @@ void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
         inputGraph == nodeGraphOf(modifier),
         "Modifier tracking must stay within a single compile graph.");
     nodeModifierMaps_[inputGraph][nodeIdOf(input)] = nodeIdOf(modifier);
+}
+
+void Builder::recordWrite(node_handle_t variable, node_handle_t writer) {
+    // `A(i); wait modify(i); B(i)` gives A -> modify -> B (design principles 2.6). The second
+    // half follows from setModifier. The first: the waited writer is ordered after every
+    // operation that used a value read from the variable before it (after the read itself
+    // when nothing used it). In a sync block the block's chain already orders them. A writer
+    // that is neither waited nor in a sync block is not ordered after earlier readers; they
+    // stay pending for the next waited writer.
+    auto &reads = pendingReads_[variable];
+    if (waited_ && !synced_) {
+        std::unordered_set<node_handle_t> before;
+        for (node_handle_t read : reads) {
+            bool used = false;
+            for (auto users : {normUsersOf(read), withUsersOf(read)}) {
+                for (draft_node_ref_t user : users) {
+                    before.insert(nodeDraftOf(read)->node(user));
+                    used = true;
+                }
+            }
+            if (!used) {
+                before.insert(read);
+            }
+        }
+        for (node_handle_t node : before) {
+            if (shouldAddSyncCtrlLink(node, writer)) {
+                linkNodes(LinkType::Ctrl, node, writer);
+            }
+        }
+    }
+    if (waited_ || synced_) {
+        reads.clear();
+    }
+    setModifier(variable, writer);
 }
 
 node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
@@ -1360,6 +1395,7 @@ node_handle_t Builder::newVariable(node_handle_t value) {
 
 node_handle_t Builder::readVariable(node_handle_t variable) {
     node_handle_t value = variableOperator("__var_get__", variable);
+    pendingReads_[variable].push_back(value);
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
             linkNodes(LinkType::Ctrl, *modifier, value);
@@ -1691,7 +1727,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     .commit(targetName + ": " + targetFuncType->toString());
             }
             if (written != nullptr) {
-                setModifier(written, targetNode);
+                recordWrite(written, targetNode);
             }
         }
     }
@@ -1714,7 +1750,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     .commit(targetName + ": " + targetFuncType->toString());
             }
             if (written != nullptr) {
-                setModifier(written, targetNode);
+                recordWrite(written, targetNode);
             }
         }
     }

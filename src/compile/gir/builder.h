@@ -98,6 +98,9 @@ class Builder {
     // and stored by the assignment operators. Every other named node is an immutable value
     // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
+    // Per variable, its reads (`:var/get`) in the current graph that no writer has been ordered
+    // after yet.
+    std::unordered_map<node_handle_t, std::vector<node_handle_t>> pendingReads_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -160,6 +163,9 @@ class Builder {
         const compile_graph_ptr_t &decoratedGraph, const GCT::node_ptr_t &origin);
     std::optional<node_handle_t> modifierOf(node_handle_t node) const;
     void setModifier(node_handle_t input, node_handle_t modifier);
+    // `writer` writes `variable`: later reads and writers are ordered after it, and a waited
+    // writer is ordered after the operations before it that used the variable's value.
+    void recordWrite(node_handle_t variable, node_handle_t writer);
     compile_graph_ptr_t buildDecoratedGraph(
         const std::string &funcName, const compile_graph_ptr_t &rawGraph,
         const std::vector<GCT::node_ptr_t> &annoNodes);

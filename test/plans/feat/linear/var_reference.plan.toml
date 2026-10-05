@@ -1698,3 +1698,559 @@ assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.default"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: default (no pass)."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.fvm"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.jit"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.tf"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.inline"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::inline."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.specialize"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::specialize."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::specialize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.devirtualize"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::devirtualize."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::devirtualize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.fold"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::fold."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.cse"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::cse."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::opt::cse"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.dce"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::dce."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.opt"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.simplify"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.macro"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.macro_inline"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::inline."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::macro", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.macro_specialize"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::specialize."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::macro", "std::specialize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.macro_devirtualize"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::devirtualize."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::macro", "std::devirtualize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.macro_fold"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::fold."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::macro", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.macro_cse"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::cse."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::macro", "std::opt::cse"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.macro_dce"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::dce."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::macro", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.macro_opt"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::macro", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.macro_simplify"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::macro", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.all_6"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::inline std::specialize std::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::inline", "std::specialize", "std::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.all_macro_9"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::inline std::specialize std::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::macro", "std::inline", "std::specialize", "std::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.opt_fvm"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::opt", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.opt_jit"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.opt_tf"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::opt", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.inline_fvm"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::inline std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.inline_jit"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::inline std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::inline", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.inline_tf"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::inline std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::inline", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.specialize_jit"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::specialize std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::specialize", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.simplify_jit"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::simplify std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.macro_opt_jit"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::macro", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_before_after.macro_opt_tf"
+desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::macro", "std::opt", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "wait_graph.before_after"
+desc = "A(i); wait modify(i); B(i) outside a sync block: the graph has the control dependencies A -> modify and modify -> the read of i that B uses."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_before_after.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+const node = (label, type) => {
+    const m = text.match(new RegExp('(N[0-9A-F]+) \\[label="' + label + '", type="' + type + '"'))
+    assert(m, `no ${type} node labelled ${label}`)
+    return m[1]
+}
+const edge = (from, to, type) => text.includes(`${from} -> ${to} [`) &&
+    new RegExp(from + ' -> ' + to + ' \\[label="[^"]*", type="' + type + '"').test(text)
+const a = node('before', 'FUNC'), m = node('modify', 'FUNC'), b = node('after', 'FUNC')
+assert(edge(a, m, 'CTRL'), 'missing control dependency A -> modify')
+const reads = [...text.matchAll(/(N[0-9A-F]+) \[label=":var\/get", type="OPER"/g)].map(x => x[1])
+const readOfB = reads.find(r => edge(r, b, 'NORM'))
+assert(readOfB, 'B does not read the variable through :var/get')
+assert(edge(m, readOfB, 'CTRL'), 'missing control dependency modify -> read used by B')
+}
+"""
+timeout_ms = 4000
