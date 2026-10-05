@@ -4,6 +4,12 @@ This file is the entry point. Read the detailed rules under `agents/` before mak
 For any branch, merge, rebase, or release task, you must read `agents/branching.md` first and follow it exactly.
 In particular, before any `develop` -> `main` release merge, you must confirm the release version, confirm the next development version, and confirm the `changes.log` release-note content with the user.
 
+## Design Principles (read first)
+- Anyone, human or AI, who changes semantics, passes, schedulers, the exporter or autodiff must read `docs/design-principles.cn.md` first (English translation: `docs/design-principles.en.md`; the Chinese file is authoritative).
+- It is normative: when it conflicts with the code, with other documents or with a test result, it prevails, and the conflict is recorded as a defect or a to-do. Do not change semantics to make a test pass.
+- Questions it lists as undecided, or does not cover, go to the language author. Do not decide them ad hoc.
+- Its section 5 lists misreadings that have actually happened; check your change against them.
+
 ## Core Rules
 - Runtime shell: Windows PowerShell.
 - Use `;` to chain commands. Do not use `&&`.

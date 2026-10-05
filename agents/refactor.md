@@ -1,5 +1,7 @@
 # Refactor Rules
 
+> **Read [`../docs/design-principles.cn.md`](../docs/design-principles.cn.md) first** (English translation: [`design-principles.en.md`](../docs/design-principles.en.md)). It is the language author's normative statement of what Camel is and of its execution model; it prevails over code and other documents, and questions it leaves undecided go to the language author.
+
 ## Design Direction
 - Prefer large, structural, end-state-oriented redesigns over incremental compatibility-preserving migration when a subsystem boundary is fundamentally wrong.
 - Do not optimize for short-term safety or staged coexistence if that leaves behind temporary scaffolding, bridge layers, or cleanup debt.

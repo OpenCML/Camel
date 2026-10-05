@@ -1,5 +1,7 @@
 # Camel 语言参考（详细版）
 
+> **先读 [`../design-principles.cn.md`](../design-principles.cn.md)。** 它是语言作者对 Camel 根本定位与执行模型的规范性说明：与实现或其他文档冲突时以它为准；它没有覆盖或标为“未定”的问题，向语言作者提问，不要自行选择。
+
 本目录是 Camel 语言的**详细语言参考**，按主题分章撰写，每章配有语法说明与可运行示例。概要版见 [../technical/00_language_reference.md](../technical/00_language_reference.md)。
 
 ---

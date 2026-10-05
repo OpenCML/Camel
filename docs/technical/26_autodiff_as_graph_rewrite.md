@@ -1,5 +1,11 @@
 # Automatic Differentiation as Graph Rewriting
 
+> **Read [`../design-principles.cn.md`](../design-principles.cn.md) first** (English translation: [`design-principles.en.md`](../design-principles.en.md)). It is the language author's normative statement of what Camel is and of its execution model; it prevails over code and other documents, and questions it leaves undecided go to the language author.
+>
+> In its terms (section 4): automatic differentiation is a **library built on the pass mechanism, not part of the language core**. Its precondition is that `std::macro` runs before `grad` / `value_and_grad` / `vjp` are used: a graph on which macros have not been executed lacks the information differentiation needs. When the precondition is not met the library must give a clear diagnostic. Pass order is otherwise unrestricted by the language and may change results.
+>
+> **Implementation status**: an unmet precondition can still surface as a run-time error instead of a clear located diagnostic (e.g. "branch arms must be subgraph calls" after `std::opt::simplify` on the GRU benchmark; tracking item N3 / D21).
+
 Status: implemented through phase 5 and phase 7 (§8); phase 6 (thin ONNX) is
 partly done: `onnx::export` exists as a module-contributed translation pass,
 but shape specialization still happens inside it and `onnx.export_model` still
