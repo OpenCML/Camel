@@ -534,6 +534,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     builtFunctions_.clear();
     effectfulGraphs_.clear();
     armGraphs_.clear();
+    builtBodies_.clear();
     typeDecls_.clear();
     syntheticRefIndex_ = 0;
 
@@ -551,6 +552,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
         visit(gct);
         reportIgnoredCapturedWrites();
         reportUndeclaredCapturedWrites();
+        reportDroppedEffectsOfBodies();
 
         compile_graph_ptr_t entryGraph = nullptr;
         if (auto decoratedMain = decoratedGraphAt("main")) {
@@ -815,7 +817,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         setBodyResult(graph, visitBodyNode(gct->atAs<GCT::ExecLoad>(1)));
         bodyStates_[graph.get()] = BodyState::Built;
         builtFunctions_.push_back({graph.get(), gct->load()->origin(), name});
-        reportDroppedEffects(graph);
+        builtBodies_.push_back(graph);
     } catch (...) {
         bodyStates_[graph.get()] = BodyState::Built;
         leaveScope();
@@ -1209,7 +1211,24 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
 }
 
-void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph) {
+void Builder::reportDroppedEffectsOfBodies() {
+    // Whether a call is an effect depends on its callee's body, which may be written later in
+    // the file (or be the caller itself): the set of effectful graphs is the least fixpoint
+    // over all bodies, and only then are the warnings issued, in the order the bodies were
+    // built.
+    for (size_t known = effectfulGraphs_.size() + 1; known != effectfulGraphs_.size();) {
+        known = effectfulGraphs_.size();
+        for (const compile_graph_ptr_t &graph : builtBodies_) {
+            reportDroppedEffects(graph, false);
+        }
+    }
+    for (const compile_graph_ptr_t &graph : builtBodies_) {
+        reportDroppedEffects(graph, true);
+    }
+    builtBodies_.clear();
+}
+
+void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report) {
     auto &draft = graph->draft();
     // What the exit depends on, through data and control edges.
     std::unordered_set<draft_node_ref_t> needed;
@@ -1243,6 +1262,9 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph) {
         } else {
             dropped.push_back(id);
         }
+    }
+    if (!report) {
+        return;
     }
     // One warning per dropped chain: an effect whose result feeds another dropped effect
     // (`println(log(1))`, the statements of a dropped sync block) is reported through the
@@ -2274,7 +2296,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         }
         bodyStates_[subGraph.get()] = BodyState::Built;
         armGraphs_.insert(subGraph.get());
-        reportDroppedEffects(subGraph);
+        builtBodies_.push_back(subGraph);
         leaveScope();
         armGraphs.push_back(subGraph.get());
         for (const CapturedUse &use : capturedUsesOf(subGraph)) {

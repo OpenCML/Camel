@@ -159,6 +159,8 @@ class Builder {
     // graphs that are branch arms (reported through their branch, not as calls).
     std::unordered_set<DraftGraphBuilder *> effectfulGraphs_;
     std::unordered_set<DraftGraphBuilder *> armGraphs_;
+    // The function bodies and arms of the module, in the order they were built.
+    std::vector<compile_graph_ptr_t> builtBodies_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -251,7 +253,11 @@ class Builder {
     bool isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const;
     // Once the body of `graph` is built: records whether its exit depends on an effect, and
     // warns (EffectNotExecuted) about the effects that the exit does not depend on.
-    void reportDroppedEffects(const compile_graph_ptr_t &graph);
+    // With `report` false it only records whether the exit depends on an effect.
+    void reportDroppedEffects(const compile_graph_ptr_t &graph, bool report = true);
+    // Once every body is built: settles which graphs are effectful (a callee may be written
+    // after its caller) and then warns for each body.
+    void reportDroppedEffectsOfBodies();
     compile_graph_ptr_t buildDecoratedGraph(
         const std::string &funcName, const compile_graph_ptr_t &rawGraph,
         const std::vector<GCT::node_ptr_t> &annoNodes);

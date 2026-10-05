@@ -402,3 +402,20 @@ assert(input.normalized.stdout === '2011\n', 'stdout: ' + input.normalized.stdou
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
+
+[[tests]]
+name = "dropped_effects_forward"
+desc = "EffectNotExecuted does not depend on the order of definitions: a dropped call of a function with an effectful sync body is reported also when that function is written after the caller."
+kind = "behavior"
+case = "../../../cases/compile/diag_json/dropped_effects_forward.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout.trim() === '2', 'program output: ' + JSON.stringify(input.normalized.stdout))
+const diags = JSON.parse(input.stderr)
+const got = diags.map(d => d.data.name + '@' + (d.range.start.line + 1))
+const want = [8, 9].map(line => 'SemanticDiag::EffectNotExecuted@' + line)
+assert(JSON.stringify(got) === JSON.stringify(want), 'warnings: ' + got.join(' '))
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
