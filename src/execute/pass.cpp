@@ -37,6 +37,7 @@
 #include "passes/sched/fastvm/jit/dump/mirdump.h"
 #include "passes/sched/nodevm/nodevm.h"
 #include "passes/sched/taskflow/taskflow.h"
+#include "passes/test/fault.h"
 #include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/stats/stats.h"
@@ -47,6 +48,7 @@
 #include <algorithm>
 #include <atomic>
 #include <format>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -480,7 +482,10 @@ void registerModulePass(const std::string &path, PassFactory factory) {
     registry.factories.insert_or_assign(path, std::move(factory));
 }
 
-PassFactory findPassFactory(const std::string &name, std::ostream &os) {
+namespace {
+
+/// The factory of a pass name, or null. Prints nothing.
+PassFactory lookupPassFactory(const std::string &name) {
     // 1. Resolve aliases
     std::string resolved = name;
     auto aliasIt         = passAliases.find(name);
@@ -513,30 +518,96 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
         return factory;
     }
 
-    // Not found; print the list of available passes
-    os << std::format("Pass <{}> not found, available passes are:\n", name);
+    // 5. Test-only fault-injection passes, off unless the environment enables them.
+    if (resolved == kDropCallArgumentPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<DropCallArgumentTestPass>(ctx);
+        };
+    }
+    return nullptr;
+}
+
+/// Lists the available passes on stderr. The listing is help text for the command line:
+/// stdout stays reserved for program output and the diagnostics array.
+void listAvailablePasses(const std::string &name) {
+    std::ostream &help = std::cerr;
+    help << std::format("Pass <{}> not found, available passes are:\n", name);
     std::vector<std::string> allPaths;
     collectPassPaths(passScope, "", allPaths);
     for (const auto &p : allPaths) {
-        os << std::format("  {}\n", p);
+        help << std::format("  {}\n", p);
     }
     {
         auto &registry = modulePasses();
         std::lock_guard lock(registry.mutex);
         if (!registry.factories.empty()) {
-            os << std::format("Passes contributed by loaded modules:\n");
+            help << std::format("Passes contributed by loaded modules:\n");
             for (const auto &entry : registry.factories) {
-                os << std::format("  {}\n", entry.first);
+                help << std::format("  {}\n", entry.first);
             }
         }
     }
-    os << std::format("Available aliases are:\n");
+    help << std::format("Available aliases are:\n");
     for (const auto &[alias, target] : passAliases) {
-        os << std::format("  {} -> {}\n", alias, target);
+        help << std::format("  {} -> {}\n", alias, target);
     }
-    os << std::endl;
+    help << std::endl;
+}
 
-    return nullptr;
+} // namespace
+
+PassFactory findPassFactory(const std::string &name, std::ostream &os) {
+    (void)os;
+    auto factory = lookupPassFactory(name);
+    if (!factory) {
+        listAvailablePasses(name);
+    }
+    return factory;
+}
+
+void requireKnownPasses(const std::vector<std::string> &passes) {
+    for (const auto &name : passes) {
+        if (lookupPassFactory(name)) {
+            continue;
+        }
+        listAvailablePasses(name);
+        setPipelineStage("pass:" + name);
+        auto unknown = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(name);
+        unknown.stage = "pass:" + name;
+        setPipelineStage("");
+        throw unknown;
+    }
+}
+
+std::optional<size_t>
+firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
+    for (size_t i = 0; i < passes.size(); ++i) {
+        auto factory = lookupPassFactory(passes[i]);
+        if (!factory) {
+            continue;
+        }
+        const auto pass = factory(ctx);
+        if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ||
+            dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
+            return i;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<Diagnostic>
+passesNeverRunWarning(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
+    const auto consumer = firstConsumingPass(passes, ctx);
+    if (!consumer.has_value() || *consumer + 1 >= passes.size()) {
+        return std::nullopt;
+    }
+    std::string rest;
+    for (size_t i = *consumer + 1; i < passes.size(); ++i) {
+        rest += (rest.empty() ? "'" : ", '") + passes[i] + "'";
+    }
+    auto warning = DiagnosticBuilder::of(RuntimeDiag::PassesNeverRun).commit(passes[*consumer], rest);
+    warning.stage = "pass:" + passes[*consumer];
+    return warning;
 }
 
 PassApplyResult applyPassesDetailed(
@@ -554,6 +625,9 @@ PassApplyResult applyPassesDetailed(
             "Pass",
             std::format("run | passes | plan ({}): {}", passes.size(), seq.str()));
     }
+    // Every name is checked before the first pass runs: an unknown pass written after a
+    // scheduling pass must not let the program execute first.
+    requireKnownPasses(passes);
     size_t passOutputIndex = 0;
     for (const auto &p : passes) {
         if (graph == nullptr) {
@@ -565,7 +639,34 @@ PassApplyResult applyPassesDetailed(
             camel::core::mm::autoSpace().safepoint(std::format("before pass {}", p));
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), graph); });
             auto pass = factory(ctx);
-            graph     = pass->apply(graph, os);
+            // Diagnostics raised while this pass runs carry its stage: "run" for a scheduling
+            // pass (the program executes), "pass:<name>" for rewrite and translation passes.
+            struct StageScope {
+                explicit StageScope(std::string stage) { setPipelineStage(std::move(stage)); }
+                ~StageScope() { setPipelineStage(""); }
+            } stageScope(
+                dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ? std::string("run")
+                                                                         : "pass:" + p);
+            try {
+                graph = pass->apply(graph, os);
+            } catch (const DiagnosticsLimitExceededBaseException &) {
+                throw; // diagnostics already recorded; the caller dumps them
+            } catch (const std::exception &e) {
+                // A pass that gives up with a plain exception (graph validation at commit, the
+                // execution-order builder meeting a cycle, an arena limit) hit a defect of the
+                // compiler, not of the program. It is still reported as a diagnostic, so that
+                // --output-format json stays a valid diagnostics array. There is no source
+                // position for it. The stage names the pass even for a scheduling pass: the
+                // failure belongs to the pass, whatever part of the program had run.
+                setPipelineStage("pass:" + p);
+                std::string what = e.what();
+                while (!what.empty() && (what.back() == '.' || what.back() == '\n')) {
+                    what.pop_back(); // the diagnostic's message ends the sentence itself
+                }
+                ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(p, what);
+                CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (internal error)", p);
+                return {nullptr, PassApplyStatus::Failed};
+            }
             camel::core::mm::autoSpace().safepoint(std::format("after pass {}", p));
             if (ctx->rtmDiags()->hasErrors()) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (see diagnostics)", p);
@@ -585,7 +686,10 @@ PassApplyResult applyPassesDetailed(
             }
             CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> next graph '{}'", p, graph->name());
         } else {
-            throw DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(p);
+            setPipelineStage("pass:" + p);
+            auto unknown = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(p);
+            setPipelineStage("");
+            throw unknown;
         }
     }
 

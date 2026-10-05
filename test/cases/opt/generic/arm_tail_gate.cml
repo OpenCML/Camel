@@ -1,0 +1,27 @@
+/**
+ * A recursion over a step count read from a shape, with a tensor accumulator.
+ * std::opt::simplify unrolls it: a specialized `run` whose exit GATE only
+ * waits on its parameters and on gated constants is inlined as the tail of a
+ * branch arm. Its control inputs disappear with the parameters, and a GATE
+ * that anchors an arm is not dissolved, so the rewrite used to commit a GATE
+ * without control input ("Runtime graph ... has GATE node ... without control
+ * input"). `s` is used twice on purpose: the shared shape value is what makes
+ * the step count a specialized-away argument.
+ */
+module arm_tail_gate
+
+import { Tensor, ones, zeros, shape } from tensor
+
+func run(t: int, steps: int, x: Tensor, h: Tensor): Tensor {
+    return if t >= steps then h else run(t + 1, steps, x, h + h)
+}
+
+func forward(x: Tensor): Tensor {
+    let s = shape(x)
+    return run(0, s[1], x, zeros([s[0]]) + 1.0)
+}
+
+func main(): int sync {
+    println(forward(ones([2, 3])))
+    return 0
+}

@@ -96,6 +96,13 @@ class TupleType : public CompositeType {
     // Build from a factory.
     static TupleType *fromFactory(TupleTypeFactory &factory);
 
+    /// The type of a variable cell: the one-slot mutable object that a `var` variable denotes
+    /// and that is shared, by pointer, with every `var` parameter and capture bound to it. It
+    /// has the layout of a one-element tuple but is a distinct type (printed `var T`). Equal
+    /// value types yield the same cell type object.
+    static TupleType *cell(Type *valueType);
+    bool isCell() const { return cell_; }
+
     // Helper: build from raw data (internal use).
     static TupleType *fromFactoryData(
         const Type *const *types, const TypeCode *typeCodes, const size_t *refs, size_t size,
@@ -144,6 +151,7 @@ class TupleType : public CompositeType {
     // Fill in one pass from vector<Type*> (used by create).
     TupleType(const TupleTypeLayout &layout, const std::vector<Type *> &types);
 
+    bool cell_ = false;      // A variable cell, see cell().
     size_t size_;            // Element count.
     size_t refCount_;        // Number of reference indices.
     Type **typesPtr_;        // Pointer to the types array (computed at construction).
@@ -160,5 +168,17 @@ class TupleType : public CompositeType {
     const TypeCode *typeCodesPtr() const { return typeCodesPtr_; }
     const size_t *refsPtr() const { return refsPtr_; }
 };
+
+/// The type of the value an argument of type `type` carries: the content type of a variable
+/// cell, `type` itself otherwise. Overloads are resolved on value types.
+inline Type *valueTypeOf(Type *type) {
+    if (type && type->code() == TypeCode::Tuple) {
+        auto *tuple = static_cast<TupleType *>(type);
+        if (tuple->isCell()) {
+            return tuple->typeAt(0);
+        }
+    }
+    return type;
+}
 
 } // namespace camel::core::type

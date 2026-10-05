@@ -45,3 +45,70 @@ expect_diagnostic_column = 17
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
+[[tests]]
+name = "semantic.throw_not_supported"
+desc = "`throw` is rejected at compile time with ConstructNotSupported at the statement; it is no longer compiled as `return`."
+kind = "negative"
+case = "../../../cases/compile/semantic/throw_not_supported.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 9
+expect_output_contains = ["'throw' is not supported: exceptions are not implemented."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "semantic.raise_not_supported"
+desc = "`raise` is rejected at compile time with ConstructNotSupported at the statement; it is no longer compiled as `return`."
+kind = "negative"
+case = "../../../cases/compile/semantic/raise_not_supported.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 5
+expect_output_contains = ["'raise' is not supported: exceptions are not implemented."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "semantic.try_not_supported"
+desc = "`try` / `catch` / `finally` is rejected at compile time with ConstructNotSupported at `try`, instead of an internal error without a position."
+kind = "negative"
+case = "../../../cases/compile/semantic/try_not_supported.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 5
+expect_output_contains = ["'try' is not supported: exceptions are not implemented."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "semantic.try_not_supported_json"
+desc = "The not-supported diagnostic in JSON: one error, stage typecheck, the range of the whole try expression, the file; stdout is nothing but the array."
+kind = "behavior"
+case = "../../../cases/compile/semantic/try_not_supported.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 1
+verify_script = """
+const diags = JSON.parse(input.stdout)
+assert(diags.length === 1, 'one diagnostic, got ' + diags.length)
+const d = diags[0]
+assert(d.severity === 'Error' && d.data.name === 'SemanticDiag::ConstructNotSupported', d.severity + ' ' + d.data.name)
+assert(d.data.stage === 'typecheck', 'stage ' + d.data.stage)
+assert(d.range.start.line === 8 && d.range.start.character === 4 && d.range.end.line === 14, 'range ' + JSON.stringify(d.range))
+assert(d.data.modulePath.endsWith('try_not_supported.cml'), 'file ' + d.data.modulePath)
+assert(input.stderr === '', 'stderr empty')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 4000

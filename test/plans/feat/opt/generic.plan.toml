@@ -370,3 +370,570 @@ assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${o
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "written_variable.reference"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: no pass."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.fold.nvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt::fold (forwarded the first tuple's element past the reassignment)."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::opt::fold", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.cse.nvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt::cse (merged `x + 1` before and after `x += 5`)."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.simplify.nvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt::simplify (folded the first tuple into a constant the assignment then wrote)."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.simplify.fvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt::simplify on FastVM."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.opt_fold.nvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt then std::opt::fold."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::opt", "std::opt::fold", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.opt_cse.nvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt then std::opt::cse."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::opt", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.inline_fold_cse.nvm"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::inline, std::opt::fold, std::opt::cse."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::inline", "std::opt::fold", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "written_variable.inline_fold_cse.jit"
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::inline, std::opt::fold, std::opt::cse on the JIT."
+kind = "behavior"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::inline", "std::opt::fold", "std::opt::cse", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' ')
+assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.reference"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: no pass."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.inline_cse.nvm"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::inline std::opt::cse."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}", "std::inline", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.inline_cse.fvm"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::inline std::opt::cse on FastVM."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}", "std::inline", "std::opt::cse", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.inline_cse.jit"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::inline std::opt::cse on the JIT."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}", "std::inline", "std::opt::cse", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.inline_arm_cse.nvm"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::inline::arm std::opt::cse."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}", "std::inline::arm", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.simplify_cse.nvm"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::opt::simplify std::opt::cse (a condition simplify cannot fold)."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}", "std::opt::simplify", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "cse_arm_constants.inline_specialize_cse_devirtualize.nvm"
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: the experiment pipeline R06."
+kind = "behavior"
+case = "../../../cases/opt/generic/cse_arm_constants.cml"
+args = ["${case}", "std::inline", "std::specialize", "std::opt::cse", "std::devirtualize", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "arm_tail_gate.reference"
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: no pass."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arm_tail_gate.simplify.nvm"
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arm_tail_gate.simplify.fvm"
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: std::opt::simplify on FastVM."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arm_tail_gate.simplify.jit"
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: std::opt::simplify on the JIT."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arm_tail_gate.unfolded_inline_small.nvm"
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: two simplify rounds by hand, then std::inline::small (the step that built the gate)."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt", "std::opt::fold", "std::opt::dce", "std::opt", "std::opt::fold", "std::opt::dce", "std::inline::small", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "shape_unroll.cse_simplify.nvm"
+desc = "shape_unroll with its three shape(x) calls merged by cse before simplify (the corpus route to the same GATE defect). Under: std::opt::cse std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/opt/generic/shape_unroll.cml"
+args = ["${case}", "std::opt::cse", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out.includes('[      3.,       3.,       3.,       3.]') && out.endsWith('dtype=float32)'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "shape_unroll.fold_fuse_cse_simplify_specialize.nvm"
+desc = "shape_unroll with its three shape(x) calls merged by cse before simplify (the corpus route to the same GATE defect). Under: the shortest experiment pipeline."
+kind = "behavior"
+case = "../../../cases/opt/generic/shape_unroll.cml"
+args = ["${case}", "std::opt::fold", "tensor::fuse", "std::opt::cse", "std::opt::simplify", "std::specialize", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out.includes('[      3.,       3.,       3.,       3.]') && out.endsWith('dtype=float32)'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "specialize_growing_shape.fold_specialize.nvm"
+desc = "A recursion whose tensor argument grows one row per level has a different argument type at every level; type-only specialization of the recursive function is bounded (8 copies), after which the call keeps its callee. The pass used not to terminate. Under: std::opt::fold std::specialize."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialize_growing_shape.cml"
+args = ["${case}", "std::opt::fold", "std::specialize", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '[12, 2]\n36', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "specialize_growing_shape.fold_specialize.bounded"
+desc = "The program after std::opt::fold std::specialize holds a bounded number of graphs (the 8 type specializations of the recursion's branch arm and what they call), and still prints the zero-pass output."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialize_growing_shape.cml"
+args = ["${case}", "std::opt::fold", "std::specialize", "std::stats", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
+assert(stats.graphs > 5 && stats.graphs <= 40, `unexpected graph count: ${stats.graphs}`)
+assert(out.endsWith('[12, 2]\n36'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "reshape_view_gc.fold_specialize.nvm"
+desc = "The corpus program of the same defect (a recursion that concatenates onto its tensor argument): std::opt::fold std::specialize terminates and reproduces the zero-pass output."
+kind = "behavior"
+case = "../../../cases/modules/tensor/reshape_view_gc.cml"
+args = ["${case}", "std::opt::fold", "std::specialize", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["total 16380", "[      2.,       4.,       6.,       8.,      10.,      12.]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_growth_budget.simplify.nvm"
+desc = "std::opt::simplify unrolls a recursion with constant arguments one level per round; the growth budget (4096 copied nodes) stops it and leaves the remaining calls as calls. fib(10) and fib(18) keep their values. Before the budget the pass ran for tens of seconds and then failed on the 16-bit edge arena."
+kind = "behavior"
+case = "../../../cases/opt/generic/simplify_growth_budget.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '55\n2584\n2639', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_growth_budget.inline_simplify.fvm"
+desc = "The same program with std::inline before std::opt::simplify (the order that reached the arena error first, and a segfault with two calls). Under: std::inline std::opt::simplify std::fvm."
+kind = "behavior"
+case = "../../../cases/opt/generic/simplify_growth_budget.cml"
+args = ["${case}", "std::inline", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '55\n2584\n2639', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_growth_budget.calls_remain"
+desc = "After the budget is spent the program still holds direct calls of fib (it is not the whole call tree) and stays small: std::stats reports fewer than 4000 nodes and more than 100 direct calls."
+kind = "behavior"
+case = "../../../cases/opt/generic/simplify_growth_budget.cml"
+args = ["${case}", "std::opt::simplify", "std::stats", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
+assert(stats.nodes < 4000, `program too large: ${stats.nodes} nodes`)
+assert(stats.direct_calls > 100, `expected remaining calls, got ${stats.direct_calls}`)
+assert(out.endsWith('55\n2584\n2639'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_growth_budget.env_override"
+desc = "CAMEL_OPT_GROWTH_BUDGET overrides the budget: with 0 nothing is specialized or inlined and the program keeps its size (fewer than 60 nodes) and its output."
+kind = "behavior"
+case = "../../../cases/opt/generic/simplify_growth_budget.cml"
+args = ["${case}", "std::opt::simplify", "std::stats", "std::nvm"]
+envs = ["CAMEL_OPT_GROWTH_BUDGET=0"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
+assert(stats.nodes < 60, `program grew: ${stats.nodes} nodes`)
+assert(out.endsWith('55\n2584\n2639'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "fib_recursive.simplify.nvm"
+desc = "The corpus program of the same defect: test/cases/linear/jit/fib_recursive.cml under std::opt::simplify finishes within the budget and prints the zero-pass output."
+kind = "behavior"
+case = "../../../cases/linear/jit/fib_recursive.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["fib_recursive f0=0 f1=1 f10=55 f15=610"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "specialize_growing_shape.simplify.nvm"
+desc = "The growing-shape recursion under std::opt::simplify: with type specialization bounded, the inliner kept unrolling it until the permanent space was exhausted (a segfault); the growth budget stops it. Output equals the zero-pass output."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialize_growing_shape.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '[12, 2]\n36', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "perm_space_exhausted.diagnostic"
+desc = "Exhausting the 32 MB permanent space inside a pass is a PassInternalError naming the pass, raised before anything executes (it used to be a write through null: the guard was an ASSERT, compiled out in release builds). The budget is lifted by CAMEL_OPT_GROWTH_BUDGET to reach the limit."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialize_growing_shape.cml"
+args = ["--output-format", "json", "${case}", "std::opt::simplify", "std::nvm"]
+envs = ["CAMEL_OPT_GROWTH_BUDGET=100000000"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout + input.normalized.stderr
+assert(out.includes('"stage":"pass:std::opt::simplify"'), `stage missing: ${out}`)
+assert(out.includes('"name":"RuntimeDiag::PassInternalError"'), `name missing: ${out}`)
+assert(out.includes('Permanent space exhausted (32 MB'), `reason missing: ${out}`)
+assert(!out.includes('[12, 2]'), `the program ran: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "broken_graph.commit_validation"
+desc = "D23: structural validation runs when a rewrite is committed, in release builds too. The test-only pass test::drop_call_argument (enabled by CAMEL_ENABLE_TEST_PASSES) commits a call that passes fewer arguments than its callee takes; the commit is rejected as PassInternalError naming the pass, and nothing executes. Before, nvm/fvm/jit ran the broken program and printed 0 instead of 42."
+kind = "behavior"
+case = "../../../cases/opt/generic/broken_graph.cml"
+args = ["--output-format", "json", "${case}", "test::drop_call_argument", "std::fvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout + input.normalized.stderr
+assert(out.includes('"stage":"pass:test::drop_call_argument"'), `stage missing: ${out}`)
+assert(out.includes('"name":"RuntimeDiag::PassInternalError"'), `name missing: ${out}`)
+assert(/Runtime graph 'main' has FUNC node \d+ passing 0 arguments and 0 'with' arguments to 'twice', which takes 1 and 0/.test(out), `reason missing: ${out}`)
+assert(!out.includes('main start'), `the program ran: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "broken_graph.test_pass_is_off_by_default"
+desc = "The fault-injection pass does not exist unless CAMEL_ENABLE_TEST_PASSES is set: naming it is an unknown-pass error and the program does not run."
+kind = "behavior"
+case = "../../../cases/opt/generic/broken_graph.cml"
+args = ["--output-format", "json", "${case}", "test::drop_call_argument", "std::fvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('"name":"RuntimeDiag::UnrecognizedGraphPass"'), `expected an unknown-pass diagnostic: ${out}`)
+assert(!out.includes('main start'), `the program ran: ${out}`)
+}
+"""
+timeout_ms = 8000

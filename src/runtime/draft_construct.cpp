@@ -456,13 +456,27 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
         node(id)->header.origin = origin;
     }
 
-    for (gc_node_ref_t input : init.normInputs) {
+    // The input lists are read back from the rebuilt node, not from `init`: a caller that
+    // snapshots the node and changes some lists (snapshotNodeInit) passes spans that view the
+    // node's own tail block, which rebuildNode has just laid out anew (in place when it fits).
+    // With one norm input fewer, the span that used to cover the control inputs covers other
+    // entries, and the control inputs were left without their user reference: a call
+    // specialized and then inlined in one session (std::opt) lost the control edge from the
+    // statement before it, and that statement's effects never ran.
+    const auto copy = [](std::span<const gc_node_ref_t> refs) {
+        return std::vector<gc_node_ref_t>(refs.begin(), refs.end());
+    };
+    const DraftNode *rebuilt  = node(id);
+    const auto newNormInputs = copy(DraftNodeView::normInputs(rebuilt));
+    const auto newWithInputs = copy(DraftNodeView::withInputs(rebuilt));
+    const auto newCtrlInputs = copy(DraftNodeView::ctrlInputs(rebuilt));
+    for (gc_node_ref_t input : newNormInputs) {
         appendUserRef(input, id, true, false, false);
     }
-    for (gc_node_ref_t input : init.withInputs) {
+    for (gc_node_ref_t input : newWithInputs) {
         appendUserRef(input, id, false, true, false);
     }
-    for (gc_node_ref_t input : init.ctrlInputs) {
+    for (gc_node_ref_t input : newCtrlInputs) {
         appendUserRef(input, id, false, false, true);
     }
 }

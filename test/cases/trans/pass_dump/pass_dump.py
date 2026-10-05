@@ -1,0 +1,94 @@
+"""Checks `camel --dump-after-each-pass <dir>` and tools/graph-diff on a macro program.
+
+Runs `basic.cml` (a macro call `add_one(41)`) through `std::macro std::inline std::nvm` and
+checks that:
+  - snapshot 00 is the input graph and one snapshot follows per pass that returned a graph
+    (the scheduling pass consumes the graph and leaves none);
+  - every snapshot has a readable DOT and a stats JSON;
+  - graph-diff between the input and the `std::macro` output reports the macro call as removed,
+    at its call site, and the materialized constant as added;
+  - the program's own output is unchanged by the option.
+
+Usage: python pass_dump.py   (needs only the standard library)
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+REPO_ROOT = HERE.parents[3]
+PROGRAM = REPO_ROOT / "test" / "cases" / "trans" / "macro" / "basic.cml"
+GRAPH_DIFF = REPO_ROOT / "tools" / "graph-diff" / "graph_diff.py"
+
+
+def camel_exe() -> str:
+    override = os.environ.get("CAMEL_EXE")
+    if override:
+        return override
+    return str(REPO_ROOT / "out" / "latest" / "bin" / ("camel.exe" if os.name == "nt" else "camel"))
+
+
+def main() -> int:
+    env = dict(os.environ)
+    env.setdefault("CAMEL_HOME", str(REPO_ROOT / "out" / "latest"))
+    failures = []
+
+    def check(cond: bool, what: str) -> None:
+        print(f"{'ok' if cond else 'FAIL'}: {what}")
+        if not cond:
+            failures.append(what)
+
+    with tempfile.TemporaryDirectory() as t:
+        out = Path(t) / "snapshots"
+        proc = subprocess.run(
+            [camel_exe(), "--dump-after-each-pass", str(out), str(PROGRAM),
+             "std::macro", "std::inline", "std::nvm"],
+            env=env, capture_output=True, text=True, cwd=REPO_ROOT)
+        check(proc.returncode == 0, f"camel exit code 0 (got {proc.returncode})")
+        check(proc.stdout.strip() == "42", "program output unchanged (42)")
+
+        names = sorted(p.name for p in out.iterdir()) if out.is_dir() else []
+        expected = [f"{stem}.{ext}"
+                    for stem in ("00_input", "01_std.macro", "02_std.inline")
+                    for ext in ("rgir.dot", "stats.json")]
+        check(names == sorted(expected), f"snapshot files {sorted(expected)} (got {names})")
+        if failures:
+            return 1
+
+        for stem in ("00_input", "01_std.macro", "02_std.inline"):
+            stats = json.loads((out / f"{stem}.stats.json").read_text())
+            check(stats.get("nodes", 0) > 0, f"{stem}: stats JSON has a node count")
+
+        diff = subprocess.run(
+            [sys.executable, str(GRAPH_DIFF), "--json",
+             str(out / "00_input.rgir.dot"), str(out / "01_std.macro.rgir.dot")],
+            capture_output=True, text=True)
+        check(diff.returncode == 1, "graph-diff exit code 1 when the graphs differ")
+        report = json.loads(diff.stdout)
+        removed = [(e["type"], e["label"]) for e in report["removed"]]
+        added = [(e["type"], e["label"]) for e in report["added"]]
+        check(removed == [("FUNC", "add_one")], f"removed is the macro call (got {removed})")
+        check(added == [("DATA", "42")], f"added is the materialized constant (got {added})")
+        call = report["removed"][0]
+        check(call["srcfile"].replace("\\", "/").endswith("trans/macro/basic.cml")
+              and call["span"].startswith("10:"),
+              f"the removed call is located at its call site, line 11 (got {call['location']})")
+
+        same = subprocess.run(
+            [sys.executable, str(GRAPH_DIFF),
+             str(out / "01_std.macro.rgir.dot"), str(out / "01_std.macro.rgir.dot")],
+            capture_output=True, text=True)
+        check(same.returncode == 0, "graph-diff exit code 0 on identical snapshots")
+
+    print("pass dump: " + ("PASS" if not failures else "FAIL"))
+    return 0 if not failures else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

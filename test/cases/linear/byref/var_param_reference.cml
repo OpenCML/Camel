@@ -1,0 +1,136 @@
+/**
+ * A `var` parameter is a reference to the caller's variable (docs/design-principles.cn.md 2.5):
+ * a write by the callee is a write to that variable, when it happens, on every scheduler and
+ * after every pass. Expected output, one value per line:
+ *   1        direct call
+ *   8        indirect call through a function value
+ *   10       recursion: 4 + 3 + 2 + 1 + 0, each level adds to the same variable
+ *   5000     tail recursion 5000 deep (no frame is kept for the write)
+ *   3        a var parameter passed on to another var parameter, twice
+ *   11 11    the same variable passed to two var parameters is one object: inside the callee
+ *            each parameter reads what was written through the other
+ *   11       ... and both writes land in the caller's variable
+ *   9        a struct variable replaced by the callee
+ *   [1, 2, 3, 4] 4   an array variable: appended in place by the callee, then replaced
+ *   15       a tuple variable replaced by the callee
+ *   2        a var with-parameter
+ *   7        a write is visible before the callee returns (read through a second reference)
+ *   0 1      one variable passed to a parameter without `var` and to a `var` parameter: the
+ *            first receives the value the variable holds at the call (the principles do not
+ *            say whether it should alias; see the open questions), the second the variable
+ */
+module var_param_reference
+
+type Point = { x: int, y: int }
+
+sync func bump(var x: int) {
+    wait x += 1
+}
+
+func count_up(var acc: int, n: int): int sync {
+    wait acc += n
+    let r = if n == 0 then 0 else count_up(acc, n - 1)
+    return r
+}
+
+func count(var acc: int, n: int): int sync {
+    wait acc += 1
+    return if n <= 1 then 0 else count(acc, n - 1)
+}
+
+sync func bump_twice(var y: int) {
+    wait bump(y)
+    wait bump(y)
+}
+
+func both(var a: int, var b: int): int sync {
+    wait a += 1
+    wait b += 10
+    println('{} {}'->format<a, b>)
+    return 0
+}
+
+sync func move_to(var p: Point, v: int) {
+    wait p = { x: v, y: v + 1 }
+}
+
+func push(var xs: int[], v: int): int sync {
+    xs->append<v>
+    return len(xs)
+}
+
+sync func reset(var xs: int[]) {
+    wait xs = [4]
+}
+
+sync func replace(var t: (int, int), a: int) {
+    wait t = (a, a + 1)
+}
+
+with <var acc: int>
+func add(n: int): int sync {
+    wait acc += n
+    return acc
+}
+
+func write_then_read(var w: int, read: () => int): int sync {
+    wait w = 7
+    return read()
+}
+
+func mixed(seen: int, var written: int): int sync {
+    wait written += 1
+    return seen
+}
+
+func main(): int sync {
+    var c = 0
+    wait bump(c)
+    println(c)
+
+    let f = bump
+    var g = 7
+    wait f(g)
+    println(g)
+
+    var total = 0
+    let r1 = count_up(total, 4)
+    println(total)
+
+    var deep = 0
+    let r2 = count(deep, 5000)
+    println(deep)
+
+    var t = 1
+    wait bump_twice(t)
+    println(t)
+
+    var e = 0
+    let r3 = both(e, e)
+    println(e)
+
+    var p = { x: 1, y: 2 }
+    wait move_to(p, 4)
+    println(p.x + p.y)
+
+    var xs = [1, 2, 3]
+    let n = push(xs, 4)
+    println('{} {}'->format<xs, n>)
+    wait reset(xs)
+
+    var q = (1, 2)
+    wait replace(q, 7)
+    println(q.0 + q.1)
+
+    var s = 0
+    let r4 = add<s>(2)
+    println(s)
+
+    var w = 0
+    println(write_then_read(w, (): int => w))
+
+    var d = 0
+    let seen = mixed(d, d)
+    println('{} {}'->format<seen, d>)
+    return r1 + r2 + r3
+}

@@ -1,0 +1,25 @@
+/**
+ * Effects reached through the operands of a composite literal (struct, tuple,
+ * array) in a `sync` block run in written order, between the statements
+ * before and after the literal. The operands used to be lowered into a scope
+ * of their own that the block's ordering did not reach: `loud('two')` ran
+ * after `println('four')` on every scheduler, and the order of the loads in
+ * `let m = { w: weight('w'), ... }` depended on the pass pipeline.
+ */
+module sync_literal_operands
+
+func loud(s: string): string sync {
+    println(s)
+    return s
+}
+
+func main(): int sync {
+    println('one')
+    let m = { a: loud('two'), b: loud('three') }
+    println('four')
+    let t = (loud('five'), loud('six'))
+    let arr = [loud('seven'), loud('eight')]
+    println('nine')
+    println(m.a + m.b + t.0 + t.1 + arr[0] + arr[1])
+    return 0
+}

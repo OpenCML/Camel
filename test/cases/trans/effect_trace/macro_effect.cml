@@ -1,0 +1,16 @@
+/**
+ * A macro function whose body has an effect. With std::macro the call is evaluated ahead of
+ * time and its println is traced with stage "macro"; without it the body runs at run time.
+ */
+module macro_effect
+
+macro func noisy(x: int): int sync {
+    println("in macro body")
+    return x + 1
+}
+
+func main(): int sync {
+    let v = noisy(41)
+    println(v)
+    return 0
+}

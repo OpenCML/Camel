@@ -6,6 +6,4 @@ add_camel_module(
     operators.cpp
     pullback.cpp
     rules.cpp
-  EXTRA_INCLUDES
-    ${CMAKE_SOURCE_DIR}/src
 )

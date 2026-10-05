@@ -457,6 +457,8 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             }
             auto *graph = invocation->ctx->runtimeRootGraph();
             try {
+                // The list is run in three parts; all names are checked before the first.
+                requireKnownPasses(Run::resolvedPassList);
                 if (!prefixPasses.empty()) {
                     auto prefixResult =
                         applyPassesDetailed(graph, prefixPasses, invocation->ctx, execOs);

@@ -1,0 +1,33 @@
+module arm_entry_after_inline
+
+// A helper with two entry operations, called from a branch arm. Hybrid inlining first puts the
+// helper into the arm graph, then the arm graph into the function: the helper's nodes then lie
+// in the arm but before the node recorded as the arm's head. A scheduler that starts the arm at
+// the recorded head skips them and reads slots that were never written.
+// Expected output (one value per line): 0.512, 1, 3, 12, -3.
+func dsq(x: float): float {
+    return 1.0 * x + 1.0 * x
+}
+
+// Reduced from the train loops of the nn test cases.
+func train(w: float, steps: int): float {
+    return if steps == 0 then w else train(w - dsq(w) * 0.1, steps - 1)
+}
+
+// Arms that themselves hold branches whose arms call the helper.
+func pick(x: float, k: int): float {
+    return if k == 1 then dsq(x) * 0.5 else if k == 2 then dsq(x) + dsq(x) else x - dsq(x)
+}
+
+func walk(w: float, steps: int): float {
+    return if steps == 0 then w else walk(if steps > 2 then pick(w, 1) + 1.0 else pick(w, steps) * 0.25, steps - 1)
+}
+
+func main(): int sync {
+    println(train(1.0, 3))
+    println(walk(1.0, 5))
+    println(pick(3.0, 1))
+    println(pick(3.0, 2))
+    println(pick(3.0, 3))
+    return 0
+}

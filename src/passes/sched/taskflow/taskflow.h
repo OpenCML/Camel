@@ -103,9 +103,22 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     tf::Executor executor_;
     std::unordered_map<camel::runtime::GCGraph *, std::vector<camel::runtime::gc_node_ref_t>>
         linearTopoCache_;
+    // Per graph and BRCH: where each arm starts executing in the linear order
+    // (resolveRuntimeBranchArmEntry, shared with NodeVM and FastVM).
+    std::unordered_map<
+        camel::runtime::GCGraph *,
+        std::unordered_map<
+            camel::runtime::gc_node_ref_t, std::vector<camel::runtime::gc_node_ref_t>>>
+        linearArmEntryCache_;
+    // Both caches are filled on first use by whichever worker gets there first (the elements
+    // of one `map` call the same graph at once).
+    std::mutex linearCacheMutex_;
 
     slot_t evalGraphTF(camel::runtime::GCGraph *graph, ctx::Frame *frame);
     slot_t evalGraphLinear(camel::runtime::GCGraph *graph, ctx::Frame *frame);
+    camel::runtime::gc_node_ref_t branchArmEntryForLinear(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef, size_t armIndex,
+        std::span<const camel::runtime::gc_node_ref_t> topoNodes);
     std::span<const camel::runtime::gc_node_ref_t>
     topoNodesForLinear(camel::runtime::GCGraph *graph);
     slot_t runPreparedSubgraph(tf::Subflow &sf, camel::runtime::GCGraph *graph, ctx::Frame *frame);

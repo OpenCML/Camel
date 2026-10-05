@@ -17,44 +17,8 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-/*
- * Runtime rewrite pass configuration.
- *
- * `std::inline` is intentionally an inline-only surface. `std::opt` is the
- * aggregate rewrite pipeline that may also enable devirtualization and
- * specialization before inlining. Keeping the two configuration types distinct
- * prevents pass registration from accidentally collapsing back into the old
- * "inline means all optimizations" behavior.
- */
+/* Moved to the public header camel/passes/opt/config.h; this file forwards to it. */
 
 #pragma once
 
-#include <cstddef>
-
-enum class InlineTargetStrategy {
-    Small,
-    Arm,
-    Hybrid,
-};
-
-struct InlineRewriteConfig {
-    InlineTargetStrategy inlineStrategy     = InlineTargetStrategy::Hybrid;
-    size_t smallSubgraphMaxNonDataPortNodes = 8;
-    /// An acyclic callee called from several places is inlined everywhere when the code this
-    /// duplicates, (call sites - 1) x its size in non-data nodes, stays within this budget.
-    size_t duplicationBudgetNodes    = 256;
-    bool blockCallsToSccEntryCallees = true;
-};
-
-struct OptimizeRewriteConfig {
-    bool enableDevirtualization = true;
-    bool enableSpecialization   = true;
-    bool enableInlining         = true;
-    /// Splits an indirect call whose callee is projected out of a branch JOIN into one call
-    /// per arm plus one JOIN per projected value. The result deliberately violates the
-    /// scheduler invariant that a JOIN is the single cut between its BRCH and everything
-    /// downstream (several sibling JOINs read the same BRCH and their users merge), so it is
-    /// only valid for consumers that never build an execution topo — the ONNX exporter.
-    bool enableBranchedCallSplit = false;
-    InlineRewriteConfig inlineConfig{};
-};
+#include "camel/passes/opt/config.h"

@@ -1,0 +1,17 @@
+module not_static
+
+// A macro call with an argument that is not a constant (line 10) is the normal case and not a
+// failure: std::macro leaves it a run-time call without a diagnostic. Output: 20 and 7.
+macro func count(n: int): int {
+    return if n == 0 then 0 else 1 + count(n - 1)
+}
+
+func run(n: int): int {
+    return count(n)
+}
+
+func main(): int sync {
+    println(count(20))
+    println(run(7))
+    return 0
+}

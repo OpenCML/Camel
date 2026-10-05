@@ -1,0 +1,48 @@
+module written_variable
+
+// A `var` that is assigned again is a variable, not one value: the assignment operators store
+// into the slot of the node that built the first value. The generic passes must not forward,
+// fold or merge across such a write. Expected output (one value per line):
+//   3            reassigned: the element of the tuple assigned last, not of the first one
+//   2 7 3        refilled, first call
+//   2 7 3        refilled, second call: the first call's write must not leak into it
+//   2 7          reread: the same expression before and after the write
+
+// The tuple is built from a non-constant element, reassigned, then projected.
+func reassigned(a: int): int sync {
+    var t = (a, 2)
+    wait t = (a + 2, 7)
+    println(t.0)
+    return 0
+}
+
+// Called with a constant: once the argument is bound, the first tuple is built from constants
+// only. Folding it into a constant would make the assignment write that constant, which every
+// call shares.
+func refilled(a: int): int sync {
+    var t = (a, 2)
+    println(t.1)
+    wait t = (a + 2, 7)
+    println(t.1)
+    println(t.0)
+    return 0
+}
+
+// `x + 1` is written twice, with a write to x in between.
+func reread(a: int): int sync {
+    var x = a
+    let p = x + 1
+    println(p)
+    wait x += 5
+    let q = x + 1
+    println(q)
+    return 0
+}
+
+// The results are used, so that every call stays ordered when the calls are inlined.
+func main(): int sync {
+    let a = reassigned(1)
+    let b = refilled(1) + a
+    let c = refilled(1) + b
+    return reread(1) + c
+}

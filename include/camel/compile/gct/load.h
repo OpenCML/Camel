@@ -218,10 +218,16 @@ class ExitLoad : public Load {
 
 class ExecLoad : public Load {
     bool synced_ = false;
+    /// A scope the lowering introduced (the operands of a composite literal
+    /// `{ a: f(), b: g() }`, the names of a declaration `let (p, q) = f()`): not a block of
+    /// the program, so its expressions take the ordering of the block they appear in.
+    bool operands_ = false;
 
   public:
-    ExecLoad(bool sync = false) : Load(LoadType::EXEC), synced_(sync) {}
+    ExecLoad(bool sync = false, bool operands = false)
+        : Load(LoadType::EXEC), synced_(sync), operands_(operands) {}
     bool synced() const { return synced_; }
+    bool operands() const { return operands_; }
 
     const std::string toString() const override { return synced_ ? "SYNC" : "EXEC"; }
 };

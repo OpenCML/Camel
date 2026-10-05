@@ -44,6 +44,16 @@ struct DraftInlineResult {
 
 DraftInlineResult inlineCallableInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId);
+/// Bound on the type-only specializations of one recursive function that a program may hold.
+///
+/// A specialization that only refines parameter types (a tensor argument whose type carries its
+/// shape) re-infers the callee's types, so the recursive call inside the copy can carry yet
+/// another type: a recursion whose tensor grows every level (`loop(i + 1, n, concat(acc, row))`)
+/// would get a new copy per level without end, because nothing in the types says where the
+/// recursion stops. A recursion that keeps its types reuses its one copy and never meets the
+/// bound; past the bound the call keeps its current callee, which accepts the argument as it is.
+inline constexpr size_t kMaxTypeSpecializationsPerRecursiveFunction = 8;
+
 bool specializeDirectFuncInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId);
 /// Rewrites a CALL into a direct FUNC when its callee is known: a static Function (its static
@@ -69,7 +79,9 @@ bool devirtualizeBranchedCallInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId);
 
 /// The node whose value `id` reads when `id` projects an element out of a tuple built by FILL
-/// in the same graph (through any chain of such projections); `id` itself otherwise.
+/// in the same graph (through any chain of such projections); `id` itself otherwise. A tuple
+/// that is written in place (see draft_writes.h) is not seen through: the projection may read
+/// what a later assignment stored.
 gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id);
 
 /// Specializes `draft`, a copy of `function`'s graph, for one call: its captured values become

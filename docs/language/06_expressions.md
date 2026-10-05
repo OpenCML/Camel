@@ -1,6 +1,6 @@
 # 6. 表达式
 
-本章详细描述 Camel 的**表达式**：求值顺序、原子、访问/下标/调用/泛型、管道、一元与类型断言、可空、各类运算、控制表达式（if/match/try）、wait、Lambda，以及**运算符优先级**。每类都配有示例。
+本章详细描述 Camel 的**表达式**：求值顺序、原子、访问/下标/调用/泛型、管道、一元与类型断言、可空、各类运算、控制表达式（if/match；try 尚未实现）、wait、Lambda，以及**运算符优先级**。每类都配有示例。
 
 ---
 
@@ -351,7 +351,7 @@ return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 ```
 
 ```cml
-let res = if len(arr) <= 1e5 then sort(arr) else {
+let res = if len(arr) <= 1e5 then sorted(arr) else {
     let mid = len(arr) / 2
     let lhs = arr->slice<0, mid>->mergesort
     let rhs = arr->slice<mid, len(arr)>->mergesort
@@ -399,7 +399,9 @@ let new_head = match dir {
 }
 ```
 
-### 6.9.3 try
+### 6.9.3 try（未实现）
+
+> **未实现。** 语法接受该写法，但异常机制（抛出、传播、捕获）没有实现：使用它是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该语句或 `try` 处）。
 
 - **`try stmtBlock catchClause+ (finally stmtBlock)?`**。
 - **catchClause**：**`catch identDef ':' typeExpr stmtBlock`**。
@@ -418,7 +420,9 @@ try {
 
 ## 6.10 wait 表达式
 
-- **`wait assignExpr`**：在 sync 块内，等待该表达式求值完成再继续。
+- **`wait assignExpr`**：作用于其后的这一个表达式。`wait` 前后的操作如果用到了该表达式的值，或用到了被它
+  修改的 `var`，就与它局部有序；排序依据是对 `var` 的使用，不是书写位置（见第 4 章 4.4.5）。表达式不涉及
+  任何 `var` 时 `wait` 没有意义；在同步块内写不写 `wait` 都一样。
 
 ```cml
 wait update(c)

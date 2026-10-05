@@ -1,0 +1,23 @@
+/**
+ * The effect sits in a function the exported one still calls after
+ * simplification (recursion whose depth depends on the input is not unrolled):
+ * the export is refused at the println inside the callee, not only at the
+ * leftover call.
+ */
+module export_ctrl_effect_callee
+
+import { Tensor, reshape, sum } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func shrink(t: Tensor): Tensor sync {
+    println('EFFECT inside a callee')
+    return if sum(t) > 1.0 then shrink(t * 0.5) else t
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    export_model((t: Tensor): Tensor => shrink(t), x, get_env('ONNX_OUT'))
+    println('unreachable')
+    return 0
+}

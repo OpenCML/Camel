@@ -1,0 +1,32 @@
+/**
+ * Consecutive statement calls of sync functions with constant arguments.
+ * std::opt specializes each call (the constant argument is bound, so the call
+ * loses a norm input) and inlines it in the same rewrite session. Rewriting
+ * the call node used to drop the user reference of its control input, so
+ * inlining the call before it could not re-point the edge: the earlier
+ * call's body no longer reached the exit and its println never ran.
+ */
+module consecutive_sync_calls
+
+func one(a: int): int sync {
+    println(a)
+    return 0
+}
+
+func two(a: int): int sync {
+    println(a + 10)
+    return 0
+}
+
+func three(a: int, b: int): int sync {
+    println(a * 100 + b)
+    return a
+}
+
+func main(): int sync {
+    one(1)
+    two(1)
+    three(2, 3)
+    one(4)
+    return 0
+}

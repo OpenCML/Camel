@@ -275,6 +275,33 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "or relax their static types.",
             },
         },
+        {
+            SemanticDiag::AssignmentTargetNotVariable,
+            {
+                "AssignmentTargetNotVariable",
+                "The target of an assignment must be a variable.",
+                "A field, an element or any other expression cannot be assigned: the store "
+                "would go to a temporary. Assign a new value to the whole variable instead.",
+            },
+        },
+        {
+            SemanticDiag::ConstructNotSupported,
+            {
+                "ConstructNotSupported",
+                "'{0}' is not supported: {1}.",
+                "The grammar accepts this construct, but the compiler does not implement it. "
+                "Remove it; nothing in the language replaces it yet.",
+            },
+        },
+        {
+            SemanticDiag::ImmutablePassedToVarParam,
+            {
+                "ImmutablePassedToVarParam",
+                "'{0}' is immutable and cannot be passed to a var parameter of '{1}'.",
+                "Only a variable declared with 'var' (or a var parameter) can be modified. "
+                "Declare it with 'var', or bind the new value to a new name.",
+            },
+        },
 
         // Warnings
         {
@@ -294,11 +321,36 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::CapturedWriteInAsyncFunction,
+            {
+                "CapturedWriteInAsyncFunction",
+                "{0} writes the captured variable{1} {2} but is not declared with the 'sync' "
+                "modifier.",
+                "Write 'sync' before the function ('sync func f(...)', 'sync (...) => ...'): the "
+                "modifier declares that the function has side effects, as it does for a "
+                "function with a var parameter. It does not make the body a sync block.",
+            },
+        },
+        {
+            SemanticDiag::EffectNotExecuted,
+            {
+                "EffectNotExecuted",
+                "{0} has side effects but is never executed: nothing depends on it and it is "
+                "not in a sync block.",
+                "Evaluation is driven by dependencies: outside a sync block an expression "
+                "whose result (or the variable it writes) nothing needs does not run. This is "
+                "legal. To run it, put it in a sync block ('sync {{ ... }}', or a function body "
+                "'func f(): T sync {{ ... }}'), or use its result.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
-                "Function '{0}' with side effects is called but not waited.",
-                "Consider waiting the function using the 'wait' keyword.",
+                "{0} is neither waited nor in a sync block, and {1}.",
+                "Write 'wait' before the expression or put it in a sync block: only then is the "
+                "write ordered after the earlier uses of the variable. Without either, the "
+                "write runs only if the variable is read afterwards.",
             },
         },
     };

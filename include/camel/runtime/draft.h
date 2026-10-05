@@ -326,8 +326,9 @@ class GraphDraft {
     retargetBranchArmAnchors(gc_node_ref_t oldId, gc_node_ref_t newHeadId, gc_node_ref_t newTailId);
     /// Removes GATEs that wait on nothing (no control input): such a gate only forwards its value,
     /// so its users read the value directly. Rewrites that remove what a gate waited on (a pruned
-    /// branch, a constant an inlined gate was ordered after) leave them behind. Returns the number
-    /// removed.
+    /// branch, a constant an inlined gate was ordered after) leave them behind. A gate that is the
+    /// head or tail of a branch arm is kept; when it waits on nothing it is made to wait on its
+    /// BRCH. Returns the number removed.
     size_t dissolveUnorderedGates();
     void setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type);
     void setNodeDataIndex(gc_node_ref_t id, gc_slot_idx_t dataIndex);

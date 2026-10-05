@@ -348,7 +348,68 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
                         graph->name(),
                         ref));
             }
+            if (graph->normInputsOf(ref).empty()) {
+                throw std::runtime_error(
+                    std::format(
+                        "Runtime graph '{}' has GATE node {} without value input.",
+                        graph->name(),
+                        ref));
+            }
         }
+        // Inputs and outputs are stored separately and must mirror each other: every scheduler
+        // walks one of the two directions and trusts the other.
+        const auto requireMirrored = [&](std::span<const gc_node_ref_t> inputs,
+                                         auto outputsOf,
+                                         std::span<const gc_node_ref_t> outputs,
+                                         auto inputsOf,
+                                         std::string_view edgeKind) {
+            for (gc_node_ref_t input : inputs) {
+                const auto users = (graph->*outputsOf)(input);
+                if (std::find(users.begin(), users.end(), ref) == users.end()) {
+                    throw std::runtime_error(
+                        std::format(
+                            "Runtime graph '{}' has asymmetric {} edge {} -> {}: missing among "
+                            "the outputs of {}.",
+                            graph->name(),
+                            edgeKind,
+                            input,
+                            ref,
+                            input));
+                }
+            }
+            for (gc_node_ref_t user : outputs) {
+                const auto sources = (graph->*inputsOf)(user);
+                if (std::find(sources.begin(), sources.end(), ref) == sources.end()) {
+                    throw std::runtime_error(
+                        std::format(
+                            "Runtime graph '{}' has asymmetric {} edge {} -> {}: missing among "
+                            "the inputs of {}.",
+                            graph->name(),
+                            edgeKind,
+                            ref,
+                            user,
+                            user));
+                }
+            }
+        };
+        requireMirrored(
+            graph->normInputsOf(ref),
+            &GCGraph::normOutputsOf,
+            graph->normOutputsOf(ref),
+            &GCGraph::normInputsOf,
+            "norm");
+        requireMirrored(
+            graph->withInputsOf(ref),
+            &GCGraph::withOutputsOf,
+            graph->withOutputsOf(ref),
+            &GCGraph::withInputsOf,
+            "with");
+        requireMirrored(
+            graph->ctrlInputsOf(ref),
+            &GCGraph::ctrlOutputsOf,
+            graph->ctrlOutputsOf(ref),
+            &GCGraph::ctrlInputsOf,
+            "ctrl");
         if (node->kind == GCNodeKind::Brch) {
             const auto *body = node->bodyAs<GCBrchBody>();
             if (!body) {
@@ -1100,6 +1161,41 @@ void emitDraftNativePayload(
 }
 
 void validateRuntimeGraphPayload(const GCGraph *graph) { validateRuntimeGraphPayloadImpl(graph); }
+
+void validateRuntimeGraphCalls(const GCGraph *graph) {
+    if (!graph || !graph->hasNodePayload()) {
+        return;
+    }
+    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+        const GCNode *node = *it;
+        if (!node || node->kind != GCNodeKind::Func) {
+            continue;
+        }
+        const GCGraph *callee = graph->directCalleeGraphOf(it.ref());
+        if (!callee || !callee->hasNodePayload()) {
+            throw std::runtime_error(
+                std::format(
+                    "Runtime graph '{}' has FUNC node {} whose callee graph is not encoded.",
+                    graph->name(),
+                    it.ref()));
+        }
+        const size_t normArgs = graph->normInputsOf(it.ref()).size();
+        const size_t withArgs = graph->withInputsOf(it.ref()).size();
+        if (normArgs != callee->normPorts().size() || withArgs != callee->withPorts().size()) {
+            throw std::runtime_error(
+                std::format(
+                    "Runtime graph '{}' has FUNC node {} passing {} arguments and {} 'with' "
+                    "arguments to '{}', which takes {} and {}.",
+                    graph->name(),
+                    it.ref(),
+                    normArgs,
+                    withArgs,
+                    callee->name(),
+                    callee->normPorts().size(),
+                    callee->withPorts().size()));
+        }
+    }
+}
 
 const std::string &GCGraph::stableId() const {
     static const std::string kEmpty;

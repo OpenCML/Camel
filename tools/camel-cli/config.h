@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 03, 2026
+ * Updated: Oct. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.2.1"
+#define VERSION "0.2.2"
 
 #include <string>
 #include <vector>
@@ -57,6 +57,8 @@ extern std::vector<std::string> fallbackPasses;   // run when graph != null afte
 extern std::string timeitPass;                    // parsed target pass from --timeit
 extern unsigned int timeitIterations;             // parsed iteration count from --timeit
 extern bool timeitEnabled;
+/// --dump-after-each-pass <dir>: directory for per-pass graph snapshots ("" = disabled).
+extern std::string dumpAfterEachPassDir;
 
 extern bool profile;
 extern bool noCache;

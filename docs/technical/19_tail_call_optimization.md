@@ -48,6 +48,8 @@
 
 该规则与 FastVM 的 `resolveTailValueNode` 一致，用于避免把「纯副作用链」误当作返回值尾结点。
 
+**分支臂内的尾调**：尾值为 **JOIN** 时，某一臂的值经转发 **GATE** 到达臂尾；只有当「臂在产生该值之后不再做任何事」时，产生该值的调用才是尾调。判定由 `runtimeArmEndsWithValue`（`src/execute/graph_runtime_support.cpp`）给出：从臂尾沿 GATE 回溯，GATE 等待的结点要么是该值本身、要么是其它转发 GATE、要么不依赖该值；若某个 GATE 等待一个排在该值之后的副作用（`let r = f(x); println(..); return r` 被内联进臂），则该调用**不是**尾调，否则帧被替换后那个副作用永远不会执行。NodeVM（`collectRuntimeTailJoinArmValues`）与 FastVM/JIT（臂出口 JUMP 处）共用这一判定。
+
 ---
 
 ## 3. NodeVM 执行管线总览
@@ -105,10 +107,10 @@ TCO 在「当前 `currNodes` 中某下标 `i` 处命中 `FUNC`」时，可能**�
 
 NodeVM 在遇到 **BRCH** 时设置：
 
-- `tillNode`：选中分支的**头结点**（从此开始执行）；
+- `tillNode`：选中分支的**入口节点**（从此开始执行），即该臂在线性拓扑序中位于 BRCH 之后的第一个可执行节点，由 `resolveRuntimeBranchArmEntry` 计算（NodeVM、Taskflow 线性路径与 FastVM 共用同一定义）。它不一定是 BRCH 记录的臂头：内联之后，臂内节点可能排在记录的臂头之前，从臂头开始执行会跳过它们。臂内没有可执行节点时，入口就是 JOIN；
 - `skipNode` / `joinNode`：选中分支的**尾**与对应 **JOIN**。
 
-主循环在 `tillNode` 非空时 **continue** 跳过序列前缀，直到到达分支头；在 `skipNode` 命中后切换到向 **JOIN** 推进的模式。
+主循环在 `tillNode` 非空时 **continue** 跳过序列前缀，直到到达分支入口；在 `skipNode` 命中后切换到向 **JOIN** 推进的模式。
 
 **尾调触发时**，实现将 **`tillNode`、`skipNode` 清空**。理由：尾调表示当前图剩余工作已由 callee 接替，不应再保留未消费的分支跳转状态，否则易与新的 `currGraph` 不一致。
 

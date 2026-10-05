@@ -50,6 +50,11 @@ struct OperatorTraits {
     bool pure = false;
     /// Output element i depends only on input elements i (after broadcasting).
     bool elementwise = false;
+    /// Not pure, but without an effect outside the program's own variables: it creates or
+    /// reads a variable (`:var/new`, `:var/get`). Its result depends on when it runs, so it
+    /// is never folded, merged or moved across a write; it is not an effect a user can
+    /// observe, so it is not reported as one (effect trace).
+    bool stateOnly = false;
 };
 
 class OperatorTraitsRegistry {
@@ -64,6 +69,10 @@ class OperatorTraitsRegistry {
 
     /// True when `uri` is registered as pure.
     bool isPure(std::string_view uri) const;
+
+    /// True when running `uri` is an effect visible outside the program's variables: it is
+    /// neither pure nor state-only.
+    bool hasExternalEffect(std::string_view uri) const;
 
   private:
     struct StringHash {

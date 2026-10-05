@@ -1,0 +1,43 @@
+/**
+ * grad left to run with the program, of a function that calls a recursive
+ * function with a constant argument (the recurrence of benchmarks/gru: `run`
+ * starts at step 0). std::opt specializes that call, which copies `run` into a
+ * new graph, and inlines in the same session. The copy is as much part of what
+ * grad will transform as `run` itself, so its branch arms must stay calls;
+ * they were inlined, and grad failed at run time after the first effect.
+ */
+module grad_unexpanded_specialize
+
+import { grad, value_and_grad } from autodiff
+import { get_env } from sys
+
+with <w: float>
+func cell(h: float): float {
+    return h * w + 1.0
+}
+
+/// Runs the recurrence over steps [t, steps).
+with <w: float>
+func run(t: int, steps: int, h: float): float {
+    return if t >= steps then h else run<w>(t + 1, steps, cell<w>(h))
+}
+
+with <w: float>
+func loss(x: float, steps: int): float {
+    let h = run<w>(0, steps, x)
+    return h * h
+}
+
+func step(w: float, x: float, steps: int): (float, float) {
+    return value_and_grad(loss)<w>(x, steps)
+}
+
+func main(): int sync {
+    println('before grad')
+    // Not a constant of the program: the recursion cannot be unrolled (run with STEPS=3).
+    let steps = int(get_env('STEPS'))
+    let vg = step(2.0, 1.0, steps)
+    // h = x w^3 + w^2 + w + 1 = 15: loss 225, d/dw = 2 * 15 * (3 x w^2 + 2 w + 1) = 510
+    'grad_unexpanded_specialize loss={} grad={} direct={}'->format<vg.0, vg.1, loss<2.0>(1.0, steps)>->println
+    return 0
+}

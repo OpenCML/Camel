@@ -1,5 +1,9 @@
 # `std::macro` Rewrite Refactor Plan
 
+> **先读 [`../design-principles.cn.md`](../design-principles.cn.md)。** 它是语言作者对 Camel 根本定位与执行模型的规范性说明：与实现或其他文档冲突时以它为准；它没有覆盖或标为“未定”的问题，向语言作者提问，不要自行选择。
+>
+> 本文是 `std::macro` 的重构计划。语义以设计原则第 3 节为准：`std::macro` 是可选的遍，不定义阶段；macro 函数体的副作用按普通函数处理。
+
 本文记录 `std::macro` 的系统性重构方案。目标不是“修复某一个宏样例”，而是把它重新纳入当前的 Graph Rewrite API 与运行时执行模型，使其成为一个长期稳定的图重写遍实现。
 
 ---

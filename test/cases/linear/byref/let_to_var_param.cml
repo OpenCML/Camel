@@ -1,0 +1,17 @@
+/**
+ * A `let` name passed to a `var` parameter of a function.
+ * Rejected at compile time: only a name bound by `var` denotes a mutable object
+ * (docs/design-principles.cn.md 2.5).
+ */
+module let_to_var_param
+
+sync func bump(var x: int) {
+    wait x += 1
+}
+
+func main(): int sync {
+    let k = 0
+    wait bump(k)
+    println(k)
+    return 0
+}

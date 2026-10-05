@@ -1,0 +1,45 @@
+/**
+ * A call that is followed by an effect is not a tail call, also when the call
+ * and the effect sit in a branch arm: `measure` calls `timed`, prints, and
+ * returns timed's result. Inlined into the arm of `run`, the arm's tail is a
+ * GATE that forwards the call's value and waits on the println. NodeVM,
+ * FastVM and the JIT took the forwarded value for the arm's last action and
+ * made the call a tail call: the frame was replaced and the println never ran
+ * (the benchmark driver lost its save_npy this way, exit 0, no output file).
+ *
+ * `timed` itself keeps its tail call (the recursion in its arm is the last
+ * thing that arm does): 50000 levels must not hit the recursion limit.
+ */
+module arm_call_then_effect
+
+import { now } from time
+
+sync func timed(remaining: int, ticks: int): int {
+    return if remaining <= 0 then ticks else sync {
+        return timed(remaining - 1, ticks + 1)
+    }
+}
+
+func measure(n: int): int sync {
+    println('start')
+    let status = timed(n, 0)
+    println('saved')
+    return status
+}
+
+func other(n: int): int sync {
+    println('other')
+    return 0
+}
+
+// Not sync, and a condition no pass can fold: the arm survives every pipeline.
+func run(n: int): int {
+    let t = now()
+    return if t > 1.0 then measure(n) else other(n)
+}
+
+func main(): int sync {
+    let r = run(50000)
+    'arm_call_then_effect r={}'->format<r>->println
+    return 0
+}

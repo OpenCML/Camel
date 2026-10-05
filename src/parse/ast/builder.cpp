@@ -975,17 +975,17 @@ retStmt    : (RETURN | RAISE | THROW) dataList ;
 */
 any Builder::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
     ENTER("RetStmt");
-    ExitType exitType;
-    if (context->RETURN()) {
-        exitType = ExitType::Return;
-    } else if (context->RAISE()) {
-        exitType = ExitType::Raise;
-    } else if (context->THROW()) {
-        exitType = ExitType::Throw;
-    } else {
-        // If no return type is specified, default to Return
-        exitType = ExitType::Return;
+    // `raise` and `throw` are in the grammar, but exceptions are not implemented: nothing
+    // propagates or catches one. They used to be compiled as `return`, silently.
+    if (context->RAISE() || context->THROW()) {
+        const char *keyword = context->RAISE() ? "raise" : "throw";
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(context->getStart(), context->getStop())
+            .commit(keyword, "exceptions are not implemented");
     }
+    // The error above stops compilation; the statement is kept as a return so that the rest
+    // of the file is still checked.
+    ExitType exitType = ExitType::Return;
     node_ptr_t exitNode = createNodeAs<ExitStmtLoad>(exitType);
     setNodeTokenRangeByContext(exitNode, context);
     if (context->dataList()) {
@@ -1422,8 +1422,13 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
     } break;
 
     default:
-        throw DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
-            .commit("visitCtrlExpr: unsupported control expression type");
+        // TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(context->getStart(), context->getStop())
+            .commit("try", "exceptions are not implemented");
+        // The error above stops compilation; a placeholder keeps the rest of the file checked.
+        ctrlNode = createNodeAs<NullLoad>();
+        setNodeTokenRangeByContext(ctrlNode, context);
     }
     LEAVE("CtrlExpr");
     return ctrlNode;

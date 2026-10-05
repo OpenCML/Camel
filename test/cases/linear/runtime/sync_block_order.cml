@@ -1,0 +1,54 @@
+/**
+ * A sync block executes its expressions in written order (docs/design-principles.cn.md 2.2),
+ * also when the block ends in a plain value, is written inside another sync block, or binds
+ * several names at once. Expected output:
+ *   A1 | A2 | 2        a sync block as the arm of a let-bound `if`: effects before and after a
+ *                      `let`, then the arm's value
+ *   B1 | 3             the other arm
+ *   n1 | n2 | 33       a sync block written as a statement of a sync block
+ *   1 pair | 2 after | 15   `let (p, q) = f()`: f runs where the declaration is written
+ *   L1 | 5             a lambda whose body is a sync block ending in a value
+ */
+module sync_block_order
+
+func pick(c: bool): int sync {
+    let y = if c then sync {
+        println("A1")
+        let a = 2
+        println("A2")
+        a
+    } else sync {
+        let b = 3
+        println("B1")
+        b
+    }
+    return y
+}
+
+func nested(a: int, b: int): int sync {
+    sync {
+        println("n1")
+        println("n2")
+    }
+    return a + b
+}
+
+func pair(): (int, int) sync {
+    println("1 pair")
+    return (7, 8)
+}
+
+func main(): int sync {
+    println(pick(true))
+    println(pick(false))
+    println(nested(11, 22))
+    let (p, q) = pair()
+    println("2 after")
+    println(p + q)
+    let f = (x: int): int => sync {
+        println("L1")
+        x + 1
+    }
+    println(f(4))
+    return 0
+}

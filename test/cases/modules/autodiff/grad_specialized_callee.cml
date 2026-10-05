@@ -1,0 +1,46 @@
+/**
+ * grad left to run with the program differentiates callees whose function type
+ * no longer describes their ports: a copy specialized to constant arguments
+ * (scale: `k` and `a` are bound, the type still lists three parameters), and a
+ * branch arm called as an ordinary function once fold has resolved the static
+ * branch (unroll: the arm takes four with ports under the type `() => float`).
+ * Both used to yield a gradient of 0 without any error.
+ */
+module grad_specialized_callee
+
+import { grad } from autodiff
+
+func scale(k: int, a: float, h: float): float {
+    return h * a * float(k)
+}
+
+with <w: float>
+func scaled(x: float): float {
+    return scale(3, 2.0, x * w)
+}
+
+with <w: float>
+func unroll(t: int, steps: int, h: float): float {
+    return if t >= steps then h else unroll<w>(t + 1, steps, h * w + 1.0)
+}
+
+with <w: float>
+func unrolled(x: float): float {
+    let h = unroll<w>(0, 3, x)
+    return h * h
+}
+
+func grad_scaled(w: float, x: float): float {
+    return grad(scaled)<w>(x)
+}
+
+func grad_unrolled(w: float, x: float): float {
+    return grad(unrolled)<w>(x)
+}
+
+func main(): int sync {
+    println('before grad')
+    // d/dw (x * w * 2 * 3) = 6x = 30; h = x w^3 + w^2 + w + 1 = 15, d/dw h^2 = 2 * 15 * 17 = 510
+    'grad_specialized_callee scaled={} unrolled={}'->format<grad_scaled(2.0, 5.0), grad_unrolled(2.0, 1.0)>->println
+    return 0
+}

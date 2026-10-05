@@ -51,6 +51,11 @@ bool OperatorTraitsRegistry::isPure(std::string_view uri) const {
     return traits && traits->pure;
 }
 
+bool OperatorTraitsRegistry::hasExternalEffect(std::string_view uri) const {
+    const auto traits = find(uri);
+    return !traits || !(traits->pure || traits->stateOnly);
+}
+
 OperatorResolverRegistry &OperatorResolverRegistry::instance() {
     static OperatorResolverRegistry registry;
     return registry;

@@ -25,6 +25,8 @@
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 
+#include <mutex>
+
 namespace mm = camel::core::mm;
 using namespace std;
 using namespace camel::core::type;
@@ -140,6 +142,22 @@ TupleType *TupleType::create(const std::vector<Type *> &types) {
 
 TupleType *TupleType::create(std::vector<Type *> &&types) { return create(types); }
 
+TupleType *TupleType::cell(Type *valueType) {
+    ASSERT(valueType != nullptr, "A variable cell needs a value type.");
+    static std::mutex mutex;
+    static std::vector<TupleType *> cells;
+    std::lock_guard lock(mutex);
+    for (TupleType *known : cells) {
+        if (known->typeAt(0) == valueType || known->typeAt(0)->equals(valueType)) {
+            return known;
+        }
+    }
+    TupleType *type = create(std::vector<Type *>{valueType});
+    type->cell_     = true;
+    cells.push_back(type);
+    return type;
+}
+
 TupleType *TupleType::fromFactory(TupleTypeFactory &factory) {
     size_t size     = factory.types_.size();
     size_t refCount = 0;
@@ -216,6 +234,9 @@ bool TupleType::resolved() const {
 }
 
 string TupleType::toString() const {
+    if (cell_) {
+        return "var " + typesPtr_[0]->toString();
+    }
     string result = "(";
     for (size_t i = 0; i < size_; ++i) {
         Type *type = typesPtr_[i];
@@ -234,6 +255,9 @@ string TupleType::toString() const {
 }
 
 std::string TupleType::mangle() const {
+    if (cell_) {
+        return "V" + typesPtr_[0]->mangle();
+    }
     std::string result = "P";
     result += std::to_string(size_);
     for (size_t i = 0; i < size_; ++i) {
@@ -243,6 +267,9 @@ std::string TupleType::mangle() const {
 }
 
 Type *TupleType::clone(bool deep /* = false */) const {
+    if (cell_) {
+        return const_cast<TupleType *>(this);
+    }
     std::vector<Type *> clonedTypes;
     clonedTypes.reserve(size_);
     if (deep) {
@@ -265,7 +292,7 @@ bool TupleType::equals(Type *other) const {
         return false;
     }
     const TupleType &otherTuple = static_cast<const TupleType &>(*other);
-    if (size_ != otherTuple.size_) {
+    if (size_ != otherTuple.size_ || cell_ != otherTuple.cell_) {
         return false;
     }
     for (size_t i = 0; i < size_; i++) {
@@ -293,8 +320,12 @@ bool TupleType::assignableFrom(Type *sourceType) const {
         return false;
     }
     const TupleType &other = static_cast<const TupleType &>(*sourceType);
-    if (size_ != other.size_) {
+    if (size_ != other.size_ || cell_ != other.cell_) {
         return false;
+    }
+    if (cell_) {
+        // A cell is written through every reference to it: the content types must be equal.
+        return typesPtr_[0]->equals(other.typesPtr_[0]);
     }
     for (size_t i = 0; i < size_; i++) {
         if (!typesPtr_[i]->assignableFrom(other.typesPtr_[i])) {
@@ -305,6 +336,9 @@ bool TupleType::assignableFrom(Type *sourceType) const {
 }
 
 Type *TupleType::widened() const {
+    if (cell_) {
+        return const_cast<TupleType *>(this);
+    }
     std::vector<Type *> types;
     bool changed = false;
     for (size_t i = 0; i < size_; i++) {

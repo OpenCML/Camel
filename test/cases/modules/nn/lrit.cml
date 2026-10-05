@@ -28,7 +28,7 @@ with <X: Tensor, y: Tensor, lr: float>
 sync func update(var w: Tensor): Tensor {
     let pred = X @ w
     let errors = pred - y
-    let dw = transpose(X) @ errors
+    var dw = transpose(X) @ errors
     let m = shape(X)[0]
     wait dw = 2.0 / float(m) * dw
     wait w = w - lr * dw
@@ -45,7 +45,8 @@ sync func train(weights: Tensor): Tensor {
 
     sync func train_step(i: int, w: Tensor): Tensor {
         return if i >= its then w else sync {
-            let nw = update<X_bias, y, lr>(w)
+            var cur = w
+            let nw = update<X_bias, y, lr>(cur)
             if i % 100 == 0 then {
                 let pred = X_bias @ nw
                 let loss = mean_squared_error(pred, y)
