@@ -103,6 +103,10 @@ Hence:
 - Assigning to a non-`var` parameter inside a function body, or passing it to an operator that requires a mutable input, is a compile-time error.
 - When testing the behaviour of `wait`, the `modify` in the test program must declare `var i` and actually modify it.
 
+**`wait` is not mechanical ordering; it orders by how the `var` is used.** What is ordered before the modification are the nodes that directly used the variable's value before it. For example, in `A(i + 1); wait modify(i)` the direct user of `i` is `+`, so `modify` is ordered after `+`, and it is not guaranteed to be ordered after `A`; this is the correct behaviour. Likewise, if the expression under `wait` involves no `var` at all (for example it has only input/output side effects), `wait` has nothing to go by and is meaningless; such calls should be written in a sync block, which is exactly why sync blocks exist. For this reason, not writing `wait` is not made an error either.
+
+The tracking of modifications should be complete: a function that writes a `var` through a capture (including a module-level variable) is, like one that writes through a `var` parameter, to be recorded at the call site as one write of that variable.
+
 Inside a sync block it makes no difference whether `wait` is written.
 
 ### 2.7 Known shortcomings
