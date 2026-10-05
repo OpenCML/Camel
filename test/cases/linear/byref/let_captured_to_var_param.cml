@@ -1,0 +1,20 @@
+/**
+ * A `let` name captured by a lambda and passed to a `var` parameter there.
+ * Rejected at compile time: only a name bound by `var` denotes a mutable object
+ * (docs/design-principles.cn.md 2.5).
+ */
+module let_captured_to_var_param
+
+sync func bump(var x: int) {
+    wait x += 1
+}
+
+func main(): int sync {
+    let k = 0
+    let f = (): int => sync {
+        wait bump(k)
+        return k
+    }
+    println(f())
+    return 0
+}

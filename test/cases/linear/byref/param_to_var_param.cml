@@ -1,0 +1,20 @@
+/**
+ * A parameter declared without `var` passed to a `var` parameter.
+ * Rejected at compile time: only a name bound by `var` denotes a mutable object
+ * (docs/design-principles.cn.md 2.5).
+ */
+module param_to_var_param
+
+sync func bump(var x: int) {
+    wait x += 1
+}
+
+func g(x: int): int sync {
+    wait bump(x)
+    return x
+}
+
+func main(): int sync {
+    println(g(1))
+    return 0
+}

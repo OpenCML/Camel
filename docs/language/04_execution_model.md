@@ -305,7 +305,7 @@ with <X: Tensor, y: Tensor, lr: float>
 sync func update(var w: Tensor): Tensor {
     let pred = X @ w
     let errors = pred - y
-    let dw = transpose(X) @ errors
+    var dw = transpose(X) @ errors
     let m = shape(X)[0]
     wait dw = 2.0 / float(m) * dw
     return w = w - lr * dw

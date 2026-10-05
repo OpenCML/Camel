@@ -74,6 +74,12 @@ class Builder {
     bool synced_;
     bool varied_;
 
+    // An argument of a call: its value node and the expression it was written as.
+    struct Argument {
+        node_handle_t node;
+        GCT::node_ptr_t expr;
+    };
+
     // Track whether this Graph has already been used (via createFuncDataNode).
     // A used Graph can no longer accept additional closure captures.
     using node_modifier_map_t = std::unordered_map<draft_node_ref_t, draft_node_ref_t>;
@@ -83,7 +89,10 @@ class Builder {
     // With-arguments bound to a callee by `f<a, b>`, consumed when the callee is invoked. Kept
     // beside the graph rather than as edges: the callee node is a value (a function literal, a
     // closure FILL whose with-inputs are its captures) that the binding must not alter.
-    std::unordered_map<node_handle_t, std::vector<node_handle_t>> boundWithArgs_;
+    std::unordered_map<node_handle_t, std::vector<Argument>> boundWithArgs_;
+    // Nodes bound by `var`: declarations, `var` parameters, and the ports that capture them.
+    // Every other named node is immutable (`let`, a parameter without `var`).
+    std::unordered_set<node_handle_t> variables_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -152,6 +161,11 @@ class Builder {
     node_handle_t applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcValueNode);
     node_handle_t resolveCrossGraphRef(node_handle_t node, const std::string &name);
     node_handle_t resolveNodeByRef(const std::string &name);
+    // The immutable name an argument expression denotes: the name itself or a field of it
+    // (`s`, `s.x`). Empty for a variable and for an expression that is not a name.
+    std::optional<std::string> immutableNameOf(const GCT::node_ptr_t &expr);
+    // Reports an immutable name passed where the callee has a `var` parameter.
+    void requireMutableArgument(const Argument &arg, const std::string &callee);
 
     std::any visit(const GCT::node_ptr_t &gct);
 

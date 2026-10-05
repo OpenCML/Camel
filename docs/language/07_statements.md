@@ -353,7 +353,7 @@ func main() {
 ```cml
 func mergesort(arr: int[]): int[] sync {
     let start = now()
-    let res = if len(arr) <= 1e5 then sort(arr) else {
+    let res = if len(arr) <= 1e5 then sorted(arr) else {
         let mid = len(arr) / 2
         let lhs = arr->slice<0, mid>->mergesort
         let rhs = arr->slice<mid, len(arr)>->mergesort

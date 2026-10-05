@@ -1,0 +1,102 @@
+id = "linear.var_reference"
+order = 344
+tier = "feat"
+tags = ["feat", "linear", "var", "reference"]
+
+[[tests]]
+name = "let_to_var_param"
+desc = "A `let` name passed to a `var` parameter of a function. It is a compile-time error located at the argument."
+kind = "negative"
+case = "../../../cases/linear/byref/let_to_var_param.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 15
+expect_output_contains = ["'k' is immutable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "let_assigned"
+desc = "Assignment to a `let` name (the assignment operators take the target as a `var` parameter). It is a compile-time error located at the argument."
+kind = "negative"
+case = "../../../cases/linear/byref/let_assigned.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 10
+expect_output_contains = ["'k' is immutable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "let_to_var_param_indirect"
+desc = "A `let` name passed to a `var` parameter through a function value. It is a compile-time error located at the argument."
+kind = "negative"
+case = "../../../cases/linear/byref/let_to_var_param_indirect.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 12
+expect_output_contains = ["'k' is immutable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "let_field_to_var_param"
+desc = "A field of a `let` struct passed to a `var` parameter. It is a compile-time error located at the argument."
+kind = "negative"
+case = "../../../cases/linear/byref/let_field_to_var_param.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 15
+expect_output_contains = ["'s' is immutable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "param_to_var_param"
+desc = "A parameter declared without `var` passed to a `var` parameter. It is a compile-time error located at the argument."
+kind = "negative"
+case = "../../../cases/linear/byref/param_to_var_param.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 15
+expect_output_contains = ["'x' is immutable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "let_captured_to_var_param"
+desc = "A `let` name captured by a lambda and passed to a `var` parameter there. It is a compile-time error located at the argument."
+kind = "negative"
+case = "../../../cases/linear/byref/let_captured_to_var_param.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 19
+expect_output_contains = ["'k' is immutable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "let_to_var_with_param"
+desc = "A `let` name passed to a `var` with-parameter. It is a compile-time error located at the argument."
+kind = "negative"
+case = "../../../cases/linear/byref/let_to_var_with_param.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
+expect_diagnostic_line = 16
+expect_diagnostic_column = 17
+expect_output_contains = ["'total' is immutable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

@@ -275,6 +275,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "or relax their static types.",
             },
         },
+        {
+            SemanticDiag::ImmutablePassedToVarParam,
+            {
+                "ImmutablePassedToVarParam",
+                "'{0}' is immutable and cannot be passed to a var parameter of '{1}'.",
+                "Only a variable declared with 'var' (or a var parameter) can be modified. "
+                "Declare it with 'var', or bind the new value to a new name.",
+            },
+        },
 
         // Warnings
         {

@@ -57,6 +57,7 @@ enum class SemanticDiag : uint32_t {
     UnrecognizedExecutorProtocol = 0x00001A,
     EntryModuleMissingMain       = 0x00001B,
     ArgumentsRejected            = 0x00001C,
+    ImmutablePassedToVarParam    = 0x00001D,
 
     // Warnings
     FeatureNotSupported     = 0x100000,
