@@ -1708,50 +1708,45 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return std::pair{valueOf(arg.node), named ? arg.node : node_handle_t{}};
     };
 
+    // All arguments are read before the call is recorded as a writer: a variable passed both
+    // by value and to a `var` parameter (`f(c, c)`) is read before the call, not after it.
+    struct Passed {
+        node_handle_t node;
+        node_handle_t written;
+        LinkType link;
+    };
+    std::vector<Passed> passed;
+    bool hasVarArgument = false;
     for (size_t i = 0; i < withInputs.size(); i++) {
-        bool isVar = (i < targetFuncType->withTypesCount()) &&
-                     targetFuncType->withIsVarAt(static_cast<size_t>(i));
-        const auto [inputNode, written] = passArgument(withInputs[i], isVar);
-        tryRemoveCtrlLink(inputNode, targetNode);
-        linkNodes(LinkType::With, inputNode, targetNode);
-        if (auto modifierNode = modifierOf(inputNode); modifierNode.has_value()) {
+        bool isVar = i < targetFuncType->withTypesCount() && targetFuncType->withIsVarAt(i);
+        const auto [node, written] = passArgument(withInputs[i], isVar);
+        passed.push_back({node, written, LinkType::With});
+        hasVarArgument |= isVar;
+    }
+    for (size_t i = 0; i < normInputs.size(); i++) {
+        bool isVar = i < targetFuncType->normTypesCount() && targetFuncType->normIsVarAt(i);
+        const auto [node, written] = passArgument(normInputs[i], isVar);
+        passed.push_back({node, written, LinkType::Norm});
+        hasVarArgument |= isVar;
+    }
+    for (const Passed &arg : passed) {
+        tryRemoveCtrlLink(arg.node, targetNode);
+        linkNodes(arg.link, arg.node, targetNode);
+        if (auto modifierNode = modifierOf(arg.node); modifierNode.has_value()) {
             if (sameGraph(*modifierNode, currGraph_) &&
                 shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
                 linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
-            }
-        }
-        if (isVar) {
-            if (!waited_ && !synced_) {
-                diags_->of(SemanticDiag::IgnoredSideEffect)
-                    .atOrigin(gct->load()->origin())
-                    .commit(targetName + ": " + targetFuncType->toString());
-            }
-            if (written != nullptr) {
-                recordWrite(written, targetNode);
             }
         }
     }
-
-    for (size_t i = 0; i < normInputs.size(); i++) {
-        bool isVar = i < targetFuncType->normTypesCount() && targetFuncType->normIsVarAt(i);
-        const auto [inputNode, written] = passArgument(normInputs[i], isVar);
-        tryRemoveCtrlLink(inputNode, targetNode);
-        linkNodes(LinkType::Norm, inputNode, targetNode);
-        if (auto modifierNode = modifierOf(inputNode); modifierNode.has_value()) {
-            if (sameGraph(*modifierNode, currGraph_) &&
-                shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
-                linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
-            }
-        }
-        if (isVar) {
-            if (!waited_ && !synced_) {
-                diags_->of(SemanticDiag::IgnoredSideEffect)
-                    .atOrigin(gct->load()->origin())
-                    .commit(targetName + ": " + targetFuncType->toString());
-            }
-            if (written != nullptr) {
-                recordWrite(written, targetNode);
-            }
+    if (hasVarArgument && !waited_ && !synced_) {
+        diags_->of(SemanticDiag::IgnoredSideEffect)
+            .atOrigin(gct->load()->origin())
+            .commit(targetName + ": " + targetFuncType->toString());
+    }
+    for (const Passed &arg : passed) {
+        if (arg.written != nullptr) {
+            recordWrite(arg.written, targetNode);
         }
     }
 

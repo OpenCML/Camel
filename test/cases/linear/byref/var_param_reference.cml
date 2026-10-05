@@ -15,6 +15,9 @@
  *   15       a tuple variable replaced by the callee
  *   2        a var with-parameter
  *   7        a write is visible before the callee returns (read through a second reference)
+ *   0 1      one variable passed to a parameter without `var` and to a `var` parameter: the
+ *            first receives the value the variable holds at the call (the principles do not
+ *            say whether it should alias; see the open questions), the second the variable
  */
 module var_param_reference
 
@@ -75,6 +78,11 @@ func write_then_read(var w: int, read: () => int): int sync {
     return read()
 }
 
+func mixed(seen: int, var written: int): int sync {
+    wait written += 1
+    return seen
+}
+
 func main(): int sync {
     var c = 0
     wait bump(c)
@@ -120,5 +128,9 @@ func main(): int sync {
 
     var w = 0
     println(write_then_read(w, (): int => w))
+
+    var d = 0
+    let seen = mixed(d, d)
+    println('{} {}'->format<seen, d>)
     return r1 + r2 + r3
 }
