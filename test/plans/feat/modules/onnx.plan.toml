@@ -807,3 +807,87 @@ assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/pass_export_ctrl
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "export_train_step.fuse"
+desc = "The training step of export_train_step exports the same model after tensor::fuse before the run-time export (failed at run time: 'tensor:numel' has no ONNX lowering; the fused operators had no type resolver, so the static shapes were lost downstream of them)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step.cml"
+args = ["${case}", "tensor::fuse", "std::nvm"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step.fuse.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step.fuse.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+// the model of the unfused program: 2 forward MatMul, 3 backward; nothing fused survives
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step.fuse_simplify"
+desc = "The training step of export_train_step exports the same model after tensor::fuse then std::opt::simplify before the run-time export."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step.cml"
+args = ["${case}", "tensor::fuse", "std::opt::simplify", "std::nvm"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step.fuse_simplify.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step.fuse_simplify.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+// the model of the unfused program: 2 forward MatMul, 3 backward; nothing fused survives
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step.fuse.fvm"
+desc = "The training step of export_train_step exports the same model after tensor::fuse before the run-time export, on FastVM."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step.cml"
+args = ["${case}", "tensor::fuse", "std::fvm"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step.fuse_fvm.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step.fuse_fvm.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+// the model of the unfused program: 2 forward MatMul, 3 backward; nothing fused survives
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
