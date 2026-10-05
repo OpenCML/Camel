@@ -26,6 +26,7 @@
 
 #include <functional>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -54,6 +55,9 @@ class ExecutorManager {
     camel::core::context::context_ptr_t context_;
     std::unordered_map<std::string, executor_factory_t> executorFactories;
     mutable std::unordered_map<std::string, executor_ptr_t> loadedExecutors;
+    // find() loads an executor on the first use of its protocol, and parallel schedulers call
+    // it from several workers at once.
+    mutable std::shared_mutex loadedExecutorsMutex;
 
   public:
     ExecutorManager(camel::core::context::context_ptr_t ctx) : context_(ctx) {};

@@ -153,6 +153,10 @@ slot_t TaskflowExecSchedPass::evalGraphTF(GCGraph *graph, Frame *frame) {
 
 std::span<const gc_node_ref_t> TaskflowExecSchedPass::topoNodesForLinear(GCGraph *graph) {
     ASSERT(graph != nullptr, "Taskflow linear topo lookup requires a runtime graph.");
+    // The entry is built under the lock: a worker that found it just inserted would otherwise
+    // run the graph with an empty node list and return no value. Entries are never removed
+    // or changed while a pass runs, so the span stays valid after the lock is released.
+    std::lock_guard lock(linearCacheMutex_);
     auto [it, inserted] = linearTopoCache_.try_emplace(graph);
     if (inserted) {
         it->second = camel::execute::buildReachableExecutionTopoIndices(graph);
@@ -163,6 +167,7 @@ std::span<const gc_node_ref_t> TaskflowExecSchedPass::topoNodesForLinear(GCGraph
 gc_node_ref_t TaskflowExecSchedPass::branchArmEntryForLinear(
     GCGraph *graph, gc_node_ref_t brchRef, size_t armIndex,
     std::span<const gc_node_ref_t> topoNodes) {
+    std::lock_guard lock(linearCacheMutex_);
     auto [it, inserted] = linearArmEntryCache_[graph].try_emplace(brchRef);
     if (inserted) {
         const size_t armCount = graph->branchArmsOf(brchRef).size();

@@ -66,18 +66,24 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
         }
         return op;
     };
-    auto itExec = loadedExecutors.find(protocol);
-    if (itExec != loadedExecutors.end()) {
-        return traced(itExec->second->find(uri.substr(pos + 1)));
+    {
+        std::shared_lock lock(loadedExecutorsMutex);
+        auto itExec = loadedExecutors.find(protocol);
+        if (itExec != loadedExecutors.end()) {
+            return traced(itExec->second->find(uri.substr(pos + 1)));
+        }
     }
     auto itFact = executorFactories.find(protocol);
     if (itFact == executorFactories.end()) {
         return std::nullopt;
     }
-    CAMEL_LOG_INFO_S("ExecMgr", "Loading executor for protocol <{}>", protocol);
-    auto executor = itFact->second();
-    loadedExecutors.emplace(protocol, executor);
-    return traced(executor->find(uri.substr(pos + 1)));
+    std::unique_lock lock(loadedExecutorsMutex);
+    auto itExec = loadedExecutors.find(protocol);
+    if (itExec == loadedExecutors.end()) {
+        CAMEL_LOG_INFO_S("ExecMgr", "Loading executor for protocol <{}>", protocol);
+        itExec = loadedExecutors.emplace(protocol, itFact->second()).first;
+    }
+    return traced(itExec->second->find(uri.substr(pos + 1)));
 }
 
 std::string ExecutorManager::getNameOfAnOperator(const operator_t &tracedOp) const {
