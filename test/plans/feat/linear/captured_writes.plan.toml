@@ -1,0 +1,315 @@
+id = "linear.captured_writes"
+order = 346
+tier = "feat"
+tags = ["feat", "linear", "var", "capture", "wait"]
+
+[[tests]]
+name = "captured_write_order.default"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: default (no pass)."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.fvm"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.jit"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.tf"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.inline"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::inline."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.opt"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::opt."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.simplify"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.macro"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.macro_fvm"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.macro_jit"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::macro", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.macro_tf"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::macro", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.macro_inline"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::inline."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::macro", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.macro_opt"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::opt."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::macro", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.macro_simplify"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::macro", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.inline_fvm"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::inline std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.simplify_tf"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::opt::simplify std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::opt::simplify", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_order.macro_opt_jit"
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::opt std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_order.cml"
+args = ["${case}", "std::macro", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '10 | 10 | 100 | 10 | 111 | 1011 | 12 | 611 | 40 | 2508 | 21', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_graph.edges"
+desc = "The control edges for captured variables in the compiled graph: writer call -> later reader call; earlier user call -> waited writer call; none between two calls of a recursive function that only reads its captured variable; JOIN of a branch whose arm writes -> the later read."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_graph.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+const nodes = (label, type) =>
+    [...text.matchAll(new RegExp('(N[0-9A-F]+) \\[label="' + label + '", type="' + type + '"', 'g'))].map(m => m[1])
+const one = (label, type) => {
+    const found = nodes(label, type)
+    assert(found.length === 1, `expected one ${type} node labelled ${label}, got ${found.length}`)
+    return found[0]
+}
+const edge = (from, to, type) =>
+    new RegExp(from + ' -> ' + to + ' \\[label="[^"]*", type="' + type + '"').test(text)
+assert(edge(one('write_a', 'FUNC'), one('read_a', 'FUNC'), 'CTRL'), 'missing write_a -> read_a')
+assert(edge(one('use_b', 'FUNC'), one('write_b', 'FUNC'), 'CTRL'), 'missing use_b -> wait write_b')
+assert(!edge(one('write_b', 'FUNC'), one('use_b', 'FUNC'), 'CTRL'), 'write_b must not precede use_b')
+// look: one call inside its own arm, two in reads(). The two outer calls are unordered.
+const looks = nodes('look', 'FUNC')
+assert(looks.length === 3, `expected three calls of look, got ${looks.length}`)
+for (const x of looks) for (const y of looks)
+    assert(!edge(x, y, 'CTRL'), `a read-only recursive function was ordered as a writer: ${x} -> ${y}`)
+// arms(): the JOIN of the branch in the graph that holds the variable (:var/new) precedes the
+// read of c written after the branch.
+const section = text.slice(text.indexOf('label="arms"'))
+const join = section.match(/(N[0-9A-F]+) \[label="JOIN", type="JOIN"[^\n]*span="58:/)
+assert(join, 'no JOIN for the branch of arms()')
+const reads = [...section.matchAll(/(N[0-9A-F]+) \[label=":var\/get", type="OPER"/g)].map(m => m[1])
+assert(reads.some(r => edge(join[1], r, 'CTRL')), 'missing JOIN -> read of c after the branch')
+}
+"""
+timeout_ms = 4000

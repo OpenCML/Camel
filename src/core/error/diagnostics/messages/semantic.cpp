@@ -315,8 +315,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
-                "Function '{0}' with side effects is called but not waited.",
-                "Consider waiting the function using the 'wait' keyword.",
+                "{0} is neither waited nor in a sync block, and {1}.",
+                "Write 'wait' before the expression or put it in a sync block: only then is the "
+                "write ordered after the earlier uses of the variable. Without either, the "
+                "write runs only if the variable is read afterwards.",
             },
         },
     };

@@ -524,7 +524,11 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     diags_  = diags;
     usedGraphs_.clear();
     variables_.clear();
-    pendingReads_.clear();
+    pendingUses_.clear();
+    captures_.clear();
+    bodyStates_.clear();
+    capturePortNames_.clear();
+    pendingIgnoredWrites_.clear();
     typeDecls_.clear();
     syntheticRefIndex_ = 0;
 
@@ -540,6 +544,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
 
     try {
         visit(gct);
+        reportIgnoredCapturedWrites();
 
         compile_graph_ptr_t entryGraph = nullptr;
         if (auto decoratedMain = decoratedGraphAt("main")) {
@@ -655,6 +660,8 @@ node_handle_t Builder::resolveCrossGraphRef(node_handle_t node, const std::strin
         scope->insert(name, portNode);
         if (isVariable(node)) {
             variables_.insert(portNode);
+            capturePortNames_.emplace(portNode, name);
+            captures_[curr.get()].variables.push_back(name);
         }
 
         curr  = curr->outerGraph();
@@ -784,8 +791,11 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
                 variables_.insert(port);
             }
         }
+        bodyStates_[graph.get()] = BodyState::Open;
         setBodyResult(graph, visitBodyNode(gct->atAs<GCT::ExecLoad>(1)));
+        bodyStates_[graph.get()] = BodyState::Built;
     } catch (...) {
+        bodyStates_[graph.get()] = BodyState::Built;
         leaveScope();
         throw;
     }
@@ -931,38 +941,165 @@ void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
     nodeModifierMaps_[inputGraph][nodeIdOf(input)] = nodeIdOf(modifier);
 }
 
-void Builder::recordWrite(node_handle_t variable, node_handle_t writer) {
+void Builder::recordWrite(
+    node_handle_t variable, node_handle_t entry, node_handle_t exit, bool throughCallee) {
     // `A(i); wait modify(i); B(i)` gives A -> modify -> B (design principles 2.6). The second
     // half follows from setModifier. The first: the waited writer is ordered after every
-    // operation that used a value read from the variable before it (after the read itself
-    // when nothing used it). In a sync block the block's chain already orders them. A writer
-    // that is neither waited nor in a sync block is not ordered after earlier readers; they
-    // stay pending for the next waited writer.
-    auto &reads = pendingReads_[variable];
+    // operation that directly used the variable's value before it: the operations that took a
+    // value read from it (the read itself when nothing took it), and the calls and branches
+    // that used the variable through a capture. `wait` orders by this use of the variable, not
+    // by position: in `A(i + 1); wait modify(i)` the direct user is `+`, not A. In a sync block
+    // the block's chain already orders them. A writer that is neither waited nor in a sync
+    // block is not ordered after earlier users; they stay pending for the next waited writer.
+    auto &uses = pendingUses_[variable];
     if (waited_ && !synced_) {
         std::unordered_set<node_handle_t> before;
-        for (node_handle_t read : reads) {
-            bool used = false;
-            for (auto users : {normUsersOf(read), withUsersOf(read)}) {
-                for (draft_node_ref_t user : users) {
-                    before.insert(nodeDraftOf(read)->node(user));
-                    used = true;
+        for (const VariableUse &use : uses) {
+            bool taken = false;
+            if (use.isRead) {
+                for (auto users : {normUsersOf(use.node), withUsersOf(use.node)}) {
+                    for (draft_node_ref_t user : users) {
+                        before.insert(nodeDraftOf(use.node)->node(user));
+                        taken = true;
+                    }
                 }
             }
-            if (!used) {
-                before.insert(read);
+            if (!taken) {
+                before.insert(use.node);
             }
         }
         for (node_handle_t node : before) {
-            if (shouldAddSyncCtrlLink(node, writer)) {
-                linkNodes(LinkType::Ctrl, node, writer);
+            if (node != exit && shouldAddSyncCtrlLink(node, entry)) {
+                linkNodes(LinkType::Ctrl, node, entry);
             }
         }
     }
     if (waited_ || synced_) {
-        reads.clear();
+        uses.clear();
     }
-    setModifier(variable, writer);
+    setModifier(variable, exit);
+    // A write of a captured variable is what callers of this graph have to see.
+    if (!throughCallee) {
+        if (auto captured = capturePortNames_.find(variable);
+            captured != capturePortNames_.end()) {
+            captures_[nodeGraphOf(variable)].written.insert(captured->second);
+        }
+    }
+}
+
+void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
+    if (auto modifier = modifierOf(variable); modifier.has_value()) {
+        if (sameGraph(*modifier, currGraph_) && shouldAddSyncCtrlLink(*modifier, node)) {
+            linkNodes(LinkType::Ctrl, *modifier, node);
+        }
+    }
+}
+
+std::set<std::string> Builder::capturedWritesOf(DraftGraphBuilder *root) const {
+    const auto isOpen = [&](DraftGraphBuilder *graph) {
+        auto state = bodyStates_.find(graph);
+        return state != bodyStates_.end() && state->second == BodyState::Open;
+    };
+    const auto summaryOf = [&](DraftGraphBuilder *graph) -> const CaptureSummary * {
+        auto summary = captures_.find(graph);
+        return summary == captures_.end() ? nullptr : &summary->second;
+    };
+    // The graphs reachable through direct calls and arms. An open body is not looked into:
+    // what it will write is not known yet, so all it captured stands for it.
+    std::vector<DraftGraphBuilder *> reached{root};
+    std::unordered_map<DraftGraphBuilder *, std::set<std::string>> writes;
+    for (size_t i = 0; i < reached.size(); ++i) {
+        DraftGraphBuilder *graph = reached[i];
+        const auto *summary      = summaryOf(graph);
+        if (summary == nullptr) {
+            writes[graph];
+            continue;
+        }
+        if (isOpen(graph)) {
+            writes[graph].insert(summary->variables.begin(), summary->variables.end());
+            continue;
+        }
+        writes[graph] = summary->written;
+        for (DraftGraphBuilder *callee : summary->callees) {
+            if (std::ranges::find(reached, callee) == reached.end()) {
+                reached.push_back(callee);
+            }
+        }
+    }
+    // Least fixpoint of: a graph writes what its callees write, as far as it captured the
+    // variable itself (a callee's write of the graph's own local variable stops there). A
+    // recursive call adds nothing to the function's own set, so recursion needs no special
+    // case here.
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (DraftGraphBuilder *graph : reached) {
+            const auto *summary = summaryOf(graph);
+            if (summary == nullptr || isOpen(graph)) {
+                continue;
+            }
+            auto &own = writes[graph];
+            for (DraftGraphBuilder *callee : summary->callees) {
+                for (const std::string &name : writes[callee]) {
+                    if (std::ranges::find(summary->variables, name) != summary->variables.end() &&
+                        own.insert(name).second) {
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+    return writes[root];
+}
+
+std::vector<Builder::CapturedUse> Builder::capturedUsesOf(const compile_graph_ptr_t &callee) {
+    auto &callees = captures_[currGraph_.get()].callees;
+    if (std::ranges::find(callees, callee.get()) == callees.end()) {
+        callees.push_back(callee.get());
+    }
+    auto summary = captures_.find(callee.get());
+    if (summary == captures_.end() || summary->second.variables.empty()) {
+        return {};
+    }
+    // Resolving a name may add a capture port to the current graph and its summary.
+    const std::vector<std::string> names = summary->second.variables;
+    const std::set<std::string> written  = capturedWritesOf(callee.get());
+    std::vector<CapturedUse> uses;
+    for (const std::string &name : names) {
+        // The callee's capture is bound by name where it is called, as its with-inputs are.
+        node_handle_t variable = resolveNodeByRef(name);
+        if (isVariable(variable)) {
+            uses.push_back({variable, name, written.contains(name)});
+        }
+    }
+    return uses;
+}
+
+void Builder::reportIgnoredCapturedWrites() {
+    for (const PendingIgnoredWrite &pending : pendingIgnoredWrites_) {
+        std::set<std::string> written;
+        for (DraftGraphBuilder *graph : pending.graphs) {
+            written.merge(capturedWritesOf(graph));
+        }
+        std::vector<std::string> names;
+        for (const std::string &name : pending.names) {
+            if (written.contains(name)) {
+                names.push_back("'" + name + "'");
+            }
+        }
+        if (names.empty()) {
+            continue;
+        }
+        diags_->of(SemanticDiag::IgnoredSideEffect)
+            .atOrigin(pending.origin)
+            .commit(
+                pending.subject,
+                std::format(
+                    "{} the captured variable{} {}",
+                    pending.verb,
+                    names.size() > 1 ? "s" : "",
+                    strutil::join(names, ", ", [](const std::string &name) { return name; })));
+    }
+    pendingIgnoredWrites_.clear();
 }
 
 node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
@@ -1387,7 +1524,7 @@ node_handle_t Builder::newVariable(node_handle_t value) {
 
 node_handle_t Builder::readVariable(node_handle_t variable) {
     node_handle_t value = variableOperator("__var_get__", variable);
-    pendingReads_[variable].push_back(value);
+    pendingUses_[variable].push_back({value, true});
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
             linkNodes(LinkType::Ctrl, *modifier, value);
@@ -1744,14 +1881,41 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
         }
     }
-    if (hasVarArgument && !waited_ && !synced_) {
-        diags_->of(SemanticDiag::IgnoredSideEffect)
-            .atOrigin(gct->load()->origin())
-            .commit(targetName + ": " + targetFuncType->toString());
+    // A function called directly brings its captured variables with it: the call uses each of
+    // them, and writes those the function writes, exactly as if they were `var` arguments.
+    std::vector<CapturedUse> captured;
+    if (targetGraph) {
+        captured = capturedUsesOf(targetGraph);
+    }
+    std::vector<std::string> capturedWrites;
+    for (const CapturedUse &use : captured) {
+        orderAfterLastWriter(use.variable, targetNode);
+        if (use.written) {
+            capturedWrites.push_back(use.name);
+        }
+    }
+    if (!waited_ && !synced_) {
+        const std::string subject =
+            std::format("The call of '{}: {}'", targetName, targetFuncType->toString());
+        if (hasVarArgument) {
+            diags_->of(SemanticDiag::IgnoredSideEffect)
+                .atOrigin(gct->load()->origin())
+                .commit(subject, "it takes a var argument");
+        } else if (!capturedWrites.empty()) {
+            pendingIgnoredWrites_.push_back(
+                {{targetGraph.get()}, capturedWrites, gct->load()->origin(), subject, "it writes"});
+        }
     }
     for (const Passed &arg : passed) {
         if (arg.written != nullptr) {
             recordWrite(arg.written, targetNode);
+        }
+    }
+    for (const CapturedUse &use : captured) {
+        if (use.written) {
+            recordWrite(use.variable, targetNode, targetNode, true);
+        } else {
+            pendingUses_[use.variable].push_back({targetNode, false});
         }
     }
 
@@ -1868,6 +2032,9 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     linkNodes(LinkType::Norm, condNode, brchNode);
     std::vector<runtime::GCBranchArm> branchArms;
     std::vector<node_handle_t> branchFuncs;
+    // The variables the arms captured, and whether some arm writes them.
+    std::vector<CapturedUse> captured;
+    std::vector<DraftGraphBuilder *> armGraphs;
 
     for (size_t i = 1; i < gct->size(); i++) {
         const auto &caseNode         = gct->atAs<GCT::CaseLoad>(i);
@@ -1901,8 +2068,25 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
         graph_ptr_t subGraph = enterScope(FunctionType::create());
         registerGraphOrigin(context_, subGraph, caseExecNode, "gir.brch.case.graph");
-        setBodyResult(subGraph, visitBodyNode(caseExecNode));
+        bodyStates_[subGraph.get()] = BodyState::Open;
+        try {
+            setBodyResult(subGraph, visitBodyNode(caseExecNode));
+        } catch (...) {
+            bodyStates_[subGraph.get()] = BodyState::Built;
+            leaveScope();
+            throw;
+        }
+        bodyStates_[subGraph.get()] = BodyState::Built;
         leaveScope();
+        armGraphs.push_back(subGraph.get());
+        for (const CapturedUse &use : capturedUsesOf(subGraph)) {
+            auto known = std::ranges::find(captured, use.variable, &CapturedUse::variable);
+            if (known == captured.end()) {
+                captured.push_back(use);
+            } else {
+                known->written |= use.written;
+            }
+        }
 
         currGraph_->addDependencyGraph(subGraph);
         Type *exitType = subGraph->funcType()->exitType();
@@ -2043,6 +2227,27 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
             .ctrlUsers    = joinCtrlUsers});
 
     linkNodes(LinkType::Norm, brchNode, joinNode);
+
+    // Entering an arm is like calling it: the branch uses every variable an arm captured and
+    // writes those an arm writes. It begins at BRCH and is complete at JOIN.
+    std::vector<std::string> capturedWrites;
+    for (const CapturedUse &use : captured) {
+        orderAfterLastWriter(use.variable, brchNode);
+        if (use.written) {
+            capturedWrites.push_back(use.name);
+        }
+    }
+    if (!capturedWrites.empty() && !waited_ && !synced_) {
+        pendingIgnoredWrites_.push_back(
+            {armGraphs, capturedWrites, gct->load()->origin(), "The branch", "an arm writes"});
+    }
+    for (const CapturedUse &use : captured) {
+        if (use.written) {
+            recordWrite(use.variable, brchNode, joinNode, true);
+        } else {
+            pendingUses_[use.variable].push_back({joinNode, false});
+        }
+    }
 
     if (synced_) {
         if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, brchNode)) {

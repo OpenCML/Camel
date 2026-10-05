@@ -19,6 +19,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <set>
 
 #include "camel/common/scope.h"
 #include "camel/core/context/context.h"
@@ -98,9 +99,52 @@ class Builder {
     // and stored by the assignment operators. Every other named node is an immutable value
     // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
-    // Per variable, its reads (`:var/get`) in the current graph that no writer has been ordered
-    // after yet.
-    std::unordered_map<node_handle_t, std::vector<node_handle_t>> pendingReads_;
+    // A use of a variable that no writer has been ordered after yet. A read (`:var/get`) hands
+    // the value on, so the operations that take the read's result are the direct users of the
+    // value; an operation that uses the variable itself (a call of a function that captured
+    // it, a branch whose arm did) is the direct user.
+    struct VariableUse {
+        node_handle_t node;
+        bool isRead;
+    };
+    std::unordered_map<node_handle_t, std::vector<VariableUse>> pendingUses_;
+
+    // Captured variables. A graph (function, lambda, branch arm) that names a variable of an
+    // enclosing graph, a module-level one included, holds the variable's cell in a capture
+    // port. What the graph does with it is not in its type, so the builder keeps a summary per
+    // graph and consults it wherever the graph is called directly or entered as a branch arm:
+    // the call or branch is then a use of each captured variable, and a write of those the
+    // graph writes (design principles 2.6: tracking of modifications is complete).
+    struct CaptureSummary {
+        // Names of the captured variables, in capture order.
+        std::vector<std::string> variables;
+        // Those the body itself stores into or hands to a `var` parameter. What its callees
+        // and arms write is derived from `callees` (capturedWritesOf), not recorded here: at
+        // a recursive call it is only an upper bound.
+        std::set<std::string> written;
+        // The graphs the body calls directly or enters as arms.
+        std::vector<DraftGraphBuilder *> callees;
+    };
+    enum class BodyState { Open, Built };
+    std::unordered_map<DraftGraphBuilder *, CaptureSummary> captures_;
+    std::unordered_map<DraftGraphBuilder *, BodyState> bodyStates_;
+    std::unordered_map<node_handle_t, std::string> capturePortNames_;
+    // A captured variable as the current graph sees it at a call or branch.
+    struct CapturedUse {
+        node_handle_t variable;
+        std::string name;
+        bool written;
+    };
+    // An unwaited write of captured variables outside a sync block, reported once every body
+    // is built: while a recursive function's body is open its writes are only an upper bound.
+    struct PendingIgnoredWrite {
+        std::vector<DraftGraphBuilder *> graphs;
+        std::vector<std::string> names;
+        camel::source::origin_id_t origin;
+        std::string subject;
+        std::string verb;
+    };
+    std::vector<PendingIgnoredWrite> pendingIgnoredWrites_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -163,9 +207,28 @@ class Builder {
         const compile_graph_ptr_t &decoratedGraph, const GCT::node_ptr_t &origin);
     std::optional<node_handle_t> modifierOf(node_handle_t node) const;
     void setModifier(node_handle_t input, node_handle_t modifier);
-    // `writer` writes `variable`: later reads and writers are ordered after it, and a waited
-    // writer is ordered after the operations before it that used the variable's value.
-    void recordWrite(node_handle_t variable, node_handle_t writer);
+    // An operation writes `variable`: later reads and writers are ordered after it, and a
+    // waited one is ordered after the operations before it that used the variable's value. The
+    // operation starts at `entry` and is complete at `exit` (one node for a call; BRCH and
+    // JOIN for a branch). `throughCallee`: the write is one a called function or an arm makes
+    // to a variable it captured, which the summaries already account for.
+    void recordWrite(
+        node_handle_t variable, node_handle_t entry, node_handle_t exit,
+        bool throughCallee = false);
+    void recordWrite(node_handle_t variable, node_handle_t writer) {
+        recordWrite(variable, writer, writer);
+    }
+    // Orders `node` after the last writer of `variable` in the current graph.
+    void orderAfterLastWriter(node_handle_t variable, node_handle_t node);
+    // The captured variables `graph` writes: by its own body, by its arms and by the functions
+    // it calls directly, transitively. Exact once every graph reached is built; for a graph
+    // whose body is still open (a recursive call) every variable it captured counts as written.
+    std::set<std::string> capturedWritesOf(DraftGraphBuilder *graph) const;
+    // The captured variables of `callee` as nodes of the current graph, which becomes a
+    // caller of `callee`.
+    std::vector<CapturedUse> capturedUsesOf(const compile_graph_ptr_t &callee);
+    // Reports the unwaited writes of captured variables that turned out to be real.
+    void reportIgnoredCapturedWrites();
     compile_graph_ptr_t buildDecoratedGraph(
         const std::string &funcName, const compile_graph_ptr_t &rawGraph,
         const std::vector<GCT::node_ptr_t> &annoNodes);
