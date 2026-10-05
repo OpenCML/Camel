@@ -40,6 +40,7 @@
 ### 8.2.1 块
 
 - **stmtBlock**：**`SYNC? '{' stmtList? '}'`**。
+  - 这里的 `SYNC` 是**块修饰符**（同步块）；**funcDecl** 的 `modifiers` 中的 `sync` 是**函数修饰符**。两者含义不同，见第 4 章 4.4.2、4.4.3。
 - **blockStmt**：**`WAIT? stmtBlock`**。
 - **blockExpr**：**stmtBlock | dataExpr**（用于 then/else、match case、Lambda 体等）。
 

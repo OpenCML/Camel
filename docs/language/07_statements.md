@@ -116,6 +116,7 @@ using namespace tensor
 
 - **stmtBlock**：**`sync? '{' stmtList? '}'`**。
 - **blockStmt** 可为 **`wait? stmtBlock`**，即块前可带 **wait**。
+- 带 `sync` 的块是**同步块**：块内表达式按书写顺序执行。不带 `sync` 的块按依赖驱动求值：结果未被使用的效应调用不执行（见第 4 章 4.4.1、4.4.2）。
 
 **普通块**
 
@@ -193,6 +194,8 @@ match dir {
 - **funcDecl**：**`(with angledParams)? export? implMark? modifiers? func identRef parentParams (':' typeExpr)? stmtBlock`**。
 - **implMark**：**inner** | **outer**。
 - **modifiers**：**atomic**、**shared**、**sync**、**macro** 等组合。
+- 写在 `func` 之前的 **`sync`** 是函数修饰符：声明函数有副作用、需要被同步（带 `var` 形参的函数必须如此声明）；它**不会**使函数体成为同步块。要让函数体按书写顺序执行，把函数体写成同步块：`func f(): T sync { ... }`，或两者并用 `sync func f(): T sync { ... }`（见第 4 章 4.4.2、4.4.3）。
+- `var` 形参是引用；把 `let` 对象传给 `var` 形参是编译期错误（见第 4 章 4.4.4）。
 - **parentParams**：**`'(' pairedParams? ','? ')'`**；**keyParamPair**：**`var? identDef ':' typeExpr ('=' dataExpr)?`**。
 
 **无参、带返回类型与 sync**

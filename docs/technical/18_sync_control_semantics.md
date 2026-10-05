@@ -23,89 +23,93 @@ Camel 的同步执行语义要求：
 
 ### 2.1 语法入口（关键产生式）
 
-当前实现可见以下语法入口：
-
 - `stmtBlock : SYNC? '{' stmtList? '}'`
 - `blockStmt : WAIT? stmtBlock`
 - `waitExpr : WAIT? assignExpr`
+- `funcDecl : ... modifiers? FUNC identRef parentParams (':' typeExpr)? stmtBlock`
 
-函数层面有两种写法，当前实现中它们**不是同一件事**（详见 2.5）：
+`sync` 在函数定义里可以出现在两个位置，它们是**两个不同的东西**（语言设计如此，不是同一修饰符的两种写法）：
 
-- 后缀写法 `func main(): int sync { ... }`：`sync` 属于函数体这个 `stmtBlock`，函数体是一个同步块；函数类型上**没有** `Modifier::Sync`。
-- 前缀写法 `sync func f(...) { ... }`：`sync` 是 `modifiers` 中的函数类型修饰符（`Modifier::Sync`）；函数体是普通块。
+- **前缀 `sync func f(...) { ... }` 修饰的是函数**：`sync` 位于 `modifiers` 中，成为函数类型上的
+  `Modifier::Sync`。它声明“这个函数有副作用、需要被同步”——调用方可能需要 `wait` 它。它**不会**把函数体
+  变成同步块。
+- **后缀 `func f(...): T sync { ... }`（以及单独的 `sync { ... }`）修饰的是其后的块**：该块是同步块，
+  块内表达式按书写顺序执行（等价于编译器在相邻表达式之间插入控制边）。函数类型上没有 `Modifier::Sync`。
 
-### 2.2 `sync` 的语义
+二者可以同时使用：`sync func f(...): T sync { ... }`。
 
-`sync` 的语义是：**在该作用域内显式建立副作用顺序约束**。  
-它不改变值语义本身，而是要求编译器为有副作用/可变参数相关的操作串联控制边，使“后语句依赖前语句完成”在 GIR 和调度器中可见。
+### 2.2 求值规则与 `sync` 块
 
-直观理解：
+Camel 的求值是**依赖驱动**的：一个表达式被求值，当且仅当它的结果（经数据边或控制边）被函数出口需要。
 
-- 无 `sync`：以值依赖为主，调度器可更自由并行。
-- 有 `sync`：增加控制依赖链，保证顺序完成语义。
+- **同步块之外，结果未被使用的效应调用不会执行。** 这是依赖驱动求值的自然结果，是合法的语言规则，
+  不是缺陷；编译器在能够检测到时给出告警。
+- **同步块**（`sync { ... }`，或以 `sync` 块作为函数体）内，表达式按书写顺序执行；编译器在相邻表达式
+  之间建立控制边，块尾成为块完成的条件。
+- `sync` 不改变值语义，只增加顺序约束。
 
-可将其简单理解为：`sync` 块把该块内操作从“默认可异步/可并行调度”收紧为“按代码书写顺序同步执行”。
+```camel
+// 函数修饰符：函数体不是同步块，println 的结果未被使用，因此不执行（设计如此）
+sync func f(): int {
+    println("hello")
+    return 1
+}
 
-### 2.3 `wait` 的语义
+// 函数体是同步块：println 执行，然后返回 1
+sync func g(): int sync {
+    println("hello")
+    return 1
+}
+```
 
-`wait expr` 的语义是：**将该表达式标记为“需要等待其副作用完成”**。  
-在当前实现中，`wait` 主要用于抑制“副作用被忽略”的语义告警，并参与 GIR builder 的副作用判定逻辑（见第 3 节）。
+### 2.3 引用、`var`、`let` 与 `wait`
 
-在非 `sync` 上下文中，调用有副作用的逻辑（例如会修改 `var` 参数或发生 I/O）应显式使用 `wait`。  
-可以把 `wait` 看成一个顺序边界：依赖被修改值的后续代码必须在该副作用完成后执行，从而保证“先写先执行、后写后执行”的时序符合预期。
+- Camel 中一切值**默认按引用传递**。`var` 标记可变对象，`let` 标记不可变对象。
+- `var` 形参是真正的引用：被调函数对它的写入就是对调用方变量的写入；在任何调度器、任何遍之后
+  （内联、特化、折叠、CSE、DCE）观察到的写入都相同。
+- 被 `if` 分支或 lambda 捕获的变量也按引用捕获：在分支或 lambda 内对它的写入作用于外层变量。
+- 把 `let` 绑定的（不可变）对象传给 `var`（可变）形参是**编译期错误**。
+- 同一个变量传给两个 `var` 形参是别名：两个形参指同一个对象。
+- **`wait`**：对带可变输入参数的函数的调用，编译器自动跟踪其对外副作用并插入控制边，使依赖被修改值的
+  后续代码在该副作用完成之后执行。这正是“默认按引用”这一设计的原因。
 
-### 2.4 静态约束（实现已落地）
+### 2.4 静态约束
 
-- 变量参数（`var`）只允许出现在 `sync` 函数中；否则触发 `VarParamInAsyncFunction`。
-- 调用带副作用签名（典型是 `var` 参数）而既不在 `sync` 上下文也不加 `wait`，会触发 `IgnoredSideEffect` 告警。
-- 这两条都是 Warn 级诊断，目前只在模块同时存在 Error 时才会被输出（见 2.5 第 6 条）。
+- `var` 形参只允许出现在带函数修饰符 `sync` 的函数中（前缀 `sync func`）；否则 `VarParamInAsyncFunction`。
+- 调用带副作用签名（典型是 `var` 形参）而既不在同步块内也不加 `wait`：`IgnoredSideEffect` 告警。
+- 把 `let` 对象传给 `var` 形参：编译期错误（见 2.3）。
 
-### 2.5 当前行为与未决问题：`sync` 块之外的效应
+### 2.5 实现现状（与上述规则的差距）
 
-> **状态：当前实现的行为记录，不是语言承诺。** 下面每一条都由程序运行确认
-> （`test/cases/linear/runtime/effects_outside_sync.cml`，计划 `linear.runtime_negative` 中的
-> `effects_outside_sync.*`；零遍、`std::fvm`、`std::jit`、`std::tf` 以及含 `std::inline`、
-> `std::opt::simplify`、`std::macro` 的流水线输出相同）。应当采用哪种语义尚未决定，见本节末尾。
+> 本小节记录**当前实现**与 2.1–2.4 规范之间的差距；规范以 2.1–2.4 为准。每条差距在代码跟上之后删除。
+> 行为记录由程序运行确认（`test/cases/linear/runtime/effects_outside_sync.cml`，计划
+> `linear.runtime_negative` 中的 `effects_outside_sync.*`）。
 
-**实际行为。** GIR builder 只通过三种途径把一个调用接到函数出口（`visitExitNode`，
-`src/compile/gir/builder.cpp`）：数据边（结果被用到，最终流向返回值）、`var` 实参的修饰链
-（`modifierOf`）、以及**函数体自身是同步块时**的同步链尾（`synced_ && lastSyncedNode_`）。都不满足的调用
-不可达于出口，不进入运行时图，因此**在任何调度器上都不执行**——不是“顺序不定”，而是不存在。具体地：
+符合规范、已由测试锁定的行为：
 
-1. 非同步函数体中，结果未被使用的效应调用（例如一条 `println(...)` 语句）不执行。
-2. 给它加 `wait` 不改变这一点：`wait` 目前只影响 `IgnoredSideEffect` 告警的判定，不建立到出口的连接。
-3. 非同步函数体内嵌套的 `sync { ... }` 块：块内语句彼此有序，但块尾同样没有接到外层出口
-   （`visitExecNode` 退出时恢复外层的 `lastSyncedNode_`），整块效应不执行。
-4. 结果作为返回值的效应调用（`return println(...)`）在数据路径上，会执行；同一函数里它之前那条结果未用的
-   `println` 仍不执行。
-5. **前缀与后缀写法不等价。** `func f(): T sync { 效应; return v }` 的函数体是同步块，效应执行。
-   `sync func f(): T { 效应; return v }` 只给函数类型加 `Modifier::Sync`（其作用是允许 `var` 参数，
-   见 2.4），函数体是普通块，效应按第 1 条被丢弃——`sync func main(): int { println(...) }` 什么也不输出。
-   反过来，后缀写法的函数不带 `Modifier::Sync`，声明 `var` 参数会触发（不显示的）
-   `VarParamInAsyncFunction` 告警，但 `var` 回写照常工作。两种写法同时使用（`sync func f(): T sync { ... }`）
-   时两者兼得。成因在语法：`funcDecl : ... modifiers? FUNC ... stmtBlock`，`stmtBlock : SYNC? '{' ... '}'`
-   （`src/parse/ast/builder.cpp` 的 `visitFuncDecl` / `visitStmtBlock`），两个 `sync` 落在不同的 AST 标记上，
-   之后没有任何一处把它们关联起来。
-6. **告警。** `IgnoredSideEffect` 只对带 `var` 参数、且既不在同步块内也未加 `wait` 的调用产生；对
-   `println` 这类不纯算子不产生。并且模块诊断只在模块有 Error 时才输出
-   （`Context::dumpAllModuleDiagnostics`，`src/core/context/context.cpp`）：没有错误的程序，其告警在
-   `camel`、`camel -v`、`camel check` 下都不显示；`camel check -N/--max-warning` 被解析但没有被使用。
-   所以上述被丢弃的效应目前没有任何提示。
-7. 附录第二个示例（`wait_boundary_demo`，非同步的 `main` 末尾一条 `println`）按第 1 条不输出任何内容。
+1. 非同步函数体中，结果未被使用的效应调用（例如一条 `println(...)` 语句）不执行，在所有调度器上一致。
+2. 前缀 `sync func` 只给函数类型加 `Modifier::Sync`，函数体是普通块；后缀 `sync` 使函数体成为同步块。
+   AST 中这是两个独立的标记（`src/parse/ast/builder.cpp` 的 `visitFuncDecl` / `visitStmtBlock`）。
+3. 结果作为返回值的效应调用（`return println(...)`）在数据路径上，会执行。
 
-**未决问题（需要语言层面的决定，实现没有替语言做决定）。**
+与规范的差距（跟踪项见 `OWNER-QUESTIONS` 的 A1、A3–A6、A9）：
 
-- A. `sync` 块之外、结果未被使用的效应调用应当如何处理：
-  - A1. **保证执行，顺序不定**：构图时把这类调用接到函数出口（控制边），不与其他语句排序；
-  - A2. **编译错误**：在非同步上下文中丢弃不纯调用的结果是错误；
-  - A3. **保持不执行，但告警**：对所有不纯算子（不仅是 `var` 参数调用）给出 `IgnoredSideEffect` 类告警，
-    并让告警在没有错误的模块上也能显示。
-- B. 前缀 `sync func` 与后缀 `func ...: T sync { }` 是否应当等价（前缀隐含同步的函数体，和/或后缀隐含
-  `Modifier::Sync`）。`docs/language/04_execution_model.md` 4.4 的示例对两种写法的用法不同（前缀写法的函数体内
-  显式使用 `wait`），没有声明二者等价；让前缀隐含同步函数体会改变现有 `sync func` 程序的行为（目前被丢弃的
-  效应会开始执行）。
-- C. `wait` 在非同步上下文中是否应当建立到出口的依赖（2.3 的文字描述暗示应当，实现没有）。
-- D. 嵌套 `sync` 块的块尾是否应当成为外层函数完成的条件。
+- **`var` 形参尚不是真正的引用。** 目前在调用返回时把被调帧中的值写回实参槽位（见 8.1），因此带 `var`
+  形参的函数不做尾调用、不进入 JIT；常量实参不被写回。目标是按引用实现，恢复尾调用与 JIT。
+- **捕获变量的写入尚未穿透到外层变量**：零遍执行丢失 `if` 分支或 lambda 内对捕获变量的写入，分支被内联
+  后写入又会生效（结果随流水线而变）。
+- **`let` 对象传给 `var` 形参尚未被拒绝**：目前可以编译，零遍执行不写入该常量，内联之后会写入共享常量。
+- **同一变量传给两个 `var` 形参**：目前按顺序回写，内联后成为别名；探针上结果相同，但没有保证。
+- **告警尚不显示。** `IgnoredSideEffect` 只对 `var` 形参调用产生，对 `println` 这类不纯算子不产生；并且
+  模块没有 Error 时，Warn 级诊断不输出（`Context::dumpAllModuleDiagnostics`）。因此被丢弃的效应目前没有提示。
+- **`wait` 在非同步上下文中**目前只影响 `IgnoredSideEffect` 的判定；对带可变输入的调用，依赖关系经
+  `var` 实参的修饰链建立。
+
+尚待语言层面确认（实现没有替语言做决定）：
+
+- 非同步函数体内嵌套的 `sync { ... }` 块，其值未被使用时是否执行。当前实现：块内语句彼此有序，但块尾没有
+  接到外层出口，整块不执行。按“依赖驱动”规则这可以是预期行为，按“同步块按书写顺序执行”也可以认为应当
+  执行；两种读法都与现有文字相容，未作选择。
 
 ## 3. 编译实现层：从 AST/GCT 到 GIR 的落地
 
@@ -114,24 +118,24 @@ Camel 的同步执行语义要求：
 ```camel
 module sync_wait_demo
 
-// 有副作用：修改 var 参数
-func bump(var x: int): void {
+// 有副作用：修改 var 形参。带 var 形参的函数用函数修饰符 sync 声明。
+sync func bump(var x: int): void {
     x += 1
 }
 
-// 有副作用：I/O
-func log_value(x: int): void {
+// 有副作用：I/O。函数体是同步块，println 按书写顺序执行。
+func log_value(x: int): void sync {
     println("x = {}"->format<x>)
 }
 
 func main(): int sync {
-    let c = 0
+    var c = 0          // var：可变对象，可以传给 var 形参
 
-    // sync 块内按书写顺序执行，修改和读取顺序稳定
+    // 同步块内按书写顺序执行，修改和读取顺序稳定
     wait bump(c)
-    wait log_value(c)
+    wait log_value(c)  // x = 1
     wait bump(c)
-    wait log_value(c)
+    wait log_value(c)  // x = 2
 
     return c
 }
@@ -140,21 +144,22 @@ func main(): int sync {
 ```camel
 module wait_boundary_demo
 
-func bump(var x: int): void {
+sync func bump(var x: int): void {
     x += 1
 }
 
 func main(): int {
-    let c = 0
+    var c = 0
 
-    // 非 sync 上下文，副作用调用需显式 wait
+    // 非同步块：对带可变输入的调用使用 wait，编译器跟踪其副作用并插入控制边，
+    // 读取 c 的后续代码在写入完成之后执行
     wait bump(c)
     let after1 = c
 
     wait bump(c)
     let after2 = c
 
-    println("after1={}, after2={}"->format<after1, after2>)
+    // 注意：这里若再写一条结果未被使用的 println(...)，它不在同步块内，不会执行（见 2.2）
     return after2
 }
 ```
@@ -258,6 +263,9 @@ func main(): int {
 - **Taskflow**：`GATE`/`SYNC` 需至少有占位任务以承接依赖边，保证并行调度下的完成顺序与线性语义一致。
 
 ### 8.1 `var` 参数的回写
+
+> **实现现状，不是规范。** 规范是 2.3：`var` 形参是真正的引用。本小节描述的“返回时回写”是当前的过渡实现，
+> 与规范不一致之处（不做尾调用、不进入 JIT、别名与捕获的情形）见 2.5；待按引用实现后本小节将被替换。
 
 `var` 参数按引用传递（见 2.3 与语言手册 4.4.2）：被调函数对 `var` 参数的赋值，调用返回后在调用者传入的变量上可见。赋值算子（`:op/assn*`）只写被调帧里该参数的槽位，所以每个执行后端在调用返回、被调帧释放之前，把各 `var` 参数的最终值写回调用点对应实参的槽位（`camel::execute::writeBackVarArgs`，直接调用 `FUNC` 与间接调用 `CALL` 相同）：
 
