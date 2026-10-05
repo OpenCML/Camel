@@ -218,8 +218,9 @@ class ExitLoad : public Load {
 
 class ExecLoad : public Load {
     bool synced_ = false;
-    /// The operands of a composite literal (`{ a: f(), b: g() }`), lowered to a scope of their
-    /// own: not a block of the program, so they take the ordering of the block they appear in.
+    /// A scope the lowering introduced (the operands of a composite literal
+    /// `{ a: f(), b: g() }`, the names of a declaration `let (p, q) = f()`): not a block of
+    /// the program, so its expressions take the ordering of the block they appear in.
     bool operands_ = false;
 
   public:

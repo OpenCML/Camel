@@ -492,8 +492,9 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     const auto &typeNodes    = ast->atAs<AST::RepeatedLoad>(0);
     const auto &dataNodes    = ast->atAs<AST::RepeatedLoad>(1);
 
-    // Create an execution node as the initial result
-    node_ptr_t res = createNodeAs<ExecLoad>();
+    // The names of the declaration get a scope of their own, which is not a block of the
+    // program: in a sync block the initializer keeps its place in the block's order.
+    node_ptr_t res = createNodeAs<ExecLoad>(false, true);
 
     // Handle different unpacking types
     switch (dataDeclLoad->unpackType()) {

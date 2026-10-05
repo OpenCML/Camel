@@ -211,6 +211,11 @@ class Builder {
     node_handle_t visitAnnoNode(const GCT::node_ptr_t &gct);
     node_handle_t visitExitNode(const GCT::node_ptr_t &gct);
     node_handle_t visitExecNode(const GCT::node_ptr_t &gct);
+    // The body of a graph (function, lambda, branch arm): a block of its own, whatever block
+    // the function or arm is written in.
+    node_handle_t visitBodyNode(const GCT::node_ptr_t &gct);
+    // Makes `result` the result of `graph` when its body set none with `return`.
+    void setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result);
     void_ptr_t visitExptNode(const GCT::node_ptr_t &gct);
 };
 

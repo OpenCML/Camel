@@ -1,0 +1,532 @@
+id = "linear.sync_order"
+order = 345
+tier = "feat"
+tags = ["feat", "linear", "sync", "order"]
+
+[[tests]]
+name = "sync_block_order.default"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: default (no pass)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.fvm"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.jit"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.tf"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.inline"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::inline."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.specialize"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::specialize."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::specialize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.devirtualize"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::devirtualize."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::devirtualize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.fold"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::fold."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.cse"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::cse."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::opt::cse"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.dce"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::dce."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.opt"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.simplify"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.macro"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.macro_inline"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::inline."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::macro", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.macro_specialize"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::specialize."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::macro", "std::specialize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.macro_devirtualize"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::devirtualize."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::macro", "std::devirtualize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.macro_fold"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt::fold."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::macro", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.macro_cse"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt::cse."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::macro", "std::opt::cse"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.macro_dce"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt::dce."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::macro", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.macro_opt"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::macro", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.macro_simplify"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::macro", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.all_6"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::inline std::specialize std::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::inline", "std::specialize", "std::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.all_macro_9"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::inline std::specialize std::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::macro", "std::inline", "std::specialize", "std::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.opt_fvm"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::opt", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.opt_jit"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt std::jit."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.opt_tf"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt std::tf."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::opt", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.inline_fvm"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::inline std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.inline_jit"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::inline std::jit."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::inline", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.inline_tf"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::inline std::tf."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::inline", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.specialize_jit"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::specialize std::jit."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::specialize", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.simplify_jit"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::simplify std::jit."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.macro_opt_jit"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt std::jit."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::macro", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "sync_block_order.macro_opt_tf"
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt std::tf."
+kind = "behavior"
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+args = ["${case}", "std::macro", "std::opt", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === 'A1 | A2 | 2 | B1 | 3 | n1 | n2 | 33 | 1 pair | 2 after | 15 | L1 | 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000

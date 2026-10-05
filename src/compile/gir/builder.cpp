@@ -784,15 +784,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
                 variables_.insert(port);
             }
         }
-        node_handle_t res = visitExecNode(gct->atAs<GCT::ExecLoad>(1));
-        if (graph->draft().exitNode() == runtime::kInvalidNodeRef) {
-            if (res != nullptr) {
-                setGraphReturnFromResult(graph, nodeIdOf(res), nodeIdOf(res), nodeTypeOf(res));
-            } else {
-                auto *resNode = graph->addStaticDataNode(Data::null());
-                setGraphReturnFromResult(graph, nodeIdOf(resNode), nodeIdOf(resNode), Type::Void());
-            }
-        }
+        setBodyResult(graph, visitBodyNode(gct->atAs<GCT::ExecLoad>(1)));
     } catch (...) {
         leaveScope();
         throw;
@@ -1896,23 +1888,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
         graph_ptr_t subGraph = enterScope(FunctionType::create());
         registerGraphOrigin(context_, subGraph, caseExecNode, "gir.brch.case.graph");
-        node_handle_t resNode = visitExecNode(caseExecNode);
-        if (subGraph->draft().exitNode() == runtime::kInvalidNodeRef) {
-            if (resNode != nullptr) {
-                setGraphReturnFromResult(
-                    subGraph,
-                    nodeIdOf(resNode),
-                    nodeIdOf(resNode),
-                    nodeTypeOf(resNode));
-            } else {
-                node_handle_t nullNode = subGraph->addStaticDataNode(Data::null());
-                setGraphReturnFromResult(
-                    subGraph,
-                    nodeIdOf(nullNode),
-                    nodeIdOf(nullNode),
-                    Type::Void());
-            }
-        }
+        setBodyResult(subGraph, visitBodyNode(caseExecNode));
         leaveScope();
 
         currGraph_->addDependencyGraph(subGraph);
@@ -2106,14 +2082,50 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     return resNode;
 }
 
+node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
+    const bool outerSynced        = std::exchange(synced_, false);
+    const node_handle_t outerLast = std::exchange(lastSyncedNode_, {});
+    node_handle_t result{};
+    try {
+        result = visitExecNode(gct);
+    } catch (...) {
+        synced_         = outerSynced;
+        lastSyncedNode_ = outerLast;
+        throw;
+    }
+    synced_         = outerSynced;
+    lastSyncedNode_ = outerLast;
+    return result;
+}
+
+void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result) {
+    if (graph->draft().exitNode() != runtime::kInvalidNodeRef) {
+        return;
+    }
+    if (result == nullptr) {
+        result = graph->addStaticDataNode(Data::null());
+        setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(result), Type::Void());
+        return;
+    }
+    // A sync block that ends in a value hands it back behind a GATE (see visitExecNode): the
+    // GATE is the output anchor, the value it forwards is what the graph returns.
+    node_handle_t value = result;
+    if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
+        value = nodeDraftOf(result)->node(normInputsOf(result).front());
+    }
+    setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(value), nodeTypeOf(value));
+}
+
 node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     ENTER("EXEC");
     const auto &execLoad      = gct->loadAs<GCT::ExecLoad>();
     bool old                  = synced_;
     node_handle_t oldFuncNode = lastSyncedNode_;
-    // The operands of a composite literal are not a block: in a sync block they continue its
-    // chain, in written order, like the arguments of a call statement.
-    const bool operands = execLoad->operands();
+    // A scope the lowering introduced (the operands of a composite literal, the names of a
+    // declaration) is not a block: in a sync block it continues the chain, in written order,
+    // like the arguments of a call statement. So does a sync block written inside a sync
+    // block: its expressions are expressions of the enclosing block, in the same order.
+    const bool operands = execLoad->operands() || (synced_ && execLoad->synced());
     if (!operands) {
         synced_         = execLoad->synced();
         lastSyncedNode_ = {};
@@ -2136,6 +2148,19 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
         }
     }
     if (!operands) {
+        // A sync block that is not part of an enclosing chain: whoever takes its value takes
+        // it after the block's last expression (a `return` has already done this for the
+        // graph's exit). Without this the chain of a block ending in a plain value was not
+        // reachable from anything and the block's effects were dropped.
+        const bool returned =
+            gct->size() > 0 && gct->at(gct->size() - 1)->type() == GCT::LoadType::EXIT;
+        if (synced_ && !returned && res != nullptr && lastSyncedNode_ != nullptr &&
+            lastSyncedNode_ != res && sameGraph(res, currGraph_)) {
+            node_handle_t gate = currGraph_->addGateNode(nodeTypeOf(res));
+            linkNodes(LinkType::Norm, res, gate);
+            linkNodes(LinkType::Ctrl, lastSyncedNode_, gate);
+            res = gate;
+        }
         synced_         = old;
         lastSyncedNode_ = oldFuncNode;
     }
