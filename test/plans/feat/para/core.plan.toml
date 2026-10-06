@@ -364,3 +364,27 @@ assert(out === '1010 | 9', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 30000
+
+[[tests]]
+name = "println_whole_lines.prl"
+desc = "Lines printed by concurrent calls under PRL come out whole, each exactly once, whatever their order."
+kind = "behavior"
+case = "../../../cases/para/core/println_whole_lines.cml"
+args = ["-t", "8", "${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split(String.fromCharCode(10))
+if (lines[lines.length - 1] === '') lines.pop()
+assert(lines.length === 3000, `expected 3000 lines, got ${lines.length}`)
+const seen = new Set()
+for (const line of lines) {
+const m = /^line ([0-9]+) of the map$/.exec(line)
+assert(m !== null, `broken line: '${line}'`)
+seen.add(Number(m[1]))
+}
+assert(seen.size === 3000, `expected 3000 distinct lines, got ${seen.size}`)
+}
+"""
+timeout_ms = 30000
