@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -2015,12 +2015,16 @@ ArrayType(siz dim) : Type type ;
 Type *Builder::visitArrayType(const AST::node_ptr_t &ast) {
     ENTER("ArrayType");
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ArrayType");
-    // TODO: The dims information is not used here yet.
-    // const auto &arrayTypeLoad = ast->loadAs<AST::ArrayTypeLoad>();
-    Type *type            = visitType(ast->atAs<AST::TypeLoad>(0));
-    const auto &arrayType = ArrayType::create(type);
+    // `T[][]` reaches here as one node of two dimensions: an array of arrays of T. One array
+    // type per dimension; a single one made `T[][]` mean `T[]`.
+    const auto &arrayTypeLoad = ast->loadAs<AST::ArrayTypeLoad>();
+    Type *type                = visitType(ast->atAs<AST::TypeLoad>(0));
+    type                      = ArrayType::create(type);
+    for (size_t dim = 1; dim < arrayTypeLoad->dims(); ++dim) {
+        type = ArrayType::create(type);
+    }
     LEAVE("ArrayType");
-    return arrayType;
+    return type;
 }
 
 /*

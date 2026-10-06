@@ -175,3 +175,25 @@ verify_script = """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
+
+[[tests]]
+name = "nested_array_type.nvm"
+desc = "The type expression T[][] is an array of arrays (parameter, return type, var, lambda parameter, three dimensions); it used to be taken as T[], so indexing it once gave the element type."
+kind = "behavior"
+case = "../../../cases/linear/nvm/nested_array_type.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["nested_array_type head=3 g21=21 acc=[[20, 21, 22]] lens=[3, 3, 3] corner=8"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "nested_array_type.fvm"
+desc = "The type expression T[][] is an array of arrays (parameter, return type, var, lambda parameter, three dimensions); it used to be taken as T[], so indexing it once gave the element type."
+kind = "behavior"
+case = "../../../cases/linear/nvm/nested_array_type.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["nested_array_type head=3 g21=21 acc=[[20, 21, 22]] lens=[3, 3, 3] corner=8"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
