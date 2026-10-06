@@ -126,6 +126,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
+name = "python.integration.prl"
+desc = "The same under PRL: Python operators run on worker threads of the scheduler (each takes the GIL; a thread without it crashes inside the interpreter)."
+kind = "behavior"
+case = "../../../cases/modules/std/python/main.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = 0
+expect_stdout_contains = ["=== All tests completed ==="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "python.phot"
 desc = "Exercises the phot Python wrapper through an end-to-end signal-processing pipeline."
 kind = "behavior"

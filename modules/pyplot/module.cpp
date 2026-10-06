@@ -297,6 +297,22 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
 
 } // namespace
 
+namespace {
+// The interpreter is initialised on the thread that loads the module, which then holds the
+// GIL. Operators run on whichever thread the scheduler gives them (a worker of the parallel
+// scheduler, several at once), so each takes the GIL for its duration, and the loading thread
+// gives it up once the module is loaded. A thread that never held the GIL has no Python thread
+// state at all: calling into the interpreter from it crashes.
+struct ReleaseGilAfterLoad {
+    bool armed = false;
+    ~ReleaseGilAfterLoad() {
+        if (armed) {
+            (void)PyEval_SaveThread();
+        }
+    }
+};
+} // namespace
+
 PyplotModule::PyplotModule(context_ptr_t ctx) : BuiltinModule("pyplot", ctx) {
     for (const auto &group : getOperatorGroups())
         exportEntity(group->name(), group);
@@ -307,11 +323,13 @@ module_ptr_t PyplotModule::create(context_ptr_t ctx) { return std::make_shared<P
 bool PyplotModule::load() {
     if (loaded_)
         return true;
+    ReleaseGilAfterLoad releaseGil;
     try {
         if (!Py_IsInitialized()) {
             PythonInitEnvGuard envGuard;
             set_python_home_from_venv();
             py::initialize_interpreter();
+            releaseGil.armed = true;
             ensure_site_packages_in_path();
             ensure_extra_python_paths_in_path();
         }
