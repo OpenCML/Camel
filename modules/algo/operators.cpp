@@ -38,33 +38,53 @@ enum class SortAlgo { Insertion, Quick, Merge };
 template <typename T, typename Compare>
 static void insertionSortSlots(slot_t *vals, size_t n, Compare comp) {
     for (size_t i = 1; i < n; ++i) {
-        T key    = (T)vals[i];
+        T key    = fromSlot<T>(vals[i]);
         size_t j = i;
-        while (j > 0 && comp(key, (T)vals[j - 1])) {
+        while (j > 0 && comp(key, fromSlot<T>(vals[j - 1]))) {
             vals[j] = vals[j - 1];
             --j;
         }
-        vals[j] = key;
+        vals[j] = toSlot(key);
     }
 }
 
+/// Quicksort over [left, right]: median-of-three pivot, Hoare partition, insertion sort for short
+/// ranges. Recursion only into the smaller part, so the depth stays logarithmic on sorted or
+/// constant input.
 template <typename T, typename Compare>
-static void quickSortSlots(slot_t *vals, int left, int right, Compare comp) {
-    if (left >= right)
-        return;
-    T pivot = (T)vals[left];
-    int i = left, j = right;
-    while (i < j) {
-        while (i < j && !comp((T)vals[j], pivot))
-            --j;
-        while (i < j && comp((T)vals[i], pivot))
-            ++i;
-        if (i < j)
-            std::swap(vals[i], vals[j]);
+static void quickSortSlots(slot_t *vals, ptrdiff_t left, ptrdiff_t right, Compare comp) {
+    while (right - left >= 16) {
+        const ptrdiff_t mid = left + (right - left) / 2;
+        if (comp(fromSlot<T>(vals[mid]), fromSlot<T>(vals[left])))
+            std::swap(vals[mid], vals[left]);
+        if (comp(fromSlot<T>(vals[right]), fromSlot<T>(vals[left])))
+            std::swap(vals[right], vals[left]);
+        if (comp(fromSlot<T>(vals[right]), fromSlot<T>(vals[mid])))
+            std::swap(vals[right], vals[mid]);
+        const T pivot = fromSlot<T>(vals[mid]);
+        ptrdiff_t i = left, j = right;
+        while (i <= j) {
+            while (comp(fromSlot<T>(vals[i]), pivot))
+                ++i;
+            while (comp(pivot, fromSlot<T>(vals[j])))
+                --j;
+            if (i <= j) {
+                std::swap(vals[i], vals[j]);
+                ++i;
+                --j;
+            }
+        }
+        if (j - left < right - i) {
+            quickSortSlots<T>(vals, left, j, comp);
+            left = i;
+        } else {
+            quickSortSlots<T>(vals, i, right, comp);
+            right = j;
+        }
     }
-    std::swap(vals[left], vals[i]);
-    quickSortSlots<T>(vals, left, i - 1, comp);
-    quickSortSlots<T>(vals, i + 1, right, comp);
+    if (right > left) {
+        insertionSortSlots<T>(vals + left, static_cast<size_t>(right - left + 1), comp);
+    }
 }
 
 template <typename T, typename Compare>
@@ -76,7 +96,7 @@ static void mergeSortSlots(slot_t *vals, size_t n, Compare comp, slot_t *tmp) {
     mergeSortSlots<T>(vals + mid, n - mid, comp, tmp);
     size_t i = 0, j = mid, k = 0;
     while (i < mid && j < n) {
-        if (comp((T)vals[i], (T)vals[j]))
+        if (comp(fromSlot<T>(vals[i]), fromSlot<T>(vals[j])))
             tmp[k++] = vals[i++];
         else
             tmp[k++] = vals[j++];
@@ -106,7 +126,7 @@ __doSortSlots__(bool inplace, Array *arr, SortAlgo algo, const ArrayType *arrTyp
         insertionSortSlots<T>(slots, n, comp);
         break;
     case SortAlgo::Quick:
-        quickSortSlots<T>(slots, 0, (int)n - 1, comp);
+        quickSortSlots<T>(slots, 0, static_cast<ptrdiff_t>(n) - 1, comp);
         break;
     case SortAlgo::Merge: {
         std::vector<slot_t> tmp(n);
