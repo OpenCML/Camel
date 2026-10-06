@@ -126,5 +126,7 @@ the two kinds differently beyond their order.
   option for the entry export (the target is the default, `onnxruntime-cpu`).
 - `CAMEL_ONNX_OUT` is the only way to name the file, until passes take arguments.
 - `--result` is not applied under `--timeit`.
+- `std::cpp` does not translate a `main` with parameters: it refuses with `TranslationRefused` at
+  `main` (the generated C++ program calls the entry function without arguments).
 - An optimizer state (`nn` Adam state) is not accepted as a parameter type on the command line
   or as a declared model input.
