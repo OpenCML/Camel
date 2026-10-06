@@ -33,6 +33,7 @@
 #include "engine.h"
 
 #include "../generic/rewrite.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
@@ -106,6 +107,46 @@ size_t inlinedNodeCount(const GCGraph *graph) {
         count += node && node->kind != GCNodeKind::Data && node->kind != GCNodeKind::Port ? 1 : 0;
     }
     return count;
+}
+
+/// True when running `graph` may have an effect or touch state: it holds an operator that is not
+/// registered as pure, a call of a function value (callee unknown here), or reaches such a graph.
+/// A cycle of graphs is pure when none of its members has an effect of its own.
+bool mayHaveEffects(const GCGraph *graph, std::unordered_set<const GCGraph *> &seen) {
+    if (!graph || !seen.insert(graph).second) {
+        return false;
+    }
+    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+        const auto *node = *it;
+        if (!node) {
+            continue;
+        }
+        if (node->kind == GCNodeKind::Call) {
+            return true;
+        }
+        if (node->kind == GCNodeKind::Oper) {
+            const auto *body = graph->nodeBodyAs<camel::runtime::GCOperBody>(it.ref());
+            if (!body || !camel::core::OperatorTraitsRegistry::instance().isPure(body->uri())) {
+                return true;
+            }
+        }
+        if (node->kind == GCNodeKind::Func) {
+            if (mayHaveEffects(graph->directCalleeGraphOf(it.ref()), seen)) {
+                return true;
+            }
+        }
+    }
+    for (GCGraph *sub : graph->subGraphs()) {
+        if (mayHaveEffects(sub, seen)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool mayHaveEffects(const GCGraph *graph) {
+    std::unordered_set<const GCGraph *> seen;
+    return mayHaveEffects(graph, seen);
 }
 
 /// True when values of `type` may hold a function: inlining a callee returning one exposes the
@@ -732,6 +773,27 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 // case, a constant result), nothing else keeps the predecessor reachable, and a
                 // write the program made was silently dropped.
                 auto argSources = camel::passes::generic::orderedSources(draft, funcNodeId);
+                // And the other way round: the call ran after the ordered sources of ALL its
+                // arguments, so the body must too, also where it does not read the argument
+                // that carried the ordering (a read of a variable feeding an argument the
+                // callee ignores: the callee's writes would otherwise be free to run before
+                // that read, and the read would see them). Made explicit on the call before it
+                // is spliced; the inliner hands a call's control predecessors to the body.
+                // Only a body that has an effect or touches state cares when it runs; a pure
+                // callee (most of a tensor program) gets no extra edge.
+                const bool calleeOrdered = mayHaveEffects(
+                    reinterpret_cast<const GCFuncBody *>(draft.payloadOf(funcNodeId).data())
+                        ->calleeGraph);
+                for (gc_node_ref_t source : argSources) {
+                    if (!calleeOrdered) {
+                        break;
+                    }
+                    const auto existing = draft.ctrlInputsOf(funcNodeId);
+                    if (source != funcNodeId && draft.alive(source) &&
+                        std::ranges::find(existing, source) == existing.end()) {
+                        draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, funcNodeId, source);
+                    }
+                }
                 for (gc_node_ref_t pred : draft.ctrlInputsOf(funcNodeId)) {
                     if (std::ranges::find(argSources, pred) == argSources.end()) {
                         argSources.push_back(pred);

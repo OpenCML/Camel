@@ -3212,3 +3212,96 @@ assert(out === 'use: 10 counter 3 | climb 3: 0 counter 3 | climb 5: 0 counter 5 
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "var_read_before_callee_write.default"
+desc = "A read of a var stays before later writes made by a callee, also when the only thing ordering the call after the read was an argument the callee does not use. After inlining, the callee's write used to be free to run before the read under std::opt::simplify (a snapshot came out as the variable's final value; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_read_before_callee_write.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_read_before_callee_write.simplify"
+desc = "A read of a var stays before later writes made by a callee, also when the only thing ordering the call after the read was an argument the callee does not use. After inlining, the callee's write used to be free to run before the read under std::opt::simplify (a snapshot came out as the variable's final value; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_read_before_callee_write.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_read_before_callee_write.opt_fold"
+desc = "A read of a var stays before later writes made by a callee, also when the only thing ordering the call after the read was an argument the callee does not use. After inlining, the callee's write used to be free to run before the read under std::opt::simplify (a snapshot came out as the variable's final value; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_read_before_callee_write.cml"
+args = ["${case}", "std::opt", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_read_before_callee_write.macro_simplify_fvm"
+desc = "A read of a var stays before later writes made by a callee, also when the only thing ordering the call after the read was an argument the callee does not use. After inlining, the callee's write used to be free to run before the read under std::opt::simplify (a snapshot came out as the variable's final value; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_read_before_callee_write.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_read_before_callee_write.macro_simplify_jit"
+desc = "A read of a var stays before later writes made by a callee, also when the only thing ordering the call after the read was an argument the callee does not use. After inlining, the callee's write used to be free to run before the read under std::opt::simplify (a snapshot came out as the variable's final value; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_read_before_callee_write.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_pipelines"
+desc = "Generated programs that write variables (fixed seed): recursions writing a var on the way down and up at depths 0 to 7, and straight-line functions with snapshots of the variable interleaved with writes, a snapshot feeding an argument the callee ignores while the callee writes, and a branch whose arms write. Each of 8 programs runs on 8 pipelines and is compared with a reference computed by simulation (not only with the default run). Two silent defects of std::opt::simplify (a dropped write; a read moved behind later writes) are in this class."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/linear/byref/var_pipelines.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["64 program-pipeline cells, 0 wrong", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
