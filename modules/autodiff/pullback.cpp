@@ -513,6 +513,22 @@ struct CallSite {
     ::Function *rule = nullptr;
 };
 
+/// What a graph being differentiated is to the differentiated function: the reason a function
+/// value is not evident in it depends on that.
+enum class GraphRole { Differentiated, Callee, BranchArm };
+
+/// Where a graph being differentiated stands.
+struct GraphScope {
+    GraphRole role = GraphRole::Differentiated;
+    /// The functions this graph is inside a branch arm of, after their bodies were brought
+    /// into a graph to follow a function value. A call of one of them from here is that
+    /// function's recursion: it is not followed again (it would be without end), it stays a
+    /// call.
+    std::unordered_set<GCGraph *> enclosing;
+    /// Set when this graph is (an arm of) a function whose recursive call was left that way.
+    std::string recursive;
+};
+
 class Engine;
 
 // ---------------------------------------------------------------- forward rewrite
@@ -520,7 +536,8 @@ class Engine;
 /// Rewrites a graph so that each differentiable call also returns its pullback.
 class ForwardRewrite {
   public:
-    ForwardRewrite(Engine &engine, GraphDraft &draft) : engine_(engine), draft_(draft) {}
+    ForwardRewrite(Engine &engine, GraphDraft &draft, const GraphScope &scope)
+        : engine_(engine), draft_(draft), scope_(scope) {}
 
     void run();
 
@@ -552,6 +569,7 @@ class ForwardRewrite {
 
     Engine &engine_;
     GraphDraft &draft_;
+    const GraphScope &scope_;
     std::unordered_map<gc_node_ref_t, CallSite> sites_;
     std::deque<mm::RootHandle> roots_;
 };
@@ -578,10 +596,6 @@ struct Tangent {
     }
 };
 
-/// What a graph being differentiated is to the differentiated function: the reason a function
-/// value is not evident in it depends on that.
-enum class GraphRole { Differentiated, Callee, BranchArm };
-
 /// A call of a function value that the gradient has to pass and cannot.
 struct Refusal {
     uint64_t origin = 0;
@@ -595,10 +609,10 @@ class Backward final : public VjpBuilder {
   public:
     Backward(
         GraphDraft &forward, GraphDraft &target,
-        const std::unordered_map<gc_node_ref_t, CallSite> &sites, GraphRole role,
+        const std::unordered_map<gc_node_ref_t, CallSite> &sites, const GraphScope &scope,
         std::vector<Refusal> &refusals)
         : forward_(forward), target_(target), sites_(sites), inPlace_(&forward == &target),
-          role_(role), refusals_(refusals) {}
+          scope_(scope), refusals_(refusals) {}
 
     /// Target-graph node holding the primal value `primal`.
     gc_node_ref_t ref(gc_node_ref_t primal);
@@ -661,7 +675,7 @@ class Backward final : public VjpBuilder {
     GraphDraft &target_;
     const std::unordered_map<gc_node_ref_t, CallSite> &sites_;
     const bool inPlace_;
-    const GraphRole role_;
+    const GraphScope &scope_;
     std::vector<Refusal> &refusals_;
     std::vector<gc_node_ref_t> refused_;
     std::unordered_set<gc_node_ref_t> primals_;
@@ -707,7 +721,17 @@ class Engine {
     /// A plan for a synthesized graph (a branch arm) with the given types.
     PullbackPlan planForDraft(
         std::unique_ptr<GraphDraft> source, const std::string &name, const PullbackPlan &types,
-        GraphRole role = GraphRole::BranchArm);
+        GraphScope scope);
+
+    /// The functions whose bodies, brought into a graph, the branch arm `arm` came with.
+    const std::unordered_set<GCGraph *> &ownersOf(GCGraph *arm) const {
+        static const std::unordered_set<GCGraph *> none;
+        auto it = armOwners_.find(arm);
+        return it == armOwners_.end() ? none : it->second;
+    }
+    void noteArmOwner(GCGraph *arm, GCGraph *owner) { armOwners_[arm].insert(owner); }
+    /// `function` called itself from one of its own arms while it was being followed.
+    void noteRecursion(GCGraph *function) { recursions_.insert(function); }
     /// The plan for calls of a closure over `graph`: the graph with its captured values turned
     /// into trailing norm ports (memoized, so two calls of one lambda share the derivative).
     const PullbackPlan &planForClosure(GCGraph *graph);
@@ -716,7 +740,8 @@ class Engine {
     struct Pending {
         PullbackPlan plan;
         std::unique_ptr<GraphDraft> source;
-        GraphRole role = GraphRole::Callee;
+        GraphScope scope;
+        GCGraph *graph = nullptr; // the function this is the graph of, for a callee
     };
     [[noreturn]] void refuse();
 
@@ -730,6 +755,8 @@ class Engine {
     std::deque<Pending> pending_;
     rt::RuntimeGraphDraftSession inlining_;
     size_t followed_ = 0;
+    std::unordered_map<GCGraph *, std::unordered_set<GCGraph *>> armOwners_;
+    std::unordered_set<GCGraph *> recursions_;
     std::vector<Refusal> refusals_;
     camel::source::source_context_ptr_t outerSource_;
 };
@@ -745,9 +772,11 @@ class Engine {
 // its call as before. Inlining is std::inline's own (camel/passes/opt/inline.h), so the order
 // and the effects of the inlined body are kept by the same code as everywhere else.
 //
-// Bounded: only calls that carry function values are inlined, branch arms are never inlined
-// (an arm is a graph of its own, so a recursion, whose recursive call sits in an arm, is
-// inlined once per graph), and the transformation as a whole follows at most
+// Bounded: only calls that carry function values are inlined, and a branch arm is never
+// inlined: it is a graph of its own, differentiated on its own (rewriteBranch), which knows
+// the functions whose bodies it came with (GraphScope::enclosing). A call of one of those from
+// inside the arm is the recursion of that function and is left a call, so a recursive function
+// is followed into once. Besides, the transformation as a whole follows at most
 // Engine::kMaxFollowedCalls calls.
 void ForwardRewrite::followFunctionValues() {
     std::unordered_set<gc_node_ref_t> left; // calls that could not be inlined
@@ -769,9 +798,33 @@ void ForwardRewrite::followFunctionValues() {
                 !carriesFunctionValue(id) || draft_.isBranchArmAnchor(id)) {
                 continue;
             }
+            // The function whose body would come in (for a closure, the function it closes).
+            GCGraph *const function =
+                kind == GCNodeKind::Func
+                    ? calleeOf(draft_, id)
+                    : evidentFunction(draft_, draft_.withInputsOf(id).front())->graph();
+            if (scope_.enclosing.contains(function)) {
+                engine_.noteRecursion(function);
+                left.insert(id);
+                continue;
+            }
             if (!engine_.mayFollow()) {
                 return;
             }
+            const auto armGraphs = [&] {
+                std::unordered_set<GCGraph *> graphs;
+                for (gc_node_ref_t join = 0; join < draft_.nodeSlotCount(); ++join) {
+                    if (draft_.alive(join) && kindOf(draft_, join) == GCNodeKind::Join) {
+                        for (gc_node_ref_t arm : draft_.withInputsOf(join)) {
+                            if (kindOf(draft_, arm) == GCNodeKind::Func) {
+                                graphs.insert(calleeOf(draft_, arm));
+                            }
+                        }
+                    }
+                }
+                return graphs;
+            };
+            const auto armsBefore = armGraphs();
             // A closure call first becomes a direct call of the closure's graph with the
             // captured values as arguments. Should the inlining then fail, that direct call
             // is an ordinary call and is differentiated as one.
@@ -782,6 +835,11 @@ void ForwardRewrite::followFunctionValues() {
             }
             if (camel::passes::opt::inlineCallInOrder(engine_.inlining(), draft_, id)) {
                 changed = true;
+                for (GCGraph *arm : armGraphs()) {
+                    if (!armsBefore.contains(arm)) {
+                        engine_.noteArmOwner(arm, function);
+                    }
+                }
             } else {
                 left.insert(id);
             }
@@ -1194,6 +1252,27 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
             }
         }
     }
+    // A closure built in this graph that an arm reads is not evident inside the arm, where it
+    // is a port. The arm gets the values the closure captured as well and builds the closure
+    // again from them, in its own graph: what it then calls is a closure built there, and the
+    // gradient reaches the captured values through the arm like through any value it reads.
+    std::vector<std::pair<size_t, gc_node_ref_t>> closures; // (position in shared, FILL here)
+    for (size_t i = 0; i < shared.size(); ++i) {
+        const gc_node_ref_t closure = ungated(draft_, shared[i]);
+        if (evidentFunction(draft_, shared[i]) == nullptr ||
+            kindOf(draft_, closure) != GCNodeKind::Fill) {
+            continue;
+        }
+        closures.emplace_back(i, closure);
+        for (gc_node_ref_t captured : copyOf(draft_.withInputsOf(closure))) {
+            if (std::find(shared.begin(), shared.end(), captured) == shared.end()) {
+                shared.push_back(captured);
+            }
+        }
+    }
+    const auto sharedIndex = [&](gc_node_ref_t node) {
+        return static_cast<size_t>(std::find(shared.begin(), shared.end(), node) - shared.begin());
+    };
     std::vector<Type *> sharedTypes;
     for (gc_node_ref_t input : shared) {
         sharedTypes.push_back(typeOf(draft_, input));
@@ -1210,13 +1289,36 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
             variant->removeWithPort(port);
         }
         param_vec_t withParams;
+        std::vector<gc_node_ref_t> ports;
         for (size_t i = 0; i < shared.size(); ++i) {
             auto it                  = std::find(oldInputs.begin(), oldInputs.end(), shared[i]);
             const gc_node_ref_t port = it != oldInputs.end()
                                            ? oldPorts[static_cast<size_t>(it - oldInputs.begin())]
                                            : addPort(*variant, sharedTypes[i]);
             variant->appendWithPort(port);
+            ports.push_back(port);
             withParams.emplace_back(sharedTypes[i], false);
+        }
+        std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> rebuilt; // (port, closure)
+        for (const auto &[index, closure] : closures) {
+            const gc_node_ref_t constant = draft_.normInputsOf(closure).front();
+            const gc_node_ref_t base     = variant->materializeStaticValue(
+                *staticValue(draft_, constant),
+                typeOf(draft_, constant));
+            std::vector<gc_node_ref_t> captured;
+            for (gc_node_ref_t value : draft_.withInputsOf(closure)) {
+                captured.push_back(ports[sharedIndex(value)]);
+            }
+            const gc_node_ref_t fill =
+                variant->addFillNode(typeOf(draft_, closure), draft_.payloadOf(closure));
+            variant->setNormInputs(fill, std::span<const gc_node_ref_t>(&base, 1));
+            variant->setWithInputs(fill, captured);
+            variant->setNodeOrigin(fill, draft_.nodeOrigin(closure));
+            rebuilt.emplace_back(ports[index], fill);
+        }
+        // Afterwards, so that a closure capturing another one captures the one built here.
+        for (const auto &[port, fill] : rebuilt) {
+            variant->replaceAllValueUses(port, fill);
         }
         FunctionType *armType = armGraph->funcType();
         param_vec_t normParams;
@@ -1226,7 +1328,14 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
         variant->setFuncType(
             FunctionType::create(withParams, normParams, valueType, armType->modifiers()));
 
-        joined = engine_.planForDraft(std::move(variant), armGraph->name(), types);
+        GraphScope scope{
+            .role      = GraphRole::BranchArm,
+            .enclosing = scope_.enclosing,
+            .recursive = scope_.recursive,
+        };
+        const auto &owners = engine_.ownersOf(armGraph);
+        scope.enclosing.insert(owners.begin(), owners.end());
+        joined = engine_.planForDraft(std::move(variant), armGraph->name(), types, scope);
         retarget(arm, joined);
         draft_.setWithInputs(arm, shared);
     }
@@ -1470,7 +1579,15 @@ std::string Backward::refusalReason(gc_node_ref_t call) const {
     const gc_node_ref_t callee = ungated(forward_, withInputs.front());
     switch (kindOf(forward_, callee)) {
     case GCNodeKind::Port:
-        switch (role_) {
+        if (!scope_.recursive.empty()) {
+            return std::string(unknown) +
+                   std::format(
+                       "the function called is a parameter of '{}', a recursive function "
+                       "that passes it on to itself: a function value is followed into such "
+                       "a function once, not through its recursive call",
+                       scope_.recursive);
+        }
+        switch (scope_.role) {
         case GraphRole::Differentiated:
             return std::string(unknown) +
                    "the function called is a parameter, or a captured value, of the function "
@@ -1478,7 +1595,7 @@ std::string Backward::refusalReason(gc_node_ref_t call) const {
         case GraphRole::BranchArm:
             return std::string(unknown) +
                    "the call is inside a branch arm, and the function called comes from "
-                   "outside that arm";
+                   "outside that arm, where it is not a function that is named or built";
         case GraphRole::Callee:
             return std::string(unknown) +
                    "the function called is a parameter, or a captured value, of the function "
@@ -1838,7 +1955,12 @@ const PullbackPlan &Engine::planFor(GCGraph *callee) {
     PullbackPlan plan =
         reserve(callee->name(), makePlanTypes(portTypesOf(callee), callee->funcType()->exitType()));
     pending_.push_back(
-        Pending{.plan = plan, .source = GraphDraft::decode(callee), .role = GraphRole::Callee});
+        Pending{
+            .plan   = plan,
+            .source = GraphDraft::decode(callee),
+            .scope  = GraphScope{.role = GraphRole::Callee},
+            .graph  = callee,
+        });
     return plans_.emplace(callee, plan).first->second;
 }
 
@@ -1871,15 +1993,21 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
     PullbackPlan plan =
         reserve(graph->name(), makePlanTypes(std::move(portTypes), type->exitType()));
     pending_.push_back(
-        Pending{.plan = plan, .source = std::move(lifted), .role = GraphRole::Callee});
+        Pending{
+            .plan   = plan,
+            .source = std::move(lifted),
+            .scope  = GraphScope{.role = GraphRole::Callee},
+            .graph  = graph,
+        });
     return closurePlans_.emplace(graph, plan).first->second;
 }
 
 PullbackPlan Engine::planForDraft(
     std::unique_ptr<GraphDraft> source, const std::string &name, const PullbackPlan &types,
-    GraphRole role) {
+    GraphScope scope) {
     PullbackPlan plan = reserve(name, types);
-    pending_.push_back(Pending{.plan = plan, .source = std::move(source), .role = role});
+    pending_.push_back(
+        Pending{.plan = plan, .source = std::move(source), .scope = std::move(scope)});
     return plan;
 }
 
@@ -1934,7 +2062,10 @@ void Engine::build(Pending &pending) {
     const PullbackPlan &plan = pending.plan;
     GraphDraft &forward      = *pending.source;
 
-    ForwardRewrite rewrite(*this, forward);
+    if (pending.graph != nullptr && recursions_.contains(pending.graph)) {
+        pending.scope.recursive = pending.graph->name();
+    }
+    ForwardRewrite rewrite(*this, forward, pending.scope);
     rewrite.run();
     const gc_node_ref_t value = valueNode(forward);
 
@@ -1943,7 +2074,7 @@ void Engine::build(Pending &pending) {
     const gc_node_ref_t dy = addPort(*pullback, tangentTypeOf(plan.valueType));
     pullback->appendNormPort(dy);
 
-    Backward backward(forward, *pullback, rewrite.sites(), pending.role, refusals_);
+    Backward backward(forward, *pullback, rewrite.sites(), pending.scope, refusals_);
     backward.seed(value, dy);
     backward.run(valueOrder(forward, value));
 
@@ -2002,13 +2133,14 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
                 type->toString()));
     }
 
+    const GraphScope scope{.role = GraphRole::Differentiated};
     auto draft = GraphDraft::decode(function);
-    ForwardRewrite rewrite(*this, *draft);
+    ForwardRewrite rewrite(*this, *draft, scope);
     rewrite.run();
     const gc_node_ref_t value              = valueNode(*draft);
     const std::vector<gc_node_ref_t> order = valueOrder(*draft, value);
 
-    Backward backward(*draft, *draft, rewrite.sites(), GraphRole::Differentiated, refusals_);
+    Backward backward(*draft, *draft, rewrite.sites(), scope, refusals_);
     const slot_t one = type->exitType()->code() == TypeCode::Float32
                            ? toSlot<camel::core::rtdata::Float32>(1.0f)
                            : toSlot<camel::core::rtdata::Float64>(1.0);
