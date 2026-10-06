@@ -1,0 +1,51 @@
+id = "compile.return_type"
+order = 131
+tier = "feat"
+tags = ["feat", "compile", "diagnostics"]
+
+[[tests]]
+name = "string_as_int"
+desc = "A function declared to return int that returns a string is a compile-time error at the return (it used to compile and print a pointer as an integer)."
+kind = "negative"
+case = "../../../cases/compile/return_type/string_as_int.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
+expect_output_contains = ["Return type 'string' does not match the function's declared return type 'i64'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "int_as_float"
+desc = "No numeric conversion is applied to a returned value, as none is applied to an argument: an int returned from a function declared float is a compile-time error (it used to print the integer's bits as a float)."
+kind = "negative"
+case = "../../../cases/compile/return_type/int_as_float.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
+expect_output_contains = ["Return type 'i64' does not match the function's declared return type 'f64'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "tensor_shape"
+desc = "A declared tensor result shape is checked against the shape of the returned value."
+kind = "negative"
+case = "../../../cases/compile/return_type/tensor_shape.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
+expect_output_contains = ["does not match the function's declared return type 'Tensor<?, [3, 2]>'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "accepted"
+desc = "Unchanged: returning the declared type, into any, into a nullable of the type, with no declared type, and a value from a function declared void."
+kind = "behavior"
+case = "../../../cases/compile/return_type/accepted.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["<any>", "2", "3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

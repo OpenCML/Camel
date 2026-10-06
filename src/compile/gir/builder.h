@@ -308,6 +308,11 @@ class Builder {
     node_handle_t visitBodyNode(const GCT::node_ptr_t &gct);
     // Makes `result` the result of `graph` when its body set none with `return`.
     void setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result);
+    /// Reports SemanticDiag::ReturnTypeMismatch when `graph` declares a return type that the
+    /// value it returns cannot be assigned to (the rule arguments are held to: Type::assignableFrom,
+    /// no numeric conversion). `origin` locates the returned expression, or 0 for the function.
+    void checkDeclaredReturn(
+        const compile_graph_ptr_t &graph, camel::core::type::Type *resultType, uint64_t origin);
     void_ptr_t visitExptNode(const GCT::node_ptr_t &gct);
 };
 

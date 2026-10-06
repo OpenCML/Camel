@@ -1,0 +1,22 @@
+module return_accepted
+// What stays accepted: the declared type itself, `any`, a nullable of the type, an undeclared
+// return type, and a function declared void whose body ends in a value.
+func a(x: int): any {
+    return x
+}
+func b(x: int): int? {
+    return x
+}
+func c(x: int) {
+    return x + 1
+}
+func d(x: int): void {
+    return x + 1
+}
+func main(): int sync {
+    println(a(2))
+    println(b(2))
+    println(c(2))
+    d(2)
+    return 0
+}

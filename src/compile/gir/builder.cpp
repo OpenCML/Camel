@@ -2518,6 +2518,7 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
             linkNodes(LinkType::Ctrl, ctrlInput, outputAnchor);
         }
     }
+    checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->load()->origin());
     setGraphReturnFromResult(
         currGraph_,
         nodeIdOf(outputAnchor),
@@ -2559,7 +2560,39 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
     if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
         value = nodeDraftOf(result)->node(normInputsOf(result).front());
     }
+    checkDeclaredReturn(graph, nodeTypeOf(value), 0);
     setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(value), nodeTypeOf(value));
+}
+
+void Builder::checkDeclaredReturn(
+    const compile_graph_ptr_t &graph, Type *resultType, uint64_t origin) {
+    // Only a DECLARED type is checked: an undeclared one is set from the first value returned,
+    // after which hasExitType() is true as well, so the check runs before that happens.
+    if (graph == nullptr || graph->draft().exitNode() != runtime::kInvalidNodeRef) {
+        return;
+    }
+    FunctionType *funcType = graph->funcType();
+    if (funcType == nullptr || !funcType->hasExitType() || resultType == nullptr) {
+        return;
+    }
+    Type *declared = funcType->exitType();
+    // Not judged here: a body without a value (its last statement decides nothing about the
+    // type), and types that are not resolved yet.
+    if (declared == nullptr || declared == resultType || resultType->code() == TypeCode::Void ||
+        declared->code() == TypeCode::Ref || resultType->code() == TypeCode::Ref) {
+        return;
+    }
+    if (declared->assignableFrom(resultType)) {
+        return;
+    }
+    auto diag = diags_->of(SemanticDiag::ReturnTypeMismatch);
+    if (origin != 0) {
+        diag.atOrigin(origin);
+    } else if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
+        diag.atOrigin(sourceContext->debugMap().graphOrigin(graph->stableId()));
+    }
+    diag.commit(resultType->toString(), declared->toString(), funcType->toString());
+    throw BuildAbortException();
 }
 
 node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {

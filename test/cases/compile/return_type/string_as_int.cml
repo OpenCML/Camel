@@ -1,0 +1,9 @@
+module return_string_as_int
+func f(): int {
+    return 'abc'
+}
+func main(): int sync {
+    println('ran')
+    println(f())
+    return 0
+}

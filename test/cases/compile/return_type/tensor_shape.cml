@@ -1,0 +1,10 @@
+module return_tensor_shape
+import { Tensor, ones } from tensor
+func f(x: Tensor<const [2, 3]>): Tensor<const [3, 2]> {
+    return x * 2.0
+}
+func main(): int sync {
+    println('ran')
+    println(f(ones([2, 3])))
+    return 0
+}
