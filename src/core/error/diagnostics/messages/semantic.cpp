@@ -294,6 +294,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::InvalidTypeArgument,
+            {
+                "InvalidTypeArgument",
+                "The arguments of the type '{0}<...>' are not accepted: {1}.",
+                "What a type takes between '<' and '>' is defined by the type itself (a type "
+                "argument, or a constant written 'const <data>'). An argument a type does not "
+                "accept is an error; it is never ignored.",
+            },
+        },
+        {
             SemanticDiag::ImmutablePassedToVarParam,
             {
                 "ImmutablePassedToVarParam",

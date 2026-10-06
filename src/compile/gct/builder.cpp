@@ -2233,25 +2233,43 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         LEAVE("SpecType");
         return base;
     }
-    type_vec_t typeArgs;
+    // The arguments in source order: types, and constants written `const <data>`. What a
+    // constant means is the type's business (OtherType::cloneWithArguments); an argument the
+    // type does not accept is an error here, never dropped.
+    std::vector<TypeArgument> arguments;
     const auto &argsNode = ast->atAs<AST::RepeatedLoad>(1);
     for (const auto &child : *argsNode) {
         if (child->type() == AST::LoadType::Type) {
-            typeArgs.push_back(visitType(child));
+            arguments.push_back(TypeArgument{.type = visitType(child), .data = nullptr});
+            continue;
         }
+        const data_ptr_t data = extractStaticDataFromNode(visitData(child));
+        if (!data) {
+            diags_->of(SemanticDiag::InvalidTypeArgument)
+                .at(child->load()->tokenRange())
+                .commit(base->toString(), "a 'const' argument must be a compile-time constant");
+            throw BuildAbortException();
+        }
+        arguments.push_back(TypeArgument{.type = nullptr, .data = data});
     }
-    if (typeArgs.empty()) {
+    if (arguments.empty()) {
         LEAVE("SpecType");
         return base;
     }
     if (!base->isOtherType()) {
-        diags_->of(SemanticDiag::FeatureNotSupported)
+        diags_->of(SemanticDiag::InvalidTypeArgument)
             .at(ast->load()->tokenRange())
-            .commit("Only OtherType is allowed to have generic params");
+            .commit(base->toString(), "this type takes no arguments");
         throw BuildAbortException();
     }
-    Type *res = static_cast<OtherType *>(base)->cloneWithParams(
-        std::span<Type *const>(typeArgs.data(), typeArgs.size()));
+    std::string error;
+    Type *res = static_cast<OtherType *>(base)->cloneWithArguments(arguments, error);
+    if (res == nullptr) {
+        diags_->of(SemanticDiag::InvalidTypeArgument)
+            .at(ast->load()->tokenRange())
+            .commit(base->toString(), error.empty() ? std::string("no reason given") : error);
+        throw BuildAbortException();
+    }
     LEAVE("SpecType");
     return res;
 }
