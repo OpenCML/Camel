@@ -1,0 +1,50 @@
+/**
+ * Writes to a variable made on the way down a recursion whose last call returns a constant.
+ * Every write is declared (var parameters, sync functions, wait), so every pipeline must make
+ * all of them. After a few rounds of inlining the innermost call is a body that neither reads
+ * its argument nor has an effect, and the write ordered before that call used to be dropped by
+ * std::opt::simplify (the counter came out one short, silently).
+ */
+module var_writes_through_recursion
+
+// one write per level, the base case returns a constant
+sync func climb(i: int, n: int, var c: int): int sync {
+    return if i >= n then 0 else sync {
+        c += 1
+        let r = wait climb(i + 1, n, c)
+        r
+    }
+}
+
+// two writes per level around the recursive call, the result is not the counter
+sync func both_sides(i: int, n: int, var c: int): int sync {
+    return if i >= n then 7 else sync {
+        c += 10
+        let r = wait both_sides(i + 1, n, c)
+        c += 1
+        r
+    }
+}
+
+sync func first_then_climb(var c: int): int sync {
+    c += 1
+    let k = c + 0
+    let r = wait climb(0, 2, c)
+    return k * 10 + r
+}
+
+func main(): int sync {
+    var a = 0
+    let ra = wait first_then_climb(a)
+    println('use: {} counter {}'->format<ra, a>)
+    var b = 0
+    let rb = wait climb(0, 3, b)
+    println('climb 3: {} counter {}'->format<rb, b>)
+    var d = 0
+    let rd = wait climb(0, 5, d)
+    println('climb 5: {} counter {}'->format<rd, d>)
+    var e = 0
+    let re = wait both_sides(0, 3, e)
+    println('around 3: {} counter {}'->format<re, e>)
+    return 0
+}

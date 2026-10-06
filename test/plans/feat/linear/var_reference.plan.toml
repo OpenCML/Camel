@@ -3116,3 +3116,99 @@ assert(!text.includes('grad '), 'no gradient is printed')
 }
 """
 timeout_ms = 20000
+
+[[tests]]
+name = "var_writes_through_recursion.default"
+desc = "Declared writes to a var made on the way down (and up) a recursion whose last call returns a constant are all made, on every pipeline. std::opt::simplify used to drop the write ordered before the innermost call once inlining had reduced that call to a body with no effect and no use of its argument (counters 2, 2, 4, 23 instead of 3, 3, 5, 33; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_writes_through_recursion.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'use: 10 counter 3 | climb 3: 0 counter 3 | climb 5: 0 counter 5 | around 3: 7 counter 33', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_writes_through_recursion.simplify"
+desc = "Declared writes to a var made on the way down (and up) a recursion whose last call returns a constant are all made, on every pipeline. std::opt::simplify used to drop the write ordered before the innermost call once inlining had reduced that call to a body with no effect and no use of its argument (counters 2, 2, 4, 23 instead of 3, 3, 5, 33; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_writes_through_recursion.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'use: 10 counter 3 | climb 3: 0 counter 3 | climb 5: 0 counter 5 | around 3: 7 counter 33', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_writes_through_recursion.macro_simplify_fvm"
+desc = "Declared writes to a var made on the way down (and up) a recursion whose last call returns a constant are all made, on every pipeline. std::opt::simplify used to drop the write ordered before the innermost call once inlining had reduced that call to a body with no effect and no use of its argument (counters 2, 2, 4, 23 instead of 3, 3, 5, 33; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_writes_through_recursion.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'use: 10 counter 3 | climb 3: 0 counter 3 | climb 5: 0 counter 5 | around 3: 7 counter 33', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_writes_through_recursion.macro_simplify_jit"
+desc = "Declared writes to a var made on the way down (and up) a recursion whose last call returns a constant are all made, on every pipeline. std::opt::simplify used to drop the write ordered before the innermost call once inlining had reduced that call to a body with no effect and no use of its argument (counters 2, 2, 4, 23 instead of 3, 3, 5, 33; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_writes_through_recursion.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'use: 10 counter 3 | climb 3: 0 counter 3 | climb 5: 0 counter 5 | around 3: 7 counter 33', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_writes_through_recursion.inline_x4"
+desc = "Declared writes to a var made on the way down (and up) a recursion whose last call returns a constant are all made, on every pipeline. std::opt::simplify used to drop the write ordered before the innermost call once inlining had reduced that call to a body with no effect and no use of its argument (counters 2, 2, 4, 23 instead of 3, 3, 5, 33; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_writes_through_recursion.cml"
+args = ["${case}", "std::inline", "std::inline", "std::inline", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'use: 10 counter 3 | climb 3: 0 counter 3 | climb 5: 0 counter 5 | around 3: 7 counter 33', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_writes_through_recursion.simplify_tf"
+desc = "Declared writes to a var made on the way down (and up) a recursion whose last call returns a constant are all made, on every pipeline. std::opt::simplify used to drop the write ordered before the innermost call once inlining had reduced that call to a body with no effect and no use of its argument (counters 2, 2, 4, 23 instead of 3, 3, 5, 33; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_writes_through_recursion.cml"
+args = ["${case}", "std::opt::simplify", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'use: 10 counter 3 | climb 3: 0 counter 3 | climb 5: 0 counter 5 | around 3: 7 counter 33', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000

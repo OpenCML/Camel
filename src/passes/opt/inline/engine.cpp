@@ -726,7 +726,17 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 // from (an effect before a statement feeding an argument). The inlined body may
                 // not read every argument, so they wait on those explicitly.
                 // Only sources a user reaches through the call alone need the explicit edge.
-                const auto argSources = camel::passes::generic::orderedSources(draft, funcNodeId);
+                // The same holds for the call's own control predecessors (a write the call was
+                // ordered after): when the inlined body neither reads the argument that carried
+                // that ordering nor has an effect of its own to hang it on (a recursion's base
+                // case, a constant result), nothing else keeps the predecessor reachable, and a
+                // write the program made was silently dropped.
+                auto argSources = camel::passes::generic::orderedSources(draft, funcNodeId);
+                for (gc_node_ref_t pred : draft.ctrlInputsOf(funcNodeId)) {
+                    if (std::ranges::find(argSources, pred) == argSources.end()) {
+                        argSources.push_back(pred);
+                    }
+                }
                 std::vector<std::pair<gc_node_ref_t, std::vector<gc_node_ref_t>>> callUsers;
                 if (!argSources.empty()) {
                     for (auto group :
