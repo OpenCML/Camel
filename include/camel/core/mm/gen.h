@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -239,7 +239,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         uint64_t safepoints                   = 0;
         uint64_t deferredCollections          = 0;
         uint64_t requestedCollections         = 0;
-        uint64_t allocationFailureCollections = 0;
+        uint64_t elderOverflowAllocations     = 0;
         uint64_t writeBarriers                = 0;
         uint64_t minorCollections             = 0;
         uint64_t majorCollections             = 0;
@@ -322,6 +322,13 @@ class GenerationalAllocatorWithGC : public IAllocator {
   private:
     void *allocUnlocked(size_t payloadSize, size_t align = alignof(slot_t));
 
+    void *allocLargeUnlocked(size_t payloadSize, size_t align);
+
+    // Small-object allocation in the elder space, or in the large-object space when the elder
+    // space is full. It never collects: collection happens at safepoints only (see the
+    // definition).
+    void *allocElderUnlocked(size_t payloadSize, size_t align);
+
     static CollectionKind combineCollectionKinds(CollectionKind lhs, CollectionKind rhs);
 
     void requestStressCollectionUnlocked(std::string_view reason);
@@ -329,8 +336,6 @@ class GenerationalAllocatorWithGC : public IAllocator {
     void requestCollectionAtSafepointUnlocked(CollectionKind kind, std::string_view reason);
 
     void collectAtSafepointUnlocked(CollectionKind kind, std::string_view reason);
-
-    void collectNonMovingUnlocked(std::string_view reason);
 
     void minorGCUnlocked();
 
@@ -387,6 +392,12 @@ class GenerationalAllocatorWithGC : public IAllocator {
     size_t largeObjMinBudget_;        // Floor of the large-object allocation budget
     size_t largeObjBudget_;           // Large-object bytes allowed before requesting a major GC
     size_t largeBytesSinceSweep_ = 0; // Large-object bytes allocated since the last sweep
+    // Elder-space overflow (allocElderUnlocked). Payloads of elderFullFromSize_ bytes or more
+    // found no block since the last sweep and go straight to the large-object space.
+    static constexpr size_t kElderNotFull = static_cast<size_t>(-1);
+    size_t elderFullFromSize_             = kElderNotFull;
+    size_t elderBytesSinceSweep_          = 0; // Bytes the elder space took since the last sweep
+    size_t elderRefillThreshold_;              // ...of which this many justify a collection
     float minorGCTriggerRatio_;       // Reserved: minor GC trigger ratio (e.g. when birth is full)
     float majorGCTriggerRatio_;       // Major GC trigger ratio (old-gen utilization)
     bool enableYoungGenCopying_;      // The runtime currently assumes stable raw object pointers.

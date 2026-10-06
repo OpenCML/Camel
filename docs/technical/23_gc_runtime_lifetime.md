@@ -60,10 +60,18 @@ old-to-young references.
 
 ## Phase 2 Safepoint Contract
 
-Moving-capable collection is serviced only by explicit `autoSpace().safepoint(...)` calls. Allocation
-and allocation-failure paths may queue a minor or major request for the next safepoint, but they do
-not run young-generation copying directly. If an allocation cannot be satisfied, the allocator may
-run an emergency non-moving mark-sweep over elder and large-object spaces before retrying.
+Collection, moving or not, is serviced only by explicit `autoSpace().safepoint(...)` calls.
+Allocation paths may queue a minor or major request for the next safepoint, but they never collect:
+an allocation site is not a safepoint, and its caller may hold objects that no root reaches yet
+(`Array::create` allocates the array and then its backing store). The earlier design ran a
+non-moving mark-sweep inside the failed allocation, which freed such half-built objects.
+
+When the elder space has no block for a small object, the object is placed in the large-object
+space instead, which grows on demand, and a major collection is requested for the next safepoint.
+The request is made only if the elder space has taken at least a quarter of its capacity since the
+last sweep: when it is full of live objects a sweep frees almost nothing, and the overflow is then
+paced by the large-object budget (below) alone. Until that sweep, sizes that found no block skip
+the elder space.
 
 Runtime safepoints are installed at pass boundaries, NodeVM node/function-call boundaries, FastVM
 bytecode boundaries, macro execution boundaries, and Taskflow's linear scheduler boundaries. At
@@ -196,8 +204,8 @@ Runtime passes expose the same infrastructure:
 - `std::gc::summary` prints a compact human-readable GC summary and leaves the graph available for
   later passes.
 - `std::gc::snapshot` / `std::gcsnap` prints JSON with region object counts/bytes, collection
-  counters, deferred/emergency collection counters, moved/promoted/freed counters, root-source data,
-  remembered-set size, and foreign-resource diagnostics.
+  counters, deferred-collection and elder-overflow counters, moved/promoted/freed counters,
+  root-source data, remembered-set size, and foreign-resource diagnostics.
 - `std::gc::remembered_set` runs a targeted old-to-young remembered-set self-test and leaves the
   graph available for later passes.
 - `std::gc::foreign_resource` runs a targeted FFI resource and handle lifetime self-test and leaves

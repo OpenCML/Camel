@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: Oct. 03, 2026
+ * Updated: Oct. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,6 +51,7 @@ GenerationalAllocatorWithGC::GenerationalAllocatorWithGC(const Config &config)
       largeObjThreshold_(config.largeObjThreshold),
       largeObjMinBudget_(config.largeObjCollectionBudget),
       largeObjBudget_(config.largeObjCollectionBudget),
+      elderRefillThreshold_(config.elderGenSize / 4),
       minorGCTriggerRatio_(config.minorGCTriggerRatio),
       majorGCTriggerRatio_(config.majorGCTriggerRatio),
       enableYoungGenCopying_(config.enableYoungGenCopying) {}
@@ -321,77 +322,73 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
 
     // Large objects use the large-object allocator directly.
     if (UNLIKELY(payloadSize > largeObjThreshold_)) {
-        void *ptr = largeObjSpace_.alloc(payloadSize, align);
-        if (UNLIKELY(!ptr)) {
-            requestCollectionAtSafepointUnlocked(
-                CollectionKind::Major,
-                "large object allocation failure");
-            // Emergency allocation-failure recovery is intentionally non-moving: callers may be
-            // in the middle of constructing an object graph whose newest local pointers are not
-            // registered as relocatable roots yet.
-            collectNonMovingUnlocked("large object allocation failure");
-            ptr = largeObjSpace_.alloc(payloadSize, align);
-            if (!ptr)
-                throw std::bad_alloc();
-        }
-        auto *header = headerOf(ptr);
-        header->setRegion(AllocRegion::LargeObj);
-        objectTypes_.erase(header);
-        // Large objects never exhaust a space, so pace their reclamation by volume:
-        // once the budget is spent, ask for a major collection at the next safepoint.
-        largeBytesSinceSweep_ += payloadSize;
-        if (largeBytesSinceSweep_ >= largeObjBudget_) {
-            requestCollectionAtSafepointUnlocked(CollectionKind::Major, "large object budget");
-        }
-        return ptr;
+        return allocLargeUnlocked(payloadSize, align);
     }
 
     if (!enableYoungGenCopying_) {
-        void *ptr = elderGenSpace_.alloc(payloadSize, align);
-        if (UNLIKELY(!ptr)) {
-            requestCollectionAtSafepointUnlocked(CollectionKind::Major, "elder allocation failure");
-            // Keep allocation-failure recovery address-stable. Constructors that allocate several
-            // objects must still use RootHandle for intermediate objects, but this avoids moving
-            // unregistered raw locals from the allocator slow path itself.
-            collectNonMovingUnlocked("elder allocation failure");
-            ptr = elderGenSpace_.alloc(payloadSize, align);
-            if (!ptr)
-                throw std::bad_alloc();
-        }
-
-        auto *header = headerOf(ptr);
-        header->setRegion(AllocRegion::ElderGen);
-        objectTypes_.erase(header);
-        return ptr;
+        return allocElderUnlocked(payloadSize, align);
     }
 
     // Try allocating in the birth space first.
     void *ptr = birthSpace_.alloc(payloadSize, align);
     if (UNLIKELY(!ptr)) {
         requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "birth allocation failure");
-        ptr = elderGenSpace_.alloc(payloadSize, align);
-        if (UNLIKELY(!ptr)) {
-            requestCollectionAtSafepointUnlocked(
-                CollectionKind::Major,
-                "birth allocation failure after elder fallback");
-            // The birth-space fallback can run while a just-created young object is still held only
-            // by a C++ local. Do not perform moving collection from this allocation slow path.
-            collectNonMovingUnlocked("birth allocation failure after elder fallback");
-            ptr = elderGenSpace_.alloc(payloadSize, align);
-            if (!ptr) {
-                throw std::bad_alloc();
-            }
-        }
-        auto *header = headerOf(ptr);
-        header->setRegion(AllocRegion::ElderGen);
-        objectTypes_.erase(header);
-        return ptr;
+        return allocElderUnlocked(payloadSize, align);
     }
 
     auto *header = headerOf(ptr);
     header->setRegion(AllocRegion::YoungGen);
     objectTypes_.erase(header);
     return ptr;
+}
+
+void *GenerationalAllocatorWithGC::allocLargeUnlocked(size_t payloadSize, size_t align) {
+    void *ptr = largeObjSpace_.alloc(payloadSize, align);
+    if (UNLIKELY(!ptr)) {
+        throw std::bad_alloc();
+    }
+    auto *header = headerOf(ptr);
+    header->setRegion(AllocRegion::LargeObj);
+    objectTypes_.erase(header);
+    // Large objects never exhaust a space, so pace their reclamation by volume:
+    // once the budget is spent, ask for a major collection at the next safepoint.
+    largeBytesSinceSweep_ += payloadSize;
+    if (largeBytesSinceSweep_ >= largeObjBudget_) {
+        requestCollectionAtSafepointUnlocked(CollectionKind::Major, "large object budget");
+    }
+    return ptr;
+}
+
+void *GenerationalAllocatorWithGC::allocElderUnlocked(size_t payloadSize, size_t align) {
+    // Nothing is freed between two sweeps, so a size that found no block will find none until
+    // the next sweep: skip the walk over the free list for it and for anything larger.
+    if (LIKELY(payloadSize < elderFullFromSize_)) {
+        if (void *ptr = elderGenSpace_.alloc(payloadSize, align)) {
+            elderBytesSinceSweep_ += payloadSize;
+            auto *header           = headerOf(ptr);
+            header->setRegion(AllocRegion::ElderGen);
+            objectTypes_.erase(header);
+            return ptr;
+        }
+        // The elder space has no room for this size. Nothing may be collected here: an
+        // allocation site is not a safepoint, and the caller can hold objects that no root
+        // reaches yet. Array::create, for one, allocates the Array and then its backing store;
+        // a sweep during the second allocation freed the first, which was then stored into a
+        // frame and traced by the next collection. The collection is requested for the next
+        // safepoint instead, and the object goes to the large-object space (below).
+        //
+        // The request is made only when the elder space has taken a fair amount since the last
+        // sweep. When it is full of live objects a sweep frees next to nothing, and asking again
+        // as soon as that little is used up would run a full mark at almost every safepoint;
+        // the overflow is then paced by the large-object budget alone, which grows with the
+        // surviving volume.
+        if (elderFullFromSize_ == kElderNotFull && elderBytesSinceSweep_ >= elderRefillThreshold_) {
+            requestCollectionAtSafepointUnlocked(CollectionKind::Major, "elder space exhausted");
+        }
+        elderFullFromSize_ = payloadSize;
+    }
+    ++stats_.elderOverflowAllocations;
+    return allocLargeUnlocked(payloadSize, align);
 }
 
 GenerationalAllocatorWithGC::CollectionKind
@@ -448,24 +445,6 @@ void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
     case CollectionKind::None:
         break;
     }
-
-    if (debugConfig_.verifyAfterGC) {
-        throwIfVerificationFailed(verifyHeapUnlocked(), std::format("after {}", reason));
-    }
-}
-
-void GenerationalAllocatorWithGC::collectNonMovingUnlocked(std::string_view reason) {
-    ++stats_.requestedCollections;
-    ++stats_.allocationFailureCollections;
-
-    if (debugConfig_.verifyBeforeGC) {
-        throwIfVerificationFailed(verifyHeapUnlocked(), std::format("before {}", reason));
-    }
-
-    ++stats_.majorCollections;
-    markPhase();
-    sweepOldGen();
-    sweepLargeObjects();
 
     if (debugConfig_.verifyAfterGC) {
         throwIfVerificationFailed(verifyHeapUnlocked(), std::format("after {}", reason));
@@ -925,6 +904,8 @@ void GenerationalAllocatorWithGC::sweepOldGen() {
         objectTypes_.erase(header);
     }
     elderGenSpace_.freeBulk(unreachable);
+    elderFullFromSize_    = kElderNotFull;
+    elderBytesSinceSweep_ = 0;
 }
 
 void GenerationalAllocatorWithGC::sweepLargeObjects() {
