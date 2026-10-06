@@ -25,6 +25,7 @@
 
 #include "rules.h"
 
+#include "camel/core/context/context.h"
 #include "camel/core/derivative.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
@@ -32,6 +33,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/source/manager.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/draft.h"
@@ -39,6 +41,7 @@
 #include "camel/utils/type.h"
 
 #include <functional>
+#include <algorithm>
 #include <atomic>
 #include <deque>
 #include <format>
@@ -83,6 +86,26 @@ using type::TypeCode;
 
 [[noreturn]] void fail(const std::string &message) {
     throwRuntimeFault(RuntimeDiag::RuntimeError, "autodiff: " + message);
+}
+
+/// The source of the program being differentiated, to say where a refused node is.
+thread_local camel::source::source_context_ptr_t currentSource;
+
+/// " (at file:line:column)" for a node origin, or nothing when it is unknown.
+std::string whereIs(uint64_t origin) {
+    if (!currentSource || origin == camel::source::kInvalidOriginId) {
+        return {};
+    }
+    const auto *file = currentSource->fileForOrigin(origin);
+    if (!file) {
+        return {};
+    }
+    const auto range = currentSource->resolveOrigin(origin);
+    return std::format(
+        " (at {}:{}:{})",
+        file->path,
+        range.start.line + 1,
+        range.start.character + 1);
 }
 
 /// A variable (`var`) is a cell; the graph passes the cell, not its content.
@@ -420,9 +443,15 @@ class ForwardRewrite {
   private:
     void rewriteBranch(gc_node_ref_t join);
     void rewriteCall(gc_node_ref_t call);
-    /// Calls of static function values: records custom-rule call sites, and turns calls of other
-    /// capture-free functions into direct calls. Returns the direct call created, if any.
+    /// Calls of function values whose callee is evident in the graph: records custom-rule call
+    /// sites, turns calls of capture-free static functions into direct calls (returned), and
+    /// differentiates calls of closures (a function with captured values) through the
+    /// function's graph with the captures as arguments.
     std::optional<gc_node_ref_t> rewriteIndirectCall(gc_node_ref_t call);
+    /// A call of the closure `function` with `captures` (caller nodes, in closure order).
+    void rewriteClosureCall(
+        gc_node_ref_t call, GCGraph *graph, std::vector<gc_node_ref_t> captures,
+        gc_node_ref_t calleeValue);
     /// The function `callee` computes when it applies one of autodiff's own macros (grad,
     /// value_and_grad, vjp) to static functions, else nullptr.
     ::Function *macroCallee(gc_node_ref_t callee);
@@ -539,7 +568,10 @@ class Backward final : public VjpBuilder {
 class Engine {
   public:
     explicit Engine(const camel::core::context::context_ptr_t &context)
-        : context_(context), group_(context) {}
+        : context_(context), group_(context), outerSource_(currentSource) {
+        currentSource = context ? context->sourceContext() : nullptr;
+    }
+    ~Engine() { currentSource = outerSource_; }
 
     GCGraph *gradient(GCGraph *function, bool withValue);
     const camel::core::context::context_ptr_t &context() const { return context_; }
@@ -549,6 +581,9 @@ class Engine {
     /// A plan for a synthesized graph (a branch arm) with the given types.
     PullbackPlan planForDraft(
         std::unique_ptr<GraphDraft> source, const std::string &name, const PullbackPlan &types);
+    /// The plan for calls of a closure over `graph`: the graph with its captured values turned
+    /// into trailing norm ports (memoized, so two calls of one lambda share the derivative).
+    const PullbackPlan &planForClosure(GCGraph *graph);
 
   private:
     struct Pending {
@@ -562,7 +597,9 @@ class Engine {
     camel::core::context::context_ptr_t context_;
     rt::GraphDraftGroup group_;
     std::unordered_map<GCGraph *, PullbackPlan> plans_;
+    std::unordered_map<GCGraph *, PullbackPlan> closurePlans_;
     std::deque<Pending> pending_;
+    camel::source::source_context_ptr_t outerSource_;
 };
 
 // ---------------------------------------------------------------- forward rewrite impl
@@ -646,8 +683,36 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     if (withInputs.empty()) {
         return std::nullopt;
     }
-    const auto calleeValue = staticValue(draft_, withInputs.front());
-    auto *function         = calleeValue ? fromSlot<::Function *>(*calleeValue) : nullptr;
+    auto calleeValue = staticValue(draft_, withInputs.front());
+    auto *function   = calleeValue ? fromSlot<::Function *>(*calleeValue) : nullptr;
+    // A closure built in this graph: FILL(function, captured values...).
+    const gc_node_ref_t fill = withInputs.front();
+    std::vector<gc_node_ref_t> filled; // captured values by closure slot, where filled here
+    bool builtHere = false;
+    if (function == nullptr && kindOf(draft_, fill) == GCNodeKind::Fill &&
+        draft_.normInputsOf(fill).size() == 1) {
+        const auto *body = reinterpret_cast<const rt::GCFillBody *>(draft_.payloadOf(fill).data());
+        const auto base  = staticValue(draft_, draft_.normInputsOf(fill).front());
+        auto *target     = base ? fromSlot<::Function *>(*base) : nullptr;
+        if (body->fillKind == rt::GCFillKind::FunctionClosure && target != nullptr &&
+            target->graph() != nullptr) {
+            const auto slots  = body->slots();
+            const auto values = draft_.withInputsOf(fill);
+            const size_t n    = target->graph()->closureNodes().size();
+            filled.assign(n, kInvalidNodeRef);
+            builtHere = slots.size() == values.size();
+            for (size_t k = 0; builtHere && k < slots.size(); ++k) {
+                const auto slot = static_cast<size_t>(slots[k]);
+                builtHere       = slot < n && filled[slot] == kInvalidNodeRef;
+                if (builtHere) {
+                    filled[slot] = values[k];
+                }
+            }
+            if (builtHere) {
+                function = target;
+            }
+        }
+    }
     if (function == nullptr) {
         // grad(f), value_and_grad(f) or vjp<rule>(f) of static functions that std::macro has
         // not expanded (autodiff applied inside a function being differentiated).
@@ -671,8 +736,26 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
                 });
             return std::nullopt;
         }
-        if (function->tupleType()->size() != 0) {
-            return std::nullopt; // a closure: its graph cannot be called directly
+        const size_t captureCount = graph->closureNodes().size();
+        if (captureCount != 0 || builtHere) {
+            // A closure. Its captured values are inputs of the call like any other: those
+            // filled here are the nodes that were captured, the rest are the constants the
+            // function value already holds.
+            std::vector<gc_node_ref_t> captures(captureCount, kInvalidNodeRef);
+            const ::Tuple *held = function->tuple();
+            for (size_t i = 0; i < captureCount; ++i) {
+                if (i < filled.size() && filled[i] != kInvalidNodeRef) {
+                    captures[i] = filled[i];
+                } else if (held != nullptr && i < held->size()) {
+                    captures[i] = draft_.materializeStaticValue(
+                        held->get<slot_t>(i),
+                        graph->node(graph->closureNodes()[i])->dataType);
+                } else {
+                    return std::nullopt; // a capture with no value: left to the refusal
+                }
+            }
+            rewriteClosureCall(call, graph, std::move(captures), withInputs.front());
+            return std::nullopt;
         }
     } else {
         return std::nullopt; // a function computed at run time
@@ -697,6 +780,64 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     }
     draft_.eraseNode(call);
     return direct;
+}
+
+void ForwardRewrite::rewriteClosureCall(
+    gc_node_ref_t call, GCGraph *graph, std::vector<gc_node_ref_t> captures,
+    gc_node_ref_t calleeValue) {
+    FunctionType *type = graph->funcType();
+    std::vector<Type *> portTypes = portTypesOf(graph);
+    for (gc_node_ref_t capture : graph->closureNodes()) {
+        portTypes.push_back(graph->node(capture)->dataType);
+    }
+    const bool carriesFlow =
+        tangentTypeOf(type->exitType()) != nullptr && anyTangent(portTypes);
+    if (!carriesFlow || type->modifiers().macro()) {
+        return; // nothing to differentiate: the call stays, a constant to the reverse pass
+    }
+    const std::vector<gc_node_ref_t> withInputs = copyOf(draft_.withInputsOf(call));
+    std::vector<gc_node_ref_t> norm              = copyOf(draft_.normInputsOf(call));
+    norm.insert(norm.end(), captures.begin(), captures.end());
+    std::vector<gc_node_ref_t> inputs(withInputs.begin() + 1, withInputs.end());
+    inputs.insert(inputs.end(), norm.begin(), norm.end());
+    if (inputs.size() != portTypes.size()) {
+        fail(
+            std::format(
+                "call of a closure passes {} values to {} ports and captures{}",
+                inputs.size(),
+                portTypes.size(),
+                whereIs(draft_.nodeOrigin(call))));
+    }
+    const PullbackPlan &plan = engine_.planForClosure(graph);
+
+    const gc_node_ref_t direct = draft_.addFuncNode(graph, typeOf(draft_, call));
+    draft_.setNodeOrigin(direct, draft_.nodeOrigin(call));
+    draft_.setWithInputs(direct, std::span(withInputs).subspan(1));
+    draft_.setNormInputs(direct, norm);
+    // The call ran after the closure was built; keep what the closure waited for.
+    std::vector<gc_node_ref_t> ctrl = copyOf(draft_.ctrlInputsOf(call));
+    for (gc_node_ref_t before : draft_.ctrlInputsOf(calleeValue)) {
+        if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
+            ctrl.push_back(before);
+        }
+    }
+    draft_.setCtrlInputs(direct, ctrl);
+    draft_.replaceAllValueUses(call, direct);
+    for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(call))) {
+        draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
+    }
+    if (draft_.outputNode() == call) {
+        draft_.setOutputNode(direct);
+    }
+    if (draft_.exitNode() == call) {
+        draft_.setExitNode(direct);
+    }
+    if (draft_.returnNode() == call) {
+        draft_.setReturnNode(direct, draft_.returnKind());
+    }
+    draft_.eraseNode(call);
+    retarget(direct, plan);
+    split(direct, plan, std::move(inputs));
 }
 
 ::Function *ForwardRewrite::macroCallee(gc_node_ref_t callee) {
@@ -1169,8 +1310,12 @@ void Backward::visit(gc_node_ref_t node) {
         return;
     case GCNodeKind::Call:
         fail(
-            "cannot differentiate through a call of a function value; the callee must be known "
-            "statically");
+            std::format(
+                "cannot differentiate through this call of a function value: which function "
+                "it calls is not evident where it is called (the function is a parameter, is "
+                "chosen by a branch, or is read from a container or a variable){}. Call a "
+                "function that is named or built in the function being differentiated",
+                whereIs(forward_.nodeOrigin(node))));
     default:
         fail(
             std::format(
@@ -1351,6 +1496,38 @@ const PullbackPlan &Engine::planFor(GCGraph *callee) {
         reserve(callee->name(), makePlanTypes(portTypesOf(callee), callee->funcType()->exitType()));
     pending_.push_back(Pending{.plan = plan, .source = GraphDraft::decode(callee)});
     return plans_.emplace(callee, plan).first->second;
+}
+
+const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
+    if (auto it = closurePlans_.find(graph); it != closurePlans_.end()) {
+        return it->second;
+    }
+    // The function's graph with its captured values as trailing norm ports: calling it with
+    // the captures as extra arguments equals calling the closure.
+    auto lifted        = GraphDraft::decode(graph);
+    FunctionType *type = lifted->funcType();
+    param_vec_t withParams, normParams;
+    for (size_t i = 0; i < type->withTypesCount(); ++i) {
+        withParams.emplace_back(type->withTypeAt(i), type->withIsVarAt(i));
+    }
+    for (size_t i = 0; i < type->normTypesCount(); ++i) {
+        normParams.emplace_back(type->normTypeAt(i), type->normIsVarAt(i));
+    }
+    std::vector<Type *> portTypes = portTypesOf(graph);
+    for (gc_node_ref_t capture : copyOf(lifted->closureNodes())) {
+        Type *captured = lifted->header(capture)->dataType;
+        lifted->removeClosureNode(capture);
+        lifted->appendNormPort(capture);
+        normParams.emplace_back(captured, false);
+        portTypes.push_back(captured);
+    }
+    lifted->setFuncType(
+        FunctionType::create(withParams, normParams, type->exitType(), type->modifiers()));
+    lifted->setClosureType(nullptr);
+    PullbackPlan plan =
+        reserve(graph->name(), makePlanTypes(std::move(portTypes), type->exitType()));
+    pending_.push_back(Pending{.plan = plan, .source = std::move(lifted)});
+    return closurePlans_.emplace(graph, plan).first->second;
 }
 
 PullbackPlan Engine::planForDraft(

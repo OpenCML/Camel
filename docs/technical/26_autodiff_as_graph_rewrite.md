@@ -194,6 +194,26 @@ inlining remove the closures.
   site.
 - Otherwise the call is rejected with a diagnostic naming the call site.
 
+Implementation status (2026-10-06). The library handles the callee itself where
+it is evident in the graph when `grad` runs; no pass has to run first:
+
+- a constant function value without captures becomes a direct call;
+- a closure — a constant function value holding captured constants, or a
+  `FILL FunctionClosure` built in the same function from a known function and
+  captured values (a `let`-bound lambda) — is differentiated through the
+  function's own graph with the captured values turned into trailing arguments
+  (`Engine::planForClosure`, one derivative per function, shared by all its call
+  sites). Captured values are inputs of the call like any other, so gradients
+  flow into captures that depend on the differentiated parameter;
+- a function value that is a parameter, is chosen by a data-dependent branch or
+  is read from a container or a variable is refused, and the diagnostic gives
+  the position of the CALL. (The wrapping of function-typed parameters
+  described above is not implemented.)
+
+Arrays are not differentiable values today (`:op/idx_arr` and `map` have no
+derivative rule), so a lambda passed to `map` is refused for that reason.
+Tests: `grad_closure.*`, `grad_closure_unknown.*`.
+
 ### 4.4a Variables
 
 A variable (`var`) is a cell: the graph passes the cell and reads its content with

@@ -1303,3 +1303,101 @@ assert(out === 'before grad | grad_specialized_callee scaled=30 unrolled=510', `
 }
 """
 timeout_ms = 6000
+
+[[tests]]
+name = "grad_closure.default"
+desc = "Gradients through calls of closures built in the differentiated function: a let-bound lambda capturing a value computed from the parameter (the CD-05 reproducer), nested lambdas, a lambda capturing a tensor that depends on the parameter, a lambda called twice, a lambda without captures. The library differentiates the closure's graph with the captured values as arguments, so no pass has to devirtualise first; values checked against finite differences. Under: the default run (grad runs with the program)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_closure.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([  2.782,    1.71, -0.8943], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([ 0.8553,  0.4799, -0.6468], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_closure.macro"
+desc = "Gradients through calls of closures built in the differentiated function: a let-bound lambda capturing a value computed from the parameter (the CD-05 reproducer), nested lambdas, a lambda capturing a tensor that depends on the parameter, a lambda called twice, a lambda without captures. The library differentiates the closure's graph with the captured values as arguments, so no pass has to devirtualise first; values checked against finite differences. Under: std::macro alone (was a compile-time error)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_closure.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([  2.782,    1.71, -0.8943], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([ 0.8553,  0.4799, -0.6468], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_closure.macro.fvm"
+desc = "Gradients through calls of closures built in the differentiated function: a let-bound lambda capturing a value computed from the parameter (the CD-05 reproducer), nested lambdas, a lambda capturing a tensor that depends on the parameter, a lambda called twice, a lambda without captures. The library differentiates the closure's graph with the captured values as arguments, so no pass has to devirtualise first; values checked against finite differences. Under: std::macro std::fvm."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_closure.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([  2.782,    1.71, -0.8943], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([ 0.8553,  0.4799, -0.6468], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_closure.simplify.macro"
+desc = "Gradients through calls of closures built in the differentiated function: a let-bound lambda capturing a value computed from the parameter (the CD-05 reproducer), nested lambdas, a lambda capturing a tensor that depends on the parameter, a lambda called twice, a lambda without captures. The library differentiates the closure's graph with the captured values as arguments, so no pass has to devirtualise first; values checked against finite differences. Under: std::opt::simplify std::macro (the order that worked before)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_closure.cml"
+args = ["${case}", "std::opt::simplify", "std::macro"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([  2.782,    1.71, -0.8943], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([ 0.8553,  0.4799, -0.6468], dtype=float32)', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_closure_unknown.default"
+desc = "A call of a function value whose callee is not evident where it is called (the function is a parameter of the function making the call) is refused by grad with a diagnostic that names the call, not only the grad call."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_closure_unknown.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes('which function it calls is not evident where it is called'), 'missing detail: ' + text)
+assert(/[(]at [^ ]*grad_closure_unknown[.]cml:7:13[)]/.test(text), 'missing position of the call: ' + text)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_closure_unknown.macro"
+desc = "A call of a function value whose callee is not evident where it is called (the function is a parameter of the function making the call) is refused by grad with a diagnostic that names the call, not only the grad call."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_closure_unknown.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes('which function it calls is not evident where it is called'), 'missing detail: ' + text)
+assert(/[(]at [^ ]*grad_closure_unknown[.]cml:7:13[)]/.test(text), 'missing position of the call: ' + text)
+}
+"""
+timeout_ms = 8000
