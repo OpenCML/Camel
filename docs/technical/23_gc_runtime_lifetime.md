@@ -81,11 +81,15 @@ frames, macro value roots, or explicit `mm::RootHandle` instances for C++ locals
 The current non-moving domains are intentional:
 
 - JIT machine code has no stack maps yet, so JIT execution remains outside the moving-GC contract.
-- Taskflow worker subflows do not provide a global stop-the-world worker barrier. The scheduler
-  therefore polls safepoints only while no flow is running, when the thread that entered the pass is
-  the only one executing and every live value is in a frame. Inside a flow other workers are in the
-  middle of operators, and a `map` holds the results of its finished elements in a C++ vector. Memory
-  allocated by a flow is reclaimed after the flow has ended.
+- Taskflow workers stop for a collection through a handshake (`TaskflowGcGate`), not by moving-safe
+  stack maps. Work that can hold a value no root reaches yet (an operator and the store of its
+  result, the fill of a callee frame, the store of a call result) runs inside a region; a worker
+  polls a safepoint only outside every region, and a deferred collection runs only while no other
+  thread is inside one. The higher-order operators keep what their tasks produce where the
+  collector finds it (the result array of a `map`, the node slot of a `reduce`, a rooted scratch
+  array). A collection can therefore run in the middle of a long flow. A collector that finds
+  another worker inside a long operator waits up to 500 ms, then gives up and retries at a later
+  poll. Workers still hold addresses across regions only for objects the collector does not move.
 - Native module bridges that hold auto-space objects across a safepoint must use `mm::RootHandle` or
   store the value in a traced frame/static slot before crossing the boundary.
 

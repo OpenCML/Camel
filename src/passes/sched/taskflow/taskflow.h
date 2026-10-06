@@ -26,10 +26,13 @@
 
 #include <algorithm>
 #include <atomic>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <span>
+#include <string_view>
 #include <taskflow/algorithm/for_each.hpp>
 #include <taskflow/taskflow.hpp>
 #include <thread>
@@ -85,6 +88,108 @@ class TaskflowFramePool {
 
 namespace ctx = camel::core::context;
 
+// Stop-the-world handshake between the threads of the parallel scheduler and the collector.
+//
+// The allocator collects on whichever thread polls a safepoint. With one thread that is safe:
+// between two nodes every live value sits in a frame, and frames are GC roots. With several
+// workers it is not: a worker in the middle of an operator holds values (a freshly allocated
+// result, the return value of a call on its way into the caller frame) that no root reaches.
+//
+// So every piece of work that can hold such a value runs inside a *region*, and a deferred
+// collection runs only while no other thread is inside one. Regions are leaf work (a few
+// operators, a frame fill, a result store): a thread never waits for another task while it
+// holds one, so the collector waits no longer than the longest operator. If an operator
+// blocks (a sleep, a rendezvous) the collector gives up after a short wait and the collection
+// is retried at a later poll, so the tasks such an operator may be waiting for keep running.
+// After a collection the next one starts no sooner than twice the time it took.
+//
+// Not covered (as before graphs ran as tasks): the collection the allocator runs inside an
+// allocation that finds the heap full; it does not go through a poll.
+class TaskflowGcGate {
+  public:
+    struct alignas(64) ThreadState {
+        std::atomic<bool> active{false};
+        uint32_t depth = 0;
+        // Bounds of this thread's native stack (0: unknown).
+        uintptr_t stackLow  = 0;
+        uintptr_t stackHigh = 0;
+    };
+
+    static TaskflowGcGate &instance();
+    // The calling thread's state, registered on first use and kept for the process lifetime.
+    ThreadState &self();
+
+    void enter(ThreadState &ts) {
+        if (ts.depth++ != 0) {
+            return;
+        }
+        for (;;) {
+            ts.active.store(true, std::memory_order_seq_cst);
+            if (!stopRequested_.load(std::memory_order_seq_cst)) [[likely]] {
+                return;
+            }
+            ts.active.store(false, std::memory_order_seq_cst);
+            waitForCollector();
+        }
+    }
+    void leave(ThreadState &ts) {
+        if (--ts.depth == 0) {
+            ts.active.store(false, std::memory_order_release);
+        }
+    }
+    // Safepoint poll; the calling thread must be outside every region.
+    void poll(ThreadState &ts, std::string_view reason) {
+        if (camel::core::mm::detail::autoSpaceSafepointSlowPath.load(std::memory_order_acquire))
+            [[unlikely]] {
+            collect(ts, reason);
+        }
+    }
+
+  private:
+    void collect(ThreadState &ts, std::string_view reason);
+    void waitForCollector();
+
+    std::atomic<bool> stopRequested_{false};
+    std::atomic<int64_t> retryAfterNs_{0};
+    std::mutex collectorMutex_;
+    std::mutex registryMutex_;
+    std::vector<std::unique_ptr<ThreadState>> threads_;
+};
+
+// A region of the constructing thread, entered and left any number of times; left on
+// destruction.
+class TaskflowGcRegion {
+  public:
+    TaskflowGcRegion() : gate_(TaskflowGcGate::instance()), ts_(gate_.self()) {}
+    ~TaskflowGcRegion() { leave(); }
+    TaskflowGcRegion(const TaskflowGcRegion &)            = delete;
+    TaskflowGcRegion &operator=(const TaskflowGcRegion &) = delete;
+
+    void enter() {
+        if (!held_) {
+            gate_.enter(ts_);
+            held_ = true;
+        }
+    }
+    void leave() {
+        if (held_) {
+            gate_.leave(ts_);
+            held_ = false;
+        }
+    }
+    void poll(std::string_view reason) {
+        if (!held_ && ts_.depth == 0) {
+            gate_.poll(ts_, reason);
+        }
+    }
+    TaskflowGcGate::ThreadState &thread() { return ts_; }
+
+  private:
+    TaskflowGcGate &gate_;
+    TaskflowGcGate::ThreadState &ts_;
+    bool held_ = false;
+};
+
 class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
   public:
     /// `max_concurrent_tasks` = 0: the thread limit of the context (`-t`), else the number of
@@ -118,31 +223,122 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     void runOnExecutor(tf::Taskflow &flow);
 
     tf::Executor executor_;
-    // Flows now running on the executor (nested ones included). While it is not zero, tasks
-    // hold values that no frame holds yet (the element results of a map, a reduce's
-    // accumulator, an operator's fresh result) and other workers keep running, so nothing
-    // may be collected: evalGraphLinear polls its safepoints only when it is zero.
-    std::atomic<size_t> runningFlows_{0};
-    std::unordered_map<camel::runtime::GCGraph *, std::vector<camel::runtime::gc_node_ref_t>>
-        linearTopoCache_;
     // Per graph and BRCH: where each arm starts executing in the linear order
-    // (resolveRuntimeBranchArmEntry, shared with NodeVM and FastVM).
+    // (resolveRuntimeBranchArmEntry, shared with NodeVM and FastVM). Used by the node-by-node
+    // fallback only; a structured plan resolves the entries when it is built.
     std::unordered_map<
         camel::runtime::GCGraph *,
         std::unordered_map<
             camel::runtime::gc_node_ref_t, std::vector<camel::runtime::gc_node_ref_t>>>
         linearArmEntryCache_;
-    // Both caches are filled on first use by whichever worker gets there first (the elements
-    // of one `map` call the same graph at once).
+    // Filled on first use by whichever worker gets there first (the elements of one `map`
+    // call the same graph at once).
     std::mutex linearCacheMutex_;
 
+    // ---- Graph-level task execution -------------------------------------------------------
+    //
+    // A graph is evaluated as the task graph its edges describe: two nodes run concurrently
+    // unless a path of NORM, WITH or CTRL edges orders them. The static shape is a GraphPlan,
+    // built once per graph from the same linear order and the same branch-arm ranges that the
+    // node-by-node evaluator (and NodeVM) execute:
+    //
+    //   scope   the top level of a graph, or one arm of a branch
+    //   item    one executable node of a scope, or a whole BRCH..JOIN region (the BRCH picks
+    //           an arm at run time and that arm's scope runs inside the item)
+    //   chain   a maximal run of items between which no concurrency is possible; one task
+    //
+    // An edge between nodes of different items orders the two items in their innermost common
+    // scope. A scope whose items are totally ordered runs inline on the calling thread; any
+    // other scope runs as a Taskflow graph (one task per chain) on the shared executor.
+    enum class ItemKind : uint8_t { Leaf, Call, Mark, Branch };
+    struct PlanItem {
+        camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
+        uint32_t branch                    = 0; // index into GraphPlan::branches (Branch items)
+        ItemKind kind                      = ItemKind::Leaf;
+        // FUNC in tail position: evaluated by the loop of evalGraph, not by a nested call.
+        bool tailCall = false;
+        // Comes after the tail value in the linear order (forwarding GATEs), or is the tail
+        // JOIN: skipped once a tail call has replaced the rest of the graph.
+        bool afterTail = false;
+    };
+    struct FlowInstance {
+        tf::Taskflow flow;
+        ctx::Frame *frame               = nullptr;
+        std::atomic<uint32_t> *tailNode = nullptr;
+        std::mutex errorMutex;
+        std::exception_ptr error;
+    };
+    struct PlanScope {
+        std::vector<PlanItem> items; // linear order
+        bool sequential = true;
+        std::vector<std::vector<PlanItem>> chains;             // parallel scopes only
+        std::vector<std::pair<uint32_t, uint32_t>> chainEdges; // chain -> chain
+        int32_t parentScope = -1;
+        uint32_t parentItem = 0;
+        uint32_t depth      = 0;
+        // Prebuilt task graphs of this scope, reused by successive runs.
+        std::mutex poolMutex;
+        std::vector<std::unique_ptr<FlowInstance>> idle;
+    };
+    struct PlanBranch {
+        camel::runtime::gc_node_ref_t brch = camel::runtime::kInvalidNodeRef;
+        camel::runtime::gc_node_ref_t join = camel::runtime::kInvalidNodeRef;
+        std::vector<int32_t> armScopes; // -1: the arm runs nothing
+    };
+    struct GraphPlan {
+        camel::runtime::GCGraph *graph = nullptr;
+        // False: the graph does not fit the scope model (or task graphs are switched off); it
+        // is evaluated node by node in linear order, its calls still as task graphs.
+        bool structured = false;
+        std::vector<std::unique_ptr<PlanScope>> scopes; // [0]: top level
+        std::vector<PlanBranch> branches;
+        std::vector<camel::runtime::gc_node_ref_t> topo;
+        camel::runtime::gc_node_ref_t lastNode = camel::runtime::kInvalidNodeRef;
+        bool lastNodeIsJoin                    = false;
+        bool anchorOk                          = false;
+    };
+
+    std::shared_mutex plansMutex_;
+    std::unordered_map<camel::runtime::GCGraph *, std::unique_ptr<GraphPlan>> plans_;
+    // Set by the first task that fails; items not yet started then do nothing.
+    std::atomic<bool> aborting_{false};
+    // CAMEL_TF_LINEAR=1: evaluate every graph node by node (the behaviour between commit
+    // 1559559a and the restore of graph-level tasks). For comparison and diagnosis.
+    bool forceLinear_ = false;
+
+    GraphPlan *planFor(camel::runtime::GCGraph *graph);
+    std::unique_ptr<GraphPlan> buildGraphPlan(camel::runtime::GCGraph *graph);
+    void buildStructuredPlan(GraphPlan &plan);
+
     slot_t evalGraphTF(camel::runtime::GCGraph *graph, ctx::Frame *frame);
-    slot_t evalGraphLinear(camel::runtime::GCGraph *graph, ctx::Frame *frame);
+    // Evaluates `graph` on `frame`, tail calls included. May be entered inside `region`;
+    // returns inside it, so the caller stores the result before a collection can run.
+    slot_t evalGraph(camel::runtime::GCGraph *graph, ctx::Frame *frame, TaskflowGcRegion &region);
+    // The three below take the calling thread's region in whatever state it is and leave it in
+    // whatever state their last step needed. `tailNode` receives the FUNC node of a tail call.
+    void runScope(
+        GraphPlan &plan, PlanScope &scope, ctx::Frame *frame, std::atomic<uint32_t> &tailNode,
+        TaskflowGcRegion &region);
+    void runItems(
+        GraphPlan &plan, std::span<const PlanItem> items, ctx::Frame *frame,
+        std::atomic<uint32_t> &tailNode, TaskflowGcRegion &region);
+    void runLinearBody(
+        GraphPlan &plan, ctx::Frame *frame, std::atomic<uint32_t> &tailNode,
+        TaskflowGcRegion &region);
+    void executeCallNode(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        TaskflowGcRegion &region);
+    // Calls the function value held in slot `funcIdx` of `funcFrame` (its graph is
+    // `targetGraph`): `fillArgs(span)` reads the arguments and `sink(result)` stores the
+    // result, both inside one region of the calling thread.
+    template <typename FillArgs, typename Sink>
+    void callClosure(
+        camel::runtime::GCGraph *targetGraph, ctx::Frame *funcFrame,
+        camel::runtime::gc_data_idx_t funcIdx, size_t argCount, FillArgs &&fillArgs,
+        Sink &&sink);
     camel::runtime::gc_node_ref_t branchArmEntryForLinear(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef, size_t armIndex,
         std::span<const camel::runtime::gc_node_ref_t> topoNodes);
-    std::span<const camel::runtime::gc_node_ref_t>
-    topoNodesForLinear(camel::runtime::GCGraph *graph);
     slot_t runPreparedSubgraph(tf::Subflow &sf, camel::runtime::GCGraph *graph, ctx::Frame *frame);
     slot_t executeLinearNode(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
