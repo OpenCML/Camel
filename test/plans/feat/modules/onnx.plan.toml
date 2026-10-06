@@ -395,7 +395,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_gated_gru_step"
-desc = "E13/T5 boundary, moved twice: a branched training step of a recurrent network (gated GRU) still cannot be exported. The forward recursion over the time steps is a loop and the slice at the loop counter is lowered, but the derived reverse pass calls itself and then uses the result (it is not a tail recursion), and the gradient of a loop is not implemented; reported at the recursive call."
+desc = "E13/T5 boundary, moved three times: a branched training step of a recurrent network (gated GRU) still cannot be exported. The forward recursion over the time steps is a loop, the slice at the loop counter is lowered and the derived reverse pass (a linear recursion) is unrolled into paired Loops, but the gradient of that slice (tensor:slice_grad) has no lowering for bounds that depend on the model input; reported at the slice."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_gated_gru_step.cml"
 args = ["${case}"]
@@ -405,8 +405,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('is not the last action of the function'), 'missing tail-position detail')
-assert(/at [^ ]*export_gated_gru_step[.]cml:42:38[)]/.test(text), 'missing source position of the recursive call')
+assert(text.includes("'tensor:slice_grad': argument 3 must be an export-time constant integer"), 'missing detail: ' + text)
+assert(/at [^ ]*export_gated_gru_step[.]cml:54:26[)]/.test(text), 'missing source position of the slice: ' + text)
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """
@@ -712,13 +712,13 @@ case = "../../../cases/modules/onnx/pass_export.py"
 args = ["${case}", "refuse"]
 skip_unless = ["${python}", "-c", "import json"]
 expect_exit = 0
-expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:29:1 file written: False", "stage pass:onnx::export at export_train_step.cml:25:14 file written: False", "at export_nontail_recursion.cml:12:44 file written: False", "onnx::export refuse: PASS"]
+expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:29:1 file written: False", "stage pass:onnx::export at export_train_step.cml:25:14 file written: False", "at export_nontail_recursion.cml:12:84 file written: False", "onnx::export refuse: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
 [[tests]]
 name = "pass_export_equals_export_model"
-desc = "For nineteen programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes and the branched-call split: the four branched training steps, the gated GRU forward, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul) the model written by `std::macro std::opt::simplify onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
+desc = "For twenty-four programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes and the branched-call split: the four branched training steps, the gated GRU forward, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul) the model written by `std::macro std::opt::simplify onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/pass_export.py"
@@ -1388,7 +1388,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_nontail_recursion"
-desc = "A recursion whose depth depends on the model input and whose recursive call is not in tail position (its result is used after it returns) is refused by export_model at the recursive call, with a diagnostic that says what would make it a loop."
+desc = "A recursion whose depth depends on the model input, whose recursive call is not in tail position and which two branches decide (so it is not a linear recursion the exporter unrolls) is refused by export_model with a located diagnostic that says what is accepted."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_nontail_recursion.cml"
 args = ["${case}"]
@@ -1398,8 +1398,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('is not the last action of the function'), 'missing tail-position detail: ' + text)
-assert(/at [^ ]*export_nontail_recursion[.]cml:12:[0-9]+[)]/.test(text), 'missing source position of the recursive call: ' + text)
+assert(text.includes('several branches decide whether a function calls itself outside tail position'), 'missing detail: ' + text)
+assert(/at [^ ]*export_nontail_recursion[.]cml:1[0-9]:[0-9]+[)]/.test(text), 'missing source position: ' + text)
 assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
 }
 """
@@ -1466,6 +1466,34 @@ expect_stdout_contains = ["ort dynamic params: worst", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+
+[[tests]]
+name = "ort_linear_recursion"
+desc = "Three hand-written linear recursions whose depth depends on the model input (the call's result added to; a right fold that post-processes the result with a counter, a changing state and an unchanged argument; one with the arms swapped and a branch in the post-processing) export as paired ONNX Loops and match the recursions written in NumPy on ONNX Runtime for depths 0, 1 and more."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_linear_recursion.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort linear recursion: worst", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "ort_grad_loop"
+desc = "The gradient of a loop whose length depends on the data (value_and_grad over a tail recursion, once with a data-dependent branch in the loop body) exports as paired ONNX Loops: on ONNX Runtime, for lengths 0, 1 and more and both arms of the branch, value and gradient match Camel's native run and a NumPy reverse sweep."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_grad_loop.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort grad loop: worst", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
 
 [[tests]]
 name = "export_train_step_vjp"

@@ -52,7 +52,10 @@
 #include "camel/passes/opt/config.h"
 #include "camel/passes/trans/dot/graphviz.h"
 
+#include <algorithm>
 #include <cstdlib>
+#include <deque>
+#include <functional>
 #include <format>
 #include <iostream>
 #include <limits>
@@ -217,9 +220,18 @@ class Evaluator {
     void refuseEffects(GCGraph *graph);
 
   private:
+    struct LinearFrame;
+    /// How the body of a linear recursion is being evaluated: which arm of its deciding branch
+    /// is taken, and what the recursive call stands for.
+    struct LinearCtx {
+        const LinearFrame *frame = nullptr;
+        size_t arm               = 0;
+        const Value *hole        = nullptr;
+    };
     struct Activation {
         GCGraph *graph;
         std::unordered_map<gc_node_ref_t, Value> ports;
+        const LinearCtx *linear = nullptr;
         // Memo layers: the base layer plus one per enclosing If arm being emitted. A value first
         // computed inside an arm lives in that arm's subgraph and is only visible there.
         std::vector<std::unordered_map<gc_node_ref_t, Value>> memo;
@@ -283,6 +295,47 @@ class Evaluator {
     Activation activationOf(GCGraph *callee, std::span<const Value> args);
     bool nodeReachesCall(const GCGraph *g, gc_node_ref_t ref, const GCGraph *target);
     std::vector<LoopFrame *> loops_;
+    GCGraph *nonTailFn_ = nullptr; // the function whose loop translation met a call outside tail position
+
+    // ---- linear recursion as paired loops, and functions as export-time values (see below)
+    struct LinearFrame {
+        GCGraph *fn = nullptr;
+        std::vector<gc_node_ref_t> ports;
+        std::vector<Value> args; // the arguments of the first call
+        std::vector<bool> carried;
+        gc_node_ref_t site = camel::runtime::kInvalidNodeRef; // the one recursive call
+        gc_node_ref_t join = camel::runtime::kInvalidNodeRef; // the branch that decides it
+        gc_node_ref_t cond = camel::runtime::kInvalidNodeRef;
+        size_t recArm      = 0;
+        std::vector<Value> finals; // the arguments of the last call
+        Value count;               // the number of recursive calls
+        Value base;                // what the last call returns
+    };
+    struct LoopClosureRef {
+        size_t frame;
+        size_t leaf;
+    };
+    using LoopBody = std::function<std::pair<std::optional<std::string>, std::vector<Value>>(
+        const Value &iter, const std::vector<Value> &state)>;
+    using HoleCall = std::function<Value(size_t leaf, const std::vector<Value> &args)>;
+    std::vector<Value> emitLoop(
+        Activation &act, const std::optional<std::string> &trip, const std::vector<Value> &init,
+        const LoopBody &body);
+    Value translateLinear(Activation &act, GCGraph *fn, std::vector<Value> args);
+    Value linearBody(const LinearFrame &f, std::span<const Value> state, size_t arm, const Value *hole);
+    std::vector<Value> linearNext(const LinearFrame &f, std::span<const Value> state);
+    std::string linearCont(Activation &act, const LinearFrame &f, std::span<const Value> state);
+    std::vector<Value> linearReplay(Activation &act, const LinearFrame &f, const Value &steps);
+    Value evalIndirectCall(Activation &act, gc_node_ref_t ref);
+    Value callClosure(Activation &act, const Value &fn, const std::vector<Value> &args, size_t withCount);
+    Value callLoopClosure(Activation &act, const Value &fn, const std::vector<Value> &args, size_t withCount);
+    Value mergeValues(Activation &act, const std::string &cond, const Value &a, const Value &b);
+    Value evalEagerBranch(Activation &act, const Value &cond, std::span<const gc_node_ref_t> arms);
+    std::optional<Value> probeSpecialClosure(Activation &act, gc_node_ref_t ref);
+    std::deque<LinearFrame> linearFrames_;
+    std::vector<LoopClosureRef> loopClosures_;
+    const HoleCall *holeCall_ = nullptr;
+    int closuresWanted_       = 0; // > 0 while functions are kept as values instead of deferred
 
     std::vector<Value> evalAll(Activation &act, std::span<const gc_node_ref_t> refs);
     Value keep(slot_t slot, type::Type *type);
@@ -523,6 +576,10 @@ void Evaluator::unsupported(Activation &act, std::string_view what, ExportError:
 Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
     GCGraph *g    = act.graph;
     const auto *n = g->node(ref);
+    // Bound from outside: parameters, and the captured values of a closure being called.
+    if (auto bound = act.ports.find(ref); bound != act.ports.end()) {
+        return bound->second;
+    }
     switch (n->kind) {
     case GCNodeKind::Data: {
         const auto index = n->dataIndex;
@@ -584,11 +641,7 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
     case GCNodeKind::Func:
         return evalCall(act, ref);
     case GCNodeKind::Call:
-        unsupported(
-            act,
-            "an indirect call remains after simplification; its callee must be known at export "
-            "time",
-            ExportError::Kind::CallRemains);
+        return evalIndirectCall(act, ref);
     default:
         unsupported(
             act,
@@ -653,6 +706,19 @@ bool sameValue(const Value &a, const Value &b) {
     if (a.isConstant()) {
         return a.slot == b.slot && a.ty == b.ty;
     }
+    if (a.isClosure() || b.isClosure()) {
+        if (!a.isClosure() || !b.isClosure() || a.closureKind != b.closureKind ||
+            a.closureRef != b.closureRef || a.slot != b.slot || a.name != b.name ||
+            a.fields.size() != b.fields.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < a.fields.size(); ++i) {
+            if (!sameValue(a.fields[i], b.fields[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
     if (a.isAggregate() != b.isAggregate()) {
         return false;
     }
@@ -668,6 +734,55 @@ bool sameValue(const Value &a, const Value &b) {
         return true;
     }
     return a.form == b.form && !a.name.empty() && a.name == b.name;
+}
+
+/// Whether a value is, or holds, a function kept as an export-time value.
+bool holdsClosure(const Value &v) {
+    if (v.isClosure()) {
+        return true;
+    }
+    if (v.isAggregate()) {
+        return std::ranges::any_of(v.fields, holdsClosure);
+    }
+    return false;
+}
+
+/// The leaves of a value: itself, or the elements of a tuple / struct, depth first.
+void flattenValue(const Value &v, std::vector<Value> &leaves) {
+    if (v.isAggregate()) {
+        for (const Value &field : v.fields) {
+            flattenValue(field, leaves);
+        }
+        return;
+    }
+    if (v.isConstant() && v.ty && v.slot != NullSlot &&
+        (v.ty->code() == TypeCode::Tuple || v.ty->code() == TypeCode::Struct)) {
+        for (const Value &field : elementsOf(v.slot, v.ty)) {
+            flattenValue(field, leaves);
+        }
+        return;
+    }
+    leaves.push_back(v);
+}
+
+/// A value of the structure of `like` with `leaves` in flattenValue's order.
+Value rebuildValue(const Value &like, std::span<const Value> leaves, size_t &next) {
+    if (like.isAggregate()) {
+        std::vector<Value> fields;
+        for (const Value &field : like.fields) {
+            fields.push_back(rebuildValue(field, leaves, next));
+        }
+        return Value::aggregate(like.camelType, std::move(fields));
+    }
+    if (like.isConstant() && like.ty && like.slot != NullSlot &&
+        (like.ty->code() == TypeCode::Tuple || like.ty->code() == TypeCode::Struct)) {
+        std::vector<Value> fields;
+        for (const Value &field : elementsOf(like.slot, like.ty)) {
+            fields.push_back(rebuildValue(field, leaves, next));
+        }
+        return Value::aggregate(like.ty, std::move(fields));
+    }
+    return leaves[next++];
 }
 
 /// Whether an argument can be a carried value of a Loop: a tensor or a numeric / bool scalar.
@@ -748,8 +863,18 @@ Value Evaluator::evalCall(Activation &act, gc_node_ref_t site) {
         isSourceName(callee->name())
             ? std::format(" to '{}'", callee->name().substr(0, callee->name().find('$')))
             : std::string();
+    if (act.linear != nullptr && callee == act.linear->frame->fn && act.graph == callee &&
+        site == act.linear->frame->site) {
+        if (act.linear->hole == nullptr) {
+            unsupported(act, "the result of a recursive call is used on the path that returns");
+        }
+        return *act.linear->hole;
+    }
     for (const LoopFrame *loop : loops_) {
         if (loop->fn == callee || callReaches(callee, loop->fn)) {
+            if (loop == loops_.back() && loop->fn == callee) {
+                nonTailFn_ = callee;
+            }
             unsupported(
                 act,
                 std::format(
@@ -772,15 +897,31 @@ Value Evaluator::evalCall(Activation &act, gc_node_ref_t site) {
         }
         return eval(inner, execute::resolveRuntimeTailValueRef(callee));
     }
+    const auto located = [&](const ExportError &e) {
+        // A refusal about the recursion as a whole is reported at the call.
+        const uint64_t origin = act.graph->nodeOrigin(site);
+        return ExportError(e.what(), locationOf(origin), origin, e.kind());
+    };
+    nonTailFn_ = nullptr;
     try {
-        return translateLoop(act, callee, std::move(args));
+        return translateLoop(act, callee, args);
+    } catch (const ExportError &e) {
+        if (nonTailFn_ != callee) {
+            if (!e.location().empty()) {
+                throw;
+            }
+            throw located(e);
+        }
+    }
+    // The recursive call is not in tail position: a linear recursion, or nothing exportable.
+    nonTailFn_ = nullptr;
+    try {
+        return translateLinear(act, callee, std::move(args));
     } catch (const ExportError &e) {
         if (!e.location().empty()) {
             throw;
         }
-        // A refusal about the loop as a whole is reported at the call.
-        const uint64_t origin = act.graph->nodeOrigin(site);
-        throw ExportError(e.what(), locationOf(origin), origin, e.kind());
+        throw located(e);
     }
 }
 
@@ -1086,6 +1227,771 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
     return *last.result;
 }
 
+// ---------------------------------------------------------------- linear recursion as loops
+//
+// A recursion whose one recursive call is NOT the last action still unrolls into loops when it
+// is linear: the function is
+//
+//     f(a) = E(a, if c(a) then E'(a, f(step(a))) else B(a))    (or with the arms swapped)
+//
+// with exactly one recursive call, on one side of one two-way branch (E and E' are treated as
+// one: the body evaluated with that side forced and the call's result given). Write a_0 for the
+// arguments of the first call, a_{i+1} = step(a_i), and n for the first i where the branch
+// takes the other arm. Then, by induction on n,
+//
+//     V_n = E(a_n, B(a_n))        V_i = E(a_i, V_{i+1})        f(a_0) = V_0
+//
+// which is three loops: a forward Loop that finds a_n and n; the value V_n computed after it;
+// and a Loop that runs n times and applies E in reverse order, i = n-1 .. 0, the state a_i
+// being recomputed from a_0 by a counted inner Loop (no tape: the cost is quadratic in n).
+// Nothing here depends on where the function comes from; the functions autodiff derives for a
+// tail-recursive loop have this form (the forward function returns (value, pullback) and wraps
+// the pullback of the recursive call in a closure).
+//
+// Functions as results. When V holds a function (a closure built by E that captures values of
+// its call and the function returned by the recursive call), the function cannot be carried
+// by a Loop. It is kept as an export-time value and the recursion is unrolled where it is
+// CALLED: g_i(x) = P(a_i, x, g_{i+1}(x)), g_n = the closure of the last call, so
+// g_0(x) is a bottom call g_n(x) followed by a Loop applying P in reverse order.
+//
+// Accepted, exactly:
+//   - one recursive call in the function's own graph, and one if / else, on a scalar condition
+//     that depends on the model input, with the call on exactly one side (branches inside that
+//     side that use the call's result on both of their sides belong to E);
+//   - the arguments the call changes are tensors or scalars of fixed dtype and shape;
+//   - the result's leaves that are not functions are tensors or scalars of fixed dtype and
+//     shape; when the result also holds a function, those leaves are passed through unchanged
+//     by E (true of autodiff's (value, pullback));
+//   - a function in the result calls the function returned by the recursive call exactly once
+//     and with its own arguments unchanged, and returns tensors or scalars (tuples of them).
+// Everything else is refused with a diagnostic.
+
+std::vector<Value> Evaluator::emitLoop(
+    Activation &act, const std::optional<std::string> &trip, const std::vector<Value> &init,
+    const LoopBody &body) {
+    if (init.empty()) {
+        unsupported(act, "a recursion changes none of its values: it never ends, or it is no loop");
+    }
+    emitter_.pushScope("loop_body");
+    std::vector<ValueInfo> inputs, outputs;
+    try {
+        const std::string iter   = emitter_.fresh("loop_iter");
+        const std::string condIn = emitter_.fresh("loop_cond_in");
+        std::vector<Value> state;
+        for (const Value &v : init) {
+            state.push_back(placeholderLike(v, emitter_.fresh("state")));
+        }
+        const auto [cont, next] = body(Value::symbolicScalar(iter, type::Type::Int64()), state);
+        if (next.size() != init.size()) {
+            unsupported(act, "the values a recursion carries are not the same on every path");
+        }
+        const TensorFacts flag{TypeCode::Bool, tensor::StaticShape{}};
+        inputs.push_back(valueInfoOf(iter, TensorFacts{TypeCode::Int64, tensor::StaticShape{}}));
+        inputs.push_back(valueInfoOf(condIn, flag));
+        const std::string always = emitter_.operand(
+            Value::constant(rtdata::toSlot<bool>(true), type::Type::Bool()),
+            TypeCode::Bool);
+        outputs.push_back(
+            valueInfoOf(emitter_.node("Identity", {cont ? *cont : always}, {}, "loop_cond"), flag));
+        for (size_t k = 0; k < init.size(); ++k) {
+            const TensorFacts in  = factsOf(state[k]);
+            const TensorFacts out = factsOf(next[k]);
+            if (!isCarriable(next[k]) || !in.dtype || in.dtype != out.dtype || !in.shape ||
+                !out.shape || *in.shape != *out.shape) {
+                unsupported(
+                    act,
+                    "the dtype or shape of a value changes from one call of a recursion to the "
+                    "next; a loop can only carry values of a fixed dtype and shape");
+            }
+            inputs.push_back(valueInfoOf(state[k].name, in));
+            outputs.push_back(valueInfoOf(
+                emitter_.node("Identity", {emitter_.operand(next[k], *in.dtype)}, {}, "state_out"),
+                in));
+        }
+    } catch (...) {
+        emitter_.popScope();
+        throw;
+    }
+    Graph bodyGraph   = emitter_.popScope();
+    bodyGraph.inputs  = std::move(inputs);
+    bodyGraph.outputs = std::move(outputs);
+    std::vector<std::string> loopInputs{
+        trip ? *trip : std::string(),
+        emitter_.operand(Value::constant(rtdata::toSlot<bool>(true), type::Type::Bool()), TypeCode::Bool)};
+    for (const Value &v : init) {
+        loopInputs.push_back(emitter_.operand(v, factsOf(v).dtype));
+    }
+    const std::vector<std::string> names = emitter_.nodeN(
+        "Loop",
+        std::move(loopInputs),
+        {Attribute::makeGraph("body", std::move(bodyGraph))},
+        init.size(),
+        "loop_state");
+    std::vector<Value> finals;
+    for (size_t k = 0; k < init.size(); ++k) {
+        finals.push_back(placeholderLike(init[k], names[k]));
+    }
+    return finals;
+}
+
+namespace {
+
+/// The values of `full` at the positions marked in `mask`.
+std::vector<Value> pick(std::span<const Value> full, const std::vector<bool> &mask) {
+    std::vector<Value> out;
+    for (size_t k = 0; k < full.size(); ++k) {
+        if (mask[k]) {
+            out.push_back(full[k]);
+        }
+    }
+    return out;
+}
+
+/// `base` with the positions marked in `mask` replaced by `values`, in order.
+std::vector<Value>
+place(std::span<const Value> base, const std::vector<bool> &mask, std::span<const Value> values) {
+    std::vector<Value> out(base.begin(), base.end());
+    size_t next = 0;
+    for (size_t k = 0; k < out.size(); ++k) {
+        if (mask[k]) {
+            out[k] = values[next++];
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+Value Evaluator::linearBody(
+    const LinearFrame &f, std::span<const Value> state, size_t arm, const Value *hole) {
+    Activation body = activationOf(f.fn, state);
+    const LinearCtx ctx{.frame = &f, .arm = arm, .hole = hole};
+    body.linear = &ctx;
+    ++closuresWanted_;
+    try {
+        Value v = eval(body, execute::resolveRuntimeTailValueRef(f.fn));
+        --closuresWanted_;
+        return v;
+    } catch (...) {
+        --closuresWanted_;
+        throw;
+    }
+}
+
+std::vector<Value> Evaluator::linearNext(const LinearFrame &f, std::span<const Value> state) {
+    Activation body = activationOf(f.fn, state);
+    const LinearCtx ctx{.frame = &f, .arm = f.recArm, .hole = nullptr};
+    body.linear = &ctx;
+    return callArguments(body, f.site, f.fn);
+}
+
+std::string
+Evaluator::linearCont(Activation &act, const LinearFrame &f, std::span<const Value> state) {
+    Activation body  = activationOf(f.fn, state);
+    const Value cond = eval(body, f.cond);
+    if (cond.isConstant() || cond.form != Value::Form::Scalar) {
+        unsupported(
+            act,
+            "the condition that decides a recursion is not a scalar that depends on the model "
+            "input");
+    }
+    const std::string c = emitter_.operand(cond, TypeCode::Bool);
+    return f.recArm == 0 ? c : emitter_.node("Not", {c});
+}
+
+/// The arguments of call number `steps` (0 = the first call), recomputed from the first call's.
+std::vector<Value>
+Evaluator::linearReplay(Activation &act, const LinearFrame &f, const Value &steps) {
+    const std::vector<Value> finals = emitLoop(
+        act,
+        emitter_.operand(steps, TypeCode::Int64),
+        pick(f.args, f.carried),
+        [&](const Value &, const std::vector<Value> &state) {
+            const std::vector<Value> next = linearNext(f, place(f.args, f.carried, state));
+            return std::pair<std::optional<std::string>, std::vector<Value>>{
+                std::nullopt,
+                pick(next, f.carried)};
+        });
+    return place(f.args, f.carried, finals);
+}
+
+Value Evaluator::translateLinear(Activation &act, GCGraph *fn, std::vector<Value> args) {
+    const size_t frameIndex = linearFrames_.size();
+    LinearFrame &f          = linearFrames_.emplace_back();
+    f.fn                    = fn;
+    f.ports.assign(fn->withPorts().begin(), fn->withPorts().end());
+    f.ports.insert(f.ports.end(), fn->normPorts().begin(), fn->normPorts().end());
+    f.args             = std::move(args);
+    const size_t count = f.ports.size();
+
+    // The one recursive call, and the branch it is an arm of.
+    size_t calls = 0;
+    for (auto it = fn->nodes().begin(); it != fn->nodes().end(); ++it) {
+        if (*it == nullptr || (*it)->kind != GCNodeKind::Func) {
+            continue;
+        }
+        const GCGraph *callee = fn->directCalleeGraphOf(it.ref());
+        if (callee == fn) {
+            f.site = it.ref();
+            ++calls;
+        } else if (callReaches(callee, fn)) {
+            unsupported(
+                act,
+                "a recursion that goes through another function and is not in tail position "
+                "cannot be exported");
+        }
+    }
+    if (calls != 1) {
+        unsupported(
+            act,
+            std::format(
+                "a recursion whose depth depends on the model input calls the function again "
+                "in {} places outside tail position; it can be exported as loops only with one "
+                "recursive call (a linear recursion)",
+                calls),
+            ExportError::Kind::CallRemains);
+    }
+    // The branch that decides it: the one if / else with the call on exactly one side. (A branch
+    // whose two sides both use the call's result is part of what is done with that result.)
+    size_t deciding = 0;
+    for (auto it = fn->nodes().begin(); it != fn->nodes().end(); ++it) {
+        if (*it == nullptr || (*it)->kind != GCNodeKind::Join) {
+            continue;
+        }
+        const auto arms = fn->withInputsOf(it.ref());
+        size_t reaching = 0, which = 0;
+        for (size_t i = 0; i < arms.size(); ++i) {
+            if (nodeReachesCall(fn, arms[i], fn)) {
+                ++reaching;
+                which = i;
+            }
+        }
+        if (reaching == 0 || reaching == arms.size()) {
+            continue;
+        }
+        const gc_node_ref_t brch = fn->normInputsOf(it.ref()).front();
+        if (arms.size() != 2 || !fn->withInputsOf(brch).empty()) {
+            unsupported(act, "a recursion decided by a match cannot be exported; use if / else");
+        }
+        ++deciding;
+        f.join   = it.ref();
+        f.recArm = which;
+        f.cond   = fn->normInputsOf(brch).front();
+    }
+    if (deciding != 1) {
+        unsupported(
+            act,
+            deciding == 0
+                ? "a recursive call that is not in tail position is made on every path; a "
+                  "linear recursion can be exported only when one if / else decides whether "
+                  "the function calls itself"
+                : "several branches decide whether a function calls itself outside tail "
+                  "position; a linear recursion can be exported only when one if / else "
+                  "decides it",
+            ExportError::Kind::CallRemains);
+    }
+    if (nodeReachesCall(fn, f.cond, fn)) {
+        unsupported(
+            act,
+            "the condition that decides a recursion uses the result of the recursive call",
+            ExportError::Kind::CallRemains);
+    }
+
+    // Which arguments does the recursive call change? (A discarded evaluation.)
+    std::vector<bool> carriable(count, false);
+    for (size_t k = 0; k < count; ++k) {
+        carriable[k] = isCarriable(f.args[k]);
+    }
+    f.carried.assign(count, false);
+    emitter_.pushScope("loop_probe");
+    try {
+        std::vector<Value> state = f.args;
+        for (size_t k = 0; k < count; ++k) {
+            if (carriable[k]) {
+                state[k] = placeholderLike(f.args[k], emitter_.fresh("probe"));
+            }
+        }
+        const std::vector<Value> next = linearNext(f, state);
+        for (size_t k = 0; k < count; ++k) {
+            f.carried[k] = !sameValue(next[k], state[k]);
+            if (f.carried[k] && !carriable[k]) {
+                unsupported(
+                    act,
+                    "a tuple, struct or array argument changes across a recursion whose depth "
+                    "depends on the model input; only tensors and scalars can be carried by a "
+                    "loop");
+            }
+        }
+        emitter_.popScope();
+    } catch (...) {
+        emitter_.popScope();
+        throw;
+    }
+
+    // Loop 1: the arguments of the last call and the number of recursive calls.
+    std::vector<Value> init = pick(f.args, f.carried);
+    const size_t m          = init.size();
+    init.push_back(Value::constant(rtdata::toSlot<rtdata::Int64>(0), type::Type::Int64()));
+    const std::vector<Value> last = emitLoop(
+        act,
+        std::nullopt,
+        init,
+        [&](const Value &, const std::vector<Value> &state) {
+            const std::vector<Value> full =
+                place(f.args, f.carried, std::span<const Value>(state.data(), m));
+            const std::string again       = linearCont(act, f, full);
+            const std::vector<Value> next = pick(linearNext(f, full), f.carried);
+            std::vector<Value> out;
+            for (size_t k = 0; k < m; ++k) {
+                out.push_back(selectValue(act, again, next[k], state[k]));
+            }
+            const int64_t one[] = {1};
+            const Value bumped  = Value::symbolicScalar(
+                emitter_.node(
+                    "Add",
+                    {emitter_.operand(state[m], TypeCode::Int64),
+                     emitter_.node("Squeeze", {emitter_.int64s(one)})}),
+                type::Type::Int64());
+            out.push_back(selectValue(act, again, bumped, state[m]));
+            return std::pair<std::optional<std::string>, std::vector<Value>>{again, out};
+        });
+    f.finals = place(f.args, f.carried, std::span<const Value>(last.data(), m));
+    f.count  = last[m];
+
+    // The value of the last call.
+    f.base = linearBody(f, f.finals, 1 - f.recArm, nullptr);
+    std::vector<Value> leaves;
+    flattenValue(f.base, leaves);
+    const auto holeLike = [&](const std::vector<Value> &plain) {
+        // The recursive call's result: `plain` for the leaves that are values, a hole for
+        // each function.
+        std::vector<Value> holes;
+        for (size_t j = 0; j < leaves.size(); ++j) {
+            if (leaves[j].isClosure()) {
+                Value hole      = Value::closure(Value::ClosureKind::Hole, leaves[j].camelType);
+                hole.closureRef = j;
+                holes.push_back(std::move(hole));
+            } else {
+                holes.push_back(plain[j]);
+            }
+        }
+        size_t next = 0;
+        return rebuildValue(f.base, holes, next);
+    };
+
+    // Which leaves does the enclosing expression change? (A discarded evaluation.)
+    std::vector<bool> changed(leaves.size(), false);
+    bool anyClosure = false, anyChanged = false;
+    emitter_.pushScope("loop_probe");
+    try {
+        std::vector<Value> state = f.args;
+        for (size_t k = 0; k < count; ++k) {
+            if (f.carried[k]) {
+                state[k] = placeholderLike(f.args[k], emitter_.fresh("probe"));
+            }
+        }
+        std::vector<Value> plain(leaves.size());
+        for (size_t j = 0; j < leaves.size(); ++j) {
+            if (leaves[j].isClosure()) {
+                anyClosure = true;
+                continue;
+            }
+            if (!isCarriable(leaves[j])) {
+                unsupported(
+                    act,
+                    "the result of a linear recursion holds something other than tensors, "
+                    "scalars and functions");
+            }
+            plain[j] = placeholderLike(leaves[j], emitter_.fresh("probe"));
+        }
+        const Value hole = holeLike(plain);
+        std::vector<Value> result;
+        flattenValue(linearBody(f, state, f.recArm, &hole), result);
+        if (result.size() != leaves.size()) {
+            unsupported(act, "the two paths of a linear recursion return values of different structure");
+        }
+        for (size_t j = 0; j < leaves.size(); ++j) {
+            if (leaves[j].isClosure() != result[j].isClosure()) {
+                unsupported(act, "the two paths of a linear recursion return values of different structure");
+            }
+            if (!leaves[j].isClosure()) {
+                changed[j] = !sameValue(result[j], plain[j]);
+                anyChanged = anyChanged || changed[j];
+            }
+        }
+        emitter_.popScope();
+    } catch (...) {
+        emitter_.popScope();
+        throw;
+    }
+    if (anyClosure && anyChanged) {
+        unsupported(
+            act,
+            "a linear recursion returns a function together with a value that it changes on "
+            "the way back; only a value passed through unchanged can accompany a function");
+    }
+
+    // Loop 2: the enclosing expression applied in reverse order, n times.
+    if (anyChanged) {
+        const std::vector<Value> ups = emitLoop(
+            act,
+            emitter_.operand(f.count, TypeCode::Int64),
+            pick(leaves, changed),
+            [&](const Value &iter, const std::vector<Value> &current) {
+                // Iteration j handles call number n - 1 - j.
+                const int64_t one[] = {1};
+                const Value index   = Value::symbolicScalar(
+                    emitter_.node(
+                        "Sub",
+                        {emitter_.node(
+                             "Sub",
+                             {emitter_.operand(f.count, TypeCode::Int64),
+                              emitter_.node("Squeeze", {emitter_.int64s(one)})}),
+                         iter.name}),
+                    type::Type::Int64());
+                const std::vector<Value> state = linearReplay(act, f, index);
+                const Value hole               = holeLike(place(leaves, changed, current));
+                std::vector<Value> result;
+                flattenValue(linearBody(f, state, f.recArm, &hole), result);
+                return std::pair<std::optional<std::string>, std::vector<Value>>{
+                    std::nullopt,
+                    pick(result, changed)};
+            });
+        leaves = place(leaves, changed, ups);
+    }
+    for (size_t j = 0; j < leaves.size(); ++j) {
+        if (leaves[j].isClosure()) {
+            Value fnValue      = Value::closure(Value::ClosureKind::Loop, leaves[j].camelType);
+            fnValue.closureRef = loopClosures_.size();
+            loopClosures_.push_back({frameIndex, j});
+            leaves[j] = std::move(fnValue);
+        }
+    }
+    size_t next = 0;
+    return rebuildValue(f.base, leaves, next);
+}
+
+// ---------------------------------------------------------------- functions as values
+
+std::optional<Value> Evaluator::probeSpecialClosure(Activation &act, gc_node_ref_t ref) {
+    const auto special = [](const Value &v, const auto &self) -> bool {
+        if (v.isClosure()) {
+            return v.closureKind != Value::ClosureKind::Plain ||
+                   std::ranges::any_of(v.fields, [&](const Value &c) { return self(c, self); });
+        }
+        return v.isAggregate() &&
+               std::ranges::any_of(v.fields, [&](const Value &c) { return self(c, self); });
+    };
+    bool found = false;
+    emitter_.pushScope("closure_probe");
+    act.memo.emplace_back();
+    ++closuresWanted_;
+    try {
+        found = special(eval(act, ref), special);
+    } catch (const ExportError &) {
+        found = false; // not evaluable: stays deferred, and fails only if it is ever needed
+    }
+    --closuresWanted_;
+    act.memo.pop_back();
+    emitter_.popScope();
+    if (!found) {
+        return std::nullopt;
+    }
+    ++closuresWanted_;
+    try {
+        Value v = eval(act, ref);
+        --closuresWanted_;
+        return v;
+    } catch (...) {
+        --closuresWanted_;
+        throw;
+    }
+}
+
+Value Evaluator::mergeValues(
+    Activation &act, const std::string &cond, const Value &a, const Value &b) {
+    std::vector<Value> la, lb;
+    flattenValue(a, la);
+    flattenValue(b, lb);
+    if (la.size() != lb.size()) {
+        unsupported(
+            act,
+            "the arms of a branch on a model-dependent condition yield different types");
+    }
+    std::vector<Value> merged;
+    for (size_t j = 0; j < la.size(); ++j) {
+        if (la[j].isClosure() || lb[j].isClosure()) {
+            if (sameValue(la[j], lb[j])) {
+                merged.push_back(la[j]);
+                continue;
+            }
+            if (!la[j].isClosure() || !lb[j].isClosure()) {
+                unsupported(act, "one arm of a branch yields a function and the other does not");
+            }
+            // (if c then f else g)(x) = if c then f(x) else g(x): decided when it is called.
+            Value select  = Value::closure(Value::ClosureKind::Select, la[j].camelType);
+            select.name   = cond;
+            select.fields = {la[j], lb[j]};
+            merged.push_back(std::move(select));
+        } else {
+            merged.push_back(selectValue(act, cond, la[j], lb[j]));
+        }
+    }
+    size_t next = 0;
+    return rebuildValue(a, merged, next);
+}
+
+Value Evaluator::evalEagerBranch(
+    Activation &act, const Value &cond, std::span<const gc_node_ref_t> arms) {
+    ++closuresWanted_;
+    try {
+        const Value a = eval(act, arms[0]);
+        const Value b = eval(act, arms[1]);
+        --closuresWanted_;
+        return mergeValues(act, emitter_.operand(cond, TypeCode::Bool), a, b);
+    } catch (...) {
+        --closuresWanted_;
+        throw;
+    }
+}
+
+Value Evaluator::evalIndirectCall(Activation &act, gc_node_ref_t ref) {
+    GCGraph *g      = act.graph;
+    const auto with = g->withInputsOf(ref);
+    Value callee;
+    if (!with.empty()) {
+        ++closuresWanted_;
+        try {
+            callee = eval(act, with.front());
+            --closuresWanted_;
+        } catch (...) {
+            --closuresWanted_;
+            throw;
+        }
+    }
+    if (with.empty() || !callee.isClosure()) {
+        unsupported(
+            act,
+            "an indirect call remains after simplification; its callee must be known at export "
+            "time",
+            ExportError::Kind::CallRemains);
+    }
+    std::vector<Value> args = evalAll(act, with.subspan(1));
+    const size_t withCount  = args.size();
+    for (Value &v : evalAll(act, g->normInputsOf(ref))) {
+        args.push_back(std::move(v));
+    }
+    return callClosure(act, callee, args, withCount);
+}
+
+Value Evaluator::callClosure(
+    Activation &act, const Value &fn, const std::vector<Value> &args, size_t withCount) {
+    switch (fn.closureKind) {
+    case Value::ClosureKind::Hole:
+        if (holeCall_ == nullptr) {
+            unsupported(
+                act,
+                "the function returned by a recursive call is called while the recursion's "
+                "own value is being computed; this form of recursion cannot be exported");
+        }
+        return (*holeCall_)(fn.closureRef, args);
+    case Value::ClosureKind::Loop:
+        return callLoopClosure(act, fn, args, withCount);
+    case Value::ClosureKind::Select: {
+        const Value a = callClosure(act, fn.fields[0], args, withCount);
+        const Value b = callClosure(act, fn.fields[1], args, withCount);
+        return mergeValues(act, fn.name, a, b);
+    }
+    case Value::ClosureKind::Plain:
+        break;
+    }
+    auto *function = rtdata::fromSlot<::Function *>(fn.slot);
+    GCGraph *graph = function ? function->graph() : nullptr;
+    if (graph == nullptr) {
+        unsupported(act, "a call of a function without a body cannot be exported");
+    }
+    const auto withPorts = graph->withPorts();
+    const auto normPorts = graph->normPorts();
+    const auto captured  = graph->closureNodes();
+    if (withCount != withPorts.size() || args.size() - withCount != normPorts.size() ||
+        captured.size() != fn.fields.size()) {
+        unsupported(act, "a call does not pass one argument per parameter of its callee");
+    }
+    Activation inner{.graph = graph, .ports = {}, .memo = {{}}};
+    for (size_t i = 0; i < withPorts.size(); ++i) {
+        inner.ports.emplace(withPorts[i], args[i]);
+    }
+    for (size_t i = 0; i < normPorts.size(); ++i) {
+        inner.ports.emplace(normPorts[i], args[withCount + i]);
+    }
+    for (size_t i = 0; i < captured.size(); ++i) {
+        inner.ports.emplace(captured[i], fn.fields[i]);
+    }
+    ++closuresWanted_;
+    try {
+        Value v = eval(inner, execute::resolveRuntimeTailValueRef(graph));
+        --closuresWanted_;
+        return v;
+    } catch (...) {
+        --closuresWanted_;
+        throw;
+    }
+}
+
+Value Evaluator::callLoopClosure(
+    Activation &act, const Value &fn, const std::vector<Value> &args, size_t withCount) {
+    const LoopClosureRef where = loopClosures_.at(fn.closureRef);
+    const LinearFrame &f       = linearFrames_.at(where.frame);
+    for (const Value &a : args) {
+        if (!isCarriable(a)) {
+            unsupported(
+                act,
+                "the function returned by a linear recursion is called with something other "
+                "than tensors and scalars");
+        }
+    }
+    std::vector<Value> baseLeaves;
+    flattenValue(f.base, baseLeaves);
+    // The recursive call's result as the function sees it: its values are those of the last
+    // call (they are passed through unchanged), its functions are holes.
+    std::vector<Value> holes = baseLeaves;
+    for (size_t j = 0; j < holes.size(); ++j) {
+        if (holes[j].isClosure()) {
+            holes[j]            = Value::closure(Value::ClosureKind::Hole, baseLeaves[j].camelType);
+            holes[j].closureRef = j;
+        }
+    }
+    size_t at        = 0;
+    const Value hole = rebuildValue(f.base, holes, at);
+    const auto closureAt = [&](std::span<const Value> state) {
+        std::vector<Value> result;
+        flattenValue(linearBody(f, state, f.recArm, &hole), result);
+        return result.at(where.leaf);
+    };
+    const HoleCall *outer = holeCall_;
+    const auto withHole   = [&](const HoleCall &handler, const auto &run) {
+        holeCall_ = &handler;
+        try {
+            auto v    = run();
+            holeCall_ = outer;
+            return v;
+        } catch (...) {
+            holeCall_ = outer;
+            throw;
+        }
+    };
+
+    // A discarded evaluation: what the bottom call returns (its structure and types), how often
+    // the function calls the one below it, and with what.
+    size_t calls = 0;
+    bool sameArguments = true;
+    std::vector<Value> shape; // leaves of the result, as placeholders
+    Value shapeLike;
+    emitter_.pushScope("loop_probe");
+    try {
+        std::vector<Value> state = f.args;
+        for (size_t k = 0; k < state.size(); ++k) {
+            if (f.carried[k]) {
+                state[k] = placeholderLike(f.args[k], emitter_.fresh("probe"));
+            }
+        }
+        std::vector<Value> probeArgs;
+        for (const Value &a : args) {
+            probeArgs.push_back(placeholderLike(a, emitter_.fresh("probe")));
+        }
+        const HoleCall none = [&](size_t, const std::vector<Value> &) -> Value {
+            unsupported(act, "the function of the call that ends a recursion calls a function of the recursion");
+        };
+        shapeLike = withHole(none, [&] { return callClosure(act, baseLeaves.at(where.leaf), probeArgs, withCount); });
+        flattenValue(shapeLike, shape);
+        for (Value &leaf : shape) {
+            if (!isCarriable(leaf)) {
+                unsupported(
+                    act,
+                    "the function returned by a linear recursion returns something other than "
+                    "tensors and scalars");
+            }
+            leaf = placeholderLike(leaf, emitter_.fresh("probe"));
+        }
+        const HoleCall count = [&](size_t leaf, const std::vector<Value> &inner) -> Value {
+            if (leaf != where.leaf) {
+                unsupported(act, "a function of a linear recursion calls another function of the same recursion");
+            }
+            ++calls;
+            sameArguments = sameArguments && inner.size() == probeArgs.size();
+            for (size_t k = 0; sameArguments && k < inner.size(); ++k) {
+                sameArguments = sameValue(inner[k], probeArgs[k]);
+            }
+            size_t next = 0;
+            return rebuildValue(shapeLike, shape, next);
+        };
+        std::vector<Value> result;
+        flattenValue(
+            withHole(count, [&] { return callClosure(act, closureAt(state), probeArgs, withCount); }),
+            result);
+        if (calls > 0 && result.size() != shape.size()) {
+            unsupported(act, "the functions of a linear recursion return values of different structure");
+        }
+        emitter_.popScope();
+    } catch (...) {
+        emitter_.popScope();
+        throw;
+    }
+    if (calls == 0) {
+        // It never calls the function below it: the first call's function is the whole answer.
+        const HoleCall none = [&](size_t, const std::vector<Value> &) -> Value {
+            unsupported(act, "a function of a linear recursion calls the one below it on some paths only");
+        };
+        return withHole(none, [&] { return callClosure(act, closureAt(f.args), args, withCount); });
+    }
+    if (calls != 1 || !sameArguments) {
+        unsupported(
+            act,
+            "the function returned by a linear recursion calls the function of the next call "
+            "more than once or with changed arguments; only one call with the same arguments "
+            "can be exported");
+    }
+
+    // Bottom: the function of the last call.
+    const HoleCall none = [&](size_t, const std::vector<Value> &) -> Value {
+        unsupported(act, "the function of the call that ends a recursion calls a function of the recursion");
+    };
+    const Value bottom =
+        withHole(none, [&] { return callClosure(act, baseLeaves.at(where.leaf), args, withCount); });
+    std::vector<Value> bottomLeaves;
+    flattenValue(bottom, bottomLeaves);
+
+    // Up: the functions of calls n-1 .. 0, each applied to the result of the one below.
+    const std::vector<Value> ups = emitLoop(
+        act,
+        emitter_.operand(f.count, TypeCode::Int64),
+        bottomLeaves,
+        [&](const Value &iter, const std::vector<Value> &current) {
+            const int64_t one[] = {1};
+            const Value index   = Value::symbolicScalar(
+                emitter_.node(
+                    "Sub",
+                    {emitter_.node(
+                         "Sub",
+                         {emitter_.operand(f.count, TypeCode::Int64),
+                          emitter_.node("Squeeze", {emitter_.int64s(one)})}),
+                     iter.name}),
+                type::Type::Int64());
+            const std::vector<Value> state = linearReplay(act, f, index);
+            const HoleCall below = [&](size_t, const std::vector<Value> &) -> Value {
+                size_t next = 0;
+                return rebuildValue(bottom, current, next);
+            };
+            std::vector<Value> result;
+            flattenValue(
+                withHole(below, [&] { return callClosure(act, closureAt(state), args, withCount); }),
+                result);
+            return std::pair<std::optional<std::string>, std::vector<Value>>{std::nullopt, result};
+        });
+    size_t next = 0;
+    return rebuildValue(bottom, ups, next);
+}
+
 std::optional<Value> Evaluator::foldConstantOper(
     std::string_view uri, std::span<const Value> norm, std::span<const Value> with,
     type::Type *resultType) {
@@ -1273,6 +2179,9 @@ Value Evaluator::evalJoin(Activation &act, gc_node_ref_t join) {
     GCGraph *g               = act.graph;
     const gc_node_ref_t brch = g->normInputsOf(join).front();
     const auto arms          = g->withInputsOf(join);
+    if (act.linear != nullptr && g == act.linear->frame->fn && join == act.linear->frame->join) {
+        return eval(act, arms[act.linear->arm]);
+    }
     const auto caseRefs      = g->withInputsOf(brch);
     const Value cond         = eval(act, g->normInputsOf(brch).front());
     if (!cond.isConstant()) {
@@ -1462,6 +2371,13 @@ Value Evaluator::evalSymbolicAggregateBranch(
             throw;
         }
     }
+    if (holdsClosure(results[0]) || holdsClosure(results[1])) {
+        // An arm yields a function that exists only at export time (what a linear recursion
+        // returns). Its captured values must stay visible where it is called, so the arms
+        // cannot live in If subgraphs: both are evaluated here and the condition selects.
+        Value cond        = Value::symbolicScalar(condName, type::Type::Bool());
+        return evalEagerBranch(act, cond, arms);
+    }
     std::vector<ArmLeaf> leaves;
     collectArmLeaves(act, results[0], results[1], leaves);
 
@@ -1566,6 +2482,19 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
         // type; anything that tries to use it as a value fails on the type.
         type::Type *elemType = isAggregate ? elemTypeAt(k) : nullptr;
         if (elemType && elemType->code() == TypeCode::Function && source.isConstant()) {
+            // A function kept as a value where a linear recursion needs it: always inside
+            // one, and elsewhere only when it is (or holds) the function such a recursion
+            // returned. Otherwise it stays deferred, as before.
+            if (closuresWanted_ > 0) {
+                values[k] = eval(act, refs[k]);
+                allConst  = allConst && values[k].isConstant();
+                continue;
+            }
+            if (auto special = probeSpecialClosure(act, refs[k])) {
+                values[k] = std::move(*special);
+                allConst  = false;
+                continue;
+            }
             values[k]   = Value::constant(NullSlot, elemType);
             sawDeferred = true;
             continue;
@@ -1587,6 +2516,33 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
             fields[static_cast<size_t>(slots[k])] = values[k];
         }
         return Value::aggregate(targetType, std::move(fields));
+    }
+    if (source.isConstant() && targetType->code() == TypeCode::Function &&
+        (closuresWanted_ > 0 || std::ranges::any_of(values, [](const Value &v) { return v.isClosure(); }))) {
+        // A closure: the function and its captured values, kept until it is called.
+        auto *fn = rtdata::fromSlot<::Function *>(source.slot);
+        if (fn == nullptr || fn->graph() == nullptr) {
+            unsupported(act, "a closure without a function body cannot be exported");
+        }
+        const auto closureNodes = fn->graph()->closureNodes();
+        Value closure           = Value::closure(Value::ClosureKind::Plain, targetType);
+        closure.slot            = source.slot;
+        closure.fields.resize(closureNodes.size());
+        if (const auto *captured = fn->tuple()) {
+            for (size_t i = 0; i < closureNodes.size() && i < captured->size(); ++i) {
+                closure.fields[i] = Value::constant(
+                    captured->get<slot_t>(i),
+                    fn->graph()->node(closureNodes[i])->dataType);
+            }
+        }
+        for (size_t k = 0; k < slots.size(); ++k) {
+            const size_t slot = static_cast<size_t>(slots[k]);
+            if (slot >= closure.fields.size()) {
+                unsupported(act, "a closure captures more values than its function declares");
+            }
+            closure.fields[slot] = values[k];
+        }
+        return closure;
     }
     if (!source.isConstant() || !allConst) {
         unsupported(

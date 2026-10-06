@@ -1,15 +1,15 @@
 /**
- * Refused: the recursive call is not in tail position (its result is used after it returns),
- * so the recursion is not a loop over its arguments.
+ * Refused: the recursive call is not in tail position and the recursion is not linear in the
+ * exportable sense, because two branches decide whether the function calls itself.
  */
 module export_nontail_recursion
 import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from sys
 
-// Not a loop: the recursive call's result is used (added to) after it returns.
+// One if / else must decide the recursion; here the second branch also ends it.
 func pile(h: Tensor): Tensor {
-    return if sum(h) < 1.0 then h else pile(h * 0.5) + h
+    return if sum(h) < 1.0 then h else (if sum(h * h) > 50.0 then h * 0.1 else pile(h * 0.5) + h)
 }
 
 func main(): int sync {

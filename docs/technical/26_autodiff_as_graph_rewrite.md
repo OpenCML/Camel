@@ -381,12 +381,57 @@ What differs from the design above:
     case is what the tests exercise; a loop inside a loop body would become a
     nested `Loop` and is not tested).
   Refused, each with a diagnostic at the recursive call or the export request:
-  a recursive call that is not in tail position; a carried value whose dtype
-  or shape changes between calls; a tuple, struct or array argument that
-  changes; a `match` whose arms call the function again; a recursion that
-  never returns. Not implemented: gradients through a `Loop`. Tests: `export_loop`, `pass_export_loop`, `export_dynamic_recursion`,
-  `export_nontail_recursion`; both entries write equivalent models
-  (`pass_export.py equiv`).
+  a carried value whose dtype or shape changes between calls; a tuple, struct
+  or array argument that changes; a `match` whose arms call the function
+  again; a recursion that never returns. Tests: `export_loop`,
+  `pass_export_loop`, `export_dynamic_recursion`; both entries write
+  equivalent models (`pass_export.py equiv`).
+- **Linear recursion** (the recursive call is not the last action). A function
+  `f(a) = E(a, if c(a) then E'(a, f(step(a))) else B(a))` with ONE recursive
+  call on one side of ONE two-way branch is the pair of loops it denotes:
+  with `a_0` the first arguments, `a_{i+1} = step(a_i)` and `n` the first `i`
+  where the branch takes the other side, `V_n` is the body at `a_n` and
+  `V_i` the body at `a_i` given `V_{i+1}`. The exporter emits a forward `Loop`
+  (the last arguments and `n`), the value of the last call, and a `Loop` of
+  `n` iterations that applies the body in reverse order; the arguments of call
+  `i` are recomputed from `a_0` by a counted inner `Loop`. There is no tape:
+  the step runs `n + n(n-1)/2` times plus a constant (measured), which is the
+  stated cost; a tape (scan outputs of the forward loop) is the follow-up.
+  The identity is applied by symbolic evaluation of the function's own graph
+  and does not depend on where the function comes from; hand-written
+  recursions (a right fold) are tested as such.
+  - Functions as results. The forward function autodiff derives for a tail
+    recursion is such a linear recursion returning `(value, pullback)`, the
+    pullback being a closure that captures values of its call and the pullback
+    returned by the recursive call. A closure cannot be carried by a `Loop`:
+    it is kept as an export-time value (function + captured values) and the
+    recursion is unrolled where the returned function is CALLED:
+    `g_i(x) = P(a_i, x, g_{i+1}(x))`, `g_n` the closure of the last call, i.e.
+    one bottom call and a `Loop` applying `P` in reverse order. A branch whose
+    arms yield such functions is evaluated on both sides and selected when the
+    function is called.
+  - Accepted, exactly: one recursive call in the function's own graph; one
+    if / else on a scalar condition that depends on the model input with the
+    call on exactly one side (branches inside that side which use the call's
+    result on both of their sides are part of the post-processing); the
+    arguments the call changes are tensors or scalars of fixed dtype and
+    shape; the result's leaves that are not functions are tensors or scalars
+    of fixed dtype and shape, and when the result also holds a function those
+    leaves are passed through unchanged; a function in the result calls the
+    function returned by the recursive call exactly once, with its own
+    arguments unchanged, and returns tensors or scalars (or tuples of them).
+    Closures may capture any export-time value: constants, tensors and
+    scalars that depend on the model input, tuples and structs of these, and
+    other closures.
+  - Refused, each located: two or more recursive calls; several branches that
+    decide the recursion; a `match` that decides it; a condition that uses the
+    call's result; a result or state whose dtype or shape changes; a function
+    returned together with a value the recursion changes on the way back; a
+    returned function that calls the one below it more than once or with
+    changed arguments.
+  Tests: `ort_linear_recursion` (NumPy, depths 0, 1 and more), `ort_grad_loop`
+  (gradient of a data-dependent loop, with a branch in the body, against
+  Camel's native gradient and NumPy), `export_nontail_recursion` (refusal).
 
 ## 8. Phases
 
