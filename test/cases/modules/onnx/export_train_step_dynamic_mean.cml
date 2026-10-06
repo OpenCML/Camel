@@ -1,10 +1,9 @@
 /**
- * E14/T7 boundary: the canonical batch-mean loss mean(y * y) cannot export
- * with a dynamic batch axis — its VJP divides by tensor:numel, which folds to
- * a constant for a static batch but becomes input-dependent once the batch is
- * symbolic, and tensor:numel has no ONNX lowering. The exporter reports the
- * operator at the mean call. (The same semantics written as sum / shape
- * arithmetic exports fine — see export_train_step_dynamic.)
+ * E14/T7: the canonical batch-mean loss mean(y * y) exports with a dynamic batch
+ * axis. Its VJP divides by tensor:numel, which folds to a constant for a static
+ * batch and is input-dependent once the batch is symbolic; the exporter lowers
+ * it to the ONNX Size of the tensor. (This used to be a documented boundary:
+ * tensor:numel had no ONNX lowering.)
  */
 module export_train_step_dynamic_mean
 

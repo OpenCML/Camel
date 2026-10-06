@@ -304,6 +304,48 @@ Value lowerReshape(const LowerContext &ctx) {
     return out;
 }
 
+/// dim(t, axis): the extent of one axis, a Camel int. A constant when that extent is static
+/// (the gradient rules of reductions and concat ask for it on values that depend on the model
+/// input, whose shapes are nevertheless known); otherwise read from the Shape of the tensor.
+Value lowerDim(const LowerContext &ctx) {
+    const auto facts = ctx.facts(0);
+    if (!facts.shape) {
+        throw ExportError("'tensor:dim' of a tensor of unknown rank is not supported");
+    }
+    const int64_t rank = static_cast<int64_t>(facts.shape->size());
+    int64_t axis       = ctx.constInt(1);
+    axis               = axis < 0 ? axis + rank : axis;
+    if (axis < 0 || axis >= rank) {
+        throw ExportError(
+            std::format("'tensor:dim': axis {} is out of range for rank {}", ctx.constInt(1), rank));
+    }
+    const int64_t extent = (*facts.shape)[static_cast<size_t>(axis)];
+    if (extent != tensor::kUnknownDim) {
+        return Value::constant(rtdata::toSlot<rtdata::Int64>(extent), type::Type::Int64());
+    }
+    Emitter &e = ctx.emitter();
+    const std::string index =
+        e.operand(Value::constant(rtdata::toSlot<rtdata::Int64>(axis), type::Type::Int64()), TypeCode::Int64);
+    return Value::symbolicScalar(
+        e.node("Gather", {e.node("Shape", {ctx.input(0)}), index}, {intAttr("axis", 0)}),
+        type::Type::Int64());
+}
+
+/// numel(t): the number of elements, a Camel int. A constant when the shape is static, otherwise
+/// the ONNX Size of the tensor.
+Value lowerNumel(const LowerContext &ctx) {
+    const auto facts = ctx.facts(0);
+    if (facts.shape &&
+        std::ranges::none_of(*facts.shape, [](int64_t d) { return d == tensor::kUnknownDim; })) {
+        int64_t count = 1;
+        for (int64_t d : *facts.shape) {
+            count *= d;
+        }
+        return Value::constant(rtdata::toSlot<rtdata::Int64>(count), type::Type::Int64());
+    }
+    return Value::symbolicScalar(ctx.emitter().node("Size", {ctx.input(0)}), type::Type::Int64());
+}
+
 Value lowerFlatten(const LowerContext &ctx) {
     return ctx.emit("Flatten", {ctx.input(0)}, {intAttr("axis", ctx.constInt(1, 1))});
 }
@@ -736,6 +778,8 @@ LoweringRegistry::LoweringRegistry() {
     add("tensor:concat", lowerConcat);
     add("tensor:slice", lowerSlice, 10);
     add("tensor:shape", lowerShape);
+    add("tensor:dim", lowerDim);
+    add("tensor:numel", lowerNumel);
     add("tensor:zeros", constantOfShapeOp(0.0), 9);
     add("tensor:ones", constantOfShapeOp(1.0), 9);
     add("tensor:full", constantOfShapeOp(std::nullopt), 9);

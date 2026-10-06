@@ -1,0 +1,35 @@
+/**
+ * Value and gradient through mean over an axis and over all elements. For the example
+ * input Camel prints the value 7.889 and the gradient [[1.278, 2.778], [3.833, 5.556],
+ * [6.389, 8.333]]; the exported model gives the same on ONNX Runtime (checked by hand).
+ */
+module export_grad_mean
+import { Tensor, reshape, sum, mean } from tensor
+import { value_and_grad } from autodiff
+import { export_model } from onnx
+import { get_env } from sys
+
+type P = { w: Tensor }
+
+with <m: P>
+func loss(x: Tensor): float {
+    let rows = mean(m.w * x, 0)
+    return sum(rows * rows) + mean(m.w * x)
+}
+
+func step(w: Tensor, x: Tensor): (Tensor, Tensor) {
+    let m = { w: w }
+    let vg = value_and_grad(loss)<m>(x)
+    return (reshape([vg.0], [1]), vg.1.w)
+}
+
+func main(): int sync {
+    let w = reshape([0.5, 0.25, -1.0, 2.0, 1.5, -0.5], [3, 2])
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [3, 2])
+    let r = step(w, x)
+    println(r.0)
+    println(r.1)
+    export_model((w: Tensor, x: Tensor): (Tensor, Tensor) => step(w, x), (w, x), get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

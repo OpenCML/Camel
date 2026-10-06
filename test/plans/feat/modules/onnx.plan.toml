@@ -448,22 +448,27 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_train_step_dynamic_mean"
-desc = "E14/T7 boundary: the canonical mean(y*y) batch mean cannot export with a dynamic batch axis — its VJP divides by tensor:numel, which folds for a static batch but is input-dependent once the batch is symbolic, and tensor:numel has no ONNX lowering; the exporter reports it at the mean call."
+desc = "E14/T7 (boundary removed): the canonical mean(y*y) batch mean exports with a dynamic batch axis. Its VJP divides by tensor:numel, which is input-dependent once the batch is symbolic; it is lowered to the ONNX Size of the tensor (a constant when the shape is static). Checked by hand on ONNX Runtime against NumPy at batch sizes 1, 2, 5 and 16."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_dynamic_mean.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_dynamic_mean.onnx"]
-expect_exit = 1
+expect_exit = 0
+expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
-({ input, assert }) => {
-const text = input.normalized.output
-assert(text.includes("operator 'tensor:numel' has no ONNX lowering at opset 17"), 'missing unsupported-operator detail')
-assert(/at [^ ]*export_train_step_dynamic_mean[.]cml:28:22[)]/.test(text), 'missing source position of the mean call')
-assert(!text.includes('unreachable'), 'export must fail before the next statement')
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_dynamic_mean.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('Size') === 1, `the element count of the dynamic batch is one Size node: ${model.ops}`)
+assert(model.outputs.length === 5, `loss and four updated parameters: ${model.outputs}`)
 }
 """
-timeout_ms = 6000
+timeout_ms = 8000
 
 [[tests]]
 name = "export_gated_gru_forward"
@@ -1151,6 +1156,112 @@ const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
 const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_float_array.onnx'))
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('Unsqueeze') === 3 && count('Concat') === 1 && count('Reshape') === 1 && count('ReduceSum') === 2, `unexpected operators ${model.ops}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "export_train_step_branch_tensor.macro_simplify"
+desc = "The branched training step with tensor arms also exports after the optimisation passes have run: the gradient of `mean` asks for `tensor:numel` of a value that depends on the model input, which had no ONNX lowering (run-time error of export_model under every pipeline with std::macro and an optimisation pass)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_branch_tensor.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::nvm"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_tensor.macro_simplify.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch_tensor.macro_simplify.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inputs: ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+assert(!model.initializers.some((n) => /^(w1|b1|w2|b2)$/.test(n)), `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_train_step_branch_tensor.macro_opt_fold"
+desc = "The branched training step with tensor arms also exports after the optimisation passes have run: the gradient of `mean` asks for `tensor:numel` of a value that depends on the model input, which had no ONNX lowering (run-time error of export_model under every pipeline with std::macro and an optimisation pass)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_branch_tensor.cml"
+args = ["${case}", "std::macro", "std::opt", "std::opt::fold", "std::nvm"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_tensor.macro_opt_fold.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch_tensor.macro_opt_fold.onnx'))
+assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inputs: ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
+assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
+assert(!model.initializers.some((n) => /^(w1|b1|w2|b2)$/.test(n)), `weights must be inputs, not initializers: ${model.initializers}`)
+}
+"""
+timeout_ms = 6000
+
+[[tests]]
+name = "export_grad_mean"
+desc = "A value and gradient through `mean` over an axis and over all elements export: the gradient rules ask for `tensor:dim` and `tensor:numel` of values that depend on the model input; with static shapes both are constants of the model (no Shape, Gather or Size node)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_grad_mean.cml"
+args = ["${case}", "std::macro"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_grad_mean.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_grad_mean.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('ReduceMean') >= 2, `the forward means are in the model: ${model.ops}`)
+assert(count('Shape') === 0 && count('Size') === 0 && count('Gather') === 0, `static extents must be constants: ${model.ops}`)
+assert(model.outputs.length === 2, `value and gradient are the outputs: ${model.outputs}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_export_grad_mean"
+desc = "A value and gradient through `mean` over an axis and over all elements export: the gradient rules ask for `tensor:dim` and `tensor:numel` of values that depend on the model input; with static shapes both are constants of the model (no Shape, Gather or Size node)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_grad_mean.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_grad_mean.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_grad_mean.onnx"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_grad_mean.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('ReduceMean') >= 2, `the forward means are in the model: ${model.ops}`)
+assert(count('Shape') === 0 && count('Size') === 0 && count('Gather') === 0, `static extents must be constants: ${model.ops}`)
+assert(model.outputs.length === 2, `value and gradient are the outputs: ${model.outputs}`)
 }
 """
 timeout_ms = 8000
