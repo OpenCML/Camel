@@ -20,6 +20,7 @@
 #include "builder.h"
 
 #include "camel/compile/gir/static_function.h"
+#include "camel/execute/entry_args.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
@@ -573,11 +574,57 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
                     sourceContext->debugMap().registerGraphOrigin(
                         rootGraph_->stableId(),
                         mainOrigin);
+                    // Also under a fixed key: the entry graph is rewritten (and renamed) by
+                    // passes, the question "where is main" outlives that.
+                    sourceContext->debugMap().registerGraphOrigin(
+                        camel::execute::kEntryFunctionOriginKey,
+                        mainOrigin);
                 }
+            }
+            // `main` is a function like any other: its parameters are the inputs of the
+            // program. The entry graph takes the same parameters (`with` ones first) and
+            // passes them on, so it never calls `main` with fewer arguments than it takes.
+            // Who supplies them is not decided here: a run binds values given from outside
+            // (see camel/execute/entry_args.h), a translation takes them as the inputs of
+            // what it produces.
+            FunctionType *entryType = entryGraph->funcType();
+            std::vector<node_handle_t> entryWithArgs, entryNormArgs;
+            if (entryType->withTypesCount() + entryType->normTypesCount() > 0) {
+                FunctionTypeFactory rootTypeFactory;
+                const auto nameAt = [&](size_t argIndex, const char *prefix, size_t i) {
+                    return argIndex < entryType->argNamesCount()
+                               ? std::string(entryType->argNameAt(argIndex))
+                               : std::format("{}{}", prefix, i);
+                };
+                for (size_t i = 0; i < entryType->withTypesCount(); ++i) {
+                    const std::string name = nameAt(i, "__w", i);
+                    const bool isVar       = entryType->withIsVarAt(i);
+                    Type *type             = entryType->withTypeAt(i);
+                    rootTypeFactory.addWithArg(name, type, isVar);
+                    entryWithArgs.push_back(
+                        rootGraph_
+                            ->addPortNode(isVar ? TupleType::cell(type) : type, name, true, isVar));
+                }
+                for (size_t i = 0; i < entryType->normTypesCount(); ++i) {
+                    const std::string name = nameAt(entryType->withTypesCount() + i, "__n", i);
+                    const bool isVar       = entryType->normIsVarAt(i);
+                    Type *type             = entryType->normTypeAt(i);
+                    rootTypeFactory.addNormArg(name, type, isVar);
+                    entryNormArgs.push_back(
+                        rootGraph_
+                            ->addPortNode(isVar ? TupleType::cell(type) : type, name, false, isVar));
+                }
+                rootGraph_->setFuncType(rootTypeFactory.build());
             }
             auto entryFuncValue = createFuncDataNode(entryGraph, true, false);
             auto entryCall      = rootGraph_->addCallNode(entryGraph->funcType()->exitType());
             linkNodes(LinkType::With, entryFuncValue, entryCall);
+            for (node_handle_t arg : entryWithArgs) {
+                linkNodes(LinkType::With, arg, entryCall);
+            }
+            for (node_handle_t arg : entryNormArgs) {
+                linkNodes(LinkType::Norm, arg, entryCall);
+            }
             setGraphReturnFromResult(
                 rootGraph_,
                 nodeIdOf(entryCall),

@@ -26,6 +26,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
+#include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/snapshot.h"
 #include "camel/init.h"
@@ -316,6 +317,13 @@ int main(int argc, char *argv[]) {
                     requireKnownPasses(Run::resolvedPassList);
                     requireKnownPasses(Run::fallbackPasses);
                     auto *graph = ctx->runtimeRootGraph();
+                    // The values given for the parameters of `main` become constants of the
+                    // entry graph before the first pass sees it.
+                    graph = camel::execute::bindEntryArgumentSpecs(ctx, graph, Run::entryArgs);
+                    if (graph == nullptr) {
+                        ctx->runtimeDiagSink()->dump(os, useJsonFormat);
+                        return 1;
+                    }
                     static PassDumpState passDump;
                     if (!Run::dumpAfterEachPassDir.empty()) {
                         passDump.dir = Run::dumpAfterEachPassDir;

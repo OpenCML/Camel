@@ -138,6 +138,26 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::EntryArgumentMissing,
+            {
+                "EntryArgumentMissing",
+                "No value was given for the {0} {1} of 'main'.",
+                "The parameters of 'main' are the inputs of the program. To run it, give each "
+                "one a value on the command line: --arg name=value (a number, true/false or "
+                "text for a scalar, a .npy file for a tensor, a directory of .npy files for a "
+                "struct of tensors). No default is assumed.",
+            },
+        },
+        {
+            RuntimeDiag::EntryArgumentInvalid,
+            {
+                "EntryArgumentInvalid",
+                "Cannot bind the argument '{0}' of 'main': {1}.",
+                "An argument is written --arg name=value, where name is a parameter of 'main' "
+                "and value is read according to the parameter's declared type.",
+            },
+        },
+        {
             RuntimeDiag::PassesNeverRun,
             {
                 "PassesNeverRun",

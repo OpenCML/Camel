@@ -21,6 +21,8 @@
 #include "camel/common/scope.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/source/manager.h"
+#include "camel/execute/entry_args.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/foreign_handle.h"
 #include "camel/core/mm/profiler.h"
@@ -647,6 +649,26 @@ PassApplyResult applyPassesDetailed(
             } stageScope(
                 dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ? std::string("run")
                                                                          : "pass:" + p);
+            // A program runs only when every parameter of `main` has a value. Parameters
+            // left open are fine for rewriting and translation (they are the inputs of what
+            // is translated); nothing may execute with a slot nobody filled.
+            if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr) {
+                const auto open = camel::execute::unboundEntryParameters(graph);
+                if (!open.empty()) {
+                    std::string names;
+                    for (size_t i = 0; i < open.size(); ++i) {
+                        names += (i == 0 ? "'" : i + 1 == open.size() ? " and '" : ", '") +
+                                 open[i] + "'";
+                    }
+                    auto diag = ctx->rtmDiags()->of(RuntimeDiag::EntryArgumentMissing);
+                    if (const uint64_t origin = camel::execute::entryFunctionOrigin(*ctx);
+                        origin != camel::source::kInvalidOriginId) {
+                        diag.atOrigin(origin);
+                    }
+                    diag.commit(open.size() == 1 ? "parameter" : "parameters", names);
+                    return {nullptr, PassApplyStatus::Failed};
+                }
+            }
             try {
                 graph = pass->apply(graph, os);
             } catch (const DiagnosticsLimitExceededBaseException &) {

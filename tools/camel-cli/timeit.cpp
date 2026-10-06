@@ -41,6 +41,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
+#include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
 #include "camel/init.h"
 #include "camel/parse/antlr/OpenCMLLexer.h"
@@ -459,6 +460,27 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             try {
                 // The list is run in three parts; all names are checked before the first.
                 requireKnownPasses(Run::resolvedPassList);
+                // The values given for the parameters of `main` (--arg), as in a plain run.
+                graph = camel::execute::bindEntryArgumentSpecs(
+                    invocation->ctx,
+                    graph,
+                    Run::entryArgs);
+                if (graph == nullptr) {
+                    if (stdoutFdRedirect)
+                        stdoutFdRedirect->restore();
+                    if (stderrFdRedirect)
+                        stderrFdRedirect->restore();
+                    if (coutRedirect)
+                        coutRedirect->restore();
+                    if (cerrRedirect)
+                        cerrRedirect->restore();
+                    emitRuntimeFailure(
+                        invocation->ctx,
+                        useJsonFormat,
+                        os,
+                        "the arguments of main could not be bound.");
+                    return 1;
+                }
                 if (!prefixPasses.empty()) {
                     auto prefixResult =
                         applyPassesDetailed(graph, prefixPasses, invocation->ctx, execOs);
