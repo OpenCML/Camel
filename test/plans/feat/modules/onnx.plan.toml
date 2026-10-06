@@ -1108,3 +1108,49 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "export_float_array"
+desc = "A float array literal whose elements depend on the model input (`reshape([sum(x * 2.0), 1.5, sum(x)], [3])`) is exported as the 1-D tensor it stands for: three Unsqueeze, one Concat, then the Reshape."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_float_array.cml"
+args = ["${case}", "std::macro"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_float_array.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_float_array.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('Unsqueeze') === 3 && count('Concat') === 1 && count('Reshape') === 1 && count('ReduceSum') === 2, `unexpected operators ${model.ops}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_export_float_array"
+desc = "A float array literal whose elements depend on the model input (`reshape([sum(x * 2.0), 1.5, sum(x)], [3])`) is exported as the 1-D tensor it stands for: three Unsqueeze, one Concat, then the Reshape."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_float_array.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_float_array.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_float_array.onnx"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_float_array.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('Unsqueeze') === 3 && count('Concat') === 1 && count('Reshape') === 1 && count('ReduceSum') === 2, `unexpected operators ${model.ops}`)
+}
+"""
+timeout_ms = 8000

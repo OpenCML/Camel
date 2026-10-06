@@ -116,6 +116,14 @@ bool isIntArrayType(type::Type *t) {
     return elem && (elem->code() == TypeCode::Int32 || elem->code() == TypeCode::Int64);
 }
 
+bool isFloatArrayType(type::Type *t) {
+    if (!t || t->code() != TypeCode::Array) {
+        return false;
+    }
+    type::Type *elem = static_cast<type::ArrayType *>(t)->elemType();
+    return elem && (elem->code() == TypeCode::Float32 || elem->code() == TypeCode::Float64);
+}
+
 bool allConstant(std::span<const Value> values) {
     return std::ranges::all_of(values, [](const Value &v) { return v.isConstant(); });
 }
@@ -223,6 +231,8 @@ class Evaluator {
     Value evalVariableRead(Activation &act, gc_node_ref_t ref);
     Value evalJoin(Activation &act, gc_node_ref_t ref);
     Value evalFill(Activation &act, gc_node_ref_t ref);
+    Value symbolicFloatArray(
+        Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values);
     Value symbolicIntArray(
         Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values);
     Value
@@ -998,6 +1008,9 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
     if (source.isConstant() && !allConst && isIntArrayType(targetType)) {
         return symbolicIntArray(act, ref, source, values);
     }
+    if (source.isConstant() && !allConst && isFloatArrayType(targetType)) {
+        return symbolicFloatArray(act, ref, source, values);
+    }
     if (source.isConstant() && (sawDeferred || !allConst) && isAggregate) {
         // A tuple or struct of input-dependent values (e.g. gradients) exists only at export
         // time; its elements are read back by accesses or become graph outputs.
@@ -1018,6 +1031,41 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
 
 /// An int[] literal with elements that depend on the input (e.g. [shape(x)[0], 128]) becomes a
 /// 1-D int64 tensor: constant and symbolic elements concatenated.
+// A float array literal with elements that depend on the model input (`[loss]`, as in
+// `reshape([loss], [1])`). An array of numbers is a tensor to every tensor operator, with the
+// dtype a constant array of that element type gets, so it is emitted as that 1-D tensor: each
+// element unsqueezed and the elements concatenated.
+Value Evaluator::symbolicFloatArray(
+    Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values) {
+    auto *templ          = rtdata::fromSlot<::Array *>(source.slot);
+    type::Type *elemType = static_cast<type::ArrayType *>(act.graph->node(ref)->dataType)->elemType();
+    const TypeCode dtype = tensor::normalizeTensorDType(elemType->code());
+    const auto fillSlots = act.graph->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
+    std::vector<std::optional<Value>> elems(templ->size());
+    for (size_t k = 0; k < fillSlots.size(); ++k) {
+        elems[static_cast<size_t>(fillSlots[k])] = values[k];
+    }
+    if (elems.empty()) {
+        unsupported(act, "an empty array cannot be exported");
+    }
+    const int64_t axis[] = {0};
+    std::vector<std::string> parts;
+    for (size_t i = 0; i < elems.size(); ++i) {
+        const Value elem = elems[i] ? *elems[i] : Value::constant(templ->get<slot_t>(i), elemType);
+        if (elem.isSymbolic() && elem.form != Value::Form::Scalar) {
+            unsupported(
+                act,
+                "a float array element that depends on the model input must be a float");
+        }
+        parts.push_back(
+            emitter_.node("Unsqueeze", {emitter_.operand(elem, dtype), emitter_.int64s(axis)}));
+    }
+    return Value::symbolic(
+        emitter_.node("Concat", std::move(parts), {Attribute::makeInt("axis", 0)}),
+        dtype,
+        tensor::StaticShape{static_cast<int64_t>(elems.size())});
+}
+
 Value Evaluator::symbolicIntArray(
     Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values) {
     auto *templ          = rtdata::fromSlot<::Array *>(source.slot);
