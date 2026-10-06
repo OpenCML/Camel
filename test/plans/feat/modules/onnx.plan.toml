@@ -1265,3 +1265,53 @@ assert(model.outputs.length === 2, `value and gradient are the outputs: ${model.
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "export_grad_matmul_vector"
+desc = "The gradient of matmul exports when an operand is a vector (matrix @ vector, vector @ matrix, vector @ vector): the operand and the incoming gradient get the axis matmul adds for a vector, and the gradient of a vector operand loses it again. Checked by hand against NumPy and on ONNX Runtime."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_grad_matmul_vector.cml"
+args = ["${case}", "std::macro"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_grad_matmul_vector.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_grad_matmul_vector.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('MatMul') >= 6, `three products and their gradients: ${model.ops}`)
+assert(count('Squeeze') >= 2 && count('Unsqueeze') >= 4, `vector operands are widened and narrowed: ${model.ops}`)
+assert(model.outputs.length === 3, `value and two gradients: ${model.outputs}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_export_grad_matmul_vector"
+desc = "The gradient of matmul exports when an operand is a vector (matrix @ vector, vector @ matrix, vector @ vector): the operand and the incoming gradient get the axis matmul adds for a vector, and the gradient of a vector operand loses it again. Checked by hand against NumPy and on ONNX Runtime."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_grad_matmul_vector.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_grad_matmul_vector.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_grad_matmul_vector.onnx"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_grad_matmul_vector.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('MatMul') >= 6, `three products and their gradients: ${model.ops}`)
+assert(count('Squeeze') >= 2 && count('Unsqueeze') >= 4, `vector operands are widened and narrowed: ${model.ops}`)
+assert(model.outputs.length === 3, `value and two gradients: ${model.outputs}`)
+}
+"""
+timeout_ms = 8000

@@ -1,0 +1,40 @@
+/**
+ * Gradient of matmul with vector operands. For the example input Camel prints the value
+ * 12.05, the gradient of w [[1.591, -3.712], [-1.947, 4.542], [0.9953, -2.322]] and of v
+ * [-0.1339, -5.774, 3.692]; NumPy and the exported model on ONNX Runtime agree.
+ */
+module export_grad_matmul_vector
+import { Tensor, reshape, sum, tanh } from tensor
+import { value_and_grad } from autodiff
+import { export_model } from onnx
+import { get_env } from sys
+
+type P = { w: Tensor, v: Tensor }
+
+// w: [3, 2] matrix, v: [3] vector, x: [2] vector.
+with <m: P>
+func loss(x: Tensor): float {
+    let a = m.w @ x        // matrix @ vector -> [3]
+    let b = m.v @ m.w      // vector @ matrix -> [2]
+    let c = m.v @ tanh(a)  // vector @ vector -> scalar
+    return sum(a * a) + sum(b * x) + sum(c * c)
+}
+
+func step(w: Tensor, v: Tensor, x: Tensor): (Tensor, Tensor, Tensor) {
+    let m = { w: w, v: v }
+    let vg = value_and_grad(loss)<m>(x)
+    return (reshape([vg.0], [1]), vg.1.w, vg.1.v)
+}
+
+func main(): int sync {
+    let w = reshape([0.5, 0.25, -1.0, 2.0, 1.5, -0.5], [3, 2])
+    let v = reshape([1.0, -2.0, 0.5], [3])
+    let x = reshape([0.3, -0.7], [2])
+    let r = step(w, v, x)
+    println(r.0)
+    println(r.1)
+    println(r.2)
+    export_model((w: Tensor, v: Tensor, x: Tensor): (Tensor, Tensor, Tensor) => step(w, v, x), (w, v, x), get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}
