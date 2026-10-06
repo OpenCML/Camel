@@ -1406,6 +1406,25 @@ assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must f
 timeout_ms = 8000
 
 [[tests]]
+name = "export_tree_recursion"
+desc = "A function that calls itself twice on one path with a depth that depends on the model input (tree recursion) is refused by export_model with a diagnostic at the second recursive call; it used to fail with an unlocated allocation error from simplification."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_tree_recursion.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_tree_recursion.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes('calls itself more than once on one path (tree recursion)'), 'missing detail: ' + text)
+assert(/[(]at [^ ]*export_tree_recursion[.]cml:12:[0-9]+[)]/.test(text), 'missing source position of the call: ' + text)
+assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
 name = "export_slice_loop"
 desc = "A recursion over the time axis that stops early on the data exports: the slice of step t takes a start and an end that depend on the model input (inputs of the ONNX Slice; they had to be export-time constants)."
 kind = "behavior"

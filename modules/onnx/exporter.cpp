@@ -698,6 +698,44 @@ bool callReaches(const GCGraph *from, const GCGraph *to) {
     return false;
 }
 
+/// A call site that makes a recursion a tree: a graph reachable from `root` that calls its own
+/// recursion in two places on one path (two calls that are not the alternative arms of a
+/// branch). Returns the graph and the second such call, or nothing.
+std::optional<std::pair<const GCGraph *, gc_node_ref_t>> findTreeRecursion(const GCGraph *root) {
+    std::unordered_set<const GCGraph *> seen;
+    std::vector<const GCGraph *> work{root};
+    while (!work.empty()) {
+        const GCGraph *g = work.back();
+        work.pop_back();
+        if (g == nullptr || !seen.insert(g).second || !g->hasNodePayload()) {
+            continue;
+        }
+        std::unordered_set<gc_node_ref_t> arms;
+        for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+            if (*it != nullptr && (*it)->kind == GCNodeKind::Join) {
+                for (gc_node_ref_t arm : g->withInputsOf(it.ref())) {
+                    arms.insert(arm);
+                }
+            }
+        }
+        size_t recursive = 0;
+        for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+            if (*it == nullptr || (*it)->kind != GCNodeKind::Func) {
+                continue;
+            }
+            const GCGraph *callee = g->directCalleeGraphOf(it.ref());
+            work.push_back(callee);
+            if (arms.contains(it.ref())) {
+                continue;
+            }
+            if ((callee == g || callReaches(callee, g)) && ++recursive == 2) {
+                return std::pair{g, it.ref()};
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 /// The same export-time value: one constant, or one symbolic value by name.
 bool sameValue(const Value &a, const Value &b) {
     if (a.isConstant() != b.isConstant()) {
@@ -3033,18 +3071,53 @@ Model exportBound(
         root = session.commit();
     }
     std::ostringstream log;
-    if (preparation == Preparation::ShapesOnly) {
-        // The pass entry. The preceding passes simplified the program without two things only
-        // the export knows: the shapes of the examples (binding their types above re-inferred
-        // the node types, so the shape of a tensor and the arithmetic on it are constants
-        // now, and a recursion bounded by a shape can unroll) and the split of branched calls,
-        // which is valid only for a consumer that never executes the graph. The same
-        // simplification as onnx.export_model finishes the job with them, so that the two
-        // entries accept the same functions. Macros are not expanded here: that stays the
-        // business of std::macro before this pass.
-        root = simplifyGraph(context, root, exportRewriteConfig(), log, kMaxExportRounds);
-    } else {
-        root = simplifyFully(context, root, log);
+    // The pass entry (ShapesOnly): the preceding passes simplified the program without two
+    // things only the export knows: the shapes of the examples (binding their types above
+    // re-inferred the node types, so the shape of a tensor and the arithmetic on it are
+    // constants now, and a recursion bounded by a shape can unroll) and the split of branched
+    // calls, which is valid only for a consumer that never executes the graph. The same
+    // simplification as onnx.export_model finishes the job with them, so that the two entries
+    // accept the same functions. Macros are not expanded here: that stays the business of
+    // std::macro before this pass.
+    const GCGraph *beforeSimplify = root;
+    try {
+        root = preparation == Preparation::ShapesOnly
+                   ? simplifyGraph(context, root, exportRewriteConfig(), log, kMaxExportRounds)
+                   : simplifyFully(context, root, log);
+    } catch (const ExportError &) {
+        throw;
+    } catch (const std::exception &e) {
+        // Simplification unrolls a recursion level by level. A function that calls itself
+        // twice on one path doubles with every level, and when its depth depends on the model
+        // input nothing ends that before the graph outgrows its representation. Say so, at
+        // the call, instead of reporting the allocation failure.
+        const auto tree = findTreeRecursion(beforeSimplify);
+        if (!tree) {
+            throw;
+        }
+        const uint64_t origin = tree->first->nodeOrigin(tree->second);
+        std::string location;
+        if (const auto source = ctx.sourceContext();
+            source && origin != camel::source::kInvalidOriginId) {
+            if (const auto *file = source->fileForOrigin(origin)) {
+                const auto range = source->resolveOrigin(origin);
+                location         = std::format(
+                    "{}:{}:{}",
+                    file->path,
+                    range.start.line + 1,
+                    range.start.character + 1);
+            }
+        }
+        throw ExportError(
+            std::format(
+                "a function calls itself more than once on one path (tree recursion) and "
+                "the depth does not become a constant, so the recursion cannot be unrolled "
+                "(simplification stopped with: {}); only a recursion with one recursive call "
+                "can be exported as loops",
+                e.what()),
+            location,
+            origin,
+            ExportError::Kind::CallRemains);
     }
     if (dumpEnabled()) {
         GraphVizDumpPass(context, GraphVizDumpConfig{.readableOnly = true}).apply(root, std::cerr);
