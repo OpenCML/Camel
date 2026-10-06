@@ -6,8 +6,15 @@
  * a value computed from the input is small: its depth is not static, so it
  * cannot unroll; because the recursive call is the last thing it does, it is a
  * loop over its argument and exports as an ONNX Loop. `pile` has the same
- * dynamic depth but uses the result of the recursive call: that is no loop,
- * and the export stops at the recursive call.
+ * dynamic depth but uses the result of the recursive call. It is a linear
+ * recursion (one recursive call, on one side of one if / else), which is a
+ * pair of loops: one finds the last arguments and counts the calls, one
+ * applies what is done with the result in reverse order; it exports as
+ * ONNX Loops. `settle` is not of that shape: two branches decide whether it
+ * calls itself, and the export stops with a diagnostic at the recursion.
+ * Not supported yet and not shown here: a function that calls itself more
+ * than once (tree recursion); today that fails during simplification
+ * without a position.
  */
 module staticness
 
@@ -33,6 +40,10 @@ func pile(t: Tensor): Tensor {
     return if sum(t) > 1.0 then pile(t * 0.5) + t else t
 }
 
+func settle(t: Tensor): Tensor {
+    return if sum(t) > 1.0 then (if sum(t * t) > 50.0 then t * 0.1 else settle(t * 0.5) + t) else t
+}
+
 func main(): int sync {
     let x = ones([2, 3, 4])
     println(forward(x))
@@ -45,8 +56,12 @@ func main(): int sync {
         export_model(shrink, x, get_env('ONNX_OUT'))
         println('exported shrink')
         return 0
-    } else if mode == 'nontail' then sync {
+    } else if mode == 'linear' then sync {
         export_model(pile, x, get_env('ONNX_OUT'))
+        println('exported pile')
+        return 0
+    } else if mode == 'nontail' then sync {
+        export_model(settle, x, get_env('ONNX_OUT'))
         println('unreachable')
         return 0
     } else 0
