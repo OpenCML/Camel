@@ -2186,7 +2186,15 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     switch (tgtType->code()) {
     case TypeCode::Tuple: {
         const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
-        elemType              = tupleType->typeAt(accsLoad->index<size_t>());
+        // A tuple has a fixed length: an element past its end is a compile-time error (it was
+        // read unchecked, which crashed the compiler in release builds).
+        if (accsLoad->index<size_t>() >= tupleType->size()) {
+            diags_->of(SemanticDiag::InvalidAccessIndex)
+                .atOrigin(gct->load()->origin())
+                .commit(std::to_string(accsLoad->index<size_t>()));
+            throw BuildAbortException();
+        }
+        elemType = tupleType->typeAt(accsLoad->index<size_t>());
         break;
     }
     case TypeCode::Array: {
