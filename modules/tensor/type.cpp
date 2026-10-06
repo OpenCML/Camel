@@ -27,7 +27,10 @@
 #include "camel/core/data/primary.h"
 #include "camel/core/mm.h"
 #include "camel/utils/assert.h"
+#include "camel/core/error/runtime.h"
+#include "camel/core/rtdata.h"
 #include "dtype.h"
+#include "tensor.h"
 
 #include <mutex>
 #include <unordered_map>
@@ -153,7 +156,64 @@ CastSafety TensorType::castSafetyFrom(Type *sourceType) const {
     if (auto r = Type::checkCastSafetyWithAny(code(), sourceType)) {
         return *r;
     }
-    return assignableFrom(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
+    if (assignableFrom(sourceType)) {
+        return CastSafety::Safe;
+    }
+    // `t as Tensor<...>` is the checked way from a less precise tensor type to a more precise
+    // one. What the two static types already contradict is refused at compile time; what the
+    // source leaves open is checked when the conversion runs (castSlotFrom): Unsafe.
+    const TensorType *rhs = asTensorType(sourceType);
+    if (!rhs) {
+        return CastSafety::Forbidden;
+    }
+    if (dtype_ && rhs->dtype_ && rhs->dtype_ != dtype_) {
+        return CastSafety::Forbidden;
+    }
+    if (shape_ && rhs->shape_) {
+        if (shape_->size() != rhs->shape_->size()) {
+            return CastSafety::Forbidden;
+        }
+        for (size_t i = 0; i < shape_->size(); ++i) {
+            const int64_t want = (*shape_)[i], have = (*rhs->shape_)[i];
+            if (want != kUnknownDim && have != kUnknownDim && want != have) {
+                return CastSafety::Forbidden;
+            }
+        }
+    }
+    return CastSafety::Unsafe;
+}
+
+slot_t TensorType::castSlotFrom(slot_t value, Type *sourceType) const {
+    (void)sourceType;
+    auto *tensor = camel::core::rtdata::fromSlot<TensorObject *>(value);
+    const auto refuse = [&](const std::string &what) {
+        camel::core::error::throwRuntimeFault(
+            camel::core::error::RuntimeDiag::RuntimeError,
+            "conversion to '" + toString() + "' failed: " + what);
+    };
+    if (tensor == nullptr) {
+        refuse("the value is null");
+    }
+    if (dtype_ && normalizeTensorDType(tensor->dtype()) != *dtype_) {
+        refuse(
+            "the tensor has element type " + std::string(dtypeName(tensor->dtype())));
+    }
+    if (shape_) {
+        std::string actual = "[";
+        for (size_t i = 0; i < tensor->rank(); ++i) {
+            actual += (i ? ", " : "") + std::to_string(tensor->dim(i));
+        }
+        actual += "]";
+        if (tensor->rank() != shape_->size()) {
+            refuse("the tensor has shape " + actual);
+        }
+        for (size_t i = 0; i < shape_->size(); ++i) {
+            if ((*shape_)[i] != kUnknownDim && (*shape_)[i] != tensor->dim(i)) {
+                refuse("the tensor has shape " + actual);
+            }
+        }
+    }
+    return value;
 }
 
 bool TensorType::assignableFrom(Type *sourceType) const {

@@ -79,6 +79,9 @@ class TensorType : public type::OtherType {
     /// Mutable bindings hold any tensor: widening drops dtype and shape facts.
     type::Type *widened() const override;
     type::CastSafety castSafetyFrom(type::Type *sourceType) const override;
+    /// `t as Tensor<...>`: the tensor itself, after checking its element type and shape against
+    /// this type (what the static types left open is checked here, when the conversion runs).
+    slot_t castSlotFrom(slot_t value, type::Type *sourceType) const override;
     bool assignableFrom(type::Type *sourceType) const override;
     type::OtherType *cloneWithParams(std::span<type::Type *const> params) const override;
     /// `Tensor<dtype>`, `Tensor<const [d0, d1, ...]>`, `Tensor<dtype, const [...]>`: the element

@@ -140,3 +140,37 @@ expect_exit = 0
 expect_stdout_contains = ["3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "as_checked"
+desc = "A tensor of unknown shape enters a shaped position through an explicit conversion: `t as Tensor<const [3]>`; the shape is checked when the conversion runs."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_types/as_checked.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "as_runtime_mismatch"
+desc = "`t as Tensor<const [4]>` on a tensor that turns out to have shape [3] is a run-time error at the conversion, naming both shapes."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_types/as_runtime_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["ran", "conversion to 'Tensor<?, [4]>' failed: the tensor has shape [3]", "as_runtime_mismatch.cml:9:15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "as_static_mismatch"
+desc = "A conversion the static types already contradict (`ones([3]) as Tensor<const [4]>`) is a compile-time error."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_types/as_static_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
+expect_output_contains = ["Tensor<float32, [3]>", "Tensor<?, [4]>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
