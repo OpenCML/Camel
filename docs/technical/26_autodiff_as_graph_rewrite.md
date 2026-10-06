@@ -194,25 +194,74 @@ inlining remove the closures.
   site.
 - Otherwise the call is rejected with a diagnostic naming the call site.
 
-Implementation status (2026-10-06). The library handles the callee itself where
-it is evident in the graph when `grad` runs; no pass has to run first:
+Implementation status (2026-10-06). The library handles the callee itself when
+`grad` runs; no pass has to run first. One rule decides what is accepted:
 
-- a constant function value without captures becomes a direct call;
-- a closure — a constant function value holding captured constants, or a
-  `FILL FunctionClosure` built in the same function from a known function and
-  captured values (a `let`-bound lambda) — is differentiated through the
-  function's own graph with the captured values turned into trailing arguments
-  (`Engine::planForClosure`, one derivative per function, shared by all its call
-  sites). Captured values are inputs of the call like any other, so gradients
-  flow into captures that depend on the differentiated parameter;
-- a function value that is a parameter, is chosen by a data-dependent branch or
-  is read from a container or a variable is refused, and the diagnostic gives
-  the position of the CALL. (The wrapping of function-typed parameters
-  described above is not implemented.)
+> A call of a function value is differentiated when the function is **named, or
+> built by a lambda, in the function being differentiated or in a function it
+> calls**, and gets from there to the call only by being **bound, captured,
+> passed as an argument, or returned**.
+
+So besides a `let`-bound lambda called where it was built: a closure called
+inside a second closure that captured it, a closure returned by a factory, a
+closure or a named function passed to a function that calls it, a function
+that takes a closure and returns one capturing it, a lambda returning a lambda,
+and a closure built before a branch and called in its arms. Captured values
+are inputs of the call like any other, so gradients flow into captures that
+depend on the differentiated parameter.
+
+How (`modules/autodiff/pullback.cpp`):
+
+- *Following* (`ForwardRewrite::followFunctionValues`). Before a graph is
+  differentiated, the calls in it that carry a function value are inlined into
+  it: a call that is passed an evident function value (as an argument or a
+  captured value) and a call that returns one. "Evident" means that the graph
+  itself says which function the value is: a constant function, or a
+  `FILL FunctionClosure` over one. Afterwards the call of the value is a call
+  of a closure built in the graph. Inlining is `std::inline`'s own
+  (`camel::passes::opt::inlineCallInOrder`), so the order and the effects of the
+  inlined code are kept by the same code as in the pass; a callee value behind
+  the gates an inlined call puts on its arguments is seen through.
+- *The call* (`rewriteIndirectCall`). A constant function without captures
+  becomes a direct call; a closure is differentiated through the function's
+  own graph with the captured values as trailing arguments
+  (`Engine::planForClosure`, one derivative per function, shared by its call
+  sites).
+- *Branch arms* (`rewriteBranch`). An arm is a graph of its own and is not
+  inlined. A closure built before the branch is handed to the arm as the values
+  it captured, and the arm builds it again in its own graph.
+- *Bounds.* Macros and functions with a derivative rule of their own are never
+  followed into. A recursive function that passes a function value on to itself
+  is followed into once: the arm that holds its recursive call knows which
+  function it came from and leaves that call a call. One transformation follows
+  at most 256 calls.
+
+What is refused, and how. A function value that does not fit the rule is
+refused at its call: one chosen by a branch at run time (also when the
+condition is a constant expression: nothing folds it before `grad` runs), read
+from a tuple, struct, array or variable, a parameter of the differentiated
+function itself, or reached through the recursive call of a function that
+passes it on. The diagnostic is located at the refused call, in the default run
+and under `std::macro` (a runtime fault names its origin; under `std::macro`
+the text adds where the macro call is); when several calls are refused, the
+first in source order is reported; the message gives the one reason that holds
+for that call. A direct call that is passed such a function value is refused
+as well when the value depends on the differentiated parameter: the callee
+may have no differentiable parameter at all, and the call would otherwise
+count as a constant and drop that part of the gradient silently. For this a
+function value that captured an active value is itself active in the activity
+analysis (`Backward::run`), as a carrier that never holds a gradient. (The
+wrapping of function-typed parameters described above is not implemented.)
+
+`grad` of a function with effects runs the function: the gradient waits for
+everything the function's own result waited for, so effects after the last
+value the gradient reads still happen.
 
 Arrays are not differentiable values today (`:op/idx_arr` and `map` have no
 derivative rule), so a lambda passed to `map` is refused for that reason.
-Tests: `grad_closure.*`, `grad_closure_unknown.*`.
+Tests: `grad_closure.*`, `grad_function_values*.*` (accepted structures,
+against finite differences), `grad_function_value_*.*` (each refusal with its
+position), `grad_effects_kept.*`.
 
 ### 4.4a Variables
 
