@@ -81,7 +81,7 @@ Macro operators over functions (`grad`, `value_and_grad`, `vjp` of `autodiff`) t
 `std::macro` replaces a call of a `macro` function or macro operator by its result when every argument is a constant. Two things can keep a call in the program:
 
 - **An argument is not a constant.** This is the normal case and not a failure; nothing is printed. With `-v` a log line names the call and the argument: `<Macro> 'count' at m.cml:11:17 stays a run-time call: argument 1 is not a constant.`
-- **The evaluation fails**: an operator raises an error (division by zero, `autodiff: no derivative rule for operator ...`), an exception escapes, or the evaluation needs more than 64 nested calls. This is a compile-time error (a provisional rule of the language; the final handling is undecided): `RuntimeDiag::MacroEvaluationFailed` (`0x0400000E`, stage `pass:std::macro`), located at the call, with the reason: `m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero.` The pipeline stops there with exit code 1; no later pass runs and the program is not executed.
+- **The evaluation fails**: an operator raises an error (division by zero, `autodiff: no derivative rule for operator ...`), an exception escapes, or the evaluation needs more than 64 nested calls. This is a compile-time error (decided 2026-10-06, design principles 2.7): `RuntimeDiag::MacroEvaluationFailed` (`0x0400000E`, stage `pass:std::macro`), located at the call, with the reason: `m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero.` The pipeline stops there with exit code 1; no later pass runs and the program is not executed.
 
 Consequences of the rule:
 

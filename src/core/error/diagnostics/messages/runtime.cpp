@@ -132,8 +132,8 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "MacroEvaluationFailed",
                 "'{0}' could not be evaluated by std::macro: {1}.",
                 "Every argument of this macro call is a constant, so std::macro evaluates it "
-                "ahead of time, and a failed evaluation is a compile-time error (provisional "
-                "rule). The program is rejected even if the call would never be reached at "
+                "ahead of time, and a failed evaluation is a compile-time error. The program "
+                "is rejected even if the call would never be reached at "
                 "run time. Without std::macro in the pipeline the call runs with the program.",
             },
         },
