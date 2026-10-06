@@ -24,6 +24,7 @@
 #include <format>
 #include <limits>
 #include <span>
+#include <stdexcept>
 
 #include "camel/core/operator.h"
 #include "camel/core/type/base.h"
@@ -387,7 +388,9 @@ union BytecodeExtra {                           // 8 bytes
 
 // FUNC/TAIL:
 // - extra()  : runtime callee graph pointer
-// - extra2() : [targetPc:16 | directCallCount:48]
+// - extra2() : [targetPc:32 | directCallCount:32]. The pc was 16 bits wide: a program linked
+//                to more than 65535 bytecode words got truncated call targets (a crash in
+//                release builds, where the range ASSERT is compiled out).
 // - extra3() : JIT entry pointer (JIT builds only; 0 means interpreter entry)
 inline camel::runtime::GCGraph *getFuncExtraRuntimeGraph(const BytecodeHeader *bc) {
     return bc->directCallExtra()->runtimeGraph;
@@ -396,9 +399,9 @@ inline void setFuncExtraRuntimeGraph(BytecodeHeader *bc, camel::runtime::GCGraph
     bc->directCallExtra()->runtimeGraph = graph;
 }
 
-constexpr uint64_t kFuncExtraCountMask     = (1ull << 48) - 1;
-constexpr uint64_t kFuncExtraTargetPcShift = 48;
-constexpr uint64_t kFuncExtraTargetPcMask  = 0xFFFFull;
+constexpr uint64_t kFuncExtraCountMask     = (1ull << 32) - 1;
+constexpr uint64_t kFuncExtraTargetPcShift = 32;
+constexpr uint64_t kFuncExtraTargetPcMask  = 0xFFFFFFFFull;
 
 inline uint32_t getFuncExtraCount(const BytecodeHeader *bc) {
     const uint64_t count = *bc->directCallExtra2() & kFuncExtraCountMask;
@@ -411,7 +414,14 @@ inline size_t getFuncExtraTargetPc(const BytecodeHeader *bc) {
         (*bc->directCallExtra2() >> kFuncExtraTargetPcShift) & kFuncExtraTargetPcMask);
 }
 inline void setFuncExtraTargetPc(BytecodeHeader *bc, size_t targetPc) {
-    ASSERT(targetPc <= kFuncExtraTargetPcMask, "JIT target pc exceeds packed FuncExtra range.");
+    if (targetPc > kFuncExtraTargetPcMask) {
+        // Checked in every build: a truncated target would run other code.
+        throw std::runtime_error(
+            std::format(
+                "FastVM: call target pc {} exceeds the {} bytecode words a program may have",
+                targetPc,
+                kFuncExtraTargetPcMask));
+    }
     const uint64_t count    = *bc->directCallExtra2() & kFuncExtraCountMask;
     *bc->directCallExtra2() = (static_cast<uint64_t>(targetPc) << kFuncExtraTargetPcShift) | count;
 }

@@ -1287,3 +1287,34 @@ assert(depth === 2, `expected the int field to survive sgd updates unchanged, go
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "gru_lite_large_bytecode"
+desc = "Same as gru_lite under a pipeline that specialises and simplifies before std::macro: the linked FastVM program has more than 65535 bytecode words, which the 16-bit call-target field used to truncate (crash, or zeros_like: RuntimeError)."
+kind = "behavior"
+case = "../../../cases/modules/nn/gru_lite.cml"
+args = ["${case}", "std::specialize", "std::opt::simplify", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::devirtualize", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const out = input.normalized.stdout
+const found = match(/gru_lite metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+) train10=([0-9.eE+-]+)/, out)
+const [before, step, after, trained] = found.slice(1, 5).map(Number)
+assert([before, step, after, trained].every(Number.isFinite), 'metrics are not finite')
+assert(before > 0, `expected positive initial loss, got ${before}`)
+assert(approx(step, before, 1e-9), `value_and_grad loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected one sgd step to lower the loss: before=${before}, after=${after}`)
+assert(trained < after, `expected ten sgd steps to beat one: after=${after}, train10=${trained}`)
+match(/gru_lite wxz=tensor/, out)
+match(/gru_lite whz=tensor/, out)
+match(/gru_lite wxn=tensor/, out)
+match(/gru_lite whn=tensor/, out)
+match(/gru_lite wxz_grad=tensor/, out)
+match(/gru_lite whz_grad=tensor/, out)
+match(/gru_lite wxn_grad=tensor/, out)
+match(/gru_lite whn_grad=tensor/, out)
+}
+"""
+timeout_ms = 4000
