@@ -1415,3 +1415,67 @@ expect_stdout_contains = ["96 gradients checked, 0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+
+[[tests]]
+name = "grad_effects_kept.default"
+desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with value_and_grad. Under: the default run (grad runs with the program)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_effects_kept.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557951 | loss | helper | helper: done | loss: helper returned | tensor([  1.769,   1.781,   1.777], dtype=float32) | loss | helper | helper: done | loss: helper returned | (0.557951, tensor([  1.769,   1.781,   1.777], dtype=float32))', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "grad_effects_kept.macro"
+desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with value_and_grad. Under: std::macro (grad built at compile time)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_effects_kept.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557951 | loss | helper | helper: done | loss: helper returned | tensor([  1.769,   1.781,   1.777], dtype=float32) | loss | helper | helper: done | loss: helper returned | (0.557951, tensor([  1.769,   1.781,   1.777], dtype=float32))', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "grad_effects_kept.macro.simplify"
+desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with value_and_grad. Under: std::macro std::opt::simplify (the derivative inlined and folded)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_effects_kept.cml"
+args = ["${case}", "std::macro", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557951 | loss | helper | helper: done | loss: helper returned | tensor([  1.769,   1.781,   1.777], dtype=float32) | loss | helper | helper: done | loss: helper returned | (0.557951, tensor([  1.769,   1.781,   1.777], dtype=float32))', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "grad_effects_kept.macro.fvm"
+desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with value_and_grad. Under: std::macro std::fvm."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_effects_kept.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557951 | loss | helper | helper: done | loss: helper returned | tensor([  1.769,   1.781,   1.777], dtype=float32) | loss | helper | helper: done | loss: helper returned | (0.557951, tensor([  1.769,   1.781,   1.777], dtype=float32))', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000

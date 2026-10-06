@@ -286,6 +286,27 @@ std::vector<gc_node_ref_t> valueOrder(const GraphDraft &draft, gc_node_ref_t roo
     return order;
 }
 
+/// Whether anything `node` runs after is ordered by a control edge (code with effects).
+bool hasOrdering(const GraphDraft &draft, gc_node_ref_t node) {
+    std::unordered_set<gc_node_ref_t> seen{node};
+    std::vector<gc_node_ref_t> work{node};
+    while (!work.empty()) {
+        const gc_node_ref_t current = work.back();
+        work.pop_back();
+        if (!draft.ctrlInputsOf(current).empty()) {
+            return true;
+        }
+        for (auto inputs : {draft.normInputsOf(current), draft.withInputsOf(current)}) {
+            for (gc_node_ref_t input : inputs) {
+                if (seen.insert(input).second) {
+                    work.push_back(input);
+                }
+            }
+        }
+    }
+    return false;
+}
+
 /// Erases the nodes the graph's result does not depend on (backward nodes computing gradients
 /// of constants, forward values only the gradient needed not), keeping ports and closure nodes.
 void pruneUnreachable(GraphDraft &draft) {
@@ -1651,6 +1672,17 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     if (withValue) {
         const std::array<gc_node_ref_t, 2> pair{value, result};
         result = addAggregate(*draft, signature->functionType->exitType(), pair);
+    }
+    // The gradient function runs the function. Its result is the gradient, which need not
+    // depend on everything the function did: what the function's own result waited for (a
+    // print after the last value the gradient reads) is not an input of the gradient. The
+    // gradient waits for it, so that the function's effects all happen, in their order.
+    const gc_node_ref_t ran = draft->exitNode();
+    if (ran != kInvalidNodeRef && ran != result && hasOrdering(*draft, ran)) {
+        const gc_node_ref_t gate = draft->addGateNode(typeOf(*draft, result));
+        draft->setNormInputs(gate, std::span<const gc_node_ref_t>(&result, 1));
+        draft->setCtrlInputs(gate, std::span<const gc_node_ref_t>(&ran, 1));
+        result = gate;
     }
     setResult(*draft, result);
     pruneUnreachable(*draft);
