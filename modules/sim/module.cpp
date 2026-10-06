@@ -15,6 +15,7 @@
 #include "module.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
 #include "executor.h"
@@ -47,6 +48,13 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
 } // namespace
 
 SimModule::SimModule(context_ptr_t ctx) : BuiltinModule("sim", ctx) {
+    // Both kernels are functions of their arguments: the random generator is local and seeded
+    // from the seed argument. Registered pure so that schedulers may run them concurrently
+    // (std::taskflow keeps the elements of a map in order unless the element function is
+    // provably free of effects) and passes may fold or merge them.
+    for (const char *uri : {"sim:pi_hits", "sim:asian_call_price"}) {
+        camel::core::OperatorTraitsRegistry::instance().set(uri, {.pure = true, .elementwise = false});
+    }
     for (const auto &group : getOperatorGroups())
         exportEntity(group->name(), group);
 }
