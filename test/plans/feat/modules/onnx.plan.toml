@@ -1487,6 +1487,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 
 [[tests]]
+name = "ort_time_axis"
+desc = "A tail recursion and a linear recursion over the time axis whose step slices the data at the counter are exported for sequence lengths 1 to 7, by the default run and after std::inline; every model runs on ONNX Runtime on five random inputs and matches NumPy. The loops used to evaluate one step past the end of the data (both sides of the loop decision were computed and selected), so models failed at run time for some lengths and inputs: found by X1a cycle 6."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_time_axis.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort time axis: 14 models, 0 failing", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
 name = "ort_linear_recursion"
 desc = "Three hand-written linear recursions whose depth depends on the model input (the call's result added to; a right fold that post-processes the result with a counter, a changing state and an unchanged argument; one with the arms swapped and a branch in the post-processing) export as paired ONNX Loops and match the recursions written in NumPy on ONNX Runtime for depths 0, 1 and more."
 kind = "behavior"

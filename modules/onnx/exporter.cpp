@@ -276,6 +276,7 @@ class Evaluator {
         std::vector<gc_node_ref_t> ports;
         std::vector<Value> inputs;
         std::vector<bool> changed; // set when a tail call passes something else for the port
+        bool wantResult = true;    // false while the loop body is built: only the state matters
     };
     /// What evaluating the function body from one node amounts to.
     struct BodyOutcome {
@@ -284,12 +285,13 @@ class Evaluator {
         std::string contName;
         std::vector<Value> next;     // the arguments of that call; the current ones on a return
         std::optional<Value> result; // the value returned, on the paths that return
+        bool returns = false;        // some path of it returns (the recursion ends)
     };
     Value evalCall(Activation &act, gc_node_ref_t site);
     Value translateLoop(Activation &act, GCGraph *fn, std::vector<Value> args);
     BodyOutcome evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop);
-    BodyOutcome
-    mergeOutcomes(Activation &act, const Value &cond, BodyOutcome a, BodyOutcome b, LoopFrame &loop);
+    BodyOutcome mergeOutcomes(
+        Activation &act, const Value &cond, BodyOutcome sides[2], Graph bodies[2], LoopFrame &loop);
     Value selectValue(Activation &act, const std::string &cond, const Value &a, const Value &b);
     std::vector<Value> callArguments(Activation &act, gc_node_ref_t site, GCGraph *callee);
     Activation activationOf(GCGraph *callee, std::span<const Value> args);
@@ -1038,9 +1040,45 @@ Value Evaluator::selectValue(
 }
 
 Evaluator::BodyOutcome Evaluator::mergeOutcomes(
-    Activation &act, const Value &cond, BodyOutcome a, BodyOutcome b, LoopFrame &loop) {
+    Activation &act, const Value &cond, BodyOutcome sides[2], Graph bodies[2], LoopFrame &loop) {
     const std::string c = emitter_.operand(cond, TypeCode::Bool);
+    BodyOutcome &a      = sides[0];
+    BodyOutcome &b      = sides[1];
     BodyOutcome out;
+    out.returns = a.returns || b.returns;
+
+    // What the If hands out: per output, the value on each side (a name valid in the subgraph
+    // of that side, or outside the If) and the facts it is declared with.
+    struct Output {
+        std::string names[2];
+        TensorFacts facts;
+        Value like;
+    };
+    std::vector<Output> outputs;
+    const auto request = [&](const Value &va, const Value &vb) {
+        const TensorFacts fa = factsOf(va), fb = factsOf(vb);
+        if (!isCarriable(va) || !isCarriable(vb) || !fa.dtype || fa.dtype != fb.dtype) {
+            unsupported(
+                act,
+                "a tuple, struct or array, or values of different types, differ between the "
+                "paths of a recursion whose depth depends on the model input");
+        }
+        outputs.push_back(
+            {{emitter_.operand(va, *fa.dtype), emitter_.operand(vb, *fa.dtype)},
+             fa,
+             va.isSymbolic() ? va : vb});
+        return outputs.size() - 1;
+    };
+    const auto boolOperand = [&](const BodyOutcome &o) {
+        return o.contConst ? emitter_.operand(
+                                 Value::constant(
+                                     rtdata::toSlot<bool>(*o.contConst),
+                                     type::Type::Bool()),
+                                 TypeCode::Bool)
+                           : o.contName;
+    };
+
+    std::optional<size_t> contAt;
     if (a.contConst && b.contConst) {
         if (*a.contConst == *b.contConst) {
             out.contConst = a.contConst;
@@ -1048,28 +1086,85 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
             out.contName = *a.contConst ? c : emitter_.node("Not", {c});
         }
     } else {
-        const auto operandOf = [&](const BodyOutcome &o) {
-            return o.contConst ? emitter_.operand(
-                                     Value::constant(
-                                         rtdata::toSlot<bool>(*o.contConst),
-                                         type::Type::Bool()),
-                                     TypeCode::Bool)
-                               : o.contName;
-        };
-        // (c and a) or (not c and b): ONNX Runtime has no Where kernel for bool tensors.
-        out.contName = emitter_.node(
-            "Or",
-            {emitter_.node("And", {c, operandOf(a)}),
-             emitter_.node("And", {emitter_.node("Not", {c}), operandOf(b)})});
+        outputs.push_back(
+            {{boolOperand(a), boolOperand(b)},
+             TensorFacts{TypeCode::Bool, tensor::StaticShape{}},
+             Value::symbolicScalar("", type::Type::Bool())});
+        contAt = outputs.size() - 1;
     }
-    out.next.reserve(loop.ports.size());
+    std::vector<std::optional<size_t>> nextAt(loop.ports.size());
+    out.next.resize(loop.ports.size());
     for (size_t k = 0; k < loop.ports.size(); ++k) {
-        out.next.push_back(selectValue(act, c, a.next[k], b.next[k]));
+        if (sameValue(a.next[k], b.next[k])) {
+            out.next[k] = a.next[k];
+        } else {
+            nextAt[k] = request(a.next[k], b.next[k]);
+        }
     }
+    std::optional<size_t> resultAt;
     if (a.result && b.result) {
-        out.result = selectValue(act, c, *a.result, *b.result);
-    } else {
-        out.result = a.result ? a.result : b.result;
+        if (sameValue(*a.result, *b.result)) {
+            out.result = a.result;
+        } else {
+            resultAt = request(*a.result, *b.result);
+        }
+    } else if (a.result || b.result) {
+        // One side calls again and has no result. Its value is never looked at (the result is
+        // read where the recursion returned), but an If needs it from both sides: zeros of
+        // the same type and rank stand in.
+        const Value &real       = a.result ? *a.result : *b.result;
+        const TensorFacts facts = factsOf(real);
+        if (!isCarriable(real) || !facts.dtype) {
+            unsupported(
+                act,
+                "a recursion whose depth depends on the model input returns a tuple, struct or "
+                "array on a path next to a recursive call; only tensors and scalars can be "
+                "returned there");
+        }
+        std::vector<int64_t> dims;
+        if (facts.shape) {
+            for (int64_t extent : *facts.shape) {
+                dims.push_back(extent == tensor::kUnknownDim ? 1 : extent);
+            }
+        }
+        std::string filler = emitter_.node("ConstantOfShape", {emitter_.int64s(dims)});
+        if (*facts.dtype != TypeCode::Float32) {
+            filler = emitter_.node(
+                "Cast",
+                {filler},
+                {Attribute::makeInt("to", static_cast<int64_t>(elemTypeOf(*facts.dtype)))});
+        }
+        const std::string name = emitter_.operand(real, *facts.dtype);
+        outputs.push_back({{a.result ? name : filler, a.result ? filler : name}, facts, real});
+        resultAt = outputs.size() - 1;
+    }
+
+    if (!outputs.empty()) {
+        for (size_t i = 0; i < 2; ++i) {
+            for (const Output &o : outputs) {
+                bodies[i].outputs.push_back(
+                    valueInfoOf(
+                        emitter_.appendIdentity(bodies[i], o.names[i], "path_out"),
+                        o.facts));
+            }
+        }
+        const std::vector<std::string> names = emitter_.nodeN(
+            "If",
+            {c},
+            {Attribute::makeGraph("then_branch", std::move(bodies[0])),
+             Attribute::makeGraph("else_branch", std::move(bodies[1]))},
+            outputs.size());
+        if (contAt) {
+            out.contName = names[*contAt];
+        }
+        for (size_t k = 0; k < loop.ports.size(); ++k) {
+            if (nextAt[k]) {
+                out.next[k] = placeholderLike(outputs[*nextAt[k]].like, names[*nextAt[k]]);
+            }
+        }
+        if (resultAt) {
+            out.result = placeholderLike(outputs[*resultAt].like, names[*resultAt]);
+        }
     }
     return out;
 }
@@ -1131,9 +1226,25 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
         if (cond.form != Value::Form::Scalar) {
             unsupported(act, "the condition of a recursion is not a scalar");
         }
-        BodyOutcome a = evalLoopBody(act, arms[0], loop);
-        BodyOutcome b = evalLoopBody(act, arms[1], loop);
-        return mergeOutcomes(act, cond, std::move(a), std::move(b), loop);
+        // Each side is evaluated in its own If subgraph, so nothing is computed on the side
+        // that is not taken: a step taken speculatively past the end of the data is not
+        // harmless (a slice outside its axis is empty, and the reshape after it fails).
+        Graph bodies[2];
+        BodyOutcome sides[2];
+        for (size_t i = 0; i < 2; ++i) {
+            emitter_.pushScope(i == 0 ? "then_branch" : "else_branch");
+            act.memo.emplace_back();
+            try {
+                sides[i] = evalLoopBody(act, arms[i], loop);
+                act.memo.pop_back();
+                bodies[i] = emitter_.popScope();
+            } catch (...) {
+                act.memo.pop_back();
+                emitter_.popScope();
+                throw;
+            }
+        }
+        return mergeOutcomes(act, cond, sides, bodies, loop);
     }
     default:
         break;
@@ -1142,7 +1253,10 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
     BodyOutcome out;
     out.contConst = false;
     out.next      = loop.inputs;
-    out.result    = eval(act, ref);
+    out.returns   = true;
+    if (loop.wantResult) {
+        out.result = eval(act, ref);
+    }
     return out;
 }
 
@@ -1192,7 +1306,7 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
         try {
             const BodyOutcome probe = evaluate(withPlaceholders(carriable, "probe"));
             emitter_.popScope();
-            if (!probe.result) {
+            if (!probe.returns) {
                 unsupported(act, "a recursion that never returns cannot be exported");
             }
             for (size_t k = 0; k < count; ++k) {
@@ -1227,7 +1341,9 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
         const std::vector<Value> inputs = withPlaceholders(carried, "state");
         const std::string iter          = emitter_.fresh("loop_iter");
         const std::string condIn        = emitter_.fresh("loop_cond_in");
+        loop.wantResult                 = false;
         const BodyOutcome outcome       = evaluate(inputs);
+        loop.wantResult                 = true;
         const std::string condOut       = emitter_.node(
             "Identity",
             {outcome.contConst ? emitter_.operand(
@@ -1620,20 +1736,57 @@ Value Evaluator::translateLinear(Activation &act, GCGraph *fn, std::vector<Value
         [&](const Value &, const std::vector<Value> &state) {
             const std::vector<Value> full =
                 place(f.args, f.carried, std::span<const Value>(state.data(), m));
-            const std::string again       = linearCont(act, f, full);
-            const std::vector<Value> next = pick(linearNext(f, full), f.carried);
-            std::vector<Value> out;
-            for (size_t k = 0; k < m; ++k) {
-                out.push_back(selectValue(act, again, next[k], state[k]));
+            const std::string again = linearCont(act, f, full);
+            // The step is taken only when the function calls itself again: computed in the
+            // then-side of an If, never speculatively (see mergeOutcomes).
+            Graph sides[2];
+            std::vector<std::string> stepped, kept;
+            emitter_.pushScope("then_branch");
+            try {
+                const std::vector<Value> next = pick(linearNext(f, full), f.carried);
+                for (size_t k = 0; k < m; ++k) {
+                    const TensorFacts in = factsOf(state[k]), out = factsOf(next[k]);
+                    if (!isCarriable(next[k]) || !in.dtype || in.dtype != out.dtype) {
+                        unsupported(
+                            act,
+                            "the dtype of a value changes from one call of a recursion to the "
+                            "next; a loop can only carry values of a fixed dtype and shape");
+                    }
+                    stepped.push_back(emitter_.operand(next[k], *in.dtype));
+                }
+                const int64_t one[] = {1};
+                stepped.push_back(
+                    emitter_.node(
+                        "Add",
+                        {emitter_.operand(state[m], TypeCode::Int64),
+                         emitter_.node("Squeeze", {emitter_.int64s(one)})}));
+                sides[0] = emitter_.popScope();
+            } catch (...) {
+                emitter_.popScope();
+                throw;
             }
-            const int64_t one[] = {1};
-            const Value bumped  = Value::symbolicScalar(
-                emitter_.node(
-                    "Add",
-                    {emitter_.operand(state[m], TypeCode::Int64),
-                     emitter_.node("Squeeze", {emitter_.int64s(one)})}),
-                type::Type::Int64());
-            out.push_back(selectValue(act, again, bumped, state[m]));
+            emitter_.pushScope("else_branch");
+            sides[1] = emitter_.popScope();
+            for (size_t k = 0; k <= m; ++k) {
+                kept.push_back(emitter_.operand(state[k], factsOf(state[k]).dtype));
+            }
+            for (size_t k = 0; k <= m; ++k) {
+                const TensorFacts facts = factsOf(state[k]);
+                sides[0].outputs.push_back(
+                    valueInfoOf(emitter_.appendIdentity(sides[0], stepped[k], "path_out"), facts));
+                sides[1].outputs.push_back(
+                    valueInfoOf(emitter_.appendIdentity(sides[1], kept[k], "path_out"), facts));
+            }
+            const std::vector<std::string> names = emitter_.nodeN(
+                "If",
+                {again},
+                {Attribute::makeGraph("then_branch", std::move(sides[0])),
+                 Attribute::makeGraph("else_branch", std::move(sides[1]))},
+                m + 1);
+            std::vector<Value> out;
+            for (size_t k = 0; k <= m; ++k) {
+                out.push_back(placeholderLike(state[k], names[k]));
+            }
             return std::pair<std::optional<std::string>, std::vector<Value>>{again, out};
         });
     f.finals = place(f.args, f.carried, std::span<const Value>(last.data(), m));

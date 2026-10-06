@@ -388,11 +388,15 @@ What differs from the design above:
   - the carried values are the arguments a recursive call changes (found by a
     first, discarded evaluation of the body); the others stay what they are
     outside the loop, so constants keep folding inside the body;
-  - the body is the function's own graph evaluated once. The branches that
-    separate "return" from "call again" are merged with `Where` instead of
-    `If`: both sides are computed and the condition selects, which is the
-    same value because every exported operator is pure and total. Branches
-    without a recursive call remain `If`s;
+  - the body is the function's own graph evaluated once. A branch that
+    separates "return" from "call again" becomes an `If` whose outputs are the
+    continue flag and the next state: each side is computed only when it is
+    taken. (Until 2026-10-06 both sides were computed and selected with
+    `Where`, on the assumption that exported operators are total; a step taken
+    past the end of the data is not — a slice outside its axis is empty and the
+    reshape after it fails — and exported loops failed at run time for some
+    lengths and inputs. Found by the pass-quality cycle; test `ort_time_axis`.)
+    Branches without a recursive call remain `If`s as before;
   - the body always runs once (as a call does) and continues while the path
     taken was a recursive call; the result is the body evaluated once more
     after the `Loop`, at the final state, so no carried value needs an initial
