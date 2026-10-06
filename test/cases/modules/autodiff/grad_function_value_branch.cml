@@ -1,0 +1,18 @@
+module grad_function_value_branch
+import { Tensor, reshape, sum, tanh } from tensor
+import { grad } from autodiff
+
+// Refused: the function called is chosen by a branch at run time. It is called twice; the
+// diagnostic is located at the first call (line 10), although the gradient meets the second first.
+func loss(p: Tensor): float {
+    let s = sum(p)
+    let g = if s > 0.0 then (t: Tensor): Tensor => tanh(t * s) else (t: Tensor): Tensor => t * s
+    let a = g(p)
+    let b = g(a * 0.5)
+    return sum(b)
+}
+
+func main(): int sync {
+    println(grad(loss)(reshape([0.5, 0.25, -0.35], [3])))
+    return 0
+}

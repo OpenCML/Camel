@@ -1,0 +1,57 @@
+/**
+ * The structures of grad_function_values in code with effects: the functions print, so their
+ * statements are ordered, and the function values reach their calls behind the gates that
+ * keep that order. The gradients are those of the same losses without the prints, checked
+ * against central finite differences in float64 (grad_function_values_reference.py, suite
+ * "effects"), and every print must still happen once, in order, before the gradient is printed.
+ */
+module grad_function_values_effects
+import { Tensor, reshape, sum, tanh } from tensor
+import { grad } from autodiff
+
+func make(s: float): (t: Tensor) => Tensor sync {
+    println('make')
+    return (t: Tensor): Tensor => tanh(t * s)
+}
+
+func apply(f: (t: Tensor) => Tensor, p: Tensor): Tensor sync {
+    println('apply')
+    let a = f(p)
+    println('apply: first call done')
+    return a + f(p * 0.5)
+}
+
+// 1. a closure passed to a function that prints and calls it twice
+func loss1(p: Tensor): float sync {
+    println('loss1')
+    let s = sum(p)
+    let r = apply((t: Tensor): Tensor => tanh(t * s), p)
+    println('loss1: applied')
+    return sum(r)
+}
+
+// 2. a closure returned by a factory that prints, called twice
+func loss2(p: Tensor): float sync {
+    println('loss2')
+    let g = make(sum(p))
+    println('loss2: made')
+    return sum(g(p) * g(p * 0.5))
+}
+
+// 3. a closure called inside a second closure, built after a print
+func loss3(p: Tensor): float sync {
+    let s = sum(p)
+    let g = (t: Tensor): Tensor => tanh(t * s)
+    println('loss3')
+    let h = (t: Tensor): Tensor => g(t) * 2.0 + g(t * 0.5)
+    println('loss3: built')
+    return sum(h(p))
+}
+
+func main(): int sync {
+    let x = reshape([0.5, 0.25, -0.35], [3])
+    println(grad(loss1)(x))
+    println(grad(loss2)(x))
+    println(grad(loss3)(x))
+    return 0
+}
