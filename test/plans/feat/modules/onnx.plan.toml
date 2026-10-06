@@ -1466,3 +1466,49 @@ expect_stdout_contains = ["ort dynamic params: worst", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+
+[[tests]]
+name = "export_train_step_vjp"
+desc = "A training step (value_and_grad + sgd) through a function declared with a custom derivative rule (@vjp<rule>) exports: loss and the two updated parameters; the model contains the rule's operators and nothing derived from the body's `where`."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_vjp.cml"
+args = ["${case}", "std::macro"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_vjp.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_vjp.onnx'))
+assert(model.outputs.length === 3, `loss and two updated parameters: ${model.outputs}`)
+assert(model.inputs.join() === 'w,b,input1', `unexpected inputs ${model.inputs}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_export_train_step_vjp"
+desc = "A training step (value_and_grad + sgd) through a function declared with a custom derivative rule (@vjp<rule>) exports: loss and the two updated parameters; the model contains the rule's operators and nothing derived from the body's `where`."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_vjp.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_train_step_vjp.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_train_step_vjp.onnx"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_train_step_vjp.onnx'))
+assert(model.outputs.length === 3, `loss and two updated parameters: ${model.outputs}`)
+assert(model.inputs.join() === 'w,b,input1', `unexpected inputs ${model.inputs}`)
+}
+"""
+timeout_ms = 8000
