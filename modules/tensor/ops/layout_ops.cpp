@@ -280,6 +280,22 @@ std::optional<Type *> sliceInfer(const InferContext &ctx) {
         (*in.shape)[a] = kUnknownDim;
         return tensorOf(in);
     }
+    // Extent and bounds are known at compile time: an interval that leaves the axis is an
+    // error here (design principles 2.7). With an unknown extent or bounds the kernel clamps,
+    // as NumPy slicing and ONNX Slice do.
+    const auto inside = [ext](int64_t v) {
+        const int64_t n = v < 0 ? v + ext : v;
+        return n >= 0 && n <= ext;
+    };
+    if (!inside(*start) || !inside(*end)) {
+        throw ShapeError(
+            std::format(
+                "slice bounds {}..{} are outside axis {} of extent {}",
+                *start,
+                *end,
+                a,
+                ext));
+    }
     auto clamp      = [ext](int64_t v) { return std::clamp<int64_t>(v < 0 ? v + ext : v, 0, ext); };
     const int64_t s = clamp(*start), e = clamp(*end);
     (*in.shape)[a] = e > s ? (e - s + *step - 1) / *step : 0;
