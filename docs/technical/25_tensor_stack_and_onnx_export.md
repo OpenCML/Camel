@@ -186,7 +186,10 @@ reads one or reads what `:var/get` returned (`len(a)` before and after
 
 `registerModulePass(path, factory)` (`include/camel/execute/pass/base.h`) lets a
 loaded module add a scoped pass; `findPassFactory` resolves it after the static
-`std` scope, and the "pass not found" listing includes module passes. The tensor
+`std` scope, and the "pass not found" listing includes module passes. A pass
+name `<module>::<pass>` that is not known when the names are checked
+(`requireKnownPasses`) loads `<module>` first, so a program need not import a
+module to use its pass (see `27_entry_parameters_and_pure_export.md`). The tensor
 module contributes `tensor::fuse`:
 
 - It rewrites `x @ w + b` and `relu(x @ w + b)` into `matmul_add` /
