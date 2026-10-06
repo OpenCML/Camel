@@ -1,0 +1,35 @@
+/**
+ * merge_sort.cml at a small size, with the evidence that the two recursive calls of a split
+ * run concurrently: each of the 8 leaf sorts waits at a rendezvous for one peer (see
+ * concurrent_calls) and reports whether it met one. The sort carries that count next to the
+ * sorted array, so no shared state orders the calls. (The leaves use `merge_sorted`: `sorted`,
+ * which merge_sort.cml uses, does not sort at the time of writing.)
+ */
+module merge_sort_small
+
+import { seed, shuffle } from random
+import { merge_sorted, merge_sorted_arrays } from algo
+import { rendezvous } from para
+
+func sort_leaf(arr: int[]): (int[], int) sync {
+    let met = rendezvous(2, 5000) - 1
+    return (merge_sorted(arr), met)
+}
+
+func mergesort(arr: int[]): (int[], int) {
+    return if len(arr) <= 8 then sort_leaf(arr) else {
+        let mid = len(arr) / 2
+        let (lhs, lmet) = arr->slice<0, mid>->mergesort
+        let (rhs, rmet) = arr->slice<mid, len(arr)>->mergesort
+        return (merge_sorted_arrays(lhs, rhs), lmet + rmet)
+    }
+}
+
+func main(): int sync {
+    seed(1)
+    let arr = range(0, 64)->shuffle
+    let (res, met) = mergesort(arr)
+    res->println
+    println('leaf sorts that met a peer: {} of 8'->format<met>)
+    return 0
+}

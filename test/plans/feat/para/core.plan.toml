@@ -222,3 +222,145 @@ expect_exit = 0
 expect_stdout_contains = ["filter_keeps_all total=80119959000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+# Graph-level task execution: nodes of one graph with no path between them run concurrently
+# under PRL, calls included. The assertions are deterministic: calls wait for each other at a
+# rendezvous (module para) and report whether a peer arrived; nothing is timed. On a scheduler
+# that runs a graph node by node every rendezvous times out and the counts are 0.
+[[tests]]
+name = "concurrent_calls.prl"
+desc = "Two calls with no path between them in the graph run at the same time under PRL: both meet at a rendezvous."
+kind = "behavior"
+case = "../../../cases/para/core/concurrent_calls.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'calls that met a peer: 2', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "concurrent_recursion.prl"
+desc = "Tree recursion under PRL: the two recursive calls of every level run concurrently, so each of the 8 leaves meets a peer at a rendezvous."
+kind = "behavior"
+case = "../../../cases/para/core/concurrent_recursion.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'leaves that met a peer: 8 of 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "merge_sort_small.prl"
+desc = "merge_sort at a small size under PRL: the result is sorted and the two recursive calls of a split run concurrently (each of the 8 leaf sorts meets a peer at a rendezvous)."
+kind = "behavior"
+case = "../../../cases/para/core/merge_sort_small.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 2, `unexpected output: ${lines.join(' | ')}`)
+const expected = '[' + Array.from({ length: 64 }, (_, i) => i).join(', ') + ']'
+assert(lines[0] === expected, `not sorted: ${lines[0]}`)
+assert(lines[1] === 'leaf sorts that met a peer: 8 of 8', `unexpected output: ${lines[1]}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "sync_order_with_tasks.prl"
+desc = "Under PRL a sync block keeps its written order (calls that sleep less and less still print 1, 2, 3; writes to a var through ordered calls land in order) while two independent calls of the same program run concurrently."
+kind = "behavior"
+case = "../../../cases/para/core/sync_order_with_tasks.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'step 1 | step 2 | step 3 | 6 | independent calls that met: 2 | step 1 | step 2 | step 3 | 6 | 1 4 11 | 11', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "concurrent_alloc.prl"
+desc = "Concurrent calls that allocate (a merge sort whose halves run concurrently, inside map elements, with reduce and filter) give the sequential result under PRL."
+kind = "behavior"
+case = "../../../cases/para/core/concurrent_alloc.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 3, `unexpected output: ${lines.join(' | ')}`)
+assert(lines[0] === '[294880, 250036, 203681, 167028, 133532, 99833, 74523, 50133, 31172, 18243, 7369, 1666]', `sums: ${lines[0]}`)
+assert(lines[1] === '[294880, 250036, 203681, 167028, 133532]', `filtered: ${lines[1]}`)
+assert(lines[2] === '[' + Array.from({ length: 96 }, (_, i) => i).join(', ') + ']', `not sorted: ${lines[2]}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "concurrent_alloc.prl_gc_stress"
+desc = "The same under PRL with a collection forced at every safepoint and every 5 allocations, heap verified before and after: values in flight on one worker survive a collection started by another."
+kind = "behavior"
+case = "../../../cases/para/core/concurrent_alloc.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 3, `unexpected output: ${lines.join(' | ')}`)
+assert(lines[0] === '[294880, 250036, 203681, 167028, 133532, 99833, 74523, 50133, 31172, 18243, 7369, 1666]', `sums: ${lines[0]}`)
+assert(lines[1] === '[294880, 250036, 203681, 167028, 133532]', `filtered: ${lines[1]}`)
+assert(lines[2] === '[' + Array.from({ length: 96 }, (_, i) => i).join(', ') + ']', `not sorted: ${lines[2]}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "arm_reads_outer_value.opt_prl"
+desc = "A branch arm that reads values computed outside the branch (through GATE nodes that execute nothing, after std::opt inlined a loop round) waits for them under PRL."
+kind = "behavior"
+case = "../../../cases/para/core/arm_reads_outer_value.cml"
+args = ["-t", "4", "${case}", "std::opt", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '1010 | 9', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "arm_reads_outer_value.opt_prl_t1"
+desc = "The same with one worker: the order of the tasks of a graph then differs from the linear order without any concurrency."
+kind = "behavior"
+case = "../../../cases/para/core/arm_reads_outer_value.cml"
+args = ["-t", "1", "${case}", "std::opt", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '1010 | 9', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
