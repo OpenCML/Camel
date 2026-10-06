@@ -40,6 +40,11 @@
  *   a type defined by a module    the loader the module registered for it
  *                                 (registerEntryArgumentLoader; the tensor module reads a
  *                                 `.npy` file for a Tensor parameter).
+ *
+ * The value `main` returns goes out the same way it would come in (writeEntryResultTo,
+ * `--result <path>` on the command line): a scalar as a text file holding the literal, a struct
+ * or tuple as a directory with one file per leaf, a module-defined type through the saver the
+ * module registered (a Tensor as a `.npy` file).
  */
 
 #pragma once
@@ -95,12 +100,38 @@ runtime::GCGraph *bindEntryArgumentSpecs(
     const core::context::context_ptr_t &context, runtime::GCGraph *root,
     std::span<const std::string> specs);
 
+/**
+ * Writes a value of a module-defined type to `path` (the counterpart of EntryArgumentLoader).
+ * Returns the path it wrote, which may be `path` with the format's extension added. Failure is
+ * an exception whose message says why.
+ */
+using EntryResultSaver =
+    std::function<std::string(slot_t value, core::type::Type *type, const std::string &path)>;
+
+/// Registers the saver for the values of the type with code `code`.
+void registerEntryResultSaver(core::type::TypeCode code, EntryResultSaver saver);
+
+/**
+ * Asks for the value the entry graph returns to be written to `path` when a scheduling pass
+ * has run the program. A value that cannot be written is RuntimeDiag::EntryResultNotWritten,
+ * located at `main`.
+ */
+void writeEntryResultTo(const core::context::context_ptr_t &context, std::string path);
+
 /// The names of the parameters of the entry graph that have no value, `with` ones first.
 std::vector<std::string> unboundEntryParameters(const runtime::GCGraph *root);
 
-/// The parameter name an object was bound for by bindEntryArguments (`w`, or `m.fc1.w` for a
-/// leaf of a struct), or empty. For translation passes that name what they emit.
-std::string entryArgumentNameOf(slot_t value);
+/// A value bindEntryArguments made a constant of the entry graph.
+struct BoundEntryArgument {
+    std::string name;       // the parameter
+    slot_t value;           // the object as it is now (the collector may have moved it)
+    core::type::Type *type; // its exact type
+};
+
+/// The objects (tensors, structs, tuples, strings) bound so far, in binding order. For
+/// translation passes that name what they emit after the parameter it came from. Scalars are
+/// not listed: a number has no identity to find again in a graph.
+std::vector<BoundEntryArgument> boundEntryArguments();
 
 /// Where diagnostics about the entry function are located: the definition of `main`.
 uint64_t entryFunctionOrigin(const core::context::Context &context);

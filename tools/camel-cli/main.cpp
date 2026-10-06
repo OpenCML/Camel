@@ -324,6 +324,9 @@ int main(int argc, char *argv[]) {
                         ctx->runtimeDiagSink()->dump(os, useJsonFormat);
                         return 1;
                     }
+                    if (!Run::entryResultPath.empty()) {
+                        camel::execute::writeEntryResultTo(ctx, Run::entryResultPath);
+                    }
                     static PassDumpState passDump;
                     if (!Run::dumpAfterEachPassDir.empty()) {
                         passDump.dir = Run::dumpAfterEachPassDir;

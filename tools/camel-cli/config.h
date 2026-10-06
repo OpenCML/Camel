@@ -61,6 +61,8 @@ extern bool timeitEnabled;
 extern std::string dumpAfterEachPassDir;
 /// --arg name=value (repeatable): values for the parameters of `main`.
 extern std::vector<std::string> entryArgs;
+/// --result <path>: where the value `main` returns is written ("" = nowhere).
+extern std::string entryResultPath;
 
 extern bool profile;
 extern bool noCache;

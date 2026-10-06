@@ -43,6 +43,7 @@ enum class RuntimeDiag : uint32_t {
     MacroEvaluationFailed     = 0x00000E,
     EntryArgumentMissing      = 0x000010,
     EntryArgumentInvalid      = 0x000011,
+    EntryResultNotWritten     = 0x000012,
     // Warnings (severity bits = Warn).
     PassesNeverRun = 0x10000F,
 };

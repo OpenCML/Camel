@@ -1,0 +1,329 @@
+id = "compile.entry_args"
+order = 322
+tier = "feat"
+tags = ["feat", "compile", "entry"]
+desc = "`main` with parameters: the entry graph takes them, `--arg name=value` binds them, `--result` writes what `main` returns."
+
+[[tests]]
+name = "entry_args.scalars_default"
+desc = "A `main` with int, float, string and bool parameters runs on the default pipeline with its values from `--arg`; the int result is the exit code (it used to end in an unlocated internal error on every pipeline: the entry graph called main with no arguments)."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 4
+expect_stdout_contains = ["hi 3 0.5 true"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.scalars_fvm"
+desc = "The same program under std::fvm."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::fvm"]
+expect_exit = 4
+expect_stdout_contains = ["hi 3 0.5 true"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.scalars_nvm"
+desc = "The same program under std::nvm."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::nvm"]
+expect_exit = 4
+expect_stdout_contains = ["hi 3 0.5 true"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.scalars_jit"
+desc = "The same program under std::jit."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::jit"]
+expect_exit = 4
+expect_stdout_contains = ["hi 3 0.5 true"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.scalars_tf"
+desc = "The same program under std::tf."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::tf"]
+expect_exit = 4
+expect_stdout_contains = ["hi 3 0.5 true"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.scalars_simplify"
+desc = "The same program after std::opt::simplify (then the default scheduler) and after std::macro std::opt::simplify under std::fvm: the rewriting passes accept an entry graph whose main has parameters."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::opt::simplify"]
+expect_exit = 4
+expect_stdout_contains = ["hi 3 0.5 true"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.scalars_macro_simplify_fvm"
+desc = "std::macro std::opt::simplify std::fvm on the same program."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 4
+expect_stdout_contains = ["hi 3 0.5 true"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.rgir_open_parameters"
+desc = "std::rgir on the program without any --arg: a dump needs no values. The entry graph has one port per parameter of main, named like it, and passes them on to main."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "arity"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+const ports = (name) => input.normalized.stdout.split('label="' + name + '", type="PORT"').length - 1
+for (const name of ['n', 'rate', 'name', 'loud']) {
+  assert(ports(name) === 2, 'parameter ' + name + ': one port in main and one in the entry graph, got ' + ports(name))
+}
+assert(input.normalized.stdout.split('[label="0|3", type="NORM"]').length - 1 === 2, 'the entry graph passes four arguments to main (and main four to println)')
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.rgir_partly_bound"
+desc = "A bound parameter is a constant of the entry graph, the others stay ports: with --arg n=3 the entry graph has three ports left."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "std::rgir"]
+expect_exit = 0
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+const ports = (name) => input.normalized.stdout.split('label="' + name + '", type="PORT"').length - 1
+assert(ports('n') === 1, 'n is bound: only the port of main itself is left, got ' + ports('n'))
+assert(ports('rate') === 2 && ports('name') === 2 && ports('loud') === 2, 'the other parameters stay ports of the entry graph')
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.missing_argument"
+desc = "Running needs every parameter: a missing value is the error EntryArgumentMissing located at the definition of main, naming the parameters without a value; nothing runs (no zeros, no random values)."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentMissing"
+expect_diagnostic_code = "0x04000010"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 1
+expect_output_contains = ["No value was given for the parameters 'rate', 'name' and 'loud' of 'main'", "--arg name=value"]
+expect_output_not_contains = ["hi", "arity", ":?:?:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.missing_argument_json"
+desc = "The same under each scheduler in --output-format json: one diagnostic, stage run, a source range, and the program does not run."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/entry_args/missing.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::fvm: EntryArgumentMissing", "std::nvm: EntryArgumentMissing", "std::jit: EntryArgumentMissing", "std::tf: EntryArgumentMissing", "default: EntryArgumentMissing", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "entry_args.unknown_name"
+desc = "An --arg that names no parameter is EntryArgumentInvalid at main and lists the parameters; the program does not run."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "--arg", "extra=1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_code = "0x04000011"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 1
+expect_output_contains = ["Cannot bind the argument 'extra' of 'main'", "its parameters: n, rate, name, loud"]
+expect_output_not_contains = ["hi 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.bad_literal"
+desc = "A value that is not a literal of the parameter's type is refused, naming the argument."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=three", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 7
+expect_output_contains = ["Cannot bind the argument 'n' of 'main': 'three' is not an integer"]
+expect_output_not_contains = ["hi "]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.given_twice"
+desc = "An argument given twice is refused."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "n=4"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_output_contains = ["the argument is given more than once"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.no_parameters"
+desc = "--arg on a program whose main takes no parameters is refused; without --arg the program runs as before."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/no_params.cml"
+args = ["${case}", "--arg", "x=1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 3
+expect_output_contains = ["'main' takes no parameters"]
+expect_output_not_contains = ["ran"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.tensor_npy"
+desc = "Tensor parameters are read from .npy files: the default run prints tanh(x @ w) of the two fixtures."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/tensors.cml"
+args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy"]
+expect_exit = 0
+expect_stdout_contains = ["0.3308", "0.5546", "dtype=float32"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.tensor_npy_jit"
+desc = "The same under std::jit."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/tensors.cml"
+args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy", "std::jit"]
+expect_exit = 0
+expect_stdout_contains = ["0.3308", "0.5546", "dtype=float32"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.tensor_npy_tf"
+desc = "The same under std::tf."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/tensors.cml"
+args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy", "std::tf"]
+expect_exit = 0
+expect_stdout_contains = ["0.3308", "0.5546", "dtype=float32"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.tensor_wrong_shape"
+desc = "A tensor that does not have the declared shape is refused when it is bound, with both shapes in the message; the program does not run."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/tensors.cml"
+args = ["${case}", "--arg", "x=test/cases/compile/entry_args/bad_shape.npy", "--arg", "w=test/cases/compile/entry_args/w.npy"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 9
+expect_output_contains = ["Cannot bind the argument 'x' of 'main'", "[2, 3]", "the tensor has shape [3, 3]"]
+expect_output_not_contains = ["tensor(["]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.tensor_missing_file"
+desc = "A tensor argument that names no file is refused."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/tensors.cml"
+args = ["${case}", "--arg", "x=test/cases/compile/entry_args/absent.npy", "--arg", "w=test/cases/compile/entry_args/w.npy"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_output_contains = ["a Tensor parameter takes a .npy file", "does not exist"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.with_parameters"
+desc = "`with` parameters of main (the weights) get their values like ordinary ones; the two call forms `layer<w, b>(x)` and `x->layer<w, b>` print the same tanh(x @ w + b). The .npy extension may be left out (b)."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/with_params.cml"
+args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy", "--arg", "b=test/cases/compile/entry_args/b"]
+expect_exit = 0
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+const out = input.normalized.stdout
+const count = (s) => out.split(s).length - 1
+assert(count('0.6878') === 2 && count('0.6351') === 2, 'both call forms print tanh(x @ w + b): ' + out)
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.with_parameters_fvm"
+desc = "The same under std::macro std::opt::simplify std::fvm."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/with_params.cml"
+args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy", "--arg", "b=test/cases/compile/entry_args/b.npy", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+const out = input.normalized.stdout
+const count = (s) => out.split(s).length - 1
+assert(count('0.6878') === 2 && count('0.6351') === 2, 'both call forms print tanh(x @ w + b): ' + out)
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.with_parameters_missing"
+desc = "A `with` parameter without a value is reported like any other, `with` parameters first."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/with_params.cml"
+args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentMissing"
+expect_diagnostic_line = 16
+expect_output_contains = ["No value was given for the parameters 'w' and 'b' of 'main'"]
+expect_output_not_contains = ["tensor(["]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.struct_directory_and_result"
+desc = "A struct parameter is a directory with one .npy file per leaf (fc.w.npy, fc.b.npy); --result writes the tuple main returns as a directory (0.npy, 1.npy) and a scalar result as a text file."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/entry_args/result.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["tuple result: 0.npy 1.npy", "scalar result: 4", "void result: EntryResultNotWritten", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

@@ -1,0 +1,105 @@
+#!/usr/bin/env node
+/**
+ * `--result <path>` writes the value `main` returns, in the layout `--arg` reads:
+ *   - struct_param.cml takes its weights from a directory (fc.w.npy, fc.b.npy) and returns a
+ *     tuple of two tensors: the result is a directory with 0.npy and 1.npy, under every
+ *     scheduler, and 1.npy is 0.npy times the scalar argument;
+ *   - scalars.cml returns an int: a text file holding the literal;
+ *   - a `main` that returns nothing: RuntimeDiag::EntryResultNotWritten at main, exit 1.
+ *
+ * Usage: node result.mjs
+ */
+
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+import url from 'url'
+import { spawnSync } from 'child_process'
+
+const HERE = path.dirname(url.fileURLToPath(import.meta.url))
+const REPO_ROOT = path.resolve(HERE, '..', '..', '..', '..')
+const CAMEL = path.join(REPO_ROOT, 'out', 'latest', 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
+const env = { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest') }
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-entry-result-'))
+
+/// The float32 payload of a little-endian .npy file (version 1 header).
+function npyFloats(file) {
+    const buf = fs.readFileSync(file)
+    const headerLen = buf.readUInt16LE(8)
+    const header = buf.subarray(10, 10 + headerLen).toString('latin1')
+    if (!header.includes("'<f4'")) throw new Error(`${file}: expected float32, header ${header}`)
+    const data = buf.subarray(10 + headerLen)
+    return Array.from({ length: data.length / 4 }, (_, i) => data.readFloatLE(4 * i))
+}
+
+let failed = false
+const check = (ok, pass, fail) => {
+    console.log(ok ? pass : `FAIL ${fail}`)
+    failed ||= !ok
+}
+
+for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
+    const out = path.join(tmp, `tuple-${(pass || 'default').replace(/:/g, '_')}`)
+    const args = [
+        path.join(HERE, 'struct_param.cml'),
+        '--arg', `x=${path.join(HERE, 'x.npy')}`,
+        '--arg', `p=${path.join(HERE, 'model')}`,
+        '--arg', 'scale=2',
+        '--result', out,
+    ]
+    if (pass) args.push(pass)
+    const proc = spawnSync(CAMEL, args, { env, encoding: 'utf8' })
+    let ok = proc.status === 0 && fs.existsSync(out)
+    let detail = `exit ${proc.status}: ${proc.stdout} ${proc.stderr}`
+    if (ok) {
+        const files = fs.readdirSync(out).sort().join(' ')
+        const h = npyFloats(path.join(out, '0.npy'))
+        const h2 = npyFloats(path.join(out, '1.npy'))
+        // tanh(x @ w + b) of the fixtures, first and last element (NumPy: 0.6877902, 0.635149).
+        ok =
+            files === '0.npy 1.npy' &&
+            h.length === 8 &&
+            Math.abs(h[0] - 0.6877902) < 1e-5 &&
+            Math.abs(h[7] - 0.635149) < 1e-5 &&
+            h2.every((v, i) => Math.abs(v - 2 * h[i]) < 1e-6)
+        detail = `files ${files}, values ${h} / ${h2}`
+    }
+    check(ok, `${pass || 'default'}: tuple result: 0.npy 1.npy`, `${pass || 'default'}: ${detail}`)
+}
+
+{
+    const out = path.join(tmp, 'n.txt')
+    const proc = spawnSync(
+        CAMEL,
+        [path.join(HERE, 'scalars.cml'), '--arg', 'n=3', '--arg', 'rate=0.5', '--arg', 'name=hi', '--arg', 'loud=false', '--result', out],
+        { env, encoding: 'utf8' },
+    )
+    const text = fs.existsSync(out) ? fs.readFileSync(out, 'utf8').trim() : '(no file)'
+    check(proc.status === 4 && text === '4', `scalar result: ${text}`, `scalar result: exit ${proc.status}, file ${text}`)
+}
+
+{
+    const out = path.join(tmp, 'void.txt')
+    const program = path.join(tmp, 'void_main.cml')
+    fs.writeFileSync(program, "module void_main\n\nfunc main(n: int): void sync {\n    println(n)\n}\n")
+    const proc = spawnSync(CAMEL, ['--output-format', 'json', program, '--arg', 'n=3', '--result', out], { env, encoding: 'utf8' })
+    let name = '(none)'
+    let line = -1
+    try {
+        const start = proc.stdout.lastIndexOf('[\n{')
+        const d = JSON.parse(proc.stdout.slice(start))[0]
+        name = d.data.name
+        line = d.range.start.line
+    } catch (e) {
+        name = `unparsed: ${proc.stdout}`
+    }
+    check(
+        proc.status === 1 && name === 'RuntimeDiag::EntryResultNotWritten' && line === 2 && !fs.existsSync(out),
+        'void result: EntryResultNotWritten at main, no file',
+        `void result: exit ${proc.status}, ${name} line ${line}`,
+    )
+}
+
+fs.rmSync(tmp, { recursive: true, force: true })
+console.log(failed ? 'FAIL' : 'PASS')
+process.exit(failed ? 1 : 0)

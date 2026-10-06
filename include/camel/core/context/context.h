@@ -80,6 +80,7 @@ class Context : public std::enable_shared_from_this<Context> {
     std::unordered_map<std::string, void *>
         loadedDllHandles_; // .cmo path -> handle; keep DLLs loaded.
     std::optional<int> processExitCode_;
+    std::function<void(camel::runtime::GCGraph *, slot_t)> entryResultHandler_;
     /** Most recent reason a ".cmo found but failed to load" case occurred, used by ModuleNotFound
      * diagnostics. */
     mutable std::string lastCmoLoadError_;
@@ -154,7 +155,16 @@ class Context : public std::enable_shared_from_this<Context> {
     void registerExecutorFactory(std::string name, std::function<std::shared_ptr<Executor>()> fact);
 
     void clearProcessExitCode() { processExitCode_.reset(); }
+    /** Every scheduling pass reports the value the entry graph returned here. */
     void captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t result);
+    /**
+     * Who else wants the value the entry graph returned (camel/execute/entry_args.h writes it
+     * to a file on request). Called from captureProcessExitCode, while the value is live.
+     */
+    using EntryResultHandler = std::function<void(camel::runtime::GCGraph *, slot_t)>;
+    void setEntryResultHandler(EntryResultHandler handler) {
+        entryResultHandler_ = std::move(handler);
+    }
     std::optional<int> processExitCode() const { return processExitCode_; }
     int processExitCodeOr(int fallback = 0) const { return processExitCode_.value_or(fallback); }
 

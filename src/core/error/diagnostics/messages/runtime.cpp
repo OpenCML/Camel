@@ -158,6 +158,16 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::EntryResultNotWritten,
+            {
+                "EntryResultNotWritten",
+                "Cannot write the result of 'main' to '{0}': {1}.",
+                "--result <path> writes the value 'main' returns: a number, bool or text as a "
+                "text file, a tensor as a .npy file, a struct or tuple as a directory with one "
+                "file per member.",
+            },
+        },
+        {
             RuntimeDiag::PassesNeverRun,
             {
                 "PassesNeverRun",

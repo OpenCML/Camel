@@ -124,6 +124,23 @@ bool TensorModule::load() {
         return true;
     }();
     (void)loaderAdded;
+    // The counterpart: a Tensor that `main` returns is written as a .npy file.
+    static const bool saverAdded = [] {
+        camel::execute::registerEntryResultSaver(
+            camel::tensor::TensorType::typeCode(),
+            [](slot_t value, camel::core::type::Type *, const std::string &text) -> std::string {
+                std::filesystem::path path(text);
+                if (path.extension() != ".npy") {
+                    path += ".npy";
+                }
+                camel::tensor::saveNpy(
+                    camel::core::rtdata::fromSlot<camel::tensor::TensorObject *>(value),
+                    path);
+                return path.string();
+            });
+        return true;
+    }();
+    (void)saverAdded;
     // Where a value crosses between tensors and host numbers: reading an element or a reduction
     // back to the host, or a computed host number entering tensor math.
     camel::runtime::NodeRoleRegistry::instance().add(

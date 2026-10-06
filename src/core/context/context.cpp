@@ -253,6 +253,9 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
 
 void Context::captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t result) {
     processExitCode_ = deriveProcessExitCode(graph, result);
+    if (entryResultHandler_) {
+        entryResultHandler_(graph, result);
+    }
 }
 
 std::vector<module_ptr_t> Context::allUserModules() const {

@@ -36,6 +36,8 @@
 
 #include <charconv>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <format>
 #include <memory>
 #include <mutex>
@@ -67,6 +69,23 @@ LoaderRegistry &loaderRegistry() {
     return registry;
 }
 
+struct SaverRegistry {
+    std::mutex mutex;
+    std::unordered_map<uint32_t, EntryResultSaver> savers;
+};
+
+SaverRegistry &saverRegistry() {
+    static SaverRegistry registry;
+    return registry;
+}
+
+EntryResultSaver findSaver(TypeCode code) {
+    auto &registry = saverRegistry();
+    std::lock_guard lock(registry.mutex);
+    auto it = registry.savers.find(static_cast<uint32_t>(code));
+    return it == registry.savers.end() ? nullptr : it->second;
+}
+
 EntryArgumentLoader findLoader(TypeCode code) {
     auto &registry = loaderRegistry();
     std::lock_guard lock(registry.mutex);
@@ -74,14 +93,23 @@ EntryArgumentLoader findLoader(TypeCode code) {
     return it == registry.loaders.end() ? nullptr : it->second;
 }
 
-struct BoundNames {
-    std::mutex mutex;
-    std::unordered_map<slot_t, std::string> names;
+/// The objects bound to parameters. Each stays rooted for the rest of the process (it is a
+/// constant of the entry graph from then on), which also keeps its address current when the
+/// collector moves it. Never destroyed: the allocator may be gone first at exit.
+struct BoundObject {
+    std::string name;
+    std::unique_ptr<mm::RootHandle> root;
+    Type *type;
 };
 
-BoundNames &boundNames() {
-    static BoundNames names;
-    return names;
+struct BoundObjects {
+    std::mutex mutex;
+    std::vector<BoundObject> objects;
+};
+
+BoundObjects &boundObjects() {
+    static BoundObjects *objects = new BoundObjects();
+    return *objects;
 }
 
 /// A value read from the command line. An object of the auto space is rooted from the moment
@@ -235,6 +263,71 @@ Loaded loadValue(const std::string &text, Type *declared, const std::string &wha
             declared->toString()));
 }
 
+/// Writes `value` to `path`; a struct or tuple becomes the directory `path` with one file per
+/// leaf, named by its path in the aggregate (the layout loadAggregate reads).
+void saveValue(slot_t value, Type *valueType, const std::string &path, const std::string &dir) {
+    const auto writeText = [&](const std::string &text) {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out << text << "\n";
+        if (!out) {
+            throw std::runtime_error("the file cannot be written");
+        }
+    };
+    if (!valueType) {
+        throw std::runtime_error("the type of the value is unknown");
+    }
+    switch (valueType->code()) {
+    case TypeCode::Int32:
+        return writeText(std::to_string(rtdata::fromSlot<int32_t>(value)));
+    case TypeCode::Int64:
+        return writeText(std::to_string(rtdata::fromSlot<int64_t>(value)));
+    case TypeCode::Float32:
+        return writeText(std::format("{}", rtdata::fromSlot<float>(value)));
+    case TypeCode::Float64:
+        return writeText(std::format("{}", rtdata::fromSlot<double>(value)));
+    case TypeCode::Bool:
+        return writeText(rtdata::fromSlot<bool>(value) ? "true" : "false");
+    case TypeCode::String:
+        return writeText(rtdata::fromSlot<::String *>(value)->toString());
+    case TypeCode::Struct:
+    case TypeCode::Tuple: {
+        const bool isStruct = valueType->code() == TypeCode::Struct;
+        const size_t count  = isStruct ? static_cast<type::StructType *>(valueType)->size()
+                                       : static_cast<type::TupleType *>(valueType)->size();
+        // Nested aggregates do not nest directories: the leaf files of the whole value lie in
+        // one directory, named by their path (`fc1.w`).
+        const bool top             = dir.empty();
+        const std::string leafRoot = top ? path : dir;
+        if (top) {
+            std::filesystem::create_directories(path);
+        }
+        for (size_t i = 0; i < count; ++i) {
+            const std::string key =
+                isStruct ? std::string(static_cast<type::StructType *>(valueType)->fieldName(i))
+                         : std::to_string(i);
+            Type *fieldType = isStruct ? static_cast<type::StructType *>(valueType)->typeAt(i)
+                                       : static_cast<type::TupleType *>(valueType)->typeAt(i);
+            const slot_t field = isStruct ? rtdata::fromSlot<::Struct *>(value)->get<slot_t>(i)
+                                          : rtdata::fromSlot<::Tuple *>(value)->get<slot_t>(i);
+            const std::string leaf = top ? leafRoot + "/" + key : path + "." + key;
+            saveValue(field, fieldType, leaf, leafRoot);
+        }
+        return;
+    }
+    default:
+        break;
+    }
+    if (const EntryResultSaver saver = findSaver(valueType->code())) {
+        (void)saver(value, valueType, path);
+        return;
+    }
+    throw std::runtime_error(
+        std::format(
+            "a value of type '{}' cannot be written to a file (int, float, bool, string, "
+            "types with a file format such as Tensor, and structs or tuples of those can)",
+            valueType->toString()));
+}
+
 std::string portNameOf(const GCGraph *graph, size_t argIndex) {
     const auto *funcType = graph->funcType();
     if (funcType && argIndex < funcType->argNamesCount()) {
@@ -243,34 +336,13 @@ std::string portNameOf(const GCGraph *graph, size_t argIndex) {
     return std::format("#{}", argIndex);
 }
 
-void rememberNames(slot_t value, Type *valueType, const std::string &name) {
-    if (!valueType || !valueType->isGCTraced() || value == NullSlot) {
+void remember(Loaded &loaded, const std::string &name) {
+    if (!loaded.root) {
         return;
     }
-    {
-        auto &names = boundNames();
-        std::lock_guard lock(names.mutex);
-        names.names.insert_or_assign(value, name);
-    }
-    if (valueType->code() == TypeCode::Struct) {
-        auto *structType = static_cast<type::StructType *>(valueType);
-        auto *object     = rtdata::fromSlot<::Struct *>(value);
-        for (size_t i = 0; i < structType->size(); ++i) {
-            rememberNames(
-                object->get<slot_t>(i),
-                structType->typeAt(i),
-                name + "." + std::string(structType->fieldName(i)));
-        }
-    } else if (valueType->code() == TypeCode::Tuple) {
-        auto *tupleType = static_cast<type::TupleType *>(valueType);
-        auto *object    = rtdata::fromSlot<::Tuple *>(value);
-        for (size_t i = 0; i < tupleType->size() && i < object->size(); ++i) {
-            rememberNames(
-                object->get<slot_t>(i),
-                tupleType->typeAt(i),
-                name + "." + std::to_string(i));
-        }
-    }
+    auto &bound = boundObjects();
+    std::lock_guard lock(bound.mutex);
+    bound.objects.push_back(BoundObject{name, std::move(loaded.root), loaded.type});
 }
 
 } // namespace
@@ -289,6 +361,42 @@ void registerEntryArgumentLoader(TypeCode code, EntryArgumentLoader loader) {
     auto &registry = loaderRegistry();
     std::lock_guard lock(registry.mutex);
     registry.loaders.insert_or_assign(static_cast<uint32_t>(code), std::move(loader));
+}
+
+void registerEntryResultSaver(TypeCode code, EntryResultSaver saver) {
+    auto &registry = saverRegistry();
+    std::lock_guard lock(registry.mutex);
+    registry.savers.insert_or_assign(static_cast<uint32_t>(code), std::move(saver));
+}
+
+void writeEntryResultTo(const core::context::context_ptr_t &context, std::string path) {
+    // The context owns the handler: it must not own the context in turn.
+    core::context::Context *ctx = context.get();
+    context->setEntryResultHandler([ctx, path = std::move(path)](GCGraph *graph, slot_t value) {
+        std::string why;
+        try {
+            Type *resultType =
+                graph && graph->funcType() && graph->funcType()->hasExitType()
+                    ? graph->funcType()->exitType()
+                    : nullptr;
+            if (!resultType || resultType->code() == TypeCode::Void) {
+                why = "'main' returns no value";
+            } else {
+                saveValue(value, resultType, path, "");
+                return;
+            }
+        } catch (const camel::core::error::Diagnostic &diagnostic) {
+            why = diagnostic.message;
+        } catch (const std::exception &e) {
+            why = e.what();
+        }
+        auto diag = ctx->rtmDiags()->of(RuntimeDiag::EntryResultNotWritten);
+        if (const uint64_t origin = entryFunctionOrigin(*ctx);
+            origin != camel::source::kInvalidOriginId) {
+            diag.atOrigin(origin);
+        }
+        diag.commit(path, why);
+    });
 }
 
 uint64_t entryFunctionOrigin(const core::context::Context &context) {
@@ -310,11 +418,19 @@ std::vector<std::string> unboundEntryParameters(const GCGraph *root) {
     return names;
 }
 
-std::string entryArgumentNameOf(slot_t value) {
-    auto &names = boundNames();
-    std::lock_guard lock(names.mutex);
-    auto it = names.names.find(value);
-    return it == names.names.end() ? std::string() : it->second;
+std::vector<BoundEntryArgument> boundEntryArguments() {
+    auto &bound = boundObjects();
+    std::lock_guard lock(bound.mutex);
+    std::vector<BoundEntryArgument> out;
+    out.reserve(bound.objects.size());
+    for (const BoundObject &object : bound.objects) {
+        out.push_back(
+            BoundEntryArgument{
+                object.name,
+                rtdata::toSlot<rtdata::Object *>(object.root->get()),
+                object.type});
+    }
+    return out;
 }
 
 GCGraph *bindEntryArgumentSpecs(
@@ -441,7 +557,6 @@ GCGraph *bindEntryArguments(
             draft.removeNormPort(port);
         }
         draft.eraseNode(port);
-        rememberNames(value, loaded.type, formal->name);
     }
     // The entry graph keeps a function type that matches its remaining ports: their names
     // are how the rest of the pipeline refers to the parameters still open.
@@ -469,7 +584,11 @@ GCGraph *bindEntryArguments(
     // A loaded value may have a more exact type than the parameter declares (the shape of a
     // tensor read from a file): the types of the nodes that read it follow.
     (void)camel::runtime::reinferDraftTypes(draft);
-    return session.commit();
+    GCGraph *result = session.commit();
+    for (auto &[formal, loaded] : bound) {
+        remember(loaded, formal->name);
+    }
+    return result;
 }
 
 } // namespace camel::execute
