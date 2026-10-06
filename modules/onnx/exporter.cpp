@@ -736,6 +736,49 @@ std::optional<std::pair<const GCGraph *, gc_node_ref_t>> findTreeRecursion(const
     return std::nullopt;
 }
 
+/// Size of what is reachable from `root` by direct calls: graphs, nodes, direct and indirect
+/// calls, branches. For CAMEL_ONNX_PREP_STATS (how much the export's own simplification does).
+std::string reachableStats(const GCGraph *root) {
+    size_t graphs = 0, nodes = 0, direct = 0, indirect = 0, branches = 0;
+    std::unordered_set<const GCGraph *> seen;
+    std::vector<const GCGraph *> work{root};
+    while (!work.empty()) {
+        const GCGraph *g = work.back();
+        work.pop_back();
+        if (g == nullptr || !seen.insert(g).second || !g->hasNodePayload()) {
+            continue;
+        }
+        ++graphs;
+        for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+            if (*it == nullptr) {
+                continue;
+            }
+            ++nodes;
+            switch ((*it)->kind) {
+            case GCNodeKind::Func:
+                ++direct;
+                work.push_back(g->directCalleeGraphOf(it.ref()));
+                break;
+            case GCNodeKind::Call:
+                ++indirect;
+                break;
+            case GCNodeKind::Brch:
+                ++branches;
+                break;
+            default:
+                break;
+            }
+        }
+    }
+    return std::format(
+        "{{\"graphs\":{},\"nodes\":{},\"direct_calls\":{},\"indirect_calls\":{},\"branches\":{}}}",
+        graphs,
+        nodes,
+        direct,
+        indirect,
+        branches);
+}
+
 /// The same export-time value: one constant, or one symbolic value by name.
 bool sameValue(const Value &a, const Value &b) {
     if (a.isConstant() != b.isConstant()) {
@@ -3080,6 +3123,12 @@ Model exportBound(
     // accept the same functions. Macros are not expanded here: that stays the business of
     // std::macro before this pass.
     const GCGraph *beforeSimplify = root;
+    // Measurement aid: what the bound function looks like when the export receives it and
+    // after the export's own simplification (one line each on stderr).
+    const bool prepStats = std::getenv("CAMEL_ONNX_PREP_STATS") != nullptr;
+    if (prepStats) {
+        std::cerr << "ONNX_PREP_STATS received " << reachableStats(root) << std::endl;
+    }
     try {
         root = preparation == Preparation::ShapesOnly
                    ? simplifyGraph(context, root, exportRewriteConfig(), log, kMaxExportRounds)
@@ -3118,6 +3167,9 @@ Model exportBound(
             location,
             origin,
             ExportError::Kind::CallRemains);
+    }
+    if (prepStats) {
+        std::cerr << "ONNX_PREP_STATS simplified " << reachableStats(root) << std::endl;
     }
     if (dumpEnabled()) {
         GraphVizDumpPass(context, GraphVizDumpConfig{.readableOnly = true}).apply(root, std::cerr);
