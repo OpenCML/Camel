@@ -1374,10 +1374,9 @@ Model finishModel(Emitter &emitter, const ExportOptions &options) {
     return model;
 }
 
-/// The simplification onnx.export_model performs on the bound function: macro expansion and
-/// the std::opt::simplify fixpoint, inlining everything that is not recursive.
-GCGraph *
-simplifyFully(const core::context::context_ptr_t &context, GCGraph *root, std::ostream &log) {
+/// How both export entries simplify the bound function: the std::opt::simplify fixpoint with
+/// everything that is not recursive inlined, and the export-only split of branched calls.
+OptimizeRewriteConfig exportRewriteConfig() {
     OptimizeRewriteConfig config;
     // Everything that is not recursive is inlined; ONNX has no calls.
     config.inlineConfig.smallSubgraphMaxNonDataPortNodes = std::numeric_limits<size_t>::max();
@@ -1391,8 +1390,18 @@ simplifyFully(const core::context::context_ptr_t &context, GCGraph *root, std::o
     // when set). A graph too large for the runtime representation fails at commit.
     config.growthBudgetNodes          = std::numeric_limits<size_t>::max();
     config.inlineConfig.maxOwnerNodes = std::numeric_limits<size_t>::max();
-    // Recursion unrolls about one level per round; one of dynamic depth stops changing instead.
-    constexpr size_t kMaxRounds = 4096;
+    return config;
+}
+
+// Recursion unrolls about one level per round; one of dynamic depth stops changing instead.
+constexpr size_t kMaxExportRounds = 4096;
+
+/// The simplification onnx.export_model performs on the bound function: macro expansion and
+/// the export simplification, to a fixpoint of the two.
+GCGraph *
+simplifyFully(const core::context::context_ptr_t &context, GCGraph *root, std::ostream &log) {
+    const OptimizeRewriteConfig config = exportRewriteConfig();
+    constexpr size_t kMaxRounds        = kMaxExportRounds;
     // Macros (grad, value_and_grad) expand once their arguments are constants, which
     // simplification may be what makes them.
     root = MacroRewritePass(context).apply(root, log);
@@ -1435,7 +1444,9 @@ void bindCaptures(camel::runtime::GraphDraft &draft, std::span<const Example> ca
 enum class Preparation {
     /// onnx.export_model: macro expansion and the whole std::opt::simplify fixpoint.
     Full,
-    /// onnx::export: only what needs the example inputs (see translateFunction).
+    /// onnx::export: the same simplification without macro expansion, which is the business
+    /// of std::macro before the pass (the name is historical: the pass used to fold shapes
+    /// only).
     ShapesOnly,
 };
 
@@ -1480,16 +1491,15 @@ Model exportBound(
     }
     std::ostringstream log;
     if (preparation == Preparation::ShapesOnly) {
-        // The graph is taken as the preceding passes left it. Binding the example types above
-        // re-inferred the node types; what those types now fix (the shape of a tensor whose
-        // type carries it, and the arithmetic on it) folds here, as std::opt::fold and
-        // std::opt::dce would fold it. Calls are not touched: no devirtualization, no
-        // specialization, no inlining, no macro expansion.
-        OptimizeRewriteConfig foldOnly;
-        foldOnly.enableDevirtualization = false;
-        foldOnly.enableSpecialization   = false;
-        foldOnly.enableInlining         = false;
-        root                            = simplifyGraph(context, root, foldOnly, log);
+        // The pass entry. The preceding passes simplified the program without two things only
+        // the export knows: the shapes of the examples (binding their types above re-inferred
+        // the node types, so the shape of a tensor and the arithmetic on it are constants
+        // now, and a recursion bounded by a shape can unroll) and the split of branched calls,
+        // which is valid only for a consumer that never executes the graph. The same
+        // simplification as onnx.export_model finishes the job with them, so that the two
+        // entries accept the same functions. Macros are not expanded here: that stays the
+        // business of std::macro before this pass.
+        root = simplifyGraph(context, root, exportRewriteConfig(), log, kMaxExportRounds);
     } else {
         root = simplifyFully(context, root, log);
     }

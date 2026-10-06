@@ -39,12 +39,22 @@ PROGRAMS = [
     "export_train_step_bn.cml",
     "export_train_step_conv.cml",
     "export_train_step_frozen.cml",
+    "export_train_step_branch.cml",
+    "export_train_step_branch_disjoint.cml",
+    "export_train_step_branch_scalar.cml",
+    "export_train_step_branch_tensor.cml",
+    "export_gated_gru_forward.cml",
+    "export_train_step_dynamic_mean.cml",
+    "export_var_local.cml",
+    "export_float_array.cml",
+    "export_grad_mean.cml",
+    "export_grad_matmul_vector.cml",
 ]
 # (program, passes, expected fragment of the message, expected 1-based line of the position)
 REFUSALS = [
     ("export_train_step.cml", ["onnx::export"], "run std::opt::simplify before onnx::export", 29),
     ("export_train_step.cml", ["std::opt::simplify", "onnx::export"], "run std::macro", 25),
-    ("export_dynamic_recursion.cml", PIPELINE, "onnx::export only translates", None),
+    ("export_dynamic_recursion.cml", PIPELINE, "recursion whose depth depends on the model input", None),
 ]
 DTYPES = {"tensor(float)": "float32", "tensor(double)": "float64", "tensor(int64)": "int64"}
 

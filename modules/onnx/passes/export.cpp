@@ -372,10 +372,10 @@ Model translate(core::context::Context &ctx, const Request &request) {
     } catch (const ExportError &e) {
         std::string message = e.what();
         if (e.kind() == ExportError::Kind::CallRemains) {
-            message += "; onnx::export only translates and does not inline: calls must be "
-                       "removed by std::opt::simplify (after std::macro when the program uses "
-                       "macros such as grad) before it, and a call those passes leave cannot "
-                       "be exported";
+            message += "; onnx::export inlines what std::opt::simplify left once the shapes "
+                       "of the examples are known, so this call is one no simplification "
+                       "removes (run std::macro before the pass when the program uses macros "
+                       "such as grad)";
         }
         // An error about the request as a whole (its examples, dynamic axes, target, the
         // function's arity or result) names no node: it is reported at the export_model call.

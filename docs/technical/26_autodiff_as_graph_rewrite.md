@@ -305,7 +305,7 @@ What exists (`modules/onnx/passes/export.cpp`, `docs/cli.md`):
 - It refuses, with the diagnostic `RuntimeDiag::TranslationRefused` at the node
   and the name of the missing pass, a graph that still has a call (not inlined,
   or the entry graph still calling `main`) or an unexpanded macro operator. It
-  never expands macros, devirtualizes, specializes calls, inlines or unrolls.
+  never expands macros.
 - For the programs both entries accept, the models are equivalent: same
   checker result and bit-identical ONNX Runtime outputs
   (`test/cases/modules/onnx/pass_export.py`).
@@ -314,27 +314,29 @@ What differs from the design above:
 
 - **Shape specialization is not a general pass.** There is no pass that takes
   example input types, so the pass does that step itself: it binds the example
-  types to the function's ports, re-infers node types, and runs the
-  `std::opt::fold` / `std::opt::dce` fixpoint on its copy of the function
-  (shape arithmetic such as `shape(x)[0] * shape(x)[1]` or `numel` in a
-  gradient can only fold then). This is the one simplification step left
-  inside the pass.
+  types to the function's ports, re-infers node types, and runs the export
+  simplification on its copy of the function (shape arithmetic such as
+  `shape(x)[0] * shape(x)[1]` or `numel` in a gradient can only fold then, and
+  a recursion bounded by a shape can only unroll then).
 - **Shapes are not read from node types.** The lowering walks the graph as a
   value DAG and re-derives dtype and shape per value with operator inference
   (this is what carries dynamic axes); in that walk it also evaluates pure
   operators whose arguments are all constants and takes the arm of a branch on
   a constant condition, where folding left them (inside branch arms).
-- **`onnx.export_model` does not run the pass pipeline.** It simplifies the
-  bound function itself with settings `std::opt::simplify` does not have:
-  inlining regardless of size, up to 4096 rounds (deeper static recursion),
-  and the branched-call split that turns the pullback of a data-dependent
-  branch into per-arm calls (`enableBranchedCallSplit`, valid only for a
-  consumer that builds no execution order). Programs that need these export
-  through `export_model` and are refused by the pipeline: of the exporting
-  programs in `test/cases/modules/onnx`, the pipeline accepts nine and refuses
-  the four `export_train_step_branch*` (indirect call left) and the two
-  `export_gated_gru_*` (call left); `export_import_order` is refused because
-  its captured weights come from `random` and only exist at run time.
+- **Both export entries run the same export simplification** on the bound
+  function (`exportRewriteConfig`, `modules/onnx/exporter.cpp`), with settings
+  `std::opt::simplify` does not have: inlining regardless of size, up to 4096
+  rounds (deeper static recursion), and the branched-call split that turns the
+  pullback of a data-dependent branch into per-arm calls
+  (`enableBranchedCallSplit`, valid only for a consumer that builds no
+  execution order, which is why it cannot be a pass before a scheduler).
+  `onnx.export_model` also expands macros; the pass leaves that to `std::macro`.
+  For nineteen programs of `test/cases/modules/onnx` the two entries write
+  models with bit-identical ONNX Runtime outputs (`pass_export.py equiv`),
+  among them the four `export_train_step_branch*` and `export_gated_gru_forward`,
+  which the pass used to refuse. `export_gated_gru_step` is refused by both;
+  `export_import_order` is refused by the pass because its captured weights
+  come from `random` and only exist at run time.
 - **Control dependencies are checked, not translated.** The lowering walk
   follows data dependencies only. Before it, both entries refuse a function in
   which an impure operator is reachable from the exit through data or control
