@@ -939,7 +939,9 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(
     const auto funcSlot   = dataIndexOf(graph, withInputs.front());
     const auto resultSlot = dataIndexOf(graph, nodeRef);
     const size_t arrSize  = currFrame.get<Array *>(arrSlot)->size();
-    Array *filtered       = Array::create(mm::autoSpace(), arrSize);
+    // Starts empty: Array::create(n) makes n null elements, and the kept ones were appended
+    // after them.
+    Array *filtered       = Array::create(mm::autoSpace(), 0);
     auto *resultType      = currFrame.typeAt<ArrayType>(resultSlot);
     currFrame.set(resultSlot, filtered);
 

@@ -521,7 +521,9 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
     const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
     auto *resultType     = currFrame.typeAt<ArrayType>(self);
 
-    Array *filtered = Array::create(mm::autoSpace(), arrSize);
+    // Starts empty: Array::create(n) makes n null elements, and the kept ones were appended
+    // after them.
+    Array *filtered = Array::create(mm::autoSpace(), 0);
     currFrame.set(self, filtered);
 
     for (size_t i = 0; i < arrSize; ++i) {
