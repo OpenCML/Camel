@@ -1,0 +1,24 @@
+/**
+ * map and filter are ordered: an element function with an effect runs for element 0, then 1,
+ * ... under every scheduler, std::tf included (it used to start the elements as independent
+ * tasks). The parallel case is unordered_foreach / unordered_reduce, or a function that is
+ * provably free of effects.
+ */
+module map_ordered_effects
+
+func show(i: int): int sync {
+    println(i)
+    return i * 2
+}
+
+func even(i: int): bool sync {
+    println(100 + i)
+    return i - (i / 2) * 2 == 0
+}
+
+func main(): int sync {
+    let doubled = range(0, 24)->map<show>
+    let kept = range(0, 24)->filter<even>
+    println(len(doubled) + len(kept))
+    return 0
+}
