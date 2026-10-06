@@ -1406,7 +1406,12 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     const auto &castLoad = gct->loadAs<GCT::CastLoad>();
     Type *targetType     = castLoad->targetType();
     Type *sourceType     = nodeTypeOf(valueNode);
-    if (targetType->castSafetyFrom(sourceType) != CastSafety::Safe) {
+    // Safe conversions always; an Unsafe one only into a module type, which then checks the
+    // value when the conversion runs (Type::castSlotFrom of that type). Primitive conversions
+    // that may lose information stay refused.
+    const CastSafety safety = targetType->castSafetyFrom(sourceType);
+    if (safety != CastSafety::Safe &&
+        !(safety == CastSafety::Unsafe && targetType->isOtherType())) {
         diags_->of(SemanticDiag::DynamicCastForbidden)
             .atOrigin(gct->load()->origin())
             .commit(sourceType->toString(), targetType->toString());

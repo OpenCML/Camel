@@ -180,7 +180,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ReturnTypeMismatch",
                 "Return type '{0}' does not match the function's declared return type '{1}'.",
                 "Ensure that the value returned from the function matches the type specified in "
-                "the function signature: {2}.",
+                "the function signature: {2}. No implicit conversion is applied: convert "
+                "explicitly, for example float(x) for a number or 'x as T' for a module type.",
             },
         },
         {
