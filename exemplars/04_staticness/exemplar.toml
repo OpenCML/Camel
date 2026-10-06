@@ -1,5 +1,5 @@
 title = "Staticness"
-summary = "Recursion whose depth follows from the input's shape unrolls at export; tail recursion whose depth depends on input values exports as a Loop; a linear recursion (one recursive call whose result is used afterwards) exports as paired Loops; a recursion that two branches decide stops the export with a diagnostic at the recursion. Tree recursion is not supported yet."
+summary = "Recursion whose depth follows from the input's shape unrolls at export; tail recursion whose depth depends on input values exports as a Loop; a linear recursion (one recursive call whose result is used afterwards) exports as paired Loops; a recursion that two branches decide stops the export with a diagnostic at the recursion. Tree recursion is refused."
 
 [[runs]]
 name = "run"

@@ -12,9 +12,9 @@
  * applies what is done with the result in reverse order; it exports as
  * ONNX Loops. `settle` is not of that shape: two branches decide whether it
  * calls itself, and the export stops with a diagnostic at the recursion.
- * Not supported yet and not shown here: a function that calls itself more
- * than once (tree recursion); today that fails during simplification
- * without a position.
+ * Not supported and not shown here: a function that calls itself more than
+ * once on one path (tree recursion); the export refuses it at the second
+ * recursive call.
  */
 module staticness
 
