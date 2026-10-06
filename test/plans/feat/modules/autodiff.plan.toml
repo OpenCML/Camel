@@ -1401,3 +1401,17 @@ assert(/[(]at [^ ]*grad_closure_unknown[.]cml:7:13[)]/.test(text), 'missing posi
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "grad_structures"
+desc = "Gradient check over 48 generated loss functions (fixed seed), each a random chain of the structures a derivative is routed through: a called function, a let-bound lambda with captures, a nested function with a capture, a branch whose arms are calls returning one value or a tuple. Reverse mode (under std::macro and on the default run) must agree with central finite differences of a NumPy float64 twin. Before the fix of stale call-site inputs 24 of the first 32 gradients were wrong; no hand-written test had combined the structures."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/autodiff/grad_structures.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy"]
+expect_exit = 0
+expect_stdout_contains = ["96 gradients checked, 0 wrong", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000

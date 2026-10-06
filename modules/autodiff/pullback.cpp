@@ -656,6 +656,22 @@ void ForwardRewrite::split(
     gc_node_ref_t node, const PullbackPlan &plan, std::vector<gc_node_ref_t> inputs) {
     const gc_node_ref_t value = draft_.addAccsNode(plan.valueType, 0u);
     draft_.replaceAllValueUses(node, value);
+    // Call sites recorded earlier name their inputs by node. A site whose input is this call
+    // (a call rewritten before the call that produces its argument: closure calls are, and a
+    // direct call may be) must follow the value to the new node, or the gradient it sends
+    // back would be accumulated on the (value, pullback) pair and never reach this call.
+    for (auto &[site, recorded] : sites_) {
+        for (gc_node_ref_t &input : recorded.inputs) {
+            if (input == node) {
+                input = value;
+            }
+        }
+    }
+    for (gc_node_ref_t &input : inputs) {
+        if (input == node) {
+            input = value; // a call that passes its own result cannot occur; kept for symmetry
+        }
+    }
     // Control users (e.g. a later BRCH that must run after the values its arms capture) now wait
     // for the value, which itself waits for the call.
     // (Only the edges: the branch structure, e.g. BRCH -> JOIN, still names the JOIN itself.)
