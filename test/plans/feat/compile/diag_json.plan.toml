@@ -339,15 +339,44 @@ timeout_ms = 6000
 
 [[tests]]
 name = "unknown_module_pass"
-desc = "A pass contributed by a module the program does not import does not exist for that program: onnx::export on a program without `import onnx` is an unknown pass, and the program does not run."
+desc = "A pass name whose module does not exist is an unknown pass, and the program does not run. (This test used onnx::export on a program without `import onnx`, which was unknown then; naming a module's pass now loads the module, see module_pass_autoload, so the test names a module that does not exist.)"
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_direct_user.cml"
-args = ["--output-format", "json", "${case}", "std::nvm", "onnx::export"]
+args = ["--output-format", "json", "${case}", "std::nvm", "nosuchmodule::export"]
 expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
 assert(diags.length === 1 && diags[0].data.name === 'RuntimeDiag::UnrecognizedGraphPass', 'diagnostic: ' + input.stdout)
-assert(diags[0].data.stage === 'pass:onnx::export', 'stage ' + diags[0].data.stage)
+assert(diags[0].data.stage === 'pass:nosuchmodule::export', 'stage ' + diags[0].data.stage)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "unknown_pass_of_known_module"
+desc = "A module that exists but contributes no pass of that name: still an unknown pass (the module is loaded, the name stays unknown), and the program does not run."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["--output-format", "json", "${case}", "std::nvm", "onnx::nosuchpass"]
+expect_exit = 1
+verify_script = """
+const diags = JSON.parse(input.stdout)
+assert(diags.length === 1 && diags[0].data.name === 'RuntimeDiag::UnrecognizedGraphPass', 'diagnostic: ' + input.stdout)
+assert(diags[0].data.stage === 'pass:onnx::nosuchpass', 'stage ' + diags[0].data.stage)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "module_pass_autoload"
+desc = "Naming a module's pass on the command line loads the module: tensor::fuse on a program that imports nothing is a known pass (it finds nothing to fuse) and the program runs under the scheduler after it."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "tensor::fuse", "std::nvm"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === '2011\n', 'the program runs once: ' + JSON.stringify(input.normalized.stdout))
+assert(!input.stderr.includes('not found'), 'the pass is known: ' + input.stderr)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000

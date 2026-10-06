@@ -314,8 +314,8 @@ int main(int argc, char *argv[]) {
                     // All pass names, the fallback's included, are checked before the first
                     // snapshot is written and before any pass runs: an unknown name anywhere
                     // on the command line leaves no effect and no artefact.
-                    requireKnownPasses(Run::resolvedPassList);
-                    requireKnownPasses(Run::fallbackPasses);
+                    requireKnownPasses(Run::resolvedPassList, ctx);
+                    requireKnownPasses(Run::fallbackPasses, ctx);
                     auto *graph = ctx->runtimeRootGraph();
                     // The values given for the parameters of `main` become constants of the
                     // entry graph before the first pass sees it.

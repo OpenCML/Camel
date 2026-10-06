@@ -459,7 +459,7 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             auto *graph = invocation->ctx->runtimeRootGraph();
             try {
                 // The list is run in three parts; all names are checked before the first.
-                requireKnownPasses(Run::resolvedPassList);
+                requireKnownPasses(Run::resolvedPassList, invocation->ctx);
                 // The values given for the parameters of `main` (--arg), as in a plain run.
                 graph = camel::execute::bindEntryArgumentSpecs(
                     invocation->ctx,

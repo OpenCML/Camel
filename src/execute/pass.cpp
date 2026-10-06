@@ -567,10 +567,30 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     return factory;
 }
 
-void requireKnownPasses(const std::vector<std::string> &passes) {
+void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (const auto &name : passes) {
         if (lookupPassFactory(name)) {
             continue;
+        }
+        // `<module>::<pass>`: the pass is contributed by a module the program did not import.
+        // Loading the module registers it.
+        if (ctx) {
+            std::string resolved = name;
+            if (auto aliasIt = passAliases.find(name); aliasIt != passAliases.end()) {
+                resolved = aliasIt->second;
+            }
+            const size_t sep = resolved.find("::");
+            if (sep != std::string::npos && sep > 0 && resolved.substr(0, sep) != "std") {
+                try {
+                    (void)ctx->importModule(resolved.substr(0, sep));
+                } catch (const Diagnostic &) {
+                    // No such module: the name stays unknown and is reported below.
+                } catch (const std::exception &) {
+                }
+                if (lookupPassFactory(name)) {
+                    continue;
+                }
+            }
         }
         listAvailablePasses(name);
         setPipelineStage("pass:" + name);
@@ -629,7 +649,7 @@ PassApplyResult applyPassesDetailed(
     }
     // Every name is checked before the first pass runs: an unknown pass written after a
     // scheduling pass must not let the program execute first.
-    requireKnownPasses(passes);
+    requireKnownPasses(passes, ctx);
     size_t passOutputIndex = 0;
     for (const auto &p : passes) {
         if (graph == nullptr) {
