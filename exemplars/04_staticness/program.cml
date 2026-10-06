@@ -3,8 +3,11 @@
  * `shape(x)[1]`, which shape specialization turns into a constant, so
  * std::opt::simplify unrolls the recursion into straight-line code
  * (std::stats: no calls left) and the model exports. `shrink` recurses until
- * a value computed from the input is small: its depth is not static, and the
- * export stops at the recursive call.
+ * a value computed from the input is small: its depth is not static, so it
+ * cannot unroll; because the recursive call is the last thing it does, it is a
+ * loop over its argument and exports as an ONNX Loop. `pile` has the same
+ * dynamic depth but uses the result of the recursive call: that is no loop,
+ * and the export stops at the recursive call.
  */
 module staticness
 
@@ -26,6 +29,10 @@ func shrink(t: Tensor): Tensor {
     return if sum(t) > 1.0 then shrink(t * 0.5) else t
 }
 
+func pile(t: Tensor): Tensor {
+    return if sum(t) > 1.0 then pile(t * 0.5) + t else t
+}
+
 func main(): int sync {
     let x = ones([2, 3, 4])
     println(forward(x))
@@ -36,6 +43,10 @@ func main(): int sync {
         return 0
     } else if mode == 'dynamic' then sync {
         export_model(shrink, x, get_env('ONNX_OUT'))
+        println('exported shrink')
+        return 0
+    } else if mode == 'nontail' then sync {
+        export_model(pile, x, get_env('ONNX_OUT'))
         println('unreachable')
         return 0
     } else 0

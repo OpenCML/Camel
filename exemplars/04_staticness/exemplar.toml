@@ -1,5 +1,5 @@
 title = "Staticness"
-summary = "Recursion whose depth follows from the input's shape unrolls at export; recursion whose depth depends on input values stops the export at the recursive call."
+summary = "Recursion whose depth follows from the input's shape unrolls at export; tail recursion whose depth depends on input values exports as a Loop; such a recursion that is not in tail position stops the export at the recursive call."
 
 [[runs]]
 name = "run"
@@ -18,6 +18,14 @@ onnx_ops = "Slice,Reshape,Add,Slice,Reshape,Add,Slice,Reshape,Add,Identity"
 [[runs]]
 name = "dynamic-export"
 env = ["MODE=dynamic", "ONNX_OUT={tmp}/shrink.onnx"]
+exit = 0
+output_contains = ["exported shrink"]
+onnx = "{tmp}/shrink.onnx"
+onnx_ops = "ReduceSum,Greater,If,Identity"
+
+[[runs]]
+name = "nontail-export"
+env = ["MODE=nontail", "ONNX_OUT={tmp}/pile.onnx"]
 exit = 1
 diagnostic = "RuntimeDiag::RuntimeError"
-output_contains = ["recursion whose depth depends on the model input cannot be exported", "04_staticness/program.cml:26:33)"]
+output_contains = ["is not the last action of the function", "04_staticness/program.cml:33:37)"]
