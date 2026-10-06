@@ -331,6 +331,18 @@ loop_start:
     return result;
 }
 
+void TaskflowExecSchedPass::runOnExecutor(tf::Taskflow &flow) {
+    // One executor for the whole run. A flow started from inside one of its tasks (a map in a
+    // map element) is run cooperatively by the calling worker. A fresh executor per nested flow
+    // meant a full set of worker threads for every inner map (thousands of threads) and
+    // ignored the thread limit.
+    if (executor_.this_worker_id() >= 0) {
+        executor_.corun(flow);
+    } else {
+        executor_.run(flow).wait();
+    }
+}
+
 slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, GCGraph *graph, Frame *frame) {
     ASSERT(graph != nullptr, "Taskflow subgraph execution requires a runtime graph.");
     (void)sf;
@@ -366,8 +378,7 @@ slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
             mark_unordered_foreach_arr(graph, nodeRef, frame, sf);
         }
     });
-    tf::Executor nestedExecutor;
-    nestedExecutor.run(flow).wait();
+    runOnExecutor(flow);
     const auto *node = requireNode(graph, nodeRef);
     return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
 }
@@ -547,8 +558,7 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
         flow.emplace([this, graph, nodeRef, frame, &result](tf::Subflow &sf) {
             result = executePreparedNode(graph, nodeRef, frame, sf, nullptr);
         });
-        tf::Executor nestedExecutor;
-        nestedExecutor.run(flow).wait();
+        runOnExecutor(flow);
         return result;
     }
     }
@@ -1232,7 +1242,7 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
         return;
     }
 
-    const size_t workerHint = std::max<size_t>(2, std::thread::hardware_concurrency());
+    const size_t workerHint = std::max<size_t>(2, executor_.num_workers());
     const size_t chunkGoal =
         arr->size() <= 1 ? size_t(1) : std::max<size_t>(2, std::min(workerHint, arr->size() / 2));
     const size_t chunkCount = std::min(arr->size(), chunkGoal);
@@ -1266,8 +1276,7 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
             .name("UNORDERED_REDUCE_CHUNK");
     }
 
-    tf::Executor nestedExecutor;
-    nestedExecutor.run(level).wait();
+    runOnExecutor(level);
 
     slot_t acc = init;
     for (size_t chunk = 0; chunk < chunkCount; ++chunk) {

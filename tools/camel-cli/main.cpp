@@ -197,6 +197,7 @@ int main(int argc, char *argv[]) {
             .entryDir    = entryDir,
             .entryFile   = targetFile,
             .searchPaths = std::move(searchPaths),
+            .maxThreads  = Run::maxThreads > 0 ? static_cast<size_t>(Run::maxThreads) : 0,
         },
         DiagsConfig{
             .total_limit         = -1,

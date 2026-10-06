@@ -24,12 +24,14 @@
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/pass/runtime_sched.h"
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <span>
 #include <taskflow/algorithm/for_each.hpp>
 #include <taskflow/taskflow.hpp>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -84,8 +86,10 @@ namespace ctx = camel::core::context;
 
 class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
   public:
-    TaskflowExecSchedPass(const ctx::context_ptr_t &ctx, size_t max_concurrent_tasks = 32)
-        : RuntimeGraphSchedulePass(ctx), executor_(max_concurrent_tasks) {}
+    /// `max_concurrent_tasks` = 0: the thread limit of the context (`-t`), else the number of
+    /// hardware threads.
+    TaskflowExecSchedPass(const ctx::context_ptr_t &ctx, size_t max_concurrent_tasks = 0)
+        : RuntimeGraphSchedulePass(ctx), executor_(workerCount(ctx, max_concurrent_tasks)) {}
     ~TaskflowExecSchedPass() override = default;
 
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
@@ -99,6 +103,18 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         std::vector<uint8_t> skipNodes;
         std::vector<std::vector<camel::execute::RuntimeBranchArmRegion>> branchArms;
     };
+
+    static size_t workerCount(const ctx::context_ptr_t &ctx, size_t requested) {
+        if (requested == 0 && ctx) {
+            requested = ctx->maxThreads();
+        }
+        if (requested == 0) {
+            requested = std::thread::hardware_concurrency();
+        }
+        return std::max<size_t>(1, requested);
+    }
+    /// Runs `flow` to completion on the pass's executor, from any thread.
+    void runOnExecutor(tf::Taskflow &flow);
 
     tf::Executor executor_;
     std::unordered_map<camel::runtime::GCGraph *, std::vector<camel::runtime::gc_node_ref_t>>

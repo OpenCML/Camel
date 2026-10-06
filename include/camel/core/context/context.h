@@ -57,6 +57,9 @@ struct EntryConfig {
     std::string entryDir;                 // root path of the context, used for loading modules
     std::string entryFile;                // entry module path
     std::vector<std::string> searchPaths; // search paths for modules
+    // Upper bound on worker threads of parallel schedulers (`-t` on the command line); 0 means
+    // not given: the scheduler uses the number of hardware threads.
+    size_t maxThreads = 0;
 
     std::string toString() const;
 };
@@ -109,6 +112,7 @@ class Context : public std::enable_shared_from_this<Context> {
         const error::DiagsConfig &diagConf = error::DiagsConfig());
 
     const std::string &entryDir() const { return entryConfig_.entryDir; }
+    size_t maxThreads() const { return entryConfig_.maxThreads; }
     error::DiagsConfig diagConfig() const { return diagConfig_; }
     module_ptr_t mainModule() const { return mainModule_; }
     error::diagnostics_ptr_t rtmDiags() const { return runtimeDiagSink_; }
