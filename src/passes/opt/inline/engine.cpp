@@ -38,6 +38,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/log.h"
 
+#include <optional>
 #include <algorithm>
 #include <cstdlib>
 #include <format>
@@ -545,6 +546,13 @@ GCGraph *applyRuntimeOptimizeRewrite(
 
         bool roundChanged = false;
         bool restartRound = false;
+        // The direct-call counts of the whole closure, shared by the graphs of this round. They
+        // depend only on the drafts, which a round changes in three ways: a specialization or a
+        // devirtualization retargets or creates a FUNC node (the counts are dropped and
+        // recomputed on the next use), and an inline restarts the round. Counting the closure
+        // again for every graph made one inline cost (graphs x nodes): 405 s for std::inline on
+        // a 36,000-node program of 1,732 graphs.
+        std::optional<std::unordered_map<const GCGraph *, size_t>> roundCallCounts;
         for (auto it = closure.rbegin(); it != closure.rend(); ++it) {
             GCGraph *nextGraph = *it;
             if (!nextGraph) {
@@ -584,6 +592,7 @@ GCGraph *applyRuntimeOptimizeRewrite(
                     if (camel::runtime::specializeDirectFuncInDraft(session, draft, funcNodeId)) {
                         changed      = true;
                         roundChanged = true;
+                        roundCallCounts.reset();
                         // The callee after the rewrite is the copy (counted in full even when
                         // an existing copy was reused).
                         const auto *body =
@@ -614,6 +623,7 @@ GCGraph *applyRuntimeOptimizeRewrite(
                             config.enableBranchedCallSplit)) {
                         changed      = true;
                         roundChanged = true;
+                        roundCallCounts.reset();
                     }
                 }
             }
@@ -627,7 +637,10 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 continue;
             }
 
-            const auto callCounts = directCallCounts(session, closure);
+            if (!roundCallCounts) {
+                roundCallCounts = directCallCounts(session, closure);
+            }
+            const auto &callCounts = *roundCallCounts;
             std::vector<gc_node_ref_t> candidates;
             candidates.reserve(draft.nodeCount());
             for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
