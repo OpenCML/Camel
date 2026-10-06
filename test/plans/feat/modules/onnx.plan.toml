@@ -1512,3 +1512,49 @@ assert(model.inputs.join() === 'w,b,input1', `unexpected inputs ${model.inputs}`
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "export_var_compound"
+desc = "Local scalar variables with typed and compound assignments (`k += 2`, `s += sum(x)`, `s *= 2.0`, `s -= 1.0`) export: a compound assignment writes the content it finds combined with its operand; the integer variable folds to a constant."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_var_compound.cml"
+args = ["${case}", "std::macro"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_var_compound.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_var_compound.onnx'))
+const ops = model.ops.filter((o) => o !== 'Identity').join(' ')
+assert(ops === 'ReduceSum Add Mul Sub Mul Add', `the chain of the float variable and nothing for the integer one, got ${model.ops}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_export_var_compound"
+desc = "Local scalar variables with typed and compound assignments (`k += 2`, `s += sum(x)`, `s *= 2.0`, `s -= 1.0`) export: a compound assignment writes the content it finds combined with its operand; the integer variable folds to a constant."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_var_compound.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_var_compound.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_var_compound.onnx"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_var_compound.onnx'))
+const ops = model.ops.filter((o) => o !== 'Identity').join(' ')
+assert(ops === 'ReduceSum Add Mul Sub Mul Add', `the chain of the float variable and nothing for the integer one, got ${model.ops}`)
+}
+"""
+timeout_ms = 8000

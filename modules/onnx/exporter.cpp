@@ -229,6 +229,10 @@ class Evaluator {
     Value evalNode(Activation &act, gc_node_ref_t ref);
     Value evalOper(Activation &act, gc_node_ref_t ref);
     Value evalVariableRead(Activation &act, gc_node_ref_t ref);
+    Value variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_ref_t at);
+    Value applyOper(
+        Activation &act, const std::string &uri, std::vector<Value> norm, type::Type *resultType,
+        std::vector<Value> with = {});
     Value evalJoin(Activation &act, gc_node_ref_t ref);
     Value evalFill(Activation &act, gc_node_ref_t ref);
     Value symbolicFloatArray(
@@ -333,6 +337,33 @@ bool isLocalVariable(const GCGraph *g, gc_node_ref_t cell) {
     return operUriOf(g, cell) == ":var/new";
 }
 
+/// An assignment operator, taken apart: `:op/assn[_T]` stores its operand; `:op/assn_<op>[_T]`
+/// (`+=`, `-=`, ...) stores `old <op> operand`, where `:op/<op>[_T]` is the binary operator.
+struct AssignmentKind {
+    bool isAssignment = false;
+    std::string binary; // empty for a plain assignment
+};
+
+AssignmentKind assignmentKindOf(std::string_view uri) {
+    constexpr std::string_view prefix = ":op/assn";
+    if (!uri.starts_with(prefix)) {
+        return {};
+    }
+    std::string_view rest = uri.substr(prefix.size()); // "", "_l", "_add", "_add_l", ...
+    if (rest.empty()) {
+        return {.isAssignment = true, .binary = {}};
+    }
+    if (rest.front() != '_') {
+        return {};
+    }
+    rest.remove_prefix(1);
+    const auto isTypeSuffix = [](std::string_view t) { return t.size() == 1; };
+    if (isTypeSuffix(rest)) {
+        return {.isAssignment = true, .binary = {}};
+    }
+    return {.isAssignment = true, .binary = std::format(":op/{}", rest)};
+}
+
 /// Why a variable that is not local to the graph using it cannot be exported.
 constexpr const char *kOuterVariable =
     "a variable is read or assigned outside the function that declares it (a var parameter, a "
@@ -387,12 +418,13 @@ void Evaluator::refuseEffects(GCGraph *root) {
                 // effect of the model (evalVariableRead translates the reads).
                 const bool onLocalVariable =
                     uri == ":var/new" ||
-                    ((uri == ":var/get" || uri == ":op/assn") && !g->normInputsOf(ref).empty() &&
+                    ((uri == ":var/get" || assignmentKindOf(uri).isAssignment) &&
+                     !g->normInputsOf(ref).empty() &&
                      isLocalVariable(g, g->normInputsOf(ref).front()));
                 if (!onLocalVariable && !core::OperatorTraitsRegistry::instance().isPure(uri)) {
                     const uint64_t origin = g->nodeOrigin(ref);
                     const std::string what =
-                        uri == ":var/get" || uri == ":op/assn"
+                        uri == ":var/get" || assignmentKindOf(uri).isAssignment
                             ? std::string(kOuterVariable)
                             : std::format("impure operator '{}' cannot be exported", uri);
                     throw ExportError(
@@ -1095,24 +1127,35 @@ Value Evaluator::evalVariableRead(Activation &act, gc_node_ref_t ref) {
     if (!isLocalVariable(g, cell)) {
         unsupported(act, kOuterVariable);
     }
+    return variableValueAt(act, cell, ref);
+}
+
+/// The content of the local variable `cell` as the node `at` finds it: the value written by the
+/// last assignment that must run before `at`. A compound assignment (`+=`) writes the content it
+/// finds combined with its operand.
+Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_ref_t at) {
+    GCGraph *g = act.graph;
     std::vector<gc_node_ref_t> before;
     for (const auto users : {g->normOutputsOf(cell), g->withOutputsOf(cell)}) {
         for (gc_node_ref_t user : users) {
+            if (user == at) {
+                continue;
+            }
             const std::string_view uri = operUriOf(g, user);
             if (uri == ":var/get") {
                 continue;
             }
-            if (uri != ":op/assn" || g->normInputsOf(user).size() != 2 ||
+            if (!assignmentKindOf(uri).isAssignment || g->normInputsOf(user).size() != 2 ||
                 g->normInputsOf(user).front() != cell) {
                 unsupported(
                     act,
                     "a variable of the exported function is passed to a call, a branch arm or "
-                    "a closure, or is updated by a compound assignment; only a variable that "
-                    "is read and assigned directly in one function can be exported");
+                    "a closure; only a variable that is read and assigned directly in one "
+                    "function can be exported");
             }
-            if (runsBefore(g, user, ref)) {
+            if (runsBefore(g, user, at)) {
                 before.push_back(user);
-            } else if (!runsBefore(g, ref, user)) {
+            } else if (!runsBefore(g, at, user)) {
                 unsupported(
                     act,
                     "an assignment of a variable is not ordered with a read of it, so the "
@@ -1128,9 +1171,16 @@ Value Evaluator::evalVariableRead(Activation &act, gc_node_ref_t ref) {
         for (gc_node_ref_t other : before) {
             isLast = isLast && (other == last || runsBefore(g, other, last));
         }
-        if (isLast) {
-            return eval(act, g->normInputsOf(last)[1]);
+        if (!isLast) {
+            continue;
         }
+        const Value operand        = eval(act, g->normInputsOf(last)[1]);
+        const AssignmentKind kind  = assignmentKindOf(operUriOf(g, last));
+        if (kind.binary.empty()) {
+            return operand;
+        }
+        const Value old = variableValueAt(act, cell, last);
+        return applyOper(act, kind.binary, {old, operand}, g->node(last)->dataType);
     }
     unsupported(
         act,
@@ -1147,7 +1197,15 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     }
     std::vector<Value> norm = evalAll(act, g->normInputsOf(ref));
     std::vector<Value> with = evalAll(act, g->withInputsOf(ref));
-    const auto *def         = tensor::ops::OpRegistry::instance().find(uri);
+    return applyOper(act, uri, std::move(norm), g->node(ref)->dataType, std::move(with));
+}
+
+/// The value of operator `uri` applied to `norm` (and `with`): folded when the arguments are
+/// constants, lowered to ONNX otherwise.
+Value Evaluator::applyOper(
+    Activation &act, const std::string &uri, std::vector<Value> norm, type::Type *resultType,
+    std::vector<Value> with) {
+    const auto *def = tensor::ops::OpRegistry::instance().find(uri);
 
     // Simplification has evaluated every pure operator whose arguments are constants; what is
     // left is translated. Side effects have no ONNX counterpart.
@@ -1156,7 +1214,7 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     }
     if (allConstant(norm) && allConstant(with) && !std::ranges::any_of(norm, isDeferredClosure) &&
         !std::ranges::any_of(with, isDeferredClosure)) {
-        if (auto folded = foldConstantOper(uri, norm, with, g->node(ref)->dataType)) {
+        if (auto folded = foldConstantOper(uri, norm, with, resultType)) {
             return *folded;
         }
     }
@@ -1200,7 +1258,7 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     }
     try {
         Value result = lowering->lower(
-            LowerContext(emitter_, uri, norm, std::move(facts), g->node(ref)->dataType));
+            LowerContext(emitter_, uri, norm, std::move(facts), resultType));
         if (traceEnabled()) {
             std::cerr << std::format("[onnx]   -> {}\n", describe(result));
         }

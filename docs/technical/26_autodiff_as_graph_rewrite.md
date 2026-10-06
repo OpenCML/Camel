@@ -351,8 +351,9 @@ What differs from the design above:
   acc`) is only a name for a sequence of values: each read is translated as the
   value of the assignment that reaches it, which is decided from the graph (the
   assignments that must run before the read form a chain; the last one is
-  read; the declaration's initial value when there is none). No state appears
-  in the model. Refused with a diagnostic: a variable read or assigned outside
+  read; the declaration's initial value when there is none). A compound
+  assignment (`+=`, `*=`, ...) writes the content it finds combined with its
+  operand. No state appears in the model. Refused with a diagnostic: a variable read or assigned outside
   the function that declares it (a `var` parameter, a captured variable, a
   variable used in a branch arm) — its content would be state the model cannot
   hold; a variable passed to a call or a closure; an assignment that the graph
