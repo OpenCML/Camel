@@ -23,6 +23,8 @@
 
 #include "type.h"
 
+#include "camel/core/data/composite/array.h"
+#include "camel/core/data/primary.h"
 #include "camel/core/mm.h"
 #include "camel/utils/assert.h"
 #include "dtype.h"
@@ -182,6 +184,49 @@ OtherType *TensorType::cloneWithParams(std::span<Type *const> params) const {
         return Default();
     }
     return get(params[0]->code(), std::nullopt);
+}
+
+OtherType *TensorType::cloneWithArguments(
+    std::span<const type::TypeArgument> arguments, std::string &error) const {
+    std::optional<TypeCode> dtype;
+    std::optional<StaticShape> shape;
+    for (const type::TypeArgument &argument : arguments) {
+        if (argument.type != nullptr) {
+            if (dtype || shape) {
+                error = "Tensor takes at most one element type, written before the shape: "
+                        "Tensor<dtype, const [d0, d1, ...]>";
+                return nullptr;
+            }
+            // As cloneWithParams: the type's code names the element type.
+            const TypeCode code = argument.type->code();
+            dtype = code;
+            continue;
+        }
+        if (shape) {
+            error = "Tensor takes at most one shape: Tensor<dtype, const [d0, d1, ...]>";
+            return nullptr;
+        }
+        const auto array = std::dynamic_pointer_cast<camel::core::data::ArrayData>(argument.data);
+        if (!array) {
+            error = "the constant argument of a Tensor type is its shape, an array of integers "
+                    "such as const [3, 4] (a negative extent means unknown)";
+            return nullptr;
+        }
+        StaticShape extents;
+        for (const auto &element : array->raw()) {
+            if (auto i = std::dynamic_pointer_cast<camel::core::data::IntData>(element)) {
+                extents.push_back(i->data() < 0 ? kUnknownDim : static_cast<int64_t>(i->data()));
+            } else if (auto l = std::dynamic_pointer_cast<camel::core::data::LongData>(element)) {
+                extents.push_back(l->data() < 0 ? kUnknownDim : l->data());
+            } else {
+                error = "every extent of a Tensor shape must be an integer constant (a negative "
+                        "extent means unknown)";
+                return nullptr;
+            }
+        }
+        shape = std::move(extents);
+    }
+    return get(dtype, std::move(shape));
 }
 
 const TensorType *asTensorType(const Type *type) {

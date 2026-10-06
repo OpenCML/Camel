@@ -81,6 +81,11 @@ class TensorType : public type::OtherType {
     type::CastSafety castSafetyFrom(type::Type *sourceType) const override;
     bool assignableFrom(type::Type *sourceType) const override;
     type::OtherType *cloneWithParams(std::span<type::Type *const> params) const override;
+    /// `Tensor<dtype>`, `Tensor<const [d0, d1, ...]>`, `Tensor<dtype, const [...]>`: the element
+    /// type and the shape. An extent written as a negative integer (conventionally -1) is
+    /// unknown; `const []` is a scalar tensor.
+    type::OtherType *cloneWithArguments(
+        std::span<const type::TypeArgument> arguments, std::string &error) const override;
 
   private:
     TensorType(std::optional<type::TypeCode> dtype, std::optional<StaticShape> shape);
