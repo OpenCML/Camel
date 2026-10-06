@@ -189,8 +189,17 @@ slot_t TaskflowExecSchedPass::evalGraphLinear(GCGraph *graph, Frame *frame) {
     auto *currRuntimeGraph = graph;
     auto currNodes         = topoNodesForLinear(currRuntimeGraph);
     auto gcSafepoint       = [&](std::string_view reason) {
-        // Taskflow's linear fallback polls coarse safepoints; the check is one atomic load and
-        // only enters the allocator when GC diagnostics or a deferred collection are pending.
+        // A collection needs every live value in a frame and every other thread stopped.
+        // Neither holds while a flow runs: a map keeps the results of its finished elements
+        // in a C++ vector until all are done, and the other workers are in the middle of
+        // operators. So the poll is skipped inside a flow; the thread that entered the pass
+        // polls between flows, when it is the only one running. Memory a flow allocates is
+        // therefore reclaimed only after the flow has ended.
+        if (runningFlows_.load(std::memory_order_acquire) != 0) {
+            return;
+        }
+        // The check is one atomic load and only enters the allocator when GC diagnostics or a
+        // deferred collection are pending.
         camel::core::mm::safepoint(reason);
     };
 
@@ -336,6 +345,13 @@ void TaskflowExecSchedPass::runOnExecutor(tf::Taskflow &flow) {
     // map element) is run cooperatively by the calling worker. A fresh executor per nested flow
     // meant a full set of worker threads for every inner map (thousands of threads) and
     // ignored the thread limit.
+    struct RunningFlow {
+        explicit RunningFlow(std::atomic<size_t> &count) : count_(count) {
+            count_.fetch_add(1, std::memory_order_acq_rel);
+        }
+        ~RunningFlow() { count_.fetch_sub(1, std::memory_order_acq_rel); }
+        std::atomic<size_t> &count_;
+    } runningFlow(runningFlows_);
     if (executor_.this_worker_id() >= 0) {
         executor_.corun(flow);
     } else {

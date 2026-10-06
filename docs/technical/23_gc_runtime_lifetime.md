@@ -81,8 +81,11 @@ frames, macro value roots, or explicit `mm::RootHandle` instances for C++ locals
 The current non-moving domains are intentional:
 
 - JIT machine code has no stack maps yet, so JIT execution remains outside the moving-GC contract.
-- Taskflow worker subflows do not yet provide a global stop-the-world worker barrier; they are safe
-  with the production non-moving auto-space mode and must not be treated as fully moving-safe.
+- Taskflow worker subflows do not provide a global stop-the-world worker barrier. The scheduler
+  therefore polls safepoints only while no flow is running, when the thread that entered the pass is
+  the only one executing and every live value is in a frame. Inside a flow other workers are in the
+  middle of operators, and a `map` holds the results of its finished elements in a C++ vector. Memory
+  allocated by a flow is reclaimed after the flow has ended.
 - Native module bridges that hold auto-space objects across a safepoint must use `mm::RootHandle` or
   store the value in a traced frame/static slot before crossing the boundary.
 

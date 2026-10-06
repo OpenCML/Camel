@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,7 @@
 #include "camel/execute/pass/runtime_sched.h"
 
 #include <algorithm>
+#include <atomic>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -117,6 +118,11 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     void runOnExecutor(tf::Taskflow &flow);
 
     tf::Executor executor_;
+    // Flows now running on the executor (nested ones included). While it is not zero, tasks
+    // hold values that no frame holds yet (the element results of a map, a reduce's
+    // accumulator, an operator's fresh result) and other workers keep running, so nothing
+    // may be collected: evalGraphLinear polls its safepoints only when it is zero.
+    std::atomic<size_t> runningFlows_{0};
     std::unordered_map<camel::runtime::GCGraph *, std::vector<camel::runtime::gc_node_ref_t>>
         linearTopoCache_;
     // Per graph and BRCH: where each arm starts executing in the linear order

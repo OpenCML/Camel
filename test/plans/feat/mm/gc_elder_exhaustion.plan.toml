@@ -9,6 +9,11 @@ used to run a mark-sweep on the spot, which freed objects held only by C++ local
 backing store was being allocated); the next collection then traced the freed object, or the
 program computed with reused memory. Every test checks the printed total against a value computed
 independently of Camel.
+
+Under std::tf a collection could also run while a flow was running: the other workers were inside
+operators, and a map held the results of its finished elements outside any frame. The std::tf
+tests cover that: the nested map at full size, and every program at a small size with a major
+collection, heap verification before and after, at every safepoint the scheduler polls.
 """
 
 [[tests]]
@@ -175,3 +180,62 @@ expect_exit = 0
 expect_stdout_contains = ["gc_nested_foreach total=32396800"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_map_tf"
+desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
+args = ["${case}", "--arg", "reps=200", "std::tf"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_map total=17472000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_map_tf_stress"
+desc = "A table built by a map inside a map element, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
+args = ["${case}", "--arg", "reps=3", "std::tf"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_map total=148608"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_filter_tf_stress"
+desc = "filter nested with map both ways, the element functions building rows, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_filter.cml"
+args = ["${case}", "--arg", "reps=3", "std::tf"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_filter total=131904"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_reduce_tf_stress"
+desc = "reduce nested with map both ways, one accumulator being an array rebuilt at every step, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_reduce.cml"
+args = ["${case}", "--arg", "reps=3", "std::tf"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_reduce total=9584448"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_foreach_tf_stress"
+desc = "foreach nested with map both ways, the bodies building rows and appending to captured variables, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_foreach.cml"
+args = ["${case}", "--arg", "reps=3", "std::tf"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_foreach total=296832"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
