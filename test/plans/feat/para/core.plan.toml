@@ -189,3 +189,36 @@ assert(out === '[0, 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121, 144, 169, 196, 22
 }
 """
 timeout_ms = 20000
+
+[[tests]]
+name = "filter_keeps_all.nvm"
+desc = "filter keeps every element whose predicate holds, also when the predicates run concurrently: forty filters over 3000 elements, count and sum of the kept elements checked. (The verdicts were bits of one std::vector<bool>, and concurrent writes to neighbouring bits lost some.)"
+kind = "behavior"
+case = "../../../cases/para/core/filter_keeps_all.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["filter_keeps_all total=80119959000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "filter_keeps_all.tf"
+desc = "filter keeps every element whose predicate holds, also when the predicates run concurrently: forty filters over 3000 elements, count and sum of the kept elements checked. (The verdicts were bits of one std::vector<bool>, and concurrent writes to neighbouring bits lost some.)"
+kind = "behavior"
+case = "../../../cases/para/core/filter_keeps_all.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+expect_stdout_contains = ["filter_keeps_all total=80119959000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "filter_keeps_all.prl"
+desc = "filter keeps every element whose predicate holds, also when the predicates run concurrently: forty filters over 3000 elements, count and sum of the kept elements checked. (The verdicts were bits of one std::vector<bool>, and concurrent writes to neighbouring bits lost some.)"
+kind = "behavior"
+case = "../../../cases/para/core/filter_keeps_all.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+expect_stdout_contains = ["filter_keeps_all total=80119959000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000

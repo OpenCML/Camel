@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1175,13 +1175,15 @@ void TaskflowExecSchedPass::mark_filter_arr(
     Function *func =
         frame->get<Function *>(dataIndexOf(graph, graph->withInputsOf(nodeRef).front()));
     const auto site = makeHigherOrderCallSite(func);
-    std::vector<bool> keep(arr->size(), false);
+    // One byte per verdict: the predicates run concurrently, and the elements of a
+    // std::vector<bool> share words, so two tasks writing neighbouring verdicts lost one.
+    std::vector<uint8_t> keep(arr->size(), 0);
     for (size_t i = 0; i < arr->size(); ++i) {
         sf.emplace([this, i, arr, site, &keep](tf::Subflow &isf) {
               std::array<slot_t, 1> args{arr->get<slot_t>(i)};
               Frame *callee =
                   acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
-              keep[i] = fromSlot<bool>(runPreparedSubgraph(isf, site.runtimeGraph, callee));
+              keep[i] = fromSlot<bool>(runPreparedSubgraph(isf, site.runtimeGraph, callee)) ? 1 : 0;
           }).name("FILTER_PRED");
     }
     sf.join();
