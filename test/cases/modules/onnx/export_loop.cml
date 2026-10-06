@@ -1,0 +1,36 @@
+/**
+ * Tail recursion whose depth depends on the model input is a loop over its arguments and
+ * exports as an ONNX Loop: `halve` (the depth depends on the data only) and `iterate` (a
+ * counter against a bound computed from the data, with an argument that never changes).
+ * Checked on ONNX Runtime against NumPy for depths 0 to 6 (artifacts: b2/probes/check_loop.py).
+ */
+module export_loop
+import { Tensor, reshape, sum, tanh } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+// Depth depends on the data only: halve until the sum is below 1.
+func halve(h: Tensor): Tensor {
+    return if sum(h) < 1.0 then h else halve(h * 0.5)
+}
+
+// A counted loop whose bound comes from the data, with an unchanged argument (w).
+func iterate(i: int, n: int, v: Tensor, w: Tensor): Tensor {
+    return if i >= n then v else iterate(i + 1, n, tanh(v @ w) + v, w)
+}
+
+func model(x: Tensor, w: Tensor): (Tensor, Tensor) {
+    let steps = int(sum(x * x) * 0.2)
+    return (halve(x), iterate(0, steps, x, w))
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    let w = reshape([0.5, -0.25, 0.1, 0.3], [2, 2])
+    let r = model(x, w)
+    println(r.0)
+    println(r.1)
+    export_model((x: Tensor, w: Tensor): (Tensor, Tensor) => model(x, w), (x, w), get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

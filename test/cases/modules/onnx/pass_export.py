@@ -39,6 +39,8 @@ PROGRAMS = [
     "export_train_step_bn.cml",
     "export_train_step_conv.cml",
     "export_train_step_frozen.cml",
+    "export_dynamic_recursion.cml",
+    "export_loop.cml",
     "export_train_step_branch.cml",
     "export_train_step_branch_disjoint.cml",
     "export_train_step_branch_scalar.cml",
@@ -54,7 +56,7 @@ PROGRAMS = [
 REFUSALS = [
     ("export_train_step.cml", ["onnx::export"], "run std::opt::simplify before onnx::export", 29),
     ("export_train_step.cml", ["std::opt::simplify", "onnx::export"], "run std::macro", 25),
-    ("export_dynamic_recursion.cml", PIPELINE, "recursion whose depth depends on the model input", None),
+    ("export_nontail_recursion.cml", PIPELINE, "is not the last action of the function", None),
 ]
 DTYPES = {"tensor(float)": "float32", "tensor(double)": "float64", "tensor(int64)": "int64"}
 

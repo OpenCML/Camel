@@ -252,6 +252,34 @@ class Evaluator {
     Value rebuildArmAggregate(type::Type *camelType, std::span<const Value> combined, size_t &next);
     Value evalAccs(Activation &act, gc_node_ref_t ref);
 
+    // ---- calls that simplification leaves: tail recursion as an ONNX Loop (see translateLoop)
+    /// One function being translated as a loop: its ports and what they are bound to while
+    /// its body is evaluated.
+    struct LoopFrame {
+        GCGraph *fn = nullptr;
+        std::vector<gc_node_ref_t> ports;
+        std::vector<Value> inputs;
+        std::vector<bool> changed; // set when a tail call passes something else for the port
+    };
+    /// What evaluating the function body from one node amounts to.
+    struct BodyOutcome {
+        // Whether the function calls itself again: a constant, or a bool value by name.
+        std::optional<bool> contConst;
+        std::string contName;
+        std::vector<Value> next;     // the arguments of that call; the current ones on a return
+        std::optional<Value> result; // the value returned, on the paths that return
+    };
+    Value evalCall(Activation &act, gc_node_ref_t site);
+    Value translateLoop(Activation &act, GCGraph *fn, std::vector<Value> args);
+    BodyOutcome evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop);
+    BodyOutcome
+    mergeOutcomes(Activation &act, const Value &cond, BodyOutcome a, BodyOutcome b, LoopFrame &loop);
+    Value selectValue(Activation &act, const std::string &cond, const Value &a, const Value &b);
+    std::vector<Value> callArguments(Activation &act, gc_node_ref_t site, GCGraph *callee);
+    Activation activationOf(GCGraph *callee, std::span<const Value> args);
+    bool nodeReachesCall(const GCGraph *g, gc_node_ref_t ref, const GCGraph *target);
+    std::vector<LoopFrame *> loops_;
+
     std::vector<Value> evalAll(Activation &act, std::span<const gc_node_ref_t> refs);
     Value keep(slot_t slot, type::Type *type);
     /// A pure operator whose arguments are all constants, evaluated as the VM would evaluate
@@ -453,7 +481,8 @@ Value Evaluator::keep(slot_t slot, type::Type *type) {
 }
 
 void Evaluator::unsupported(Activation &act, std::string_view what, ExportError::Kind kind) {
-    const std::string &graph = act.graph->name();
+    // The source name: a specialization's suffix ("$tspec0") means nothing to the reader.
+    const std::string graph = act.graph->name().substr(0, act.graph->name().find('$'));
     throw ExportError(
         isSourceName(graph) ? std::format("in '{}': {}", graph, what) : std::string(what),
         kind);
@@ -520,17 +549,8 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         return evalOper(act, ref);
     case GCNodeKind::Join:
         return evalJoin(act, ref);
-    case GCNodeKind::Func: {
-        const std::string &callee = g->directCalleeGraphOf(ref)->name();
-        unsupported(
-            act,
-            std::format(
-                "a call{} remains after simplification; recursion whose depth depends on the "
-                "model input cannot be exported",
-                isSourceName(callee) ? std::format(" to '{}'", callee.substr(0, callee.find('$')))
-                                     : std::string()),
-            ExportError::Kind::CallRemains);
-    }
+    case GCNodeKind::Func:
+        return evalCall(act, ref);
     case GCNodeKind::Call:
         unsupported(
             act,
@@ -542,6 +562,496 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
             act,
             std::format("graph node kind {} has no export semantics", static_cast<int>(n->kind)));
     }
+}
+
+// ---------------------------------------------------------------- tail recursion as a Loop
+//
+// Simplification inlines every call that is not recursive and unrolls a recursion whose depth
+// is known at export time. A call that is left is a recursion whose depth depends on the model
+// input. When every recursive call is the last thing its path does (tail position), the
+// function is a loop over its arguments:
+//
+//     state = arguments
+//     do { (again, state) = one evaluation of the body at state } while (again)
+//     result = the value the body returns at the final state
+//
+// and that is an ONNX Loop whose carried values are the arguments that change. The body is the
+// function's own graph evaluated once with the carried arguments as inputs. Its decision tree
+// (the branches that separate "return" from "call again") is merged with Where instead of If:
+// both sides are evaluated and the condition selects, which is the same value because every
+// exported operator is pure and total. Branches without a recursive call stay Ifs. The result is
+// computed once more after the Loop, at the final state, so no carried value needs an initial
+// result of a known shape.
+//
+// Refused, with a diagnostic: a recursive call that is not in tail position, a carried value
+// whose dtype or shape changes between iterations, a tuple, struct or array argument that
+// changes, a recursion that never returns.
+
+namespace {
+
+/// Whether a direct call chain leads from `from` to `to` (`from` itself included).
+bool callReaches(const GCGraph *from, const GCGraph *to) {
+    std::unordered_set<const GCGraph *> seen;
+    std::vector<const GCGraph *> work{from};
+    while (!work.empty()) {
+        const GCGraph *g = work.back();
+        work.pop_back();
+        if (g == nullptr || !seen.insert(g).second || !g->hasNodePayload()) {
+            continue;
+        }
+        for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+            if (*it == nullptr || (*it)->kind != GCNodeKind::Func) {
+                continue;
+            }
+            const GCGraph *callee = g->directCalleeGraphOf(it.ref());
+            if (callee == to) {
+                return true;
+            }
+            work.push_back(callee);
+        }
+    }
+    return false;
+}
+
+/// The same export-time value: one constant, or one symbolic value by name.
+bool sameValue(const Value &a, const Value &b) {
+    if (a.isConstant() != b.isConstant()) {
+        return false;
+    }
+    if (a.isConstant()) {
+        return a.slot == b.slot && a.ty == b.ty;
+    }
+    if (a.isAggregate() != b.isAggregate()) {
+        return false;
+    }
+    if (a.isAggregate()) {
+        if (a.fields.size() != b.fields.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < a.fields.size(); ++i) {
+            if (!sameValue(a.fields[i], b.fields[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return a.form == b.form && !a.name.empty() && a.name == b.name;
+}
+
+/// Whether an argument can be a carried value of a Loop: a tensor or a numeric / bool scalar.
+bool isCarriable(const Value &v) {
+    if (v.isSymbolic()) {
+        return v.form == Value::Form::Tensor || v.form == Value::Form::Scalar;
+    }
+    if (v.ty == nullptr) {
+        return false;
+    }
+    return tensor::asTensorType(v.ty) != nullptr || tensor::isSupportedTensorScalar(v.ty->code());
+}
+
+/// A symbolic value named `name` with the form, dtype and shape of `like`.
+Value placeholderLike(const Value &like, std::string name) {
+    if (type::Type *scalar = scalarCamelTypeOf(like)) {
+        return Value::symbolicScalar(std::move(name), scalar);
+    }
+    const TensorFacts facts = factsOf(like);
+    return Value::symbolic(std::move(name), facts.dtype, facts.shape);
+}
+
+} // namespace
+
+bool Evaluator::nodeReachesCall(const GCGraph *g, gc_node_ref_t ref, const GCGraph *target) {
+    std::unordered_set<gc_node_ref_t> seen{ref};
+    std::vector<gc_node_ref_t> work{ref};
+    while (!work.empty()) {
+        const gc_node_ref_t node = work.back();
+        work.pop_back();
+        if (g->node(node)->kind == GCNodeKind::Func) {
+            const GCGraph *callee = g->directCalleeGraphOf(node);
+            if (callee == target || callReaches(callee, target)) {
+                return true;
+            }
+        }
+        for (const auto inputs : {g->normInputsOf(node), g->withInputsOf(node)}) {
+            for (gc_node_ref_t input : inputs) {
+                if (seen.insert(input).second) {
+                    work.push_back(input);
+                }
+            }
+        }
+    }
+    return false;
+}
+
+std::vector<Value>
+Evaluator::callArguments(Activation &act, gc_node_ref_t site, GCGraph *callee) {
+    GCGraph *g      = act.graph;
+    const auto with = g->withInputsOf(site);
+    const auto norm = g->normInputsOf(site);
+    if (with.size() != callee->withPorts().size() || norm.size() != callee->normPorts().size()) {
+        unsupported(act, "a call does not pass one argument per parameter of its callee");
+    }
+    std::vector<Value> args = evalAll(act, with);
+    for (Value &v : evalAll(act, norm)) {
+        args.push_back(std::move(v));
+    }
+    return args;
+}
+
+Evaluator::Activation Evaluator::activationOf(GCGraph *callee, std::span<const Value> args) {
+    Activation inner{.graph = callee, .ports = {}, .memo = {{}}};
+    size_t k = 0;
+    for (gc_node_ref_t port : callee->withPorts()) {
+        inner.ports.emplace(port, args[k++]);
+    }
+    for (gc_node_ref_t port : callee->normPorts()) {
+        inner.ports.emplace(port, args[k++]);
+    }
+    return inner;
+}
+
+Value Evaluator::evalCall(Activation &act, gc_node_ref_t site) {
+    GCGraph *callee = act.graph->directCalleeGraphOf(site);
+    const std::string name =
+        isSourceName(callee->name())
+            ? std::format(" to '{}'", callee->name().substr(0, callee->name().find('$')))
+            : std::string();
+    for (const LoopFrame *loop : loops_) {
+        if (loop->fn == callee || callReaches(callee, loop->fn)) {
+            unsupported(
+                act,
+                std::format(
+                    "a call{} remains after simplification and is not the last action of the "
+                    "function (a recursion whose depth depends on the model input can only be "
+                    "exported as a loop when every recursive call is in tail position)",
+                    name),
+                ExportError::Kind::CallRemains);
+        }
+    }
+    std::vector<Value> args = callArguments(act, site, callee);
+    if (!callReaches(callee, callee)) {
+        // Not recursive: its value is its body's (simplification inlines these; one that is
+        // left is evaluated in place).
+        Activation inner     = activationOf(callee, args);
+        const auto *exitType = callee->funcType()->exitType();
+        if (callee->returnKind() == camel::runtime::GCReturnKind::None ||
+            (exitType && exitType->code() == TypeCode::Void)) {
+            return Value::constant(NullSlot, type::Type::Void());
+        }
+        return eval(inner, execute::resolveRuntimeTailValueRef(callee));
+    }
+    try {
+        return translateLoop(act, callee, std::move(args));
+    } catch (const ExportError &e) {
+        if (!e.location().empty()) {
+            throw;
+        }
+        // A refusal about the loop as a whole is reported at the call.
+        const uint64_t origin = act.graph->nodeOrigin(site);
+        throw ExportError(e.what(), locationOf(origin), origin, e.kind());
+    }
+}
+
+Value Evaluator::selectValue(
+    Activation &act, const std::string &cond, const Value &a, const Value &b) {
+    if (sameValue(a, b)) {
+        return a;
+    }
+    if (a.isAggregate() || b.isAggregate() || !isCarriable(a) || !isCarriable(b)) {
+        unsupported(
+            act,
+            "a tuple, struct or array differs between the paths of a recursion whose depth "
+            "depends on the model input; only tensors and scalars can be carried by a loop");
+    }
+    const TensorFacts fa = factsOf(a), fb = factsOf(b);
+    if (!fa.dtype || fa.dtype != fb.dtype) {
+        unsupported(
+            act,
+            "the paths of a recursion whose depth depends on the model input yield values of "
+            "different types");
+    }
+    const std::string out = emitter_.node(
+        "Where",
+        {cond, emitter_.operand(a, *fa.dtype), emitter_.operand(b, *fa.dtype)});
+    if (type::Type *scalar = scalarCamelTypeOf(a)) {
+        return Value::symbolicScalar(out, scalar);
+    }
+    std::optional<tensor::StaticShape> shape;
+    if (fa.shape && fb.shape && *fa.shape == *fb.shape) {
+        shape = fa.shape;
+    }
+    return Value::symbolic(out, fa.dtype, shape);
+}
+
+Evaluator::BodyOutcome Evaluator::mergeOutcomes(
+    Activation &act, const Value &cond, BodyOutcome a, BodyOutcome b, LoopFrame &loop) {
+    const std::string c = emitter_.operand(cond, TypeCode::Bool);
+    BodyOutcome out;
+    if (a.contConst && b.contConst) {
+        if (*a.contConst == *b.contConst) {
+            out.contConst = a.contConst;
+        } else {
+            out.contName = *a.contConst ? c : emitter_.node("Not", {c});
+        }
+    } else {
+        const auto operandOf = [&](const BodyOutcome &o) {
+            return o.contConst ? emitter_.operand(
+                                     Value::constant(
+                                         rtdata::toSlot<bool>(*o.contConst),
+                                         type::Type::Bool()),
+                                     TypeCode::Bool)
+                               : o.contName;
+        };
+        // (c and a) or (not c and b): ONNX Runtime has no Where kernel for bool tensors.
+        out.contName = emitter_.node(
+            "Or",
+            {emitter_.node("And", {c, operandOf(a)}),
+             emitter_.node("And", {emitter_.node("Not", {c}), operandOf(b)})});
+    }
+    out.next.reserve(loop.ports.size());
+    for (size_t k = 0; k < loop.ports.size(); ++k) {
+        out.next.push_back(selectValue(act, c, a.next[k], b.next[k]));
+    }
+    if (a.result && b.result) {
+        out.result = selectValue(act, c, *a.result, *b.result);
+    } else {
+        out.result = a.result ? a.result : b.result;
+    }
+    return out;
+}
+
+Evaluator::BodyOutcome
+Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
+    GCGraph *g    = act.graph;
+    const auto *n = g->node(ref);
+    switch (n->kind) {
+    case GCNodeKind::Copy:
+        return evalLoopBody(act, g->normInputsOf(ref).front(), loop);
+    case GCNodeKind::Gate: {
+        const auto norm = g->normInputsOf(ref);
+        return evalLoopBody(act, norm.empty() ? g->withInputsOf(ref).back() : norm.back(), loop);
+    }
+    case GCNodeKind::Func: {
+        GCGraph *callee = g->directCalleeGraphOf(ref);
+        if (callee == loop.fn) {
+            // The recursive call in tail position: the next state.
+            BodyOutcome out;
+            out.contConst = true;
+            out.next      = callArguments(act, ref, callee);
+            for (size_t k = 0; k < loop.ports.size(); ++k) {
+                if (!sameValue(out.next[k], loop.inputs[k])) {
+                    loop.changed[k] = true;
+                }
+            }
+            return out;
+        }
+        if (callReaches(callee, loop.fn)) {
+            // A function (a branch arm, a helper) on the way to the recursive call.
+            const std::vector<Value> args = callArguments(act, ref, callee);
+            Activation inner              = activationOf(callee, args);
+            return evalLoopBody(inner, execute::resolveRuntimeTailValueRef(callee), loop);
+        }
+        break;
+    }
+    case GCNodeKind::Join: {
+        const gc_node_ref_t brch = g->normInputsOf(ref).front();
+        const auto arms          = g->withInputsOf(ref);
+        bool recursive           = false;
+        for (gc_node_ref_t arm : arms) {
+            recursive = recursive || nodeReachesCall(g, arm, loop.fn);
+        }
+        if (!recursive) {
+            break; // an ordinary branch: a value
+        }
+        const Value cond = eval(act, g->normInputsOf(brch).front());
+        if (!g->withInputsOf(brch).empty() || arms.size() != 2) {
+            unsupported(
+                act,
+                "a match whose arms call the function again cannot be exported as a loop; "
+                "write the recursion with if / else");
+        }
+        if (cond.isConstant()) {
+            const size_t arm = tensor::scalarToBool(cond.ty->code(), cond.slot) ? 0 : 1;
+            return evalLoopBody(act, arms[arm], loop);
+        }
+        if (cond.form != Value::Form::Scalar) {
+            unsupported(act, "the condition of a recursion is not a scalar");
+        }
+        BodyOutcome a = evalLoopBody(act, arms[0], loop);
+        BodyOutcome b = evalLoopBody(act, arms[1], loop);
+        return mergeOutcomes(act, cond, std::move(a), std::move(b), loop);
+    }
+    default:
+        break;
+    }
+    // A path that returns: the state stays, the value is the result.
+    BodyOutcome out;
+    out.contConst = false;
+    out.next      = loop.inputs;
+    out.result    = eval(act, ref);
+    return out;
+}
+
+Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> args) {
+    LoopFrame loop;
+    loop.fn = fn;
+    loop.ports.assign(fn->withPorts().begin(), fn->withPorts().end());
+    loop.ports.insert(loop.ports.end(), fn->normPorts().begin(), fn->normPorts().end());
+    const size_t count          = loop.ports.size();
+    const gc_node_ref_t exitRef = execute::resolveRuntimeTailValueRef(fn);
+
+    // One evaluation of the body with `inputs` as the state, in the current scope.
+    const auto evaluate = [&](std::vector<Value> inputs) {
+        loop.inputs = std::move(inputs);
+        loop.changed.assign(count, false);
+        Activation body = activationOf(fn, loop.inputs);
+        loops_.push_back(&loop);
+        try {
+            BodyOutcome outcome = evalLoopBody(body, exitRef, loop);
+            loops_.pop_back();
+            return outcome;
+        } catch (...) {
+            loops_.pop_back();
+            throw;
+        }
+    };
+    const auto withPlaceholders = [&](const std::vector<bool> &carried, std::string_view hint) {
+        std::vector<Value> inputs = args;
+        for (size_t k = 0; k < count; ++k) {
+            if (carried[k]) {
+                inputs[k] = placeholderLike(args[k], emitter_.fresh(hint));
+            }
+        }
+        return inputs;
+    };
+
+    // Pass 1, discarded: which arguments does a recursive call change? Everything that can be
+    // carried is a placeholder here, so that nothing folds on the first call's values (a
+    // counter that starts at the constant 0).
+    std::vector<bool> carriable(count, false);
+    for (size_t k = 0; k < count; ++k) {
+        carriable[k] = isCarriable(args[k]);
+    }
+    std::vector<bool> carried(count, false);
+    {
+        emitter_.pushScope("loop_probe");
+        try {
+            const BodyOutcome probe = evaluate(withPlaceholders(carriable, "probe"));
+            emitter_.popScope();
+            if (!probe.result) {
+                unsupported(act, "a recursion that never returns cannot be exported");
+            }
+            for (size_t k = 0; k < count; ++k) {
+                if (loop.changed[k] && !carriable[k]) {
+                    unsupported(
+                        act,
+                        "a tuple, struct or array argument changes across a recursion whose "
+                        "depth depends on the model input; only tensors and scalars can be "
+                        "carried by a loop");
+                }
+                carried[k] = loop.changed[k];
+            }
+        } catch (...) {
+            emitter_.popScope();
+            throw;
+        }
+    }
+    if (std::ranges::none_of(carried, [](bool c) { return c; })) {
+        unsupported(
+            act,
+            "a recursion calls the function again with the arguments it was called with: it "
+            "never ends, or it is no loop");
+    }
+
+    // Pass 2: the Loop. Arguments that never change stay what they are outside (constants keep
+    // folding inside the body).
+    emitter_.pushScope("loop_body");
+    Graph bodyGraph;
+    std::vector<ValueInfo> bodyInputs, bodyOutputs;
+    std::vector<Value> finals = args;
+    try {
+        const std::vector<Value> inputs = withPlaceholders(carried, "state");
+        const std::string iter          = emitter_.fresh("loop_iter");
+        const std::string condIn        = emitter_.fresh("loop_cond_in");
+        const BodyOutcome outcome       = evaluate(inputs);
+        const std::string condOut       = emitter_.node(
+            "Identity",
+            {outcome.contConst ? emitter_.operand(
+                                     Value::constant(
+                                         rtdata::toSlot<bool>(*outcome.contConst),
+                                         type::Type::Bool()),
+                                     TypeCode::Bool)
+                               : outcome.contName},
+            {},
+            "loop_cond");
+        std::vector<ValueInfo> stateIn, stateOut;
+        for (size_t k = 0; k < count; ++k) {
+            if (!carried[k]) {
+                if (!sameValue(outcome.next[k], inputs[k])) {
+                    unsupported(act, "the set of values a recursion changes is not stable");
+                }
+                continue;
+            }
+            const TensorFacts in  = factsOf(inputs[k]);
+            const TensorFacts out = factsOf(outcome.next[k]);
+            if (!in.dtype || in.dtype != out.dtype || !in.shape || !out.shape ||
+                *in.shape != *out.shape) {
+                unsupported(
+                    act,
+                    "the dtype or shape of a value changes from one call of a recursion to the "
+                    "next; a loop can only carry values of a fixed dtype and shape");
+            }
+            stateIn.push_back(valueInfoOf(inputs[k].name, in));
+            stateOut.push_back(valueInfoOf(
+                emitter_.node(
+                    "Identity",
+                    {emitter_.operand(outcome.next[k], *in.dtype)},
+                    {},
+                    "state_out"),
+                in));
+        }
+        const TensorFacts flag{TypeCode::Bool, tensor::StaticShape{}};
+        stateIn.insert(stateIn.begin(), valueInfoOf(condIn, flag));
+        stateIn.insert(
+            stateIn.begin(),
+            valueInfoOf(iter, TensorFacts{TypeCode::Int64, tensor::StaticShape{}}));
+        stateOut.insert(stateOut.begin(), valueInfoOf(condOut, flag));
+        bodyInputs  = std::move(stateIn);
+        bodyOutputs = std::move(stateOut);
+    } catch (...) {
+        emitter_.popScope();
+        throw;
+    }
+    bodyGraph         = emitter_.popScope();
+    bodyGraph.inputs  = std::move(bodyInputs);
+    bodyGraph.outputs = std::move(bodyOutputs);
+    // "" is the trip count (none); the body always runs once, as a call of the function does.
+    std::vector<std::string> loopInputs{
+        std::string(),
+        emitter_.operand(Value::constant(rtdata::toSlot<bool>(true), type::Type::Bool()), TypeCode::Bool)};
+    std::vector<size_t> carriedIndex;
+    for (size_t k = 0; k < count; ++k) {
+        if (carried[k]) {
+            loopInputs.push_back(emitter_.operand(args[k], factsOf(args[k]).dtype));
+            carriedIndex.push_back(k);
+        }
+    }
+    const std::vector<std::string> outputs = emitter_.nodeN(
+        "Loop",
+        std::move(loopInputs),
+        {Attribute::makeGraph("body", std::move(bodyGraph))},
+        carriedIndex.size(),
+        "loop_state");
+    for (size_t i = 0; i < carriedIndex.size(); ++i) {
+        finals[carriedIndex[i]] = placeholderLike(args[carriedIndex[i]], outputs[i]);
+    }
+
+    // The result: the body once more, at the final state, where it returns.
+    const BodyOutcome last = evaluate(finals);
+    if (!last.result) {
+        unsupported(act, "a recursion that never returns cannot be exported");
+    }
+    return *last.result;
 }
 
 std::optional<Value> Evaluator::foldConstantOper(

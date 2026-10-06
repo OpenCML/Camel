@@ -358,6 +358,34 @@ What differs from the design above:
   hold; a variable passed to a call or a closure; an assignment that the graph
   does not order with a read. Tests: `export_var_local`,
   `pass_export_refusal_var_*`.
+- **Tail recursion of dynamic depth is an ONNX Loop.** Simplification unrolls
+  a recursion whose depth is known at export time. A call that is left is a
+  recursion whose depth depends on the model input. When every recursive call
+  is in tail position, the function is a loop over its arguments, and the
+  exporter emits one `Loop` (`Evaluator::translateLoop`,
+  `modules/onnx/exporter.cpp`):
+  - the carried values are the arguments a recursive call changes (found by a
+    first, discarded evaluation of the body); the others stay what they are
+    outside the loop, so constants keep folding inside the body;
+  - the body is the function's own graph evaluated once. The branches that
+    separate "return" from "call again" are merged with `Where` instead of
+    `If`: both sides are computed and the condition selects, which is the
+    same value because every exported operator is pure and total. Branches
+    without a recursive call remain `If`s;
+  - the body always runs once (as a call does) and continues while the path
+    taken was a recursive call; the result is the body evaluated once more
+    after the `Loop`, at the final state, so no carried value needs an initial
+    result;
+  - a recursion that goes through helpers or branch arms is followed (the arm
+    case is what the tests exercise; a loop inside a loop body would become a
+    nested `Loop` and is not tested).
+  Refused, each with a diagnostic at the recursive call or the export request:
+  a recursive call that is not in tail position; a carried value whose dtype
+  or shape changes between calls; a tuple, struct or array argument that
+  changes; a `match` whose arms call the function again; a recursion that
+  never returns. Not implemented: gradients through a `Loop`. Tests: `export_loop`, `pass_export_loop`, `export_dynamic_recursion`,
+  `export_nontail_recursion`; both entries write equivalent models
+  (`pass_export.py equiv`).
 
 ## 8. Phases
 

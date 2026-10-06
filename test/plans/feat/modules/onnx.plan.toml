@@ -395,7 +395,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_gated_gru_step"
-desc = "E13/T5 boundary: a branched training step of a recurrent network (gated GRU) still cannot be exported — inside the differentiated decision tree the loop counter loses its staticness and the recursion cannot be unrolled. Locks the current boundary of the Level-2 map."
+desc = "E13/T5 boundary, moved: a branched training step of a recurrent network (gated GRU) still cannot be exported. The recursion over the time steps is now translated as a loop, and what stops the export is the slice of the input at the loop counter (`tensor:slice` with a start that depends on the model input has no lowering yet), reported at the slice."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_gated_gru_step.cml"
 args = ["${case}"]
@@ -405,8 +405,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('recursion whose depth depends on the model input cannot be exported'), 'missing recursion detail')
-assert(/at [^ ]*export_gated_gru_step[.]cml:42:38[)]/.test(text), 'missing source position of the recursive call')
+assert(text.includes("'tensor:slice': argument 2 must be an export-time constant integer"), 'missing slice detail')
+assert(/at [^ ]*export_gated_gru_step[.]cml:36:22[)]/.test(text), 'missing source position of the slice')
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """
@@ -504,22 +504,32 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_dynamic_recursion"
-desc = "Recursion whose depth depends on the input cannot unroll; the call left after simplification is reported at its source position."
+desc = "Tail recursion whose depth depends on the input cannot unroll; it is exported as an ONNX Loop over the argument that changes (it used to be refused: 'a call remains after simplification')."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_dynamic_recursion.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=tmp/test/onnx/export_dynamic_recursion.onnx"]
-expect_exit = 1
+expect_exit = 0
+expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
-({ input, assert }) => {
-const text = input.normalized.output
-assert(text.includes('remains after simplification; recursion whose depth depends on the model input cannot be exported'), 'missing leftover-call detail')
-assert(/at [^ ]*export_dynamic_recursion[.]cml:12:33[)]/.test(text), 'missing source position of the recursive call')
-assert(!text.includes('unreachable'), 'export must fail before the next statement')
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_dynamic_recursion.onnx'))
+// Loops may sit inside an If (the first call is peeled): count every NodeProto op_type
+// (field 4 -> key 0x22, length 4) equal to "Loop" in the file.
+const fs = await import('fs')
+const buf = fs.readFileSync(path.join(input.repo_root, 'tmp/test/onnx/export_dynamic_recursion.onnx'))
+const mark = Buffer.from([0x22, 0x04, 0x4c, 0x6f, 0x6f, 0x70])
+let loops = 0, at = 0
+while ((at = buf.indexOf(mark, at)) !== -1) { loops += 1; at += 1 }
+assert(loops === 1, `1 Loop node(s) expected, got ${loops}; top-level ops ${model.ops}`)
 }
 """
-timeout_ms = 6000
+timeout_ms = 8000
 
 [[tests]]
 name = "export_capability"
@@ -695,14 +705,14 @@ timeout_ms = 4000
 
 [[tests]]
 name = "pass_export_refusals_json"
-desc = "The refusals of onnx::export in --output-format json: name RuntimeDiag::TranslationRefused, stage pass:onnx::export, a source position, no model file (no simplify; no std::macro; a call left by a recursion of dynamic depth, reported at the recursive call as export_model reports it)."
+desc = "The refusals of onnx::export in --output-format json: name RuntimeDiag::TranslationRefused, stage pass:onnx::export, a source position, no model file (no simplify; no std::macro; a recursive call that is not in tail position, so the recursion is no loop)."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/pass_export.py"
 args = ["${case}", "refuse"]
 skip_unless = ["${python}", "-c", "import json"]
 expect_exit = 0
-expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:29:1 file written: False", "stage pass:onnx::export at export_train_step.cml:25:14 file written: False", "at export_dynamic_recursion.cml:12:33 file written: False", "onnx::export refuse: PASS"]
+expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:29:1 file written: False", "stage pass:onnx::export at export_train_step.cml:25:14 file written: False", "at export_nontail_recursion.cml:12:44 file written: False", "onnx::export refuse: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
@@ -1312,6 +1322,85 @@ const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('MatMul') >= 6, `three products and their gradients: ${model.ops}`)
 assert(count('Squeeze') >= 2 && count('Unsqueeze') >= 4, `vector operands are widened and narrowed: ${model.ops}`)
 assert(model.outputs.length === 3, `value and two gradients: ${model.outputs}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "export_loop"
+desc = "Two tail recursions whose depth depends on the model input (one bounded by the data alone, one a counter against a data-dependent bound with an argument that never changes) export as two ONNX Loops; the unchanged argument is not a carried value."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_loop.cml"
+args = ["${case}", "std::macro"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_loop.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_loop.onnx'))
+// Loops may sit inside an If (the first call is peeled): count every NodeProto op_type
+// (field 4 -> key 0x22, length 4) equal to "Loop" in the file.
+const fs = await import('fs')
+const buf = fs.readFileSync(path.join(input.repo_root, 'tmp/test/onnx/export_loop.onnx'))
+const mark = Buffer.from([0x22, 0x04, 0x4c, 0x6f, 0x6f, 0x70])
+let loops = 0, at = 0
+while ((at = buf.indexOf(mark, at)) !== -1) { loops += 1; at += 1 }
+assert(loops === 2, `2 Loop node(s) expected, got ${loops}; top-level ops ${model.ops}`)
+assert(model.outputs.length === 2, `two results: ${model.outputs}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_export_loop"
+desc = "Two tail recursions whose depth depends on the model input (one bounded by the data alone, one a counter against a data-dependent bound with an argument that never changes) export as two ONNX Loops; the unchanged argument is not a carried value."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_loop.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_loop.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_loop.onnx"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_loop.onnx'))
+// Loops may sit inside an If (the first call is peeled): count every NodeProto op_type
+// (field 4 -> key 0x22, length 4) equal to "Loop" in the file.
+const fs = await import('fs')
+const buf = fs.readFileSync(path.join(input.repo_root, 'tmp/test/onnx/pass_export_loop.onnx'))
+const mark = Buffer.from([0x22, 0x04, 0x4c, 0x6f, 0x6f, 0x70])
+let loops = 0, at = 0
+while ((at = buf.indexOf(mark, at)) !== -1) { loops += 1; at += 1 }
+assert(loops === 2, `2 Loop node(s) expected, got ${loops}; top-level ops ${model.ops}`)
+assert(model.outputs.length === 2, `two results: ${model.outputs}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "export_nontail_recursion"
+desc = "A recursion whose depth depends on the model input and whose recursive call is not in tail position (its result is used after it returns) is refused by export_model at the recursive call, with a diagnostic that says what would make it a loop."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_nontail_recursion.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_nontail_recursion.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes('is not the last action of the function'), 'missing tail-position detail: ' + text)
+assert(/at [^ ]*export_nontail_recursion[.]cml:12:[0-9]+[)]/.test(text), 'missing source position of the recursive call: ' + text)
+assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
 }
 """
 timeout_ms = 8000
