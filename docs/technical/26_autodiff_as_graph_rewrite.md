@@ -194,6 +194,35 @@ inlining remove the closures.
   site.
 - Otherwise the call is rejected with a diagnostic naming the call site.
 
+### 4.4a Variables
+
+A variable (`var`) is a cell: the graph passes the cell and reads its content with
+the operator `:var/get` (design principles 2.5). **Gradients do not flow through
+variables.** This is a rule of the library, not of the language:
+
+- A `var` parameter is not a differentiable input; `grad` and `value_and_grad`
+  take no gradient with respect to it. The gradient function keeps it a `var`
+  parameter, so the function's writes reach the caller's variable.
+- A read of a variable of a differentiable type is a **constant of the call**,
+  and it is accepted only where that is certain: in the differentiated function
+  itself (not in a function or branch arm it calls), for a variable that comes
+  in from outside (a `var` parameter or a captured variable), and only if every
+  operation of that function that assigns the variable a value depending on a
+  differentiated parameter, or that receives the variable and may write it (a
+  call, a branch, a closure), is ordered after the read, that is, depends on it.
+  `let a = acc * 1.0; acc = a * 0.5 + x` is accepted: the read feeds the
+  assignment.
+- Everything else is refused with a diagnostic that says so (a read after such
+  an assignment or call, a read in a callee or an arm, a variable of a
+  differentiable type declared inside the differentiated function). Taking those
+  reads as constants would return a wrong gradient without any sign of it.
+- Variables of types without a tangent (an integer counter, a flag) are not
+  affected.
+
+Not implemented: following a value through an assignment and a later read of the
+same variable (`acc = m.w * x; ... sum(acc)`). Use `let` for values a gradient
+has to pass through. Tests: `test/cases/modules/autodiff/var_tensor_*.cml`.
+
 ### 4.5 Macro interplay
 
 `grad(f)` evaluates when `f` is static, after the macros inside `f` have run

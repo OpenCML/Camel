@@ -38,6 +38,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/type.h"
 
+#include <functional>
 #include <atomic>
 #include <deque>
 #include <format>
@@ -82,6 +83,12 @@ using type::TypeCode;
 
 [[noreturn]] void fail(const std::string &message) {
     throwRuntimeFault(RuntimeDiag::RuntimeError, "autodiff: " + message);
+}
+
+/// A variable (`var`) is a cell; the graph passes the cell, not its content.
+bool isCellType(Type *type) {
+    return type != nullptr && type->code() == TypeCode::Tuple &&
+           tt::as_ptr<TupleType>(type)->isCell();
 }
 
 // ---------------------------------------------------------------- draft helpers
@@ -512,6 +519,8 @@ class Backward final : public VjpBuilder {
     void visitAccs(gc_node_ref_t node);
     void visitFill(gc_node_ref_t node);
     void visitForward(gc_node_ref_t node, bool convert);
+    void checkVariableReads(const std::vector<gc_node_ref_t> &order);
+    std::string_view operUri(gc_node_ref_t node) const;
 
     GraphDraft &forward_;
     GraphDraft &target_;
@@ -993,8 +1002,15 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         forward_.withPorts().begin(),
         forward_.withPorts().end());
     ports.insert(forward_.normPorts().begin(), forward_.normPorts().end());
+    checkVariableReads(order);
     for (gc_node_ref_t node : order) {
-        if (tangentTypeOf(typeOf(forward_, node)) == nullptr) {
+        // A variable is state, not a differentiable input: its cell is never active, and a
+        // read of it (checked above) is a constant of the call.
+        if (tangentTypeOf(typeOf(forward_, node)) == nullptr ||
+            isCellType(typeOf(forward_, node))) {
+            continue;
+        }
+        if (kindOf(forward_, node) == GCNodeKind::Oper && operUri(node) == ":var/get") {
             continue;
         }
         bool active = ports.contains(node);
@@ -1011,6 +1027,112 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         auto found = gradients_.find(*it);
         if (found != gradients_.end() && !found->second.empty()) {
             visit(*it);
+        }
+    }
+}
+
+std::string_view Backward::operUri(gc_node_ref_t node) const {
+    const auto payload = forward_.payloadOf(node);
+    return reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri();
+}
+
+// Gradients do not flow through variables. A read of a variable of a differentiable type is
+// taken as a constant, which is only right when the content cannot depend on a differentiated
+// parameter. That is established here, and only for the differentiated function's own graph,
+// where a variable that comes in through a port (a `var` parameter, a captured variable) holds
+// plain data of the caller: every operation of this graph that writes the variable a value
+// depending on a parameter, or that may write it (a call, a branch arm or a closure that gets
+// the variable), must come after the read, i.e. depend on it. Everything else is refused:
+// treating such a read as a constant would give a wrong gradient without any sign of it.
+void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
+    std::unordered_map<gc_node_ref_t, bool> dependsMemo;
+    // Whether a value depends on a parameter that has a tangent (the content of variables
+    // aside): the question activity analysis answers for the nodes the result depends on,
+    // asked here for a stored value, which the result need not depend on.
+    const std::function<bool(gc_node_ref_t)> dependsOnParameter = [&](gc_node_ref_t node) {
+        if (auto known = dependsMemo.find(node); known != dependsMemo.end()) {
+            return known->second;
+        }
+        dependsMemo[node] = false; // bounds the recursion; data edges have no cycle
+        Type *type        = typeOf(forward_, node);
+        bool depends      = false;
+        if (!isCellType(type)) {
+            if (kindOf(forward_, node) == GCNodeKind::Port) {
+                depends = tangentTypeOf(type) != nullptr;
+            } else if (!(kindOf(forward_, node) == GCNodeKind::Oper &&
+                         operUri(node) == ":var/get")) {
+                for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
+                    for (gc_node_ref_t input : inputs) {
+                        depends = depends || dependsOnParameter(input);
+                    }
+                }
+            }
+        }
+        dependsMemo[node] = depends;
+        return depends;
+    };
+    for (gc_node_ref_t read : order) {
+        if (kindOf(forward_, read) != GCNodeKind::Oper || operUri(read) != ":var/get" ||
+            tangentTypeOf(typeOf(forward_, read)) == nullptr) {
+            continue;
+        }
+        if (!inPlace_) {
+            fail(
+                "a variable of a differentiable type is read in a function or branch arm that "
+                "the differentiated function calls. Gradients do not flow through variables, "
+                "and only a read in the differentiated function itself, before the variable is "
+                "written there, can be taken as a constant. Pass the value instead of the "
+                "variable");
+        }
+        const gc_node_ref_t cell = forward_.normInputsOf(read).front();
+        if (kindOf(forward_, cell) != GCNodeKind::Port) {
+            fail(
+                "a variable of a differentiable type that is declared inside the differentiated "
+                "function is read there. Gradients do not flow through variables: bind the "
+                "value with let instead");
+        }
+        // Everything that depends on the read (data and control edges) runs after it.
+        std::unordered_set<gc_node_ref_t> after{read};
+        std::vector<gc_node_ref_t> work{read};
+        while (!work.empty()) {
+            const gc_node_ref_t node = work.back();
+            work.pop_back();
+            for (auto users : {forward_.normUsersOf(node), forward_.withUsersOf(node),
+                               forward_.ctrlUsersOf(node)}) {
+                for (gc_node_ref_t user : users) {
+                    if (after.insert(user).second) {
+                        work.push_back(user);
+                    }
+                }
+            }
+        }
+        for (auto users : {forward_.normUsersOf(cell), forward_.withUsersOf(cell)}) {
+            for (gc_node_ref_t user : users) {
+                if (after.contains(user)) {
+                    continue;
+                }
+                const bool isOper = kindOf(forward_, user) == GCNodeKind::Oper;
+                if (isOper && operUri(user) == ":var/get") {
+                    continue;
+                }
+                if (isOper && operUri(user).starts_with(":op/assn")) {
+                    const auto stored = forward_.normInputsOf(user);
+                    if (stored.size() > 1 && !dependsOnParameter(stored[1])) {
+                        continue; // plain data: whenever it is stored, the read is a constant
+                    }
+                    fail(
+                        "a variable is read that may hold a value computed from a "
+                        "differentiated parameter (the function assigns it one, and the read "
+                        "is not ordered before that assignment). Gradients do not flow "
+                        "through variables: use the value itself, or read the variable "
+                        "before it is assigned");
+                }
+                fail(
+                    "a variable of a differentiable type is read after, or unordered with, a "
+                    "call, branch or closure of the differentiated function that receives the "
+                    "variable and may write it. Gradients do not flow through variables: read "
+                    "it before that point, or pass the value instead of the variable");
+            }
         }
     }
 }
@@ -1366,7 +1488,12 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
     }
     GradientSignature signature;
     std::vector<Type *> tangents;
+    // A `var` parameter is a variable, not a differentiable input: no gradient is taken with
+    // respect to it.
     for (size_t i = 0; i < function->withTypesCount(); ++i) {
+        if (function->withIsVarAt(i)) {
+            continue;
+        }
         if (Type *tangent = tangentTypeOf(function->withTypeAt(i))) {
             signature.withPorts.push_back(i);
             tangents.push_back(tangent);
@@ -1374,6 +1501,9 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
     }
     if (signature.withPorts.empty()) {
         for (size_t i = 0; i < function->normTypesCount(); ++i) {
+            if (function->normIsVarAt(i)) {
+                continue;
+            }
             if (Type *tangent = tangentTypeOf(function->normTypeAt(i))) {
                 signature.normPorts.push_back(i);
                 tangents.push_back(tangent);
