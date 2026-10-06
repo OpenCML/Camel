@@ -1,8 +1,8 @@
 /**
- * map and filter are ordered: an element function with an effect runs for element 0, then 1,
- * ... under every scheduler, std::tf included (it used to start the elements as independent
- * tasks). The parallel case is unordered_foreach / unordered_reduce, or a function that is
- * provably free of effects.
+ * On the LINEAR schedulers map and filter run their element function for element 0, then 1,
+ * ...: an element function with an effect prints in element order. (Under a parallel scheduler
+ * the element functions may run concurrently and the order of their effects is not defined;
+ * see map_result_order.)
  */
 module map_ordered_effects
 

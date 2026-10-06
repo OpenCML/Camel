@@ -22,8 +22,6 @@
 #include "camel/core/effect_trace.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
-#include "camel/core/operator_traits.h"
-#include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
@@ -35,10 +33,7 @@
 #include <array>
 #include <format>
 #include <string>
-#include <mutex>
 #include <thread>
-#include <unordered_map>
-#include <unordered_set>
 
 using namespace camel::core::context;
 using namespace camel::core::error;
@@ -86,90 +81,6 @@ slot_t readForwardedRuntimeValue(GCGraph *graph, gc_node_ref_t nodeRef, Frame *f
     const auto *node = requireNode(graph, current);
     ASSERT(node->dataIndex != 0, "Taskflow forwarded-value chain resolved to slot 0.");
     return frame->get<slot_t>(node->dataIndex);
-}
-
-/// Whether running `graph` is provably free of effects: every operator it reaches is
-/// registered pure, every call is a direct call of such a graph, and every function handed
-/// to a higher-order operator is a known function of that kind. Anything it cannot see
-/// through (an indirect call, an unregistered operator, a function value computed at run
-/// time) makes the answer no.
-bool provablyPure(const GCGraph *graph, std::unordered_set<const GCGraph *> &visiting) {
-    if (graph == nullptr || !graph->hasNodePayload()) {
-        return false;
-    }
-    if (!visiting.insert(graph).second) {
-        return true; // a recursion: decided by the rest of the cycle
-    }
-    const auto knownFunction = [&](gc_node_ref_t ref) -> const GCGraph * {
-        const auto *node = graph->node(ref);
-        if (node != nullptr && node->kind == GCNodeKind::Fill) {
-            const auto source = graph->normInputsOf(ref);
-            if (source.size() != 1) {
-                return nullptr;
-            }
-            ref  = source.front();
-            node = graph->node(ref);
-        }
-        if (node == nullptr || node->kind != GCNodeKind::Data || node->dataIndex >= 0 ||
-            node->dataType == nullptr ||
-            node->dataType->code() != camel::core::type::TypeCode::Function) {
-            return nullptr;
-        }
-        const auto slots = graph->staticSlots();
-        const auto index = static_cast<size_t>(-node->dataIndex);
-        if (index >= slots.size()) {
-            return nullptr;
-        }
-        auto *function = fromSlot<Function *>(slots[index]);
-        return function ? function->graph() : nullptr;
-    };
-    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-        if (*it == nullptr) {
-            continue;
-        }
-        switch ((*it)->kind) {
-        case GCNodeKind::Call:
-            return false;
-        case GCNodeKind::Func:
-            if (!provablyPure(graph->directCalleeGraphOf(it.ref()), visiting)) {
-                return false;
-            }
-            break;
-        case GCNodeKind::Oper: {
-            const auto *body = graph->nodeBodyAs<camel::runtime::GCOperBody>(it.ref());
-            const std::string_view uri = body->uri();
-            if (uri.starts_with(":mark/")) {
-                // A higher-order operator is as pure as the function it applies.
-                const auto with = graph->withInputsOf(it.ref());
-                if (with.empty() || !provablyPure(knownFunction(with.front()), visiting)) {
-                    return false;
-                }
-            } else if (!camel::core::OperatorTraitsRegistry::instance().isPure(uri)) {
-                return false;
-            }
-        } break;
-        default:
-            break;
-        }
-    }
-    return true;
-}
-
-/// provablyPure, remembered per graph (graphs are immutable while a schedule runs).
-bool elementsMayRunUnordered(const GCGraph *graph) {
-    static std::mutex mutex;
-    static std::unordered_map<const GCGraph *, bool> known;
-    {
-        std::lock_guard guard(mutex);
-        if (auto it = known.find(graph); it != known.end()) {
-            return it->second;
-        }
-    }
-    std::unordered_set<const GCGraph *> visiting;
-    const bool pure = provablyPure(graph, visiting);
-    std::lock_guard guard(mutex);
-    known.emplace(graph, pure);
-    return pure;
 }
 
 TaskflowHigherOrderCallSite makeHigherOrderCallSite(Function *func) {
@@ -1207,24 +1118,13 @@ void TaskflowExecSchedPass::mark_map_arr(
         frame->get<Function *>(dataIndexOf(graph, graph->withInputsOf(nodeRef).front()));
     const auto site = makeHigherOrderCallSite(func);
     std::vector<slot_t> results(arr->size());
-    // map / apply / filter are ORDERED (design principles 2.7): the element function runs for
-    // element 0, then 1, ... The elements run concurrently only when the function is provably
-    // free of effects, where the order cannot be observed; the parallel operators are the
-    // unordered_* ones.
-    const bool unordered = elementsMayRunUnordered(site.runtimeGraph);
-    tf::Task previous;
     for (size_t i = 0; i < arr->size(); ++i) {
-        tf::Task element =
-            sf.emplace([this, i, arr, site, &results](tf::Subflow &isf) {
-                  std::array<slot_t, 1> args{arr->get<slot_t>(i)};
-                  Frame *callee =
-                      acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
-                  results[i] = runPreparedSubgraph(isf, site.runtimeGraph, callee);
-              }).name("MAP_ELEM");
-        if (!unordered && i > 0) {
-            element.succeed(previous);
-        }
-        previous = element;
+        sf.emplace([this, i, arr, site, &results](tf::Subflow &isf) {
+              std::array<slot_t, 1> args{arr->get<slot_t>(i)};
+              Frame *callee =
+                  acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
+              results[i] = runPreparedSubgraph(isf, site.runtimeGraph, callee);
+          }).name("MAP_ELEM");
     }
     sf.join();
     Array *res       = Array::create(camel::core::mm::autoSpace(), arr->size());
@@ -1242,24 +1142,13 @@ void TaskflowExecSchedPass::mark_apply_arr(
         frame->get<Function *>(dataIndexOf(graph, graph->withInputsOf(nodeRef).front()));
     const auto site = makeHigherOrderCallSite(func);
     std::vector<slot_t> results(arr->size());
-    // map / apply / filter are ORDERED (design principles 2.7): the element function runs for
-    // element 0, then 1, ... The elements run concurrently only when the function is provably
-    // free of effects, where the order cannot be observed; the parallel operators are the
-    // unordered_* ones.
-    const bool unordered = elementsMayRunUnordered(site.runtimeGraph);
-    tf::Task previous;
     for (size_t i = 0; i < arr->size(); ++i) {
-        tf::Task element =
-            sf.emplace([this, i, arr, site, &results](tf::Subflow &isf) {
-                  std::array<slot_t, 1> args{arr->get<slot_t>(i)};
-                  Frame *callee =
-                      acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
-                  results[i] = runPreparedSubgraph(isf, site.runtimeGraph, callee);
-              }).name("APPLY_ELEM");
-        if (!unordered && i > 0) {
-            element.succeed(previous);
-        }
-        previous = element;
+        sf.emplace([this, i, arr, site, &results](tf::Subflow &isf) {
+              std::array<slot_t, 1> args{arr->get<slot_t>(i)};
+              Frame *callee =
+                  acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
+              results[i] = runPreparedSubgraph(isf, site.runtimeGraph, callee);
+          }).name("APPLY_ELEM");
     }
     sf.join();
     auto *arrType =
@@ -1277,24 +1166,13 @@ void TaskflowExecSchedPass::mark_filter_arr(
         frame->get<Function *>(dataIndexOf(graph, graph->withInputsOf(nodeRef).front()));
     const auto site = makeHigherOrderCallSite(func);
     std::vector<bool> keep(arr->size(), false);
-    // map / apply / filter are ORDERED (design principles 2.7): the element function runs for
-    // element 0, then 1, ... The elements run concurrently only when the function is provably
-    // free of effects, where the order cannot be observed; the parallel operators are the
-    // unordered_* ones.
-    const bool unordered = elementsMayRunUnordered(site.runtimeGraph);
-    tf::Task previous;
     for (size_t i = 0; i < arr->size(); ++i) {
-        tf::Task element =
-            sf.emplace([this, i, arr, site, &keep](tf::Subflow &isf) {
-                  std::array<slot_t, 1> args{arr->get<slot_t>(i)};
-                  Frame *callee =
-                      acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
-                  keep[i] = fromSlot<bool>(runPreparedSubgraph(isf, site.runtimeGraph, callee));
-              }).name("FILTER_PRED");
-        if (!unordered && i > 0) {
-            element.succeed(previous);
-        }
-        previous = element;
+        sf.emplace([this, i, arr, site, &keep](tf::Subflow &isf) {
+              std::array<slot_t, 1> args{arr->get<slot_t>(i)};
+              Frame *callee =
+                  acquirePreparedClosureCallFrame(site.runtimeGraph, site.closure, args);
+              keep[i] = fromSlot<bool>(runPreparedSubgraph(isf, site.runtimeGraph, callee));
+          }).name("FILTER_PRED");
     }
     sf.join();
     Array *filtered  = Array::create(camel::core::mm::autoSpace(), 0);

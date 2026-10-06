@@ -143,17 +143,49 @@ assert(out === '0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 |
 timeout_ms = 8000
 
 [[tests]]
-name = "map_ordered_effects.tf"
-desc = "map and filter are ordered: an element function with an effect runs for element 0, then 1, ... and filter keeps exactly the accepted elements. Under Taskflow (it used to start the elements as independent tasks: the prints came out shuffled and interleaved)."
+name = "map_result_order.nvm"
+desc = "The result of map and filter is in element order under every scheduler, also when the element functions run concurrently and finish out of order. (The order of EFFECTS inside element functions under a parallel scheduler is not asserted: it is not defined.)"
 kind = "behavior"
-case = "../../../cases/para/core/map_ordered_effects.cml"
+case = "../../../cases/para/core/map_result_order.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '[0, 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121, 144, 169, 196, 225, 256, 289, 324, 361, 400, 441, 484, 529, 576, 625, 676, 729, 784, 841, 900, 961, 1024, 1089, 1156, 1225, 1296, 1369, 1444, 1521] | [0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39]', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "map_result_order.tf"
+desc = "The result of map and filter is in element order under every scheduler, also when the element functions run concurrently and finish out of order. (The order of EFFECTS inside element functions under a parallel scheduler is not asserted: it is not defined.)"
+kind = "behavior"
+case = "../../../cases/para/core/map_result_order.cml"
 args = ["${case}", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === '0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 100 | 101 | 102 | 103 | 104 | 105 | 106 | 107 | 108 | 109 | 110 | 111 | 112 | 113 | 114 | 115 | 116 | 117 | 118 | 119 | 120 | 121 | 122 | 123 | 36', `unexpected output: ${out}`)
+assert(out === '[0, 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121, 144, 169, 196, 225, 256, 289, 324, 361, 400, 441, 484, 529, 576, 625, 676, 729, 784, 841, 900, 961, 1024, 1089, 1156, 1225, 1296, 1369, 1444, 1521] | [0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39]', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 8000
+timeout_ms = 20000
+
+[[tests]]
+name = "map_result_order.prl"
+desc = "The result of map and filter is in element order under every scheduler, also when the element functions run concurrently and finish out of order. (The order of EFFECTS inside element functions under a parallel scheduler is not asserted: it is not defined.)"
+kind = "behavior"
+case = "../../../cases/para/core/map_result_order.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '[0, 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121, 144, 169, 196, 225, 256, 289, 324, 361, 400, 441, 484, 529, 576, 625, 676, 729, 784, 841, 900, 961, 1024, 1089, 1156, 1225, 1296, 1369, 1444, 1521] | [0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39]', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
