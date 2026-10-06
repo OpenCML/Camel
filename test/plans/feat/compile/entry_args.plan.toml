@@ -327,3 +327,45 @@ expect_stdout_contains = ["tuple result: 0.npy 1.npy", "scalar result: 4", "void
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "entry_args.timeit"
+desc = "--timeit binds --arg like a plain run (two fresh executions print twice), and a missing argument there is the same located diagnostic (it used to print 'Compilation failed but no diagnostics were collected')."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/entry_args/timeit.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["timeit with arguments: 2 runs", "timeit without: EntryArgumentMissing", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "entry_args.cpp_refused"
+desc = "std::cpp does not translate a main with parameters yet: a located TranslationRefused at main, with or without the values given (it was an unlocated internal error of the pass)."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::cpp"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 1
+expect_output_contains = ["Translation pass 'std::cpp' refused the graph: 'main' takes parameters"]
+expect_output_not_contains = ["internal error", ":?:?:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.cpp_refused_open"
+desc = "The same without values."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_line = 7
+expect_output_contains = ["Translation pass 'std::cpp' refused the graph: 'main' takes parameters"]
+expect_output_not_contains = ["internal error", ":?:?:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

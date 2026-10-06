@@ -619,7 +619,13 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             lastRunExitCode = invocation->ctx->processExitCodeOr(0);
         } catch (DiagnosticsLimitExceededBaseException &) {
             if (invocation && invocation->ctx) {
-                invocation->ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+                // The diagnostic that ended the run is a runtime one when a pass or the
+                // binding of main's arguments reported it; the module diagnostics otherwise.
+                if (const auto &diags = invocation->ctx->runtimeDiagSink(); diags->hasErrors()) {
+                    diags->dump(os, useJsonFormat);
+                } else {
+                    invocation->ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+                }
             }
             return 1;
         } catch (Diagnostic &d) {
