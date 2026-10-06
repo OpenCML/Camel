@@ -246,8 +246,28 @@ size_t reinferDraftTypes(GraphDraft &draft) {
         }
     }
     if (differs) {
-        draft.setFuncType(
-            type::FunctionType::create(withTypes, normTypes, exitType, funcType->modifiers()));
+        // The parameters keep their names: they are how diagnostics, graph dumps and
+        // translations refer to them.
+        if (funcType->argNamesCount() == withTypes.size() + normTypes.size()) {
+            type::FunctionTypeFactory factory;
+            factory.setHasCompileInfo(true);
+            factory.setModifiers(funcType->modifiers());
+            factory.setExitType(exitType);
+            size_t arg = 0;
+            for (const auto &[t, isVar] : withTypes) {
+                factory.addWithArg(std::string(funcType->argNameAt(arg++)), t, isVar);
+            }
+            for (const auto &[t, isVar] : normTypes) {
+                factory.addNormArg(std::string(funcType->argNameAt(arg++)), t, isVar);
+            }
+            for (size_t i = 0; i < funcType->closureRefsCount(); ++i) {
+                factory.addClosureRef(std::string(funcType->closureRefAt(i)));
+            }
+            draft.setFuncType(factory.build());
+        } else {
+            draft.setFuncType(
+                type::FunctionType::create(withTypes, normTypes, exitType, funcType->modifiers()));
+        }
     }
     return changed;
 }
