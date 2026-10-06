@@ -936,7 +936,7 @@ bool X64Backend::compileBytecode(
             break;
         }
         case OpCode::JUMP: {
-            size_t target = static_cast<size_t>(bc.fastop[0]);
+            size_t target = getJumpTargetPc(&bc);
             // If the target is JOIN and the current block is the BRCH "first branch" (only this
             // JUMP), write back w0 directly and jump to JOIN afterward, to avoid reading an
             // uninitialized w1 through JOIN.

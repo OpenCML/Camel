@@ -45,7 +45,7 @@ enum class OpCode : uint8_t {
     CAST, // Use fastop[0] as the slot index to cast; extra stores the target type.
     COPY, // Use fastop[0] as the source index to copy.
     ACCS, // fastop[0] is the target index; fastop[1] is the accessed subscript.
-    JUMP, // Use fastop[0] as the jump target address.
+    JUMP, // The jump target pc: see getJumpTargetPc (fastop[0], and fastop[1] once linked).
 
     // Variable-arity instructions
     BRCH,
@@ -163,9 +163,14 @@ inline bool isSafeSizeTForIndexT(size_t value) {
 
 template <typename T> inline data_idx_t as_index(T value) {
     if constexpr (std::is_same_v<T, size_t>) {
-        ASSERT(
-            isSafeSizeTForIndexT(value),
-            "Value exceeds int16_t range when converting to data_idx_t.");
+        // Checked in every build: a truncated slot index or jump target runs on other data.
+        if (!isSafeSizeTForIndexT(value)) {
+            throw std::runtime_error(
+                std::format(
+                    "FastVM: index {} does not fit the 16-bit operand of a bytecode (one graph "
+                    "with more than 32767 slots or bytecode words)",
+                    value));
+        }
     } else {
         static_assert(false, "Unsupported type for data_idx_t conversion.");
     }
@@ -397,6 +402,23 @@ inline camel::runtime::GCGraph *getFuncExtraRuntimeGraph(const BytecodeHeader *b
 }
 inline void setFuncExtraRuntimeGraph(BytecodeHeader *bc, camel::runtime::GCGraph *graph) {
     bc->directCallExtra()->runtimeGraph = graph;
+}
+
+// JUMP: the target pc. Inside one graph, before linking, it is graph-relative and fits fastop[0]
+// (fastop[1] is 0). The linker makes it absolute, and a linked program can exceed 16 bits: the
+// absolute target is spread over both operands, low 16 bits in fastop[0], high 16 bits in
+// fastop[1]. Every reader of a linked JUMP goes through getJumpTargetPc.
+inline size_t getJumpTargetPc(const BytecodeHeader *bc) {
+    return static_cast<size_t>(static_cast<uint16_t>(bc->fastop[0])) |
+           (static_cast<size_t>(static_cast<uint16_t>(bc->fastop[1])) << 16);
+}
+inline void setJumpTargetPc(BytecodeHeader *bc, size_t targetPc) {
+    if (targetPc > 0xFFFFFFFFull) {
+        throw std::runtime_error(
+            std::format("FastVM: jump target pc {} exceeds the 32-bit range", targetPc));
+    }
+    bc->fastop[0] = static_cast<data_idx_t>(static_cast<uint16_t>(targetPc & 0xFFFF));
+    bc->fastop[1] = static_cast<data_idx_t>(static_cast<uint16_t>(targetPc >> 16));
 }
 
 constexpr uint64_t kFuncExtraCountMask     = (1ull << 32) - 1;

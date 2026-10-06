@@ -164,7 +164,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             } break;
 
             case OpCode::JUMP: {
-                pc = static_cast<arr_size_t>(bc.fastop[0]);
+                pc = getJumpTargetPc(&bc);
                 continue; // skip i increment
             } break;
 

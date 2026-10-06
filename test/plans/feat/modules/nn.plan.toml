@@ -1318,3 +1318,26 @@ match(/gru_lite whn_grad=tensor/, out)
 }
 """
 timeout_ms = 4000
+
+[[tests]]
+name = "residual_mlp_large_bytecode"
+desc = "Same as residual_mlp under a pipeline whose linked FastVM program has jump targets beyond 65535 bytecode words (they were truncated to 16 bits: a crash, or subtract: Unsupported Tensor dtype)."
+kind = "behavior"
+case = "../../../cases/modules/nn/residual_mlp.cml"
+args = ["${case}", "std::specialize", "std::opt::simplify", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::devirtualize", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const found = match(/residual_mlp start=([0-9.eE+-]+) value=([0-9.eE+-]+) sgd=([0-9.eE+-]+) adam=([0-9.eE+-]+) depth=([0-9]+)/, input.normalized.stdout)
+const [start, value, bySgd, byAdam, depth] = found.slice(1, 6).map(Number)
+assert([start, value, bySgd, byAdam].every(Number.isFinite), 'metrics are not finite')
+assert(start > 0, `expected positive initial loss, got ${start}`)
+assert(approx(value, start, 1e-9), `value_and_grad loss ${value} should equal the direct loss ${start}`)
+assert(bySgd < start, `expected sgd training to lower the loss: start=${start}, sgd=${bySgd}`)
+assert(byAdam < start, `expected adam training to lower the loss: start=${start}, adam=${byAdam}`)
+assert(depth === 2, `expected the int field to survive sgd updates unchanged, got depth=${depth}`)
+}
+"""
+timeout_ms = 4000

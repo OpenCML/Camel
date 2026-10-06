@@ -706,7 +706,8 @@ LinkedBytecodeResult compileAndLinkFrom(
             setFuncExtraTargetPc(&bc, it != offsetMap.end() ? it->second : *known(target));
         } break;
         case OpCode::JUMP: {
-            bc.fastop[0] += offsetMap.at(info.runtimeGraph);
+            // Graph-relative before, absolute from here on (and possibly wider than 16 bits).
+            setJumpTargetPc(&bc, getJumpTargetPc(&bc) + offsetMap.at(info.runtimeGraph));
         } break;
         default:
             break;
