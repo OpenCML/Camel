@@ -156,6 +156,22 @@ std::optional<slot_t> staticValue(const GraphDraft &draft, gc_node_ref_t node) {
 
 bool isFunctionType(Type *type) { return type != nullptr && type->code() == TypeCode::Function; }
 
+/// Whether a value of `type` is, or holds, a function value (a closure, a tuple of closures).
+bool holdsFunction(Type *type) {
+    if (isFunctionType(type)) {
+        return true;
+    }
+    if (type == nullptr || isCellType(type) || !isAggregate(type)) {
+        return false;
+    }
+    for (size_t i = 0; i < aggregateSize(type); ++i) {
+        if (holdsFunction(aggregateElement(type, i))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// The value a chain of gates passes on. A gate orders a value after other nodes (an inlined
 /// call gates its arguments after what the call waited for); it does not change the value.
 gc_node_ref_t ungated(const GraphDraft &draft, gc_node_ref_t node) {
@@ -667,8 +683,13 @@ class Backward final : public VjpBuilder {
     void visitForward(gc_node_ref_t node, bool convert);
     void checkVariableReads(const std::vector<gc_node_ref_t> &order);
     std::string_view operUri(gc_node_ref_t node) const;
-    /// Why the function a CALL calls is not known here.
+    /// Why the gradient cannot pass the call `call` (a CALL, or a FUNC left alone).
     std::string refusalReason(gc_node_ref_t call) const;
+    /// Why the function the value `function` is is not known here.
+    std::string whyNotEvident(gc_node_ref_t function) const;
+    /// An input of `call` (for a closure call, a captured value as well) that is a function
+    /// value carrying an active value, or kInvalidNodeRef.
+    gc_node_ref_t activeFunctionInput(gc_node_ref_t call) const;
     void reportRefusals(const std::vector<gc_node_ref_t> &order);
 
     GraphDraft &forward_;
@@ -1511,17 +1532,24 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         forward_.withPorts().end());
     ports.insert(forward_.normPorts().begin(), forward_.normPorts().end());
     checkVariableReads(order);
+    //
+    // A function value has no tangent, but a closure carries the values it captured: one that
+    // captured an active value is active too, as a carrier. No gradient is ever accumulated
+    // on it; it only makes what is computed from it active, so that a call it is passed to is
+    // not mistaken for a constant (see visit, FUNC).
     for (gc_node_ref_t node : order) {
+        Type *const type   = typeOf(forward_, node);
+        const bool carrier = holdsFunction(type);
         // A variable is state, not a differentiable input: its cell is never active, and a
         // read of it (checked above) is a constant of the call.
-        if (tangentTypeOf(typeOf(forward_, node)) == nullptr ||
-            isCellType(typeOf(forward_, node))) {
+        if ((tangentTypeOf(type) == nullptr && !carrier) || isCellType(type)) {
             continue;
         }
         if (kindOf(forward_, node) == GCNodeKind::Oper && operUri(node) == ":var/get") {
             continue;
         }
-        bool active = ports.contains(node);
+        // A function passed in from outside is given: it does not depend on a parameter.
+        bool active = ports.contains(node) && tangentTypeOf(type) != nullptr;
         for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
             for (gc_node_ref_t input : inputs) {
                 active |= active_.contains(input);
@@ -1560,79 +1588,128 @@ void Backward::reportRefusals(const std::vector<gc_node_ref_t> &order) {
             }
         }
     }
+    const std::unordered_set<gc_node_ref_t> met(refused_.begin(), refused_.end());
     for (gc_node_ref_t node : order) {
-        if (before.contains(node) && kindOf(forward_, node) == GCNodeKind::Call &&
-            active_.contains(node) && !sites_.contains(node)) {
+        const bool unreached = before.contains(node) && active_.contains(node) &&
+                               kindOf(forward_, node) == GCNodeKind::Call &&
+                               !sites_.contains(node) &&
+                               tangentTypeOf(typeOf(forward_, node)) != nullptr;
+        if (met.contains(node) || unreached) {
             refusals_.push_back(
                 Refusal{.origin = forward_.nodeOrigin(node), .reason = refusalReason(node)});
         }
     }
 }
 
+gc_node_ref_t Backward::activeFunctionInput(gc_node_ref_t call) const {
+    const auto carries = [&](gc_node_ref_t node) {
+        return holdsFunction(typeOf(forward_, node)) && active_.contains(node);
+    };
+    auto withInputs = forward_.withInputsOf(call);
+    if (kindOf(forward_, call) == GCNodeKind::Call && !withInputs.empty()) {
+        const gc_node_ref_t closure = ungated(forward_, withInputs.front());
+        if (kindOf(forward_, closure) == GCNodeKind::Fill) {
+            for (gc_node_ref_t captured : forward_.withInputsOf(closure)) {
+                if (carries(captured)) {
+                    return captured;
+                }
+            }
+        }
+        withInputs = withInputs.subspan(1);
+    }
+    for (auto inputs : {withInputs, forward_.normInputsOf(call)}) {
+        for (gc_node_ref_t input : inputs) {
+            if (carries(input)) {
+                return input;
+            }
+        }
+    }
+    return kInvalidNodeRef;
+}
+
 std::string Backward::refusalReason(gc_node_ref_t call) const {
-    static constexpr std::string_view unknown =
-        "which function it calls is not evident where it is called: ";
+    static constexpr std::string_view passed =
+        "it is passed (as an argument or a captured value) a function value that depends on a "
+        "differentiated parameter, and which function that is is not evident where it is "
+        "passed: ";
+    static constexpr std::string_view head =
+        "cannot differentiate through this call of a function value: ";
+    if (kindOf(forward_, call) == GCNodeKind::Func) {
+        return std::format(
+            "cannot differentiate through this call of '{}': {}{}",
+            calleeOf(forward_, call)->name(), // left alone, so its callee is a graph
+            passed,
+            whyNotEvident(activeFunctionInput(call)));
+    }
     const auto withInputs = forward_.withInputsOf(call);
     if (withInputs.empty()) {
-        return std::string(unknown) + "the call names no function";
+        return std::string(head) + "the call names no function";
     }
     const gc_node_ref_t callee = ungated(forward_, withInputs.front());
-    switch (kindOf(forward_, callee)) {
+    if (kindOf(forward_, callee) == GCNodeKind::Data ||
+        kindOf(forward_, callee) == GCNodeKind::Fill) {
+        // The function called is known; the call was left alone all the same.
+        if (const gc_node_ref_t input = activeFunctionInput(call); input != kInvalidNodeRef) {
+            return std::string(head) + std::string(passed) + whyNotEvident(input);
+        }
+        return std::string(head) +
+               "the function it calls is known, but cannot be differentiated through its body "
+               "(a macro, or a function value without a graph)";
+    }
+    return std::string(head) + "which function it calls is not evident where it is called: " +
+           whyNotEvident(callee);
+}
+
+std::string Backward::whyNotEvident(gc_node_ref_t function) const {
+    function = ungated(forward_, function);
+    switch (kindOf(forward_, function)) {
     case GCNodeKind::Port:
         if (!scope_.recursive.empty()) {
-            return std::string(unknown) +
-                   std::format(
-                       "the function called is a parameter of '{}', a recursive function "
-                       "that passes it on to itself: a function value is followed into such "
-                       "a function once, not through its recursive call",
-                       scope_.recursive);
+            return std::format(
+                "the function is a parameter of '{}', a recursive function that passes it on "
+                "to itself: a function value is followed into such a function once, not "
+                "through its recursive call",
+                scope_.recursive);
         }
         switch (scope_.role) {
         case GraphRole::Differentiated:
-            return std::string(unknown) +
-                   "the function called is a parameter, or a captured value, of the function "
-                   "being differentiated";
+            return "the function is a parameter, or a captured value, of the function being "
+                   "differentiated";
         case GraphRole::BranchArm:
-            return std::string(unknown) +
-                   "the call is inside a branch arm, and the function called comes from "
-                   "outside that arm, where it is not a function that is named or built";
+            return "the call is inside a branch arm, and the function comes from outside "
+                   "that arm, where it is not a function that is named or built";
         case GraphRole::Callee:
-            return std::string(unknown) +
-                   "the function called is a parameter, or a captured value, of the function "
-                   "making the call, and what is passed for it is not a function that is "
-                   "named or built where it is passed";
+            return "the function is a parameter, or a captured value, of the function making "
+                   "the call, and what is passed for it is not a function that is named or "
+                   "built where it is passed";
         }
         break;
     case GCNodeKind::Join:
-        return std::string(unknown) + "the function called is chosen by a branch at run time";
+        return "the function is chosen by a branch at run time";
     case GCNodeKind::Accs:
-        return std::string(unknown) +
-               "the function called is read from a tuple, a struct or an array";
+        return "the function is read from a tuple, a struct or an array";
     case GCNodeKind::Oper:
-        if (operUri(callee) == ":var/get") {
-            return std::string(unknown) + "the function called is read from a variable";
+        if (operUri(function) == ":var/get") {
+            return "the function is read from a variable";
         }
-        return std::string(unknown) +
-               std::format("the function called is the result of '{}'", operUri(callee));
+        return std::format("the function is the result of '{}'", operUri(function));
     case GCNodeKind::Func:
         // A call that returns a function value is never retargeted: its callee is a graph.
-        return std::string(unknown) +
-               std::format(
-                   "the function called is the result of a call of '{}', and that function "
-                   "does not return a function that is named or built in it",
-                   calleeOf(forward_, callee)->name());
+        return std::format(
+            "the function is the result of a call of '{}', and what that returns is not a "
+            "function that is named or built in it",
+            calleeOf(forward_, function)->name());
     case GCNodeKind::Call:
-        return std::string(unknown) +
-               "the function called is the result of a call of another function value that "
-               "is itself not evident";
+        return "the function is the result of a call of another function value";
     case GCNodeKind::Data:
     case GCNodeKind::Fill:
-        return "the function called is known, but it cannot be differentiated through its "
-               "body (a macro, or a function value without a graph)";
+        return "the function is known where it is passed, but could not be followed into the "
+               "function it is passed to (a macro, a function with a derivative rule of its "
+               "own, or a recursion)";
     default:
         break;
     }
-    return std::string(unknown) + "the function called is computed at run time";
+    return "the function is computed at run time";
 }
 
 std::string_view Backward::operUri(gc_node_ref_t node) const {
@@ -1769,7 +1846,14 @@ void Backward::visit(gc_node_ref_t node) {
     case GCNodeKind::Sync:
         return;
     case GCNodeKind::Func:
-        // Calls the forward rewrite left alone take no differentiable input: constants.
+        // Calls the forward rewrite left alone take no differentiable input: constants. Unless
+        // one is passed a function value that carries an active value: its result then depends
+        // on the differentiated parameter through a function that could not be followed into
+        // the callee. Taking the call for a constant would drop that part of the gradient
+        // without any sign of it.
+        if (activeFunctionInput(node) != kInvalidNodeRef) {
+            refused_.push_back(node);
+        }
         return;
     case GCNodeKind::Call:
         // Refused, by Engine::refuse once every graph has been looked at: the first such
@@ -2043,11 +2127,10 @@ void Engine::refuse() {
     failAt(
         first->origin,
         std::format(
-            "cannot differentiate through this call of a function value: {}{}{}. A call of a "
-            "function value is differentiated when the function is named, or built by a "
-            "lambda, in the function being differentiated or in a function it calls, and "
-            "gets from there to the call by being bound, captured, passed as an argument or "
-            "returned",
+            "{}{}{}. A call of a function value is differentiated when the function is named, "
+            "or built by a lambda, in the function being differentiated or in a function it "
+            "calls, and gets from there to the call by being bound, captured, passed as an "
+            "argument or returned",
             first->reason,
             followingExhausted()
                 ? std::format(

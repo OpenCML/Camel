@@ -1589,7 +1589,7 @@ assert(text.includes('grad_function_value_branch.cml:10:14: [Error]'), 'the diag
 assert(/[(]at [^ ]*grad_function_value_branch[.]cml:10:14[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
-assert(text.includes('the function called is chosen by a branch at run time'), 'missing: the function called is chosen by a branch at run time in: ' + text)
+assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 }
 """
 timeout_ms = 12000
@@ -1609,7 +1609,7 @@ assert(text.includes('grad_function_value_branch.cml:10:14: [Error]'), 'the diag
 assert(/[(]at [^ ]*grad_function_value_branch[.]cml:10:14[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
-assert(text.includes('the function called is chosen by a branch at run time'), 'missing: the function called is chosen by a branch at run time in: ' + text)
+assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
 assert(/the macro call is at [^ ]*[.]cml:[0-9]+:[0-9]+/.test(text), 'macro call not named: ' + text)
 }
@@ -1631,7 +1631,7 @@ assert(text.includes('grad_function_value_static_branch.cml:10:17: [Error]'), 't
 assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:10:17[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
-assert(text.includes('the function called is chosen by a branch at run time'), 'missing: the function called is chosen by a branch at run time in: ' + text)
+assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 }
 """
 timeout_ms = 12000
@@ -1651,7 +1651,7 @@ assert(text.includes('grad_function_value_static_branch.cml:10:17: [Error]'), 't
 assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:10:17[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
-assert(text.includes('the function called is chosen by a branch at run time'), 'missing: the function called is chosen by a branch at run time in: ' + text)
+assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
 assert(/the macro call is at [^ ]*[.]cml:[0-9]+:[0-9]+/.test(text), 'macro call not named: ' + text)
 }
@@ -1672,7 +1672,7 @@ const text = input.normalized.output
 assert(text.includes('grad_function_value_parameter.cml:9:14: [Error]'), 'the diagnostic is not located at the call (9:14): ' + text)
 assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:9:14[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
-assert(text.includes('the function called is a parameter, or a captured value, of the function being differentiated'), 'missing: the function called is a parameter, or a captured value, of the function being differentiated in: ' + text)
+assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
 }
 """
 timeout_ms = 12000
@@ -1691,7 +1691,7 @@ const text = input.normalized.output
 assert(text.includes('grad_function_value_parameter.cml:9:14: [Error]'), 'the diagnostic is not located at the call (9:14): ' + text)
 assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:9:14[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
-assert(text.includes('the function called is a parameter, or a captured value, of the function being differentiated'), 'missing: the function called is a parameter, or a captured value, of the function being differentiated in: ' + text)
+assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
 assert(/the macro call is at [^ ]*[.]cml:[0-9]+:[0-9]+/.test(text), 'macro call not named: ' + text)
 }
@@ -1712,7 +1712,7 @@ const text = input.normalized.output
 assert(text.includes('grad_function_value_container.cml:10:17: [Error]'), 'the diagnostic is not located at the call (10:17): ' + text)
 assert(/[(]at [^ ]*grad_function_value_container[.]cml:10:17[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
-assert(text.includes('the function called is read from a tuple, a struct or an array'), 'missing: the function called is read from a tuple, a struct or an array in: ' + text)
+assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 }
 """
 timeout_ms = 12000
@@ -1731,7 +1731,7 @@ const text = input.normalized.output
 assert(text.includes('grad_function_value_container.cml:10:17: [Error]'), 'the diagnostic is not located at the call (10:17): ' + text)
 assert(/[(]at [^ ]*grad_function_value_container[.]cml:10:17[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
-assert(text.includes('the function called is read from a tuple, a struct or an array'), 'missing: the function called is read from a tuple, a struct or an array in: ' + text)
+assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
 assert(/the macro call is at [^ ]*[.]cml:[0-9]+:[0-9]+/.test(text), 'macro call not named: ' + text)
 }
@@ -1816,7 +1816,7 @@ const text = input.normalized.output
 assert(text.includes('grad_function_value_recursion.cml:7:53: [Error]'), 'the diagnostic is not located at the call (7:53): ' + text)
 assert(/[(]at [^ ]*grad_function_value_recursion[.]cml:7:53[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
-assert(text.includes('the function called is a parameter of'), 'missing: the function called is a parameter of in: ' + text)
+assert(text.includes('the function is a parameter of'), 'missing: the function is a parameter of in: ' + text)
 assert(text.includes('iterate'), 'missing: iterate in: ' + text)
 assert(text.includes('a recursive function that passes it on to itself'), 'missing: a recursive function that passes it on to itself in: ' + text)
 }
@@ -1837,9 +1837,55 @@ const text = input.normalized.output
 assert(text.includes('grad_function_value_recursion.cml:7:53: [Error]'), 'the diagnostic is not located at the call (7:53): ' + text)
 assert(/[(]at [^ ]*grad_function_value_recursion[.]cml:7:53[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
-assert(text.includes('the function called is a parameter of'), 'missing: the function called is a parameter of in: ' + text)
+assert(text.includes('the function is a parameter of'), 'missing: the function is a parameter of in: ' + text)
 assert(text.includes('iterate'), 'missing: iterate in: ' + text)
 assert(text.includes('a recursive function that passes it on to itself'), 'missing: a recursive function that passes it on to itself in: ' + text)
+assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:[0-9]+:[0-9]+/.test(text), 'macro call not named: ' + text)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "grad_function_value_passed.default"
+desc = "Refused: a function value that depends on the differentiated parameter (chosen by a branch between two closures capturing x) is passed to a function without a differentiable parameter. The call used to count as a constant: the gradient came out as 1 instead of 7 without any error. The diagnostic is located at the call that passes the value. Under: the default run (grad runs with the program)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_function_value_passed.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes('grad_function_value_passed.cml:14:17: [Error]'), 'the diagnostic is not located at the call (14:17): ' + text)
+assert(/[(]at [^ ]*grad_function_value_passed[.]cml:14:17[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
+assert(text.includes('cannot differentiate through this call of'), 'missing: cannot differentiate through this call of in: ' + text)
+assert(text.includes('call0'), 'missing: call0 in: ' + text)
+assert(text.includes('a function value that depends on a differentiated parameter'), 'missing: a function value that depends on a differentiated parameter in: ' + text)
+assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "grad_function_value_passed.macro"
+desc = "Refused: a function value that depends on the differentiated parameter (chosen by a branch between two closures capturing x) is passed to a function without a differentiable parameter. The call used to count as a constant: the gradient came out as 1 instead of 7 without any error. The diagnostic is located at the call that passes the value. Under: std::macro (grad built at compile time)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_function_value_passed.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(text.includes('grad_function_value_passed.cml:14:17: [Error]'), 'the diagnostic is not located at the call (14:17): ' + text)
+assert(/[(]at [^ ]*grad_function_value_passed[.]cml:14:17[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
+assert(text.includes('cannot differentiate through this call of'), 'missing: cannot differentiate through this call of in: ' + text)
+assert(text.includes('call0'), 'missing: call0 in: ' + text)
+assert(text.includes('a function value that depends on a differentiated parameter'), 'missing: a function value that depends on a differentiated parameter in: ' + text)
+assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
 assert(/the macro call is at [^ ]*[.]cml:[0-9]+:[0-9]+/.test(text), 'macro call not named: ' + text)
 }
