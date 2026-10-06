@@ -220,6 +220,7 @@ class Evaluator {
     Value eval(Activation &act, gc_node_ref_t ref);
     Value evalNode(Activation &act, gc_node_ref_t ref);
     Value evalOper(Activation &act, gc_node_ref_t ref);
+    Value evalVariableRead(Activation &act, gc_node_ref_t ref);
     Value evalJoin(Activation &act, gc_node_ref_t ref);
     Value evalFill(Activation &act, gc_node_ref_t ref);
     Value symbolicIntArray(
@@ -279,6 +280,52 @@ Value Evaluator::translate(GCGraph *graph, std::span<const Value> inputs) {
 /// specializations of them) mean nothing in the source; the source position says more.
 bool isSourceName(std::string_view name) { return !name.empty() && !name.starts_with("__"); }
 
+/// The operator of a node, or an empty view for any other node kind.
+std::string_view operUriOf(const GCGraph *g, gc_node_ref_t ref) {
+    const auto *n = g->node(ref);
+    if (n == nullptr || n->kind != GCNodeKind::Oper) {
+        return {};
+    }
+    return g->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
+}
+
+/// A variable declared in `g` itself (`var v = e` is the operator `:var/new`): its content
+/// never leaves the function, so reads and assignments of it are not effects of the model.
+bool isLocalVariable(const GCGraph *g, gc_node_ref_t cell) {
+    return operUriOf(g, cell) == ":var/new";
+}
+
+/// Why a variable that is not local to the graph using it cannot be exported.
+constexpr const char *kOuterVariable =
+    "a variable is read or assigned outside the function that declares it (a var parameter, a "
+    "captured variable, a variable used in a branch arm): its content is state that an ONNX "
+    "model cannot hold; only a variable declared, read and assigned directly in one function "
+    "can be exported. Pass the value as an argument and return the new value instead";
+
+/// Whether running `from` is a precondition of running `to` (data or control edges).
+bool runsBefore(const GCGraph *g, gc_node_ref_t from, gc_node_ref_t to) {
+    if (from == to) {
+        return false;
+    }
+    std::unordered_set<gc_node_ref_t> seen{from};
+    std::vector<gc_node_ref_t> work{from};
+    while (!work.empty()) {
+        const gc_node_ref_t ref = work.back();
+        work.pop_back();
+        for (const auto users : {g->normOutputsOf(ref), g->withOutputsOf(ref), g->ctrlOutputsOf(ref)}) {
+            for (gc_node_ref_t user : users) {
+                if (user == to) {
+                    return true;
+                }
+                if (seen.insert(user).second) {
+                    work.push_back(user);
+                }
+            }
+        }
+    }
+    return false;
+}
+
 void Evaluator::refuseEffects(GCGraph *root) {
     std::unordered_set<GCGraph *> seenGraphs{root};
     std::vector<GCGraph *> graphs{root};
@@ -298,10 +345,18 @@ void Evaluator::refuseEffects(GCGraph *root) {
             GCGraph *referenced = nullptr;
             if (n->kind == GCNodeKind::Oper) {
                 const std::string uri(g->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri());
-                if (!core::OperatorTraitsRegistry::instance().isPure(uri)) {
+                // Declaring, reading and assigning a variable of the function itself is no
+                // effect of the model (evalVariableRead translates the reads).
+                const bool onLocalVariable =
+                    uri == ":var/new" ||
+                    ((uri == ":var/get" || uri == ":op/assn") && !g->normInputsOf(ref).empty() &&
+                     isLocalVariable(g, g->normInputsOf(ref).front()));
+                if (!onLocalVariable && !core::OperatorTraitsRegistry::instance().isPure(uri)) {
                     const uint64_t origin = g->nodeOrigin(ref);
                     const std::string what =
-                        std::format("impure operator '{}' cannot be exported", uri);
+                        uri == ":var/get" || uri == ":op/assn"
+                            ? std::string(kOuterVariable)
+                            : std::format("impure operator '{}' cannot be exported", uri);
                     throw ExportError(
                         isSourceName(g->name()) ? std::format("in '{}': {}", g->name(), what)
                                                 : what,
@@ -507,10 +562,69 @@ std::optional<Value> Evaluator::foldConstantOper(
     return keep(result, resultType);
 }
 
+// A variable of the exported function. ONNX has no cells; a variable that lives and dies inside
+// one function is only a name for a sequence of values, so a read is translated as the value of
+// the assignment that reaches it (the declaration's initial value when none does). That is
+// decided from the graph: the assignments of this variable that must run before the read form a
+// chain, and the last of the chain is the one read. Everything this cannot decide is refused: a
+// variable that comes from outside the function (its content is state outside the model), one
+// that a call, a branch arm or a closure receives, an assignment not ordered with the read.
+Value Evaluator::evalVariableRead(Activation &act, gc_node_ref_t ref) {
+    GCGraph *g               = act.graph;
+    const gc_node_ref_t cell = g->normInputsOf(ref).front();
+    if (!isLocalVariable(g, cell)) {
+        unsupported(act, kOuterVariable);
+    }
+    std::vector<gc_node_ref_t> before;
+    for (const auto users : {g->normOutputsOf(cell), g->withOutputsOf(cell)}) {
+        for (gc_node_ref_t user : users) {
+            const std::string_view uri = operUriOf(g, user);
+            if (uri == ":var/get") {
+                continue;
+            }
+            if (uri != ":op/assn" || g->normInputsOf(user).size() != 2 ||
+                g->normInputsOf(user).front() != cell) {
+                unsupported(
+                    act,
+                    "a variable of the exported function is passed to a call, a branch arm or "
+                    "a closure, or is updated by a compound assignment; only a variable that "
+                    "is read and assigned directly in one function can be exported");
+            }
+            if (runsBefore(g, user, ref)) {
+                before.push_back(user);
+            } else if (!runsBefore(g, ref, user)) {
+                unsupported(
+                    act,
+                    "an assignment of a variable is not ordered with a read of it, so the "
+                    "value the read sees is not determined by the graph");
+            }
+        }
+    }
+    if (before.empty()) {
+        return eval(act, g->normInputsOf(cell).front());
+    }
+    for (gc_node_ref_t last : before) {
+        bool isLast = true;
+        for (gc_node_ref_t other : before) {
+            isLast = isLast && (other == last || runsBefore(g, other, last));
+        }
+        if (isLast) {
+            return eval(act, g->normInputsOf(last)[1]);
+        }
+    }
+    unsupported(
+        act,
+        "the assignments of a variable before a read of it are not ordered among themselves, "
+        "so the value the read sees is not determined by the graph");
+}
+
 Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     GCGraph *g       = act.graph;
     const auto *body = g->nodeBodyAs<camel::runtime::GCOperBody>(ref);
     const std::string uri(body->uri());
+    if (uri == ":var/get") {
+        return evalVariableRead(act, ref);
+    }
     std::vector<Value> norm = evalAll(act, g->normInputsOf(ref));
     std::vector<Value> with = evalAll(act, g->withInputsOf(ref));
     const auto *def         = tensor::ops::OpRegistry::instance().find(uri);
