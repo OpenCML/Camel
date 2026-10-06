@@ -41,6 +41,7 @@ PROGRAMS = [
     "export_train_step_frozen.cml",
     "export_dynamic_recursion.cml",
     "export_loop.cml",
+    "export_slice_loop.cml",
     "export_train_step_branch.cml",
     "export_train_step_branch_disjoint.cml",
     "export_train_step_branch_scalar.cml",

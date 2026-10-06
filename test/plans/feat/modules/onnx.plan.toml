@@ -395,7 +395,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_gated_gru_step"
-desc = "E13/T5 boundary, moved: a branched training step of a recurrent network (gated GRU) still cannot be exported. The recursion over the time steps is now translated as a loop, and what stops the export is the slice of the input at the loop counter (`tensor:slice` with a start that depends on the model input has no lowering yet), reported at the slice."
+desc = "E13/T5 boundary, moved twice: a branched training step of a recurrent network (gated GRU) still cannot be exported. The forward recursion over the time steps is a loop and the slice at the loop counter is lowered, but the derived reverse pass calls itself and then uses the result (it is not a tail recursion), and the gradient of a loop is not implemented; reported at the recursive call."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_gated_gru_step.cml"
 args = ["${case}"]
@@ -405,8 +405,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes("'tensor:slice': argument 2 must be an export-time constant integer"), 'missing slice detail')
-assert(/at [^ ]*export_gated_gru_step[.]cml:36:22[)]/.test(text), 'missing source position of the slice')
+assert(text.includes('is not the last action of the function'), 'missing tail-position detail')
+assert(/at [^ ]*export_gated_gru_step[.]cml:42:38[)]/.test(text), 'missing source position of the recursive call')
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """
@@ -1401,6 +1401,54 @@ const text = input.normalized.output
 assert(text.includes('is not the last action of the function'), 'missing tail-position detail: ' + text)
 assert(/at [^ ]*export_nontail_recursion[.]cml:12:[0-9]+[)]/.test(text), 'missing source position of the recursive call: ' + text)
 assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "export_slice_loop"
+desc = "A recursion over the time axis that stops early on the data exports: the slice of step t takes a start and an end that depend on the model input (inputs of the ONNX Slice; they had to be export-time constants)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_slice_loop.cml"
+args = ["${case}", "std::macro"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_slice_loop.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const fs = await import('fs')
+// Slices may sit inside a Loop or an If: count op_type "Slice" (key 0x22, length 5) in the file.
+const buf = fs.readFileSync(path.join(input.repo_root, 'tmp/test/onnx/export_slice_loop.onnx'))
+const mark = Buffer.from([0x22, 0x05, 0x53, 0x6c, 0x69, 0x63, 0x65])
+let slices = 0, at = 0
+while ((at = buf.indexOf(mark, at)) !== -1) { slices += 1; at += 1 }
+assert(slices >= 1, `at least one Slice expected, got ${slices}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_export_slice_loop"
+desc = "A recursion over the time axis that stops early on the data exports: the slice of step t takes a start and an end that depend on the model input (inputs of the ONNX Slice; they had to be export-time constants)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_slice_loop.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_slice_loop.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_slice_loop.onnx"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const fs = await import('fs')
+// Slices may sit inside a Loop or an If: count op_type "Slice" (key 0x22, length 5) in the file.
+const buf = fs.readFileSync(path.join(input.repo_root, 'tmp/test/onnx/pass_export_slice_loop.onnx'))
+const mark = Buffer.from([0x22, 0x05, 0x53, 0x6c, 0x69, 0x63, 0x65])
+let slices = 0, at = 0
+while ((at = buf.indexOf(mark, at)) !== -1) { slices += 1; at += 1 }
+assert(slices >= 1, `at least one Slice expected, got ${slices}`)
 }
 """
 timeout_ms = 8000

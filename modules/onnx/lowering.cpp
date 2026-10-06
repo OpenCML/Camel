@@ -363,15 +363,49 @@ Value lowerConcat(const LowerContext &ctx) {
         {intAttr("axis", ctx.constInt(2))});
 }
 
+/// slice(t, axis, start, end[, step]). The axis and the step are constants of the model; a start
+/// or an end that depends on the model input (the counter of a loop over the time axis) is an
+/// input of the ONNX Slice, which clamps out-of-range bounds as Camel does. The extent of the
+/// sliced axis is then unknown to the exporter.
 Value lowerSlice(const LowerContext &ctx) {
-    Emitter &e             = ctx.emitter();
-    const int64_t axis[]   = {ctx.constInt(1)};
-    const int64_t starts[] = {ctx.constInt(2)};
-    const int64_t ends[]   = {ctx.constInt(3)};
-    const int64_t steps[]  = {ctx.constInt(4, 1)};
-    return ctx.emit(
-        "Slice",
-        {ctx.input(0), e.int64s(starts), e.int64s(ends), e.int64s(axis), e.int64s(steps)});
+    Emitter &e            = ctx.emitter();
+    const int64_t axis[]  = {ctx.constInt(1)};
+    const int64_t steps[] = {ctx.constInt(4, 1)};
+    bool dynamic          = false;
+    const auto bound      = [&](size_t index) {
+        if (ctx.arg(index).isConstant()) {
+            const int64_t value[] = {ctx.constInt(index)};
+            return e.int64s(value);
+        }
+        if (ctx.arg(index).form != Value::Form::Scalar) {
+            throw ExportError(
+                std::format("'tensor:slice': argument {} must be an integer", index));
+        }
+        dynamic              = true;
+        const int64_t zero[] = {0};
+        return e.node("Unsqueeze", {ctx.input(index, TypeCode::Int64), e.int64s(zero)});
+    };
+    const std::string starts = bound(2);
+    const std::string ends   = bound(3);
+    if (!dynamic) {
+        return ctx.emit("Slice", {ctx.input(0), starts, ends, e.int64s(axis), e.int64s(steps)});
+    }
+    const auto facts = ctx.facts(0);
+    if (!facts.shape) {
+        throw ExportError("'tensor:slice' of a tensor of unknown rank is not supported");
+    }
+    tensor::StaticShape shape = *facts.shape;
+    const int64_t rank        = static_cast<int64_t>(shape.size());
+    const int64_t at          = axis[0] < 0 ? axis[0] + rank : axis[0];
+    if (at < 0 || at >= rank) {
+        throw ExportError(
+            std::format("'tensor:slice': axis {} is out of range for rank {}", axis[0], rank));
+    }
+    shape[static_cast<size_t>(at)] = tensor::kUnknownDim;
+    return Value::symbolic(
+        e.node("Slice", {ctx.input(0), starts, ends, e.int64s(axis), e.int64s(steps)}),
+        facts.dtype,
+        shape);
 }
 
 /// Reduction over one axis. Opset 18 moved `axes` from an attribute to an input for every
