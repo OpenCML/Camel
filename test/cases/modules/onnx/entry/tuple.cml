@@ -1,0 +1,11 @@
+/**
+ * A tuple result becomes one model output per element (`output_0`, `output_1`).
+ */
+module tuple
+
+import { Tensor, tanh } from tensor
+
+func main(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 4]>): (Tensor, Tensor) {
+    let h = tanh(x @ w)
+    return (h, h * 2.0)
+}

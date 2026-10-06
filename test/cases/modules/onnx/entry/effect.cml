@@ -1,0 +1,12 @@
+/**
+ * A `main` that does more than compute cannot be translated as a whole: the export is refused
+ * at the effect (line 10).
+ */
+module effect
+
+import { Tensor, tanh } from tensor
+
+func main(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 4]>): Tensor sync {
+    println('forward')
+    return tanh(x @ w)
+}

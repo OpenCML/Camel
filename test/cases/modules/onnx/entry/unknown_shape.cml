@@ -1,0 +1,11 @@
+/**
+ * A model input needs an element type and a shape: the parameter `x` declares neither, so the
+ * export is refused and names it (line 8).
+ */
+module unknown_shape
+
+import { Tensor, tanh } from tensor
+
+func main(x: Tensor, w: Tensor<f32, const [3, 4]>): Tensor {
+    return tanh(x @ w)
+}

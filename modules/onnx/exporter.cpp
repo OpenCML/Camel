@@ -41,7 +41,9 @@
 #include "camel/core/source/manager.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/execute/entry_args.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/draft_inline.h"
@@ -362,10 +364,20 @@ class Evaluator {
 
 Value Evaluator::translate(GCGraph *graph, std::span<const Value> inputs) {
     Activation act{.graph = graph, .ports = {}, .memo = {{}}};
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        act.ports.emplace(graph->normPorts()[i], inputs[i]);
+    // `with` parameters first, then the ordinary ones (a function exported through
+    // export_model has none of the former: checkArity).
+    size_t next = 0;
+    for (gc_node_ref_t port : graph->withPorts()) {
+        if (next < inputs.size()) {
+            act.ports.emplace(port, inputs[next++]);
+        }
     }
-    const auto *exitType = graph->funcType()->exitType();
+    for (gc_node_ref_t port : graph->normPorts()) {
+        if (next < inputs.size()) {
+            act.ports.emplace(port, inputs[next++]);
+        }
+    }
+    const auto *exitType = graph->funcType() ? graph->funcType()->exitType() : nullptr;
     if (graph->returnKind() == camel::runtime::GCReturnKind::None ||
         (exitType && exitType->code() == TypeCode::Void)) {
         return Value::constant(NullSlot, type::Type::Void());
@@ -3227,6 +3239,14 @@ enum class Preparation {
     ShapesOnly,
 };
 
+/// The second half of every export: simplifies `root` (a graph whose parameters already have
+/// the types of `inputs`), translates it with its parameters bound to `inputs` and declares
+/// the outputs. `names` are the source names of constant objects, for the initializers.
+Model translatePrepared(
+    core::context::Context &ctx, Emitter &emitter, GCGraph *root, std::span<const Value> inputs,
+    std::unordered_map<slot_t, std::string> names, const ExportOptions &options,
+    Preparation preparation);
+
 Model exportBound(
     core::context::Context &ctx, ::Function *fn, std::span<const Example> captures,
     std::span<const Example> examples, const ExportOptions &options, Preparation preparation) {
@@ -3266,6 +3286,25 @@ Model exportBound(
         camel::runtime::bindFunctionCall(session.rootDraft(), fn, inputTypes);
         root = session.commit();
     }
+    std::unordered_map<slot_t, std::string> names;
+    for (const Example &capture : captures) {
+        collectNames(capture.value, capture.type, "", names);
+    }
+    if (rooted) {
+        const auto *captured = rooted->getAs<::Tuple>();
+        const auto *layout   = static_cast<const type::TupleType *>(rooted->type());
+        for (size_t i = 0; i < captured->size(); ++i) {
+            collectNames(captured->get<slot_t>(i), layout->typeAt(i), "", names);
+        }
+    }
+    return translatePrepared(ctx, emitter, root, inputs, std::move(names), options, preparation);
+}
+
+Model translatePrepared(
+    core::context::Context &ctx, Emitter &emitter, GCGraph *root, std::span<const Value> inputs,
+    std::unordered_map<slot_t, std::string> names, const ExportOptions &options,
+    Preparation preparation) {
+    const auto context = ctx.shared_from_this();
     std::ostringstream log;
     // The pass entry (ShapesOnly): the preceding passes simplified the program without two
     // things only the export knows: the shapes of the examples (binding their types above
@@ -3328,24 +3367,168 @@ Model exportBound(
         GraphVizDumpPass(context, GraphVizDumpConfig{.readableOnly = true}).apply(root, std::cerr);
     }
 
-    std::unordered_map<slot_t, std::string> names;
-    for (const Example &capture : captures) {
-        collectNames(capture.value, capture.type, "", names);
-    }
-    if (rooted) {
-        const auto *captured = rooted->getAs<::Tuple>();
-        const auto *layout   = static_cast<const type::TupleType *>(rooted->type());
-        for (size_t i = 0; i < captured->size(); ++i) {
-            collectNames(captured->get<slot_t>(i), layout->typeAt(i), "", names);
-        }
-    }
     Evaluator evaluator(emitter, options, ctx, std::move(names), ctx.sourceContext());
     evaluator.refuseEffects(root);
     emitOutputs(emitter, evaluator.translate(root, inputs), options.outputName);
     return finishModel(emitter, options);
 }
 
+/// Declares the model inputs of a parameter of the entry function from its declared type:
+/// one input per tensor or number, named after the parameter (`x`), a struct field or tuple
+/// element by its path (`m_fc1_w`, `t_0`).
+class DeclaredInputBinder {
+  public:
+    explicit DeclaredInputBinder(Emitter &emitter) : emitter_(emitter) {}
+
+    Value bind(type::Type *ty, const std::string &name, const std::string &param) {
+        if (!ty) {
+            refuse(param, name, "has no declared type");
+        }
+        if (const auto *tensorType = tensor::asTensorType(ty)) {
+            if (!tensorType->dtype() || !tensorType->shape()) {
+                refuse(
+                    param,
+                    name,
+                    std::format(
+                        "is declared '{}', which leaves its {} unknown; a model input needs "
+                        "both: write the type with them, e.g. Tensor<f32, const [2, 3]> (a "
+                        "negative extent is a dynamic axis), or give the parameter a value "
+                        "with --arg, which makes it a constant of the model",
+                        ty->toString(),
+                        !tensorType->shape()
+                            ? (tensorType->dtype() ? "shape" : "element type and shape")
+                            : "element type"));
+            }
+            tensor::StaticShape shape = *tensorType->shape();
+            std::vector<size_t> dynamic;
+            for (size_t a = 0; a < shape.size(); ++a) {
+                if (shape[a] < 0) {
+                    shape[a] = tensor::kUnknownDim;
+                    dynamic.push_back(a);
+                }
+            }
+            declare(name);
+            const Value input   = Value::symbolic(name, tensorType->dtype(), shape);
+            ValueInfo inputInfo = valueInfoOf(name, factsOf(input));
+            for (size_t a : dynamic) {
+                (*inputInfo.shape)[a] = Dim{std::format("{}_dim{}", name, a)};
+            }
+            emitter_.addInput(std::move(inputInfo));
+            return input;
+        }
+        switch (ty->code()) {
+        case TypeCode::Int32:
+        case TypeCode::Int64:
+        case TypeCode::Float32:
+        case TypeCode::Float64:
+        case TypeCode::Bool: {
+            declare(name);
+            Value input = Value::symbolicScalar(name, ty);
+            emitter_.addInput(valueInfoOf(name, factsOf(input)));
+            return input;
+        }
+        case TypeCode::Struct: {
+            auto *structType = static_cast<type::StructType *>(ty);
+            std::vector<Value> fields;
+            for (size_t i = 0; i < structType->size(); ++i) {
+                fields.push_back(
+                    bind(
+                        structType->typeAt(i),
+                        name + "_" + std::string(structType->fieldName(i)),
+                        param));
+            }
+            return Value::aggregate(ty, std::move(fields));
+        }
+        case TypeCode::Tuple: {
+            auto *tupleType = static_cast<type::TupleType *>(ty);
+            std::vector<Value> fields;
+            for (size_t i = 0; i < tupleType->size(); ++i) {
+                fields.push_back(bind(tupleType->typeAt(i), std::format("{}_{}", name, i), param));
+            }
+            return Value::aggregate(ty, std::move(fields));
+        }
+        default:
+            break;
+        }
+        refuse(
+            param,
+            name,
+            std::format(
+                "has type '{}'; a model input is a tensor, a number, or a struct or tuple of "
+                "those (give the parameter a value with --arg to make it a constant of the "
+                "model)",
+                ty->toString()));
+    }
+
+  private:
+    [[noreturn]] static void
+    refuse(const std::string &param, const std::string &name, const std::string &why) {
+        throw ExportError(
+            name == param ? std::format("parameter '{}' of 'main' {}", param, why)
+                          : std::format("'{}' of parameter '{}' of 'main' {}", name, param, why));
+    }
+
+    void declare(const std::string &name) {
+        if (!names_.insert(name).second) {
+            throw ExportError(std::format("two inputs are named '{}'", name));
+        }
+    }
+
+    Emitter &emitter_;
+    std::unordered_set<std::string> names_;
+};
+
 } // namespace
+
+Model translateEntryGraph(
+    core::context::Context &ctx, GCGraph *root, const ExportOptions &options) {
+    Emitter emitter(options.opset, capabilitiesFor(options));
+    emitter.graph().name = options.graphName;
+
+    // One model input per parameter the entry graph still has, `with` ones first: the order
+    // the parameters are bound in.
+    DeclaredInputBinder binder(emitter);
+    std::vector<Value> inputs;
+    const auto *funcType   = root->funcType();
+    const size_t withCount = root->withPorts().size();
+    const size_t portCount = withCount + root->normPorts().size();
+    for (size_t i = 0; i < portCount; ++i) {
+        const bool isWith        = i < withCount;
+        const size_t k           = isWith ? i : i - withCount;
+        const gc_node_ref_t port = isWith ? root->withPorts()[k] : root->normPorts()[k];
+        const std::string name   = funcType && i < funcType->argNamesCount()
+                                       ? std::string(funcType->argNameAt(i))
+                                       : std::format("{}{}", options.inputName, i);
+        const bool known =
+            funcType && (isWith ? k < funcType->withTypesCount() : k < funcType->normTypesCount());
+        if (known && (isWith ? funcType->withIsVarAt(k) : funcType->normIsVarAt(k))) {
+            throw ExportError(
+                std::format(
+                    "parameter '{}' of 'main' is a 'var' parameter, a variable of the caller; "
+                    "a model has no such input",
+                    name));
+        }
+        type::Type *declared = known ? (isWith ? funcType->withTypeAt(k) : funcType->normTypeAt(k))
+                                     : root->node(port)->dataType;
+        inputs.push_back(binder.bind(declared, name, name));
+    }
+
+    // The objects given with --arg are constants of the graph; the initializers they become
+    // are named after the parameter (a struct's leaves after their fields).
+    std::unordered_map<slot_t, std::string> names;
+    for (const auto &argument : execute::boundEntryArguments()) {
+        collectNames(argument.value, argument.type, argument.name, names);
+    }
+    DetachedGraphsGuard guard{ctx};
+    return translatePrepared(
+        ctx,
+        emitter,
+        root,
+        inputs,
+        std::move(names),
+        options,
+        Preparation::ShapesOnly);
+}
 
 Model translateFunction(
     core::context::Context &ctx, ::Function *fn, std::span<const Example> captures,

@@ -1,0 +1,21 @@
+/**
+ * Weights as `with` parameters, data as ordinary parameters. Exported without values, every
+ * leaf of the weights is a model input (`p_fc_w`, `p_fc_b`, before the data). Exported with
+ * `--arg p=<dir>`, the weights are constants of the graph and become initializers.
+ */
+module weights
+
+import { Tensor, tanh } from tensor
+
+type Linear = { w: Tensor<f32, const [3, 4]>, b: Tensor<f32, const [4]> }
+type Model = { fc: Linear }
+
+with <p: Linear>
+func linear(x: Tensor): Tensor {
+    return x @ p.w + p.b
+}
+
+with <p: Model>
+func main(x: Tensor<f32, const [-1, 3]>): Tensor {
+    return x->linear<p.fc>->tanh
+}
