@@ -1911,3 +1911,17 @@ expect_stdout_contains = ["ort entry export: worst", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 180000
+
+[[tests]]
+name = "ort_var_parameter"
+desc = "A function that hands its state to a called function as a var parameter exports (the callee is inlined, so the variable is declared, read and assigned in one function): by the operator and by the pass, each model checked by onnx.checker and on ONNX Runtime for two inputs against NumPy. An inliner change once made the exporter refuse this program (the variable cell was wrapped in a GATE)."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_var_parameter.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["operator: max abs error", "pass: max abs error", "var parameter export: PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000

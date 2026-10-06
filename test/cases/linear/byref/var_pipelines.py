@@ -1,4 +1,24 @@
-"""Generated programs that write variables, compared across pipelines and with a reference.\n\nEach program declares recursive `sync` functions with a `var` parameter that write the variable on\nthe way down and / or up (all writes declared and waited), calls them from `main` at several\ndepths, and prints the results and the final values of the variables. The expected output is\ncomputed here by a direct simulation, so every pipeline is compared with the reference and not\nonly with the default run. Depths go beyond the number of inlining rounds after which a lost write\nfirst appeared (4).\n\nStraight-line functions add the other shape: snapshots of the variable (`let k = c + 0`) interleaved\nwith writes, a snapshot feeding an argument that the callee ignores while the callee writes the\nvariable, a recursion between two snapshots, and a branch whose arms write.\n\nWhy this exists: std::opt::simplify once dropped a declared write to a var (one increment missing)\nin a recursion whose last call returned a constant, and once let a read of a var slip behind later\nwrites (the read fed an argument the inlined callee did not use). The first version of this\ngenerator had only recursions and passed while the second defect existed.\n\nUsage: python var_pipelines.py [--seed N] [--programs N]\nThe compiler is REPO_ROOT/out/latest unless CAMEL_EXE / CAMEL_HOME are set.\n"""
+"""Generated programs that write variables, compared across pipelines and with a reference.
+
+Each program declares recursive `sync` functions with a `var` parameter that write the variable on
+the way down and / or up (all writes declared and waited), calls them from `main` at several
+depths, and prints the results and the final values of the variables. The expected output is
+computed here by a direct simulation, so every pipeline is compared with the reference and not
+only with the default run. Depths go beyond the number of inlining rounds after which a lost write
+first appeared (4).
+
+Straight-line functions add the other shape: snapshots of the variable (`let k = c + 0`) interleaved
+with writes, a snapshot feeding an argument that the callee ignores while the callee writes the
+variable, a recursion between two snapshots, and a branch whose arms write.
+
+Why this exists: std::opt::simplify once dropped a declared write to a var (one increment missing)
+in a recursion whose last call returned a constant, and once let a read of a var slip behind later
+writes (the read fed an argument the inlined callee did not use). The first version of this
+generator had only recursions and passed while the second defect existed.
+
+Usage: python var_pipelines.py [--seed N] [--programs N]
+The compiler is REPO_ROOT/out/latest unless CAMEL_EXE / CAMEL_HOME are set.
+"""
 
 from __future__ import annotations
 

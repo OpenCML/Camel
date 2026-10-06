@@ -842,6 +842,13 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
         if (!calleeOrdered) {
             break;
         }
+        // Creating a variable is not something to wait for: whatever uses the cell reads it
+        // as data. Waiting on it would also wrap the cell in a GATE when the call is spliced,
+        // and a consumer that follows a variable by its cell (the ONNX exporter) would no
+        // longer see it as local.
+        if (camel::passes::generic::operUriOf(draft, source) == ":var/new") {
+            continue;
+        }
         const auto existing = draft.ctrlInputsOf(funcNodeId);
         if (source != funcNodeId && draft.alive(source) &&
             std::ranges::find(existing, source) == existing.end()) {
