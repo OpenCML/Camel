@@ -299,8 +299,8 @@ MacroEvaluator::tryEvaluate(const MacroCandidate &candidate, std::ostream &os) {
         return std::nullopt;
     } catch (const RuntimeFault &fault) {
         (void)os;
-        // A fault of an operator the evaluation ran (it has no position of its own here): its
-        // diagnostic name and message, as the run would report it.
+        // A fault of an operator the evaluation ran: its diagnostic name and message, as the
+        // run would report it, at the place the fault names when it names one.
         const DiagInfo info = getDiagInfo(fault.diag());
         std::string message = info.message;
         for (size_t i = 0; i < fault.formatArgs().size(); ++i) {
@@ -310,7 +310,10 @@ MacroEvaluator::tryEvaluate(const MacroCandidate &candidate, std::ostream &os) {
                 message.replace(at, slot.size(), fault.formatArgs()[i]);
             }
         }
-        noteFailure(candidate, std::format("{}: {}", info.name, message));
+        noteFailure(
+            candidate,
+            std::format("{}: {}", info.name, message),
+            fault.hint().cachedOrigin);
         return std::nullopt;
     } catch (const std::exception &e) {
         (void)os;
@@ -366,14 +369,27 @@ bool firstReport(uint64_t origin, const std::string &text) {
 
 } // namespace
 
-void MacroEvaluator::noteFailure(const MacroCandidate &candidate, std::string reason) {
+void MacroEvaluator::noteFailure(
+    const MacroCandidate &candidate, std::string reason, camel::source::origin_id_t origin) {
     while (!reason.empty() && (reason.back() == '.' || reason.back() == '\n')) {
         reason.pop_back(); // the diagnostic's message ends the sentence itself
     }
+    const uint64_t callOrigin =
+        candidate.runtimeGraph ? candidate.runtimeGraph->nodeOrigin(candidate.nodeRef) : 0;
+    const bool elsewhere = origin != camel::source::kInvalidOriginId && origin != callOrigin;
+    if (elsewhere && callOrigin != 0 && context_->sourceContext()) {
+        // Reported where the failure belongs; the text says where the macro call is.
+        const auto id    = static_cast<camel::source::origin_id_t>(callOrigin);
+        const auto range = context_->sourceContext()->resolveOrigin(id);
+        reason += std::format(
+            " (the macro call is at {}:{}:{})",
+            context_->sourceContext()->pathForOrigin(id),
+            range.start.line + 1,
+            range.start.character + 1);
+    }
     failures_.push_back(
         Failure{
-            .origin = candidate.runtimeGraph ? candidate.runtimeGraph->nodeOrigin(candidate.nodeRef)
-                                             : 0,
+            .origin = elsewhere ? origin : callOrigin,
             .callee = calleeNameOf(candidate.runtimeGraph, candidate.nodeRef),
             .reason = std::move(reason),
         });

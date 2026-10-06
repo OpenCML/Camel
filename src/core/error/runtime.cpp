@@ -163,7 +163,14 @@ RuntimeErrorReporter::report(const RuntimeFault &fault, const ExecutionSite &sit
     d.suggestion    = formatIndexedMessage(info.suggestion, fault.formatArgs());
     d.sourceContext = sink_ ? sink_->sourceContext() : nullptr;
 
-    auto resolved = resolver_.resolve(site);
+    // A fault that names a place of the program itself is reported there. The site only says
+    // which node was running, and for an operator that works on a whole function (a macro
+    // such as grad) that is the call of the operator, not the place the fault is about.
+    ExecutionSite located = site;
+    if (fault.hint().cachedOrigin != camel::source::kInvalidOriginId) {
+        located.cachedOrigin = fault.hint().cachedOrigin;
+    }
+    auto resolved = resolver_.resolve(located);
     if (resolved.origin != camel::source::kInvalidOriginId) {
         d.range = resolved.origin;
     }
