@@ -1452,3 +1452,17 @@ assert(slices >= 1, `at least one Slice expected, got ${slices}`)
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "ort_dynamic_params"
+desc = "A gradient step whose parameters are tensor arguments next to the data, exported with dynamic axis 0, runs on ONNX Runtime at batch sizes 1, 2, 3, 4, 5 and 9 and matches Camel's native run. Every argument has its own symbolic size on that axis: the option cannot say which argument is data, and one shared 'batch' declared the weights to have the batch's extent (the model loaded and then failed at other batch sizes)."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_dynamic_params.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort dynamic params: worst", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000

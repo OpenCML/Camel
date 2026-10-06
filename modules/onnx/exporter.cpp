@@ -1680,8 +1680,10 @@ struct DetachedGraphsGuard {
 /// Binds the exported function's parameters to graph inputs shaped like the examples.
 class InputBinder {
   public:
-    InputBinder(Emitter &emitter, const ExportOptions &options)
-        : emitter_(emitter), options_(options) {}
+    /// `sharedBatch`: whether dynamic axis 0 is named "batch" (one tensor argument) or gets a
+    /// symbolic size per argument (several: see bindInputs).
+    InputBinder(Emitter &emitter, const ExportOptions &options, bool sharedBatch = true)
+        : emitter_(emitter), options_(options), sharedBatch_(sharedBatch) {}
 
     /// The input value of a parameter like `example`, and the exact type that goes with it.
     std::pair<Value, type::Type *> bind(const Example &example, const std::string &name, bool top) {
@@ -1713,7 +1715,8 @@ class InputBinder {
             ValueInfo inputInfo = valueInfoOf(name, factsOf(input));
             for (size_t a : dynamic) {
                 (*inputInfo.shape)[a] =
-                    Dim{a == 0 ? std::string("batch") : std::format("{}_dim{}", name, a)};
+                    Dim{a == 0 && sharedBatch_ ? std::string("batch")
+                                               : std::format("{}_dim{}", name, a)};
             }
             emitter_.addInput(std::move(inputInfo));
             return {input, tensor::TensorType::get(t->dtype(), shape)};
@@ -1786,6 +1789,7 @@ class InputBinder {
 
     Emitter &emitter_;
     const ExportOptions &options_;
+    bool sharedBatch_ = true;
     std::unordered_set<std::string> names_;
 };
 
@@ -1860,7 +1864,22 @@ struct BoundInputs {
 /// Declares one graph input per tensor of `examples` and returns the parameters' values.
 BoundInputs
 bindInputs(Emitter &emitter, const ExportOptions &options, std::span<const Example> examples) {
-    InputBinder binder(emitter, options);
+    // Dynamic axis 0 is the symbolic size "batch" when the function has one tensor argument.
+    // With several, the option cannot say which of them are data: weights passed next to the
+    // data would be declared to have the batch's extent (a model that loads and then fails on
+    // ONNX Runtime at other batch sizes), so each argument gets its own symbolic size and
+    // nothing is claimed about their equality.
+    size_t batched = 0;
+    for (const Example &example : examples) {
+        if (!tensor::asTensorType(example.type) &&
+            !(example.type && example.type->code() == tensor::TensorType::typeCode())) {
+            continue;
+        }
+        const auto *t = rtdata::fromSlot<tensor::TensorObject *>(example.value);
+        batched += t->shapeSpan().empty() ? 0 : 1;
+    }
+    const bool sharedBatch = batched <= 1;
+    InputBinder binder(emitter, options, sharedBatch);
     BoundInputs inputs;
     size_t tensorArgs = 0;
     for (const Example &example : examples) {
