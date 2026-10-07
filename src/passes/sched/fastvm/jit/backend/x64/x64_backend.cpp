@@ -261,17 +261,42 @@ bool X64Backend::compileBytecode(
     // if a dynamic slot is never written by any bytecode in this function,
     // repeated loads of that slot can be replaced by VCopy from the first load.
     //
-    // This is deliberately stronger than a local peephole because the source
-    // slot is immutable for the whole function, so the cache may survive normal
-    // control-flow edges. Calls still clear the cache because caller-saved regs
-    // are clobbered even if the logical slot value itself is unchanged.
+    // The cache lives for one basic block: the register is only known to hold the
+    // slot where the load has run, and a load made in one arm of a branch has not
+    // run in the other arm, nor on every path to the join. It is cleared wherever
+    // straight-line code starts anew (blockStarts) and at calls, which clobber the
+    // caller-saved regs even if the logical slot value itself is unchanged.
     std::unordered_set<data_idx_t> writtenSlots;
     for (size_t p = entryPc; p < pcEnd; p += base[p].opsize)
         if (base[p].result > 0)
             writtenSlots.insert(base[p].result);
     std::unordered_map<int, x64::VRegId> slotCache;
+    // Every jump target, and the bytecode after each BRCH, JUMP, RETN and TAIL. An
+    // if-else BRCH is followed by its two-entry jump table (the targets its lowering uses).
+    std::unordered_set<size_t> blockStarts;
+    for (size_t p = entryPc; p < pcEnd; p += base[p].opsize) {
+        const size_t next = p + base[p].opsize;
+        switch (base[p].opcode) {
+        case OpCode::BRCH:
+            blockStarts.insert(next);
+            blockStarts.insert(next + 1);
+            break;
+        case OpCode::JUMP:
+            blockStarts.insert(getJumpTargetPc(&base[p]));
+            blockStarts.insert(next);
+            break;
+        case OpCode::RETN:
+        case OpCode::TAIL:
+            blockStarts.insert(next);
+            break;
+        default:
+            break;
+        }
+    }
 
-    auto loadSlot = [&](data_idx_t slotIdx, int disp, x64::VRegId v) {
+    // `cacheable` is false for a load whose code does not run on every path through the
+    // current block (see the fused JOIN).
+    auto loadSlot = [&](data_idx_t slotIdx, int disp, x64::VRegId v, bool cacheable = true) {
         // Positive indices address the dynamic frame, negative indices address
         // compile-time-known static slots.
         if (slotIdx > 0) {
@@ -281,7 +306,7 @@ bool X64Backend::compileBytecode(
                 return;
             }
             build.emitVLoadFromFrame(v, disp);
-            if (!writtenSlots.count(slotIdx))
+            if (cacheable && !writtenSlots.count(slotIdx))
                 slotCache[disp] = v;
         } else {
             emitLoadStaticConst(staticBase, slotIdx, v, build);
@@ -306,6 +331,8 @@ bool X64Backend::compileBytecode(
 
     for (size_t pc = entryPc; pc < pcEnd;) {
         const Bytecode &bc = base[pc];
+        if (blockStarts.count(pc))
+            slotCache.clear();
         build.setNextPc(static_cast<uint32_t>(pc));
         if (debug && debug->enableDebugTrace) {
             build.emitDebugTrace(static_cast<uint32_t>(pc));
@@ -772,9 +799,10 @@ bool X64Backend::compileBytecode(
 
             if (fusedBrchJoin.active && fusedBrchJoin.idxSlot == idxSlot) {
                 // Phase K: fused cmp-BRCH already handled then-path via JUMP.
-                // JOIN only executes from else-path, so take w1 directly.
+                // JOIN only executes from else-path, so take w1 directly. The then-path
+                // jumps past this code, so what follows the JOIN must not reuse the load.
                 x64::VRegId v1 = nextVReg++;
-                loadSlot(w1, d1, v1);
+                loadSlot(w1, d1, v1, false);
 
                 // Phase N: if JOIN is immediately followed by RETN reading
                 // JOIN's result, emit VRet directly — skip the intermediate store.

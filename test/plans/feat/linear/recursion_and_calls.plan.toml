@@ -157,3 +157,66 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
+
+[[tests]]
+name = "self_recursion_shapes.inline.jit"
+desc = "Self-recursive functions of one, two and three arguments and with a float argument, whose recursive arm reads parameters the other arm read first and passes them on in another order, compute the node VM's values once std::inline has made each a single graph the JIT compiles. A register loaded in one arm of the branch was reused in the other arm (garbage arguments: wrong values, or a recursion that never ended)."
+kind = "behavior"
+case = "../../../cases/linear/jit/self_recursion_shapes.cml"
+args = ["${case}", "std::inline", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match, approx }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/self_recursion_shapes fib=(-?[0-9]+) paths=(-?[0-9]+) weave=(-?[0-9]+) halves=(-?[0-9.]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 6765, `expected fib=6765, got ${found[1]}`)
+    assert(Number(found[2]) === 6435, `expected paths=6435, got ${found[2]}`)
+    assert(Number(found[3]) === 52035, `expected weave=52035, got ${found[3]}`)
+    assert(approx(Number(found[4]), 640.976807, 1e-4), `expected halves~=640.976807, got ${found[4]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "self_recursion_shapes.simplify.jit"
+desc = "The same functions and values under std::macro std::opt::simplify on the JIT."
+kind = "behavior"
+case = "../../../cases/linear/jit/self_recursion_shapes.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match, approx }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/self_recursion_shapes fib=(-?[0-9]+) paths=(-?[0-9]+) weave=(-?[0-9]+) halves=(-?[0-9.]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 6765, `expected fib=6765, got ${found[1]}`)
+    assert(Number(found[2]) === 6435, `expected paths=6435, got ${found[2]}`)
+    assert(Number(found[3]) === 52035, `expected weave=52035, got ${found[3]}`)
+    assert(approx(Number(found[4]), 640.976807, 1e-4), `expected halves~=640.976807, got ${found[4]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "self_recursion_shapes.inline.jit.compiled"
+desc = "The four functions are executed as machine code, not left to the interpreter: the JIT log names each as compiled, and the values are still the node VM's."
+kind = "behavior"
+case = "../../../cases/linear/jit/self_recursion_shapes.cml"
+args = ["-vv", "--log-include", "JIT", "${case}", "std::inline", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert, match, approx }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const found = match(/self_recursion_shapes fib=(-?[0-9]+) paths=(-?[0-9]+) weave=(-?[0-9]+) halves=(-?[0-9.]+)/, input.normalized.stdout)
+    assert(Number(found[1]) === 6765, `expected fib=6765, got ${found[1]}`)
+    assert(Number(found[2]) === 6435, `expected paths=6435, got ${found[2]}`)
+    assert(Number(found[3]) === 52035, `expected weave=52035, got ${found[3]}`)
+    assert(approx(Number(found[4]), 640.976807, 1e-4), `expected halves~=640.976807, got ${found[4]}`)
+    for (const name of ['fib', 'paths', 'weave', 'halves']) {
+        assert(input.normalized.stderr.includes(`compiled & cached graph '${name}'`), `graph '${name}' was not compiled by the JIT: ${input.normalized.stderr}`)
+    }
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
