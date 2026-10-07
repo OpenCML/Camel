@@ -335,10 +335,11 @@ timeout_ms = 60000
 
 [[tests]]
 name = "arm_reads_outer_value.opt_prl"
-desc = "A branch arm that reads values computed outside the branch (through GATE nodes that execute nothing, after std::opt inlined a loop round) waits for them under PRL."
+desc = "A branch arm that reads values computed outside the branch (through GATE nodes that execute nothing, after std::opt inlined a loop round) waits for them under PRL. The program is scalar, so the granularity rule would run it inline: CAMEL_TF_FANOUT_ALL=1 makes every unordered scope a task graph, which is what this test is about."
 kind = "behavior"
 case = "../../../cases/para/core/arm_reads_outer_value.cml"
 args = ["-t", "4", "${case}", "std::opt", "${run_prl}"]
+envs = ["CAMEL_TF_FANOUT_ALL=1"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -355,6 +356,7 @@ desc = "The same with one worker: the order of the tasks of a graph then differs
 kind = "behavior"
 case = "../../../cases/para/core/arm_reads_outer_value.cml"
 args = ["-t", "1", "${case}", "std::opt", "${run_prl}"]
+envs = ["CAMEL_TF_FANOUT_ALL=1"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -401,4 +403,65 @@ expect_diagnostic_code = "0x04000004"
 expect_stdout_contains = ["2000", "Maximum recursion depth ("]
 expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+# Granularity: a scope runs as a task graph only when it has two unordered items that are each
+# a higher-order operator or a call of a heavy graph (one that reaches a higher-order operator,
+# a module operator or a call of a function value). Asserted through the scheduler's statistics
+# line (CAMEL_TF_GC_STATS: "[taskflow] run: task_graphs=N"), not through time.
+[[tests]]
+name = "scalar_recursion_inline.prl"
+desc = "Light side of the granularity rule: fib and a mutual recursion, bodies of built-in arithmetic only, make unordered recursive calls but run inline under PRL: 0 task graphs."
+kind = "behavior"
+case = "../../../cases/para/core/scalar_recursion_inline.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '6765 | 987', `unexpected output: ${out}`)
+const m = /task_graphs=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) === 0, `${m[1]} task graph(s) ran for a scalar recursion, expected 0`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "scalar_recursion_inline.prl_fanout_all"
+desc = "The same program with the rule switched off (CAMEL_TF_FANOUT_ALL=1) does run task graphs: the 0 above comes from the rule, not from the program."
+kind = "behavior"
+case = "../../../cases/para/core/scalar_recursion_inline.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_TF_GC_STATS=1", "CAMEL_TF_FANOUT_ALL=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '6765 | 987', `unexpected output: ${out}`)
+const m = /task_graphs=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null && Number(m[1]) > 1000, `expected many task graphs with the rule off: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "concurrent_alloc.prl_fans_out"
+desc = "Heavy side of the granularity rule: the two halves of a merge sort call module operators (algo), so each split runs as a task graph under PRL: at least 12 task graphs (the program sorts 13 arrays; measured 225)."
+kind = "behavior"
+case = "../../../cases/para/core/concurrent_alloc.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /task_graphs=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) >= 12, `only ${m[1]} task graph(s) ran for the merge sort, expected at least 12`)
+}
+"""
 timeout_ms = 30000
