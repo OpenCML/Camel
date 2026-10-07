@@ -2330,3 +2330,46 @@ expect_diagnostic_name = "RuntimeDiag::RuntimeError"
 expect_output_contains = ["the example given for parameter 'x' is a 'Tensor<float32, [2, 3]>', but the parameter is declared 'Tensor<float32, [4, 3]>'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+
+[[tests]]
+name = "ort_loop_loaded_weights"
+desc = "A data-dependent loop and the gradient of a loss over it, with weights read from a file (load_npy) into a struct the exported function captures, exported with a dynamic batch axis: the declared type of the weights says neither element type nor shape, and the export gives the captured constant the type its value has. The model passes onnx.checker's full check, holds a Loop, and on ONNX Runtime matches the native run for batches of 1, 2, 3, 5 and 7 rows and loops of 0, some and the maximum number of steps (counter exactly). The export used to end with 'Runtime draft encoding failed to allocate ... bytes'."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_loop_loaded_weights.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort loop loaded weights: worst", "batches [1, 2, 3, 5, 7]", "PASS"]
+expect_output_not_contains = ["FAIL", "MISMATCH"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
+name = "unended_unrolling.pass"
+desc = "An export whose simplification does not end (a constant typed by a declared return type that says neither element type nor shape, used inside a recursion: every unrolled level is more precisely typed than the loop) is refused at the recursive call, saying that the unrolling did not end and what no longer fits. It used to be the unlocated 'Runtime draft encoding failed to allocate ... bytes'. By the pass (std::macro std::opt::simplify onnx::export): TranslationRefused at the construct."
+kind = "negative"
+case = "../../../cases/modules/onnx/refusals/unended_unrolling.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_code = "0x0400000B"
+expect_diagnostic_line = 24
+expect_diagnostic_column = 54
+expect_output_contains = ["the simplification of the exported function did not end: unrolling the recursion", "filled the memory the compiler keeps graphs in", "bytes and no longer fits"]
+expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "Runtime draft encoding failed to allocate"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 60000
+
+[[tests]]
+name = "unended_unrolling.operator"
+desc = "An export whose simplification does not end (a constant typed by a declared return type that says neither element type nor shape, used inside a recursion: every unrolled level is more precisely typed than the loop) is refused at the recursive call, saying that the unrolling did not end and what no longer fits. It used to be the unlocated 'Runtime draft encoding failed to allocate ... bytes'. By the operator (default run): the same refusal, as the error of the export_model call, with the position of the construct in its text."
+kind = "negative"
+case = "../../../cases/modules/onnx/refusals/unended_unrolling.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["the simplification of the exported function did not end: unrolling the recursion of 'walk'", "filled the memory the compiler keeps graphs in", "unended_unrolling.cml:24:54"]
+expect_output_not_contains = ["Runtime draft encoding failed to allocate"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 60000

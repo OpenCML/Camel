@@ -804,6 +804,31 @@ std::optional<std::pair<const GCGraph *, gc_node_ref_t>> findTreeRecursion(const
     return std::nullopt;
 }
 
+/// A call that closes a call cycle: a graph reachable from `root` and a call in it of a
+/// function from which that graph is called again. Nothing when no function is recursive.
+std::optional<std::pair<const GCGraph *, gc_node_ref_t>> findRecursiveCall(const GCGraph *root) {
+    std::unordered_set<const GCGraph *> seen;
+    std::vector<const GCGraph *> work{root};
+    while (!work.empty()) {
+        const GCGraph *g = work.back();
+        work.pop_back();
+        if (g == nullptr || !seen.insert(g).second || !g->hasNodePayload()) {
+            continue;
+        }
+        for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+            if (*it == nullptr || (*it)->kind != GCNodeKind::Func) {
+                continue;
+            }
+            const GCGraph *callee = g->directCalleeGraphOf(it.ref());
+            if (callee == g || callReaches(callee, g)) {
+                return std::pair{g, it.ref()};
+            }
+            work.push_back(callee);
+        }
+    }
+    return std::nullopt;
+}
+
 /// Size of what is reachable from `root` by direct calls: graphs, nodes, direct and indirect
 /// calls, branches. For CAMEL_ONNX_PREP_STATS (how much the export's own simplification does).
 std::string reachableStats(const GCGraph *root) {
@@ -3454,6 +3479,52 @@ simplifyFully(const core::context::context_ptr_t &context, GCGraph *root, std::o
     return root;
 }
 
+/// The type of a constant with everything its value fixes: a tensor's element type and shape,
+/// through structs and tuples. `declared` itself when the value adds nothing to it. The static
+/// type of a captured value says what the program declared (`{ w: Tensor }` for weights read
+/// from a file), and types only flow into the functions a constant is passed to (an object is
+/// not bound into its callee): with the declared type the body of a loop knows less about the
+/// weights than the place that calls it, every level of the recursion the simplification
+/// unrolls there is again more precisely typed than the loop, and the unrolling never ends.
+type::Type *exactTypeOf(slot_t value, type::Type *declared) {
+    if (!declared || value == NullSlot) {
+        return declared;
+    }
+    if (declared->code() == tensor::TensorType::typeCode()) {
+        const auto *t = rtdata::fromSlot<tensor::TensorObject *>(value);
+        return tensor::TensorType::get(
+            t->dtype(),
+            tensor::StaticShape(t->shapeSpan().begin(), t->shapeSpan().end()));
+    }
+    if (declared->code() == TypeCode::Struct) {
+        auto *structType = static_cast<type::StructType *>(declared);
+        auto *object     = rtdata::fromSlot<::Struct *>(value);
+        type::StructTypeFactory factory;
+        bool changed = false;
+        for (size_t i = 0; i < structType->size(); ++i) {
+            type::Type *field = exactTypeOf(object->get<slot_t>(i), structType->typeAt(i));
+            changed           = changed || field != structType->typeAt(i);
+            factory.add(std::string(structType->fieldName(i)), field);
+        }
+        return changed ? factory.build() : declared;
+    }
+    if (declared->code() == TypeCode::Tuple) {
+        auto *tupleType = static_cast<type::TupleType *>(declared);
+        auto *object    = rtdata::fromSlot<::Tuple *>(value);
+        if (tupleType->isCell() || object->size() != tupleType->size()) {
+            return declared;
+        }
+        std::vector<type::Type *> types;
+        bool changed = false;
+        for (size_t i = 0; i < tupleType->size(); ++i) {
+            types.push_back(exactTypeOf(object->get<slot_t>(i), tupleType->typeAt(i)));
+            changed = changed || types.back() != tupleType->typeAt(i);
+        }
+        return changed ? type::TupleType::create(std::move(types)) : declared;
+    }
+    return declared;
+}
+
 /// Binds the closure slots of `draft` to the constants `captures` (a closure the program
 /// builds from constants, which exists only as a FILL node until the program runs).
 void bindCaptures(camel::runtime::GraphDraft &draft, std::span<const Example> captures) {
@@ -3470,7 +3541,7 @@ void bindCaptures(camel::runtime::GraphDraft &draft, std::span<const Example> ca
     for (size_t i = 0; i < nodes.size(); ++i) {
         const gc_node_ref_t value = draft.materializeStaticValue(
             captures[i].value,
-            captures[i].type,
+            exactTypeOf(captures[i].value, captures[i].type),
             camel::runtime::kGCNodeFlagConstant);
         draft.replaceAllValueUses(nodes[i], value);
         draft.removeClosureNode(nodes[i]);
@@ -3533,7 +3604,15 @@ Model exportBound(
         if (!captures.empty()) {
             bindCaptures(session.rootDraft(), captures);
         }
-        camel::runtime::bindFunctionCall(session.rootDraft(), fn, inputTypes);
+        // Captured values are constants of the model: they get the types their values fix.
+        std::vector<type::Type *> captureTypes;
+        if (const ::Tuple *captured = fn->tuple(); captured && fn->tupleType()) {
+            for (size_t i = 0; i < captured->size() && i < fn->tupleType()->size(); ++i) {
+                captureTypes.push_back(
+                    exactTypeOf(captured->get<slot_t>(i), fn->tupleType()->typeAt(i)));
+            }
+        }
+        camel::runtime::bindFunctionCall(session.rootDraft(), fn, inputTypes, captureTypes);
         root = session.commit();
     }
     std::unordered_map<slot_t, std::string> names;
@@ -3548,6 +3627,79 @@ Model exportBound(
         }
     }
     return translatePrepared(ctx, emitter, root, inputs, std::move(names), options, preparation);
+}
+
+/// The export's simplification filled the space graphs live in. With a recursion in the
+/// function that is an unrolling that did not end: said so, with what could not be placed, at
+/// the recursive call. Returns (the caller rethrows `error`) when `error` is something else or
+/// the function has no recursion.
+void refuseUnendedUnrolling(
+    core::context::Context &ctx, const GCGraph *received, const std::exception &error) {
+    const auto *full = dynamic_cast<const camel::runtime::GraphSpaceExhausted *>(&error);
+    if (!full) {
+        return;
+    }
+    const auto call = findRecursiveCall(received);
+    if (!call) {
+        return;
+    }
+    const uint64_t origin = call->first->nodeOrigin(call->second);
+    std::string location;
+    if (const auto source = ctx.sourceContext();
+        source && origin != camel::source::kInvalidOriginId) {
+        if (const auto *file = source->fileForOrigin(origin)) {
+            const auto range = source->resolveOrigin(origin);
+            location         = std::format(
+                "{}:{}:{}",
+                file->path,
+                range.start.line + 1,
+                range.start.character + 1);
+        }
+    }
+    const std::string name = call->first->name().substr(0, call->first->name().find('$'));
+    // What the export received, for scale: the graphs and nodes reachable by direct calls.
+    size_t graphs = 0, nodes = 0;
+    {
+        std::unordered_set<const GCGraph *> seen;
+        std::vector<const GCGraph *> work{received};
+        while (!work.empty()) {
+            const GCGraph *g = work.back();
+            work.pop_back();
+            if (g == nullptr || !seen.insert(g).second || !g->hasNodePayload()) {
+                continue;
+            }
+            ++graphs;
+            for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+                if (*it == nullptr) {
+                    continue;
+                }
+                ++nodes;
+                if ((*it)->kind == GCNodeKind::Func) {
+                    work.push_back(g->directCalleeGraphOf(it.ref()));
+                }
+            }
+        }
+    }
+    throw ExportError(
+        std::format(
+            "the simplification of the exported function did not end: unrolling the "
+            "recursion{} filled the memory the compiler keeps graphs in (the graph '{}' it was "
+            "building takes {} bytes and no longer fits; the function the export received had "
+            "{} nodes in {} graphs). A recursion "
+            "whose depth depends on the model input is exported as a loop once its body stops "
+            "changing; here every level that was unrolled gave the next call arguments more "
+            "specific than the loop's own (a more precise type, or a constant), so one more "
+            "level was unrolled each time. Give the values the recursion carries and the "
+            "constants it uses types that say their element type and shape (`x as Tensor<f32, "
+            "const [...]>`)",
+            isSourceName(name) ? std::format(" of '{}'", name) : std::string(),
+            full->graph(),
+            full->bytes(),
+            nodes,
+            graphs),
+        location,
+        origin,
+        ExportError::Kind::Other);
 }
 
 Model translatePrepared(
@@ -3603,6 +3755,9 @@ Model translatePrepared(
                         capacity->quantity(),
                         capacity->limit()));
             }
+            // The other way an unrolling ends badly: no single graph is too large, but the
+            // space all graphs live in is full (a recursion that is unrolled without end).
+            refuseUnendedUnrolling(ctx, beforeSimplify, e);
             throw;
         }
         const uint64_t origin = tree->first->nodeOrigin(tree->second);

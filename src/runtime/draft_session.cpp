@@ -531,10 +531,7 @@ size_t namedDraftGraphBytes(
 GCGraph *allocateGraph(size_t bytes, const std::string &name) {
     void *mem = mm::graphSpace().alloc(bytes, alignof(GCGraph));
     if (!mem) {
-        throw std::runtime_error(std::format(
-            "Runtime draft encoding failed to allocate {} bytes for graph '{}'.",
-            bytes,
-            name));
+        throw GraphSpaceExhausted(bytes, name);
     }
     return reinterpret_cast<GCGraph *>(mem);
 }

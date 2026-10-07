@@ -86,9 +86,12 @@ gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id);
 
 /// Specializes `draft`, a copy of `function`'s graph, for one call: its captured values become
 /// constants and its norm ports take `normTypes` (entries may be null: the port keeps its type),
-/// and the node types are re-inferred from them.
+/// and the node types are re-inferred from them. `closureTypes`, when given, has one entry per
+/// captured value: the type that constant gets instead of the one the closure declares (a type
+/// the caller knows to be more precise for that value; null keeps the declared one).
 void bindFunctionCall(
     GraphDraft &draft, const ::Function *function,
-    std::span<camel::core::type::Type *const> normTypes);
+    std::span<camel::core::type::Type *const> normTypes,
+    std::span<camel::core::type::Type *const> closureTypes = {});
 
 } // namespace camel::runtime
