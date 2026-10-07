@@ -87,7 +87,7 @@ std::optional<type::Type *> operResultType(const GraphDraft &draft, gc_node_ref_
         return std::nullopt;
     }
     type::type_vec_t with, norm;
-    std::vector<std::optional<slot_t>> statics;
+    std::vector<type::StaticArg> statics;
     for (gc_node_ref_t in : draft.withInputsOf(id)) {
         with.push_back(typeOf(draft, in));
     }

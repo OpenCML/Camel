@@ -256,6 +256,17 @@ std::optional<slot_t> staticValueOf(node_handle_t node) {
     return index < slots.size() ? std::optional<slot_t>(slots[index]) : std::nullopt;
 }
 
+/// The node behind a COPY of it (the argument of a call is copied when it is a constant).
+node_handle_t throughCopy(node_handle_t node) {
+    if (nodeIsKind(node, runtime::GCNodeKind::Copy)) {
+        const auto inputs = normInputsOf(node);
+        if (inputs.size() == 1) {
+            return nodeDraftOf(node)->node(inputs.front());
+        }
+    }
+    return node;
+}
+
 void setNodeType(node_handle_t node, Type *type) {
     ASSERT(node != nullptr, "Cannot update type of null draft node.");
     nodeDraftOf(node)->setNodeDataType(nodeIdOf(node), type);
@@ -917,6 +928,38 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             node_handle_t srcNode = currGraph_->addStaticDataNode(data, filledType);
             node                  = currGraph_->addFillNode(filledType, payload);
             linkNodes(LinkType::Norm, srcNode, node);
+            // An array written in place with some elements computed: the constant elements
+            // stay known to the operators the array is passed to (StaticArg::elements).
+            if (auto array = std::dynamic_pointer_cast<ArrayData>(data);
+                array && filledType->code() == TypeCode::Array) {
+                Type *elemType = tt::as_ptr<ArrayType>(filledType)->elemType();
+                std::vector<std::optional<slot_t>> elements(array->raw().size());
+                for (size_t i = 0; i < elements.size(); ++i) {
+                    const auto &element = array->raw()[i];
+                    if (!element || element->type() != elemType) {
+                        continue;
+                    }
+                    if (auto l = std::dynamic_pointer_cast<LongData>(element)) {
+                        elements[i] = camel::core::rtdata::toSlot(l->data());
+                    } else if (auto n = std::dynamic_pointer_cast<IntData>(element)) {
+                        elements[i] = camel::core::rtdata::toSlot(n->data());
+                    } else if (auto d = std::dynamic_pointer_cast<DoubleData>(element)) {
+                        elements[i] = camel::core::rtdata::toSlot(d->data());
+                    } else if (auto f = std::dynamic_pointer_cast<FloatData>(element)) {
+                        elements[i] = camel::core::rtdata::toSlot(f->data());
+                    } else if (auto b = std::dynamic_pointer_cast<BoolData>(element)) {
+                        elements[i] = camel::core::rtdata::toSlot(b->data());
+                    }
+                }
+                for (size_t h = 0; h < holes.size(); ++h) {
+                    if (holes[h] < elements.size()) {
+                        elements[holes[h]] = nodeTypeOf(refNodes[h]) == elemType
+                                                 ? staticArgOf(refNodes[h]).value
+                                                 : std::nullopt;
+                    }
+                }
+                arrayElementStatics_[node] = std::move(elements);
+            }
             std::vector<camel::source::origin_id_t> mergedInputs;
             for (const auto &refNode : refNodes) {
                 linkNodes(LinkType::With, refNode, node);
@@ -1773,10 +1816,24 @@ node_handle_t Builder::argumentNodeOf(const std::any &res, const GCT::node_ptr_t
     return node;
 }
 
+StaticArg Builder::staticArgOf(node_handle_t node) const {
+    StaticArg arg(staticValueOf(node));
+    node = throughCopy(node);
+    if (!arg.value) {
+        if (auto it = typeFoldedValues_.find(node); it != typeFoldedValues_.end()) {
+            arg.value = it->second;
+        }
+    }
+    if (auto it = arrayElementStatics_.find(node); it != arrayElementStatics_.end()) {
+        arg.elements = it->second;
+    }
+    return arg;
+}
+
 node_handle_t Builder::variableOperator(const std::string &group, node_handle_t input) {
     const auto entity = module_->getImportedEntity(group);
     ASSERT(entity.has_value() && entity->isOperGroup(), "Variable operators are not available.");
-    const std::vector<std::optional<slot_t>> statics(1);
+    const std::vector<StaticArg> statics(1);
     const auto op = entity->operGroup()->resolve({}, {nodeTypeOf(input)}, statics, Modifier::None);
     ASSERT(op.has_value(), "Variable operator rejected its operand.");
     node_handle_t node = currGraph_->addOperNode(*op, 0);
@@ -1942,10 +1999,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         } else if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             auto ops        = std::get<oper_group_ptr_t>(drefTarget);
             // Constant arguments (shape literals, axes) let operators refine their result type.
-            std::vector<std::optional<slot_t>> normStatics;
+            std::vector<StaticArg> normStatics;
             normStatics.reserve(normInputs.size());
             for (const Argument &input : normInputs) {
-                normStatics.push_back(staticValueOf(input.node));
+                normStatics.push_back(staticArgOf(input.node));
             }
             const auto &res =
                 ops->resolve(withInputTypes, normInputTypes, normStatics, Modifier::None);
@@ -2035,6 +2092,29 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
             targetFuncType = targetOperator->funcType();
+            // A result that the argument types fix (the shape of a tensor whose type carries
+            // it) is a constant for the operators it is passed to, as a literal would be.
+            if (const auto *folder =
+                    camel::core::OperatorTypeFolderRegistry::instance().find(targetOperator->uri());
+                folder != nullptr && withInputs.empty()) {
+                Type *resultType = targetFuncType->exitType();
+                std::optional<slot_t> value;
+                try {
+                    value = (*folder)(normInputTypes, normStatics, camel::core::mm::autoSpace());
+                } catch (const std::exception &) {
+                    value = std::nullopt;
+                }
+                if (value && resultType != nullptr) {
+                    if (isGCTraced(resultType->code()) && *value != NullSlot) {
+                        typeFoldedRoots_.emplace_back(
+                            camel::core::mm::autoSpace(),
+                            camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(*value),
+                            resultType,
+                            "gir.build.typefold");
+                    }
+                    typeFoldedValues_[targetNode] = *value;
+                }
+            }
         } else if (std::holds_alternative<graph_ptr_t>(drefTarget)) {
             auto decoratedGraph           = std::get<graph_ptr_t>(drefTarget);
             node_handle_t decoratorInvoke = lowerDecoratedGraphValue(decoratedGraph, gct);

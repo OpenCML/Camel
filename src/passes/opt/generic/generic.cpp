@@ -559,7 +559,7 @@ bool foldFromTypes(
         return false;
     }
     std::vector<type::Type *> types;
-    std::vector<std::optional<slot_t>> statics;
+    std::vector<type::StaticArg> statics;
     for (gc_node_ref_t in : draft.normInputsOf(id)) {
         const auto *h = draft.header(in);
         if (!h || !h->dataType) {

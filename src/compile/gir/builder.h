@@ -17,6 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <deque>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -29,6 +30,9 @@
 #include "camel/compile/gct.h"
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/mm.h"
+#include "camel/core/mm/root_handle.h"
+#include "camel/core/type/resolver.h"
 
 namespace camel::compile::gir {
 
@@ -99,6 +103,16 @@ class Builder {
     // and stored by the assignment operators. Every other named node is an immutable value
     // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
+    // What the compiler knows about a node's value beyond static data, for operators whose
+    // result type follows constant arguments (StaticArg). `typeFoldedValues_`: the value of an
+    // operator result that its argument types fix (OperatorTypeFolderRegistry), e.g. the shape
+    // of a tensor whose type carries it. `arrayElementStatics_`: for an array written in place
+    // with some elements computed (`[n, 3]`), the elements that are constants. The graph is not
+    // changed by either: the operator and the FILL stay, std::opt folds them later.
+    std::unordered_map<node_handle_t, slot_t> typeFoldedValues_;
+    std::unordered_map<node_handle_t, std::vector<std::optional<slot_t>>> arrayElementStatics_;
+    std::deque<camel::core::mm::RootHandle> typeFoldedRoots_;
+    camel::core::type::StaticArg staticArgOf(node_handle_t node) const;
     // A use of a variable that no writer has been ordered after yet. A read (`:var/get`) hands
     // the value on, so the operations that take the read's result are the direct users of the
     // value; an operation that uses the variable itself (a call of a function that captured

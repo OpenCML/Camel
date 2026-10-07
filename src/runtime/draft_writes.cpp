@@ -55,7 +55,7 @@ type::FunctionType *operFuncType(const GraphDraft &draft, gc_node_ref_t id, std:
     }
     try {
         // The values of constant arguments only refine the result type, never the parameters.
-        const std::vector<std::optional<slot_t>> statics(norm.size());
+        const std::vector<type::StaticArg> statics(norm.size());
         const auto resolved = resolver->resolveWith(with, norm, statics, Modifier::None);
         return resolved ? *resolved : nullptr;
     } catch (const std::exception &) {
