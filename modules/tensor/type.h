@@ -72,6 +72,9 @@ class TensorType : public type::OtherType {
     bool isStaticShape() const;
 
     std::string toString() const override;
+    /// As a program writes the type: `Tensor<f32, const [2, -1]>` for what toString() prints as
+    /// `Tensor<float32, [2, ?]>`.
+    std::string spelling() const override;
     std::string mangle() const override;
     type::Type *clone(bool deep = false) const override;
     bool equals(type::Type *type) const override;

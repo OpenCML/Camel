@@ -125,6 +125,45 @@ std::string TensorType::toString() const {
     return result + ">";
 }
 
+std::string TensorType::spelling() const {
+    if (!dtype_ && !shape_) {
+        return "Tensor";
+    }
+    std::string arguments;
+    if (dtype_) {
+        switch (*dtype_) {
+        case TypeCode::Float32:
+            arguments = "f32";
+            break;
+        case TypeCode::Float64:
+            arguments = "f64";
+            break;
+        case TypeCode::Int32:
+            arguments = "i32";
+            break;
+        case TypeCode::Int64:
+            arguments = "i64";
+            break;
+        case TypeCode::Bool:
+            arguments = "bool";
+            break;
+        default:
+            arguments = std::string(dtypeName(*dtype_));
+            break;
+        }
+    }
+    if (shape_) {
+        arguments += arguments.empty() ? "const [" : ", const [";
+        for (size_t i = 0; i < shape_->size(); ++i) {
+            arguments +=
+                (i ? ", " : "") +
+                ((*shape_)[i] == kUnknownDim ? std::string("-1") : std::to_string((*shape_)[i]));
+        }
+        arguments += "]";
+    }
+    return "Tensor<" + arguments + ">";
+}
+
 std::string TensorType::mangle() const { return "T" + internKey(dtype_, shape_) + ";"; }
 
 Type *TensorType::clone(bool) const { return const_cast<TensorType *>(this); }

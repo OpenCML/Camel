@@ -1,0 +1,14 @@
+module shape_inference_plain_result
+import { Tensor, tanh, sum, ones } from tensor
+// A result declared plain Tensor has no extents for the caller, whatever the body computes.
+func g(x: Tensor<f32, const [3]>): Tensor {
+    return tanh(x)
+}
+func h(a: Tensor<f32, const [3]>): float {
+    return sum(a)
+}
+func main(): int sync {
+    let t = g(ones([3]))
+    println(h(t))
+    return 0
+}
