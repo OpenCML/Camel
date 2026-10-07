@@ -1529,6 +1529,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
 
 [[tests]]
+name = "ort_loop_values"
+desc = "Tail recursions whose depth depends on the model input and which carry and return several values (a tensor state with an integer counter as a tuple, with two returning paths that yield different values, as a struct, with a third carried tensor, and as a nested tuple with a carried float and a bool computed where the recursion returns) each export as one ONNX Loop; the models pass onnx.checker's full check, the counter is an int64 output, and on ONNX Runtime every output matches the recursion written in NumPy and Camel's native run for inputs on which the loop stops after 0, 1 and several steps and at its maximum count (counters and bools exactly). The exporter used to refuse a tuple or struct returned next to a recursive call."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_loop_values.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort loop values: worst", "steps [0, 1, 2, 3, 5, 6]", "PASS"]
+expect_output_not_contains = ["FAIL", "MISMATCH"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
 name = "export_train_step_vjp"
 desc = "A training step (value_and_grad + sgd) through a function declared with a custom derivative rule (@vjp<rule>) exports: loss and the two updated parameters; the model contains the rule's operators and nothing derived from the body's `where`."
 kind = "behavior"

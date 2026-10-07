@@ -682,9 +682,15 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
 // computed once more after the Loop, at the final state, so no carried value needs an initial
 // result of a known shape.
 //
+// The function may return several values: a tuple or struct (nested) whose leaves are tensors
+// and scalars (float, int, bool), each a carried value or computed from them where the
+// recursion returns. The result is handled leaf by leaf (mergeOutcomes), so a counter comes out
+// as the int64 scalar it is.
+//
 // Refused, with a diagnostic: a recursive call that is not in tail position, a carried value
 // whose dtype or shape changes between iterations, a tuple, struct or array argument that
-// changes, a recursion that never returns.
+// changes, a result leaf that is neither a tensor nor a scalar (a function, an int array built
+// from model-dependent values), a recursion that never returns.
 
 namespace {
 
@@ -1113,42 +1119,98 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
             nextAt[k] = request(a.next[k], b.next[k]);
         }
     }
-    std::optional<size_t> resultAt;
+    // The result, leaf by leaf: a recursion may return a tuple or struct (nested) of tensors
+    // and scalars. A leaf that is the same on both sides, or a constant next to a side that
+    // has no result, needs no output of the If.
+    std::vector<Value> resultLeaves;
+    std::vector<std::optional<size_t>> resultAt;
+    const Value *resultLike = nullptr;
+    const auto leafKind     = [](const Value &leaf) -> std::string {
+        if (leaf.isClosure() || (leaf.isConstant() && leaf.ty && leaf.ty->code() == TypeCode::Function)) {
+            return "a function";
+        }
+        if (leaf.isSymbolic() && leaf.form == Value::Form::IntArray) {
+            return "an int array whose elements depend on the model input";
+        }
+        if (leaf.isConstant() && leaf.ty) {
+            return std::format("a value of type '{}'", leaf.ty->toString());
+        }
+        return "a value that is neither a tensor nor a scalar";
+    };
     if (a.result && b.result) {
-        if (sameValue(*a.result, *b.result)) {
-            out.result = a.result;
-        } else {
-            resultAt = request(*a.result, *b.result);
+        std::vector<Value> la, lb;
+        flattenValue(*a.result, la);
+        flattenValue(*b.result, lb);
+        if (la.size() != lb.size()) {
+            unsupported(
+                act,
+                "the paths on which a recursion whose depth depends on the model input returns "
+                "yield tuples or structs of different structure");
+        }
+        resultLike = &*a.result;
+        resultAt.resize(la.size());
+        for (size_t j = 0; j < la.size(); ++j) {
+            if (sameValue(la[j], lb[j])) {
+                resultLeaves.push_back(la[j]);
+                continue;
+            }
+            const TensorFacts fa = factsOf(la[j]), fb = factsOf(lb[j]);
+            if (!isCarriable(la[j]) || !isCarriable(lb[j]) || !fa.dtype || fa.dtype != fb.dtype) {
+                const Value &bad = !isCarriable(la[j]) ? la[j] : lb[j];
+                unsupported(
+                    act,
+                    std::format(
+                        "element {} of the result of a recursion whose depth depends on the "
+                        "model input differs between the paths that return and is {}; such an "
+                        "element must be a tensor or a scalar (float, int, bool) of one type on "
+                        "every path",
+                        j,
+                        !isCarriable(la[j]) || !isCarriable(lb[j]) ? leafKind(bad)
+                                                                    : "of different types on them"));
+            }
+            resultAt[j] = request(la[j], lb[j]);
+            resultLeaves.push_back(la[j]);
         }
     } else if (a.result || b.result) {
         // One side calls again and has no result. Its value is never looked at (the result is
         // read where the recursion returned), but an If needs it from both sides: zeros of
-        // the same type and rank stand in.
-        const Value &real       = a.result ? *a.result : *b.result;
-        const TensorFacts facts = factsOf(real);
-        if (!isCarriable(real) || !facts.dtype) {
-            unsupported(
-                act,
-                "a recursion whose depth depends on the model input returns a tuple, struct or "
-                "array on a path next to a recursive call; only tensors and scalars can be "
-                "returned there");
-        }
-        std::vector<int64_t> dims;
-        if (facts.shape) {
-            for (int64_t extent : *facts.shape) {
-                dims.push_back(extent == tensor::kUnknownDim ? 1 : extent);
+        // the same type and rank stand in, one per tensor or scalar the other side returns.
+        resultLike = a.result ? &*a.result : &*b.result;
+        flattenValue(*resultLike, resultLeaves);
+        resultAt.resize(resultLeaves.size());
+        for (size_t j = 0; j < resultLeaves.size(); ++j) {
+            const Value &real       = resultLeaves[j];
+            const TensorFacts facts = factsOf(real);
+            if (real.isConstant() && !(real.ty && real.ty->code() == TypeCode::Function)) {
+                continue; // known at export time: the same whatever the If selects
             }
+            if (!isCarriable(real) || !facts.dtype) {
+                unsupported(
+                    act,
+                    std::format(
+                        "a recursion whose depth depends on the model input returns {} (element "
+                        "{} of its result) on a path next to a recursive call; it can return "
+                        "tensors and scalars (float, int, bool) and tuples or structs of them",
+                        leafKind(real),
+                        j));
+            }
+            std::vector<int64_t> dims;
+            if (facts.shape) {
+                for (int64_t extent : *facts.shape) {
+                    dims.push_back(extent == tensor::kUnknownDim ? 1 : extent);
+                }
+            }
+            std::string filler = emitter_.node("ConstantOfShape", {emitter_.int64s(dims)});
+            if (*facts.dtype != TypeCode::Float32) {
+                filler = emitter_.node(
+                    "Cast",
+                    {filler},
+                    {Attribute::makeInt("to", static_cast<int64_t>(elemTypeOf(*facts.dtype)))});
+            }
+            const std::string name = emitter_.operand(real, *facts.dtype);
+            outputs.push_back({{a.result ? name : filler, a.result ? filler : name}, facts, real});
+            resultAt[j] = outputs.size() - 1;
         }
-        std::string filler = emitter_.node("ConstantOfShape", {emitter_.int64s(dims)});
-        if (*facts.dtype != TypeCode::Float32) {
-            filler = emitter_.node(
-                "Cast",
-                {filler},
-                {Attribute::makeInt("to", static_cast<int64_t>(elemTypeOf(*facts.dtype)))});
-        }
-        const std::string name = emitter_.operand(real, *facts.dtype);
-        outputs.push_back({{a.result ? name : filler, a.result ? filler : name}, facts, real});
-        resultAt = outputs.size() - 1;
     }
 
     if (!outputs.empty()) {
@@ -1174,9 +1236,15 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
                 out.next[k] = placeholderLike(outputs[*nextAt[k]].like, names[*nextAt[k]]);
             }
         }
-        if (resultAt) {
-            out.result = placeholderLike(outputs[*resultAt].like, names[*resultAt]);
+        for (size_t j = 0; j < resultAt.size(); ++j) {
+            if (resultAt[j]) {
+                resultLeaves[j] = placeholderLike(outputs[*resultAt[j]].like, names[*resultAt[j]]);
+            }
         }
+    }
+    if (resultLike != nullptr) {
+        size_t next = 0;
+        out.result  = rebuildValue(*resultLike, resultLeaves, next);
     }
     return out;
 }
