@@ -1033,3 +1033,195 @@ assert(out === 'side 2 | side 2 | bd 1 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.default"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.simplify"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.simplify_nvm"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.simplify_fvm"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.simplify_jit"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.simplify_tf"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}", "std::opt::simplify", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.macro_simplify_fvm"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole_tensor.default"
+desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'r 0.4375', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole_tensor.simplify_nvm"
+desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'r 0.4375', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole_tensor.simplify_fvm"
+desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'r 0.4375', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole_tensor.simplify_jit"
+desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'r 0.4375', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole_tensor.simplify_tf"
+desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
+args = ["${case}", "std::opt::simplify", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'r 0.4375', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000

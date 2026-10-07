@@ -222,6 +222,25 @@ std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GC
                     }
                 }
             }
+
+            // Each arm must also be laid out as one piece: the code of an arm that is not taken
+            // is skipped as a range, and an arm that falls into another one's code runs it. The
+            // JOIN may wait on nodes inside an arm (a rewrite that removed an inner branch hands
+            // what that branch waited on to the users of its JOIN). Visiting those first would
+            // lay a part of that arm before the other arms and the rest of it after them. So:
+            // what the JOIN waits on outside the branch, then the BRCH, then one arm after the
+            // other from its tail; the waits inside an arm are reached from that arm's tail.
+            for (gc_node_ref_t input : graph->ctrlInputsOf(index)) {
+                if (!inBranch.contains(input)) {
+                    visit(input);
+                }
+            }
+            for (gc_node_ref_t input : graph->normInputsOf(index)) {
+                visit(input);
+            }
+            for (gc_node_ref_t input : graph->withInputsOf(index)) {
+                visit(input);
+            }
         }
 
         for (gc_node_ref_t input : graph->ctrlInputsOf(index)) {
