@@ -1,0 +1,48 @@
+id = "modules.tensor.shape_inference"
+order = 365
+tier = "feat"
+tags = ["feat", "modules", "tensor", "types", "diagnostics"]
+
+[[tests]]
+name = "si_shape_operator"
+desc = "The shape of a tensor whose type carries it is a constant where it is passed on: reshape(y, shape(x)), zeros(shape(x)) and ones([dim(x, 1)]) have the shapes [2, 3], [2, 3] and [3] in their types (each is accepted by a parameter declared with that shape) and the values are right."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/shape_operator.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["30"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_computed_extent"
+desc = "A shape written in place with a computed extent keeps its rank and constant extents: zeros([n, 3]) and reshape(x, [n, 3]) are accepted by a parameter declared [-1, 3]; with a [6] input, reshape(y, [n, 3]) is [2, 3] (the only value of n that fits). Values are right."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/computed_extent.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["27", "21"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_computed_extent_run_time"
+desc = "The [2, 3] inferred for reshape(y, [n, 3]) of a [6] input claims nothing that can be wrong: with n = 3 the reshape itself fails when it runs, at the reshape."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/computed_extent_run_time.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["ran", "reshape changes tensor element count: [6] -> [3, 3]", "computed_extent_run_time.cml:8:18"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_row_loop"
+desc = "A loop written as a recursion carries a [3] accumulator over the rows of a [?, 3] input; the first accumulator is zeros([dim(x, 1)]) and the input may come from concat(reshape(x, [n, 3]), x, 0). Everything is inferred, no `as`; values are right."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/row_loop.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["tensor([      5.,       7.,       9.], dtype=float32)", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

@@ -108,6 +108,28 @@ std::optional<std::vector<int64_t>> InferContext::constInts(size_t index) const 
             return *v;
         }
     }
+    // An array written in place whose elements are all constants: `[dim(x, 1), 3]` when the
+    // type of x fixes the dimension.
+    if (index < partials_.size() && partials_[index]) {
+        std::vector<int64_t> values;
+        for (const auto &element : *partials_[index]) {
+            if (!element) {
+                return std::nullopt;
+            }
+            values.push_back(*element);
+        }
+        return values;
+    }
+    return std::nullopt;
+}
+
+std::optional<PartialInts> InferContext::partialInts(size_t index) const {
+    if (auto values = constInts(index)) {
+        return PartialInts(values->begin(), values->end());
+    }
+    if (index < partials_.size() && partials_[index]) {
+        return partials_[index];
+    }
     return std::nullopt;
 }
 

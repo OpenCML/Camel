@@ -72,6 +72,10 @@ struct ParamSpec {
 /// Value of a constant argument, when known (export time, graph rewrites).
 using ConstArg = std::variant<int64_t, double, bool, std::string, std::vector<int64_t>>;
 
+/// An int array of known length whose elements are known only in part: `[n, 3]` is
+/// {nullopt, 3}. What inference sees of an array written in place with computed elements.
+using PartialInts = std::vector<std::optional<int64_t>>;
+
 /// What is statically known about a tensor-valued argument.
 struct TensorFacts {
     std::optional<type::TypeCode> dtype;
@@ -81,8 +85,9 @@ struct TensorFacts {
 class InferContext {
   public:
     InferContext(
-        std::span<type::Type *const> types, std::span<const std::optional<ConstArg>> constants = {})
-        : types_(types), constants_(constants) {}
+        std::span<type::Type *const> types, std::span<const std::optional<ConstArg>> constants = {},
+        std::span<const std::optional<PartialInts>> partials = {})
+        : types_(types), constants_(constants), partials_(partials) {}
 
     size_t size() const { return types_.size(); }
     type::Type *type(size_t index) const { return types_[index]; }
@@ -97,12 +102,16 @@ class InferContext {
     std::optional<bool> constBool(size_t index) const;
     std::optional<std::string> constString(size_t index) const;
     std::optional<std::vector<int64_t>> constInts(size_t index) const;
+    /// An int-array argument whose length is known: a constant array (every element known) or
+    /// an array written in place (`[n, 3]`), whose computed elements are nullopt.
+    std::optional<PartialInts> partialInts(size_t index) const;
 
   private:
     const ConstArg *constant(size_t index) const;
 
     std::span<type::Type *const> types_;
     std::span<const std::optional<ConstArg>> constants_;
+    std::span<const std::optional<PartialInts>> partials_;
 };
 
 using InferFn = std::function<std::optional<type::Type *>(const InferContext &)>;
