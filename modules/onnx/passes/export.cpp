@@ -36,10 +36,12 @@
 #include "camel/core/source/manager.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/entry_args.h"
+#include "camel/execute/graph_runtime_support.h"
 #include "camel/passes/opt/config.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <format>
 #include <memory>
@@ -245,6 +247,80 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node) {
         request.options.target = rtdata::fromSlot<::String *>(target.value)->toString();
     }
     return request;
+}
+
+/// The branch of `g` in whose arm `node` sits (the innermost one), when the condition of that
+/// branch is not a constant of the graph: whether the arm runs is then decided at run time.
+std::optional<gc_node_ref_t> runtimeBranchOver(GCGraph *g, gc_node_ref_t node) {
+    std::optional<gc_node_ref_t> found;
+    size_t foundSize = 0;
+    for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+        const auto *n = *it;
+        if (!n || n->kind != GCNodeKind::Brch) {
+            continue;
+        }
+        const auto cond = g->normInputsOf(it.ref());
+        if (!cond.empty() && constantOf(g, cond.front())) {
+            continue;
+        }
+        const size_t arms = g->ctrlOutputsOf(it.ref()).size();
+        for (size_t arm = 0; arm < arms; ++arm) {
+            const auto region = camel::execute::collectRuntimeBranchArmRegion(g, it.ref(), arm);
+            const auto &nodes = region.topoIndices;
+            if (std::find(nodes.begin(), nodes.end(), node) != nodes.end() &&
+                (!found || nodes.size() < foundSize)) {
+                found     = it.ref();
+                foundSize = nodes.size();
+            }
+        }
+    }
+    return found;
+}
+
+/// "file:line:column" of `origin`, or nothing when it has no source position.
+std::string locationOf(const core::context::Context &ctx, uint64_t origin) {
+    const auto source = ctx.sourceContext();
+    if (!source || origin == camel::source::kInvalidOriginId) {
+        return {};
+    }
+    const auto *file = source->fileForOrigin(origin);
+    if (!file) {
+        return {};
+    }
+    const auto range = source->resolveOrigin(origin);
+    return std::format("{}:{}:{}", file->path, range.start.line + 1, range.start.character + 1);
+}
+
+/// Reads the request `node` of the entry graph. A request the pass cannot read because it is
+/// made in the arm of a branch decided at run time is refused at that branch: what the arm
+/// computes is not a constant of the graph (it waits for the branch), and that, not the
+/// argument the reading stumbled on, is what the program has to change.
+Request readEntryRequest(const core::context::Context &ctx, GCGraph *g, gc_node_ref_t node) {
+    try {
+        return readRequest(g, node);
+    } catch (const Refusal &) {
+        const auto brch = runtimeBranchOver(g, node);
+        if (!brch) {
+            throw;
+        }
+        const auto cond            = g->normInputsOf(*brch);
+        const std::string location = locationOf(ctx, originNear(g, node));
+        uint64_t origin            = originNear(g, *brch);
+        if (origin == camel::source::kInvalidOriginId) {
+            origin = originNear(g, node);
+        }
+        throw Refusal{
+            origin,
+            std::format(
+                "the onnx.export_model call{} is made in an arm of this branch, and the "
+                "condition of the branch{} is not known at compile time; onnx::export does not "
+                "run the program, so it cannot tell whether the request is made, and what the "
+                "arm computes is not a constant of the graph; write the export_model call "
+                "outside the branch, or make the condition a constant",
+                location.empty() ? std::string() : " at " + location,
+                cond.empty() ? std::string()
+                             : std::format(" ({})", describeNode(g, cond.front())))};
+    }
 }
 
 /// The function a call node of `g` calls, when it is statically known.
@@ -478,7 +554,7 @@ std::vector<Request> collectRequests(const core::context::Context &ctx, GCGraph 
         }
         if (n->kind == GCNodeKind::Oper &&
             root->nodeBodyAs<camel::runtime::GCOperBody>(it.ref())->uri() == kRequestUri) {
-            requests.push_back(readRequest(root, it.ref()));
+            requests.push_back(readEntryRequest(ctx, root, it.ref()));
         } else if ((n->kind == GCNodeKind::Func || n->kind == GCNodeKind::Call) && !firstCall) {
             firstCall = it.ref();
         }

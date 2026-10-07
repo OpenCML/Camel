@@ -2082,3 +2082,42 @@ expect_output_contains = ["the entry graph still contains a call to 'main' that 
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "run std::opt::simplify before onnx::export", "growth budget"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "pass_export_refusal_located.request_in_arm"
+desc = "An export_model call in an arm of a branch on an environment value: the refusal points at the branch (the `if`, line 19 column 12), says where the call is and that the condition of the branch is not known at compile time. It used to point at the definition of the example and say 'the example argument of onnx.export_model is a value computed at run time ... run std::opt::simplify before it so that it folds'."
+kind = "negative"
+case = "../../../cases/modules/onnx/refusals/request_in_arm.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_code = "0x0400000B"
+expect_diagnostic_line = 19
+expect_diagnostic_column = 12
+expect_output_contains = ["request_in_arm.cml:20:9 is made in an arm of this branch, and the condition of the branch (a value computed by ':op/eq_s') is not known at compile time", "onnx::export does not run the program, so it cannot tell whether the request is made", "write the export_model call outside the branch, or make the condition a constant"]
+expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "the example argument of onnx.export_model", "run std::opt::simplify before it so that it folds"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_export_refusal_located.request_in_arm_json"
+desc = "The same refusal in --output-format json: one diagnostic, TranslationRefused, stage pass:onnx::export, the range of the branch (it starts at the `if` on line 19 and ends with the else arm on line 23), no model file."
+kind = "behavior"
+case = "../../../cases/modules/onnx/refusals/request_in_arm.cml"
+args = ["--output-format", "json", "${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const diags = JSON.parse(input.normalized.stdout)
+assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
+const d = diags[0]
+assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:onnx::export', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
+assert(d.message.includes('is made in an arm of this branch') && d.message.includes('is not known at compile time'), `unexpected message: ${d.message}`)
+assert(d.range.start.line === 18 && d.range.start.character === 11 && d.range.end.line === 22, `unexpected range ${JSON.stringify(d.range)}`)
+assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/refusal_request_in_arm.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 8000
