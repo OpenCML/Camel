@@ -232,8 +232,20 @@ Every node evaluates to either a constant or a symbolic tensor:
   Operand dtypes are converted to the inferred result dtype, which reproduces
   Camel's promotion rules (ONNX requires equal input types).
 - `FUNC` and `CALL` nodes are inlined. Recursion driven by constants (for
-  example the GRU time-step loop) unrolls; a call-depth bound turns recursion
-  that depends on the model input into a diagnostic.
+  example the GRU time-step loop) unrolls. A recursion whose depth depends on
+  the model input is exported as ONNX `Loop`s when it is a loop: a tail
+  recursion (one `Loop` over the arguments that change) or a linear recursion
+  (paired `Loop`s, which is also how the gradient of a loop is exported);
+  everything else is refused with a located diagnostic. Accepted class, in
+  one statement: a tail recursion whose changing arguments are tensors and
+  scalars of fixed dtype and shape and whose result is a tensor, a scalar
+  (float, int, bool) or a tuple or struct of these, nested, each leaf a
+  carried value, a value computed from them where the recursion returns, or
+  a constant (an integer counter is an int64 output); and, for the gradient,
+  `value_and_grad` of a loss computed from that result when ONE if / else
+  decides the recursion. The full statement, the refusals and the tests are
+  in `26_autodiff_as_graph_rewrite.md` section 7 ("Tail recursion of dynamic
+  depth is an ONNX Loop", "Linear recursion").
 - Symbolic values have a form: a tensor, a Camel scalar (rank-0 ONNX
   tensor), or an `int[]` (1-D int64 tensor, e.g. `shape(x)` with a dynamic
   batch). The lowering table also covers builtin scalar arithmetic,

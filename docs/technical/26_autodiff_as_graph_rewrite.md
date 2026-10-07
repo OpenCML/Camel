@@ -452,13 +452,34 @@ What differs from the design above:
     result;
   - a recursion that goes through helpers or branch arms is followed (the arm
     case is what the tests exercise; a loop inside a loop body would become a
-    nested `Loop` and is not tested).
+    nested `Loop` and is not tested);
+  - **several values.** The recursion may carry several values and return
+    them: the result is a tensor, a scalar (float, int, bool), or a tuple or
+    struct of these, nested to any depth. Each leaf of the result is a carried
+    value, a value computed from the carried values where the recursion
+    returns, or a constant; different returning paths may yield different
+    values, of the same structure and leaf types. The result is merged leaf
+    by leaf: a leaf that differs between two returning paths is an output of
+    the `If` that separates them; next to a path that calls again, zeros of
+    the leaf's type and rank stand in (they are never read); a constant needs
+    no output. An integer counter stays an int64 scalar and is an int64
+    output of the model, a bool a bool output. This is the usual shape of a
+    data-dependent loop: `func loop(h: Tensor, k: int): (Tensor, int)`,
+    stopped by a threshold on the state or a maximum count.
   Refused, each with a diagnostic at the recursive call or the export request:
   a carried value whose dtype or shape changes between calls; a tuple, struct
-  or array argument that changes; a `match` whose arms call the function
+  or array argument that changes (the carried values themselves are the
+  arguments: tensors and scalars, not a tuple passed whole); a leaf of the
+  result that is neither a tensor nor a scalar: a function, or an int array
+  built from values that depend on the model input (the diagnostic names the
+  element of the result and what it is); returning paths whose results differ
+  in structure or in a leaf's type; a `match` whose arms call the function
   again; a recursion that never returns. Tests: `export_loop`,
-  `pass_export_loop`, `export_dynamic_recursion`; both entries write
-  equivalent models (`pass_export.py equiv`).
+  `pass_export_loop`, `export_dynamic_recursion`, `ort_loop_values` (tuple,
+  two returning paths, struct, three carried values, nested tuple with a
+  carried float and a bool: NumPy and the native run for 0, 1, several and
+  the maximum number of steps), `export_loop_values_array` (refusal); both
+  entries write equivalent models (`pass_export.py equiv`).
 - **Linear recursion** (the recursive call is not the last action). A function
   `f(a) = E(a, if c(a) then E'(a, f(step(a))) else B(a))` with ONE recursive
   call on one side of ONE two-way branch is the pair of loops it denotes:
@@ -492,19 +513,54 @@ What differs from the design above:
     of fixed dtype and shape, and when the result also holds a function those
     leaves are passed through unchanged; a function in the result calls the
     function returned by the recursive call exactly once, with its own
-    arguments unchanged, and returns tensors or scalars (or tuples of them).
+    arguments unchanged, and returns tensors or scalars (or tuples of them);
+    it is called with tensors, scalars, constants, or tuples and structs of
+    these (the arguments are not carried by a `Loop`: every call of the chain
+    receives them unchanged).
     Closures may capture any export-time value: constants, tensors and
     scalars that depend on the model input, tuples and structs of these, and
     other closures.
+  - The gradient of a loop that returns several values. For a tail recursion
+    that returns `(state, counter)` (or a struct, or more values) the derived
+    forward function returns `((state, counter), pullback)` and the pullback
+    takes one cotangent per differentiable element of the result, as a tuple
+    or struct; the counter has no tangent and is not differentiated. This is
+    inside the class above, so `value_and_grad` of a loss computed from the
+    returned values exports as paired `Loop`s, with the counter usable as a
+    number in the loss and as an output of the model. What is accepted for
+    the gradient is NARROWER than for the forward loop: ONE if / else must
+    decide the recursion (write a maximum count into the condition,
+    `if k >= limit || done(h) then (h, k) else loop(step(h), k + 1)`; a
+    second, nested branch that also ends the loop exports forward and is
+    refused in the gradient as "several branches decide"). The cost is that
+    of the route: no tape, the step is recomputed, quadratic in the number of
+    iterations.
   - Refused, each located: two or more recursive calls; several branches that
     decide the recursion; a `match` that decides it; a condition that uses the
     call's result; a result or state whose dtype or shape changes; a function
     returned together with a value the recursion changes on the way back; a
     returned function that calls the one below it more than once or with
-    changed arguments.
+    changed arguments, or that is called with a function or with an array
+    whose elements depend on the model input. The conditions on the returned
+    function are reported at the recursive call (they used to be reported at
+    the `value_and_grad` expression, where the pullback is called).
   Tests: `ort_linear_recursion` (NumPy, depths 0, 1 and more), `ort_grad_loop`
   (gradient of a data-dependent loop, with a branch in the body, against
-  Camel's native gradient and NumPy), `export_nontail_recursion` (refusal).
+  Camel's native gradient and NumPy), `ort_grad_loop_values` (gradient of
+  loops returning a tuple, a struct and four values, the counter in the loss
+  and as an output: NumPy reverse sweep and the native run for 0, 1, several
+  and the maximum number of steps), `ort_loop_values_dynamic` (the same loop
+  and its gradient with a dynamic batch axis), `export_nontail_recursion`
+  (refusal).
+- **Constant tuples, structs and arrays in a branch arm.** Simplification
+  folds a tuple, struct or array literal of constants only where replacing it
+  is execution-safe; one inside a branch arm reaches the export unfolded (the
+  zero gradient `{ w: zeros }` on the path where a loop takes no step; `[k, k
+  + 1]` in the first, specialised call of a recursion, where `k` is 0). The
+  exporter keeps such a tuple or struct as the export-time aggregate of its
+  elements and such an array as the 1-D tensor it stands for, as it does when
+  some element depends on the model input. (It used to refuse them with "a
+  tuple, struct or array of constants was not folded".)
 
 ## 8. Phases
 
