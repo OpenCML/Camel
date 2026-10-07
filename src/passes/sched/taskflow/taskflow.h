@@ -111,6 +111,9 @@ class TaskflowGcGate {
     struct alignas(64) ThreadState {
         std::atomic<bool> active{false};
         uint32_t depth = 0;
+        // Calls of graphs now open on this thread's native stack (for the diagnostic of a
+        // recursion that is too deep).
+        uint32_t callDepth = 0;
         // Bounds of this thread's native stack (0: unknown).
         uintptr_t stackLow  = 0;
         uintptr_t stackHigh = 0;

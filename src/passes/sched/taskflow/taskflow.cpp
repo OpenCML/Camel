@@ -178,7 +178,7 @@ void nativeStackBounds(uintptr_t &low, uintptr_t &high) {
 // times the stack of an inline call (the executor's own frames, and whatever other task the
 // waiting worker picks up meanwhile), and deep non-tail recursion must not end in a stack
 // overflow that the node-by-node evaluator would not have had.
-bool nativeStackIsTight(const TaskflowGcGate::ThreadState &ts) {
+bool nativeStackUsedBeyond(const TaskflowGcGate::ThreadState &ts, unsigned num, unsigned den) {
 #if defined(__linux__) && defined(__GLIBC__)
     if (ts.stackLow == 0) {
         return false;
@@ -187,11 +187,27 @@ bool nativeStackIsTight(const TaskflowGcGate::ThreadState &ts) {
     if (here <= ts.stackLow || here > ts.stackHigh) {
         return false;
     }
-    return (ts.stackHigh - here) > (ts.stackHigh - ts.stackLow) / 4;
+    return (ts.stackHigh - here) > (ts.stackHigh - ts.stackLow) / den * num;
 #else
     (void)ts; // stack bounds are not read on this platform: no guard
+    (void)num;
+    (void)den;
     return false;
 #endif
+}
+
+bool nativeStackIsTight(const TaskflowGcGate::ThreadState &ts) {
+    return nativeStackUsedBeyond(ts, 1, 4);
+}
+
+// True when the calling thread has used fifteen sixteenths of its native stack: one more call
+// of a graph is refused with a diagnostic instead of running into the guard page. The
+// scheduler has no fixed limit of its own (NodeVM stops at 256 frames); what a thread can nest
+// depends on its stack and on what else the worker picked up while waiting. The depth the
+// diagnostic reports is the number of calls open on that thread (a recursion that started on
+// another worker is deeper than that).
+bool nativeStackIsExhausted(const TaskflowGcGate::ThreadState &ts) {
+    return nativeStackUsedBeyond(ts, 15, 16);
 }
 
 int64_t steadyNowNs() {
@@ -1150,6 +1166,23 @@ void TaskflowExecSchedPass::runLinearBody(
     }
 }
 
+namespace {
+
+// Out of line: the fault and its site are large temporaries, and executeCallNode's frame is
+// what every level of a recursion pays for.
+[[noreturn, gnu::noinline]] void
+throwRecursionTooDeep(Context &context, GCGraph *graph, uint32_t depth) {
+    throw reportRuntimeFault(
+        context,
+        RuntimeFault::make(
+            RuntimeDiag::MaxRecursionDepthExceeded,
+            std::string(graph->name()),
+            depth),
+        makeGraphExecutionSite(context.sourceContext(), graph, 0, "taskflow"));
+}
+
+} // namespace
+
 void TaskflowExecSchedPass::executeCallNode(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, TaskflowGcRegion &region) {
     const auto *node = requireNode(graph, nodeRef);
@@ -1166,6 +1199,15 @@ void TaskflowExecSchedPass::executeCallNode(
         targetGraph    = func ? func->graph() : nullptr;
     }
     ASSERT(targetGraph != nullptr, "Taskflow call target graph is null.");
+    auto &thread = region.thread();
+    if (nativeStackIsExhausted(thread)) [[unlikely]] {
+        throwRecursionTooDeep(*context_, graph, thread.callDepth);
+    }
+    struct OpenCall {
+        explicit OpenCall(uint32_t &depth) : depth_(depth) { ++depth_; }
+        ~OpenCall() { --depth_; }
+        uint32_t &depth_;
+    } openCall(thread.callDepth);
     Frame *calleeFrame = acquirePreparedRuntimeCallFrame(targetGraph, nodeRef, frame);
     slot_t result      = NullSlot;
     try {
