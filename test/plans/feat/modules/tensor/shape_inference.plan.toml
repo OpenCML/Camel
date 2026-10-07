@@ -235,3 +235,47 @@ expect_exit = 0
 expect_stdout_contains = ["6"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "si_as_fails"
+desc = "A conversion that fails when it runs names the declared type, the shape the tensor has, and the position of the conversion."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/as_fails.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["ran", "conversion to 'Tensor<float32, [4]>' failed: the tensor has shape [6]", "as_fails.cml:9:15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_as_fails_fvm"
+desc = "A conversion that fails when it runs names the declared type, the shape the tensor has, and the position of the conversion (under std::fvm)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/as_fails.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["ran", "conversion to 'Tensor<float32, [4]>' failed: the tensor has shape [6]", "as_fails.cml:9:15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_as_fails_jit"
+desc = "A conversion that fails when it runs names the declared type, the shape the tensor has, and the position of the conversion (under std::jit)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/as_fails.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 1
+expect_output_contains = ["ran", "conversion to 'Tensor<float32, [4]>' failed: the tensor has shape [6]", "as_fails.cml:9:15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_as_fails_prl"
+desc = "A conversion that fails when it runs names the declared type, the shape the tensor has, and the position of the conversion (under std::prl)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/as_fails.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 1
+expect_output_contains = ["ran", "conversion to 'Tensor<float32, [4]>' failed: the tensor has shape [6]", "as_fails.cml:9:15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

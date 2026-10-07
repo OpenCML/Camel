@@ -1156,7 +1156,18 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
         Type *srcType                   = frame->typeAt<Type>(srcIdx);
         Type *tgtType                   = node->dataType;
         slot_t value                    = frame->get<slot_t>(srcIdx);
-        slot_t result                   = tgtType->castSlotFrom(value, srcType);
+        slot_t result                   = NullSlot;
+        try {
+            result = tgtType->castSlotFrom(value, srcType);
+        } catch (const RuntimeFault &fault) {
+            // A checked conversion (`x as T` into a module type) that fails is an error of the
+            // program, reported at the conversion like the fault of an operator.
+            auto site = makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow");
+            if (const uint64_t origin = graph->nodeOrigin(nodeRef)) {
+                site.cachedOrigin = origin;
+            }
+            throw reportRuntimeFault(*context_, fault, site);
+        }
         frame->set(node->dataIndex, result);
         return result;
     }
@@ -1426,7 +1437,18 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         Type *srcType                   = frame->typeAt<Type>(srcIdx);
         Type *tgtType                   = node->dataType;
         slot_t value                    = frame->get<slot_t>(srcIdx);
-        slot_t result                   = tgtType->castSlotFrom(value, srcType);
+        slot_t result                   = NullSlot;
+        try {
+            result = tgtType->castSlotFrom(value, srcType);
+        } catch (const RuntimeFault &fault) {
+            // A checked conversion (`x as T` into a module type) that fails is an error of the
+            // program, reported at the conversion like the fault of an operator.
+            auto site = makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow");
+            if (const uint64_t origin = graph->nodeOrigin(nodeRef)) {
+                site.cachedOrigin = origin;
+            }
+            throw reportRuntimeFault(*context_, fault, site);
+        }
         frame->set(node->dataIndex, result);
         return result;
     }
