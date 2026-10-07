@@ -49,3 +49,28 @@ expect_exit = 0
 expect_stdout_contains = ["<any>", "2", "3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "nested_literals"
+desc = "A tuple, array or struct literal made of names inside another literal (`((h, k), (e, k >= 6))`, `[[a, b], [b, a]]`, a struct holding a tuple) is built from what the names stand for and has the type of its elements. The inner literal used to be embedded as a constant whose names were never filled: typed `(ref, ref)` and rejected against the declared return type, or, for arrays, refused with an unlocated element type mismatch."
+kind = "behavior"
+case = "../../../cases/compile/return_type/nested_literals.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  'pairs 3 0.5 0.5 3',
+  'mixed 1.5 6 0.25 true',
+  'deep 4 5 4 7',
+  '[[8, 9], [9, 8], [1, 2]]',
+  'record 1 2.5 2.5 1',
+  'every 6 1 [7, 2] 6',
+  'local 11 12 [11, 11]',
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000

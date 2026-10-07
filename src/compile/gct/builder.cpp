@@ -210,9 +210,32 @@ pair<node_ptr_t, data_ptr_t> Builder::makeRefData(const node_ptr_t &expr) {
     return make_pair(refNode, data);
 }
 
+/// A tuple, array or struct literal that still names values (`(h, k)`): it is built when the
+/// program runs, from what the names stand for, so it is not a constant element of a literal
+/// that encloses it.
+bool isUnresolvedLiteral(const data_ptr_t &data) {
+    if (!data || !data->type()) {
+        return false;
+    }
+    switch (data->type()->code()) {
+    case TypeCode::Tuple:
+    case TypeCode::Array:
+    case TypeCode::Struct: {
+        const auto composite = std::dynamic_pointer_cast<CompositeData>(data);
+        return composite && !composite->resolved();
+    }
+    default:
+        return false;
+    }
+}
+
 pair<data_ptr_t, bool> Builder::extractData(const node_ptr_t &node, node_ptr_t &execNode) {
     const data_ptr_t data = extractStaticDataFromNode(node);
-    if (data) {
+    // An enclosing literal only fills the names among its own elements (CompositeData::refs),
+    // so an inner literal with names of its own is an element computed like any other
+    // expression: `((h, k), 1)` is `let a = (h, k)` then `(a, 1)`. Embedded as a constant it
+    // kept its unresolved element types ("(ref, ref)") and its names were never filled.
+    if (data && !isUnresolvedLiteral(data)) {
         return make_pair(data, false);
     } else {
         auto [refNode, refData] = makeRefData(node);
