@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 /**
- * `--result <path>` writes the value `main` returns, in the layout `--arg` reads:
+ * The value `main` returns goes to the output (`-o` / `--output <file>`, standard output by
+ * default). To a file it is written in the layout `--arg` reads:
  *   - struct_param.cml takes its weights from a directory (fc.w.npy, fc.b.npy) and returns a
  *     tuple of two tensors: the result is a directory with 0.npy and 1.npy, under every
  *     scheduler, and 1.npy is 0.npy times the scalar argument;
  *   - scalars.cml returns an int: a text file holding the literal;
  *   - a `main` that returns nothing: RuntimeDiag::EntryResultNotWritten at main, exit 1.
+ * On standard output (no `-o`): the tuple is printed as `println` prints it, after the
+ * program's own output; an int result is the exit code and is not printed.
  *
  * Usage: node result.mjs
  */
@@ -45,7 +48,7 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
         '--arg', `x=${path.join(HERE, 'x.npy')}`,
         '--arg', `p=${path.join(HERE, 'model')}`,
         '--arg', 'scale=2',
-        '--result', out,
+        '-o', out,
     ]
     if (pass) args.push(pass)
     const proc = spawnSync(CAMEL, args, { env, encoding: 'utf8' })
@@ -71,7 +74,7 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
     const out = path.join(tmp, 'n.txt')
     const proc = spawnSync(
         CAMEL,
-        [path.join(HERE, 'scalars.cml'), '--arg', 'n=3', '--arg', 'rate=0.5', '--arg', 'name=hi', '--arg', 'loud=false', '--result', out],
+        [path.join(HERE, 'scalars.cml'), '--arg', 'n=3', '--arg', 'rate=0.5', '--arg', 'name=hi', '--arg', 'loud=false', '--output', out],
         { env, encoding: 'utf8' },
     )
     const text = fs.existsSync(out) ? fs.readFileSync(out, 'utf8').trim() : '(no file)'
@@ -82,7 +85,7 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
     const out = path.join(tmp, 'void.txt')
     const program = path.join(tmp, 'void_main.cml')
     fs.writeFileSync(program, "module void_main\n\nfunc main(n: int): void sync {\n    println(n)\n}\n")
-    const proc = spawnSync(CAMEL, ['--output-format', 'json', program, '--arg', 'n=3', '--result', out], { env, encoding: 'utf8' })
+    const proc = spawnSync(CAMEL, ['--output-format', 'json', program, '--arg', 'n=3', '-o', out], { env, encoding: 'utf8' })
     let name = '(none)'
     let line = -1
     try {
@@ -97,6 +100,48 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
         proc.status === 1 && name === 'RuntimeDiag::EntryResultNotWritten' && line === 2 && !fs.existsSync(out),
         'void result: EntryResultNotWritten at main, no file',
         `void result: exit ${proc.status}, ${name} line ${line}`,
+    )
+}
+
+{
+    // No -o: the tuple goes to standard output in its text form, nothing is written to a file.
+    const proc = spawnSync(
+        CAMEL,
+        [path.join(HERE, 'struct_param.cml'), '--arg', `x=${path.join(HERE, 'x.npy')}`, '--arg', `p=${path.join(HERE, 'model')}`, '--arg', 'scale=2'],
+        { env, encoding: 'utf8' },
+    )
+    const out = proc.stdout
+    const tensors = out.split('tensor(').length - 1
+    check(
+        proc.status === 0 && tensors === 2 && out.includes('0.6878') && out.includes('1.376') && out.endsWith('\n'),
+        'tuple result on stdout: two tensors printed',
+        `tuple result on stdout: exit ${proc.status}: ${out} ${proc.stderr}`,
+    )
+}
+
+{
+    // No -o and an int result: it is the exit code and is not printed.
+    const proc = spawnSync(
+        CAMEL,
+        [path.join(HERE, 'scalars.cml'), '--arg', 'n=3', '--arg', 'rate=0.5', '--arg', 'name=hi', '--arg', 'loud=false'],
+        { env, encoding: 'utf8' },
+    )
+    check(
+        proc.status === 4 && proc.stdout === 'hi 3 0.5 false\n',
+        'int result on stdout: not printed, exit code 4',
+        `int result on stdout: exit ${proc.status}: ${JSON.stringify(proc.stdout)}`,
+    )
+}
+
+{
+    // No -o and no result: nothing is printed and nothing is refused.
+    const program = path.join(tmp, 'void_main2.cml')
+    fs.writeFileSync(program, "module void_main2\n\nfunc main(n: int): void sync {\n    println(n)\n}\n")
+    const proc = spawnSync(CAMEL, [program, '--arg', 'n=3'], { env, encoding: 'utf8' })
+    check(
+        proc.status === 0 && proc.stdout === '3\n',
+        'void result on stdout: nothing printed',
+        `void result on stdout: exit ${proc.status}: ${JSON.stringify(proc.stdout)} ${proc.stderr}`,
     )
 }
 

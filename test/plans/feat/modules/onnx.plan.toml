@@ -1988,7 +1988,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "ort_entry_export"
-desc = "Pure programs exported by `std::macro std::opt::simplify onnx::export` and the same programs run natively with --arg / --result under the default pipeline, std::fvm, std::jit and std::tf agree on ONNX Runtime within 1e-5: declared shapes with a dynamic axis at two batch sizes, a tuple result, a parameterless main, weights as `with` parameters exported as inputs and (given at export) as initializers, and a training step returning the loss and the updated weights."
+desc = "Pure programs exported by `std::macro std::opt::simplify onnx::export` and the same programs run natively with --arg / -o under the default pipeline, std::fvm, std::jit and std::tf agree on ONNX Runtime within 1e-5: declared shapes with a dynamic axis at two batch sizes, a tuple result, a parameterless main, weights as `with` parameters exported as inputs and (given at export) as initializers, and a training step returning the loss and the updated weights."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/entry/ort_entry_export.py"

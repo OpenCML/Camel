@@ -41,7 +41,7 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `--timeit <pass>/<N>`: Measure one pass `N` times from a fresh graph; text mode prints samples plus a compact summary table, while `--output-format json` emits structured benchmark data  
 - `--dump-after-each-pass <dir>`: Write the graph before the first pass (`00_input`) and after each pass that returns a graph (`NN_<pass>`, `::` written as `.`) into `<dir>`: a readable DOT (`.rgir.dot`, the `std::rgir` format with `origin`/`span`/`srcfile` per node) and the `std::stats` counters (`.stats.json`). Scheduling and translation passes consume the graph and leave no snapshot. Compare two snapshots with `python tools/graph-diff/graph_diff.py BEFORE AFTER`  
 - `--arg <name>=<value>`: Value of a parameter of `main` (repeatable; see "Programs whose `main` takes parameters")  
-- `--result <path>`: Write the value `main` returns to `<path>` (same section)  
+- `-o`, `--output <file>`: Where the value `main` returns is written (default: standard output; same section)  
 - `-P`, `--profile`: Record time spent in each stage and output a performance report  
 - `-S`, `--scheduler <type>`: Specify the scheduler type  
 - `-t`, `--threads <num>`: Maximum number of threads  
@@ -50,11 +50,11 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `-L`, `--stdlib <path>`: Specify standard library path (default: `./stdlib` under current directory)  
 - `-E`, `--error-format`, `--output-format <text|json>`: Output format (default: `text`); `--timeit` reuses this, and the test harness expects `json`
 
-### Programs whose `main` takes parameters (`--arg`, `--result`)
+### Programs whose `main` takes parameters or returns a value (`--arg`, `-o`)
 
 `main` is a function like any other and may take parameters, ordinary ones and `with` ones. They are the inputs of the program: a run gets their values from the command line, a translation takes them as the inputs of what it produces (see "ONNX export as a pass").
 
-    camel model.cml --arg x=x.npy --arg p=weights --arg scale=0.5 --result out
+    camel model.cml --arg x=x.npy --arg p=weights --arg scale=0.5 -o out
 
 - **`--arg name=value`** gives the parameter `name` its value; the option is repeated for each parameter. How `value` is read follows the declared type of the parameter:
   - `int`, `float`, `bool`, `string`: the literal (`3`, `0.5`, `true` / `false`, any text).
@@ -64,8 +64,13 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - **Binding is partial application.** A parameter that gets a value becomes a constant of the entry graph before the first pass runs, so the passes see it as one (they fold and specialize with it). The others stay parameters of the entry graph; `std::rgir` shows them as `PORT` nodes named like the parameters.
 - **Running needs every parameter.** A scheduling pass (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`, or the default run) refuses an entry graph that still has parameters with `RuntimeDiag::EntryArgumentMissing` (`0x04000010`, stage `run`), located at the definition of `main` and naming the parameters without a value. Nothing runs; no default, zero or random value is ever assumed. Rewriting and translation passes accept open parameters.
 - **A bad argument** (a name that is no parameter, a name given twice, text that is not a literal of the type, a missing file, a tensor of another shape, `--arg` for a `main` without parameters) is `RuntimeDiag::EntryArgumentInvalid` (`0x04000011`), located at `main`, before any pass runs.
-- **`--result path`** writes the value `main` returns when a scheduling pass has run the program, in the layout `--arg` reads: a scalar as a text file holding the literal, a tensor as a `.npy` file (`.npy` is appended when `path` has another extension or none), a struct or tuple as the directory `path` with one file per leaf. A value that cannot be written (`main` returns nothing, an unwritable path, a type without a file format) is `RuntimeDiag::EntryResultNotWritten` (`0x04000012`), located at `main`. An `int` result is also the exit code, as for any `main`.
-- `--timeit` binds `--arg` like a plain run; `--result` is not applied there.
+- **The value `main` returns goes to the output**, `-o` / `--output <file>`, which is standard output by default, when a scheduling pass has run the program. The exact rule:
+  - `main` returns nothing (`void`): nothing is written. With `-o` that is `RuntimeDiag::EntryResultNotWritten` (`0x04000012`), located at `main`.
+  - `main` returns an exit code (`int`, `bool`, `byte`: the types the process exit code is derived from): the value is the exit code, as for any `main`, and is **not** printed on standard output, so a program whose `main` returns its status behaves as it always did. It is written (as text) only when `-o` names a file.
+  - `main` returns anything else (a `float`, a `string`, a tensor, a tuple, a struct, ...): that value is the result of the program. Without `-o` it is printed on standard output as `println` prints it, on a line of its own after the program's own output (a tuple or struct in its text form, e.g. `(tensor([...]), tensor([...]))`). With `-o path` it is written in the layout `--arg` reads: a scalar as a text file holding the literal, a tensor as a `.npy` file (`.npy` is appended when `path` has another extension or none), a struct or tuple as the directory `path` with one file per leaf (`0.npy`, `1.w.npy`).
+  - A value that cannot be written to the file (an unwritable path, a type without a file format such as an array or a function) is `EntryResultNotWritten`, located at `main`; the exit status is 1.
+  - The rule does not depend on whether `main` has parameters. Translation passes and dumps are not affected: they write what they always wrote.
+- `--timeit` binds `--arg` like a plain run; the result of `main` is neither printed nor written there.
 
 ### Pass pipelines
 
@@ -137,7 +142,7 @@ When no `export_model` call exists anywhere in the program, the pass translates 
 - **Refusal**: the pass translates what it can and refuses where it cannot, with `TranslationRefused` at the construct: an effect (`println`, a file read), an unexpanded macro (run `std::macro`), a call no simplification removes, an operator without a lowering. There is no separate check that the program is "pure"; a program that does more than compute exports one of its functions with `onnx.export_model` instead, and the refusal says so. The pass inlines the call of `main` itself, so it also works without `std::opt::simplify` before it; `std::macro` is still needed for programs that use `grad` or `value_and_grad`.
 - A program that does contain an `export_model` call is never translated this way, wherever the call is: if the call is not visible in the entry graph (nothing was inlined), the refusal names `std::opt::simplify` as before.
 
-To check an exported model against the program itself, run the program with the same values and compare: `camel model.cml --arg x=x.npy --arg p=weights --result out` writes what `main` returns in files a NumPy script reads.
+To check an exported model against the program itself, run the program with the same values and compare: `camel model.cml --arg x=x.npy --arg p=weights -o out` writes what `main` returns in files a NumPy script reads.
 
 Running the program without passes (`camel m.cml`) keeps working: `export_model` then expands macros and simplifies the function itself. What it accepts and the pass refuses are programs whose export request or captured values only exist at run time (random initial weights, a path from `get_env`).
 

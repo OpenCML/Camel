@@ -2,7 +2,7 @@ id = "compile.entry_args"
 order = 322
 tier = "feat"
 tags = ["feat", "compile", "entry"]
-desc = "`main` with parameters: the entry graph takes them, `--arg name=value` binds them, `--result` writes what `main` returns."
+desc = "`main` with parameters: the entry graph takes them, `--arg name=value` binds them, what `main` returns goes to the output (`-o`, standard output by default)."
 
 [[tests]]
 name = "entry_args.scalars_default"
@@ -317,13 +317,13 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.struct_directory_and_result"
-desc = "A struct parameter is a directory with one .npy file per leaf (fc.w.npy, fc.b.npy); --result writes the tuple main returns as a directory (0.npy, 1.npy) and a scalar result as a text file."
+desc = "A struct parameter is a directory with one .npy file per leaf (fc.w.npy, fc.b.npy); -o / --output writes the tuple main returns as a directory (0.npy, 1.npy) and a scalar result as a text file (EntryResultNotWritten when main returns nothing); without -o the tuple is printed on standard output as println prints it, while an int result stays the exit code and is not printed."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/entry_args/result.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tuple result: 0.npy 1.npy", "scalar result: 4", "void result: EntryResultNotWritten", "PASS"]
+expect_stdout_contains = ["tuple result: 0.npy 1.npy", "scalar result: 4", "void result: EntryResultNotWritten", "tuple result on stdout: two tensors printed", "int result on stdout: not printed, exit code 4", "void result on stdout: nothing printed", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000

@@ -23,6 +23,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
+#include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
@@ -39,7 +40,9 @@
 #include <filesystem>
 #include <fstream>
 #include <format>
+#include <iostream>
 #include <memory>
+#include <sstream>
 #include <mutex>
 #include <stdexcept>
 #include <unordered_map>
@@ -379,7 +382,24 @@ void writeEntryResultTo(const core::context::context_ptr_t &context, std::string
                 graph && graph->funcType() && graph->funcType()->hasExitType()
                     ? graph->funcType()->exitType()
                     : nullptr;
-            if (!resultType || resultType->code() == TypeCode::Void) {
+            const bool none = !resultType || resultType->code() == TypeCode::Void;
+            // The types the process exit code is derived from (Context::captureProcessExitCode).
+            const bool exitCode =
+                !none &&
+                (resultType->code() == TypeCode::Int32 || resultType->code() == TypeCode::Int64 ||
+                 resultType->code() == TypeCode::Bool || resultType->code() == TypeCode::Byte);
+            if (path.empty()) {
+                if (!none && !exitCode) {
+                    // One piece, like a println: the program's own output is complete by now.
+                    std::ostringstream text;
+                    rtdata::printSlot(text, value, resultType);
+                    text << '\n';
+                    std::cout << text.str();
+                    std::cout.flush();
+                }
+                return;
+            }
+            if (none) {
                 why = "'main' returns no value";
             } else {
                 saveValue(value, resultType, path, "");

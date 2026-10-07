@@ -220,7 +220,6 @@ unsigned int timeitIterations   = 0;
 bool timeitEnabled              = false;
 string dumpAfterEachPassDir     = "";
 vector<string> entryArgs        = {};
-string entryResultPath          = "";
 
 bool profile      = false;
 bool noCache      = false;
@@ -341,9 +340,9 @@ bool parseArgs(int argc, char *argv[]) {
          repeatable(option("--arg") & value("name=value", entryArgs)) %
              "value of a parameter of main (repeatable): a literal for a scalar, a .npy file for "
              "a tensor, a directory of .npy files for a struct of tensors",
-         (option("--result") & value("path", entryResultPath)) %
-             "write the value main returns: a scalar as text, a tensor as .npy, a struct or "
-             "tuple as a directory of those",
+         (option("-o", "--output") & value("output file", outputFile)) %
+             "where the value main returns is written (default: stdout): a scalar as text, a "
+             "tensor as .npy, a struct or tuple as a directory of those",
          globalOps,
          opt_values("input", targetFiles) %
              "input file (optional if --input given; at least one required)");

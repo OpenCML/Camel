@@ -324,9 +324,12 @@ int main(int argc, char *argv[]) {
                         ctx->runtimeDiagSink()->dump(os, useJsonFormat);
                         return 1;
                     }
-                    if (!Run::entryResultPath.empty()) {
-                        camel::execute::writeEntryResultTo(ctx, Run::entryResultPath);
-                    }
+                    // What `main` returns goes to the output: the file given with -o, else
+                    // standard output (where an exit code is not printed).
+                    camel::execute::writeEntryResultTo(
+                        ctx,
+                        Run::outputFile.empty() || Run::outputFile == "stdout" ? std::string()
+                                                                      : Run::outputFile);
                     static PassDumpState passDump;
                     if (!Run::dumpAfterEachPassDir.empty()) {
                         passDump.dir = Run::dumpAfterEachPassDir;

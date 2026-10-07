@@ -61,10 +61,21 @@ The pass driver (`applyPassesDetailed`, `src/execute/pass.cpp`) checks
 `RuntimeDiag::EntryArgumentMissing` at `main`, naming them. The check is in the driver, not in
 each scheduler, so it holds for every scheduling pass, present and future.
 
-The result goes out the same way: every scheduling pass already hands the entry result to
+The result goes out through the output of the command line (`-o` / `--output <file>`, standard
+output by default). Every scheduling pass already hands the entry result to
 `Context::captureProcessExitCode`; the context passes it on to a handler when one is set, and
-`writeEntryResultTo(ctx, path)` (`--result`) sets one that writes the value in the layout the
-loaders read (`registerEntryResultSaver` for module-defined types).
+the driver always sets one (`writeEntryResultTo(ctx, path)`, `path` empty for standard output):
+
+| `main` returns | standard output (no `-o`) | `-o file` |
+|---|---|---|
+| nothing | nothing | `EntryResultNotWritten` |
+| an exit code (`int`, `bool`, `byte`) | nothing: it is the exit code | the literal, as text |
+| any other value | its `println` form, one line | the layout the loaders read |
+
+The second row is what keeps ordinary programs unchanged: a `main` that returns its status
+prints nothing new. The file layout is the one the loaders read (`registerEntryResultSaver` for
+module-defined types: the tensor module writes `.npy`), so a result can be given back as an
+argument. On standard output there is no refusal: every value has a `println` form.
 
 ## 3. Passes of modules the program does not import
 
@@ -125,7 +136,7 @@ the two kinds differently beyond their order.
 - Dynamic axes come from the declared types only; there is no `dynamic_axes` or `target`
   option for the entry export (the target is the default, `onnxruntime-cpu`).
 - `CAMEL_ONNX_OUT` is the only way to name the file, until passes take arguments.
-- `--result` is not applied under `--timeit`.
+- The result of `main` is neither printed nor written under `--timeit`.
 - `std::cpp` does not translate a `main` with parameters: it refuses with `TranslationRefused` at
   `main` (the generated C++ program calls the entry function without arguments).
 - An optimizer state (`nn` Adam state) is not accepted as a parameter type on the command line

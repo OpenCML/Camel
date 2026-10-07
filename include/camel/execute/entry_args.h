@@ -41,8 +41,9 @@
  *                                 (registerEntryArgumentLoader; the tensor module reads a
  *                                 `.npy` file for a Tensor parameter).
  *
- * The value `main` returns goes out the same way it would come in (writeEntryResultTo,
- * `--result <path>` on the command line): a scalar as a text file holding the literal, a struct
+ * The value `main` returns goes out the same way it would come in (writeEntryResultTo; the
+ * output of the command line, `-o` / `--output <file>`, standard output by default). Written to
+ * a file: a scalar as a text file holding the literal, a struct
  * or tuple as a directory with one file per leaf, a module-defined type through the saver the
  * module registered (a Tensor as a `.npy` file).
  */
@@ -112,9 +113,21 @@ using EntryResultSaver =
 void registerEntryResultSaver(core::type::TypeCode code, EntryResultSaver saver);
 
 /**
- * Asks for the value the entry graph returns to be written to `path` when a scheduling pass
- * has run the program. A value that cannot be written is RuntimeDiag::EntryResultNotWritten,
- * located at `main`.
+ * Has the value the entry graph returns written to the output when a scheduling pass has run
+ * the program. `path` is the output file, or empty for standard output.
+ *
+ *   - `main` returns nothing: nothing is written; with a file, that is
+ *     RuntimeDiag::EntryResultNotWritten.
+ *   - `main` returns an exit code (int, bool, byte: the types the process exit code is derived
+ *     from): the value stays the exit code. It is written only to a file that was asked for,
+ *     never to standard output, so a program whose `main` returns its status prints what it
+ *     printed before.
+ *   - any other value is the result of the program. On standard output it is printed as
+ *     `println` prints it, on a line of its own. To a file it is written in the layout the
+ *     argument loaders read (see the head of this file).
+ *
+ * A value that cannot be written to the file is RuntimeDiag::EntryResultNotWritten, located at
+ * `main`.
  */
 void writeEntryResultTo(const core::context::context_ptr_t &context, std::string path);
 

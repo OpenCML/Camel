@@ -5,7 +5,7 @@ Each program of this folder is a pure `main` (no export request, no `import onnx
   - exported by `camel p.cml std::macro std::opt::simplify onnx::export` (CAMEL_ONNX_OUT),
     the model checked by onnx.checker(full_check) when the onnx package is present and its
     inputs, initializers and outputs compared with what the declared types say;
-  - run natively with the same values (`--arg name=file`, `--result dir`) under the default
+  - run natively with the same values (`--arg name=file`, `-o dir`) under the default
     pipeline and under std::fvm, std::jit and std::tf;
   - run on ONNX Runtime with those values.
 
@@ -130,7 +130,7 @@ def check(tmp: Path, label: str, program: str, values: dict, bound: list[str], w
     run_args = [a for name in values for a in ("--arg", f"{name}={files[name]}")]
     for sched in SCHEDULERS:
         result = tmp / f"{label}_result_{(sched or 'default').replace(':', '_')}"
-        camel(program, *run_args, "--result", str(result), *([sched] if sched else []))
+        camel(program, *run_args, "-o", str(result), *([sched] if sched else []))
         native = load_result(result, outputs)
         for name, g, n in zip(outputs, got, native):
             if np.asarray(g).shape != n.shape:
