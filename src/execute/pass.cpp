@@ -396,7 +396,6 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::fvm", "std::fastvm"},
     {"std::jit", "std::fastvm::jit"},
     {"std::nvm", "std::nodevm"},
-    {"std::svm", "std::stackvm"},
     {"std::tf", "std::taskflow"},
     // Common translation and dump aliases
     // Common translation and dump aliases
