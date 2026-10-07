@@ -455,6 +455,27 @@ TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
                          graph,
                          plan->topo,
                          static_cast<size_t>(anchor - plan->topo.begin()));
+    if (plan->anchorOk) {
+        // A call that feeds an inner JOIN of nested branches in tail position (what inlining
+        // a recursive function into itself leaves) is a tail call too: taken as an ordinary
+        // call, a 50000-level tail recursion overflowed the native stack.
+        std::vector<gc_node_ref_t> candidates{plan->lastNode};
+        if (plan->lastNodeIsJoin) {
+            const auto armValues =
+                camel::execute::collectRuntimeTailJoinArmValues(graph, plan->lastNode);
+            candidates.insert(candidates.end(), armValues.begin(), armValues.end());
+        }
+        for (gc_node_ref_t ref : candidates) {
+            const auto *node = ref != kInvalidNodeRef ? graph->node(ref) : nullptr;
+            if (node != nullptr && node->kind == GCNodeKind::Func) {
+                plan->tailCalls.push_back(ref);
+            }
+        }
+        std::sort(plan->tailCalls.begin(), plan->tailCalls.end());
+        plan->tailCalls.erase(
+            std::unique(plan->tailCalls.begin(), plan->tailCalls.end()),
+            plan->tailCalls.end());
+    }
 
     if (!forceLinear_) {
         try {
@@ -507,12 +528,6 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
     const uint32_t anchorPos =
         plan.anchorOk && plan.lastNode < blocks ? pos[plan.lastNode] : kNo;
 
-    const auto isTailCall = [&](gc_node_ref_t ref) {
-        return plan.anchorOk &&
-               (ref == plan.lastNode ||
-                (plan.lastNodeIsJoin &&
-                 camel::execute::runtimeNodeOutputsContain(graph, ref, plan.lastNode)));
-    };
     const auto isElided = [](GCNodeKind kind) {
         return kind == GCNodeKind::Data || kind == GCNodeKind::Port || kind == GCNodeKind::Sync ||
                kind == GCNodeKind::Bind || kind == GCNodeKind::Dref;
@@ -612,7 +627,7 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
             switch (node->kind) {
             case GCNodeKind::Func:
                 item.kind     = ItemKind::Call;
-                item.tailCall = isTailCall(ref);
+                item.tailCall = plan.isTailCall(ref);
                 break;
             case GCNodeKind::Call:
                 item.kind = ItemKind::Call;
@@ -635,6 +650,33 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
     };
     (void)newScope(-1, 0);
     parse(0, 0, topo.size());
+
+    // What lies behind a tail call (the GATEs that forward its value, the JOINs of the nested
+    // branches it sits in) is skipped once that call has been taken: the frame is refilled for
+    // the callee and there is no value to forward or join.
+    {
+        std::vector<gc_node_ref_t> work(plan.tailCalls.begin(), plan.tailCalls.end());
+        std::vector<uint8_t> seen(blocks, 0);
+        while (!work.empty()) {
+            const gc_node_ref_t ref = work.back();
+            work.pop_back();
+            for (auto outputs :
+                 {graph->normOutputsOf(ref), graph->withOutputsOf(ref), graph->ctrlOutputsOf(ref)}) {
+                for (gc_node_ref_t out : outputs) {
+                    if (out >= blocks || seen[out] != 0) {
+                        continue;
+                    }
+                    seen[out] = 1;
+                    work.push_back(out);
+                    if (loc[out].scope >= 0) {
+                        plan.scopes[static_cast<size_t>(loc[out].scope)]
+                            ->items[loc[out].item]
+                            .afterTail = true;
+                    }
+                }
+            }
+        }
+    }
 
     // The executable nodes a node waits for, seen through the nodes that execute nothing.
     std::vector<std::vector<gc_node_ref_t>> waitsFor(blocks);
@@ -1021,12 +1063,6 @@ void TaskflowExecSchedPass::runLinearBody(
     GraphPlan &plan, Frame *frame, std::atomic<uint32_t> &tailNode, TaskflowGcRegion &region) {
     GCGraph *graph = plan.graph;
     const std::span<const gc_node_ref_t> nodes(plan.topo);
-    const auto isTailCall = [&](gc_node_ref_t ref) {
-        return plan.anchorOk &&
-               (ref == plan.lastNode ||
-                (plan.lastNodeIsJoin &&
-                 camel::execute::runtimeNodeOutputsContain(graph, ref, plan.lastNode)));
-    };
 
     gc_node_ref_t tillNode = kInvalidNodeRef;
     gc_node_ref_t skipNode = kInvalidNodeRef;
@@ -1081,7 +1117,7 @@ void TaskflowExecSchedPass::runLinearBody(
 
         switch (node->kind) {
         case GCNodeKind::Func:
-            if (isTailCall(nodeRef)) {
+            if (plan.isTailCall(nodeRef)) {
                 tailNode.store(nodeRef, std::memory_order_release);
                 return;
             }

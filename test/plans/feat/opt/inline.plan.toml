@@ -693,6 +693,70 @@ assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected outpu
 timeout_ms = 10000
 
 [[tests]]
+name = "arm_call_then_effect.inline.tf"
+desc = "The recursion of timed stays a tail call when std::inline has unrolled timed into itself: the call then feeds an inner JOIN of nested branches in tail position, and the parallel scheduler took it for an ordinary call (50000 levels: segmentation fault). The println after the call of timed in measure still runs. Under: std::inline on Taskflow."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::inline", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.inline.prl"
+desc = "The recursion of timed stays a tail call when std::inline has unrolled timed into itself: the call then feeds an inner JOIN of nested branches in tail position, and the parallel scheduler took it for an ordinary call (50000 levels: segmentation fault). The println after the call of timed in measure still runs. Under: std::inline on std::prl."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["${case}", "std::inline", "std::prl"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.inline.tf_t1"
+desc = "The recursion of timed stays a tail call when std::inline has unrolled timed into itself: the call then feeds an inner JOIN of nested branches in tail position, and the parallel scheduler took it for an ordinary call (50000 levels: segmentation fault). The println after the call of timed in measure still runs. Under: std::inline on Taskflow with one worker."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["-t", "1", "${case}", "std::inline", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "arm_call_then_effect.inline.prl_t1"
+desc = "The recursion of timed stays a tail call when std::inline has unrolled timed into itself: the call then feeds an inner JOIN of nested branches in tail position, and the parallel scheduler took it for an ordinary call (50000 levels: segmentation fault). The println after the call of timed in measure still runs. Under: std::inline on std::prl with one worker."
+kind = "behavior"
+case = "../../../cases/opt/inline/arm_call_then_effect.cml"
+args = ["-t", "1", "${case}", "std::inline", "std::prl"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
 name = "arm_call_then_effect.macro.opt.nvm"
 desc = "A branch nested in an arm of the same graph (std::opt inlines measure and timed into the arm of run) does not lose the end of the enclosing arm: the other arm (println 'other') must not run after the taken one. Under: std::macro std::opt on NodeVM."
 kind = "behavior"

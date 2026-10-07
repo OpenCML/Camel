@@ -325,6 +325,13 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         camel::runtime::gc_node_ref_t lastNode = camel::runtime::kInvalidNodeRef;
         bool lastNodeIsJoin                    = false;
         bool anchorOk                          = false;
+        // The FUNC nodes in tail position (sorted): the tail value itself, or a call whose
+        // result reaches the tail JOIN only through forwarding GATEs and nested JOINs, with
+        // nothing of its arm running after it (the rule NodeVM and FastVM use).
+        std::vector<camel::runtime::gc_node_ref_t> tailCalls;
+        bool isTailCall(camel::runtime::gc_node_ref_t ref) const {
+            return std::binary_search(tailCalls.begin(), tailCalls.end(), ref);
+        }
     };
 
     std::shared_mutex plansMutex_;
