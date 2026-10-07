@@ -77,6 +77,22 @@ so `--rules frozen` and `--rules frozen+D1` still give the earlier classificatio
       sum of absolute values (records made before that), the sampled elements are compared
       element by element and the two sums relative to the sum of absolute values; the cell says
       so (`file_compare_mode`) and is flagged as needing a rerun (`needs_rerun`).
+  D11 (2026-10-07) the order of PURE READS in the effect trace is not part of a program's observable
+      behaviour. Reason: the language leaves independent computations unordered, a read changes
+      no state, and since the restoration of the parallel scheduler (graphs run as task graphs)
+      independent reads are executed in an unspecified order; optimisation passes may reorder them
+      too. Without this rule every such program is EFFECT_MISMATCH although exit code, output and
+      written files agree. Pure reads are the operators of PURE_READ_OPERATORS: `sys:get_env` (no
+      operator of the libraries writes the environment) and `tensor:load_npy`. What stays
+      order-bearing: every other effect (prints, file writes, random numbers, the clock, thread
+      settings, ...), in their order among themselves; WHICH reads happen and with which arguments
+      (compared as a multiset); a read whose payload text is missing or truncated; and the
+      position of a FILE read relative to the file-writing operators of the run (FILE_WRITING):
+      a file read may only move among the effects between the same two file writes, because a
+      read of a file the program itself writes is not independent of that write. (Coarser than
+      comparing paths, on purpose: the payload of a file-writing operator is often cut before
+      its path, see D7.) Implemented in `events()`: under D11 the events are put in a canonical
+      order before anything is compared.
   R1  owner-directed reframing (CLASSIFIER-RULES.md section 13). What is tested: pipelines of
       the standard optimisation passes and schedulers preserve results relative to the default
       pipeline (P0, no pass on the command line). "Any pass sequence behaves the same" is not a
@@ -138,6 +154,11 @@ CLOCK_OR_RANDOM_V2 = re.compile(r"^time:|rand|random")
 # D7: operators that write a file. Their payload holds the per-run path and the printed value;
 # when that text is truncated the event is compared through the files the run wrote.
 FILE_WRITING = re.compile(r"^(tensor:save_npy|nn:save_params|onnx:export_model|fs:.*write.*)$")
+# D11: operators that only read. ENV: nothing can write what they read. FILE: reads a file, so its
+# position relative to the file-writing operators of the same run stays order-bearing.
+PURE_READ_ENV = {"sys:get_env"}
+PURE_READ_FILE = {"tensor:load_npy"}
+PURE_READ_OPERATORS = PURE_READ_ENV | PURE_READ_FILE
 HERE = Path(__file__).resolve().parent
 
 # Worst first. A cell takes the worst outcome of its repeats. REFUSED_UNLOCATED is ranked only
@@ -256,6 +277,7 @@ class Rules:
     file_ops_by_content: bool = False           # D7
     report_v2: bool = False                     # D9 (also carries the reporting part of D3)
     npy_full_comparison: bool = False           # D10: arrays element by element; sums only relative to abs_sum
+    read_order_free: bool = False               # D11: the order of pure reads is not observable behaviour
     r1: bool = False                            # R1: defect classes, LIBRARY_PRECONDITION, REQUIRES_STD_MACRO
 
 
@@ -274,6 +296,10 @@ DEVIATIONS = {
                                    "where the record has them (values, or run.py's vs_ref); otherwise the sample "
                                    "element by element and the sums relative to the sum of absolute values, "
                                    "flagged as needing a rerun"),
+    "D11": ("read_order_free", "2026-10-07: the order of pure reads (" + ", ".join(sorted(PURE_READ_OPERATORS))
+                               + ") in the effect trace is not a defect: independent computations are unordered "
+                               "by design and a read changes no state; which reads happen, their arguments, and "
+                               "the position of a file read relative to the file writes stay compared"),
     "R1": ("r1", "owner-directed reframing: defect classes charged to the standard passes / schedulers; "
                  "LIBRARY_PRECONDITION for diagnostics of a library precondition (prefixes: "
                  + ", ".join(e["prefix"] for e in LIBRARY_PRECONDITIONS) + "); REQUIRES_STD_MACRO programs listed; "
@@ -288,8 +314,8 @@ DEVIATIONS_R1_TEXT = {
     "D9": "classes per cell, defect signatures and cause groups, resource and exclusion tables",
 }
 # The revisions of the newest rule set, in the order they were recorded.
-NEWEST_DEVIATIONS = ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "R1"]
-NEWEST = "frozen+D1-D10+R1"
+NEWEST_DEVIATIONS = ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "R1"]
+NEWEST = "frozen+D1-D11+R1"
 DEFAULT_RULES = NEWEST
 
 
@@ -440,7 +466,47 @@ def events(rec: dict, rules: Rules) -> List[dict]:
     evs = rec.get("effects", [])
     if rules.exclude_macro_ops:
         evs = [e for e in evs if e.get("uri") not in MACRO_OPERATORS]
+    if rules.read_order_free:
+        evs = order_free_reads(evs)
     return evs
+
+
+def _read_sort_key(event: dict) -> Optional[tuple]:
+    """The key a pure read is ordered by under D11, or None when the event must keep its place
+    (not a pure read, or its payload text is missing or truncated)."""
+    if event.get("uri") not in PURE_READ_OPERATORS:
+        return None
+    text = event.get("payload")
+    if not isinstance(text, str) or event.get("payload_truncated"):
+        return None
+    if STRIP_PAYLOAD_TYPES:
+        text = _TYPE_PREFIX.sub(lambda m: m.group(1), text)
+    return (event.get("uri"), text)
+
+
+def order_free_reads(evs: List[dict]) -> List[dict]:
+    """D11: the canonical order of an effect trace in which the order of pure reads does not count.
+    Reads of the environment come first, sorted. The rest is cut at every file-writing event; inside
+    each piece the file reads come first, sorted, then the other events in their recorded order. Two
+    traces have the same canonical order iff they agree on the ordered sequence of the events that
+    are not pure reads, on the multiset of environment reads, and on the multiset of file reads
+    between each pair of consecutive file writes."""
+    if not any(e.get("uri") in PURE_READ_OPERATORS for e in evs):
+        return evs
+    env_reads, out, file_reads, others = [], [], [], []
+    for e in evs:
+        key = _read_sort_key(e)
+        if key is not None and e.get("uri") in PURE_READ_ENV:
+            env_reads.append((key, len(env_reads), e))
+        elif key is not None:
+            file_reads.append((key, len(file_reads), e))
+        else:
+            others.append(e)
+            if FILE_WRITING.match(e.get("uri") or ""):
+                out += [x[2] for x in sorted(file_reads, key=lambda x: x[:2])] + others
+                file_reads, others = [], []
+    out += [x[2] for x in sorted(file_reads, key=lambda x: x[:2])] + others
+    return [x[2] for x in sorted(env_reads, key=lambda x: x[:2])] + out
 
 
 def effect_key(rec: dict, rules: Rules) -> list:

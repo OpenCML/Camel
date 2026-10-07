@@ -14,8 +14,8 @@
 # Exit code 0 means the run completed and every cell (program, pipeline, repeat) listed in
 # cells*.json has a record; it says nothing about the outcomes, which are in summary/.
 #
-# Rule set: the newest one of classify.py (frozen rules plus the recorded deviations D1-D10 and
-# the owner-directed reframing R1 of CLASSIFIER-RULES.md: frozen+D1-D10+R1) unless RULES says
+# Rule set: the newest one of classify.py (frozen rules plus the recorded deviations D1-D11 and
+# the owner-directed reframing R1 of CLASSIFIER-RULES.md: frozen+D1-D11+R1) unless RULES says
 # otherwise, e.g. RULES=frozen+D1-D9, RULES=frozen+D1 or RULES=frozen. The rule set in force is
 # printed before the run and with the summary, and is in totals.json.
 # The summary has the cause groups first (signatures.csv, signature_causes.csv), then the cells.

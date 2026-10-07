@@ -118,9 +118,63 @@ check("frozen+D1-D9 has every flag", (N.unlocated_refusal_violation, N.exclusion
                                       N.file_ops_by_content, N.report_v2, N.npy_full_comparison, N.r1),
       (True,) * 5 + (False, False))
 check("frozen+D1-D9 names D1..D9", c.deviations_of(N), [f"D{k}" for k in range(1, 10)])
-check("newest rule set", (c.NEWEST, c.DEFAULT_RULES, NEW.npy_full_comparison, NEW.r1, NEW.report_v2),
-      ("frozen+D1-D10+R1", "frozen+D1-D10+R1", True, True, True))
-check("newest names D1..D10 and R1", c.deviations_of(NEW), [f"D{k}" for k in range(1, 11)] + ["R1"])
+check("newest rule set", (c.NEWEST, c.DEFAULT_RULES, NEW.npy_full_comparison, NEW.r1, NEW.report_v2,
+                           NEW.read_order_free),
+      ("frozen+D1-D11+R1", "frozen+D1-D11+R1", True, True, True, True))
+check("newest names D1..D11 and R1", c.deviations_of(NEW), [f"D{k}" for k in range(1, 12)] + ["R1"])
+
+# D11: the order of pure reads is not observable behaviour.
+OLD = c.resolve_rules("frozen+D1-D10+R1")
+check("the rule set before D11 still resolves, without the flag", (OLD.read_order_free, OLD.r1), (False, True))
+
+
+def env(name):
+    return ev("sys:get_env", f"string={name}|||", name)
+
+
+def load(path, truncated=False):
+    return ev("tensor:load_npy", f"string={path}|||", path, truncated)
+
+
+def wr(path):
+    return ev("fs:write_text", f"string={path}|string=1 2 3|||", "w" + path)
+
+
+pr = ev(":io/println", "string=hello|||", "p1")
+pr2 = ev(":io/println", "string=world|||", "p2")
+e_ab, e_ba = rec([env("A"), env("B"), pr]), rec([env("B"), pr, env("A")])
+check("D11 off: two environment reads in the other order", outcome_under(OLD, e_ab, e_ba)["outcome"], "EFFECT_MISMATCH")
+check("D11: two environment reads in the other order, one after a print", outcome_under(NEW, e_ab, e_ba)["outcome"],
+      "CONSISTENT")
+check("D11: another variable is read", outcome_under(NEW, e_ab, rec([env("A"), env("C"), pr]))["outcome"],
+      "EFFECT_MISMATCH")
+check("D11: a read is missing", outcome_under(NEW, e_ab, rec([env("A"), pr]))["outcome"], "EFFECT_MISMATCH")
+check("D11: a read happens twice", outcome_under(NEW, e_ab, rec([env("A"), env("B"), env("B"), pr]))["outcome"],
+      "EFFECT_MISMATCH")
+check("D11: prints keep their order", outcome_under(NEW, rec([env("A"), pr, pr2]), rec([env("A"), pr2, pr]))["outcome"],
+      "EFFECT_MISMATCH")
+l_ab, l_ba = rec([load("w/a.npy"), load("w/b.npy"), pr]), rec([load("w/b.npy"), load("w/a.npy"), pr])
+check("D11 off: two file reads in the other order", outcome_under(OLD, l_ab, l_ba)["outcome"], "EFFECT_MISMATCH")
+check("D11: two file reads in the other order", outcome_under(NEW, l_ab, l_ba)["outcome"], "CONSISTENT")
+check("D11: file and environment reads interleaved differently",
+      outcome_under(NEW, rec([env("A"), load("w/a.npy"), env("B"), load("w/b.npy")]),
+                    rec([load("w/b.npy"), env("B"), load("w/a.npy"), env("A")]))["outcome"], "CONSISTENT")
+check("D11: another file is read", outcome_under(NEW, l_ab, rec([load("w/a.npy"), load("w/c.npy"), pr]))["outcome"],
+      "EFFECT_MISMATCH")
+w_then_r, r_then_w = rec([wr("o/x.npy"), load("o/x.npy")]), rec([load("o/x.npy"), wr("o/x.npy")])
+check("D11: a file read moved across a file write stays a mismatch", outcome_under(NEW, w_then_r, r_then_w)["outcome"],
+      "EFFECT_MISMATCH")
+check("D11: file reads reordered on one side of a file write",
+      outcome_under(NEW, rec([load("w/a.npy"), load("w/b.npy"), wr("o/x.npy"), load("w/c.npy")]),
+                    rec([load("w/b.npy"), load("w/a.npy"), wr("o/x.npy"), load("w/c.npy")]))["outcome"], "CONSISTENT")
+check("D11: an environment read may move across a file write",
+      outcome_under(NEW, rec([env("A"), wr("o/x.npy")]), rec([wr("o/x.npy"), env("A")]))["outcome"], "CONSISTENT")
+check("D11: a read with a truncated payload keeps its place",
+      outcome_under(NEW, rec([load("w/a.npy", True), pr]), rec([pr, load("w/a.npy", True)]))["outcome"], "EFFECT_MISMATCH")
+check("D11: other effects are not reads (random numbers)",
+      outcome_under(NEW, rec([ev("rand:rand", "||", "r"), pr]), rec([pr, ev("rand:rand", "||", "r")]))["outcome"],
+      "EFFECT_MISMATCH")
+check("D11: a trace without reads is returned as it is", c.order_free_reads([pr, pr2]), [pr, pr2])
 s0 = save("Tensor=tensor([1.0, 2.0", "p0", [npy("a", [1.0, 2.0])])
 s1 = save("Tensor=tensor([1.0, 2.0", "p1", [npy("b", [1.0, 2.000001])])
 s2 = save("Tensor=tensor([1.0, 2.1", "p2", [npy("b", [1.0, 2.000001])])
