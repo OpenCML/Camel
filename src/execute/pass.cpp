@@ -23,6 +23,7 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
+#include "camel/runtime/capacity.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/foreign_handle.h"
 #include "camel/core/mm/profiler.h"
@@ -525,6 +526,11 @@ PassFactory lookupPassFactory(const std::string &name) {
             return std::make_unique<DropCallArgumentTestPass>(ctx);
         };
     }
+    if (resolved == kOvergrowGraphPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<OvergrowGraphTestPass>(ctx);
+        };
+    }
     return nullptr;
 }
 
@@ -692,6 +698,24 @@ PassApplyResult applyPassesDetailed(
                 graph = pass->apply(graph, os);
             } catch (const DiagnosticsLimitExceededBaseException &) {
                 throw; // diagnostics already recorded; the caller dumps them
+            } catch (const camel::runtime::GraphCapacityError &e) {
+                // The pass built a graph larger than a graph can be. That is a limit of the
+                // representation the program ran into, not a broken graph: it is reported with
+                // the graph, the quantity, the size reached and the limit, at the function the
+                // graph was compiled from (or at one of its nodes).
+                setPipelineStage("pass:" + p);
+                auto diag = ctx->rtmDiags()->of(RuntimeDiag::GraphTooLarge);
+                if (e.origin() != camel::source::kInvalidOriginId) {
+                    diag.atOrigin(e.origin());
+                }
+                diag.commit(
+                    p,
+                    e.graph().empty() ? std::string("(unnamed)") : e.graph(),
+                    e.size(),
+                    e.quantity(),
+                    e.limit());
+                CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (graph too large)", p);
+                return {nullptr, PassApplyStatus::Failed};
             } catch (const std::exception &e) {
                 // A pass that gives up with a plain exception (graph validation at commit, the
                 // execution-order builder meeting a cycle, an arena limit) hit a defect of the

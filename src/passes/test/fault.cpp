@@ -43,3 +43,26 @@ DropCallArgumentTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) 
     }
     return graph;
 }
+
+camel::runtime::GCGraph *
+OvergrowGraphTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
+    camel::runtime::RuntimeGraphDraftSession session(context_, graph);
+    for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
+        if (owner->name() != "main") {
+            continue;
+        }
+        camel::runtime::GraphDraft &draft = session.edit(owner);
+        camel::core::type::Type *type     = nullptr;
+        for (camel::runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount() && !type; ++id) {
+            if (const auto *header = draft.header(id)) {
+                type = header->dataType;
+            }
+        }
+        // Each node takes several blocks: 20000 of them need more than the 65535 a graph has.
+        for (size_t i = 0; i < 20000; ++i) {
+            draft.addCopyNode(type);
+        }
+        return session.commit();
+    }
+    return graph;
+}

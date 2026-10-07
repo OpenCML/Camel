@@ -52,6 +52,7 @@
 #include "camel/passes/macro/macro.h"
 #include "camel/passes/opt/generic.h"
 #include "camel/passes/opt/config.h"
+#include "camel/runtime/capacity.h"
 #include "camel/passes/trans/dot/graphviz.h"
 
 #include <algorithm>
@@ -3452,6 +3453,25 @@ Model translatePrepared(
         // the call, instead of reporting the allocation failure.
         const auto tree = findTreeRecursion(beforeSimplify);
         if (!tree) {
+            // ONNX has no calls, so the export inlines every call and unrolls every recursion
+            // of constant depth into the one graph of the exported function, without the size
+            // bounds of an optimization pass. A function that does not fit one graph that way
+            // is refused as such, at the export_model call (the error names no node).
+            if (const auto *capacity =
+                    dynamic_cast<const camel::runtime::GraphCapacityError *>(&e)) {
+                throw ExportError(
+                    std::format(
+                        "the exported function does not fit one graph once every call in it "
+                        "is inlined and every recursion of constant depth is unrolled (ONNX "
+                        "has no calls): graph '{}' needs {} {}, and one runtime graph holds "
+                        "at most {} (they are addressed with 16 bits); export a smaller "
+                        "function (fewer unrolled steps, or the forward function instead of "
+                        "a training step through all of them)",
+                        capacity->graph(),
+                        capacity->size(),
+                        capacity->quantity(),
+                        capacity->limit()));
+            }
             throw;
         }
         const uint64_t origin = tree->first->nodeOrigin(tree->second);

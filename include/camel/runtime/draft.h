@@ -335,6 +335,9 @@ class GraphDraft {
     void setNodeRuntimeFlags(gc_node_ref_t id, uint8_t runtimeFlags);
     /// Source origin of node `id` (see DraftNodeHeader::origin).
     uint64_t nodeOrigin(gc_node_ref_t id) const;
+    /// The origin of the first live node that has one, 0 when none has: where to report
+    /// something about the graph as a whole when its definition is not known.
+    uint64_t firstNodeOrigin() const;
     void setNodeOrigin(gc_node_ref_t id, uint64_t origin);
     void rewriteNode(gc_node_ref_t id, const DraftNodeInit &init);
     void appendNormPort(gc_node_ref_t id);

@@ -41,6 +41,7 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
+#include "camel/runtime/capacity.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
 #include "runtime/graph_build.h"
@@ -587,7 +588,11 @@ class EncodeSession {
                 graph->draft().returnKind());
         }
 
-        prepared.payloadShape = describeDraftNativePayload(*prepared.draft);
+        try {
+            prepared.payloadShape = describeDraftNativePayload(*prepared.draft);
+        } catch (const camel::runtime::GraphCapacityError &e) {
+            throw e.inGraph(graph->name(), prepared.draft->firstNodeOrigin());
+        }
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepared compile graph '{}' with {} draft nodes.",
