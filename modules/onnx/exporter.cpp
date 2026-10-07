@@ -1118,6 +1118,16 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
         if (sameValue(a.next[k], b.next[k])) {
             out.next[k] = a.next[k];
         } else {
+            if (!isCarriable(a.next[k]) || !isCarriable(b.next[k])) {
+                unsupported(
+                    act,
+                    std::format(
+                        "argument {} of a recursion whose depth depends on the model input "
+                        "(counting from 1, `with` parameters first) is a tuple, struct or array "
+                        "that a recursive call changes; a loop carries tensors and scalars: pass "
+                        "the elements as separate arguments",
+                        k + 1));
+            }
             nextAt[k] = request(a.next[k], b.next[k]);
         }
     }

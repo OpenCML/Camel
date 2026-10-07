@@ -1594,6 +1594,29 @@ assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/export_loop_valu
 timeout_ms = 8000
 
 [[tests]]
+name = "export_loop_tuple_argument"
+desc = "A tail recursion whose depth depends on the model input and whose state is one tuple argument that every call replaces is refused by export_model at the call of the recursion; the diagnostic names the argument and says to pass the elements as separate arguments. (It used to say only that 'a tuple, struct or array, or values of different types, differ between the paths'.)"
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_loop_tuple_argument.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_loop_tuple_argument.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const text = input.normalized.output
+assert(text.includes("in 'walk': argument 1 of a recursion whose depth depends on the model input"), 'missing detail: ' + text)
+assert(text.includes('is a tuple, struct or array that a recursive call changes; a loop carries tensors and scalars: pass the elements as separate arguments'), 'missing condition: ' + text)
+assert(/[(]at [^ ]*export_loop_tuple_argument[.]cml:18:48[)]/.test(text), 'missing source position of the call: ' + text)
+assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
+assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/export_loop_tuple_argument.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
 name = "export_train_step_vjp"
 desc = "A training step (value_and_grad + sgd) through a function declared with a custom derivative rule (@vjp<rule>) exports: loss and the two updated parameters; the model contains the rule's operators and nothing derived from the body's `where`."
 kind = "behavior"
