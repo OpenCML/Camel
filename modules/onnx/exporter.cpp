@@ -257,6 +257,9 @@ class Evaluator {
         Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values);
     Value
     evalSymbolicBranch(Activation &act, const Value &cond, std::span<const gc_node_ref_t> arms);
+    /// Refuses a branch on a model-dependent condition whose arms yield functions (of type
+    /// `functionType`, when known); eval() locates it at the branch.
+    [[noreturn]] void refuseFunctionBranch(Activation &act, type::Type *functionType);
     /// A branch on a model-dependent condition whose JOIN is tuple/struct-typed: the arms
     /// yield aggregates, so the If gets one output per leaf value.
     Value evalSymbolicAggregateBranch(
@@ -2621,6 +2624,9 @@ Value Evaluator::evalJoin(Activation &act, gc_node_ref_t join) {
                 "a match on a value that depends on the model input cannot be exported");
         }
         type::Type *joinType = g->node(join)->dataType;
+        if (joinType && joinType->code() == TypeCode::Function) {
+            refuseFunctionBranch(act, joinType);
+        }
         if (joinType &&
             (joinType->code() == TypeCode::Tuple || joinType->code() == TypeCode::Struct)) {
             return evalSymbolicAggregateBranch(act, emitter_.operand(cond, TypeCode::Bool), arms);
@@ -2656,6 +2662,21 @@ Value Evaluator::evalJoin(Activation &act, gc_node_ref_t join) {
     return eval(act, arms[arm]);
 }
 
+void Evaluator::refuseFunctionBranch(Activation &act, type::Type *functionType) {
+    // An If yields tensors. A function is no value of the model, and which function is called
+    // would only be known when the model runs. (The exception, handled before this is
+    // reached: the function a recursion with one recursive call returns, see translateLinear.)
+    unsupported(
+        act,
+        std::format(
+            "a branch on a condition that depends on the model input chooses between "
+            "functions{}: a model has no function values, so which function is called cannot "
+            "be decided when the model runs. Call the functions inside the arms and let the "
+            "branch choose between their results",
+            functionType ? std::format(" (its value is a '{}')", functionType->toString())
+                         : std::string()));
+}
+
 /// if-then-else on a condition that depends on the input: ONNX If with one subgraph per arm.
 /// Both arms must yield values of the same form and dtype.
 Value Evaluator::evalSymbolicBranch(
@@ -2668,6 +2689,13 @@ Value Evaluator::evalSymbolicBranch(
         act.memo.emplace_back();
         try {
             results[i]          = eval(act, arms[i]);
+            if (results[i].isClosure() ||
+                (results[i].isConstant() && results[i].ty &&
+                 results[i].ty->code() == TypeCode::Function)) {
+                refuseFunctionBranch(
+                    act,
+                    results[i].isClosure() ? results[i].camelType : results[i].ty);
+            }
             const TensorFacts f = factsOf(results[i]);
             const std::string out =
                 emitter_.node("Identity", {emitter_.operand(results[i])}, {}, "arm_out");
