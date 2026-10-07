@@ -121,10 +121,11 @@ timeout_ms = 6000
 
 [[tests]]
 name = "pass_internal_error_stage"
-desc = "An exception that escapes a pass (here std::cpp giving up on a tensor program with a std::runtime_error) is reported as the diagnostic RuntimeDiag::PassInternalError with stage pass:<name> in a valid JSON array, exit 1; it used to be a plain text line on stdout. It has no source range."
+desc = "An exception that escapes a pass (here the test-only pass test::drop_call_argument, whose commit is rejected by graph validation with a std::runtime_error) is reported as the diagnostic RuntimeDiag::PassInternalError with stage pass:<name> in a valid JSON array, exit 1; it used to be a plain text line on stdout. It has no source range. (The test used std::cpp on a tensor program until that became a located refusal, see trans.cpp refuse_tensor.)"
 kind = "behavior"
-case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["--output-format", "json", "${case}", "std::cpp"]
+case = "../../../cases/opt/generic/broken_graph.cml"
+args = ["--output-format", "json", "${case}", "test::drop_call_argument", "std::fvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 1
 verify_script = """
 const text = input.stdout
@@ -132,11 +133,11 @@ const diags = JSON.parse(text)
 assert(diags.length === 1, 'stdout is one JSON diagnostics array with one diagnostic')
 const d = diags[0]
 assert(d.severity === 'Error', 'severity is a JSON string')
-assert(d.data.stage === 'pass:std::cpp', 'stage is pass:std::cpp, got ' + d.data.stage)
+assert(d.data.stage === 'pass:test::drop_call_argument', 'stage names the pass, got ' + d.data.stage)
 assert(d.data.name === 'RuntimeDiag::PassInternalError', 'name is RuntimeDiag::PassInternalError, got ' + d.data.name)
 assert(d.code === '0x0400000C', 'code is 0x0400000C, got ' + d.code)
-assert(d.message.startsWith("Pass 'std::cpp' failed with an internal error: "), 'message names the pass, got ' + d.message)
-assert(d.message.includes('is not supported by the direct C++ path'), 'message carries the exception text, got ' + d.message)
+assert(d.message.startsWith("Pass 'test::drop_call_argument' failed with an internal error: "), 'message names the pass, got ' + d.message)
+assert(d.message.includes("passing 0 arguments and 0 'with' arguments to 'twice'"), 'message carries the exception text, got ' + d.message)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
@@ -145,10 +146,11 @@ timeout_ms = 6000
 name = "pass_internal_error_text"
 desc = "The same failure in text mode is a diagnostic line with the name and code, exit 1."
 kind = "behavior"
-case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::cpp"]
+case = "../../../cases/opt/generic/broken_graph.cml"
+args = ["${case}", "test::drop_call_argument", "std::fvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 1
-expect_output_contains = ["Pass 'std::cpp' failed with an internal error", "name=RuntimeDiag::PassInternalError, code=0x0400000C"]
+expect_output_contains = ["Pass 'test::drop_call_argument' failed with an internal error", "name=RuntimeDiag::PassInternalError, code=0x0400000C"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 

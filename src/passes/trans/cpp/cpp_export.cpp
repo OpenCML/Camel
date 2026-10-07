@@ -51,6 +51,47 @@ bool entryTakesParameters(const GCGraph *root) {
            (with.size() > 1 || !root->normInputsOf(callRef).empty());
 }
 
+/// The source origin of `ref`, or of the nearest input that has one (a node the compiler
+/// synthesized carries none; what it reads does).
+uint64_t nodeOriginNear(const GCGraph *g, camel::runtime::gc_node_ref_t ref) {
+    if (const uint64_t origin = g->nodeOrigin(ref); origin != camel::source::kInvalidOriginId) {
+        return origin;
+    }
+    for (const auto inputs : {g->withInputsOf(ref), g->normInputsOf(ref)}) {
+        for (camel::runtime::gc_node_ref_t input : inputs) {
+            if (const uint64_t origin = g->nodeOrigin(input);
+                origin != camel::source::kInvalidOriginId) {
+                return origin;
+            }
+        }
+    }
+    return camel::source::kInvalidOriginId;
+}
+
+/// The definition of the function `g` was compiled from, or the first of its nodes that has a
+/// source position.
+uint64_t graphOriginOf(const camel::core::context::Context &ctx, const GCGraph *g) {
+    if (g == nullptr) {
+        return camel::source::kInvalidOriginId;
+    }
+    if (const auto source = ctx.sourceContext()) {
+        const auto origin = source->debugMap().graphOrigin(g->stableId());
+        if (origin != camel::source::kInvalidOriginId) {
+            return origin;
+        }
+    }
+    for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+        if (*it == nullptr) {
+            continue;
+        }
+        if (const uint64_t origin = g->nodeOrigin(it.ref());
+            origin != camel::source::kInvalidOriginId) {
+            return origin;
+        }
+    }
+    return camel::source::kInvalidOriginId;
+}
+
 } // namespace
 
 camel::runtime::GCGraph *CppDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
@@ -74,6 +115,32 @@ camel::runtime::GCGraph *CppDumpPass::apply(camel::runtime::GCGraph *graph, std:
     }
 
     RuntimeCppEmitter emitter(context_, mode_);
-    os << emitter.emit(graph);
+    try {
+        os << emitter.emit(graph);
+    } catch (const CppTranslationRefusal &refusal) {
+        // A program outside what the pass translates is refused where the construct is
+        // written: at the node, else at the function it is in, else at the entry function.
+        const auto &issue = refusal.issue;
+        uint64_t origin   = camel::source::kInvalidOriginId;
+        if (!issue.aboutFunction && issue.nodeRef != camel::runtime::kInvalidNodeRef) {
+            origin = nodeOriginNear(issue.graph, issue.nodeRef);
+        }
+        if (origin == camel::source::kInvalidOriginId) {
+            origin = graphOriginOf(*context_, issue.graph);
+        }
+        if (origin == camel::source::kInvalidOriginId) {
+            origin = camel::execute::entryFunctionOrigin(*context_);
+        }
+        auto diag = context_->rtmDiags()->of(camel::core::error::RuntimeDiag::TranslationRefused);
+        if (origin != camel::source::kInvalidOriginId) {
+            diag.atOrigin(origin);
+        }
+        diag.commit(
+            mode_ == CppEmitMode::Module    ? "std::cpp::module"
+            : mode_ == CppEmitMode::Inspect ? "std::cpp::inspect"
+            : mode_ == CppEmitMode::Bench   ? "std::cpp::bench"
+                                            : "std::cpp",
+            issue.reason);
+    }
     return nullptr;
 }

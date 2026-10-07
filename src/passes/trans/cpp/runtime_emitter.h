@@ -36,6 +36,18 @@ struct RuntimeCppLoweringIssue {
     camel::runtime::GCGraph *graph        = nullptr;
     camel::runtime::gc_node_ref_t nodeRef = camel::runtime::kInvalidNodeRef;
     std::string reason;
+    /// A construct of the program the pass does not translate (a refusal, reported at the
+    /// construct), as opposed to a graph the pass should never be given (an internal error).
+    bool unsupported = false;
+    /// The issue is about the function as a whole (its result type): reported at its
+    /// definition rather than at `nodeRef`.
+    bool aboutFunction = false;
+};
+
+/// The program uses something std::cpp does not translate. `issue.reason` says what, in the
+/// program's terms; CppDumpPass reports it as TranslationRefused at the construct.
+struct CppTranslationRefusal {
+    RuntimeCppLoweringIssue issue;
 };
 
 struct RuntimeCppGraphPlan {

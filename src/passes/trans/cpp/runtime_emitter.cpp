@@ -150,6 +150,21 @@ std::string joinBranchExprs(
     return expr;
 }
 
+/// What std::cpp translates, for the refusals.
+constexpr const char *kBridgeableTypes =
+    "std::cpp translates values of the types int32, int64, float32, float64, bool, string and "
+    "void only";
+
+std::string typeName(const Type *type) { return type ? type->toString() : "an unknown type"; }
+
+/// 'name' of a function as the program writes it (a specialization keeps the name before '$').
+std::string functionName(const GCGraph *graph) {
+    if (!graph || graph->name().empty() || isAnonymousGraphName(graph->name())) {
+        return "an anonymous function";
+    }
+    return std::format("function '{}'", graph->name().substr(0, graph->name().find('$')));
+}
+
 std::string stripRedundantOuterParens(std::string_view s) {
     if (s.size() < 2 || s.front() != '(' || s.back() != ')') {
         return std::string(s);
@@ -184,6 +199,13 @@ std::string RuntimeCppEmitter::emit(GCGraph *root) {
     for (GCGraph *graph : emissionOrder) {
         RuntimeCppGraphPlan plan = analyzeGraph(graph);
         if (!plan.directCallable) {
+            // A construct of the program that has no translation is a refusal at that
+            // construct; anything else in the list is a graph this pass should not be given.
+            for (const RuntimeCppLoweringIssue &issue : plan.issues) {
+                if (issue.unsupported) {
+                    throw CppTranslationRefusal{issue};
+                }
+            }
             throw std::runtime_error(
                 std::format(
                     "runtime graph '{}' is not supported by the direct C++ path: {}",
@@ -299,6 +321,7 @@ RuntimeCppGraphPlan RuntimeCppEmitter::analyzeGraph(GCGraph *graph) const {
     plan.graph     = graph;
     plan.topoNodes = camel::execute::buildReachableExecutionTopoIndices(graph);
 
+    // A graph the pass should not be given (malformed): an internal error.
     auto addIssue = [&](gc_node_ref_t nodeRef, std::string reason) {
         plan.issues.push_back({
             .graph   = graph,
@@ -306,22 +329,53 @@ RuntimeCppGraphPlan RuntimeCppEmitter::analyzeGraph(GCGraph *graph) const {
             .reason  = std::move(reason),
         });
     };
+    // A construct of the program without a translation: a refusal at the construct.
+    auto refuse = [&](gc_node_ref_t nodeRef, std::string reason, bool aboutFunction = false) {
+        plan.issues.push_back({
+            .graph         = graph,
+            .nodeRef       = nodeRef,
+            .reason        = std::move(reason),
+            .unsupported   = true,
+            .aboutFunction = aboutFunction,
+        });
+    };
+    const std::string self = functionName(graph);
 
+    // The result type first: it is what a reader of the function's first line sees.
+    if (auto *ret = const_cast<Type *>(graph->funcType()->exitType());
+        !isBridgeableTypeForCpp(ret)) {
+        refuse(
+            graph->returnNodeRef(),
+            std::format(
+                "{} returns a value of type '{}'; {}",
+                self,
+                typeName(ret),
+                kBridgeableTypes),
+            true);
+    }
     for (gc_node_ref_t portRef : graph->normPorts()) {
         const auto *port = requireNode(graph, portRef);
         if (!isBridgeableTypeForCpp(port->dataType)) {
-            addIssue(portRef, "non-bridgeable norm port type");
+            refuse(
+                portRef,
+                std::format(
+                    "a parameter of {} has type '{}'; {}",
+                    self,
+                    typeName(port->dataType),
+                    kBridgeableTypes));
         }
     }
     for (gc_node_ref_t portRef : graph->withPorts()) {
         const auto *port = requireNode(graph, portRef);
         if (!isBridgeableTypeForCpp(port->dataType)) {
-            addIssue(portRef, "non-bridgeable with port type");
+            refuse(
+                portRef,
+                std::format(
+                    "a 'with' parameter of {} has type '{}'; {}",
+                    self,
+                    typeName(port->dataType),
+                    kBridgeableTypes));
         }
-    }
-    if (auto *ret = const_cast<Type *>(graph->funcType()->exitType());
-        !isBridgeableTypeForCpp(ret)) {
-        addIssue(graph->returnNodeRef(), "non-bridgeable return type");
     }
 
     for (gc_node_ref_t nodeRef : plan.topoNodes) {
@@ -331,31 +385,50 @@ RuntimeCppGraphPlan RuntimeCppEmitter::analyzeGraph(GCGraph *graph) const {
             auto literal =
                 cppLiteralFor(graph->staticArea()->get<slot_t>(-node->dataIndex), node->dataType);
             if (!literal.has_value()) {
-                addIssue(nodeRef, "data literal cannot be emitted as a C++ literal");
+                refuse(
+                    nodeRef,
+                    std::format(
+                        "{} uses a constant of type '{}', which has no C++ literal; {}",
+                        self,
+                        typeName(node->dataType),
+                        kBridgeableTypes));
             }
         } break;
         case GCNodeKind::Port:
             break;
         case GCNodeKind::Oper: {
+            const std::string uri(graph->nodeBodyAs<GCOperBody>(nodeRef)->uri());
             if (!isBridgeableTypeForCpp(node->dataType)) {
-                addIssue(nodeRef, "operator result type is not bridgeable");
+                refuse(
+                    nodeRef,
+                    std::format(
+                        "the result of operator '{}' in {} has type '{}'; {}",
+                        uri,
+                        self,
+                        typeName(node->dataType),
+                        kBridgeableTypes));
                 break;
             }
-            bool bridgeable = true;
-            for (gc_node_ref_t argRef : graph->normInputsOf(nodeRef)) {
-                if (!isBridgeableTypeForCpp(requireNode(graph, argRef)->dataType)) {
-                    bridgeable = false;
-                    break;
+            Type *unbridgeable = nullptr;
+            bool allBridgeable = true;
+            for (const auto args : {graph->normInputsOf(nodeRef), graph->withInputsOf(nodeRef)}) {
+                for (gc_node_ref_t argRef : args) {
+                    Type *argType = requireNode(graph, argRef)->dataType;
+                    if (allBridgeable && !isBridgeableTypeForCpp(argType)) {
+                        allBridgeable = false;
+                        unbridgeable  = argType;
+                    }
                 }
             }
-            for (gc_node_ref_t argRef : graph->withInputsOf(nodeRef)) {
-                if (!isBridgeableTypeForCpp(requireNode(graph, argRef)->dataType)) {
-                    bridgeable = false;
-                    break;
-                }
-            }
-            if (!bridgeable) {
-                addIssue(nodeRef, "operator arguments are not bridgeable");
+            if (!allBridgeable) {
+                refuse(
+                    nodeRef,
+                    std::format(
+                        "an argument of operator '{}' in {} has type '{}'; {}",
+                        uri,
+                        self,
+                        typeName(unbridgeable),
+                        kBridgeableTypes));
             }
         } break;
         case GCNodeKind::Func: {
@@ -365,10 +438,23 @@ RuntimeCppGraphPlan RuntimeCppEmitter::analyzeGraph(GCGraph *graph) const {
                 break;
             }
             if (!callee->closureNodes().empty()) {
-                addIssue(nodeRef, "direct callee closure is not supported");
+                refuse(
+                    nodeRef,
+                    std::format(
+                        "{} calls {}, which captures variables of the function around it; "
+                        "std::cpp does not translate closures yet",
+                        self,
+                        functionName(callee)));
             }
             if (!isBridgeableTypeForCpp(const_cast<Type *>(callee->funcType()->exitType()))) {
-                addIssue(nodeRef, "callee return type is not bridgeable");
+                refuse(
+                    nodeRef,
+                    std::format(
+                        "{} calls {}, which returns a value of type '{}'; {}",
+                        self,
+                        functionName(callee),
+                        typeName(callee->funcType()->exitType()),
+                        kBridgeableTypes));
             }
         } break;
         case GCNodeKind::Brch: {
@@ -406,7 +492,16 @@ RuntimeCppGraphPlan RuntimeCppEmitter::analyzeGraph(GCGraph *graph) const {
         case GCNodeKind::Copy:
         case GCNodeKind::Gate:
             if (!isBridgeableTypeForCpp(node->dataType)) {
-                addIssue(nodeRef, "node result type is not bridgeable");
+                refuse(
+                    nodeRef,
+                    std::format(
+                        "a value of type '{}' is {} in {}; {}",
+                        typeName(node->dataType),
+                        node->kind == GCNodeKind::Cast   ? "converted"
+                        : node->kind == GCNodeKind::Copy ? "copied"
+                                                         : "passed on",
+                        self,
+                        kBridgeableTypes));
             }
             break;
         case GCNodeKind::Call:
@@ -414,9 +509,24 @@ RuntimeCppGraphPlan RuntimeCppEmitter::analyzeGraph(GCGraph *graph) const {
         case GCNodeKind::Accs:
         case GCNodeKind::Bind:
         case GCNodeKind::Sync:
-        case GCNodeKind::Dref:
-            addIssue(nodeRef, "node type is not supported by runtime C++ lowering yet");
-            break;
+        case GCNodeKind::Dref: {
+            const char *construct =
+                node->kind == GCNodeKind::Call   ? "a call of a function value"
+                : node->kind == GCNodeKind::Fill ? "the construction of a struct, tuple, array or "
+                                                   "closure value"
+                : node->kind == GCNodeKind::Accs ? "an access to an element or a field"
+                : node->kind == GCNodeKind::Bind ? "a function bound to its 'with' arguments"
+                : node->kind == GCNodeKind::Sync ? "a sync block"
+                                                 : "a read through a reference";
+            refuse(
+                nodeRef,
+                std::format(
+                    "{} contains {}{}, which std::cpp does not translate yet",
+                    self,
+                    construct,
+                    node->dataType ? std::format(" (of type '{}')", typeName(node->dataType))
+                                   : std::string()));
+        } break;
         default:
             addIssue(nodeRef, "unknown runtime node type");
             break;
