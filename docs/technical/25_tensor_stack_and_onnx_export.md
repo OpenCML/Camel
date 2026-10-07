@@ -140,6 +140,60 @@ An unknown rank is represented by an absent shape.
 - Runtime shape errors use `RuntimeDiag::TensorDimensionMismatch` instead of
   generic `RuntimeError` strings.
 
+#### Shapes written in a program
+
+A program writes a tensor type as `Tensor<f32, const [2, 3]>`: the element type
+(`f32`, `f64`, `i32`, `i64`, `bool`), then the shape. Either part may be left
+out (`Tensor<f32>`, `Tensor<const [3]>`), and an extent written `-1` is unknown
+(`Tensor<f32, const [-1, 3]>`; diagnostics print it as `Tensor<float32, [?, 3]>`).
+A declared shape is checked at compile time wherever the value's type is at
+least as exact: at a call, at a `return` against the declared return type, in
+the operators of the body.
+
+What inference derives without help, besides the propagation listed above:
+
+- a shape literal: `zeros([2, 3])`, `reshape(x, [3, 2])`, `reshape(x, [-1])` of
+  a tensor whose extents are all known;
+- the shape operators of a tensor whose type carries the shape: `shape(x)`,
+  `dim(x, k)` and `numel(x)` are constants where they are passed on, so
+  `reshape(y, shape(x))`, `zeros(shape(x))` and `ones([dim(x, 1)])` have static
+  shapes;
+- a shape written in place with a computed extent: `zeros([n, 3])` and
+  `reshape(x, [n, 3])` are `[?, 3]`. When every extent of the input is known and
+  one extent of the target is computed, that extent is the only value that
+  fits (`reshape(y, [n, 3])` of a `[6]` tensor is `[2, 3]`; any other `n` is
+  reshape's error when it runs);
+- tuples, structs, branches whose arms agree, and recursive functions whose
+  declared types carry the shapes.
+
+#### When you need `as`
+
+`e as Tensor<...>` is a checked conversion: the compiler refuses it when the two
+types already contradict each other, and otherwise the element type and the
+shape are checked when the conversion runs. A failure stops the program at the
+conversion and names both sides (`conversion to 'Tensor<float32, [4]>' failed:
+the tensor has shape [6]`). Nothing else converts or checks implicitly: a type
+that leaves open what a declared type fixes is refused with
+`ArgumentNeedsConversion` or `ReturnNeedsConversion`, which name the argument
+(or the element of a tuple or struct), both types, and the conversion to write.
+
+The cases where the shape is knowledge of the run, so that `as` is the answer:
+
+| Case | Example |
+|---|---|
+| A tensor read from outside the program | `load_npy(path) as Tensor<f32, const [3, 3]>` |
+| A result that a function declares as plain `Tensor` (the declaration is what callers see, whatever the body computes); declaring the shape is the alternative | `let t = g(x)` ... `h(t as Tensor<f32, const [3]>)` |
+| A slice or index with computed bounds | `slice(x, 0, i, i + 1) as Tensor<f32, const [1, 3]>` |
+| A reduction with a computed axis, a reshape whose target is computed as a whole or has two computed extents, a computed extent itself | `reshape(x, [n, 3]) as Tensor<f32, const [2, 3]>` when `x` is `[?, 3]` |
+| A shape in which more than one extent is indexed out of a shape or computed by arithmetic, even from constants (such expressions are folded by `std::opt`, after types are checked) | `reshape(x, [shape(x)[1], shape(x)[0]]) as Tensor<f32, const [3, 2]>` |
+| The end of a recursion over a shrinking tensor | `if n <= 1 then x as Tensor<f32, const [1]> else ...` |
+| Branch arms of different extents (they join to `?`) | `(if c then a else b) as Tensor<f32, const [3]>` |
+| The value read from a `var` variable (a variable has the widened type `Tensor` of its first value, so that later assignments may change the shape) | `(s as Tensor<f32, const [3]>) + x` |
+
+A `var` parameter takes the variable itself, so no conversion applies to its
+argument: declare the `var` parameter with the variable's type (`var s:
+Tensor`) and convert the value where it is read.
+
 ### 3.4 Operator traits and generic graph passes (core)
 
 `camel::core::OperatorTraitsRegistry` (`include/camel/core/operator_traits.h`)
